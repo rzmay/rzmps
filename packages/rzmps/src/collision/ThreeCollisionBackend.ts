@@ -8,6 +8,8 @@ import {
   CollisionQuery,
 } from '../interfaces/ICollisionBackend';
 import ParticleSystem from '../ParticleSystem';
+import { TRAIL_RENDERER_USER_DATA_KEY } from '../renderers/TrailRenderer';
+import { SPRITE_RENDERER_USER_DATA_KEY } from '../renderers/SpriteRenderer';
 
 export interface ThreeCollisionBackendOptions {
   world?: THREE.Object3D;
@@ -330,8 +332,8 @@ class ThreeCollisionBackend implements ICollisionBackend {
       if (object instanceof THREE.PointLightHelper) return;
 
       // Check for renderer object
-      if (object.userData["__rmps__trailRenderer"]) return;
-      if (object.userData["__rmps_spriteRenderer"]) return;
+      if (object.userData[TRAIL_RENDERER_USER_DATA_KEY]) return;
+      if (object.userData[SPRITE_RENDERER_USER_DATA_KEY]) return;
 
       if (
         this.objectFilter

@@ -5,7 +5,7 @@ import {
   MeshRenderer,
   ParticleSystem,
   SpriteRenderer,
-} from 'rmps';
+} from 'rzmps';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import suzanneModel from 'url:../../assets/models/suzanne.glb';
 import { curvePresets } from '../curvePresets';

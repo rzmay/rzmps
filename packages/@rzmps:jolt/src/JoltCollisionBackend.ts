@@ -4,7 +4,7 @@ import type {
   ICollisionBackend,
   CollisionHit,
   CollisionQuery,
-} from 'rmps/src/interfaces/ICollisionBackend';
+} from 'rzmps/src/interfaces/ICollisionBackend';
 
 type JoltModule = Awaited<ReturnType<typeof Jolt>>;
 

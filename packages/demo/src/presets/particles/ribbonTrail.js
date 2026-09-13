@@ -6,7 +6,7 @@ import {
   TrailRenderer,
   TrailMode,
   TrailTextureMode,
-} from 'rmps';
+} from 'rzmps';
 import { curvePresets } from '../curvePresets';
 
 export default async function createRibbonTrail() {

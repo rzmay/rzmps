@@ -436,6 +436,6 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/jetbrains,node,macos,windows,linux,sublimetext,vim,emacs,typescript,yarn,react
 
-# RMPS generated artifacts
+# RZMPS generated artifacts
 packages/*/build/
 packages/demo/dist/

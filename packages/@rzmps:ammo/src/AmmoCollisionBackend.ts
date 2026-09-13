@@ -8,7 +8,7 @@ import type {
   ICollisionBackend,
   CollisionHit,
   CollisionQuery,
-} from 'rmps';
+} from 'rzmps';
 import {
   AmmoLike,
   AmmoRigidBodyLike,

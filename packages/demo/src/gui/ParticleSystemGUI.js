@@ -25,7 +25,7 @@ import {
     TrailTextureMode,
     Collision,
     EndBehavior,
-} from 'rmps';
+} from 'rzmps';
 
 const INITIAL_VALUE_DEFAULTS = {
     lifetime: () => 1,
@@ -998,7 +998,7 @@ export class ParticleSystemGUI {
 
         const lines = [
             `import * as THREE from 'three';`,
-            `import { ${Array.from(imports).sort().join(', ')} } from 'rmps';`,
+            `import { ${Array.from(imports).sort().join(', ')} } from 'rzmps';`,
             '',
         ];
 

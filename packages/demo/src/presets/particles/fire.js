@@ -13,7 +13,7 @@ import {
   SpriteRenderer,
   TransformByNoise,
   VelocityOverLifetime,
-} from 'rmps';
+} from 'rzmps';
 import fireSprite from 'url:../../assets/images/fire_tile_8x4_n32.png';
 import { curvePresets } from '../curvePresets';
 

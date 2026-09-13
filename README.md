@@ -1,18 +1,18 @@
-# RMPS
+# RZMPS
 
 **🧅 Robert May Particle System** is a modular, extensible particle system for
 [Three.js](https://threejs.org/).
 
-[![npm](https://img.shields.io/npm/v/rmps)](https://www.npmjs.com/package/rmps)
-[![license](https://img.shields.io/npm/l/rmps)](https://github.com/rzmay/rmps)
+[![npm](https://img.shields.io/npm/v/rzmps)](https://www.npmjs.com/package/rzmps)
+[![license](https://img.shields.io/npm/l/rzmps)](https://github.com/rzmay/rzmps)
 
 | Resource    | Link                                                         |
 | ----------- | ------------------------------------------------------------ |
-| npm package | [npmjs.com/package/rmps](https://www.npmjs.com/package/rmps) |
-| GitHub repo | [github.com/rzmay/rmps](https://github.com/rzmay/rmps)       |
-| Live demo   | [rmps.rzmay.com](https://rmps.rzmay.com)                     |
+| npm package | [npmjs.com/package/rzmps](https://www.npmjs.com/package/rzmps) |
+| GitHub repo | [github.com/rzmay/rzmps](https://github.com/rzmay/rzmps)       |
+| Live demo   | [rzmps.rzmay.com](https://rzmps.rzmay.com)                     |
 
-RMPS is built from small composable pieces:
+RZMPS is built from small composable pieces:
 
 - **Emitters** create particles from shapes.
 - **Modules** modify particles over time.
@@ -38,7 +38,7 @@ RMPS is built from small composable pieces:
 ## Installation
 
 ```bash
-npm install rmps three
+npm install rzmps three
 ```
 
 `three` is a peer dependency.
@@ -54,7 +54,7 @@ import {
   ParticleSystem,
   ScaleOverLifetime,
   SpriteRenderer,
-} from "rmps";
+} from "rzmps";
 
 const particles = new ParticleSystem({
   emitters: new Emitter({
@@ -98,7 +98,7 @@ animate();
 
 ### Dynamic Values
 
-Many RMPS options use `DynamicValue<T>`.
+Many RZMPS options use `DynamicValue<T>`.
 
 ```ts
 type DynamicValue<T> =
@@ -113,7 +113,7 @@ type Multiple<T> = T | T[];
 // Multiple with least one value
 type StrictMultiple<T> = T | [T, ...[T]];
 
-// In RMPS, tags are natively strings
+// In RZMPS, tags are natively strings
 type Tag = string;
 ```
 
@@ -905,13 +905,13 @@ For external physics engines, use the extension packages:
 
 | Package        | Engine       | npm                                                                          |
 | -------------- | ------------ | ---------------------------------------------------------------------------- |
-| `@rmps/rapier` | Rapier       | [npmjs.com/package/@rmps/rapier](https://www.npmjs.com/package/@rmps/rapier) |
-| `@rmps/jolt`   | Jolt Physics | [npmjs.com/package/@rmps/jolt](https://www.npmjs.com/package/@rmps/jolt)     |
-| `@rmps/ammo`   | Ammo.js      | [npmjs.com/package/@rmps/ammo](https://www.npmjs.com/package/@rmps/ammo)     |
+| `@rzmps/rapier` | Rapier       | [npmjs.com/package/@rzmps/rapier](https://www.npmjs.com/package/@rzmps/rapier) |
+| `@rzmps/jolt`   | Jolt Physics | [npmjs.com/package/@rzmps/jolt](https://www.npmjs.com/package/@rzmps/jolt)     |
+| `@rzmps/ammo`   | Ammo.js      | [npmjs.com/package/@rzmps/ammo](https://www.npmjs.com/package/@rzmps/ammo)     |
 
 ```ts
-import { Collision } from "rmps";
-import { RapierCollisionBackend } from "@rmps/rapier";
+import { Collision } from "rzmps";
+import { RapierCollisionBackend } from "@rzmps/rapier";
 
 const collision = new Collision({
   backend: new RapierCollisionBackend({ RAPIER, world }),
@@ -934,7 +934,7 @@ passing a custom particle modify function.
 ### Constructor Function
 
 ```ts
-import { Module } from "rmps";
+import { Module } from "rzmps";
 
 const upwardDrift = new Module((particle, deltaTime) => {
   particle.velocity.y += 0.5 * deltaTime;
@@ -953,7 +953,7 @@ needs named options, cached state, dependent modules, setup work, or cleanup.
 
 ```ts
 import * as THREE from "three";
-import { Module, ModuleOptions, ParticleSystem } from "rmps";
+import { Module, ModuleOptions, ParticleSystem } from "rzmps";
 
 interface GustModuleOptions extends Partial<ModuleOptions> {
   strength?: number;
@@ -1006,21 +1006,21 @@ module chains that must run together, and `cleanup()` for external resources.
 Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/rzmay/rmps.git
-cd rmps
+git clone https://github.com/rzmay/rzmps.git
+cd rzmps
 npm install
 ```
 
 Build the core package:
 
 ```bash
-npm run build --workspace packages/rmps
+npm run build --workspace packages/rzmps
 ```
 
 Run the package in watch mode:
 
 ```bash
-npm run dev --workspace packages/rmps
+npm run dev --workspace packages/rzmps
 ```
 
 Run the demo locally:
@@ -1038,9 +1038,9 @@ npm run build --workspace packages/demo
 Build the physics extensions:
 
 ```bash
-npm run build --workspace @rmps/rapier
-npm run build --workspace @rmps/jolt
-npm run build --workspace @rmps/ammo
+npm run build --workspace @rzmps/rapier
+npm run build --workspace @rzmps/jolt
+npm run build --workspace @rzmps/ammo
 ```
 
 ## License

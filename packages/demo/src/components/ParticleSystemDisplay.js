@@ -35,7 +35,7 @@ function ParticleSystemDisplay({
         scenes: scenePresets,
         initialPreset,
         initialScene,
-        title: 'RMPS Demo',
+        title: 'RZMPS Demo',
         width: 340,
         onSystemChange: (nextSystem) => {
           particleSystem.current = nextSystem;

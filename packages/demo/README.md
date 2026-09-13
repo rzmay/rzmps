@@ -1,18 +1,18 @@
-# RMPS Demo
+# RZMPS Demo
 
 Interactive browser demo for
-[RMPS](https://www.npmjs.com/package/rmps), the Robert May Particle System for
+[RZMPS](https://www.npmjs.com/package/rzmps), the Robert May Particle System for
 [Three.js](https://threejs.org/).
 
 | Resource | Link |
 | --- | --- |
-| Live demo | [rmps.rzmay.com](https://rmps.rzmay.com) |
-| npm package | [npmjs.com/package/rmps](https://www.npmjs.com/package/rmps) |
-| GitHub repo | [github.com/rzmay/rmps](https://github.com/rzmay/rmps) |
+| Live demo | [rzmps.rzmay.com](https://rzmps.rzmay.com) |
+| npm package | [npmjs.com/package/rzmps](https://www.npmjs.com/package/rzmps) |
+| GitHub repo | [github.com/rzmay/rzmps](https://github.com/rzmay/rzmps) |
 
-This app is the development playground and showcase for the RMPS package. It
+This app is the development playground and showcase for the RZMPS package. It
 uses React, React Three Fiber, Parcel, lil-gui, and the local monorepo packages
-for `rmps` and the optional physics integrations.
+for `rzmps` and the optional physics integrations.
 
 ## What It Shows
 
@@ -75,13 +75,13 @@ From the repo root:
 npm install
 ```
 
-Build the local RMPS packages before running the demo:
+Build the local RZMPS packages before running the demo:
 
 ```bash
-npm run build --workspace packages/rmps
-npm run build --workspace @rmps/rapier
-npm run build --workspace @rmps/jolt
-npm run build --workspace @rmps/ammo
+npm run build --workspace packages/rzmps
+npm run build --workspace @rzmps/rapier
+npm run build --workspace @rzmps/jolt
+npm run build --workspace @rzmps/ammo
 ```
 
 Start the demo:
@@ -121,7 +121,7 @@ view.
 
 ## Monorepo Package Notes
 
-The demo imports `rmps`, `@rmps/rapier`, `@rmps/jolt`, and `@rmps/ammo` as npm
+The demo imports `rzmps`, `@rzmps/rapier`, `@rzmps/jolt`, and `@rzmps/ammo` as npm
 workspace packages. Until the packages are published, production builds should
 build those workspaces from the monorepo before building the demo.
 
@@ -140,7 +140,7 @@ Recommended Render settings:
 ```txt
 Service type: Static Site
 Root Directory: repo root / blank
-Build Command: npm install && npm run build --workspace packages/rmps && npm run build --workspace @rmps/rapier && npm run build --workspace @rmps/jolt && npm run build --workspace @rmps/ammo && npm run build --workspace packages/demo
+Build Command: npm install && npm run build --workspace packages/rzmps && npm run build --workspace @rzmps/rapier && npm run build --workspace @rzmps/jolt && npm run build --workspace @rzmps/ammo && npm run build --workspace packages/demo
 Publish Directory: packages/demo/dist
 ```
 
@@ -150,8 +150,8 @@ Equivalent `render.yaml`:
 services:
   - type: web
     runtime: static
-    name: rmps-demo
-    buildCommand: npm install && npm run build --workspace packages/rmps && npm run build --workspace @rmps/rapier && npm run build --workspace @rmps/jolt && npm run build --workspace @rmps/ammo && npm run build --workspace packages/demo
+    name: rzmps-demo
+    buildCommand: npm install && npm run build --workspace packages/rzmps && npm run build --workspace @rzmps/rapier && npm run build --workspace @rzmps/jolt && npm run build --workspace @rzmps/ammo && npm run build --workspace packages/demo
     staticPublishPath: packages/demo/dist
 ```
 
