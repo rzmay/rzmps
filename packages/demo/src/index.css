@@ -24,32 +24,6 @@ code {
   overflow: hidden;
 }
 
-.renderer-select {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  color: #f3f7fb;
-  background: rgba(16, 19, 24, 0.86);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.renderer-select select {
-  color: #f3f7fb;
-  background: #202833;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
-  padding: 4px 22px 4px 8px;
-  font: inherit;
-}
 
 .code-panel {
   position: absolute;

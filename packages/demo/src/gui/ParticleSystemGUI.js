@@ -73,6 +73,7 @@ const DEFAULT_RENDERER_FACTORIES = {
     Trail: () => new TrailRenderer(),
 };
 const END_BEHAVIOR_OPTIONS = EndBehavior;
+const RENDERER_MODE_OPTIONS = { WebGL: 'webgl', WebGPU: 'webgpu' };
 export class ParticleSystemGUI {
     constructor(options) {
         this.presetLoadVersion = 0;
@@ -86,11 +87,16 @@ export class ParticleSystemGUI {
         this.subSystemFactories = options.subSystemFactories ?? {};
         this.onSystemChange = options.onSystemChange;
         this.onPresetChange = options.onPresetChange;
+        this.onRendererChange = options.onRendererChange;
         this.onSceneChange = options.onSceneChange;
         this.onCodeChange = options.onCodeChange;
         this.onShowCodeChange = options.onShowCodeChange;
         this.currentPresetName = options.initialPreset;
         this.currentSceneName = options.initialScene;
+        this.viewState = {
+            renderer: options.rendererMode ?? 'webgl',
+            showCode: false,
+        };
         this.handleSystemDestroyed = () => {
             this.rebuild();
             this.emitCode();
@@ -104,10 +110,15 @@ export class ParticleSystemGUI {
         this.injectStyles();
         this.gui.onChange(() => this.emitCode());
         this.addResourceLinks();
-        if (this.onShowCodeChange) {
-            const viewState = { showCode: false };
+        if (this.onRendererChange) {
             this.gui
-                .add(viewState, 'showCode')
+                .add(this.viewState, 'renderer', RENDERER_MODE_OPTIONS)
+                .name('Renderer')
+                .onChange(this.onRendererChange);
+        }
+        if (this.onShowCodeChange) {
+            this.gui
+                .add(this.viewState, 'showCode')
                 .name('Show code')
                 .onChange(this.onShowCodeChange);
         }

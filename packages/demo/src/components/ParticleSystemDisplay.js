@@ -10,8 +10,10 @@ function ParticleSystemDisplay({
   initialScene,
   onCodeChange,
   onPresetChange,
+  onRendererChange,
   onSceneChange,
   onShowCodeChange,
+  rendererMode,
 }) {
   const particleSystem = useRef(null);
   const guiRef = useRef(null);
@@ -42,8 +44,10 @@ function ParticleSystemDisplay({
         },
         onCodeChange,
         onPresetChange,
+        onRendererChange,
         onSceneChange,
         onShowCodeChange,
+        rendererMode,
       });
 
       guiRef.current = gui;
@@ -64,6 +68,7 @@ function ParticleSystemDisplay({
   }, [
     onCodeChange,
     onPresetChange,
+    onRendererChange,
     onSceneChange,
     onShowCodeChange,
     scene,
@@ -81,8 +86,10 @@ ParticleSystemDisplay.propTypes = {
   initialScene: PropTypes.string.isRequired,
   onCodeChange: PropTypes.func.isRequired,
   onPresetChange: PropTypes.func.isRequired,
+  onRendererChange: PropTypes.func.isRequired,
   onSceneChange: PropTypes.func.isRequired,
   onShowCodeChange: PropTypes.func.isRequired,
+  rendererMode: PropTypes.oneOf(['webgl', 'webgpu']).isRequired,
 };
 
 export default ParticleSystemDisplay;

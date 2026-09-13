@@ -51,9 +51,11 @@ async function createWebGPURenderer(defaultProps) {
 function DemoScene({
   onCodeChange,
   onPresetChange,
+  onRendererChange,
   onSceneChange,
   onShowCodeChange,
   particlePreset,
+  rendererMode,
   scenePreset,
 }) {
   return (
@@ -65,8 +67,10 @@ function DemoScene({
         initialScene={scenePreset}
         onCodeChange={onCodeChange}
         onPresetChange={onPresetChange}
+        onRendererChange={onRendererChange}
         onSceneChange={onSceneChange}
         onShowCodeChange={onShowCodeChange}
+        rendererMode={rendererMode}
       />
     </>
   );
@@ -85,12 +89,10 @@ function IndexPage() {
     getQueryParam('scene', SCENE_PRESET_NAMES, 'Checkerboard')
   ));
 
-  function handleRendererChange(event) {
-    const nextRendererMode = event.target.value;
-
+  const handleRendererChange = useCallback((nextRendererMode) => {
     setQueryParam('renderer', nextRendererMode);
     setRendererMode(nextRendererMode);
-  }
+  }, []);
 
   const handlePresetChange = useCallback((name) => {
     setQueryParam('preset', name);
@@ -104,14 +106,6 @@ function IndexPage() {
 
   return (
     <div className="demo-shell">
-      <label className="renderer-select">
-        <span>Renderer</span>
-        <select value={rendererMode} onChange={handleRendererChange}>
-          <option value="webgl">WebGL</option>
-          <option value="webgpu">WebGPU</option>
-        </select>
-      </label>
-
       <Canvas
         key={rendererMode}
         gl={rendererMode === 'webgpu' ? createWebGPURenderer : undefined}
@@ -121,9 +115,11 @@ function IndexPage() {
         <DemoScene
           onCodeChange={setCode}
           onPresetChange={handlePresetChange}
+          onRendererChange={handleRendererChange}
           onSceneChange={handleSceneChange}
           onShowCodeChange={setShowCode}
           particlePreset={particlePreset}
+          rendererMode={rendererMode}
           scenePreset={scenePreset}
         />
       </Canvas>
