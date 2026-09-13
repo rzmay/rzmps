@@ -1,7 +1,0 @@
-services:
-  - type: web
-    runtime: static
-    name: rzmps-demo
-    rootDir: packages/demo
-    buildCommand: npm install --workspaces=false && npm run build --workspaces=false
-    staticPublishPath: dist
