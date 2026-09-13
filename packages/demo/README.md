@@ -134,17 +134,28 @@ not published to npm.
 
 ## Render Deployment
 
-Use a Render Static Site and set the root directory to `packages/demo`. That
-keeps the deployment outside the monorepo workspace install, so npm installs
-the published `@rzmps/*` packages from the registry.
+Use a Render Static Site and set the root directory to `packages/demo` when
+possible. The build command also passes `--workspaces=false`, which keeps npm
+from linking the local monorepo packages and forces the demo to install the
+published `@rzmps/*` packages from the registry.
 
 Recommended Render settings:
 
 ```txt
 Service type: Static Site
 Root Directory: packages/demo
-Build Command: npm install && npm run build
+Build Command: npm install --workspaces=false && npm run build --workspaces=false
 Publish Directory: dist
+```
+
+
+If Render still shows paths like `/opt/render/project/src/packages/demo` in
+build errors, its root directory is still the repo root. In that case either set
+Root Directory to `packages/demo`, or use these root-level settings instead:
+
+```txt
+Build Command: cd packages/demo && npm install --workspaces=false && npm run build --workspaces=false
+Publish Directory: packages/demo/dist
 ```
 
 Equivalent `render.yaml`:
@@ -155,7 +166,7 @@ services:
     runtime: static
     name: rzmps-demo
     rootDir: packages/demo
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --workspaces=false && npm run build --workspaces=false
     staticPublishPath: dist
 ```
 
