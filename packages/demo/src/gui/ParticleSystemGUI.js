@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { GitFork, Package } from 'lucide-react';
 import * as THREE from 'three';
 
+import { curvePresetDefinitions } from '../presets/curvePresets';
+
 import {
     Emitter,
     EmissionShape,
@@ -74,6 +76,16 @@ const DEFAULT_RENDERER_FACTORIES = {
 };
 const END_BEHAVIOR_OPTIONS = EndBehavior;
 const RENDERER_MODE_OPTIONS = { WebGL: 'webgl', WebGPU: 'webgpu' };
+const CURVE_PRESET_DEFINITIONS = new Map(
+    curvePresetDefinitions.map((definition) => [definition.name, definition]),
+);
+const CURVE_PRESET_NAMES_PATTERN = curvePresetDefinitions
+    .map(({ name }) => name)
+    .join('|');
+const CURVE_PRESET_REFERENCE_PATTERNS = [
+    new RegExp(`\\bcurvePresets\\.(${CURVE_PRESET_NAMES_PATTERN})\\.evaluate\\(([^)]*)\\)`, 'g'),
+    new RegExp(`\\((?:0,\\s*)?_[\\w$]+\\.curvePresets\\)\\.(${CURVE_PRESET_NAMES_PATTERN})\\.evaluate\\(([^)]*)\\)`, 'g'),
+];
 export class ParticleSystemGUI {
     constructor(options) {
         this.presetLoadVersion = 0;
@@ -1040,18 +1052,71 @@ export class ParticleSystemGUI {
     serializeParticleSystem() {
         const imports = new Set(['EndBehavior', 'ParticleSystem', 'Emitter', 'EmissionShape', 'EmissionSource']);
         this.collectImports(this.system, imports);
+        this.usedCurvePresets = new Set();
+
+        const counter = { value: 0 };
+        const rootName = 'particleSystem';
+        const systemLines = this.serializeParticleSystemTree(this.system, rootName, counter);
+        const curveDefinitions = this.serializeUsedCurvePresets();
 
         const lines = [
             `import * as THREE from 'three';`,
             `import { ${Array.from(imports).sort().join(', ')} } from '@rzmps/rzmps';`,
-            '',
         ];
 
-        const counter = { value: 0 };
-        const rootName = 'particleSystem';
-        lines.push(...this.serializeParticleSystemTree(this.system, rootName, counter));
-        lines.push('', `export default ${rootName};`, '');
+        if (curveDefinitions.length > 0) {
+            lines.push(`import { Curve, NumberKeyframe } from 'curves';`);
+            if (this.usedCurvePresetsNeedEasing()) {
+                lines.push(`import { Easing } from 'eaz';`);
+            }
+        }
+
+        lines.push('', ...curveDefinitions);
+        if (curveDefinitions.length > 0) {
+            lines.push('');
+        }
+        lines.push(...systemLines, '', `export default ${rootName};`, '');
+        this.usedCurvePresets = undefined;
         return lines.join('\n');
+    }
+
+    serializeUsedCurvePresets() {
+        if (!this.usedCurvePresets?.size) {
+            return [];
+        }
+
+        return Array.from(this.usedCurvePresets)
+            .sort()
+            .map((name) => this.serializeCurvePresetDefinition(name));
+    }
+
+    usedCurvePresetsNeedEasing() {
+        return Array.from(this.usedCurvePresets ?? []).some((name) => CURVE_PRESET_DEFINITIONS
+            .get(name)
+            ?.keyframes.some(({ easing }) => easing !== undefined));
+    }
+
+    serializeCurvePresetDefinition(name) {
+        const definition = CURVE_PRESET_DEFINITIONS.get(name);
+        if (!definition) {
+            return '';
+        }
+
+        const keyframes = definition.keyframes
+            .map(({ time, value, easing }) => {
+                const args = [time, value];
+                if (easing !== undefined) {
+                    args.push(`Easing.${easing}`);
+                }
+                return `    new NumberKeyframe(${args.join(', ')}),`;
+            })
+            .join('\n');
+
+        return [
+            `const ${name} = new Curve([`,
+            keyframes,
+            '  ]);',
+        ].join('\n');
     }
 
     collectImports(system, imports) {
@@ -1352,7 +1417,7 @@ export class ParticleSystemGUI {
         if (typeof value === 'number' || typeof value === 'boolean')
             return String(value);
         if (typeof value === 'function')
-            return value.toString();
+            return this.serializeFunction(value);
         if (value instanceof THREE.Vector3)
             return `new THREE.Vector3(${value.x}, ${value.y}, ${value.z})`;
         if (value instanceof THREE.Vector2)
@@ -1376,6 +1441,17 @@ export class ParticleSystemGUI {
         }
         return 'undefined';
     }
+    serializeFunction(value) {
+        let source = value.toString();
+        CURVE_PRESET_REFERENCE_PATTERNS.forEach((pattern) => {
+            source = source.replace(pattern, (_match, name, timeExpression) => {
+                this.usedCurvePresets?.add(name);
+                return `${name}.evaluate(${timeExpression})`;
+            });
+        });
+        return source;
+    }
+
     serializeKey(key) {
         return /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
     }
