@@ -1,6 +1,6 @@
 # `@rzmps/ammo`
 
-Ammo.js collision support for [`rzmps`](https://www.npmjs.com/package/rzmps).
+Ammo.js collision support for [`@rzmps/rzmps`](https://www.npmjs.com/package/@rzmps/rzmps).
 
 Unlike Rapier and Jolt, Ammo.js does not have a single standard npm
 distribution. This package therefore does not depend on a specific Ammo.js
@@ -21,7 +21,7 @@ Install whichever Ammo.js distribution your application uses separately.
 
 ```ts
 import { AmmoCollisionBackend } from "@rzmps/ammo";
-import { Collision } from "rzmps";
+import { Collision } from "@rzmps/rzmps";
 
 const backend = new AmmoCollisionBackend({
   Ammo,

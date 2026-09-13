@@ -1,8 +1,8 @@
 # @rzmps/jolt
 
-Jolt Physics collision support for [`rzmps`](https://www.npmjs.com/package/rzmps).
+Jolt Physics collision support for [`@rzmps/rzmps`](https://www.npmjs.com/package/@rzmps/rzmps).
 
-`@rzmps/jolt` allows particles using the rzmps `Collision` module to collide with
+`@rzmps/jolt` allows particles using the @rzmps/rzmps `Collision` module to collide with
 bodies in an existing Jolt physics simulation.
 
 It integrates with
@@ -17,7 +17,7 @@ simulation.
 npm install @rzmps/jolt @barclah/jolt-physics
 ```
 
-`rzmps`, `three`, and `@barclah/jolt-physics` are peer dependencies.
+`@rzmps/rzmps`, `three`, and `@barclah/jolt-physics` are peer dependencies.
 
 ## Usage
 
@@ -26,7 +26,7 @@ Initialize Jolt and create your `JoltInterface` normally:
 ```ts
 import initJolt from "@barclah/jolt-physics";
 import { JoltCollisionBackend } from "@rzmps/jolt";
-import { Collision } from "rzmps";
+import { Collision } from "@rzmps/rzmps";
 
 const Jolt = await initJolt();
 

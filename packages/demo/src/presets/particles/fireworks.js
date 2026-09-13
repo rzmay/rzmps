@@ -14,7 +14,7 @@ import {
   TransformByNoise,
   LimitVelocityOverLifetime,
   RotationOverLifetime,
-} from 'rzmps';
+} from '@rzmps/rzmps';
 
 import fireworkSprite from 'url:../../assets/images/firework.png';
 import defaultSprite from 'url:../../assets/images/default.png';

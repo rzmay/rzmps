@@ -1,18 +1,18 @@
 # RZMPS Demo
 
 Interactive browser demo for
-[RZMPS](https://www.npmjs.com/package/rzmps), the Robert May Particle System for
+[RZMPS](https://www.npmjs.com/package/@rzmps/rzmps), the Robert May Particle System for
 [Three.js](https://threejs.org/).
 
 | Resource | Link |
 | --- | --- |
 | Live demo | [rzmps.rzmay.com](https://rzmps.rzmay.com) |
-| npm package | [npmjs.com/package/rzmps](https://www.npmjs.com/package/rzmps) |
+| npm package | [npmjs.com/package/@rzmps/rzmps](https://www.npmjs.com/package/@rzmps/rzmps) |
 | GitHub repo | [github.com/rzmay/rzmps](https://github.com/rzmay/rzmps) |
 
 This app is the development playground and showcase for the RZMPS package. It
 uses React, React Three Fiber, Parcel, lil-gui, and the local monorepo packages
-for `rzmps` and the optional physics integrations.
+for `@rzmps/rzmps` and the optional physics integrations.
 
 ## What It Shows
 
@@ -121,7 +121,7 @@ view.
 
 ## Monorepo Package Notes
 
-The demo imports `rzmps`, `@rzmps/rapier`, `@rzmps/jolt`, and `@rzmps/ammo` as npm
+The demo imports `@rzmps/rzmps`, `@rzmps/rapier`, `@rzmps/jolt`, and `@rzmps/ammo` as npm
 workspace packages. Until the packages are published, production builds should
 build those workspaces from the monorepo before building the demo.
 

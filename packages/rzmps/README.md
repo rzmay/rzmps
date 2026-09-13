@@ -3,12 +3,12 @@
 **🧅 Robert May Particle System** is a modular, extensible particle system for
 [Three.js](https://threejs.org/).
 
-[![npm](https://img.shields.io/npm/v/rzmps)](https://www.npmjs.com/package/rzmps)
-[![license](https://img.shields.io/npm/l/rzmps)](https://github.com/rzmay/rzmps)
+[![npm](https://img.shields.io/npm/v/@rzmps/rzmps)](https://www.npmjs.com/package/@rzmps/rzmps)
+[![license](https://img.shields.io/npm/l/@rzmps/rzmps)](https://github.com/rzmay/rzmps)
 
 | Resource    | Link                                                         |
 | ----------- | ------------------------------------------------------------ |
-| npm package | [npmjs.com/package/rzmps](https://www.npmjs.com/package/rzmps) |
+| npm package | [npmjs.com/package/@rzmps/rzmps](https://www.npmjs.com/package/@rzmps/rzmps) |
 | GitHub repo | [github.com/rzmay/rzmps](https://github.com/rzmay/rzmps)       |
 | Live demo   | [rzmps.rzmay.com](https://rzmps.rzmay.com)                     |
 
@@ -38,7 +38,7 @@ RZMPS is built from small composable pieces:
 ## Installation
 
 ```bash
-npm install rzmps three
+npm install @rzmps/rzmps three
 ```
 
 `three` is a peer dependency.
@@ -54,7 +54,7 @@ import {
   ParticleSystem,
   ScaleOverLifetime,
   SpriteRenderer,
-} from "rzmps";
+} from "@rzmps/rzmps";
 
 const particles = new ParticleSystem({
   emitters: new Emitter({
@@ -910,7 +910,7 @@ For external physics engines, use the extension packages:
 | `@rzmps/ammo`   | Ammo.js      | [npmjs.com/package/@rzmps/ammo](https://www.npmjs.com/package/@rzmps/ammo)     |
 
 ```ts
-import { Collision } from "rzmps";
+import { Collision } from "@rzmps/rzmps";
 import { RapierCollisionBackend } from "@rzmps/rapier";
 
 const collision = new Collision({
@@ -934,7 +934,7 @@ passing a custom particle modify function.
 ### Constructor Function
 
 ```ts
-import { Module } from "rzmps";
+import { Module } from "@rzmps/rzmps";
 
 const upwardDrift = new Module((particle, deltaTime) => {
   particle.velocity.y += 0.5 * deltaTime;
@@ -953,7 +953,7 @@ needs named options, cached state, dependent modules, setup work, or cleanup.
 
 ```ts
 import * as THREE from "three";
-import { Module, ModuleOptions, ParticleSystem } from "rzmps";
+import { Module, ModuleOptions, ParticleSystem } from "@rzmps/rzmps";
 
 interface GustModuleOptions extends Partial<ModuleOptions> {
   strength?: number;

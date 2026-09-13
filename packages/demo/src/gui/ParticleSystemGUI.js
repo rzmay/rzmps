@@ -1,4 +1,7 @@
 import GUI from 'lil-gui';
+import { Fragment, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import { GitFork, Package } from 'lucide-react';
 import * as THREE from 'three';
 
 import {
@@ -25,7 +28,12 @@ import {
     TrailTextureMode,
     Collision,
     EndBehavior,
-} from 'rzmps';
+} from '@rzmps/rzmps';
+
+const RESOURCE_LINKS = [
+    { label: 'GitHub', href: 'https://github.com/rzmay/rzmps', Icon: GitFork },
+    { label: 'npm', href: 'https://www.npmjs.com/package/@rzmps/rzmps', Icon: Package },
+];
 
 const INITIAL_VALUE_DEFAULTS = {
     lifetime: () => 1,
@@ -95,6 +103,7 @@ export class ParticleSystemGUI {
         });
         this.injectStyles();
         this.gui.onChange(() => this.emitCode());
+        this.addResourceLinks();
         if (this.onShowCodeChange) {
             const viewState = { showCode: false };
             this.gui
@@ -138,7 +147,32 @@ export class ParticleSystemGUI {
     destroy() {
         this.sceneCleanup?.();
         this.system.removeEventListener?.('destroyed', this.handleSystemDestroyed);
+        this.resourceLinksRoot?.unmount();
         this.gui.destroy();
+    }
+    addResourceLinks() {
+        const container = document.createElement('div');
+        container.className = 'psgui-resource-links';
+        this.gui.domElement.appendChild(container);
+        this.resourceLinksRoot = createRoot(container);
+        this.resourceLinksRoot.render(createElement(
+            Fragment,
+            null,
+            RESOURCE_LINKS.map(({ label, href, Icon }) => createElement(
+                'a',
+                {
+                    key: label,
+                    className: 'psgui-resource-link',
+                    href,
+                    target: '_blank',
+                    rel: 'noreferrer',
+                    title: label,
+                    'aria-label': label,
+                },
+                createElement(Icon, { size: 15, strokeWidth: 2 }),
+                createElement('span', null, label),
+            )),
+        ));
     }
     rebuild() {
         this.contentFolder?.destroy();
@@ -998,7 +1032,7 @@ export class ParticleSystemGUI {
 
         const lines = [
             `import * as THREE from 'three';`,
-            `import { ${Array.from(imports).sort().join(', ')} } from 'rzmps';`,
+            `import { ${Array.from(imports).sort().join(', ')} } from '@rzmps/rzmps';`,
             '',
         ];
 
@@ -1370,6 +1404,31 @@ export class ParticleSystemGUI {
       .lil-gui .psgui-renderers { border-top-color: #ff9d57; }
       .lil-gui .psgui-demo { border-top-color: #66d19e; }
       .lil-gui .psgui-system { margin-top: 6px; }
+      .lil-gui .psgui-resource-links {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        padding: 4px;
+        border-bottom: 1px solid rgba(255,255,255,.12);
+      }
+      .lil-gui .psgui-resource-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 28px;
+        color: var(--text-color);
+        background: rgba(255,255,255,.08);
+        border-radius: 6px;
+        font-size: 11px;
+        text-decoration: none;
+      }
+      .lil-gui .psgui-resource-link:hover {
+        background: rgba(255,255,255,.14);
+      }
+      .lil-gui .psgui-resource-link svg {
+        flex: 0 0 auto;
+      }
     `;
         document.head.appendChild(style);
     }

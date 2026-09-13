@@ -7,7 +7,7 @@ import {
   TrailMode,
   TransformByNoise,
   TrailTextureMode,
-} from 'rzmps';
+} from '@rzmps/rzmps';
 import { curvePresets } from '../curvePresets';
 import simpleSprite from 'url:../../assets/images/simple.png';
 

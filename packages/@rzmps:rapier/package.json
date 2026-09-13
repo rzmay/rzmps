@@ -16,12 +16,12 @@
   "license": "MIT",
   "peerDependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
-    "rzmps": "^1.0.0",
+    "@rzmps/rzmps": "^1.0.0",
     "three": "^0.185.1"
   },
   "devDependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
-    "rzmps": "^1.0.0",
+    "@rzmps/rzmps": "^1.0.0",
     "three": "^0.185.1",
     "typescript": "^5.0.0"
   }

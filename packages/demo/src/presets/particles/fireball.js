@@ -7,7 +7,7 @@ import {
   ParticleSystem,
   ScaleOverLifetime,
   SpriteRenderer,
-} from 'rzmps';
+} from '@rzmps/rzmps';
 import fireballSprite from 'url:../../assets/images/fireball_tile_5x4_n20.png';
 import { curvePresets } from '../curvePresets';
 

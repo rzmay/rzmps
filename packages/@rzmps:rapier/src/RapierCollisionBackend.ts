@@ -4,7 +4,7 @@ import type {
   ICollisionBackend,
   CollisionHit,
   CollisionQuery,
-} from 'rzmps';
+} from '@rzmps/rzmps';
 
 type RapierCollisionData = {
   body?: RAPIER.RigidBody;

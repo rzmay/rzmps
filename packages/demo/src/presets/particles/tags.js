@@ -8,7 +8,7 @@ import {
   RotationOverLifetime,
   ColorOverLifetime,
   ScaleOverLifetime,
-} from 'rzmps';
+} from '@rzmps/rzmps';
 import circleSprite from 'url:../../assets/images/circle.png';
 import { curvePresets } from '../curvePresets';
 

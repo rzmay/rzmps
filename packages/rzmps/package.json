@@ -1,5 +1,5 @@
 {
-  "name": "rzmps",
+  "name": "@rzmps/rzmps",
   "version": "1.0.0",
   "description": "🧅 Modular and extendable particle system for Three.js",
   "main": "build/index.js",

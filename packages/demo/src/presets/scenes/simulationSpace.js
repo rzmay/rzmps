@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ParticleSystem } from 'rzmps';
+import { ParticleSystem } from '@rzmps/rzmps';
 
 const RING_SIZE = new THREE.Vector3(5, 0, 5);
 

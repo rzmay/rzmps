@@ -6,7 +6,7 @@ import {
   ParticleSystem,
   RotationOverLifetime,
   SpriteRenderer,
-} from 'rzmps';
+} from '@rzmps/rzmps';
 import { curvePresets } from '../curvePresets';
 
 export default async function createCubes() {
