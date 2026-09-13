@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import initJolt from '@barclah/jolt-physics';
-import { JoltCollisionBackend } from '@rmps/jolt';
+import { JoltCollisionBackend } from '@rzmps/jolt';
 import createCollisionObjects from './createCollisionObjects';
 
 export default async function createJoltCollisionTest(scene) {
@@ -164,7 +164,8 @@ export default async function createJoltCollisionTest(scene) {
       objectLayer: 1,
     });
 
-  scene.userData["__rmps_activeCollisionBackend"] = backend;
+  // Normally this would be passed into the constructor, but since we don't have particle system access here we have to use scene data
+  scene.userData.__rzmps_activeCollisionBackend = backend;
 
   let previous = performance.now();
   let elapsed = 0;
@@ -270,7 +271,7 @@ export default async function createJoltCollisionTest(scene) {
   return () => {
     cancelAnimationFrame(frameId);
 
-    delete scene.userData.__rmps_activeCollisionBackend;
+    delete scene.userData.__rzmps_activeCollisionBackend;
 
     dynamicBodies.forEach(({ body }, index) => {
       const id = body.GetID();

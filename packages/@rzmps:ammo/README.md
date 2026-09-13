@@ -1,6 +1,6 @@
-# `@rmps/ammo`
+# `@rzmps/ammo`
 
-Ammo.js collision support for [`rmps`](https://www.npmjs.com/package/rmps).
+Ammo.js collision support for [`rzmps`](https://www.npmjs.com/package/rzmps).
 
 Unlike Rapier and Jolt, Ammo.js does not have a single standard npm
 distribution. This package therefore does not depend on a specific Ammo.js
@@ -12,7 +12,7 @@ implementation along with its physics world.
 ## Installation
 
 ```bash
-npm install @rmps/ammo
+npm install @rzmps/ammo
 ```
 
 Install whichever Ammo.js distribution your application uses separately.
@@ -20,8 +20,8 @@ Install whichever Ammo.js distribution your application uses separately.
 ## Usage
 
 ```ts
-import { AmmoCollisionBackend } from "@rmps/ammo";
-import { Collision } from "rmps";
+import { AmmoCollisionBackend } from "@rzmps/ammo";
+import { Collision } from "rzmps";
 
 const backend = new AmmoCollisionBackend({
   Ammo,
@@ -36,5 +36,5 @@ const collision = new Collision({
 `Ammo` should be an initialized Ammo.js API implementation, and `world` should
 be its `btDiscreteDynamicsWorld`.
 
-This allows `@rmps/ammo` to work with custom Ammo builds, GitHub builds, WASM
+This allows `@rzmps/ammo` to work with custom Ammo builds, GitHub builds, WASM
 distributions, or other compatible Ammo.js packages.

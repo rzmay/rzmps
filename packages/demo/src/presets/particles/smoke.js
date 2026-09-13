@@ -9,7 +9,7 @@ import {
   ScaleOverLifetime,
   SpriteRenderer,
   TransformByNoise,
-} from 'rmps';
+} from 'rzmps';
 import defaultSprite from 'url:../../assets/images/default.png';
 import smokeAlpha from 'url:../../assets/images/smoke_alpha.jpg';
 import { curvePresets } from '../curvePresets';

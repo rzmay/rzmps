@@ -1,7 +1,7 @@
 {
-  "name": "@rmps/jolt",
+  "name": "@rzmps/rapier",
   "version": "1.0.0",
-  "description": "Jolt physics engine extension for rmps.",
+  "description": "Rapier physics engine extension for rzmps.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "files": [
@@ -15,13 +15,13 @@
   "author": "Robert May",
   "license": "MIT",
   "peerDependencies": {
-    "rmps": "^1.0.0",
-    "@barclah/jolt-physics": "^0.31.0",
+    "@dimforge/rapier3d-compat": "^0.20.0",
+    "rzmps": "^1.0.0",
     "three": "^0.185.1"
   },
   "devDependencies": {
-    "rmps": "^1.0.0",
-    "@barclah/jolt-physics": "^0.31.0",
+    "@dimforge/rapier3d-compat": "^0.20.0",
+    "rzmps": "^1.0.0",
     "three": "^0.185.1",
     "typescript": "^5.0.0"
   }

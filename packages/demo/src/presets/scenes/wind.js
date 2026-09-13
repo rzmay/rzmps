@@ -4,7 +4,7 @@ import {
   ParticleForceField,
   ParticleForceFieldHelper,
   ParticleSystem,
-} from 'rmps';
+} from 'rzmps';
 
 export default function createWind(scene) {
   const root = new THREE.Group();

@@ -7,7 +7,7 @@ import {
   ParticleSystem,
   SpriteRenderer,
   TrailRenderer,
-} from 'rmps';
+} from 'rzmps';
 import circleSprite from 'url:../../assets/images/circle.png';
 
 export default async function createCollisionSubEmitters() {

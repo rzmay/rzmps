@@ -1,8 +1,8 @@
-# @rmps/rapier
+# @rzmps/rapier
 
-Rapier collision support for [`rmps`](https://www.npmjs.com/package/rmps).
+Rapier collision support for [`rzmps`](https://www.npmjs.com/package/rzmps).
 
-`@rmps/rapier` allows particles using the rmps `Collision` module to collide
+`@rzmps/rapier` allows particles using the rzmps `Collision` module to collide
 with bodies in an existing Rapier physics world.
 
 It uses
@@ -13,10 +13,10 @@ binary embedded for broader bundler compatibility.
 ## Installation
 
 ```bash
-npm install @rmps/rapier @dimforge/rapier3d-compat
+npm install @rzmps/rapier @dimforge/rapier3d-compat
 ```
 
-`rmps`, `three`, and `@dimforge/rapier3d-compat` are peer dependencies.
+`rzmps`, `three`, and `@dimforge/rapier3d-compat` are peer dependencies.
 
 ## Usage
 
@@ -24,8 +24,8 @@ Initialize Rapier and create your world normally:
 
 ```ts
 import RAPIER from "@dimforge/rapier3d-compat";
-import { RapierCollisionBackend } from "@rmps/rapier";
-import { Collision } from "rmps";
+import { RapierCollisionBackend } from "@rzmps/rapier";
+import { Collision } from "rzmps";
 
 await RAPIER.init();
 

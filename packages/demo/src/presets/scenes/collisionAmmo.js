@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import AmmoModule from 'ammo.js/builds/ammo.wasm.js';
 import ammoWasmUrl from 'url:ammo.js/builds/ammo.wasm.wasm';
-import { AmmoCollisionBackend } from '@rmps/ammo';
+import { AmmoCollisionBackend } from '@rzmps/ammo';
 import createCollisionObjects from './createCollisionObjects';
 
 export default async function createAmmoCollisionTest(scene) {
@@ -133,7 +133,8 @@ export default async function createAmmoCollisionTest(scene) {
       world,
     });
 
-  scene.userData.__rmps_activeCollisionBackend = backend;
+  // Normally this would be passed into the constructor, but since we don't have particle system access here we have to use scene data
+  scene.userData.__rzmps_activeCollisionBackend = backend;
 
   const syncBody = (mesh, body) => {
     const motionState = body.getMotionState();
@@ -262,7 +263,7 @@ export default async function createAmmoCollisionTest(scene) {
   return () => {
     cancelAnimationFrame(frameId);
 
-    delete scene.userData.__rmps_activeCollisionBackend;
+    delete scene.userData.__rzmps_activeCollisionBackend;
 
     objects.group.removeFromParent();
 

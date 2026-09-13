@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { RapierCollisionBackend } from '@rmps/rapier';
+import { RapierCollisionBackend } from '@rzmps/rapier';
 import createCollisionObjects from './createCollisionObjects';
 
 export default async function createRapierCollisionTest(scene) {
@@ -103,7 +103,8 @@ export default async function createRapierCollisionTest(scene) {
   const movingBody =
     addBox(objects.movingBox, 'kinematic');
 
-  scene.userData.__rmps_activeCollisionBackend =
+  // Normally this would be passed into the constructor, but since we don't have particle system access here we have to use scene data
+  scene.userData.__rzmps_activeCollisionBackend =
     new RapierCollisionBackend({
       RAPIER,
       world,
@@ -183,7 +184,7 @@ export default async function createRapierCollisionTest(scene) {
   return () => {
     cancelAnimationFrame(frameId);
 
-    delete scene.userData.__rmps_activeCollisionBackend;
+    delete scene.userData.__rzmps_activeCollisionBackend;
 
     objects.group.removeFromParent();
 

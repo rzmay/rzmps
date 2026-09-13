@@ -8,6 +8,9 @@ import { ICollisionBackend, CollisionHit } from '../interfaces/ICollisionBackend
 import ThreeCollisionBackend from '../collision/ThreeCollisionBackend';
 import ParticleSystem from '../ParticleSystem';
 
+const ACTIVE_COLLISION_BACKEND_KEY = "__rzmps_activeCollisionBackend";
+const PREVIOUS_POSITION_KEY = "__rzmps_collision_prevPosition";
+
 export type CollisionListener = (particle: Particle, collision: CollisionHit) => void;
 
 export interface CollisionOptions extends Partial<ModuleOptions> {
@@ -46,7 +49,7 @@ class Collision extends Module {
     // Priority < 0, cache position before movement
     this.dependents = [
       new Module(
-        (particle) => particle.data["__rmps_collision_prevPosition"] = particle.position.clone(),
+        (particle) => particle.data[PREVIOUS_POSITION_KEY] = particle.position.clone(),
         { ...options, priority: -1 }
       )
     ];
@@ -76,13 +79,13 @@ class Collision extends Module {
 
     if (system.scene) {
       // Check if backend exists or needs to be updated
-      const cachedBackend = system.scene.userData["__rmps_activeCollisionBackend"];
+      const cachedBackend = system.scene.userData[ACTIVE_COLLISION_BACKEND_KEY];
 
       if (!this.backend || this.backend != cachedBackend) {
         this.backend = cachedBackend
           ?? new ThreeCollisionBackend({ world: system.scene });
 
-        system.scene.userData["__rmps_activeCollisionBackend"] =
+        system.scene.userData[ACTIVE_COLLISION_BACKEND_KEY] =
           this.backend;
       }
     }
@@ -93,7 +96,7 @@ class Collision extends Module {
   private collide(particle: Particle): void {
     if (!this.backend || !this._system) return;
 
-    const startPosition = particle.data["__rmps_collision_prevPosition"] as THREE.Vector3;
+    const startPosition = particle.data[PREVIOUS_POSITION_KEY] as THREE.Vector3;
     const endPosition = particle.position;
 
     if (startPosition.equals(endPosition)) return;

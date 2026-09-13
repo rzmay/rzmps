@@ -8,7 +8,7 @@ import {
   SpriteRenderer,
   TransformByNoise,
   ColorOverLifetime,
-} from 'rmps';
+} from 'rzmps';
 import defaultSprite from 'url:../../assets/images/default.png';
 import snowflakeAlpha from 'url:../../assets/images/snowflake_alpha.png';
 import { curvePresets } from '../curvePresets';

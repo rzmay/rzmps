@@ -8,6 +8,8 @@ import particleRatio from '../helpers/particleRatio';
 import { StrictMultiple } from '../types/Multiple';
 import acceptMultiple from '../helpers/acceptMultiple';
 
+const AUDIO_LISTENER_KEY = "__rzmps_audioListener";
+
 export interface AudioOptions extends Partial<ModuleOptions> {
   listener: THREE.AudioListener;
 
@@ -40,7 +42,6 @@ interface ParticleAudio {
   buffer: AudioBuffer;
 }
 
-// TODO: onSpawn sound, onDeath sound
 class Audio extends Module {
   listener?: THREE.AudioListener;
 
@@ -131,7 +132,7 @@ class Audio extends Module {
 
     if (!this.listener) {
       // Try to get listener from cache
-      if (system.scene) this.listener = system.scene.userData["__rmps_audioListener"];
+      if (system.scene) this.listener = system.scene.userData[AUDIO_LISTENER_KEY];
 
       // Try to get listener from camera
       if (system.sceneCamera) {
@@ -149,7 +150,7 @@ class Audio extends Module {
       }
 
       // If we found a listener, add it to the scene cache
-      if (this.listener && system.scene) system.scene.userData["__rmps_audioListener"] = this.listener;
+      if (this.listener && system.scene) system.scene.userData[AUDIO_LISTENER_KEY] = this.listener;
     }
 
     this._cleanParticleAudio(system.particles);

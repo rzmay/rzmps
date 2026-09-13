@@ -11,6 +11,7 @@ import { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import seedrandom from 'seedrandom';
 import { SpriteMaterialType } from '../enums/SpriteMaterialType';
+import { TRAIL_RENDERER_USER_DATA_KEY } from './TrailRenderer';
 
 type SceneDepthData = {
   target: THREE.WebGLRenderTarget;
@@ -45,11 +46,10 @@ type WebGPURendererLike = {
   setRenderTarget(target: THREE.RenderTarget | null): void;
 };
 
-const SPRITE_RENDERER_USER_DATA_KEY = "__rmps_spriteRenderer";
-const TRAIL_RENDERER_USER_DATA_KEY = "__rmps_trailRenderer";
-const SCENE_DEPTH_DATA_USER_DATA_KEY = "__rmps_sceneDepthData";
-const WEBGPU_SCENE_DEPTH_DATA_USER_DATA_KEY = "__rmps_webgpuSceneDepthData";
-const WEBGPU_SCENE_DEPTH_TEXTURE = new THREE.DepthTexture(
+export const SPRITE_RENDERER_USER_DATA_KEY = "__rzmps_spriteRenderer";
+export const SCENE_DEPTH_DATA_USER_DATA_KEY = "__rzmps_sceneDepthData";
+export const WEBGPU_SCENE_DEPTH_DATA_USER_DATA_KEY = "__rzmps_webgpuSceneDepthData";
+export const WEBGPU_SCENE_DEPTH_TEXTURE = new THREE.DepthTexture(
   1,
   1,
   THREE.UnsignedIntType,

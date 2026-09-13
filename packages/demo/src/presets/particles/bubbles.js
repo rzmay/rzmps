@@ -8,7 +8,7 @@ import {
   ParticleSystem,
   SpriteRenderer,
   TransformByNoise,
-} from 'rmps';
+} from 'rzmps';
 
 import circleSprite from 'url:../../assets/images/circle.png';
 

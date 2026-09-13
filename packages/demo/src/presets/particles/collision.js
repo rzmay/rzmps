@@ -5,7 +5,7 @@ import {
   EmissionShape,
   ParticleSystem,
   SpriteRenderer,
-} from 'rmps';
+} from 'rzmps';
 import circleSprite from 'url:../../assets/images/circle.png';
 
 export default async function createCollision() {

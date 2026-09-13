@@ -9,6 +9,8 @@ import evaluateDynamicColor from '../helpers/evaluateDynamicColor';
 import { TrailMode } from '../enums/TrailMode';
 import { TrailTextureMode } from '../enums/TrailTextureMode';
 
+export const TRAIL_RENDERER_USER_DATA_KEY = "__rzmps_trailRenderer";
+
 export interface TrailRendererOptions extends RendererOptions {
   mode: TrailMode | `${TrailMode}`;
   textureMode: TrailTextureMode | `${TrailTextureMode}`;
@@ -155,7 +157,7 @@ class TrailRenderer extends Renderer {
     );
 
     // Add user data to the mesh so we can recognize it elsewhere
-    this.mesh.userData.__rmps_trailRenderer = true;
+    this.mesh.userData[TRAIL_RENDERER_USER_DATA_KEY] = true;
 
     this.mesh.frustumCulled = false;
   }

@@ -9,7 +9,7 @@ import {
   ScaleOverLifetime,
   SpriteRenderer,
   EmissionSource,
-} from 'rmps';
+} from 'rzmps';
 import circleSprite from 'url:../../assets/images/circle.png';
 import suzanneModel from 'url:../../assets/models/suzanne.glb';
 import { curvePresets } from '../curvePresets';
