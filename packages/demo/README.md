@@ -75,7 +75,8 @@ From the repo root:
 npm install
 ```
 
-Build the local RZMPS packages before running the demo:
+Build the local RZMPS packages before running the demo if you want to test
+unpublished workspace changes:
 
 ```bash
 npm run build --workspace packages/rzmps
@@ -121,9 +122,11 @@ view.
 
 ## Monorepo Package Notes
 
-The demo imports `@rzmps/rzmps`, `@rzmps/rapier`, `@rzmps/jolt`, and `@rzmps/ammo` as npm
-workspace packages. Until the packages are published, production builds should
-build those workspaces from the monorepo before building the demo.
+The demo imports `@rzmps/rzmps`, `@rzmps/rapier`, `@rzmps/jolt`, and
+`@rzmps/ammo` as npm packages. Local development from the repo root uses npm
+workspaces, so those packages resolve to sibling package folders. Production
+demo deployments should install from `packages/demo` so npm resolves the
+published registry packages instead.
 
 The publishable packages each have a `prepack` script, so `npm pack` and
 `npm publish` build their `build/**/*` output automatically. The demo itself is
@@ -131,17 +134,17 @@ not published to npm.
 
 ## Render Deployment
 
-Use a Render Static Site and leave the root directory set to the repository
-root. The demo needs access to sibling workspace packages during install and
-build.
+Use a Render Static Site and set the root directory to `packages/demo`. That
+keeps the deployment outside the monorepo workspace install, so npm installs
+the published `@rzmps/*` packages from the registry.
 
 Recommended Render settings:
 
 ```txt
 Service type: Static Site
-Root Directory: repo root / blank
-Build Command: npm install && npm run build --workspace packages/rzmps && npm run build --workspace @rzmps/rapier && npm run build --workspace @rzmps/jolt && npm run build --workspace @rzmps/ammo && npm run build --workspace packages/demo
-Publish Directory: packages/demo/dist
+Root Directory: packages/demo
+Build Command: npm install && npm run build
+Publish Directory: dist
 ```
 
 Equivalent `render.yaml`:
@@ -151,8 +154,9 @@ services:
   - type: web
     runtime: static
     name: rzmps-demo
-    buildCommand: npm install && npm run build --workspace packages/rzmps && npm run build --workspace @rzmps/rapier && npm run build --workspace @rzmps/jolt && npm run build --workspace @rzmps/ammo && npm run build --workspace packages/demo
-    staticPublishPath: packages/demo/dist
+    rootDir: packages/demo
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
 ```
 
 ## Project Structure

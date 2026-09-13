@@ -21,8 +21,8 @@
     "lil-gui": "^0.21.0",
     "lucide-react": "^1.45.0",
     "prop-types": "^15.7.2",
-    "react": "19",
-    "react-dom": "19",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "three": "^0.185",
     "web-vitals": "^1.0.1"
   },
@@ -46,6 +46,8 @@
   "devDependencies": {
     "@babel/eslint-parser": "^7.14.2",
     "@babel/preset-react": "^7.13.13",
+    "@parcel/packager-raw-url": "^2.16.4",
+    "@parcel/transformer-webmanifest": "^2.16.4",
     "@rzmps/ammo": "^1.0.0",
     "@rzmps/jolt": "^1.0.0",
     "@rzmps/rapier": "^1.0.0",
@@ -53,6 +55,8 @@
     "eslint-plugin-import": "^2.23.0",
     "eslint-plugin-jsx-a11y": "^6.4.1",
     "eslint-plugin-workspaces": "^0.6.2",
-    "parcel": "^2.16.4"
+    "parcel": "^2.16.4",
+    "path-browserify": "^1.0.1",
+    "process": "^0.11.10"
   }
 }
