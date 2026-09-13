@@ -1,9 +1,18 @@
 import * as THREE from 'three';
-import Ammo from 'ammo.js/builds/ammo.js';
+import AmmoModule from 'ammo.js/builds/ammo.wasm.js';
+import ammoWasmUrl from 'url:ammo.js/builds/ammo.wasm.wasm';
 import { AmmoCollisionBackend } from '@rzmps/ammo';
 import createCollisionObjects from './createCollisionObjects';
 
 export default async function createAmmoCollisionTest(scene) {
+  const scope = {};
+
+  await AmmoModule.call(scope, {
+    locateFile: () => ammoWasmUrl,
+  });
+
+  const Ammo = scope.Ammo;
+
   const collisionConfiguration =
     new Ammo.btDefaultCollisionConfiguration();
   const dispatcher =
