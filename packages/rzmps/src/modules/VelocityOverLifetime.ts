@@ -33,7 +33,11 @@ class VelocityOverLifetime extends Module {
       }
 
       if (this.options.radial !== undefined && fromCenter.lengthSq() > 0) {
-        velocity.add(fromCenter.normalize().multiplyScalar(evaluateDynamicNumber(this.options.radial, time, particle.id)));
+        velocity.add(
+          fromCenter.normalize().multiplyScalar(
+            evaluateDynamicNumber(this.options.radial, time, particle.id)
+          )
+        );
       }
 
       particle.velocity = velocity;

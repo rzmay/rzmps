@@ -14,7 +14,11 @@ class ColorOverLifetime extends Module {
   constructor(public options: ColorOverLifetimeOptions = {}) {
     super((particle: Particle) => {
       if (this.options.color !== undefined) {
-        particle.color = particle.start.color.clone().multiply(evaluateDynamicColor(this.options.color, particle.time, particle.id));
+        particle.color = particle
+          .start
+          .color
+          .clone()
+          .multiply(evaluateDynamicColor(this.options.color, particle.time, particle.id));
       }
       if (this.options.alpha !== undefined) {
         particle.alpha = particle.start.alpha * evaluateDynamicNumber(this.options.alpha, particle.time, particle.id);

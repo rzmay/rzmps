@@ -95,30 +95,30 @@ export default function createRepulsorAttractor(scene) {
    * The module doesn't explicitly reference any of the fields below;
    * it discovers ParticleForceFields from the scene automatically.
    */
-  let frameId;
-  let removeExternalForcesModule = () => {};
-  const refreshExternalForcesModule = () => {
-    let particleSystem;
-    scene.traverse((obj) => {
-      if (obj instanceof ParticleSystem) particleSystem = obj;
-    });
+  const configureParticleSystemKey = '__rzmps_configureParticleSystem';
+  const sceneExternalForces = new Map();
 
-    if (!particleSystem.modules.some((module) => module instanceof ExternalForces)) {
-      const externalForces = new ExternalForces({});
-
-      particleSystem.addModule(externalForces);
-
-      removeExternalForcesModule = () => particleSystem.removeModule(externalForces);
+  scene.userData[configureParticleSystemKey] = (particleSystem) => {
+    if (
+      !(particleSystem instanceof ParticleSystem)
+      || particleSystem.isSubSystem
+      || sceneExternalForces.has(particleSystem)
+      || particleSystem.modules.some((module) => module instanceof ExternalForces)
+    ) {
+      return;
     }
 
-    frameId = requestAnimationFrame(refreshExternalForcesModule);
-  }
-
-  refreshExternalForcesModule()
+    const externalForces = new ExternalForces();
+    particleSystem.addModule(externalForces);
+    sceneExternalForces.set(particleSystem, externalForces);
+  };
 
   return () => {
-    cancelAnimationFrame(frameId);
-    removeExternalForcesModule();
+    sceneExternalForces.forEach((externalForces, particleSystem) => {
+      particleSystem.removeModule(externalForces);
+    });
+    sceneExternalForces.clear();
+    delete scene.userData[configureParticleSystemKey];
 
     scene.remove(root);
 

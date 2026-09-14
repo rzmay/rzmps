@@ -8,9 +8,9 @@ import ParticleForceField from '../ParticleForceField';
 import ParticleSystem from '../ParticleSystem';
 
 export interface ExternalForcesOptions extends Partial<ModuleOptions> {
-    multiplier?: DynamicValue<number>;
-    forceFieldFilter?: (forceField: ParticleForceField) => boolean;
-    forceFields?: IParticleForceField[];
+    multiplier: DynamicValue<number>;
+    forceFieldFilter: (forceField: ParticleForceField) => boolean;
+    forceFields: IParticleForceField[];
 }
 
 class ExternalForces extends Module {
@@ -24,7 +24,7 @@ class ExternalForces extends Module {
 
   private particleSystem?: ParticleSystem;
 
-  constructor(options: ExternalForcesOptions) {
+  constructor(options: Partial<ExternalForcesOptions> = {}) {
     super((particle: Particle, deltaTime: number) => {
       const multiplier = evaluateDynamicNumber(this.multiplier ?? 1, particle.time, particle.id);
       const particleSystem = this.particleSystem;
@@ -39,7 +39,7 @@ class ExternalForces extends Module {
 
       const worldQuaternion = particleSystem.simulationSpace === 'local'
         ? particleSystem.getWorldQuaternion(new THREE.Quaternion())
-        : undefined;
+        : new THREE.Quaternion();
       const inverseWorldQuaternion = worldQuaternion?.clone().invert();
       const forceParticle = particleSystem.simulationSpace === 'world'
         ? particle
@@ -50,7 +50,7 @@ class ExternalForces extends Module {
             position: particlePosition,
             velocity: particle.velocity
               .clone()
-              .applyQuaternion(worldQuaternion!),
+              .applyQuaternion(worldQuaternion),
           },
         );
 
@@ -69,7 +69,7 @@ class ExternalForces extends Module {
     this.forceFieldFilter = options.forceFieldFilter ?? (() => true );
   }
 
-  public prepare(particleSystem: ParticleSystem, deltaTime: number): void {
+  public prepare(particleSystem: ParticleSystem): void {
     this.particleSystem = particleSystem;
 
     // If explicit force fields are provided, just use those

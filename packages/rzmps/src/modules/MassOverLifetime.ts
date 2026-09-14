@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import { DynamicValue } from '../types/DynamicValue';
@@ -10,12 +9,12 @@ export interface MassOverLifetimeOptions extends Partial<ModuleOptions> {
 }
 
 class MassOverLifetime extends Module {
-  constructor(public options: MassOverLifetimeOptions) {
+  constructor(public options: Partial<MassOverLifetimeOptions> = {}) {
     super((particle: Particle) => {
       const sizeRatio = particle.scale.length() / particle.start.scale.length();
 
       particle.mass = particle.start.mass
-        * evaluateDynamicNumber(this.options.mass, particle.time, particle.id)
+        * evaluateDynamicNumber(this.options.mass ?? 1, particle.time, particle.id)
         * (options.multiplyMassBySize ?? true ? sizeRatio : 1);
     }, options);
   }

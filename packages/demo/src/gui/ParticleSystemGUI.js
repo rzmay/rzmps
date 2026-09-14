@@ -32,6 +32,8 @@ import {
     EndBehavior,
 } from '@rzmps/rzmps';
 
+const SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY = '__rzmps_configureParticleSystem';
+
 const RESOURCE_LINKS = [
     { label: 'GitHub', href: 'https://github.com/rzmay/rzmps', Icon: GitFork },
     { label: 'npm', href: 'https://www.npmjs.com/package/@rzmps/rzmps', Icon: Package },
@@ -154,6 +156,7 @@ export class ParticleSystemGUI {
             this.scene.add(next);
         }
         this.system = next;
+        this.configureSystemForScene(next);
         this.system.addEventListener?.('destroyed', this.handleSystemDestroyed);
         this.onSystemChange?.(next, previous);
         this.onPresetChange?.(presetName);
@@ -268,6 +271,12 @@ export class ParticleSystemGUI {
         }
         if (typeof cleanup === 'function')
             this.sceneCleanup = cleanup;
+        this.configureSystemForScene(this.system);
+        this.rebuild();
+        this.emitCode();
+    }
+    configureSystemForScene(system = this.system) {
+        this.scene?.userData?.[SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY]?.(system);
     }
     buildSystemFolder(root, system = this.system) {
         const folder = root.addFolder('System');
@@ -566,6 +575,10 @@ export class ParticleSystemGUI {
                 'priority',
                 'backend',
                 'collisionListeners',
+                'explicitForceFields',
+                'forceFields',
+                'forceFieldFilter',
+                'particleSystem',
                 'tags',
             ]);
             Object.keys(candidate)
@@ -1253,6 +1266,20 @@ export class ParticleSystemGUI {
                 tags: runtime.tags,
             })})`;
         }
+
+        if (module instanceof ExternalForces) {
+            const options = {
+                multiplier: module.multiplier,
+                tags: module.tags,
+            };
+
+            if (Array.isArray(module.explicitForceFields)) {
+                options.forceFields = module.explicitForceFields;
+            }
+
+            return `new ExternalForces(${this.serializeValue(options)})`;
+        }
+
         const runtime = module;
         const args = runtime.options !== undefined
             ? this.serializeValue({

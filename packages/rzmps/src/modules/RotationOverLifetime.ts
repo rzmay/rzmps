@@ -9,10 +9,13 @@ export interface RotationOverLifetimeOptions extends Partial<ModuleOptions> {
 }
 
 class RotationOverLifetime extends Module {
-  constructor(public options: RotationOverLifetimeOptions) {
+  constructor(public options: Partial<RotationOverLifetimeOptions> = {}) {
     super((particle: Particle) => {
       particle.angularVelocity = particle.start.angularVelocity.clone()
-        .add(evaluateDynamicVector(this.options.angularVelocity, particle.time, particle.id));
+        .add(evaluateDynamicVector(
+          this.options.angularVelocity ?? new THREE.Vector3(0, 0, 0),
+          particle.time,
+          particle.id));
     }, options);
   }
 }

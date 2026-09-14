@@ -8,18 +8,22 @@ import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 export type SpeedRange = [number, number] | { min: number; max: number };
 
 export interface ColorBySpeedOptions extends Partial<ModuleOptions> {
-    color?: DynamicValue<THREE.Color>;
-    alpha?: DynamicValue<number>;
-    speedRange?: SpeedRange;
+    color: DynamicValue<THREE.Color>;
+    alpha: DynamicValue<number>;
+    speedRange: SpeedRange;
 }
 
 class ColorBySpeed extends Module {
-  constructor(public options: ColorBySpeedOptions) {
+  constructor(public options: Partial<ColorBySpeedOptions> = {}) {
     super((particle: Particle) => {
       const t = this.getSpeedTime(particle.velocity.length());
 
       if (this.options.color !== undefined) {
-        particle.color = particle.start.color.clone().multiply(evaluateDynamicColor(this.options.color, t, particle.id));
+        particle.color = particle
+          .start
+          .color
+          .clone()
+          .multiply(evaluateDynamicColor(this.options.color, t, particle.id));
       }
       if (this.options.alpha !== undefined) {
         particle.alpha = particle.start.alpha * evaluateDynamicNumber(this.options.alpha, t, particle.id);

@@ -7,16 +7,20 @@ import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
 
 export interface LimitVelocityOverLifetimeOptions extends Partial<ModuleOptions> {
     limit: DynamicValue<THREE.Vector3>;
-    dampen?: number;
-    drag?: DynamicValue<number>;
-    multiplyDragBySize?: boolean;
-    multiplyDragByVelocity?: boolean;
+    dampen: number;
+    drag: DynamicValue<number>;
+    multiplyDragBySize: boolean;
+    multiplyDragByVelocity: boolean;
 }
 
 class LimitVelocityOverLifetime extends Module {
-  constructor(public options: LimitVelocityOverLifetimeOptions) {
+  constructor(public options: Partial<LimitVelocityOverLifetimeOptions> = {}) {
     super((particle: Particle, deltaTime: number) => {
-      const limit = evaluateDynamicVector(this.options.limit, particle.time, particle.id);
+      const limit = evaluateDynamicVector(
+        this.options.limit ?? new THREE.Vector3(1, 1, 1),
+        particle.time,
+        particle.id
+      );
       const dampen = this.options.dampen ?? 1;
 
       this.dampenAxis(particle.velocity, 'x', Math.abs(limit.x), dampen);

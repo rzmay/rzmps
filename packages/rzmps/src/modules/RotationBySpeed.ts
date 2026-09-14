@@ -7,14 +7,17 @@ import { SpeedRange } from './ColorBySpeed';
 
 export interface RotationBySpeedOptions extends Partial<ModuleOptions> {
     angularVelocity: DynamicValue<THREE.Vector3>;
-    speedRange?: SpeedRange;
+    speedRange: SpeedRange;
 }
 
 class RotationBySpeed extends Module {
-  constructor(public options: RotationBySpeedOptions) {
+  constructor(public options: Partial<RotationBySpeedOptions> = {}) {
     super((particle: Particle) => {
       particle.angularVelocity = particle.start.angularVelocity.clone().add(
-        evaluateDynamicVector(this.options.angularVelocity, this.getSpeedTime(particle.velocity.length()), particle.id),
+        evaluateDynamicVector(
+          this.options.angularVelocity ?? new THREE.Vector3(0, 0, 0),
+          this.getSpeedTime(particle.velocity.length()),
+          particle.id),
       );
     }, options);
   }

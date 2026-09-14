@@ -9,9 +9,13 @@ export interface ScaleOverLifetimeOptions extends Partial<ModuleOptions> {
 }
 
 class ScaleOverLifetime extends Module {
-  constructor(public options: ScaleOverLifetimeOptions) {
+  constructor(public options: Partial<ScaleOverLifetimeOptions> = {}) {
     super((particle: Particle) => {
-      particle.scale = particle.start.scale.clone().multiply(evaluateDynamicVector(this.options.scale, particle.time, particle.id));
+      particle.scale = particle
+        .start
+        .scale
+        .clone()
+        .multiply(evaluateDynamicVector(this.options.scale ?? new THREE.Vector3(1, 1, 1), particle.time, particle.id));
     }, options);
   }
 }

@@ -17,7 +17,7 @@ class TransformByNoise extends Module {
     private noiseY: NoiseModule;
     private noiseZ: NoiseModule;
 
-    constructor(public options: Partial<TransformByNoiseOptions>) {
+    constructor(public options: Partial<TransformByNoiseOptions> = {}) {
       const key = `transformByNoise-${Math.random().toString(36).slice(2)}`;
       const noiseX = new NoiseModule(`${key}-x`, { ...options, offset: new THREE.Vector3(0, 0, 0) });
       const noiseY = new NoiseModule(`${key}-y`, { ...options, offset: new THREE.Vector3(31.416, 0, 0) });

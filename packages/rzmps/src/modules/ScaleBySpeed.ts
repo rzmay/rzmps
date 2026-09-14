@@ -11,10 +11,14 @@ export interface ScaleBySpeedOptions extends Partial<ModuleOptions> {
 }
 
 class ScaleBySpeed extends Module {
-  constructor(public options: ScaleBySpeedOptions) {
+  constructor(public options: Partial<ScaleBySpeedOptions> = {}) {
     super((particle: Particle) => {
       particle.scale = particle.start.scale.clone().multiply(
-        evaluateDynamicVector(this.options.scale, this.getSpeedTime(particle.velocity.length()), particle.id),
+        evaluateDynamicVector(
+          this.options.scale ?? new THREE.Vector3(1, 1, 1),
+          this.getSpeedTime(particle.velocity.length()),
+          particle.id
+        ),
       );
     }, options);
   }
