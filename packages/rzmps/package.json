@@ -4,6 +4,17 @@
   "description": "🧅 Modular and extendable particle system for Three.js",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "keywords": [
+    "three",
+    "threejs",
+    "particles",
+    "particle-system",
+    "webgl",
+    "webgpu",
+    "vfx",
+    "simulation",
+    "typescript"
+  ],
   "files": [
     "build/**/*"
   ],

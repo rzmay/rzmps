@@ -4,6 +4,18 @@
   "description": "Jolt physics engine extension for rzmps.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "keywords": [
+    "rzmps",
+    "three",
+    "threejs",
+    "particles",
+    "particle-system",
+    "physics",
+    "collision",
+    "jolt",
+    "jolt-physics",
+    "typescript"
+  ],
   "files": [
     "build/**/*"
   ],
