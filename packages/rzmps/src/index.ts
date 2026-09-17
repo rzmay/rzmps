@@ -17,7 +17,8 @@ export { default as TrailRenderer } from './renderers/TrailRenderer';
 export { TrailMode } from './enums/TrailMode';
 export { TrailTextureMode } from './enums/TrailTextureMode';
 
-export { default as Module, ModuleOptions } from './Module';
+export { default as Module } from './Module';
+export type { ModuleOptions } from './Module';
 export { default as NoiseModule } from './modules/NoiseModule';
 export { default as VelocityOverLifetime } from './modules/VelocityOverLifetime';
 export { default as ForceOverLifetime } from './modules/ForceOverLifetime';
@@ -33,11 +34,11 @@ export { default as ExternalForces } from './modules/ExternalForces';
 export { default as Collision } from './modules/Collision';
 export { default as Audio } from './modules/Audio';
 
-export { IParticleForceField } from './interfaces/IParticleForceField';
+export type { IParticleForceField } from './interfaces/IParticleForceField';
 export { default as ParticleForceField } from './ParticleForceField';
 export { default as ParticleForceFieldHelper } from './ParticleForceFieldHelper'
 
-export { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';
+export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';
 export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBackend';
 
-export { DynamicValue } from './types/DynamicValue';
+export type { DynamicValue } from './types/DynamicValue';

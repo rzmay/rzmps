@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import * as THREE from 'three';
-import { Tag } from './types/Tag';
+import type { Tag } from './types/Tag';
 
 export interface ParticleOptions {
   position: THREE.Vector3;

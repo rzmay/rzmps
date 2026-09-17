@@ -2,8 +2,17 @@
   "name": "@rzmps/rzmps",
   "version": "1.0.4",
   "description": "🧅 Modular and extendable particle system for Three.js",
-  "main": "build/index.js",
+  "main": "build/index.cjs",
+  "module": "build/index.mjs",
   "types": "build/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "import": "./build/index.mjs",
+      "require": "./build/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
   "keywords": [
     "three",
     "threejs",
@@ -19,12 +28,33 @@
     "build/**/*"
   ],
   "scripts": {
-    "build": "tsc && npm run build:shaders && npm run copy:assets && npm run fix:shader-imports",
+    "build": "tsdown && tsc --emitDeclarationOnly && npm run copy:assets",
     "build:shaders": "node scripts/build-shaders.mjs",
     "copy:assets": "mkdir -p build && rm -rf build/assets && cp -r src/assets build/assets",
     "fix:shader-imports": "node scripts/fix-shader-imports.mjs",
-    "dev": "concurrently -k \"tsc --watch\" \"watch 'npm run build:shaders && npm run fix:shader-imports' src/shaders\" \"watch 'npm run copy:assets' src/assets\"",
+    "dev": "concurrently -k \"tsdown --watch\" \"tsc --emitDeclarationOnly --watch\" \"watch 'npm run copy:assets' src/assets\"",
     "prepack": "npm run build"
+  },
+  "tsdown": {
+    "entry": [
+      "src/index.ts"
+    ],
+    "outDir": "build",
+    "format": [
+      "esm",
+      "cjs"
+    ],
+    "dts": false,
+    "platform": "neutral",
+    "fixedExtension": true,
+    "target": "es2015",
+    "loader": {
+      ".frag": "text",
+      ".vert": "text",
+      ".png": "dataurl",
+      ".jpg": "dataurl",
+      ".jpeg": "dataurl"
+    }
   },
   "author": "Robert May",
   "license": "MIT",

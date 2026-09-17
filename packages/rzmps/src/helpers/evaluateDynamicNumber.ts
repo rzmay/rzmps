@@ -1,4 +1,4 @@
-import { DynamicValue } from '../types/DynamicValue';
+import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamic from './evaluateDynamic';
 
 export default function evaluateDynamicNumber(

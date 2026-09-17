@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import seedrandom from 'seedrandom';
-import Renderer, { RendererOptions } from '../Renderer';
+import Renderer, { type RendererOptions } from '../Renderer';
 import Particle from '../Particle';
 import ParticleSystem from '../ParticleSystem';
-import { DynamicValue } from '../types/DynamicValue';
+import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicColor from '../helpers/evaluateDynamicColor';
 import { TrailMode } from '../enums/TrailMode';

@@ -1,4 +1,4 @@
-import { DynamicValue } from '../types/DynamicValue';
+import type { DynamicValue } from '../types/DynamicValue';
 import seedrandom from 'seedrandom';
 
 type SeededMinMax<T> = DynamicValue<T>[] & { _dynamicValueSeededInterp: number };

@@ -5,13 +5,13 @@ import Module from './Module';
 import Renderer from './Renderer';
 import acceptMultiple from './helpers/acceptMultiple';
 import SpriteRenderer from './renderers/SpriteRenderer';
-import { Multiple } from './types/Multiple';
-import { DynamicValue } from './types/DynamicValue';
+import type { Multiple } from './types/Multiple';
+import type { DynamicValue } from './types/DynamicValue';
 import evaluateDynamicNumber from './helpers/evaluateDynamicNumber';
 import particleRatio from './helpers/particleRatio';
 import { CollisionListener } from './modules/Collision';
-import { CollisionHit } from './interfaces/ICollisionBackend';
-import { Tag } from './types/Tag';
+import type { CollisionHit } from './interfaces/ICollisionBackend';
+import type { Tag } from './types/Tag';
 import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 

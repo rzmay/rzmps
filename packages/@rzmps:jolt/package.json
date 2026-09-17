@@ -2,8 +2,17 @@
   "name": "@rzmps/jolt",
   "version": "1.0.1",
   "description": "Jolt physics engine extension for rzmps.",
-  "main": "build/index.js",
+  "main": "build/index.cjs",
+  "module": "build/index.mjs",
   "types": "build/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "import": "./build/index.mjs",
+      "require": "./build/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
   "keywords": [
     "rzmps",
     "three",
@@ -20,9 +29,23 @@
     "build/**/*"
   ],
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsdown && tsc --emitDeclarationOnly",
+    "dev": "concurrently -k \"tsdown --watch\" \"tsc --emitDeclarationOnly --watch\"",
     "prepack": "npm run build"
+  },
+  "tsdown": {
+    "entry": [
+      "src/index.ts"
+    ],
+    "outDir": "build",
+    "format": [
+      "esm",
+      "cjs"
+    ],
+    "dts": false,
+    "platform": "neutral",
+    "fixedExtension": true,
+    "target": "es2015"
   },
   "author": "Robert May",
   "license": "MIT",
@@ -34,6 +57,7 @@
   "devDependencies": {
     "@rzmps/rzmps": "^1.0.0",
     "@barclah/jolt-physics": "^0.31.0",
+    "concurrently": "^6.1.0",
     "three": "^0.185.1",
     "typescript": "^5.0.0"
   }

@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import Module, { ModuleOptions } from '../Module';
+import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import ParticleSystem from '../ParticleSystem';
-import { DynamicValue } from '../types/DynamicValue';
+import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import particleRatio from '../helpers/particleRatio';
-import { StrictMultiple } from '../types/Multiple';
+import type { StrictMultiple } from '../types/Multiple';
 import acceptMultiple from '../helpers/acceptMultiple';
 
 const AUDIO_LISTENER_KEY = "__rzmps_audioListener";

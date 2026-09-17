@@ -1,6 +1,6 @@
 import { makeNoise4D } from 'fast-simplex-noise';
 import * as THREE from 'three';
-import Module, { ModuleOptions } from '../Module';
+import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 
 export interface NoiseOptions extends Partial<ModuleOptions> {

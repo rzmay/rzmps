@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import Renderer, { RendererOptions } from '../Renderer';
+import Renderer, { type RendererOptions } from '../Renderer';
 import Particle from '../Particle';
 import ParticleSystem from '../ParticleSystem';
 import simple from '../assets/images/default.png';
-import UnlitSprite, { UnlitSpriteOptions } from '../materials/UnlitSprite';
-import BasicSprite, { BasicSpriteOptions } from '../materials/BasicSprite';
+import UnlitSprite, { type UnlitSpriteOptions } from '../materials/UnlitSprite';
+import BasicSprite, { type BasicSpriteOptions } from '../materials/BasicSprite';
 import WebGPUUnlitSprite from '../materials/WebGPUUnlitSprite';
 import WebGPUBasicSprite from '../materials/WebGPUBasicSprite';
-import { DynamicValue } from '../types/DynamicValue';
+import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import seedrandom from 'seedrandom';
 import { SpriteMaterialType } from '../enums/SpriteMaterialType';

@@ -1,15 +1,15 @@
 import * as THREE from 'three';
 import EmissionShape from './EmissionShape';
 import Particle from './Particle';
-import { InitialParticleValues } from './interfaces/InitialParticleValues';
+import type { InitialParticleValues } from './interfaces/InitialParticleValues';
 import evaluateDynamicVector from './helpers/evaluateDynamicVector3';
 import evaluateDynamicNumber from './helpers/evaluateDynamicNumber';
 import evaluateDynamicColor from './helpers/evaluateDynamicColor';
 import acceptMultiple from './helpers/acceptMultiple';
 import ParticleSystem from './ParticleSystem';
-import { DynamicUntimedValue, DynamicValue } from './types/DynamicValue';
-import { Multiple, StrictMultiple } from './types/Multiple';
-import { Tag } from './types/Tag';
+import type { DynamicUntimedValue, DynamicValue } from './types/DynamicValue';
+import type { Multiple, StrictMultiple } from './types/Multiple';
+import type { Tag } from './types/Tag';
 import { TagSelectionMethod } from './enums/TagSelectionMethod';
 
 type SpawnBurst = {

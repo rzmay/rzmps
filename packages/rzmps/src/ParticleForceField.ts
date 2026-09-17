@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import Particle from './Particle';
-import { IParticleForceField } from './interfaces/IParticleForceField';
-import { DynamicValue } from './types/DynamicValue';
+import type { IParticleForceField } from './interfaces/IParticleForceField';
+import type { DynamicValue } from './types/DynamicValue';
 import evaluateDynamicNumber from './helpers/evaluateDynamicNumber';
 import evaluateDynamicVector from './helpers/evaluateDynamicVector3';
 import isPointInMesh from './helpers/isPointInMesh';
-import { StrictMultiple } from './types/Multiple';
-import { Tag } from './types/Tag';
+import type { StrictMultiple } from './types/Multiple';
+import type { Tag } from './types/Tag';
 import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
 

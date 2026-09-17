@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import Module, { ModuleOptions } from '../Module';
+import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
-import { DynamicValue } from '../types/DynamicValue';
+import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicColor from '../helpers/evaluateDynamicColor';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import Renderer, { RendererOptions } from '../Renderer';
+import Renderer, { type RendererOptions } from '../Renderer';
 import ParticleSystem from '../ParticleSystem';
 import Particle from '../Particle';
-import { DynamicValue } from '../types/DynamicValue';
+import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import particleRatio from '../helpers/particleRatio';
 

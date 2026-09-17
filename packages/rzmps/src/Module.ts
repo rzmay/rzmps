@@ -1,7 +1,7 @@
 import Particle from './Particle';
 import ParticleSystem from './ParticleSystem';
-import { Tag } from './types/Tag';
-import { StrictMultiple } from './types/Multiple';
+import type { Tag } from './types/Tag';
+import type { StrictMultiple } from './types/Multiple';
 import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
 

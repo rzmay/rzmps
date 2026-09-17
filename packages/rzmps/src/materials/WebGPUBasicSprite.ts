@@ -10,7 +10,7 @@ import { perspectiveDepthToViewZ } from 'three/src/nodes/display/ViewportDepthNo
 import { abs, dot, smoothstep } from 'three/src/nodes/math/MathNode.js';
 import { spritesheetUV } from 'three/src/nodes/utils/SpriteSheetUV.js';
 import { float, vec2, vec3 } from 'three/src/nodes/tsl/TSLBase.js';
-import { BasicSpriteOptions } from './BasicSprite';
+import type { BasicSpriteOptions } from './BasicSprite';
 
 type WebGPUBasicSpriteOptions = BasicSpriteOptions & {
   sceneDepthTexture: THREE.DepthTexture;

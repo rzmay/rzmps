@@ -16,7 +16,7 @@
     "@testing-library/user-event": "^12.1.10",
     "@types/three": "^0.185.4",
     "ammo.js": "github:kripken/ammo.js.git#0f92865b2f2cff3602ff2cf203101cde0edf2c37",
-    "curves": "^1.1.2",
+    "curves": "^1.1.4",
     "eaz": "^2.0.3",
     "lil-gui": "^0.21.0",
     "lucide-react": "^1.45.0",

@@ -1,6 +1,6 @@
-import Module, { ModuleOptions } from '../Module';
+import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
-import { DynamicValue } from '../types/DynamicValue';
+import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 
 export interface MassOverLifetimeOptions extends Partial<ModuleOptions> {

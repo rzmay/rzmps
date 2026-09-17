@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DynamicValue } from '../types/DynamicValue';
+import type { DynamicValue } from '../types/DynamicValue';
 
 export interface InitialParticleValues {
     // Particle members

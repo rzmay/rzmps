@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Octree } from 'three/examples/jsm/math/Octree.js';
 import { Capsule } from 'three/examples/jsm/math/Capsule.js';
 
-import {
+import type {
   ICollisionBackend,
   CollisionHit,
   CollisionQuery,
