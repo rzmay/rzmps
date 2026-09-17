@@ -1,6 +1,6 @@
 {
   "name": "@rzmps/rzmps",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "🧅 Modular and extendable particle system for Three.js",
   "main": "build/index.cjs",
   "module": "build/index.mjs",

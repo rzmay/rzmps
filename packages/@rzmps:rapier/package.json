@@ -1,6 +1,6 @@
 {
   "name": "@rzmps/rapier",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Rapier physics engine extension for rzmps.",
   "main": "build/index.cjs",
   "module": "build/index.mjs",
