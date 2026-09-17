@@ -64,7 +64,7 @@ export interface SpriteRendererOptions extends RendererOptions {
   randomStartFrame: boolean;
   alphaMap: string | THREE.Texture;
   material: SpriteMaterialType | `${SpriteMaterialType}`;
-  materialOptions: BasicSpriteOptions | UnlitSpriteOptions;
+  materialOptions: Partial<BasicSpriteOptions | UnlitSpriteOptions>;
   castShadow: boolean;
   softParticleDistance: number;
 }
@@ -101,9 +101,9 @@ class SpriteRenderer extends Renderer {
     opacity: 0,
   });
 
-  private _materialOptions: BasicSpriteOptions | UnlitSpriteOptions | undefined;
-  get materialOptions(): BasicSpriteOptions | UnlitSpriteOptions | undefined { return this._materialOptions; }
-  set materialOptions(value: BasicSpriteOptions | UnlitSpriteOptions | undefined) {
+  private _materialOptions?: Partial<BasicSpriteOptions | UnlitSpriteOptions>;
+  get materialOptions(): Partial<BasicSpriteOptions | UnlitSpriteOptions> { return this._materialOptions ?? {}; }
+  set materialOptions(value: Partial<BasicSpriteOptions | UnlitSpriteOptions> | undefined) {
     this._materialOptions = value;
     this.material = this.loadMaterial(value);
     this.points.material = this.material;
@@ -333,7 +333,7 @@ class SpriteRenderer extends Renderer {
     this.webgpuMesh.removeFromParent();
   }
 
-  private loadMaterial(options: BasicSpriteOptions | UnlitSpriteOptions | undefined) {
+  private loadMaterial(options: Partial<BasicSpriteOptions | UnlitSpriteOptions> | undefined) {
     const createMaterial = this.materialType === SpriteMaterialType.Basic ? BasicSprite : UnlitSprite;
 
     return createMaterial(this.texture, {
@@ -346,7 +346,7 @@ class SpriteRenderer extends Renderer {
     });
   }
 
-  private loadWebGPUMaterial(options: BasicSpriteOptions | UnlitSpriteOptions | undefined) {
+  private loadWebGPUMaterial(options: Partial<BasicSpriteOptions | UnlitSpriteOptions> | undefined) {
     const createMaterial = this.materialType === SpriteMaterialType.Basic ? WebGPUBasicSprite : WebGPUUnlitSprite;
 
     return createMaterial(this.texture, {
