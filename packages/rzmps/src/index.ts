@@ -2,6 +2,7 @@ export { default as ParticleSystem } from './ParticleSystem';
 export { default as Particle } from './Particle';
 export { EndBehavior } from './enums/EndBehavior';
 export { SimulationSpace } from './enums/SimulationSpace';
+export { MaxCulling } from './enums/MaxCulling';
 
 export { default as EmissionShape } from './EmissionShape';
 export { default as Emitter } from './Emitter';

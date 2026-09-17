@@ -30,6 +30,7 @@ import {
     TrailTextureMode,
     Collision,
     EndBehavior,
+    MaxCulling,
 } from '@rzmps/rzmps';
 
 const SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY = '__rzmps_configureParticleSystem';
@@ -77,6 +78,7 @@ const DEFAULT_RENDERER_FACTORIES = {
     Trail: () => new TrailRenderer(),
 };
 const END_BEHAVIOR_OPTIONS = EndBehavior;
+const MAX_CULLING_OPTIONS = MaxCulling ?? { New: 'new', Old: 'old' };
 const RENDERER_MODE_OPTIONS = { WebGL: 'webgl', WebGPU: 'webgpu' };
 const CURVE_PRESET_DEFINITIONS = new Map(
     curvePresetDefinitions.map((definition) => [definition.name, definition]),
@@ -287,8 +289,13 @@ export class ParticleSystemGUI {
         this.addDynamicValue(folder, system, 'gravityModifier', 'Gravity Modifier');
         folder.add(system, 'simulationSpeed', 0, 4, 0.01).name('Simulation Speed');
         folder.add(system, 'duration', 0.01).name('Duration');
+        folder.add(system, 'prewarm').name('Prewarm');
+        folder.add(system, 'prewarmFPS', 1, 120, 1).name('Prewarm FPS');
         folder.add(system, 'looping').name('Looping');
         folder.add(system, 'endBehavior', END_BEHAVIOR_OPTIONS).name('End Behavior');
+        folder.add(system, 'maxParticles', 0, 100000, 1).name('Max Particles');
+        folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling');
+        folder.add(system, 'simulationDistance', 0, 1000, 0.1).name('Simulation Distance');
         const actions = {
             start: () => system.start(),
             pause: () => system.pause(),
@@ -1163,8 +1170,13 @@ export class ParticleSystemGUI {
             `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
             `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
             `  duration: ${this.serializeValue(system.duration)},`,
+            `  prewarm: ${this.serializeValue(system.prewarm)},`,
+            `  prewarmFPS: ${this.serializeValue(system.prewarmFPS)},`,
             `  looping: ${this.serializeValue(system.looping)},`,
             `  endBehavior: ${this.serializeEndBehavior(system.endBehavior)},`,
+            `  maxParticles: ${this.serializeValue(system.maxParticles)},`,
+            `  maxCullingMode: ${this.serializeValue(system.maxCullingMode)},`,
+            `  simulationDistance: ${this.serializeValue(system.simulationDistance)},`,
             '  emitters: [',
             this.indent(emitters, 4),
             '  ],',

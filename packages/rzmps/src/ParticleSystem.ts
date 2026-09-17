@@ -14,6 +14,7 @@ import type { CollisionHit } from './interfaces/ICollisionBackend';
 import type { Tag } from './types/Tag';
 import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
+import { MaxCulling } from './enums/MaxCulling';
 
 interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
@@ -21,8 +22,13 @@ interface ParticleSystemOptions {
   modules: Multiple<Module>;
   simulationSpeed: number;
   duration: number;
+  prewarm: boolean;
+  prewarmFPS: number;
   looping: boolean;
   endBehavior: EndBehavior | `${EndBehavior}`;
+  maxParticles: number;
+  maxCullingMode: MaxCulling | `${MaxCulling}`;
+  simulationDistance: number;
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   simulationSpace: SimulationSpace | `${SimulationSpace}`;
@@ -72,8 +78,14 @@ class ParticleSystem extends THREE.Object3D {
   gravityModifier: DynamicValue<number>;
   simulationSpeed: number;
   duration: number;
+  prewarm: boolean;
+  prewarmFPS: number;
   looping: boolean;
   endBehavior: EndBehavior;
+
+  maxParticles: number = 1000;
+  maxCullingMode: MaxCulling;
+  simulationDistance: number;
 
   private _simulationSpace: SimulationSpace = SimulationSpace.Local;
   get simulationSpace(): SimulationSpace {
@@ -115,12 +127,14 @@ class ParticleSystem extends THREE.Object3D {
   private _playing = true;
   private _paused = false;
   private _elapsedTime = 0;
+  private _prewarmed = false;
   private _ended = false;
   private _destroyed = false;
   get destroyed(): boolean { return this._destroyed; }
 
   private readonly _rendererObjects = new Set<THREE.Object3D>();
   private readonly _worldRendererRoot = new THREE.Group();
+  private _contextCaptureDummy: THREE.Mesh;
 
   constructor(options: Partial<ParticleSystemOptions> = {}) {
     super();
@@ -130,8 +144,14 @@ class ParticleSystem extends THREE.Object3D {
     this.modules = acceptMultiple(options.modules) ?? [];
     this.simulationSpeed = options.simulationSpeed ?? 1;
     this.duration = options.duration ?? 10;
+    this.prewarm = options.prewarm ?? false;
+    this.prewarmFPS = options.prewarmFPS ?? 24;
     this.looping = options.looping ?? true;
     this.endBehavior = (options.endBehavior as EndBehavior) ?? EndBehavior.None;
+
+    this.maxParticles = Math.max(options.maxParticles ?? this.maxParticles, 0);
+    this.maxCullingMode = (options.maxCullingMode as MaxCulling) ?? MaxCulling.New;
+    this.simulationDistance = Math.max(options.simulationDistance ?? 0, 0);
 
     // If gravity is passed in, gravityModifier will be set to 1.
     // In effect, this means gravity will be turned off by default,
@@ -147,12 +167,14 @@ class ParticleSystem extends THREE.Object3D {
     this.emitters.forEach((e) => e.setup(this));
     this.renderers.forEach((r) => r.setup(this));
 
-    // Store these here so that other renderers/modules can access easily
-    // Dummy mesh that renders nothing allows us to catch the onBeforeRender hook
-    const dummy = new THREE.Mesh();
-    this.add(dummy);
+    // Store these here so that other renderers/modules can access easily.
+    // The dummy renders no color, but avoids frustum culling so offscreen roots
+    // can still capture the active renderer, scene, and camera.
+    this._contextCaptureDummy = new THREE.Mesh();
+    this._contextCaptureDummy.frustumCulled = false;
+    this.add(this._contextCaptureDummy );
 
-    dummy.onBeforeRender = (renderer, scene, camera) => {
+    this._contextCaptureDummy .onBeforeRender = (renderer, scene, camera) => {
       this._renderer = renderer;
       this._scene = scene;
       this._camera = camera;
@@ -180,7 +202,11 @@ class ParticleSystem extends THREE.Object3D {
     // Check for pauses
     if (this._paused) return;
 
+    if (!this._isWithinSimulationDistance()) return;
+
     this.syncRendererParents();
+
+    this._prewarm();
 
     if (this._playing) this._updateSystemTime();
 
@@ -213,6 +239,12 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _processParticles() {
+    // Cull particles
+    if (this.particles.length > this.maxParticles) {
+      if (this.maxCullingMode == MaxCulling.New) this.particles.splice(this.maxParticles)
+      else this.particles.splice(0, this.particles.length - this.maxParticles)
+    }
+
     // Moudle preparation
     this.modules
       .flatMap((module) => module.withDependents())
@@ -286,9 +318,11 @@ class ParticleSystem extends THREE.Object3D {
     parentDeltaTime: number,
   ): void {
     if (!this._playing || this._paused) return;
+    if (!this._isWithinSimulationDistance()) return;
 
     this.syncRendererParents();
     this.deltaTime = this._scaleDeltaTime(parentDeltaTime);
+    this._prewarm();
     this._updateSystemTime();
 
     if (options.emitContinuous) {
@@ -431,19 +465,22 @@ class ParticleSystem extends THREE.Object3D {
     this._paused = false;
     this._ended = false;
     this._elapsedTime = 0;
+    this._prewarmed = false;
     this.lastFrame = now;
 
     this.emitters.forEach((emitter) => emitter.reset());
-
-    this.subSystems.forEach((_options, subSystem) => {
-      subSystem.start();
-    });
 
     this._emissionRuns.forEach((run) => {
       this.emitters.forEach((emitter) => emitter.clearContext(run.id));
     });
 
     this._emissionRuns.length = 0;
+
+    this.subSystems.forEach((_options, subSystem) => {
+      subSystem.start();
+    });
+
+    this._prewarm();
   }
 
   // Pause emission and simulation
@@ -520,6 +557,7 @@ class ParticleSystem extends THREE.Object3D {
   // Clear particles
   public clearParticles(): void {
     this.particles.length = 0;
+    this._prewarmed = false;
 
     this.renderers.forEach((renderer) => {
       renderer.update(this.particles, this);
@@ -751,6 +789,61 @@ class ParticleSystem extends THREE.Object3D {
       this._playing = false;
       this._ended = true;
     }
+  }
+
+  private _prewarm(): void {
+    if (!this.prewarm || this._prewarmed || !this._playing || this._paused) return;
+
+    this._prewarmed = true;
+
+    if (this.duration <= 0) return;
+
+    const fps = Number.isFinite(this.prewarmFPS) && this.prewarmFPS > 0
+      ? this.prewarmFPS
+      : 24;
+    const frameDuration = 1 / fps;
+    const previousDeltaTime = this.deltaTime;
+    let remaining = this.duration;
+
+    this.emitters.forEach((emitter) => emitter.reset());
+    this._elapsedTime = 0;
+
+    while (remaining > 0 && !this._destroyed) {
+      this.deltaTime = Math.min(frameDuration, remaining);
+
+      this._updateSystemTime();
+
+      if (this._playing) {
+        this.emitters.forEach((emitter) => {
+          const newParticles = emitter.update(this.particles, this.getEmitterContext());
+          newParticles.forEach((p) => this._notifySpawn(p));
+        });
+      }
+
+      this._processParticles();
+      this._updateSubSystems();
+      this._handleEndBehavior();
+
+      remaining -= this.deltaTime;
+    }
+
+    this.deltaTime = previousDeltaTime;
+    this.lastFrame = Date.now();
+  }
+
+  private _isWithinSimulationDistance(): boolean {
+    if (this.simulationDistance <= 0 || !this.sceneCamera) return true;
+
+    const worldPos = new THREE.Vector3();
+    const cameraWorldPos = new THREE.Vector3();
+
+    this.updateWorldMatrix(true, false);
+    this.sceneCamera.updateWorldMatrix(true, false);
+
+    this.getWorldPosition(worldPos);
+    this.sceneCamera.getWorldPosition(cameraWorldPos);
+
+    return worldPos.distanceToSquared(cameraWorldPos) <= this.simulationDistance ** 2;
   }
 
   private _handleEndBehavior(): void {

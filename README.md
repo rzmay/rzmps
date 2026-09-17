@@ -180,9 +180,15 @@ interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
   renderers: Multiple<Renderer>;
   modules: Multiple<Module>;
+  simulationSpeed: number;
   duration: number;
+  prewarm: boolean;
+  prewarmFPS: number;
   looping: boolean;
   endBehavior: EndBehavior;
+  maxParticles: number;
+  maxCullingMode: MaxCulling;
+  simulationDistance: number;
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   simulationSpace: SimulationSpace;
@@ -191,6 +197,14 @@ interface ParticleSystemOptions {
 
 `duration` and `looping` control the particle system's emission timeline.
 Emitters use normalized system time for rate curves and bursts.
+
+Set `prewarm: true` to simulate one full `duration` cycle before the system
+first renders. `prewarmFPS` controls the fixed warmup step rate and defaults to
+`24`, which keeps the warmup inexpensive while avoiding an empty first frame.
+
+Set `simulationDistance` above `0` to pause simulation while the particle
+system is farther than that distance from the active camera. The default is `0`,
+which disables distance limiting.
 
 For non-looping systems, `endBehavior` controls what happens after the system
 duration has elapsed.
@@ -209,13 +223,33 @@ enum EndBehavior {
 | `Destroy`          | Stops emission, lets live particles finish, then destroys the system. |
 | `DestroyImmediate` | Destroys the system as soon as its duration elapses.                  |
 
+### Max Particles
+
+`maxParticles` caps the number of live particles in the system. When the cap is
+exceeded, `maxCullingMode` controls which particles are removed.
+
+```ts
+enum MaxCulling {
+  New = "new",
+  Old = "old",
+}
+```
+
+| Value | Behavior                                                                  |
+| ----- | ------------------------------------------------------------------------- |
+| `New` | Keeps the existing particles and discards particles after `maxParticles`. |
+| `Old` | Removes particles from the front of the particle list first.              |
+
+Particle age is determined by list order for speed, rather than by comparing
+lifetime values.
+
 ### Simulation Space
 
 `simulationSpace` follows the `SimulationSpace` enum and controls whether
 particle positions are stored relative to the particle system or in world space.
 
 ```ts
-enum EndBehavior {
+enum SimulationSpace {
   Local = "local",
   World = "world",
 }

@@ -6,11 +6,11 @@
 [![npm](https://img.shields.io/npm/v/@rzmps/rzmps)](https://www.npmjs.com/package/@rzmps/rzmps)
 [![license](https://img.shields.io/npm/l/@rzmps/rzmps)](https://github.com/rzmay/rzmps)
 
-| Resource    | Link                                                         |
-| ----------- | ------------------------------------------------------------ |
+| Resource    | Link                                                                         |
+| ----------- | ---------------------------------------------------------------------------- |
 | npm package | [npmjs.com/package/@rzmps/rzmps](https://www.npmjs.com/package/@rzmps/rzmps) |
-| GitHub repo | [github.com/rzmay/rzmps](https://github.com/rzmay/rzmps)       |
-| Live demo   | [rzmps.rzmay.com](https://rzmps.rzmay.com)                     |
+| GitHub repo | [github.com/rzmay/rzmps](https://github.com/rzmay/rzmps)                     |
+| Live demo   | [rzmps.rzmay.com](https://rzmps.rzmay.com)                                   |
 
 RZMPS is built from small composable pieces:
 
@@ -180,9 +180,15 @@ interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
   renderers: Multiple<Renderer>;
   modules: Multiple<Module>;
+  simulationSpeed: number;
   duration: number;
+  prewarm: boolean;
+  prewarmFPS: number;
   looping: boolean;
   endBehavior: EndBehavior;
+  maxParticles: number;
+  maxCullingMode: MaxCulling;
+  simulationDistance: number;
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   simulationSpace: SimulationSpace;
@@ -191,6 +197,14 @@ interface ParticleSystemOptions {
 
 `duration` and `looping` control the particle system's emission timeline.
 Emitters use normalized system time for rate curves and bursts.
+
+Set `prewarm: true` to simulate one full `duration` cycle before the system
+first renders. `prewarmFPS` controls the fixed warmup step rate and defaults to
+`24`, which keeps the warmup inexpensive while avoiding an empty first frame.
+
+Set `simulationDistance` above `0` to pause simulation while the particle system
+is farther than that distance from the active camera. The default is `0`, which
+disables distance limiting.
 
 For non-looping systems, `endBehavior` controls what happens after the system
 duration has elapsed.
@@ -209,13 +223,33 @@ enum EndBehavior {
 | `Destroy`          | Stops emission, lets live particles finish, then destroys the system. |
 | `DestroyImmediate` | Destroys the system as soon as its duration elapses.                  |
 
+### Max Particles
+
+`maxParticles` caps the number of live particles in the system. When the cap is
+exceeded, `maxCullingMode` controls which particles are removed.
+
+```ts
+enum MaxCulling {
+  New = "new",
+  Old = "old",
+}
+```
+
+| Value | Behavior                                                                  |
+| ----- | ------------------------------------------------------------------------- |
+| `New` | Keeps the existing particles and discards particles after `maxParticles`. |
+| `Old` | Removes particles from the front of the particle list first.              |
+
+Particle age is determined by list order for speed, rather than by comparing
+lifetime values.
+
 ### Simulation Space
 
 `simulationSpace` follows the `SimulationSpace` enum and controls whether
 particle positions are stored relative to the particle system or in world space.
 
 ```ts
-enum EndBehavior {
+enum SimulationSpace {
   Local = "local",
   World = "world",
 }
@@ -903,8 +937,8 @@ dynamic objects being made based on movement in the scene.
 
 For external physics engines, use the extension packages:
 
-| Package        | Engine       | npm                                                                          |
-| -------------- | ------------ | ---------------------------------------------------------------------------- |
+| Package         | Engine       | npm                                                                            |
+| --------------- | ------------ | ------------------------------------------------------------------------------ |
 | `@rzmps/rapier` | Rapier       | [npmjs.com/package/@rzmps/rapier](https://www.npmjs.com/package/@rzmps/rapier) |
 | `@rzmps/jolt`   | Jolt Physics | [npmjs.com/package/@rzmps/jolt](https://www.npmjs.com/package/@rzmps/jolt)     |
 | `@rzmps/ammo`   | Ammo.js      | [npmjs.com/package/@rzmps/ammo](https://www.npmjs.com/package/@rzmps/ammo)     |

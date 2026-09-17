@@ -16,6 +16,7 @@ import { curvePresets } from '../curvePresets';
 export default async function createSnow() {
   const snow = new ParticleSystem({
     duration: 10,
+    prewarm: true,
     looping: true,
     gravityModifier: 0.025,
     emitters: [
