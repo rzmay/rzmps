@@ -296,21 +296,20 @@ export class ParticleSystemGUI {
         folder.add(system, 'maxParticles', 0, 100000, 1).name('Max Particles');
         folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling');
         folder.add(system, 'simulationDistance', 0, 1000, 0.1).name('Simulation Distance');
+        const controlOptions = {
+            children: true,
+        };
         const actions = {
-            start: () => system.start(),
-            pause: () => system.pause(),
-            resume: () => {
-                if (system.resume) system.resume();
-                else system.start();
-            },
-            stop: () => system.stop(false),
-            stopAndClear: () => system.stop(true),
-            clearParticles: () => system.clearParticles(),
+            start: () => system.start(controlOptions.children),
+            pause: () => system.pause(controlOptions.children),
+            stop: () => system.stop(false, controlOptions.children),
+            stopAndClear: () => system.stop(true, controlOptions.children),
+            clearParticles: () => system.clearParticles(controlOptions.children),
             respawn: () => void this.respawnSystem(),
         };
+        folder.add(controlOptions, 'children').name('Propagate Children');
         folder.add(actions, 'start').name('Start / Restart');
         folder.add(actions, 'pause').name('Pause');
-        folder.add(actions, 'resume').name('Resume');
         folder.add(actions, 'stop').name('Stop');
         folder.add(actions, 'stopAndClear').name('Stop + Clear');
         folder.add(actions, 'clearParticles').name('Clear Particles');

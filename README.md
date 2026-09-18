@@ -264,19 +264,26 @@ Subsystems inherit the parent system's simulation space.
 
 ### Control Methods
 
-| Method                          | Description                                                  |
-| ------------------------------- | ------------------------------------------------------------ |
-| `update()`                      | Advances the particle system. Call once per animation frame. |
-| `start()`                       | Starts or restarts emission.                                 |
-| `pause()`                       | Pauses emission and simulation.                              |
-| `resume()`                      | Resumes from pause.                                          |
-| `stop(clearParticles)`          | Stops emission; optionally clears existing particles.        |
-| `destroy()`                     | Stops, clears, destroys renderers, and removes the system.   |
-| `clearParticles()`              | Removes all live particles.                                  |
-| `addEmitter(emitter)`           | Adds and sets up an emitter.                                 |
-| `addModule(module)`             | Adds a module.                                               |
-| `addRenderer(renderer)`         | Adds and sets up a renderer.                                 |
-| `addSubSystem(system, options)` | Adds a child particle system emitted by particles.           |
+| Method                              | Description                                                  |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `update()`                          | Advances the particle system. Call once per animation frame. |
+| `start(children = true)`            | Starts or restarts emission.                                 |
+| `pause(children = true)`            | Pauses emission and simulation.                              |
+| `stop(clearParticles, children = true)` | Stops emission; optionally clears existing particles.    |
+| `destroy(children = true)`          | Stops, clears, destroys renderers, and removes the system.   |
+| `clearParticles(children = true)`   | Removes all live particles.                                  |
+| `addEmitter(emitter)`               | Adds and sets up an emitter.                                 |
+| `addModule(module)`                 | Adds a module.                                               |
+| `addRenderer(renderer)`             | Adds and sets up a renderer.                                 |
+| `addSubSystem(system, options)`     | Adds a child particle system emitted by particles.           |
+
+For control methods with a `children` argument, `true` propagates the same
+action to child `ParticleSystem` objects in the Three.js hierarchy. Subsystems
+registered through `addSubSystem` are managed separately and are not treated as
+hierarchy children for this propagation.
+
+Use the read-only `playing`, `paused`, and `ended` properties to inspect control
+state and decide whether your application should call `start()`.
 
 ### Event Listeners
 

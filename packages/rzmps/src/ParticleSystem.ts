@@ -125,10 +125,17 @@ class ParticleSystem extends THREE.Object3D {
   private _nextEmissionRunId = 0;
 
   private _playing = true;
+  get playing(): boolean { return this._playing; }
+
   private _paused = false;
+  get paused(): boolean { return this._paused; }
+
+  private _ended = false;
+  get ended(): boolean { return this._ended; }
+
   private _elapsedTime = 0;
   private _prewarmed = false;
-  private _ended = false;
+
   private _destroyed = false;
   get destroyed(): boolean { return this._destroyed; }
 
@@ -458,7 +465,7 @@ class ParticleSystem extends THREE.Object3D {
   */
 
   // Start emitting
-  public start(): void {
+  public start(children: boolean = true): void {
     const now = Date.now();
 
     this._playing = true;
@@ -480,42 +487,25 @@ class ParticleSystem extends THREE.Object3D {
       subSystem.start();
     });
 
+    this._iterateChildren(children, (child) => child.start(false));
+
     this._prewarm();
   }
 
   // Pause emission and simulation
-  public pause(): void {
+  public pause(children: boolean = true): void {
     if (!this._playing || this._paused) return;
     this._paused = true;
 
     this.subSystems.forEach((_options, subSystem) => {
       subSystem.pause();
     });
-  }
 
-  public resume(): void {
-    if (!this._playing || !this._paused) return;
-
-    this._paused = false;
-    this.lastFrame = Date.now();
-
-    const now = Date.now();
-
-    this.particles.forEach((p) => {
-      p.startTime = now - p.realtime;
-    })
-
-    this._emissionRuns.forEach((e) => {
-      e.startTime = now - e.realtime * 1000;
-    })
-
-    this.subSystems.forEach((_options, subSystem) => {
-      subSystem.resume();
-    });
+    this._iterateChildren(children, (child) => child.pause(false));
   }
 
   // Stop emission and optionally clear particles
-  public stop(clearParticles: boolean): void {
+  public stop(clearParticles: boolean, children: boolean = true): void {
     this._playing = false;
     this._paused = false;
     this._ended = true;
@@ -523,6 +513,8 @@ class ParticleSystem extends THREE.Object3D {
     this.subSystems.forEach((_options, subSystem) => {
       subSystem.stop(clearParticles);
     });
+
+    this._iterateChildren(children, (child) => child.stop(clearParticles, false));
 
     this._emissionRuns.forEach((run) => {
       this.emitters.forEach((emitter) => {
@@ -532,30 +524,12 @@ class ParticleSystem extends THREE.Object3D {
 
     this._emissionRuns.length = 0;
 
-    if (clearParticles) this.clearParticles();
-  }
-
-  public destroy(): void {
-    if (this._destroyed) return;
-
-    this._destroyed = true;
-    this.stop(true);
-
-    this.subSystems.forEach((_options, subSystem) => {
-      subSystem.destroy();
-    });
-
-    this.renderers.forEach((renderer) => {
-      renderer.destroy();
-    });
-
-    this.removeFromParent();
-    this.cleanup();
-    this.dispatchEvent({ type: 'destroyed' } as unknown as Parameters<typeof this.dispatchEvent>[0]);
+    // Child systems were handled above, so avoid propagating the clear a second time.
+    if (clearParticles) this.clearParticles(false);
   }
 
   // Clear particles
-  public clearParticles(): void {
+  public clearParticles(children: boolean = true): void {
     this.particles.length = 0;
     this._prewarmed = false;
 
@@ -566,6 +540,29 @@ class ParticleSystem extends THREE.Object3D {
     this.subSystems.forEach((_options, subSystem) => {
       subSystem.clearParticles();
     });
+
+    this._iterateChildren(children, (child) => child.clearParticles(false));
+  }
+
+  public destroy(children: boolean = true): void {
+    if (this._destroyed) return;
+
+    this._destroyed = true;
+    this.stop(true, children);
+
+    this.subSystems.forEach((_options, subSystem) => {
+      subSystem.destroy();
+    });
+
+    this._iterateChildren(children, (child) => child.destroy(false));
+
+    this.renderers.forEach((renderer) => {
+      renderer.destroy();
+    });
+
+    this.removeFromParent();
+    this.cleanup();
+    this.dispatchEvent({ type: 'destroyed' } as unknown as Parameters<typeof this.dispatchEvent>[0]);
   }
 
   /*
@@ -829,6 +826,24 @@ class ParticleSystem extends THREE.Object3D {
 
     this.deltaTime = previousDeltaTime;
     this.lastFrame = Date.now();
+  }
+
+  private _iterateChildren(
+    children: boolean,
+    callback: (child: ParticleSystem) => void,
+  ): void {
+    if (!children) return;
+
+    const particleSystems: ParticleSystem[] = [];
+
+    this.traverse((child) => {
+      if (child === this || !(child instanceof ParticleSystem) || child.isSubSystem) return;
+
+      particleSystems.push(child);
+    });
+
+    // Pass false in callbacks since the collected list already includes all descendants.
+    particleSystems.forEach(callback);
   }
 
   private _isWithinSimulationDistance(): boolean {
