@@ -8,9 +8,9 @@ import {
   RotationOverLifetime,
   ScaleOverLifetime,
   SpriteRenderer,
+  Textures,
   TransformByNoise,
 } from '@rzmps/rzmps';
-import defaultSprite from 'url:../../assets/images/default.png';
 import smokeAlpha from 'url:../../assets/images/smoke_alpha.jpg';
 import { curvePresets } from '../curvePresets';
 
@@ -29,7 +29,7 @@ export default async function createSmoke() {
         initialValues: {
           lifetime: 4.5,
           speed: 0.55,
-          scale: new THREE.Vector3(10, 10, 10),
+          scale: new THREE.Vector3(2.5, 2.5, 2.5),
           color: [new THREE.Color('#4e4d4a'), new THREE.Color('#a7a097')],
           alpha: 0.55,
           velocity: new THREE.Vector3(0, 0.75, 0),
@@ -61,7 +61,7 @@ export default async function createSmoke() {
       }),
     ],
     renderers: [
-      new SpriteRenderer(defaultSprite, {
+      new SpriteRenderer(Textures.Default, {
         material: 'basic',
         alphaMap: smokeAlpha,
         softParticleDistance: 1,

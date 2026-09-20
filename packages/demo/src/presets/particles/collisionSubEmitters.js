@@ -4,11 +4,12 @@ import {
   ColorOverLifetime,
   Emitter,
   EmissionShape,
+  EmissionSource,
   ParticleSystem,
   SpriteRenderer,
+  Textures,
   TrailRenderer,
 } from '@rzmps/rzmps';
-import circleSprite from 'url:../../assets/images/circle.png';
 
 export default async function createCollisionSubEmitters() {
   const collision = new ParticleSystem({
@@ -22,12 +23,9 @@ export default async function createCollisionSubEmitters() {
         radialSpeed: [1, 5],
         initialValues: {
           lifetime: 8,
-          scale: new THREE.Vector3(0.5, 0.5, 0.5),
+          scale: new THREE.Vector3(0.125, 0.125, 0.125),
           mass: 1,
-          color: [
-            new THREE.Color('#ff6633'),
-            new THREE.Color('#ffd166'),
-          ],
+          color: new THREE.Color('#aaa'),
         },
       }),
     ],
@@ -35,16 +33,16 @@ export default async function createCollisionSubEmitters() {
       new Collision({
         bounce: 0.75,
         dampen: 0.05,
-        radiusScale: 0.5,
+        radiusScale: 1,
         applyImpulses: true,
       }),
     ],
     renderers: [
-      new SpriteRenderer(circleSprite, {
+      new SpriteRenderer(Textures.Circle, {
         material: 'basic',
         castShadow: true,
         materialOptions: {
-          roughness: 0.5,
+          roughness: 0,
           sphericalNormals: true,
           normalLighting: 1,
         },
@@ -55,16 +53,19 @@ export default async function createCollisionSubEmitters() {
   const sparks = new ParticleSystem({
     duration: 0.08,
     looping: false,
-    gravityModifier: 0.35,
+    gravityModifier: 1,
     emitters: [
       new Emitter({
-        source: EmissionShape.Sphere(0.03),
+        source: new EmissionShape({
+          geometry: new THREE.ConeGeometry(0.01, 0.01, 32, 1, true),
+          source: EmissionSource.Volume,
+        }),
         rate: 0,
-        bursts: [{ time: 0, count: 7 }],
-        radialSpeed: [3.5, 7.5],
+        bursts: [{ time: 0, count: [3, 6] }],
+        radialSpeed: [0.5, 2],
         initialValues: {
           lifetime: [0.18, 0.42],
-          scale: new THREE.Vector3(1, 1, 1),
+          scale: [new THREE.Vector3(0.01, 0.01, 0.01), new THREE.Vector3(0.1, 0.1, 0.1)],
           color: [
             new THREE.Color('#fff4b0'),
             new THREE.Color('#ff8a3d'),
@@ -83,7 +84,8 @@ export default async function createCollisionSubEmitters() {
         lifetime: 0.16,
         minimumVertexDistance: 0.015,
         dieWithParticles: false,
-        width: 0.025,
+        width: 0.18,
+        sizeAffectsWidth: true,
         inheritParticleColor: true,
         materialOptions: {
           emissive: new THREE.Color('#ffb347'),
@@ -101,6 +103,10 @@ export default async function createCollisionSubEmitters() {
     emitContinuous: false,
     emitOnCollision: true,
     inheritLifetime: false,
+    impulseAffectsScale: 0.1,
+    impulseAffectsSpeed: 0.45,
+    impulseAffectsAlignment: true,
+    impulseThreshhold: 1.2,
   });
 
   collision.name = 'Collision + Sub Emitters';

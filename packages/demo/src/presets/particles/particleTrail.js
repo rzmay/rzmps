@@ -7,12 +7,12 @@ import {
   TrailMode,
   TransformByNoise,
   TrailTextureMode,
+  Textures,
 } from '@rzmps/rzmps';
 import { curvePresets } from '../curvePresets';
-import simpleSprite from 'url:../../assets/images/simple.png';
 
 export default async function createParticleTrail() {
-  const simpleSpriteTexture = new THREE.TextureLoader().load(simpleSprite);
+  const simpleSpriteTexture = new THREE.TextureLoader().load(Textures.Simple);
 
   const particleTrail = new ParticleSystem({
     duration: 2,

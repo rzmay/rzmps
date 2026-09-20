@@ -5,8 +5,8 @@ import {
   EmissionShape,
   ParticleSystem,
   SpriteRenderer,
+  Textures,
 } from '@rzmps/rzmps';
-import circleSprite from 'url:../../assets/images/circle.png';
 
 export default async function createCollision() {
   const collision = new ParticleSystem({
@@ -22,7 +22,7 @@ export default async function createCollision() {
         radialSpeed: [1, 5],
         initialValues: {
           lifetime: 8,
-          scale: new THREE.Vector3(0.5, 0.5, 0.5),
+          scale: new THREE.Vector3(0.125, 0.125, 0.125),
           mass: 1,
           color: [
             new THREE.Color('#ff6633'),
@@ -35,12 +35,12 @@ export default async function createCollision() {
       new Collision({
         bounce: 0.75,
         dampen: 0.05,
-        radiusScale: 0.5,
+        radiusScale: 1,
         applyImpulses: true,
       }),
     ],
     renderers: [
-      new SpriteRenderer(circleSprite, {
+      new SpriteRenderer(Textures.Circle, {
         material: 'basic',
         castShadow: true,
 

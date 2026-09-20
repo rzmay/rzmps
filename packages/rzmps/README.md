@@ -264,18 +264,18 @@ Subsystems inherit the parent system's simulation space.
 
 ### Control Methods
 
-| Method                              | Description                                                  |
-| ----------------------------------- | ------------------------------------------------------------ |
-| `update()`                          | Advances the particle system. Call once per animation frame. |
-| `start(children = true)`            | Starts or restarts emission.                                 |
-| `pause(children = true)`            | Pauses emission and simulation.                              |
-| `stop(clearParticles, children = true)` | Stops emission; optionally clears existing particles.    |
-| `destroy(children = true)`          | Stops, clears, destroys renderers, and removes the system.   |
-| `clearParticles(children = true)`   | Removes all live particles.                                  |
-| `addEmitter(emitter)`               | Adds and sets up an emitter.                                 |
-| `addModule(module)`                 | Adds a module.                                               |
-| `addRenderer(renderer)`             | Adds and sets up a renderer.                                 |
-| `addSubSystem(system, options)`     | Adds a child particle system emitted by particles.           |
+| Method                                  | Description                                                  |
+| --------------------------------------- | ------------------------------------------------------------ |
+| `update()`                              | Advances the particle system. Call once per animation frame. |
+| `start(children = true)`                | Starts or restarts emission.                                 |
+| `pause(children = true)`                | Pauses emission and simulation.                              |
+| `stop(clearParticles, children = true)` | Stops emission; optionally clears existing particles.        |
+| `destroy(children = true)`              | Stops, clears, destroys renderers, and removes the system.   |
+| `clearParticles(children = true)`       | Removes all live particles.                                  |
+| `addEmitter(emitter)`                   | Adds and sets up an emitter.                                 |
+| `addModule(module)`                     | Adds a module.                                               |
+| `addRenderer(renderer)`                 | Adds and sets up a renderer.                                 |
+| `addSubSystem(system, options)`         | Adds a child particle system emitted by particles.           |
 
 For control methods with a `children` argument, `true` propagates the same
 action to child `ParticleSystem` objects in the Three.js hierarchy. Subsystems
@@ -330,6 +330,12 @@ interface SubSystemOptions {
   inheritColor: boolean;
   inheritAlpha: boolean;
   inheritMass: boolean;
+  impulseAffectsScale: number;
+  impulseAffectsSpeed: number;
+  impulseAffectsLifetime: number;
+  impulseAffectsMass: number;
+  impulseAffectsAlignment: boolean;
+  impulseThreshhold: number;
 }
 ```
 
@@ -340,11 +346,36 @@ rocketSystem.addSubSystem(sparkSystem, {
   inheritColor: true,
   inheritAlpha: true,
   inheritScale: true,
+  impulseAffectsScale: 0.35,
+  impulseAffectsAlignment: true,
+  impulseThreshhold: 0.2,
 });
 ```
 
 Subsystems are owned and updated by their parent. They can emit continuously
 from parent particles, or trigger emission runs on spawn, collision, or death.
+For collision-triggered emission runs, impulse effect values use
+`Math.pow(collision.impulse.length(), effect)`. Scale, speed, and mass use that
+result as a multiplier. Lifetime adds that result to the emission run duration.
+Alignment rotates the emission so its up axis follows the collision impulse.
+`impulseThreshhold` defaults to `0`; collision-triggered runs only start when
+`collision.impulse.length() > impulseThreshhold`.
+
+### Textures
+
+RZMPS exports built-in texture URLs for common sprite and trail renderers:
+
+```ts
+import { Textures } from "@rzmps/rzmps";
+
+new SpriteRenderer(Textures.Circle);
+```
+
+| Export             | Description                 |
+| ------------------ | --------------------------- |
+| `Textures.Default` | Default particle sprite.    |
+| `Textures.Circle`  | Circular particle sprite.   |
+| `Textures.Simple`  | Simple soft circle texture. |
 
 ## Emitters
 
@@ -646,7 +677,13 @@ interface CollisionOptions extends Partial<ModuleOptions> {
 
 Detects collisions using an `ICollisionBackend`, reflects velocity with bounce
 and dampening, reduces lifetime on impact, and can apply impulses to dynamic
-physics bodies when supported by the backend.
+physics bodies when supported by the backend. `radiusScale` multiplies half of
+the largest particle scale component to produce the collision radius; sprite
+renderers draw particle scale in world units, so `radiusScale: 1` matches a
+full-size circular sprite. Collision hits report `impulse` as the collision
+normal multiplied by normal impact speed and particle mass, keeping
+collision-triggered effects consistent across the built-in octree backend and
+the external Rapier, Jolt, and Ammo backends.
 
 ### Audio
 
@@ -671,11 +708,18 @@ interface AudioOptions extends Partial<ModuleOptions> {
   alphaAffectsVolume: number;
   speedAffectsPitch: number;
   speedAffectsVolume: number;
+  impulseAffectsPitch: number;
+  impulseAffectsVolume: number;
+  impulseThreshhold: number;
 }
 ```
 
 Adds positional audio to particles and can play event sounds for spawn,
-collision, and death.
+collision, and death. Collision event sounds can use `impulseAffectsPitch` and
+`impulseAffectsVolume`; each uses `Math.pow(collision.impulse.length(), effect)`
+as a multiplier on the evaluated pitch or volume. `impulseThreshhold` defaults
+to `0`; collision sounds only play when
+`collision.impulse.length() > impulseThreshhold`.
 
 ## Built-In Renderers
 

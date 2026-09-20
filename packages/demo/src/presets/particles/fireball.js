@@ -25,7 +25,7 @@ export default async function createFireball() {
         initialValues: {
           lifetime: 0.7,
           speed: 1,
-          scale: new THREE.Vector3(10, 10, 10),
+          scale: new THREE.Vector3(2.5, 2.5, 2.5),
           color: [new THREE.Color('#ffffff'), new THREE.Color('#ffd166')],
           rotation: [new THREE.Vector3(-90, 0, 0), new THREE.Vector3(90, 0, 0)],
           alpha: 1,

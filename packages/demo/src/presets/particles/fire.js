@@ -32,7 +32,7 @@ export default async function createFire() {
         initialValues: {
           lifetime: 1.35,
           speed: 1.2,
-          scale: new THREE.Vector3(10, 10, 10),
+          scale: new THREE.Vector3(2.5, 2.5, 2.5),
           color: [new THREE.Color('#ff9c88'), new THREE.Color('#ffd47f')],
           alpha: 0.95,
           velocity: new THREE.Vector3(0, 2.2, 0),

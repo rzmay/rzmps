@@ -47,6 +47,8 @@ export interface EmissionContext {
   color?: THREE.Color;
   alpha?: number;
   mass?: number;
+  velocityScale?: number;
+  scale?: number;
   tags?: Tag[];
 }
 
@@ -219,10 +221,15 @@ class Emitter {
       mass *= context.mass;
     }
 
+    const scale = evaluateDynamicVector(this.initialValues.scale ?? new THREE.Vector3(1, 1, 1), time);
+    if (context?.scale !== undefined) {
+      scale.multiplyScalar(context.scale);
+    }
+
     const particle = new Particle({
       position,
       rotation: evaluateDynamicVector(this.initialValues.rotation ?? rotation, time),
-      scale: evaluateDynamicVector(this.initialValues.scale ?? new THREE.Vector3(1, 1, 1), time),
+      scale,
       lifetime: evaluateDynamicNumber(this.initialValues.lifetime ?? 1, time),
       color,
       alpha,
@@ -238,6 +245,10 @@ class Emitter {
       .add(normal.multiplyScalar(
         evaluateDynamicNumber(this.radialSpeed, time),
       ));
+
+    if (context?.velocityScale !== undefined) {
+      particle.velocity.multiplyScalar(context.velocityScale);
+    }
 
     if (this.initialValues.angularVelocity) particle.angularVelocity = evaluateDynamicVector(this.initialValues.angularVelocity, time).clone();
     if (this.initialValues.scalarVelocity) particle.scalarVelocity = evaluateDynamicVector(this.initialValues.scalarVelocity, time).clone();

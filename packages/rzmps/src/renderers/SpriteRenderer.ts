@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import Renderer, { type RendererOptions } from '../Renderer';
 import Particle from '../Particle';
 import ParticleSystem from '../ParticleSystem';
-import simple from '../assets/images/default.png';
+import defaultTex from '../assets/textures/default.png';
 import UnlitSprite, { type UnlitSpriteOptions } from '../materials/UnlitSprite';
 import BasicSprite, { type BasicSpriteOptions } from '../materials/BasicSprite';
 import WebGPUUnlitSprite from '../materials/WebGPUUnlitSprite';
@@ -132,7 +132,7 @@ class SpriteRenderer extends Renderer {
   private readonly scaleVector = new THREE.Vector3();
   private readonly color = new THREE.Color();
 
-  constructor(texture: string | THREE.Texture = simple, options: Partial<SpriteRendererOptions> = {}) {
+  constructor(texture: string | THREE.Texture = defaultTex, options: Partial<SpriteRendererOptions> = {}) {
     super(options);
 
     const textureLoader = new THREE.TextureLoader();
@@ -235,6 +235,14 @@ class SpriteRenderer extends Renderer {
       );
       return;
     }
+
+    const viewportSize = this.getUniformValue<THREE.Vector2>(
+      'depthResolution',
+      () => new THREE.Vector2(),
+    );
+
+    system.sceneRenderer?.getDrawingBufferSize(viewportSize);
+    this.setUniformValue('viewportHeight', viewportSize.y || 600);
 
     // Set uniforms for soft particles
     this.setUniformValue('softParticles', Boolean(this.softParticleDistance));
@@ -437,21 +445,7 @@ class SpriteRenderer extends Renderer {
       return this.scaleVector;
     }
 
-    const drawingBufferHeight =
-      renderer?.getDrawingBufferSize(new THREE.Vector2()).y
-      ?? renderer?.domElement?.height
-      ?? 600;
-    const worldUnitsPerPointSizeUnit =
-      2
-      * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)
-      * 300
-      / drawingBufferHeight;
-
-    this.scaleVector.set(
-      width * worldUnitsPerPointSizeUnit,
-      height * worldUnitsPerPointSizeUnit,
-      1,
-    );
+    this.scaleVector.set(width, height, 1);
 
     return this.scaleVector;
   }

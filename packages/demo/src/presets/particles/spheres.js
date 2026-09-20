@@ -3,8 +3,8 @@ import {
   Emitter,
   ParticleSystem,
   SpriteRenderer,
+  Textures,
 } from '@rzmps/rzmps';
-import circleSprite from 'url:../../assets/images/circle.png';
 
 export default async function createSpheres() {
   const colors = new Set([
@@ -29,8 +29,8 @@ export default async function createSpheres() {
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.4, 0.4, 0.4),
-            new THREE.Vector3(1.0, 1.0, 1.0),
+            new THREE.Vector3(0.1, 0.1, 0.1),
+            new THREE.Vector3(0.25, 0.25, 0.25),
           ],
           alpha: 1,
         },
@@ -40,7 +40,7 @@ export default async function createSpheres() {
     modules: [],
 
     renderers: [
-      new SpriteRenderer(circleSprite, {
+      new SpriteRenderer(Textures.Circle, {
         material: 'basic',
 
         materialOptions: {

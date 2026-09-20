@@ -1,6 +1,7 @@
 import createAdditiveSmoke from './additiveSmoke';
 import createBubbles from './bubbles';
 import createCollision from './collision';
+import createCollisionSubEmitters from './collisionSubEmitters';
 import createCubes from './cubes';
 import createFire from './fire';
 import createFireball from './fireball';
@@ -27,6 +28,7 @@ const particlePresets = {
   "Particle Trail": createParticleTrail,
   "Ribbon Trail": createRibbonTrail,
   Collision: createCollision,
+  "Collision Sparks": createCollisionSubEmitters,
   "Bubbles (Audio)": createBubbles,
   "Fireworks (Subsystems)": createFireworks,
   "Cubes and Spheres (Tags)": createTags,

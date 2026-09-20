@@ -29,32 +29,9 @@
   ],
   "scripts": {
     "build": "tsdown && tsc --emitDeclarationOnly && npm run copy:assets",
-    "build:shaders": "node scripts/build-shaders.mjs",
-    "copy:assets": "mkdir -p build && rm -rf build/assets && cp -r src/assets build/assets",
-    "fix:shader-imports": "node scripts/fix-shader-imports.mjs",
+    "copy:assets": "mkdir -p build && cp build/index.d.ts build/index.d.mts && cp build/index.d.ts build/index.d.cts && cp src/global.d.ts build/global.d.ts && rm -rf build/assets && cp -r src/assets build/assets",
     "dev": "concurrently -k \"tsdown --watch\" \"tsc --emitDeclarationOnly --watch\" \"watch 'npm run copy:assets' src/assets\"",
     "prepack": "npm run build"
-  },
-  "tsdown": {
-    "entry": [
-      "src/index.ts"
-    ],
-    "outDir": "build",
-    "format": [
-      "esm",
-      "cjs"
-    ],
-    "dts": false,
-    "platform": "neutral",
-    "fixedExtension": true,
-    "target": "es2015",
-    "loader": {
-      ".frag": "text",
-      ".vert": "text",
-      ".png": "dataurl",
-      ".jpg": "dataurl",
-      ".jpeg": "dataurl"
-    }
   },
   "author": "Robert May",
   "license": "MIT",

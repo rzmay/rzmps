@@ -31,9 +31,11 @@ import {
     Collision,
     EndBehavior,
     MaxCulling,
+    Textures,
 } from '@rzmps/rzmps';
 
 const SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY = '__rzmps_configureParticleSystem';
+const RAW_CODE = Symbol('rawCode');
 
 const RESOURCE_LINKS = [
     { label: 'GitHub', href: 'https://github.com/rzmay/rzmps', Icon: GitFork },
@@ -516,6 +518,12 @@ export class ParticleSystemGUI {
         folder.add(options, 'inheritColor').name('Inherit Color');
         folder.add(options, 'inheritAlpha').name('Inherit Alpha');
         folder.add(options, 'inheritMass').name('Inherit Mass');
+        folder.add(options, 'impulseAffectsScale', 0, 4, 0.01).name('Impulse Affects Scale');
+        folder.add(options, 'impulseAffectsSpeed', 0, 4, 0.01).name('Impulse Affects Speed');
+        folder.add(options, 'impulseAffectsLifetime', 0, 4, 0.01).name('Impulse Affects Lifetime');
+        folder.add(options, 'impulseAffectsMass', 0, 4, 0.01).name('Impulse Affects Mass');
+        folder.add(options, 'impulseAffectsAlignment').name('Impulse Affects Alignment');
+        folder.add(options, 'impulseThreshhold', 0, 100, 0.01).name('Impulse Threshhold');
 
         const info = {
             particles: subSystem.particles.length,
@@ -1140,7 +1148,12 @@ export class ParticleSystemGUI {
 
     collectImports(system, imports) {
         system.modules.forEach((module) => imports.add(module.constructor.name));
-        system.renderers.forEach((renderer) => imports.add(renderer.constructor.name));
+        system.renderers.forEach((renderer) => {
+            imports.add(renderer.constructor.name);
+            if (this.rendererUsesBuiltInTexture(renderer)) {
+                imports.add('Textures');
+            }
+        });
         system.subSystems?.forEach((_options, subSystem) => this.collectImports(subSystem, imports));
     }
 
@@ -1212,6 +1225,12 @@ export class ParticleSystemGUI {
             inheritColor: options.inheritColor,
             inheritAlpha: options.inheritAlpha,
             inheritMass: options.inheritMass,
+            impulseAffectsScale: options.impulseAffectsScale,
+            impulseAffectsSpeed: options.impulseAffectsSpeed,
+            impulseAffectsLifetime: options.impulseAffectsLifetime,
+            impulseAffectsMass: options.impulseAffectsMass,
+            impulseAffectsAlignment: options.impulseAffectsAlignment,
+            impulseThreshhold: options.impulseThreshhold,
         });
     }
 
@@ -1312,7 +1331,7 @@ export class ParticleSystemGUI {
                 castShadow: renderer.castShadow,
                 softParticleDistance: renderer.softParticleDistance,
                 tags: renderer.tags,
-                alphaMap: renderer.alphaMap ? this.textureSource(renderer.alphaMap) : undefined,
+                alphaMap: renderer.alphaMap ? this.rawCode(this.serializeTexture(renderer.alphaMap)) : undefined,
                 material: renderer.materialType,
                 materialOptions: renderer.materialOptions,
             });
@@ -1383,6 +1402,10 @@ export class ParticleSystemGUI {
 
         const options = {};
 
+        if (material.map) {
+            options.map = this.rawCode(this.serializeTexture(material.map));
+        }
+
         if (material.color) {
             options.color = material.color;
         }
@@ -1437,15 +1460,49 @@ export class ParticleSystemGUI {
     }
     serializeTexture(texture) {
         const source = this.textureSource(texture);
-        return source !== undefined
-            ? JSON.stringify(source)
-            : `undefined /* texture ${JSON.stringify(texture.name || texture.uuid)} must be supplied manually */`;
+        const reference = this.textureReference(source);
+        return reference
+            ?? (source !== undefined
+                ? JSON.stringify(source)
+                : `undefined /* texture ${JSON.stringify(texture?.name || texture?.uuid)} must be supplied manually */`);
+    }
+    textureReference(source) {
+        if (source === undefined)
+            return undefined;
+
+        const references = {
+            'Textures.Default': Textures.Default,
+            'Textures.Circle': Textures.Circle,
+            'Textures.Simple': Textures.Simple,
+        };
+
+        return Object.entries(references)
+            .find(([, value]) => value === source)?.[0];
+    }
+    rendererUsesBuiltInTexture(renderer) {
+        if (renderer instanceof SpriteRenderer) {
+            return Boolean(
+                this.textureReference(this.textureSource(renderer.texture))
+                || this.textureReference(this.textureSource(renderer.alphaMap)),
+            );
+        }
+
+        if (renderer instanceof TrailRenderer) {
+            return Boolean(this.textureReference(this.textureSource(renderer.material?.map)));
+        }
+
+        return false;
+    }
+    rawCode(code) {
+        return { [RAW_CODE]: code };
     }
     textureSource(texture) {
-        const image = texture.image;
+        const image = texture?.image;
         return image?.currentSrc || image?.src || undefined;
     }
     serializeValue(value, seen = new WeakSet()) {
+        if (value?.[RAW_CODE])
+            return value[RAW_CODE];
         if (value === undefined)
             return 'undefined';
         if (value === null)

@@ -7,6 +7,7 @@ import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import particleRatio from '../helpers/particleRatio';
 import type { StrictMultiple } from '../types/Multiple';
 import acceptMultiple from '../helpers/acceptMultiple';
+import { CollisionHit } from '../interfaces/ICollisionBackend';
 
 const AUDIO_LISTENER_KEY = "__rzmps_audioListener";
 
@@ -35,6 +36,10 @@ export interface AudioOptions extends Partial<ModuleOptions> {
 
   speedAffectsPitch: number;
   speedAffectsVolume: number;
+
+  impulseAffectsPitch: number;
+  impulseAffectsVolume: number;
+  impulseThreshhold: number;
 }
 
 interface ParticleAudio {
@@ -65,6 +70,9 @@ class Audio extends Module {
   alphaAffectsVolume: number;
   speedAffectsPitch: number;
   speedAffectsVolume: number;
+  impulseAffectsPitch: number;
+  impulseAffectsVolume: number;
+  impulseThreshhold: number;
 
   private _system?: ParticleSystem;
   private _particleAudio = new Map<string, ParticleAudio>();
@@ -109,6 +117,10 @@ class Audio extends Module {
 
     this.speedAffectsPitch = Math.max(0, options.speedAffectsPitch ?? 0);
     this.speedAffectsVolume = Math.max(0, options.speedAffectsVolume ?? 0);
+
+    this.impulseAffectsPitch = Math.max(0, options.impulseAffectsPitch ?? 0);
+    this.impulseAffectsVolume = Math.max(0, options.impulseAffectsVolume ?? 0);
+    this.impulseThreshhold = Math.max(0, options.impulseThreshhold ?? 0);
   }
 
   public prepare(system: ParticleSystem): void {
@@ -116,7 +128,10 @@ class Audio extends Module {
 
     if (!this._setupCallbacks) {
       system.onCollision(
-        (particle, _) => this._handleEvent(particle, this.onCollisionSound),
+        (particle, collisionHit) => {
+          if (collisionHit.impulse.length() <= this.impulseThreshhold) return;
+          this._handleEvent(particle, this.onCollisionSound, collisionHit);
+        },
       );
 
       system.onDeath(
@@ -190,7 +205,7 @@ class Audio extends Module {
     state.audio.setVolume(this._getVolume(particle));
   }
 
-  private _handleEvent(particle: Particle, audio?: AudioBuffer[]): void {
+  private _handleEvent(particle: Particle, audio?: AudioBuffer[], collisionHit?: CollisionHit): void {
     if (
       !audio
       || audio?.length === 0
@@ -203,10 +218,11 @@ class Audio extends Module {
     this._playOneShot(
       audio[Math.floor(Math.random() * audio.length)],
       particle,
+      collisionHit,
     );
   }
 
-  private _playOneShot(clip: AudioBuffer, particle: Particle) {
+  private _playOneShot(clip: AudioBuffer, particle: Particle, collisionHit?: CollisionHit) {
     if (!this.listener || !this._system) return;
 
     const audio = new THREE.PositionalAudio(this.listener);
@@ -215,8 +231,8 @@ class Audio extends Module {
     audio.setLoop(false);
 
     audio.position.copy(particle.position);
-    audio.setPlaybackRate(this._getPitch(particle));
-    audio.setVolume(this._getVolume(particle));
+    audio.setPlaybackRate(this._getPitch(particle, collisionHit));
+    audio.setVolume(this._getVolume(particle, collisionHit));
 
     this._system.add(audio);
     this._eventAudio.add(audio);
@@ -235,7 +251,7 @@ class Audio extends Module {
     }
   }
 
-  private _getPitch(particle: Particle): number {
+  private _getPitch(particle: Particle, collisionHit?: CollisionHit): number {
     const base = evaluateDynamicNumber(
       this.pitch,
       particle.time,
@@ -247,11 +263,12 @@ class Audio extends Module {
       base
         * this._getEffect(particle.scale.length(), this.sizeAffectsPitch)
         * this._getEffect(particle.alpha, this.alphaAffectsPitch)
-        * this._getEffect(particle.velocity.length() * particle.speed, this.speedAffectsPitch),
+        * this._getEffect(particle.velocity.length() * particle.speed, this.speedAffectsPitch)
+        * this._getEffect(collisionHit?.impulse.length() ?? 1, this.impulseAffectsPitch),
     );
   }
 
-  private _getVolume(particle: Particle): number {
+  private _getVolume(particle: Particle, collisionHit?: CollisionHit): number {
     const base = evaluateDynamicNumber(
       this.volume,
       particle.time,
@@ -263,7 +280,8 @@ class Audio extends Module {
       base
         * this._getEffect(particle.scale.length(), this.sizeAffectsVolume)
         * this._getEffect(particle.alpha, this.alphaAffectsVolume)
-        * this._getEffect(particle.velocity.length(), this.speedAffectsVolume),
+        * this._getEffect(particle.velocity.length(), this.speedAffectsVolume)
+        * this._getEffect(collisionHit?.impulse.length() ?? 1, this.impulseAffectsVolume),
     );
   }
 

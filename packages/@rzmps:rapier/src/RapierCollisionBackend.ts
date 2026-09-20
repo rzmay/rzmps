@@ -62,9 +62,17 @@ class RapierCollisionBackend implements ICollisionBackend {
       .clone()
       .addScaledVector(normal, -query.radius);
 
+    const impulse = normal
+      .clone()
+      .multiplyScalar(query.particle.mass)
+      .multiplyScalar(
+        Math.max(0, -query.velocity.dot(normal)),
+      );
+
     return {
       point,
       normal,
+      impulse,
       position: position.addScaledVector(normal, 1e-4),
       backendData: {
         body: hit.collider.parent() ?? undefined,

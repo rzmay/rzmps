@@ -7,10 +7,9 @@ import {
   EmissionShape,
   ParticleSystem,
   SpriteRenderer,
+  Textures,
   TransformByNoise,
 } from '@rzmps/rzmps';
-
-import circleSprite from 'url:../../assets/images/circle.png';
 
 import bubblesUrl from 'url:../../assets/audio/bubbles.mp3';
 import bubblePop1Url from 'url:../../assets/audio/bubble_pop_1.mp3';
@@ -50,8 +49,8 @@ export default async function createBubbles() {
           lifetime: [7, 12],
 
           scale: [
-            new THREE.Vector3(0.5, 0.5, 0.5),
-            new THREE.Vector3(1, 1, 1),
+            new THREE.Vector3(0.125, 0.125, 0.125),
+            new THREE.Vector3(0.25, 0.25, 0.25),
           ],
 
           mass: 0.25,
@@ -76,7 +75,7 @@ export default async function createBubbles() {
       new Collision({
         bounce: 0.9,
         dampen: 0.03,
-        radiusScale: 0.5,
+        radiusScale: 1,
         lifetimeLoss: 1,
       }),
 
@@ -117,7 +116,7 @@ export default async function createBubbles() {
     ],
 
     renderers: [
-      new SpriteRenderer(circleSprite, {
+      new SpriteRenderer(Textures.Circle, {
         material: 'basic',
 
         materialOptions: {

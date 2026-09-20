@@ -109,6 +109,9 @@ class Collision extends Module {
     const end = this._system.simulationSpace === 'world'
       ? endPosition.clone()
       : this._system.localToWorld(endPosition.clone());
+    const velocity = this._system.simulationSpace === 'world'
+      ? particle.velocity.clone()
+      : this.localDirectionToWorld(particle.velocity);
 
     const radius = this.getParticleRadius(particle);
 
@@ -116,17 +119,17 @@ class Collision extends Module {
       particle,
       start,
       end,
+      velocity,
       radius,
     });
 
     if (!hit) return;
 
-    // Collision callbacks
-    this.collisionListeners.forEach((listener) => listener(particle, hit));
-    this._system.notifyCollision(particle, hit);
+    const worldHit = this.cloneHit(hit);
 
     if (this._system.simulationSpace === 'local') {
       const inverseWorld = this._system.matrixWorld.clone().invert();
+      const impulseLength = hit.impulse.length();
 
       hit.point = this._system.worldToLocal(hit.point.clone());
 
@@ -138,7 +141,18 @@ class Collision extends Module {
         .clone()
         .transformDirection(inverseWorld)
         .normalize();
+
+      if (impulseLength > 0) {
+        hit.impulse = hit.impulse
+          .clone()
+          .transformDirection(inverseWorld)
+          .multiplyScalar(impulseLength);
+      }
     }
+
+    // Collision callbacks
+    this.collisionListeners.forEach((listener) => listener(particle, hit));
+    this._system.notifyCollision(particle, hit);
 
     this.resolvePosition(particle, hit, radius);
 
@@ -158,7 +172,11 @@ class Collision extends Module {
         .sub(incomingVelocity)
         .multiplyScalar(-particle.mass);
 
-      this.backend.applyImpulse(hit, impulse);
+      const backendImpulse = this._system.simulationSpace === 'world'
+        ? impulse
+        : this.localDirectionToWorld(impulse);
+
+      this.backend.applyImpulse(worldHit, backendImpulse);
     }
 
     const speed = particle.velocity.length();
@@ -268,6 +286,27 @@ class Collision extends Module {
 
   private killParticle(particle: Particle): void {
     particle.lifetime = 0;
+  }
+
+  private cloneHit(hit: CollisionHit): CollisionHit {
+    return {
+      ...hit,
+      point: hit.point.clone(),
+      normal: hit.normal.clone(),
+      impulse: hit.impulse.clone(),
+      position: hit.position?.clone(),
+    };
+  }
+
+  private localDirectionToWorld(vector: THREE.Vector3): THREE.Vector3 {
+    const length = vector.length();
+
+    if (length === 0 || !this._system) return vector.clone();
+
+    return vector
+      .clone()
+      .transformDirection(this._system.matrixWorld)
+      .multiplyScalar(length);
   }
 }
 

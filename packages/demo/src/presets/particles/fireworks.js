@@ -14,11 +14,10 @@ import {
   TransformByNoise,
   LimitVelocityOverLifetime,
   RotationOverLifetime,
+  Textures,
 } from '@rzmps/rzmps';
 
 import fireworkSprite from 'url:../../assets/images/firework.png';
-import defaultSprite from 'url:../../assets/images/default.png';
-import simpleSprite from 'url:../../assets/images/simple.png';
 import smokeAlpha from 'url:../../assets/images/smoke_alpha.jpg';
 import sparklesSprite from 'url:../../assets/images/sparkle_tile_5x2_n10.png';
 import launchSound1Url from 'url:../../assets/audio/firework_launch_1.mp3';
@@ -47,7 +46,7 @@ export default async function createFireworks() {
         initialValues: {
           lifetime: 2,
           velocity: new THREE.Vector3(0, 8.5, 0),
-          scale: new THREE.Vector3(2, 2, 2),
+          scale: new THREE.Vector3(0.5, 0.5, 0.5),
           color: new Set([
             new THREE.Color('#ff4d6d'),
             new THREE.Color('#ffe14b'),
@@ -85,7 +84,7 @@ export default async function createFireworks() {
         initialValues: {
           lifetime: 4.5,
           speed: 0.55,
-          scale: new THREE.Vector3(3, 3, 3),
+          scale: new THREE.Vector3(0.75, 0.75, 0.75),
           color: [new THREE.Color('#4e4d4a'), new THREE.Color('#a7a097')],
           alpha: 0.1,
           velocity: new THREE.Vector3(0, 0.75, 0),
@@ -117,7 +116,7 @@ export default async function createFireworks() {
       }),
     ],
     renderers: [
-      new SpriteRenderer(defaultSprite, {
+      new SpriteRenderer(Textures.Default, {
         material: 'basic',
         alphaMap: smokeAlpha,
         softParticleDistance: 1,
@@ -143,7 +142,7 @@ export default async function createFireworks() {
         radialSpeed: [4.5, 12],
         initialValues: {
           lifetime: [0.75, 1.35],
-          scale: [new THREE.Vector3(2, 2, 2), new THREE.Vector3(4, 4, 4)],
+          scale: [new THREE.Vector3(0.5, 0.5, 0.5), new THREE.Vector3(1, 1, 1)],
           color: new THREE.Color('#ffffff')
         },
       }),
@@ -172,7 +171,7 @@ export default async function createFireworks() {
         materialOptions: {
           roughness: 1,
           transparent: true,
-          map: new THREE.TextureLoader().load(simpleSprite),
+          map: new THREE.TextureLoader().load(Textures.Simple),
         },
       }),
       new LightRenderer({

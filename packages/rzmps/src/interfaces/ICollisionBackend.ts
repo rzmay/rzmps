@@ -5,12 +5,16 @@ export interface CollisionQuery {
   particle: Particle;
   start: THREE.Vector3;
   end: THREE.Vector3;
+  velocity: THREE.Vector3;
   radius: number;
 }
 
 export interface CollisionHit {
   point: THREE.Vector3;
   normal: THREE.Vector3;
+
+  // Collision normal scaled by normal impact speed and particle mass.
+  impulse: THREE.Vector3;
 
   // Corrected center position for the particle after collision.
   // If omitted, Collision falls back to point + normal * radius

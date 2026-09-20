@@ -46,6 +46,13 @@ export interface SubSystemOptions {
   inheritColor: boolean;
   inheritAlpha: boolean;
   inheritMass: boolean;
+
+  impulseAffectsScale: number;
+  impulseAffectsSpeed: number;
+  impulseAffectsLifetime: number;
+  impulseAffectsMass: number;
+  impulseAffectsAlignment: boolean;
+  impulseThreshhold: number;
 }
 
 interface SubSystemEmissionRun {
@@ -55,6 +62,7 @@ interface SubSystemEmissionRun {
   realtime: number;
   duration?: number;
   particle: Omit<ParticleOptions, 'tags'> & { tags?: Tag[] };
+  collision?: CollisionHit;
 }
 
 export type ParticleListener = (particle: Particle) => void;
@@ -388,6 +396,11 @@ class ParticleSystem extends THREE.Object3D {
             elapsedTime: elapsed,
             looping: false,
             color: options.inheritColor ? run.particle.color : undefined,
+            alpha: options.inheritAlpha ? run.particle.alpha : undefined,
+            mass: this._getEmissionRunMass(run, options),
+            scale: this._getImpulseEffect(run.collision, options.impulseAffectsScale),
+            velocityScale: this._getImpulseEffect(run.collision, options.impulseAffectsSpeed),
+            tags: run.particle.tags,
           });
 
           newParticles.forEach((particle) => this._notifySpawn(particle));
@@ -412,6 +425,7 @@ class ParticleSystem extends THREE.Object3D {
   private _startEmissionRunAtParticle(
     particle: Particle,
     options: SubSystemOptions,
+    collision?: CollisionHit
   ): void {
     const now = Date.now();
 
@@ -420,17 +434,29 @@ class ParticleSystem extends THREE.Object3D {
     this._ended = false;
     this.lastFrame = now;
 
+    const impulse = collision?.impulse;
+    const transform = this._particleEmissionTransform(
+      particle,
+      options.inheritScale,
+      options.impulseAffectsAlignment ? impulse : undefined,
+    );
+    const baseDuration = options.inheritLifetime
+      ? particle.lifetime
+      : this.duration;
+    const impulseDuration = collision && options.impulseAffectsLifetime > 0
+      ? this._getImpulseEffect(collision, options.impulseAffectsLifetime)
+      : 0;
+    const duration = baseDuration + impulseDuration;
     this._emissionRuns.push({
       id: `event_${this._nextEmissionRunId++}`,
-      transform: this._particleEmissionTransform(particle),
+      transform,
       startTime: now,
       realtime: 0,
 
-      // If lifetime is inherited, use the parent's lifetime instead
-      // of the subsystem emitter's configured duration.
-      duration: options.inheritLifetime
-        ? particle.lifetime
-        : this.duration,
+      duration,
+
+      // If a collision was passed in, pass it to the context
+      collision,
 
       // Pass particle info -- clone so reference doesn't get destroyed
       particle: {
@@ -446,18 +472,47 @@ class ParticleSystem extends THREE.Object3D {
     });
   }
 
-  private _particleEmissionTransform(particle: Particle, inheritScale: boolean = false): THREE.Matrix4 {
-    const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(
-      particle.rotation.x,
-      particle.rotation.y,
-      particle.rotation.z,
-    ));
+  private _particleEmissionTransform(
+    particle: Particle,
+    inheritScale: boolean = false,
+    alignUpTo?: THREE.Vector3,
+  ): THREE.Matrix4 {
+    const quaternion = alignUpTo && alignUpTo.lengthSq() > 0
+      ? new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        alignUpTo.clone().normalize(),
+      )
+      : new THREE.Quaternion().setFromEuler(new THREE.Euler(
+        particle.rotation.x,
+        particle.rotation.y,
+        particle.rotation.z,
+      ));
 
     return new THREE.Matrix4().compose(
       particle.position,
       quaternion,
       inheritScale ? particle.scale : new THREE.Vector3(1, 1, 1),
     );
+  }
+
+  // eslint-disable-next-line class-methods-use-this
+  private _getImpulseEffect(collision: CollisionHit | undefined, effect: number): number {
+    return Math.pow(Math.max(0, collision?.impulse.length() ?? 1), effect);
+  }
+
+  private _getEmissionRunMass(
+    run: SubSystemEmissionRun,
+    options: SubSystemOptions,
+  ): number | undefined {
+    const inheritedMass = options.inheritMass ? run.particle.mass : undefined;
+    const impulseMass = options.impulseAffectsMass > 0
+      ? this._getImpulseEffect(run.collision, options.impulseAffectsMass)
+      : undefined;
+
+    if (inheritedMass === undefined) return impulseMass;
+    if (impulseMass === undefined) return inheritedMass;
+
+    return inheritedMass * impulseMass;
   }
 
   /*
@@ -655,6 +710,14 @@ class ParticleSystem extends THREE.Object3D {
       inheritColor: options.inheritColor ?? true,
       inheritAlpha: options.inheritAlpha ?? true,
       inheritMass: options.inheritMass ?? true,
+
+      // Impulse options
+      impulseAffectsScale: options.impulseAffectsScale ?? 0,
+      impulseAffectsSpeed: options.impulseAffectsSpeed ?? 0,
+      impulseAffectsLifetime: options.impulseAffectsLifetime ?? 0,
+      impulseAffectsMass: options.impulseAffectsMass ?? 0,
+      impulseAffectsAlignment: options.impulseAffectsAlignment ?? false,
+      impulseThreshhold: Math.max(0, options.impulseThreshhold ?? 0),
     });
 
     subSystem._subSystemParent = this;
@@ -716,8 +779,12 @@ class ParticleSystem extends THREE.Object3D {
     this._collisionListeners.forEach((listener) => listener(particle, collision));
 
     this.subSystems.forEach((options, subSystem) => {
-      if (options.emitOnCollision && this._canEmitForParticle(particle, options)) {
-        subSystem._startEmissionRunAtParticle(particle, options);
+      if (
+        options.emitOnCollision
+        && collision.impulse.length() > options.impulseThreshhold
+        && this._canEmitForParticle(particle, options)
+      ) {
+        subSystem._startEmissionRunAtParticle(particle, options, collision);
       }
     });
   }

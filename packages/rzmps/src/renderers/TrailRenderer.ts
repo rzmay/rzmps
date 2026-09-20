@@ -8,11 +8,13 @@ import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicColor from '../helpers/evaluateDynamicColor';
 import { TrailMode } from '../enums/TrailMode';
 import { TrailTextureMode } from '../enums/TrailTextureMode';
+import defaultTex from '../assets/textures/default.png';
 
 export const TRAIL_RENDERER_USER_DATA_KEY = "__rzmps_trailRenderer";
 
 export interface TrailRendererOptions extends RendererOptions {
   mode: TrailMode | `${TrailMode}`;
+  texture: string | THREE.Texture;
   textureMode: TrailTextureMode | `${TrailTextureMode}`;
 
   ratio: number;
@@ -68,6 +70,8 @@ type RenderPoint = {
 class TrailRenderer extends Renderer {
   mode: TrailMode = TrailMode.Particle;
 
+  texture: THREE.Texture;
+
   ratio = 1;
 
   lifetime: DynamicValue<number> = 1;
@@ -118,6 +122,14 @@ class TrailRenderer extends Renderer {
   ) {
     super(options);
 
+    const textureLoader = new THREE.TextureLoader();
+    if (options.texture) {
+      this.texture = typeof options.texture === 'string' ? textureLoader.load(options.texture) : options.texture;
+    } else {
+      // If a map is provided via material options, use that before using the default texture
+      this.texture = options.materialOptions?.map ?? new THREE.TextureLoader().load(defaultTex);
+    }
+
     this.mode = (options.mode as TrailMode) ?? this.mode;
     this.ratio = options.ratio ?? this.ratio;
     this.lifetime = options.lifetime ?? this.lifetime;
@@ -142,6 +154,7 @@ class TrailRenderer extends Renderer {
     this.setEmptyGeometry();
 
     this.material = options.material ?? new THREE.MeshStandardMaterial({
+      map: this.texture,
       vertexColors: true,
       side: THREE.DoubleSide,
       transparent: true,

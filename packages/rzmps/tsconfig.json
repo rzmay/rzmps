@@ -13,5 +13,8 @@
     "types": [],
     "strict": true,
     "moduleResolution": "bundler"
-  }
+  },
+  "include": [
+    "src/**/*"
+  ]
 }

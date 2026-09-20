@@ -8,8 +8,8 @@ import {
   SpriteRenderer,
   TransformByNoise,
   ColorOverLifetime,
+  Textures,
 } from '@rzmps/rzmps';
-import defaultSprite from 'url:../../assets/images/default.png';
 import snowflakeAlpha from 'url:../../assets/images/snowflake_alpha.png';
 import { curvePresets } from '../curvePresets';
 
@@ -29,7 +29,7 @@ export default async function createSnow() {
         initialValues: {
           lifetime: 8.5,
           speed: 1,
-          scale: new THREE.Vector3(1, 1, 1),
+          scale: new THREE.Vector3(0.25, 0.25, 0.25),
           color: new THREE.Color('#e9f7ff'),
           alpha: 0.9,
           velocity: new THREE.Vector3(0, -0.35, 0),
@@ -54,7 +54,7 @@ export default async function createSnow() {
       })
     ],
     renderers: [
-      new SpriteRenderer(defaultSprite, {
+      new SpriteRenderer(Textures.Default, {
         material: 'basic',
         alphaMap: snowflakeAlpha,
         materialOptions: {

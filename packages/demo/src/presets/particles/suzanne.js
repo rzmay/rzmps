@@ -9,8 +9,8 @@ import {
   ScaleOverLifetime,
   SpriteRenderer,
   EmissionSource,
+  Textures,
 } from '@rzmps/rzmps';
-import circleSprite from 'url:../../assets/images/circle.png';
 import suzanneModel from 'url:../../assets/models/suzanne.glb';
 import { curvePresets } from '../curvePresets';
 
@@ -44,7 +44,7 @@ export default async function createSuzanne() {
         initialValues: {
           lifetime: 2.2,
           speed: 0,
-          scale: new THREE.Vector3(0.45, 0.45, 0.45),
+          scale: new THREE.Vector3(0.1125, 0.1125, 0.1125),
           color: new THREE.Color('#70d6ff'),
           alpha: 0.85,
           velocity: new THREE.Vector3(0, 0, 0),
@@ -58,7 +58,7 @@ export default async function createSuzanne() {
       }),
     ],
     renderers: [
-      new SpriteRenderer(circleSprite, {
+      new SpriteRenderer(Textures.Circle, {
         material: 'basic',
       }),
     ],

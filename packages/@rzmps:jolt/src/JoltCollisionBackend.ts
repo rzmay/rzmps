@@ -194,9 +194,17 @@ class JoltCollisionBackend implements ICollisionBackend {
     // Copy this out as a plain JS number before the collector is reused.
     const bodyID = hit.mBodyID2.GetIndexAndSequenceNumber();
 
+    const impulse = normal
+      .clone()
+      .multiplyScalar(query.particle.mass)
+      .multiplyScalar(
+        Math.max(0, -query.velocity.dot(normal)),
+      );
+
     const result: CollisionHit = {
       point,
       normal,
+      impulse,
       position,
       backendData: {
         bodyID,

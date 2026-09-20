@@ -8,8 +8,8 @@ import {
   RotationOverLifetime,
   ColorOverLifetime,
   ScaleOverLifetime,
+  Textures,
 } from '@rzmps/rzmps';
-import circleSprite from 'url:../../assets/images/circle.png';
 import { curvePresets } from '../curvePresets';
 
 export default async function createTags() {
@@ -37,8 +37,8 @@ export default async function createTags() {
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.4, 0.4, 0.4),
-            new THREE.Vector3(1.0, 1.0, 1.0),
+            new THREE.Vector3(0.1, 0.1, 0.1),
+            new THREE.Vector3(0.25, 0.25, 0.25),
           ],
           alpha: 1,
         },
@@ -65,7 +65,7 @@ export default async function createTags() {
     ],
 
     renderers: [
-      new SpriteRenderer(circleSprite, {
+      new SpriteRenderer(Textures.Circle, {
         material: 'basic',
         tags: 'spheres',
         materialOptions: {
@@ -78,7 +78,7 @@ export default async function createTags() {
       new MeshRenderer({
         tags: 'cubes',
         mesh: new THREE.Mesh(
-          new THREE.BoxGeometry(0.25, 0.25, 0.25),
+          new THREE.BoxGeometry(1, 1, 1),
           new THREE.MeshStandardMaterial()
         ),
         castShadow: true,

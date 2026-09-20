@@ -74,9 +74,17 @@ class AmmoCollisionBackend implements ICollisionBackend {
       .sub(hit.offset)
       .addScaledVector(hit.normal, query.radius + 1e-4);
 
+    const impulse = hit.normal
+      .clone()
+      .multiplyScalar(query.particle.mass)
+      .multiplyScalar(
+        Math.max(0, -query.velocity.dot(hit.normal)),
+      );
+
     return {
       point: hit.point,
       normal: hit.normal,
+      impulse,
       position,
       backendData: { body: hit.body },
     };
