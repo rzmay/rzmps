@@ -174,11 +174,15 @@ export class ParticleSystemGUI {
         this.rebuild();
         this.emitCode();
     }
+    update(deltaTime) {
+        this.sceneUpdate?.(deltaTime);
+    }
     generateCode() {
         return this.serializeParticleSystem();
     }
     destroy() {
         this.sceneCleanup?.();
+        this.sceneUpdate = undefined;
         this.system.removeEventListener?.('destroyed', this.handleSystemDestroyed);
         this.resourceLinksRoot?.unmount();
         this.gui.destroy();
@@ -269,17 +273,24 @@ export class ParticleSystemGUI {
         const version = ++this.sceneLoadVersion;
         this.sceneCleanup?.();
         this.sceneCleanup = undefined;
+        this.sceneUpdate = undefined;
         this.currentSceneName = name;
         this.onSceneChange?.(name);
         this.applyDefaultSceneState();
-        const cleanup = await this.scenes[name](this.scene, this.renderer);
+        const sceneLifecycle = await this.scenes[name](this.scene, this.renderer);
         if (version !== this.sceneLoadVersion) {
-            if (typeof cleanup === 'function')
-                cleanup();
+            if (typeof sceneLifecycle === 'function')
+                sceneLifecycle();
+            else
+                sceneLifecycle?.cleanup?.();
             return;
         }
-        if (typeof cleanup === 'function')
-            this.sceneCleanup = cleanup;
+        if (typeof sceneLifecycle === 'function') {
+            this.sceneCleanup = sceneLifecycle;
+        } else {
+            this.sceneCleanup = sceneLifecycle?.cleanup;
+            this.sceneUpdate = sceneLifecycle?.update;
+        }
         this.syncRendererBackground();
         this.configureSystemForScene(this.system);
         this.rebuild();

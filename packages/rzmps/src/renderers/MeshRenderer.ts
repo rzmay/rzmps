@@ -100,10 +100,13 @@ class MeshRenderer extends Renderer {
       this._alphaAttr.needsUpdate = true;
     }
 
-    destroy(): void
-    {
+    destroy(): void {
         this.restoreMaterialEnvironment();
         this.instances.removeFromParent();
+    }
+
+    clear(): void {
+      this.instances.count = 0;
     }
 
     private preprocessMaterial(

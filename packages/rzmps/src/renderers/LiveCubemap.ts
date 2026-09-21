@@ -3,13 +3,20 @@ import CubeRenderTarget from 'three/src/renderers/common/CubeRenderTarget.js';
 import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
 
 export const LIVE_CUBEMAP_CAMERA_KEY = '__rzmps_liveCubemapCamera';
+export const PARTICLE_RENDERER_OBJECT_KEY = '__rzmps_particleRendererObject';
 
 export interface LiveCubemapOptions {
   resolutionScale: number;
   fps: number;
   intensity: number;
   excludeParent: boolean;
+  excludeParticleRenderers: boolean;
 }
+
+type HiddenObject = {
+  object: THREE.Object3D;
+  visible: boolean;
+};
 
 export default class LiveCubemap extends THREE.Object3D {
 
@@ -21,9 +28,10 @@ export default class LiveCubemap extends THREE.Object3D {
   }
 
   fps: number = 24;
-  resolutionScale: number = 0.125;
+  resolutionScale: number = 1 / 16;
   intensity: number = 1;
   excludeParent: boolean = false;
+  excludeParticleRenderers: boolean = false;
 
   get map(): THREE.Texture | undefined { return this._renderTarget?.texture }
 
@@ -39,6 +47,7 @@ export default class LiveCubemap extends THREE.Object3D {
     this.resolutionScale = options.resolutionScale ?? this.resolutionScale;
     this.intensity = options.intensity ?? this.intensity;
     this.excludeParent = options.excludeParent ?? this.excludeParent;
+    this.excludeParticleRenderers = options.excludeParticleRenderers ?? this.excludeParticleRenderers;
   }
 
   setup(parent: THREE.Object3D) {
@@ -115,6 +124,9 @@ export default class LiveCubemap extends THREE.Object3D {
 
     const excludedParent = this.excludeParent ? this.parent : undefined;
     const previousParentVisibility = excludedParent?.visible;
+    const hiddenParticleRenderers = this.excludeParticleRenderers
+      ? this.hideParticleRenderers(scene)
+      : [];
 
     if (excludedParent) {
       excludedParent.visible = false;
@@ -127,6 +139,8 @@ export default class LiveCubemap extends THREE.Object3D {
         excludedParent.visible = previousParentVisibility;
       }
 
+      this.restoreHiddenObjects(hiddenParticleRenderers);
+
       if (backgroundColor) {
         scene.background = previousBackground;
         renderer.setClearColor(previousClearColor, previousClearAlpha);
@@ -138,5 +152,27 @@ export default class LiveCubemap extends THREE.Object3D {
     this._renderTarget?.dispose();
     this._renderTarget = undefined;
     this._cubeCamera = undefined;
+  }
+
+  private hideParticleRenderers(scene: THREE.Scene): HiddenObject[] {
+    const hidden: HiddenObject[] = [];
+
+    scene.traverse((object) => {
+      if (!object.userData[PARTICLE_RENDERER_OBJECT_KEY]) return;
+
+      hidden.push({
+        object,
+        visible: object.visible,
+      });
+      object.visible = false;
+    });
+
+    return hidden;
+  }
+
+  private restoreHiddenObjects(hidden: HiddenObject[]): void {
+    hidden.forEach(({ object, visible }) => {
+      object.visible = visible;
+    });
   }
 }

@@ -39,4 +39,5 @@ export default abstract class Renderer {
 
     // Cleanup
     public abstract destroy(): void;
+    public abstract clear(): void;
 }

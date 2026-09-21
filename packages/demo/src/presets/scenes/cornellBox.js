@@ -107,33 +107,21 @@ export default function loadCornellBox(scene, renderer) {
   const ambient = new THREE.AmbientLight(0xffffff, 0.12);
   const metalCubemap = new LiveCubemap({
     fps: 24,
-    resolutionScale: 0.125,
+    resolutionScale: 1 / 32,
     intensity: 1,
     excludeParent: true,
   });
 
   metalCubemap.setup(metalSphere);
 
-  let lastFrame = performance.now() / 1000;
-  let frameId;
-
-  const animate = () => {
-    const now = performance.now() / 1000;
-    const dt = now - lastFrame;
-
-    metalCubemap.update(scene, renderer, dt);
+  const update = (deltaTime) => {
+    metalCubemap.update(scene, renderer, deltaTime);
     if (metal.envMap !== metalCubemap.map) {
       metal.envMap = metalCubemap.map ?? null;
       metal.envMapIntensity = metalCubemap.intensity;
       metal.needsUpdate = true;
     }
-
-    lastFrame = now;
-
-    frameId = requestAnimationFrame(animate);
-  }
-
-  animate();
+  };
 
   root.add(
     floor,
@@ -151,18 +139,20 @@ export default function loadCornellBox(scene, renderer) {
 
   scene.add(root);
 
-  return () => {
-    scene.remove(root);
-    cancelAnimationFrame(frameId);
+  return {
+    update,
+    cleanup: () => {
+      scene.remove(root);
 
-    [floor, ceiling, back, left, right, metalSphere, matteBox, lightPanel].forEach((mesh) => {
-      mesh.geometry.dispose();
-    });
+      [floor, ceiling, back, left, right, metalSphere, matteBox, lightPanel].forEach((mesh) => {
+        mesh.geometry.dispose();
+      });
 
-    [white, red, green, metal, matte, lightPanelMaterial].forEach((material) => {
-      material.dispose();
-    });
+      [white, red, green, metal, matte, lightPanelMaterial].forEach((material) => {
+        material.dispose();
+      });
 
-    metalCubemap.dispose();
+      metalCubemap.dispose();
+    },
   };
 }

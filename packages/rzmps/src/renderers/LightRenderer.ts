@@ -234,6 +234,10 @@ class LightRenderer extends Renderer {
     destroy(): void {
       this.lightContainer.removeFromParent();
     }
+
+    clear(): void {
+      this._update([])
+    }
 }
 
 export default LightRenderer;

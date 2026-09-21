@@ -119,6 +119,7 @@ class TrailRenderer extends Renderer {
 
   receiveShadow = false;
 
+  // Necessary to store a copy for ribbons
   private particles: Particle[] = [];
 
   private trails: Map<string, ParticleTrail> =
@@ -231,6 +232,11 @@ class TrailRenderer extends Renderer {
     this.trails.clear();
 
     this.mesh.removeFromParent();
+  }
+
+  clear(): void {
+    this.trails.clear();
+    this.particles.length = 0;
   }
 
   private updateParticleTrails(particles: Particle[]): void {

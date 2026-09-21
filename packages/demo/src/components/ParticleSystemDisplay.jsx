@@ -76,8 +76,9 @@ function ParticleSystemDisplay({
     scene,
   ]);
 
-  useFrame(() => {
+  useFrame((_state, delta) => {
     particleSystem.current?.update();
+    guiRef.current?.update(delta);
   });
 
   return null;

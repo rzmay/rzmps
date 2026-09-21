@@ -16,7 +16,7 @@ import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
 import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
-import LiveCubemap from './renderers/LiveCubemap';
+import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY } from './renderers/LiveCubemap';
 
 interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
@@ -125,6 +125,8 @@ class ParticleSystem extends THREE.Object3D {
 
   private _camera?: THREE.Camera;
   get sceneCamera() { return this._camera; }
+  private readonly _sceneCameraQuaternion = new THREE.Quaternion();
+  get sceneCameraQuaternion() { return this._sceneCameraQuaternion; }
 
   private _renderer?: THREE.WebGLRenderer | WebGPURenderer;
   get sceneRenderer() { return this._renderer; }
@@ -215,6 +217,7 @@ class ParticleSystem extends THREE.Object3D {
       this._renderer = renderer;
       this._scene = scene;
       this._camera = camera;
+      camera.getWorldQuaternion(this._sceneCameraQuaternion);
     }
 
     // Cleanup on remove from scene. Anything done here should not be permanent.
@@ -568,7 +571,7 @@ class ParticleSystem extends THREE.Object3D {
       subSystem.start();
     });
 
-    this._iterateChildren(children, (child) => child.start(false));
+    if (children) this._iterateChildren((child) => child.start(false));
 
     this._prewarm();
   }
@@ -582,7 +585,7 @@ class ParticleSystem extends THREE.Object3D {
       subSystem.pause();
     });
 
-    this._iterateChildren(children, (child) => child.pause(false));
+    if (children) this._iterateChildren((child) => child.pause(false));
   }
 
   // Stop emission and optionally clear particles
@@ -595,7 +598,7 @@ class ParticleSystem extends THREE.Object3D {
       subSystem.stop(clearParticles);
     });
 
-    this._iterateChildren(children, (child) => child.stop(clearParticles, false));
+    if (children) this._iterateChildren((child) => child.stop(clearParticles, false));
 
     this._emissionRuns.forEach((run) => {
       this.emitters.forEach((emitter) => {
@@ -616,13 +619,14 @@ class ParticleSystem extends THREE.Object3D {
 
     this.renderers.forEach((renderer) => {
       renderer.update(this.particles, this);
+      renderer.clear();
     });
 
     this.subSystems.forEach((_options, subSystem) => {
       subSystem.clearParticles();
     });
 
-    this._iterateChildren(children, (child) => child.clearParticles(false));
+    if (children) this._iterateChildren((child) => child.clearParticles(false));
   }
 
   public destroy(children: boolean = true): void {
@@ -635,7 +639,7 @@ class ParticleSystem extends THREE.Object3D {
       subSystem.destroy();
     });
 
-    this._iterateChildren(children, (child) => child.destroy(false));
+    if (children) this._iterateChildren((child) => child.destroy(false));
 
     this.renderers.forEach((renderer) => {
       renderer.destroy();
@@ -705,6 +709,7 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   public addRendererObject(object: THREE.Object3D): void {
+    object.userData[PARTICLE_RENDERER_OBJECT_KEY] = true;
     this._rendererObjects.add(object);
     this.getRendererParent().add(object);
   }
@@ -921,12 +926,7 @@ class ParticleSystem extends THREE.Object3D {
     this.lastFrame = Date.now();
   }
 
-  private _iterateChildren(
-    children: boolean,
-    callback: (child: ParticleSystem) => void,
-  ): void {
-    if (!children) return;
-
+  private _iterateChildren(callback: (child: ParticleSystem) => void): void {
     const particleSystems: ParticleSystem[] = [];
 
     this.traverse((child) => {
