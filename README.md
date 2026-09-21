@@ -223,6 +223,34 @@ need a local realtime cubemap. Set `excludeParent: true` to hide the parent
 object while the cubemap is rendered, which is useful for reflective objects
 that should not capture themselves.
 
+```ts
+new LiveCubemap(options?: Partial<LiveCubemapOptions>)
+
+interface LiveCubemapOptions {
+  resolutionScale: number;
+  fps: number;
+  intensity: number;
+  excludeParent: boolean;
+  excludeParticleRenderers: boolean;
+}
+```
+
+| Option                     | Description                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `resolutionScale`          | Multiplies the renderer size before choosing the cubemap face resolution. Defaults to `1/16`. |
+| `fps`                      | Maximum cubemap update rate. Defaults to `24`.                                              |
+| `intensity`                | Reflection intensity used when particle renderers consume the cubemap. Defaults to `1`.      |
+| `excludeParent`            | Hides the parent from the cubemap color/depth pass so reflective objects do not capture themselves. |
+| `excludeParticleRenderers` | Hides particle renderer objects while the cubemap is rendered. Defaults to `false`.          |
+
+| Member                                      | Description                                      |
+| ------------------------------------------- | ------------------------------------------------ |
+| `map`                                       | The generated cubemap texture, if initialized.   |
+| `setup(parent)`                             | Attaches the cubemap helper to an object.        |
+| `update(scene, renderer, deltaTime)`        | Updates the cubemap when its `fps` interval elapses. |
+| `dispose()`                                 | Disposes the cubemap render target.              |
+| `LiveCubemap.isLiveCubemapCamera(camera)`   | Returns `true` for cameras used by this helper.  |
+
 WebGL renders `SpriteRenderer` particles with `gl.POINTS`, whose size is
 implementation-limited by `ALIASED_POINT_SIZE_RANGE`. In WebGL live cubemaps,
 sprite particles may render as undersized point samples on some GPUs/drivers.

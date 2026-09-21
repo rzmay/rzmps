@@ -199,7 +199,7 @@ class SpriteRenderer extends Renderer {
         this.setUniformValue('softParticles', isSceneCamera && Boolean(this.softParticleDistance));
       }
     };
-    this.webgpuMesh.onBeforeRender = (renderer, _scene, camera) => {
+    this.webgpuMesh.onBeforeRender = (renderer, _scene, _camera) => {
       this.setActiveRenderer(renderer);
     };
   }
