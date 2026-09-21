@@ -58,8 +58,8 @@ export default async function createCollisionSubEmitters() {
         material: 'basic',
         castShadow: true,
         materialOptions: {
-          roughness: 0.1,
-          metalness: 0.75,
+          roughness: 0.2,
+          metalness: 0.6,
           sphericalNormals: true,
           normalLighting: 1,
         },
@@ -98,6 +98,7 @@ export default async function createCollisionSubEmitters() {
     ],
     renderers: [
       new TrailRenderer({
+        texture: Textures.Circle,
         lifetime: 0.16,
         minimumVertexDistance: 0.015,
         dieWithParticles: false,

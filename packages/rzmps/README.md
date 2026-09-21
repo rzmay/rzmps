@@ -223,6 +223,12 @@ need a local realtime cubemap. Set `excludeParent: true` to hide the parent
 object while the cubemap is rendered, which is useful for reflective objects
 that should not capture themselves.
 
+WebGL renders `SpriteRenderer` particles with `gl.POINTS`, whose size is
+implementation-limited by `ALIASED_POINT_SIZE_RANGE`. In WebGL live cubemaps,
+sprite particles may render as undersized point samples on some GPUs/drivers.
+Use WebGPU when sprite particles need to appear correctly in live cubemap
+reflections, or use mesh/trail renderers for reflected particles in WebGL.
+
 For non-looping systems, `endBehavior` controls what happens after the system
 duration has elapsed.
 
@@ -784,8 +790,11 @@ interface SpriteRendererOptions extends RendererOptions {
 }
 ```
 
-`SpriteRenderer` renders particles as GPU points. It supports sprite sheets,
-alpha maps, random start frames, shadows, and soft particles.
+`SpriteRenderer` renders particles as GPU points in WebGL and camera-facing
+instanced quads in WebGPU. It supports sprite sheets, alpha maps, random start
+frames, shadows, and soft particles. WebGL point sprites are subject to the
+browser/GPU point-size range, so very large sprites and sprites captured by
+WebGL live cubemaps may not preserve their apparent world size.
 
 `SpriteMaterialType` is an enum consisting of two string values:
 

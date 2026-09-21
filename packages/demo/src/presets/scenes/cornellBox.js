@@ -109,7 +109,7 @@ export default function loadCornellBox(scene, renderer) {
     fps: 24,
     resolutionScale: 1 / 32,
     intensity: 1,
-    // excludeParent: true,
+    excludeParent: true,
   });
 
   metalCubemap.setup(metalSphere);

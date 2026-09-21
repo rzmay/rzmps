@@ -18,6 +18,12 @@ type HiddenObject = {
   visible: boolean;
 };
 
+type HiddenMaterialState = {
+  material: THREE.Material;
+  colorWrite: boolean;
+  depthWrite: boolean;
+};
+
 export default class LiveCubemap extends THREE.Object3D {
 
   static isLiveCubemapCamera(camera?: THREE.Camera): boolean {
@@ -123,22 +129,17 @@ export default class LiveCubemap extends THREE.Object3D {
     }
 
     const excludedParent = this.excludeParent ? this.parent : undefined;
-    const previousParentVisibility = excludedParent?.visible;
+    const hiddenParentMaterials = excludedParent
+      ? this.hideMaterialsFromColorPass(excludedParent)
+      : [];
     const hiddenParticleRenderers = this.excludeParticleRenderers
       ? this.hideParticleRenderers(scene)
       : [];
 
-    if (excludedParent) {
-      excludedParent.visible = false;
-    }
-
     try {
       this._cubeCamera.update(renderer, scene);
     } finally {
-      if (excludedParent && previousParentVisibility !== undefined) {
-        excludedParent.visible = previousParentVisibility;
-      }
-
+      this.restoreHiddenMaterials(hiddenParentMaterials);
       this.restoreHiddenObjects(hiddenParticleRenderers);
 
       if (backgroundColor) {
@@ -173,6 +174,39 @@ export default class LiveCubemap extends THREE.Object3D {
   private restoreHiddenObjects(hidden: HiddenObject[]): void {
     hidden.forEach(({ object, visible }) => {
       object.visible = visible;
+    });
+  }
+
+  private hideMaterialsFromColorPass(object: THREE.Object3D): HiddenMaterialState[] {
+    const hidden: HiddenMaterialState[] = [];
+    const seen = new Set<THREE.Material>();
+
+    object.traverse((child) => {
+      const material = (child as THREE.Mesh | THREE.Line | THREE.Points).material;
+      const materials = Array.isArray(material) ? material : [material];
+
+      materials.forEach((entry) => {
+        if (!entry || seen.has(entry)) return;
+
+        seen.add(entry);
+        hidden.push({
+          material: entry,
+          colorWrite: entry.colorWrite,
+          depthWrite: entry.depthWrite,
+        });
+
+        entry.colorWrite = false;
+        entry.depthWrite = false;
+      });
+    });
+
+    return hidden;
+  }
+
+  private restoreHiddenMaterials(hidden: HiddenMaterialState[]): void {
+    hidden.forEach(({ material, colorWrite, depthWrite }) => {
+      material.colorWrite = colorWrite;
+      material.depthWrite = depthWrite;
     });
   }
 }

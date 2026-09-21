@@ -13,14 +13,6 @@ import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
 
 export const TRAIL_RENDERER_USER_DATA_KEY = "__rzmps_trailRenderer";
 
-type RendererDebugGlobal = typeof globalThis & {
-  __RZMPS_DEBUG_RENDERERS?: boolean;
-  __RZMPS_RENDERER_EVENTS?: unknown[];
-  __RZMPS_DEBUG_TRAILS_NO_DEPTH?: boolean;
-  __RZMPS_DEBUG_TRAILS_BASIC?: boolean;
-  __RZMPS_DEBUG_TRAILS_RENDER_ORDER?: number;
-};
-
 export interface TrailRendererOptions extends RendererOptions {
   mode: TrailMode | `${TrailMode}`;
   texture: string | THREE.Texture;
@@ -132,9 +124,6 @@ class TrailRenderer extends Renderer {
     envMapIntensity?: number;
   }>();
 
-  private _debugLastLog = 0;
-  private _debugBasicMaterial?: THREE.MeshBasicMaterial;
-
   constructor(
     options: Partial<TrailRendererOptions> = {},
   ) {
@@ -199,7 +188,7 @@ class TrailRenderer extends Renderer {
     this.mesh.onBeforeRender = (renderer, _scene, camera) => {
       if (!(renderer instanceof WebGPURenderer)) return;
       if (system.sceneCamera && camera !== system.sceneCamera) return;
-      this.rebuildGeometry(camera, `onBeforeRender:${renderer.constructor.name}`);
+      this.rebuildGeometry(camera);
     };
   }
 
@@ -209,8 +198,6 @@ class TrailRenderer extends Renderer {
 
     this.mesh.castShadow = this.castShadow;
     this.mesh.receiveShadow = this.receiveShadow;
-    this.mesh.renderOrder = (globalThis as RendererDebugGlobal).__RZMPS_DEBUG_TRAILS_RENDER_ORDER ?? 0;
-    this.applyDebugMaterialOverrides();
     this.updateMaterialEnvironment(system);
 
     if (this.mode === TrailMode.Particle) {
@@ -220,13 +207,12 @@ class TrailRenderer extends Renderer {
     }
 
     if (system.sceneCamera) {
-      this.rebuildGeometry(system.sceneCamera, 'update');
+      this.rebuildGeometry(system.sceneCamera);
     }
   }
 
   destroy(): void {
     this.restoreMaterialEnvironment();
-    this._debugBasicMaterial?.dispose();
     this.geometry.dispose();
 
     this.trails.clear();
@@ -420,7 +406,7 @@ class TrailRenderer extends Renderer {
     return ribbons.filter((ribbon) => ribbon.length >= 2);
   }
 
-  private rebuildGeometry(camera: THREE.Camera, source: string = 'unknown'): void {
+  private rebuildGeometry(camera: THREE.Camera): void {
     const paths = this.getPaths();
 
     const positions: number[] = [];
@@ -443,15 +429,6 @@ class TrailRenderer extends Renderer {
         indices,
       );
     }
-
-    this.debugGeometryRebuild(
-      source,
-      camera,
-      paths.length,
-      positions.length / 3,
-      indices.length,
-      colors,
-    );
 
     if (positions.length === 0) {
       this.setEmptyGeometry();
@@ -498,163 +475,6 @@ class TrailRenderer extends Renderer {
       this.geometry.computeBoundingSphere();
     } else {
       this.geometry.boundingSphere = null;
-    }
-
-    this.debugGeometryState(source, camera);
-  }
-
-  private applyDebugMaterialOverrides(): void {
-    const debugGlobal = globalThis as RendererDebugGlobal;
-    const materials = Array.isArray(this.material) ? this.material : [this.material];
-
-    if (debugGlobal.__RZMPS_DEBUG_TRAILS_BASIC) {
-      this._debugBasicMaterial ??= new THREE.MeshBasicMaterial({
-        color: 0xff00ff,
-        vertexColors: true,
-        transparent: true,
-        opacity: 1,
-        depthTest: false,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-
-      if (this.mesh.material !== this._debugBasicMaterial) {
-        this.mesh.material = this._debugBasicMaterial;
-      }
-
-      return;
-    }
-
-    if (this._debugBasicMaterial && this.mesh.material === this._debugBasicMaterial) {
-      this.mesh.material = this.material;
-    }
-
-    materials.forEach((material) => {
-      const debugMaterial = material as THREE.Material & {
-        userData: THREE.Material['userData'] & {
-          __rzmpsOriginalDepthTest?: boolean;
-        };
-      };
-
-      if (debugGlobal.__RZMPS_DEBUG_TRAILS_NO_DEPTH) {
-        debugMaterial.userData.__rzmpsOriginalDepthTest ??= debugMaterial.depthTest;
-        debugMaterial.depthTest = false;
-        debugMaterial.needsUpdate = true;
-        return;
-      }
-
-      if (debugMaterial.userData.__rzmpsOriginalDepthTest !== undefined) {
-        debugMaterial.depthTest = debugMaterial.userData.__rzmpsOriginalDepthTest;
-        delete debugMaterial.userData.__rzmpsOriginalDepthTest;
-        debugMaterial.needsUpdate = true;
-      }
-    });
-  }
-
-  private debugGeometryRebuild(
-    source: string,
-    camera: THREE.Camera,
-    pathCount: number,
-    vertexCount: number,
-    indexCount: number,
-    colors: number[],
-  ): void {
-    const debugGlobal = globalThis as RendererDebugGlobal;
-    if (!debugGlobal.__RZMPS_DEBUG_RENDERERS) return;
-
-    let minAlpha = Infinity;
-    let maxAlpha = -Infinity;
-    for (let index = 3; index < colors.length; index += 4) {
-      minAlpha = Math.min(minAlpha, colors[index]);
-      maxAlpha = Math.max(maxAlpha, colors[index]);
-    }
-
-    if (colors.length === 0) {
-      minAlpha = 0;
-      maxAlpha = 0;
-    }
-
-    const cameraWorldPosition = camera.getWorldPosition(new THREE.Vector3());
-    const material = Array.isArray(this.material) ? this.material[0] : this.material;
-    const event = {
-      type: 'trail',
-      time: Math.round(performance.now()),
-      source,
-      cameraType: camera.constructor.name,
-      cameraName: camera.name,
-      cameraUuid: camera.uuid,
-      cameraParentType: camera.parent?.constructor.name,
-      cameraParentName: camera.parent?.name,
-      cameraWorldPosition: cameraWorldPosition.toArray(),
-      isCubemapCamera: Boolean(
-        camera.userData?.__rzmps_liveCubemapCamera
-        || camera.parent?.userData?.__rzmps_liveCubemapCamera,
-      ),
-      pathCount,
-      vertexCount,
-      indexCount,
-      minAlpha,
-      maxAlpha,
-      boundingSphereRadius: this.geometry.boundingSphere?.radius,
-      meshVisible: this.mesh.visible,
-      meshParentType: this.mesh.parent?.constructor.name,
-      materialType: material?.constructor.name,
-      materialVisible: material?.visible,
-      materialOpacity: material?.opacity,
-      materialSide: material?.side,
-      materialDepthTest: material?.depthTest,
-      materialDepthWrite: material?.depthWrite,
-    };
-
-    debugGlobal.__RZMPS_RENDERER_EVENTS ??= [];
-    debugGlobal.__RZMPS_RENDERER_EVENTS.push(event);
-    debugGlobal.__RZMPS_RENDERER_EVENTS.splice(0, Math.max(0, debugGlobal.__RZMPS_RENDERER_EVENTS.length - 200));
-
-    const now = performance.now();
-    if (now - this._debugLastLog < 500) return;
-    this._debugLastLog = now;
-
-    console.log('[rzmps:trail]', event);
-  }
-
-  private debugGeometryState(source: string, camera: THREE.Camera): void {
-    const debugGlobal = globalThis as RendererDebugGlobal;
-    if (!debugGlobal.__RZMPS_DEBUG_RENDERERS) return;
-
-    const sphere = this.geometry.boundingSphere;
-    if (!sphere) return;
-
-    this.mesh.updateWorldMatrix(true, false);
-    camera.updateWorldMatrix(true, false);
-
-    const worldCenter = sphere.center.clone().applyMatrix4(this.mesh.matrixWorld);
-    const cameraSpaceCenter = worldCenter.clone().applyMatrix4(camera.matrixWorldInverse);
-    const worldScale = this.mesh.getWorldScale(new THREE.Vector3());
-    const worldRadius = sphere.radius * Math.max(worldScale.x, worldScale.y, worldScale.z);
-
-    const projectionScreenMatrix = new THREE.Matrix4().multiplyMatrices(
-      camera.projectionMatrix,
-      camera.matrixWorldInverse,
-    );
-    const frustum = new THREE.Frustum().setFromProjectionMatrix(projectionScreenMatrix);
-    const inFrustum = frustum.intersectsSphere(new THREE.Sphere(worldCenter, worldRadius));
-
-    const events = debugGlobal.__RZMPS_RENDERER_EVENTS;
-    const lastEvent = events?.[events.length - 1];
-    if (
-      lastEvent
-      && typeof lastEvent === 'object'
-      && 'type' in lastEvent
-      && lastEvent.type === 'trail'
-    ) {
-      Object.assign(lastEvent, {
-        worldCenter: worldCenter.toArray(),
-        cameraSpaceCenter: cameraSpaceCenter.toArray(),
-        worldRadius,
-        inFrustum,
-        cameraNear: 'near' in camera ? camera.near : undefined,
-        cameraFar: 'far' in camera ? camera.far : undefined,
-      });
     }
   }
 

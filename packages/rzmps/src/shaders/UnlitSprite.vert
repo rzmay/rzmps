@@ -17,7 +17,9 @@ void main() {
 
     vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
 
-    aspectRatio = float(scale.y) / float(scale.x);
+    vec2 spriteScale = abs(scale.xy);
+
+    aspectRatio = spriteScale.y / spriteScale.x;
 
     float projectionScale =
         projectionMatrix[1][1]
@@ -30,7 +32,7 @@ void main() {
             : 1.0;
 
     gl_PointSize =
-        max(scale.x, scale.y)
+        max(spriteScale.x, spriteScale.y)
         * projectionScale
         * perspectiveScale;
 
