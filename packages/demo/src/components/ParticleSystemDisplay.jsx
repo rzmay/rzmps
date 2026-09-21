@@ -5,6 +5,8 @@ import { ParticleSystemGUI } from '../gui/ParticleSystemGUI';
 import particlePresets from '../presets/particles';
 import scenePresets from '../presets/scenes';
 
+const RZMPS_VERSION = import.meta.env.VITE_RZMPS_VERSION;
+
 function ParticleSystemDisplay({
   initialPreset,
   initialScene,
@@ -38,7 +40,7 @@ function ParticleSystemDisplay({
         renderer: gl,
         initialPreset,
         initialScene,
-        title: 'RZMPS Demo',
+        title: `RZMPS Demo v${RZMPS_VERSION}`,
         width: 340,
         onSystemChange: (nextSystem) => {
           particleSystem.current = nextSystem;
