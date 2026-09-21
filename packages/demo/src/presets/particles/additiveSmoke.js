@@ -11,7 +11,7 @@ import {
   Textures,
   TransformByNoise,
 } from '@rzmps/rzmps';
-import smokeAlpha from 'url:../../assets/images/smoke_alpha.jpg';
+import smokeAlpha from '../../assets/images/smoke_alpha.jpg?url';
 import { curvePresets } from '../curvePresets';
 
 export default async function createAdditiveSmoke() {

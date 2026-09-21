@@ -11,9 +11,9 @@ import {
   TransformByNoise,
 } from '@rzmps/rzmps';
 
-import bubblesUrl from 'url:../../assets/audio/bubbles.mp3';
-import bubblePop1Url from 'url:../../assets/audio/bubble_pop_1.mp3';
-import bubblePop2Url from 'url:../../assets/audio/bubble_pop_2.mp3';
+import bubblesUrl from '../../assets/audio/bubbles.mp3?url';
+import bubblePop1Url from '../../assets/audio/bubble_pop_1.mp3?url';
+import bubblePop2Url from '../../assets/audio/bubble_pop_2.mp3?url';
 
 import { curvePresets } from '../curvePresets';
 

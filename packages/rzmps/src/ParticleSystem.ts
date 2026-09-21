@@ -210,6 +210,8 @@ class ParticleSystem extends THREE.Object3D {
     this.add(this._contextCaptureDummy );
 
     this._contextCaptureDummy .onBeforeRender = (renderer, scene, camera) => {
+      if (LiveCubemap.isLiveCubemapCamera(camera)) return;
+
       this._renderer = renderer;
       this._scene = scene;
       this._camera = camera;

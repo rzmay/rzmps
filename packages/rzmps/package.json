@@ -28,9 +28,11 @@
     "build/**/*"
   ],
   "scripts": {
-    "build": "tsdown && tsc --emitDeclarationOnly && npm run copy:assets",
-    "copy:assets": "mkdir -p build && cp build/index.d.ts build/index.d.mts && cp build/index.d.ts build/index.d.cts && cp src/global.d.ts build/global.d.ts && rm -rf build/assets && cp -r src/assets build/assets",
-    "dev": "concurrently -k \"tsdown --watch\" \"tsc --emitDeclarationOnly --watch\" \"watch 'npm run copy:assets' src/assets\"",
+    "build": "tsdown && tsc --emitDeclarationOnly && npm run copy:static && npm run copy:declarations",
+    "copy:assets": "npm run copy:static",
+    "copy:static": "mkdir -p build && cp src/global.d.ts build/global.d.ts && rm -rf build/assets && cp -r src/assets build/assets",
+    "copy:declarations": "if [ -f build/index.d.ts ]; then cp build/index.d.ts build/index.d.mts && cp build/index.d.ts build/index.d.cts; else echo \"Skipping declaration aliases; build/index.d.ts has not been emitted yet.\"; fi",
+    "dev": "concurrently -k \"tsdown --watch\" \"tsc --emitDeclarationOnly --watch\" \"watch 'npm run copy:static' src/assets\"",
     "prepack": "npm run build"
   },
   "author": "Robert May",

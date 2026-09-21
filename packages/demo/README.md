@@ -91,10 +91,10 @@ Start the demo:
 npm start --workspace packages/demo
 ```
 
-Parcel prints the local URL, usually:
+Vite prints the local URL, usually:
 
 ```txt
-http://localhost:1234
+http://localhost:5173
 ```
 
 ## Building
@@ -114,11 +114,11 @@ packages/demo/dist
 The demo build script currently uses:
 
 ```bash
-parcel build --no-optimize --no-scope-hoist
+vite build
 ```
 
-This keeps constructor names readable in the browser editor and generated-code
-view.
+The Vite config aliases `@rzmps/rzmps` to the sibling package build output so
+the demo can pick up local library rebuilds during development.
 
 ## Monorepo Package Notes
 

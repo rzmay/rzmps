@@ -17,13 +17,13 @@ import {
   Textures,
 } from '@rzmps/rzmps';
 
-import fireworkSprite from 'url:../../assets/images/firework.png';
-import smokeAlpha from 'url:../../assets/images/smoke_alpha.jpg';
-import sparklesSprite from 'url:../../assets/images/sparkle_tile_5x2_n10.png';
-import launchSound1Url from 'url:../../assets/audio/firework_launch_1.mp3';
-import launchSound2Url from 'url:../../assets/audio/firework_launch_2.mp3';
-import blastSound1Url from 'url:../../assets/audio/firework_blast_1.mp3';
-import blastSound2Url from 'url:../../assets/audio/firework_blast_2.mp3';
+import fireworkSprite from '../../assets/images/firework.png?url';
+import smokeAlpha from '../../assets/images/smoke_alpha.jpg?url';
+import sparklesSprite from '../../assets/images/sparkle_tile_5x2_n10.png?url';
+import launchSound1Url from '../../assets/audio/firework_launch_1.mp3?url';
+import launchSound2Url from '../../assets/audio/firework_launch_2.mp3?url';
+import blastSound1Url from '../../assets/audio/firework_blast_1.mp3?url';
+import blastSound2Url from '../../assets/audio/firework_blast_2.mp3?url';
 import { curvePresets } from '../curvePresets';
 
 

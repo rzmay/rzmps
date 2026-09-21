@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import CubeRenderTarget from 'three/src/renderers/common/CubeRenderTarget.js';
 import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
 
+export const LIVE_CUBEMAP_CAMERA_KEY = '__rzmps_liveCubemapCamera';
+
 export interface LiveCubemapOptions {
   resolutionScale: number;
   fps: number;
@@ -10,6 +12,14 @@ export interface LiveCubemapOptions {
 }
 
 export default class LiveCubemap extends THREE.Object3D {
+
+  static isLiveCubemapCamera(camera?: THREE.Camera): boolean {
+    return Boolean(
+      camera?.userData?.[LIVE_CUBEMAP_CAMERA_KEY]
+      || camera?.parent?.userData?.[LIVE_CUBEMAP_CAMERA_KEY],
+    );
+  }
+
   fps: number = 24;
   resolutionScale: number = 0.125;
   intensity: number = 1;
@@ -78,6 +88,12 @@ export default class LiveCubemap extends THREE.Object3D {
 
     if (!this._cubeCamera) {
       this._cubeCamera = new THREE.CubeCamera(0.1, 1000, this._renderTarget);
+
+      // Track so particle system knows not to treat this as the active camera
+      this._cubeCamera.userData[LIVE_CUBEMAP_CAMERA_KEY] = true;
+      this._cubeCamera.children.forEach((child) => {
+        child.userData[LIVE_CUBEMAP_CAMERA_KEY] = true;
+      });
 
       // Should be positioned at the same place as the system
       this.add(this._cubeCamera);

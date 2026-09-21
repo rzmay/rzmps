@@ -10,7 +10,7 @@ import {
   ColorOverLifetime,
   Textures,
 } from '@rzmps/rzmps';
-import snowflakeAlpha from 'url:../../assets/images/snowflake_alpha.png';
+import snowflakeAlpha from '../../assets/images/snowflake_alpha.png?url';
 import { curvePresets } from '../curvePresets';
 
 export default async function createSnow() {

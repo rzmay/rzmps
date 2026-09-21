@@ -14,7 +14,7 @@ import {
   TransformByNoise,
   VelocityOverLifetime,
 } from '@rzmps/rzmps';
-import fireSprite from 'url:../../assets/images/fire_tile_8x4_n32.png';
+import fireSprite from '../../assets/images/fire_tile_8x4_n32.png?url';
 import { curvePresets } from '../curvePresets';
 
 export default async function createFire() {

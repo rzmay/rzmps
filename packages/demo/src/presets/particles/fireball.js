@@ -8,7 +8,7 @@ import {
   ScaleOverLifetime,
   SpriteRenderer,
 } from '@rzmps/rzmps';
-import fireballSprite from 'url:../../assets/images/fireball_tile_5x4_n20.png';
+import fireballSprite from '../../assets/images/fireball_tile_5x4_n20.png?url';
 import { curvePresets } from '../curvePresets';
 
 export default async function createFireball() {

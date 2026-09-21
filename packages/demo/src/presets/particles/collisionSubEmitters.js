@@ -11,7 +11,7 @@ import {
   Textures,
   TrailRenderer,
 } from '@rzmps/rzmps';
-import ballHitUrl from 'url:../../assets/audio/ball_hit.mp3';
+import ballHitUrl from '../../assets/audio/ball_hit.mp3?url';
 
 export default async function createCollisionSubEmitters() {
   const ballHit = await new THREE.AudioLoader().loadAsync(ballHitUrl);

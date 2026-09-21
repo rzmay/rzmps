@@ -32,6 +32,11 @@ type HiddenSpriteRenderer = {
   visible: boolean;
 };
 
+type RendererDebugGlobal = typeof globalThis & {
+  __RZMPS_DEBUG_RENDERERS?: boolean;
+  __RZMPS_RENDERER_EVENTS?: unknown[];
+};
+
 export const SPRITE_RENDERER_USER_DATA_KEY = "__rzmps_spriteRenderer";
 export const SCENE_DEPTH_DATA_USER_DATA_KEY = "__rzmps_sceneDepthData";
 export const WEBGPU_SCENE_DEPTH_DATA_USER_DATA_KEY = "__rzmps_webgpuSceneDepthData";
@@ -109,6 +114,7 @@ class SpriteRenderer extends Renderer {
   private webgpuFrameAttribute: THREE.InstancedBufferAttribute;
   private webgpuAlphaAttribute: THREE.InstancedBufferAttribute;
   private webgpuCapacity = 10000;
+  private webgpuParticles: Particle[] = [];
 
   private readonly matrix = new THREE.Matrix4();
   private readonly quaternion = new THREE.Quaternion();
@@ -117,6 +123,7 @@ class SpriteRenderer extends Renderer {
   private readonly rollAxis = new THREE.Vector3(0, 0, 1);
   private readonly scaleVector = new THREE.Vector3();
   private readonly color = new THREE.Color();
+  private _debugLastLog = 0;
 
   constructor(texture: string | THREE.Texture = defaultTex, options: Partial<SpriteRendererOptions> = {}) {
     super(options);
@@ -185,8 +192,29 @@ class SpriteRenderer extends Renderer {
     system.addRendererObject(this.points);
     system.addRendererObject(this.webgpuMesh);
 
-    this.points.onBeforeRender = (renderer) => this.setActiveRenderer(renderer);
-    this.webgpuMesh.onBeforeRender = (renderer) => this.setActiveRenderer(renderer);
+    this.points.onBeforeRender = (renderer, _scene, camera) => {
+      this.setActiveRenderer(renderer);
+
+      if (renderer instanceof THREE.WebGLRenderer) {
+        const viewport = renderer.getCurrentViewport(new THREE.Vector4());
+        this.setUniformValue('viewportHeight', viewport.w || renderer.getDrawingBufferSize(new THREE.Vector2()).y || 600);
+
+        const isSceneCamera = !system.sceneCamera || camera === system.sceneCamera;
+        this.setUniformValue('softParticles', isSceneCamera && Boolean(this.softParticleDistance));
+      }
+    };
+    this.webgpuMesh.onBeforeRender = (renderer, _scene, camera) => {
+      this.setActiveRenderer(renderer);
+
+      if (renderer instanceof WebGPURenderer) {
+        if (system.sceneCamera && camera !== system.sceneCamera) return;
+        this.updateWebGPUInstances(
+          this.webgpuParticles,
+          camera,
+          `onBeforeRender:${renderer.constructor.name}`,
+        );
+      }
+    };
   }
 
   _update(particles: Particle[], system: ParticleSystem): void {
@@ -194,11 +222,11 @@ class SpriteRenderer extends Renderer {
 
     // Update attributes
     if (system.sceneRenderer instanceof WebGPURenderer) {
-      this.updateWebGPUInstances(
-        particles,
-        system.sceneCamera,
-        system.sceneRenderer,
-      );
+      this.webgpuParticles = particles;
+
+      if (system.sceneCamera) {
+        this.updateWebGPUInstances(particles, system.sceneCamera, 'update');
+      }
     } else {
       this.updateAttributes(particles);
     }
@@ -379,7 +407,7 @@ class SpriteRenderer extends Renderer {
   private updateWebGPUInstances(
     particles: Particle[],
     camera: THREE.Camera | undefined,
-    renderer: THREE.WebGLRenderer | WebGPURenderer,
+    source: string = 'unknown',
   ): void {
     const count = Math.min(particles.length, this.webgpuCapacity);
 
@@ -424,6 +452,49 @@ class SpriteRenderer extends Renderer {
     if (this.webgpuMesh.instanceColor) this.webgpuMesh.instanceColor.needsUpdate = true;
     this.webgpuFrameAttribute.needsUpdate = true;
     this.webgpuAlphaAttribute.needsUpdate = true;
+
+    this.debugWebGPUInstances(source, camera, count);
+  }
+
+  private debugWebGPUInstances(
+    source: string,
+    camera: THREE.Camera | undefined,
+    count: number,
+  ): void {
+    const debugGlobal = globalThis as RendererDebugGlobal;
+    if (!debugGlobal.__RZMPS_DEBUG_RENDERERS) return;
+
+
+    const cameraWorldPosition = camera?.getWorldPosition(new THREE.Vector3());
+    const event = {
+      type: 'sprite-webgpu',
+      time: Math.round(performance.now()),
+      source,
+      count,
+      cameraType: camera?.constructor.name,
+      cameraName: camera?.name,
+      cameraUuid: camera?.uuid,
+      cameraParentType: camera?.parent?.constructor.name,
+      cameraParentName: camera?.parent?.name,
+      cameraWorldPosition: cameraWorldPosition?.toArray(),
+      cameraQuaternion: this.cameraQuaternion.toArray(),
+      isCubemapCamera: Boolean(
+        camera?.userData?.__rzmps_liveCubemapCamera
+        || camera?.parent?.userData?.__rzmps_liveCubemapCamera,
+      ),
+      meshVisible: this.webgpuMesh.visible,
+      meshParentType: this.webgpuMesh.parent?.constructor.name,
+    };
+
+    debugGlobal.__RZMPS_RENDERER_EVENTS ??= [];
+    debugGlobal.__RZMPS_RENDERER_EVENTS.push(event);
+    debugGlobal.__RZMPS_RENDERER_EVENTS.splice(0, Math.max(0, debugGlobal.__RZMPS_RENDERER_EVENTS.length - 200));
+
+    const now = performance.now();
+    if (now - this._debugLastLog < 500) return;
+    this._debugLastLog = now;
+
+    console.log('[rzmps:sprite-webgpu]', event);
   }
 
   private getWebGPUWorldScale(

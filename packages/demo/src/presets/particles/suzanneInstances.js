@@ -7,7 +7,7 @@ import {
   SpriteRenderer,
 } from '@rzmps/rzmps';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
-import suzanneModel from 'url:../../assets/models/suzanne.glb';
+import suzanneModel from '../../assets/models/suzanne.glb?url';
 import { curvePresets } from '../curvePresets';
 
 
