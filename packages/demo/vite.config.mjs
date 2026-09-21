@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const rzmpsBuild = path.resolve(__dirname, '../rzmps/build/index.mjs');
+const localRzmpsAlias = fs.existsSync(rzmpsBuild)
+  ? { '@rzmps/rzmps': rzmpsBuild }
+  : {};
 const rzmpsPackageJson = JSON.parse(
   fs.readFileSync(require.resolve('@rzmps/rzmps/package.json'), 'utf8'),
 );
@@ -22,9 +25,7 @@ export default defineConfig({
     'import.meta.env.VITE_RZMPS_VERSION': JSON.stringify(rzmpsPackageJson.version),
   },
   resolve: {
-    alias: {
-      '@rzmps/rzmps': rzmpsBuild,
-    },
+    alias: localRzmpsAlias,
   },
   server: {
     watch: {
