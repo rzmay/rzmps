@@ -74,14 +74,14 @@ export default function createRepulsorAttractor(scene) {
 
   const ambient = new THREE.AmbientLight(
     0xffffff,
-    0.4,
+    0.55,
   );
 
   root.add(ambient);
 
   const light = new THREE.DirectionalLight(
     0xffffff,
-    2,
+    3,
   );
 
   light.position.set(5, 10, 5);

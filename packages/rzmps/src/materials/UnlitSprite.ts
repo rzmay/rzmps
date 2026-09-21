@@ -17,7 +17,6 @@ const UnlitSprite = (
     gridSize,
     frames,
     alphaMap,
-    softParticles,
     softParticleDistance = 0,
     ...materialOptions
   } = options;

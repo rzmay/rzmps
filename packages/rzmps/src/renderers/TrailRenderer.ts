@@ -9,6 +9,7 @@ import evaluateDynamicColor from '../helpers/evaluateDynamicColor';
 import { TrailMode } from '../enums/TrailMode';
 import { TrailTextureMode } from '../enums/TrailTextureMode';
 import defaultTex from '../assets/textures/default.png';
+import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
 
 export const TRAIL_RENDERER_USER_DATA_KEY = "__rzmps_trailRenderer";
 
@@ -117,6 +118,11 @@ class TrailRenderer extends Renderer {
 
   private elapsedTime = 0;
 
+  private materialEnvironmentState = new Map<THREE.Material, {
+    envMap?: THREE.Texture | null;
+    envMapIntensity?: number;
+  }>();
+
   constructor(
     options: Partial<TrailRendererOptions> = {},
   ) {
@@ -179,7 +185,7 @@ class TrailRenderer extends Renderer {
     system.addRendererObject(this.mesh);
 
     this.mesh.onBeforeRender = (renderer, _scene, camera) => {
-      if (!(renderer as { isWebGPURenderer?: boolean }).isWebGPURenderer) return;
+      if (!(renderer instanceof WebGPURenderer)) return;
 
       this.rebuildGeometry(camera);
     };
@@ -191,6 +197,7 @@ class TrailRenderer extends Renderer {
 
     this.mesh.castShadow = this.castShadow;
     this.mesh.receiveShadow = this.receiveShadow;
+    this.updateMaterialEnvironment(system);
 
     if (this.mode === TrailMode.Particle) {
       this.updateParticleTrails(
@@ -204,6 +211,7 @@ class TrailRenderer extends Renderer {
   }
 
   destroy(): void {
+    this.restoreMaterialEnvironment();
     this.geometry.dispose();
 
     this.trails.clear();
@@ -454,6 +462,7 @@ class TrailRenderer extends Renderer {
     );
 
     this.geometry.setIndex(indices);
+    this.geometry.computeVertexNormals();
     this.geometry.setDrawRange(0, Infinity);
 
     if (positions.length > 0) {
@@ -793,6 +802,76 @@ class TrailRenderer extends Renderer {
     material.vertexColors = true;
     material.transparent = true;
     material.needsUpdate = true;
+  }
+
+  private updateMaterialEnvironment(system: ParticleSystem): void {
+    const materials = Array.isArray(this.material)
+      ? this.material
+      : [this.material];
+
+    materials.forEach((material) => this.updateSingleMaterialEnvironment(material, system));
+  }
+
+  private restoreMaterialEnvironment(): void {
+    this.materialEnvironmentState.forEach((original, material) => {
+      const envMaterial = material as THREE.Material & {
+        envMap?: THREE.Texture | null;
+        envMapIntensity?: number;
+      };
+
+      envMaterial.envMap = original.envMap;
+      envMaterial.envMapIntensity = original.envMapIntensity;
+      material.needsUpdate = true;
+    });
+
+    this.materialEnvironmentState.clear();
+  }
+
+  private updateSingleMaterialEnvironment(
+    material: THREE.Material,
+    system: ParticleSystem,
+  ): void {
+    const envMaterial = material as THREE.Material & {
+      envMap?: THREE.Texture | null;
+      envMapIntensity?: number;
+    };
+
+    if (!('envMap' in envMaterial)) return;
+
+    if (!this.materialEnvironmentState.has(material)) {
+      this.materialEnvironmentState.set(material, {
+        envMap: envMaterial.envMap,
+        envMapIntensity: envMaterial.envMapIntensity,
+      });
+    }
+
+    const original = this.materialEnvironmentState.get(material);
+
+    if (system.useLiveCubemap) {
+      const nextMap = system.liveCubemap.map ?? null;
+
+      if (
+        envMaterial.envMap !== nextMap
+        || envMaterial.envMapIntensity !== system.liveCubemap.intensity
+      ) {
+        envMaterial.envMap = nextMap;
+        envMaterial.envMapIntensity = system.liveCubemap.intensity;
+        material.needsUpdate = true;
+      }
+
+      return;
+    }
+
+    if (!original) return;
+
+    if (
+      envMaterial.envMap !== original.envMap
+      || envMaterial.envMapIntensity !== original.envMapIntensity
+    ) {
+      envMaterial.envMap = original.envMap;
+      envMaterial.envMapIntensity = original.envMapIntensity;
+      material.needsUpdate = true;
+    }
   }
 }
 

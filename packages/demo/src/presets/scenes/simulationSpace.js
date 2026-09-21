@@ -54,8 +54,8 @@ export default function createSimulationSpace(scene) {
   marker.rotation.x = -Math.PI / 2;
   marker.position.y = 0.06;
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.25);
-  const point = new THREE.PointLight(0xffffff, 200);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+  const point = new THREE.PointLight(0xffffff, 260);
   point.position.set(10, 20, 0);
   point.castShadow = true;
 

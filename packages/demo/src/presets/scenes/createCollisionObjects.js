@@ -74,8 +74,8 @@ export default function createCollisionObjects(includeDynamic = false) {
     group.add(mesh);
   });
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-  const point = new THREE.PointLight(0xffffff, 200);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.65);
+  const point = new THREE.PointLight(0xffffff, 280);
   point.position.set(10, 20, 0);
   point.castShadow = true;
   group.add(ambient, point);

@@ -5,8 +5,10 @@ import { GitFork, Package } from 'lucide-react';
 import * as THREE from 'three';
 
 import { curvePresetDefinitions } from '../presets/curvePresets';
+import { createDefaultSceneBackground } from '../presets/scenes/background';
 
 import {
+    Audio,
     Emitter,
     EmissionShape,
     EmissionSource,
@@ -100,6 +102,7 @@ export class ParticleSystemGUI {
         this.scene = options.scene;
         this.presets = options.presets ?? {};
         this.scenes = options.scenes ?? {};
+        this.renderer = options.renderer;
         this.moduleFactories = { ...DEFAULT_MODULE_FACTORIES, ...options.moduleFactories };
         this.rendererFactories = { ...DEFAULT_RENDERER_FACTORIES, ...options.rendererFactories };
         this.subSystemFactories = options.subSystemFactories ?? {};
@@ -213,9 +216,9 @@ export class ParticleSystemGUI {
         if (this.isSystemDestroyed(this.system))
             return;
         this.buildEmittersFolder(this.contentFolder, this.system);
-        this.buildSubSystemsFolder(this.contentFolder, this.system);
         this.buildModulesFolder(this.contentFolder, this.system);
         this.buildRenderersFolder(this.contentFolder, this.system);
+        this.buildSubSystemsFolder(this.contentFolder, this.system);
     }
     isSystemDestroyed(system) {
         return !!system.destroyed;
@@ -257,6 +260,7 @@ export class ParticleSystemGUI {
                 if (name !== '(current)')
                     void this.setScene(name);
             });
+            this.buildSceneBackgroundControl(folder);
         }
     }
     async setScene(name) {
@@ -267,7 +271,8 @@ export class ParticleSystemGUI {
         this.sceneCleanup = undefined;
         this.currentSceneName = name;
         this.onSceneChange?.(name);
-        const cleanup = await this.scenes[name](this.scene);
+        this.applyDefaultSceneState();
+        const cleanup = await this.scenes[name](this.scene, this.renderer);
         if (version !== this.sceneLoadVersion) {
             if (typeof cleanup === 'function')
                 cleanup();
@@ -275,9 +280,46 @@ export class ParticleSystemGUI {
         }
         if (typeof cleanup === 'function')
             this.sceneCleanup = cleanup;
+        this.syncRendererBackground();
         this.configureSystemForScene(this.system);
         this.rebuild();
         this.emitCode();
+    }
+    applyDefaultSceneState() {
+        if (!this.scene) {
+            return;
+        }
+
+        this.scene.background = createDefaultSceneBackground();
+        this.scene.environment = null;
+        this.syncRendererBackground();
+    }
+    buildSceneBackgroundControl(folder) {
+        if (!(this.scene?.background instanceof THREE.Color)) {
+            return;
+        }
+
+        const state = {
+            background: `#${this.scene.background.getHexString()}`,
+        };
+
+        folder.addColor(state, 'background').name('Background').onChange((value) => {
+            if (!(this.scene?.background instanceof THREE.Color)) {
+                return;
+            }
+
+            this.scene.background.set(value);
+            this.syncRendererBackground();
+        });
+    }
+    syncRendererBackground() {
+        if (!this.renderer || !this.scene) {
+            return;
+        }
+
+        if (this.scene.background instanceof THREE.Color) {
+            this.renderer.setClearColor(this.scene.background, 1);
+        }
     }
     configureSystemForScene(system = this.system) {
         this.scene?.userData?.[SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY]?.(system);
@@ -298,6 +340,10 @@ export class ParticleSystemGUI {
         folder.add(system, 'maxParticles', 0, 100000, 1).name('Max Particles');
         folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling');
         folder.add(system, 'simulationDistance', 0, 1000, 0.1).name('Simulation Distance');
+        folder.add(system, 'useLiveCubemap').name('Live Cubemap');
+        folder.add(system.liveCubemap, 'fps', 1, 120, 1).name('Live Cubemap FPS');
+        folder.add(system.liveCubemap, 'resolutionScale', 0.05, 1, 0.01).name('Live Cubemap Scale');
+        folder.add(system.liveCubemap, 'intensity', 0, 10, 0.01).name('Live Cubemap Intensity');
         const controlOptions = {
             children: true,
         };
@@ -548,9 +594,9 @@ export class ParticleSystemGUI {
         const editor = folder.addFolder('Editor');
         this.buildSystemFolder(editor, subSystem);
         this.buildEmittersFolder(editor, subSystem);
-        this.buildSubSystemsFolder(editor, subSystem);
         this.buildModulesFolder(editor, subSystem);
         this.buildRenderersFolder(editor, subSystem);
+        this.buildSubSystemsFolder(editor, subSystem);
 
         folder.add(actions, 'remove').name('Remove Sub System');
     }
@@ -593,6 +639,7 @@ export class ParticleSystemGUI {
                 'forceFields',
                 'forceFieldFilter',
                 'particleSystem',
+                'listener',
                 'tags',
             ]);
             Object.keys(candidate)
@@ -680,6 +727,48 @@ export class ParticleSystemGUI {
         };
         folder.add(info, 'texture').name('Texture').disable();
         folder.add(info, 'alphaMap').name('Alpha Map').disable();
+
+        this.buildSpriteMaterialOptionsFolder(
+            folder.addFolder('Material Options'),
+            renderer,
+        );
+    }
+    buildSpriteMaterialOptionsFolder(folder, renderer) {
+        const optionDefinitions = [
+            ['opacity', 'Opacity', 0, 1, 0.01],
+            ['alphaTest', 'Alpha Test', 0, 1, 0.001],
+            ['roughness', 'Roughness', 0, 1, 0.01],
+            ['metalness', 'Metalness', 0, 1, 0.01],
+            ['normalStrength', 'Normal Strength', 0, 4, 0.01],
+            ['normalLighting', 'Normal Lighting', 0, 1, 0.01],
+            ['envIntensity', 'Env Intensity', 0, 10, 0.01],
+        ];
+
+        optionDefinitions.forEach(([key, label, min, max, step]) => {
+            const state = {
+                [key]: renderer.materialOptions[key] ?? this.defaultSpriteMaterialOption(key),
+            };
+
+            folder
+                .add(state, key, min, max, step)
+                .name(label)
+                .onChange((value) => {
+                    renderer.materialOptions = {
+                        ...renderer.materialOptions,
+                        [key]: value,
+                    };
+                });
+        });
+    }
+    defaultSpriteMaterialOption(key) {
+        switch (key) {
+            case 'opacity':
+                return 1;
+            case 'roughness':
+                return 0.5;
+            default:
+                return 0;
+        }
     }
     buildLightRenderer(folder, renderer) {
         this.addDynamicValue(folder, renderer, 'brightness', 'Brightness');
@@ -731,6 +820,7 @@ export class ParticleSystemGUI {
         folder.add(info, 'capacity').name('Capacity').disable();
         folder.add(renderer, 'castShadow').name('Cast Shadow');
         folder.add(renderer, 'receiveShadow').name('Receive Shadow');
+        this.buildMaterialFolder(folder.addFolder('Material'), renderer.mesh.material);
     }
     buildTrailRenderer(folder, renderer) {
         const modeState = {
@@ -831,9 +921,12 @@ export class ParticleSystemGUI {
         );
     }
     buildTrailMaterialFolder(folder, renderer) {
-        const materials = Array.isArray(renderer.material)
-            ? renderer.material
-            : [renderer.material];
+        this.buildMaterialFolder(folder, renderer.material);
+    }
+    buildMaterialFolder(folder, materialOrMaterials) {
+        const materials = Array.isArray(materialOrMaterials)
+            ? materialOrMaterials
+            : [materialOrMaterials];
 
         const material = materials[0];
 
@@ -863,23 +956,39 @@ export class ParticleSystemGUI {
                 });
         }
 
-        if ('opacity' in material) {
-            folder
-                .add(material, 'opacity', 0, 1)
-                .name('Opacity');
-        }
+        const numericControls = [
+            ['opacity', 'Opacity', 0, 1, 0.01],
+            ['alphaTest', 'Alpha Test', 0, 1, 0.001],
+            ['roughness', 'Roughness', 0, 1, 0.01],
+            ['metalness', 'Metalness', 0, 1, 0.01],
+            ['envMapIntensity', 'Env Map Intensity', 0, 10, 0.01],
+            ['emissiveIntensity', 'Emissive Intensity', 0, 10, 0.01],
+            ['ior', 'IOR', 1, 2.333, 0.001],
+            ['reflectivity', 'Reflectivity', 0, 1, 0.01],
+            ['clearcoat', 'Clearcoat', 0, 1, 0.01],
+            ['clearcoatRoughness', 'Clearcoat Roughness', 0, 1, 0.01],
+            ['transmission', 'Transmission', 0, 1, 0.01],
+            ['thickness', 'Thickness', 0, 10, 0.01],
+            ['attenuationDistance', 'Attenuation Distance', 0, 100, 0.01],
+            ['sheen', 'Sheen', 0, 1, 0.01],
+            ['sheenRoughness', 'Sheen Roughness', 0, 1, 0.01],
+            ['iridescence', 'Iridescence', 0, 1, 0.01],
+            ['iridescenceIOR', 'Iridescence IOR', 1, 2.333, 0.001],
+            ['anisotropy', 'Anisotropy', 0, 1, 0.01],
+        ];
 
-        if ('roughness' in material) {
-            folder
-                .add(material, 'roughness', 0, 1)
-                .name('Roughness');
-        }
+        numericControls.forEach(([key, label, min, max, step]) => {
+            if (!(key in material) || typeof material[key] !== 'number') {
+                return;
+            }
 
-        if ('metalness' in material) {
             folder
-                .add(material, 'metalness', 0, 1)
-                .name('Metalness');
-        }
+                .add(material, key, min, max, step)
+                .name(label)
+                .onChange(() => {
+                    material.needsUpdate = true;
+                });
+        });
 
         if (
             'emissive' in material
@@ -895,12 +1004,6 @@ export class ParticleSystemGUI {
                 .onChange((value) => {
                     material.emissive.set(value);
                 });
-        }
-
-        if ('emissiveIntensity' in material) {
-            folder
-                .add(material, 'emissiveIntensity', 0)
-                .name('Emissive Intensity');
         }
 
         if ('wireframe' in material) {
@@ -1005,6 +1108,10 @@ export class ParticleSystemGUI {
 
             return;
         }
+        if (value instanceof Set) {
+            this.addSetValue(folder.addFolder(label), value);
+            return;
+        }
         if (value && typeof value === 'object') {
             if (seen.has(value)) {
                 return;
@@ -1046,7 +1153,55 @@ export class ParticleSystemGUI {
             this.addValue(sub, value, '1', 'Max');
             return;
         }
+        if (value instanceof Set) {
+            const sub = folder.addFolder(label);
+            const state = { mode: 'Random Set' };
+            sub.add(state, 'mode').name('Mode').disable();
+            this.addSetValue(sub, value);
+            return;
+        }
         this.addValue(folder, object, key, label);
+    }
+    addSetValue(folder, set) {
+        Array.from(set).forEach((item, index) => {
+            const label = `Option ${index + 1}`;
+
+            if (item instanceof THREE.Color) {
+                const state = { color: `#${item.getHexString()}` };
+                folder.addColor(state, 'color').name(label).onChange((hex) => {
+                    item.set(hex);
+                });
+                return;
+            }
+
+            if (item instanceof THREE.Vector3) {
+                this.addVector3(folder.addFolder(label), item, label);
+                return;
+            }
+
+            if (item instanceof THREE.Vector2) {
+                this.addVector2(folder.addFolder(label), item, label);
+                return;
+            }
+
+            if (typeof item === 'number' || typeof item === 'boolean' || typeof item === 'string') {
+                const state = { value: item };
+                folder.add(state, 'value').name(label).onChange((nextValue) => {
+                    const values = Array.from(set);
+                    values[index] = nextValue;
+                    set.clear();
+                    values.forEach((value) => set.add(value));
+                });
+                return;
+            }
+
+            this.addValue(
+                folder,
+                Array.from(set),
+                String(index),
+                label,
+            );
+        });
     }
     addVector3(folder, vector, label) {
         folder.add(vector, 'x').name(`${label} X`);
@@ -1189,6 +1344,10 @@ export class ParticleSystemGUI {
             `  maxParticles: ${this.serializeValue(system.maxParticles)},`,
             `  maxCullingMode: ${this.serializeValue(system.maxCullingMode)},`,
             `  simulationDistance: ${this.serializeValue(system.simulationDistance)},`,
+            `  useLiveCubemap: ${this.serializeValue(system.useLiveCubemap)},`,
+            `  liveCubemapFPS: ${this.serializeValue(system.liveCubemap.fps)},`,
+            `  liveCubemapResolutionScale: ${this.serializeValue(system.liveCubemap.resolutionScale)},`,
+            `  liveCubemapIntensity: ${this.serializeValue(system.liveCubemap.intensity)},`,
             '  emitters: [',
             this.indent(emitters, 4),
             '  ],',
@@ -1308,6 +1467,49 @@ export class ParticleSystemGUI {
             }
 
             return `new ExternalForces(${this.serializeValue(options)})`;
+        }
+
+        if (module instanceof Audio) {
+            const options = {
+                loop: module.loop,
+                maxClips: module.maxClips,
+                ratio: module.ratio,
+                collisionRatio: module.collisionRatio,
+                pitch: module.pitch,
+                volume: module.volume,
+                highPass: module.highPass,
+                lowPass: module.lowPass,
+                sizeAffectsPitch: module.sizeAffectsPitch,
+                sizeAffectsVolume: module.sizeAffectsVolume,
+                alphaAffectsPitch: module.alphaAffectsPitch,
+                alphaAffectsVolume: module.alphaAffectsVolume,
+                speedAffectsPitch: module.speedAffectsPitch,
+                speedAffectsVolume: module.speedAffectsVolume,
+                impulseAffectsPitch: module.impulseAffectsPitch,
+                impulseAffectsVolume: module.impulseAffectsVolume,
+                impulseAffectsHighPass: module.impulseAffectsHighPass,
+                impulseAffectsLowPass: module.impulseAffectsLowPass,
+                impulseThreshhold: module.impulseThreshhold,
+                tags: module.tags,
+            };
+
+            if (module.sound?.length) {
+                options.sound = this.rawCode('undefined /* AudioBuffer | AudioBuffer[] */');
+            }
+
+            if (module.onCollisionSound?.length) {
+                options.onCollisionSound = this.rawCode('undefined /* AudioBuffer | AudioBuffer[] */');
+            }
+
+            if (module.onSpawnSound?.length) {
+                options.onSpawnSound = this.rawCode('undefined /* AudioBuffer | AudioBuffer[] */');
+            }
+
+            if (module.onDeathSound?.length) {
+                options.onDeathSound = this.rawCode('undefined /* AudioBuffer | AudioBuffer[] */');
+            }
+
+            return `new Audio(${this.serializeValue(options)})`;
         }
 
         const runtime = module;
@@ -1523,6 +1725,9 @@ export class ParticleSystemGUI {
             return `new THREE.Euler(${value.x}, ${value.y}, ${value.z}, ${JSON.stringify(value.order)})`;
         if (Array.isArray(value)) {
             return `[${value.map((item) => this.serializeValue(item, seen)).join(', ')}]`;
+        }
+        if (value instanceof Set) {
+            return `new Set([${Array.from(value).map((item) => this.serializeValue(item, seen)).join(', ')}])`;
         }
         if (typeof value === 'object') {
             if (seen.has(value))

@@ -6,10 +6,8 @@ export default function loadHdri(url) {
     let disposed = false;
     let environmentTexture = null;
 
-    scene.background = new THREE.Color('#202020');
-
-    const ambient = new THREE.AmbientLight(0xffffff, 0.12);
-    const point = new THREE.PointLight(0xffffff, 0.65);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.18);
+    const point = new THREE.PointLight(0xffffff, 1);
     point.position.set(10, 20, 0);
     scene.add(ambient, point);
 
@@ -31,7 +29,6 @@ export default function loadHdri(url) {
 
       if (environmentTexture) environmentTexture.dispose();
 
-      scene.background = new THREE.Color('#17191c');
       scene.environment = null;
     };
   }

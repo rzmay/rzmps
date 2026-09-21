@@ -11,10 +11,12 @@ import createWind from './wind';
 import createVortex from './vortex';
 import createRepulsorAttractor from './repulsor';
 import createSimulationSpace from './simulationSpace';
+import loadCornellBox from './cornellBox';
 
 
 const scenePresets = {
   Checkerboard: loadCheckerboard,
+  'Cornell Box': loadCornellBox,
   'Shanghai Bund HDRI': loadHdri(shanghaiBund),
   'Ferndale Studio HDRI': loadHdri(ferndaleStudio),
   'Color Lights': loadColorLights,

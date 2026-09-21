@@ -15,6 +15,8 @@ import type { Tag } from './types/Tag';
 import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
+import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
+import LiveCubemap from './renderers/LiveCubemap';
 
 interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
@@ -32,6 +34,11 @@ interface ParticleSystemOptions {
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   simulationSpace: SimulationSpace | `${SimulationSpace}`;
+
+  useLiveCubemap: boolean;
+  liveCubemapFPS: number;
+  liveCubemapResolutionScale: number;
+  liveCubemapIntensity: number;
 }
 
 export interface SubSystemOptions {
@@ -95,6 +102,9 @@ class ParticleSystem extends THREE.Object3D {
   maxCullingMode: MaxCulling;
   simulationDistance: number;
 
+  useLiveCubemap: boolean;
+  liveCubemap: LiveCubemap;
+
   private _simulationSpace: SimulationSpace = SimulationSpace.Local;
   get simulationSpace(): SimulationSpace {
     return this._simulationSpace;
@@ -116,7 +126,7 @@ class ParticleSystem extends THREE.Object3D {
   private _camera?: THREE.Camera;
   get sceneCamera() { return this._camera; }
 
-  private _renderer?: THREE.WebGLRenderer;
+  private _renderer?: THREE.WebGLRenderer | WebGPURenderer;
   get sceneRenderer() { return this._renderer; }
 
   private deltaTime = 0;
@@ -167,6 +177,16 @@ class ParticleSystem extends THREE.Object3D {
     this.maxParticles = Math.max(options.maxParticles ?? this.maxParticles, 0);
     this.maxCullingMode = (options.maxCullingMode as MaxCulling) ?? MaxCulling.New;
     this.simulationDistance = Math.max(options.simulationDistance ?? 0, 0);
+
+    // Init live cubemap, even if unused
+    this.useLiveCubemap = options.useLiveCubemap
+      ?? Boolean(options.liveCubemapFPS || options.liveCubemapResolutionScale);
+    this.liveCubemap = new LiveCubemap({
+      fps: options.liveCubemapFPS,
+      resolutionScale: options.liveCubemapResolutionScale,
+      intensity: options.liveCubemapIntensity,
+    });
+    this.liveCubemap.setup(this);
 
     // If gravity is passed in, gravityModifier will be set to 1.
     // In effect, this means gravity will be turned off by default,
@@ -235,6 +255,10 @@ class ParticleSystem extends THREE.Object3D {
 
     // Subsystems
     this._updateSubSystems();
+
+    // Cubemap update
+    if (this.useLiveCubemap) this.liveCubemap.update(this.scene, this.sceneRenderer, this.deltaTime);
+
     this._handleEndBehavior();
   }
 

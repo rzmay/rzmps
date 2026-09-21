@@ -10,6 +10,7 @@ import HemisphereLightNode from 'three/src/nodes/lighting/HemisphereLightNode.js
 import PointLightNode from 'three/src/nodes/lighting/PointLightNode.js';
 import RectAreaLightNode from 'three/src/nodes/lighting/RectAreaLightNode.js';
 import SpotLightNode from 'three/src/nodes/lighting/SpotLightNode.js';
+import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import CameraControls from '../components/CameraControls';
 import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
 import particlePresets from '../presets/particles';
@@ -35,6 +36,8 @@ function setQueryParam(name, value) {
 
 async function createWebGPURenderer(defaultProps) {
   const renderer = new WebGPURenderer(defaultProps);
+
+  RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init());
 
   renderer.library.addLight(AmbientLightNode, THREE.AmbientLight);
   renderer.library.addLight(DirectionalLightNode, THREE.DirectionalLight);

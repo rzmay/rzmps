@@ -17,7 +17,7 @@ function ParticleSystemDisplay({
 }) {
   const particleSystem = useRef(null);
   const guiRef = useRef(null);
-  const { scene } = useThree();
+  const { gl, scene } = useThree();
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +35,7 @@ function ParticleSystemDisplay({
         scene,
         presets: particlePresets,
         scenes: scenePresets,
+        renderer: gl,
         initialPreset,
         initialScene,
         title: 'RZMPS Demo',
@@ -71,6 +72,7 @@ function ParticleSystemDisplay({
     onRendererChange,
     onSceneChange,
     onShowCodeChange,
+    gl,
     scene,
   ]);
 

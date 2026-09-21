@@ -27,6 +27,8 @@ const WebGPUBasicSprite = (
     normalStrength,
     roughness,
     roughnessMap,
+    metalness = 0,
+    metalnessMap,
     envMap,
     envIntensity,
     normalLighting,
@@ -40,7 +42,7 @@ const WebGPUBasicSprite = (
   const material = new MeshStandardNodeMaterial({
     depthTest: true,
     depthWrite: false,
-    metalness: 0,
+    metalness,
     roughness: roughness ?? 0.5,
     transparent: true,
     vertexColors: true,
@@ -96,11 +98,14 @@ const WebGPUBasicSprite = (
   material.roughnessNode = roughnessMap
     ? texture(roughnessMap, spriteUv).r.mul(roughness ?? 0.5)
     : float(roughness ?? 0.5);
-  material.metalnessNode = float(0);
+  material.metalnessNode = metalnessMap
+    ? texture(metalnessMap, spriteUv).r.mul(metalness)
+    : float(metalness);
   material.userData.frames = frames ?? 1;
   material.userData.normalMap = normalMap;
   material.userData.normalStrength = normalStrength;
   material.userData.roughnessMap = roughnessMap;
+  material.userData.metalnessMap = metalnessMap;
   material.userData.normalLighting = normalLighting;
   material.userData.sphericalNormals = sphericalNormals;
   material.userData.softParticles = softParticles;

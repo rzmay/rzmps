@@ -20,6 +20,8 @@ export { SpriteMaterialType } from './enums/SpriteMaterialType';
 export { default as TrailRenderer } from './renderers/TrailRenderer';
 export { TrailMode } from './enums/TrailMode';
 export { TrailTextureMode } from './enums/TrailTextureMode';
+export { default as LiveCubemap } from './renderers/LiveCubemap';
+export type { LiveCubemapOptions } from './renderers/LiveCubemap';
 
 // Modules
 export { default as Module } from './Module';

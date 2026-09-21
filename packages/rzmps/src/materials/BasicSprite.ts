@@ -12,6 +12,8 @@ export interface BasicSpriteOptions extends THREE.ShaderMaterialParameters {
   sphericalNormals: boolean;
   roughness: number;
   roughnessMap: THREE.Texture;
+  metalness: number;
+  metalnessMap: THREE.Texture;
   envMap: THREE.Texture;
   envIntensity: number;
   softParticles: boolean;
@@ -31,9 +33,10 @@ const BasicSprite = (
     sphericalNormals,
     roughness = 0.5,
     roughnessMap,
+    metalness = 0,
+    metalnessMap,
     envMap,
     envIntensity = 1.0,
-    softParticles,
     softParticleDistance = 0,
     ...materialOptions
   } = options;
@@ -63,6 +66,9 @@ const BasicSprite = (
         roughness: { value: roughness },
         roughnessMap: { value: roughnessMap ?? null },
         hasRoughnessMap: { value: Boolean(roughnessMap) },
+        metalness: { value: THREE.MathUtils.clamp(metalness, 0, 1) },
+        metalnessMap: { value: metalnessMap ?? null },
+        hasMetalnessMap: { value: Boolean(metalnessMap) },
 
         envMap: { value: envMap },
         envIntensity: { value: envIntensity },

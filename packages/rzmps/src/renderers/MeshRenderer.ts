@@ -36,6 +36,11 @@ class MeshRenderer extends Renderer {
 
     private dummy: THREE.Object3D;
 
+    private materialEnvironmentState = new Map<THREE.Material, {
+      envMap?: THREE.Texture | null;
+      envMapIntensity?: number;
+    }>();
+
     constructor(options: Partial<MeshRendererOptions> = {}) {
       super(options);
 
@@ -70,11 +75,12 @@ class MeshRenderer extends Renderer {
       system.addRendererObject(this.instances);
     }
 
-    _update(particles: Particle[]): void {
+    _update(particles: Particle[], system: ParticleSystem): void {
       this.instances.count = particles.length;
 
       this.instances.castShadow = this.castShadow;
       this.instances.receiveShadow = this.receiveShadow;
+      this.updateMaterialEnvironment(system);
 
       particles.forEach((particle, i) => {
         this.dummy.position.set(...particle.position.toArray());
@@ -96,6 +102,7 @@ class MeshRenderer extends Renderer {
 
     destroy(): void
     {
+        this.restoreMaterialEnvironment();
         this.instances.removeFromParent();
     }
 
@@ -132,6 +139,76 @@ gl_FragColor.a *= vInstanceAlpha;`
       };
 
       material.needsUpdate = true;
+    }
+
+    private updateMaterialEnvironment(system: ParticleSystem): void {
+      const materials = Array.isArray(this.instances.material)
+        ? this.instances.material
+        : [this.instances.material];
+
+      materials.forEach((material) => this.updateSingleMaterialEnvironment(material, system));
+    }
+
+    private restoreMaterialEnvironment(): void {
+      this.materialEnvironmentState.forEach((original, material) => {
+        const envMaterial = material as THREE.Material & {
+          envMap?: THREE.Texture | null;
+          envMapIntensity?: number;
+        };
+
+        envMaterial.envMap = original.envMap;
+        envMaterial.envMapIntensity = original.envMapIntensity;
+        material.needsUpdate = true;
+      });
+
+      this.materialEnvironmentState.clear();
+    }
+
+    private updateSingleMaterialEnvironment(
+      material: THREE.Material,
+      system: ParticleSystem,
+    ): void {
+      const envMaterial = material as THREE.Material & {
+        envMap?: THREE.Texture | null;
+        envMapIntensity?: number;
+      };
+
+      if (!('envMap' in envMaterial)) return;
+
+      if (!this.materialEnvironmentState.has(material)) {
+        this.materialEnvironmentState.set(material, {
+          envMap: envMaterial.envMap,
+          envMapIntensity: envMaterial.envMapIntensity,
+        });
+      }
+
+      const original = this.materialEnvironmentState.get(material);
+
+      if (system.useLiveCubemap) {
+        const nextMap = system.liveCubemap.map ?? null;
+
+        if (
+          envMaterial.envMap !== nextMap
+          || envMaterial.envMapIntensity !== system.liveCubemap.intensity
+        ) {
+          envMaterial.envMap = nextMap;
+          envMaterial.envMapIntensity = system.liveCubemap.intensity;
+          material.needsUpdate = true;
+        }
+
+        return;
+      }
+
+      if (!original) return;
+
+      if (
+        envMaterial.envMap !== original.envMap
+        || envMaterial.envMapIntensity !== original.envMapIntensity
+      ) {
+        envMaterial.envMap = original.envMap;
+        envMaterial.envMapIntensity = original.envMapIntensity;
+        material.needsUpdate = true;
+      }
     }
 }
 

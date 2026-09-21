@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {
+  Audio,
   Collision,
   ColorOverLifetime,
   Emitter,
@@ -10,12 +11,17 @@ import {
   Textures,
   TrailRenderer,
 } from '@rzmps/rzmps';
+import ballHitUrl from 'url:../../assets/audio/ball_hit.mp3';
 
 export default async function createCollisionSubEmitters() {
+  const ballHit = await new THREE.AudioLoader().loadAsync(ballHitUrl);
+
   const collision = new ParticleSystem({
     duration: 5,
     looping: true,
     gravityModifier: 1,
+    useLiveCubemap: true,
+    liveCubemapIntensity: 3,
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.25),
@@ -36,6 +42,16 @@ export default async function createCollisionSubEmitters() {
         radiusScale: 1,
         applyImpulses: true,
       }),
+      new Audio({
+        onCollisionSound: ballHit,
+        collisionRatio: 1,
+        pitch: [0.8, 1.2],
+        volume: 0.18,
+        impulseAffectsVolume: 0.5,
+        impulseThreshhold: 0.1,
+        lowPass: 1800,
+        impulseAffectsLowPass: 1,
+      }),
     ],
     renderers: [
       new SpriteRenderer(Textures.Circle, {
@@ -43,6 +59,7 @@ export default async function createCollisionSubEmitters() {
         castShadow: true,
         materialOptions: {
           roughness: 0,
+          metalness: 1,
           sphericalNormals: true,
           normalLighting: 1,
         },

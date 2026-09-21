@@ -192,6 +192,10 @@ interface ParticleSystemOptions {
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   simulationSpace: SimulationSpace;
+  useLiveCubemap: boolean;
+  liveCubemapFPS: number;
+  liveCubemapResolutionScale: number;
+  liveCubemapIntensity: number;
 }
 ```
 
@@ -205,6 +209,19 @@ first renders. `prewarmFPS` controls the fixed warmup step rate and defaults to
 Set `simulationDistance` above `0` to pause simulation while the particle system
 is farther than that distance from the active camera. The default is `0`, which
 disables distance limiting.
+
+Set `useLiveCubemap: true` to render a live environment map from the particle
+system and feed it to sprite renderers using `material: "basic"`, mesh
+renderers, and trail renderers. `liveCubemapFPS`,
+`liveCubemapResolutionScale`, and `liveCubemapIntensity` control the update
+rate, resolution cost, and reflection intensity.
+
+`LiveCubemap` is also exported for utility use outside `ParticleSystem`. It is
+primarily an internal helper, but can be attached to any `THREE.Object3D` with
+`setup(parent)` and updated with `update(scene, renderer, deltaTime)` when you
+need a local realtime cubemap. Set `excludeParent: true` to hide the parent
+object while the cubemap is rendered, which is useful for reflective objects
+that should not capture themselves.
 
 For non-looping systems, `endBehavior` controls what happens after the system
 duration has elapsed.
@@ -698,10 +715,13 @@ interface AudioOptions extends Partial<ModuleOptions> {
   onDeathSound: AudioBuffer | AudioBuffer[];
   shouldPlay: (particle: Particle) => boolean;
   loop: boolean;
+  maxClips: number;
   ratio: number;
   collisionRatio: number;
   pitch: DynamicValue<number>;
   volume: DynamicValue<number>;
+  highPass: DynamicValue<number>;
+  lowPass: DynamicValue<number>;
   sizeAffectsPitch: number;
   sizeAffectsVolume: number;
   alphaAffectsPitch: number;
@@ -710,15 +730,25 @@ interface AudioOptions extends Partial<ModuleOptions> {
   speedAffectsVolume: number;
   impulseAffectsPitch: number;
   impulseAffectsVolume: number;
+  impulseAffectsHighPass: number;
+  impulseAffectsLowPass: number;
   impulseThreshhold: number;
 }
 ```
 
 Adds positional audio to particles and can play event sounds for spawn,
-collision, and death. Collision event sounds can use `impulseAffectsPitch` and
+collision, and death. `maxClips` defaults to `100` and limits the number of
+simultaneous event clips from this module. Collision event sounds can use
+`impulseAffectsPitch` and
 `impulseAffectsVolume`; each uses `Math.pow(collision.impulse.length(), effect)`
-as a multiplier on the evaluated pitch or volume. `impulseThreshhold` defaults
-to `0`; collision sounds only play when
+as a multiplier on the evaluated pitch or volume. `highPass` and `lowPass`
+create Web Audio `BiquadFilterNode` filters through Three.js.
+`impulseAffectsLowPass` raises the low-pass cutoff as impulse increases, while
+`impulseAffectsHighPass` lowers the high-pass cutoff as impulse increases, so
+gentler collisions can sound more filtered and harder impacts can sound fuller.
+Filters are only applied when both the cutoff value and the corresponding
+`impulseAffects...` value are greater than `0`.
+`impulseThreshhold` defaults to `0`; collision sounds only play when
 `collision.impulse.length() > impulseThreshhold`.
 
 ## Built-In Renderers
@@ -792,6 +822,8 @@ interface BasicSpriteOptions extends THREE.ShaderMaterialParameters {
   sphericalNormals: boolean;
   roughness: number;
   roughnessMap: THREE.Texture;
+  metalness: number;
+  metalnessMap: THREE.Texture;
   envMap: THREE.Texture;
   envIntensity: number;
   softParticles: boolean;

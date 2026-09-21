@@ -12,6 +12,7 @@ import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import seedrandom from 'seedrandom';
 import { SpriteMaterialType } from '../enums/SpriteMaterialType';
 import { TRAIL_RENDERER_USER_DATA_KEY } from './TrailRenderer';
+import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
 
 type SceneDepthData = {
   target: THREE.WebGLRenderTarget;
@@ -29,21 +30,6 @@ type WebGPUSceneDepthData = {
 type HiddenSpriteRenderer = {
   object: THREE.Object3D;
   visible: boolean;
-};
-
-type RendererLike = THREE.WebGLRenderer & {
-  isWebGPURenderer?: boolean;
-  domElement?: HTMLCanvasElement;
-};
-
-type WebGPURendererLike = {
-  isWebGPURenderer?: boolean;
-  info: THREE.WebGLRenderer['info'];
-  clear(): void;
-  getDrawingBufferSize(target: THREE.Vector2): THREE.Vector2;
-  getRenderTarget(): THREE.RenderTarget | null;
-  render(scene: THREE.Scene, camera: THREE.Camera): void;
-  setRenderTarget(target: THREE.RenderTarget | null): void;
 };
 
 export const SPRITE_RENDERER_USER_DATA_KEY = "__rzmps_spriteRenderer";
@@ -199,19 +185,19 @@ class SpriteRenderer extends Renderer {
     system.addRendererObject(this.points);
     system.addRendererObject(this.webgpuMesh);
 
-    this.points.onBeforeRender = (renderer) => this.setActiveRenderer(renderer as RendererLike);
-    this.webgpuMesh.onBeforeRender = (renderer) => this.setActiveRenderer(renderer as RendererLike);
+    this.points.onBeforeRender = (renderer) => this.setActiveRenderer(renderer);
+    this.webgpuMesh.onBeforeRender = (renderer) => this.setActiveRenderer(renderer);
   }
 
   _update(particles: Particle[], system: ParticleSystem): void {
-    this.setActiveRenderer(system.sceneRenderer as RendererLike | undefined);
+    this.setActiveRenderer(system.sceneRenderer);
 
     // Update attributes
-    if (this.isWebGPURenderer(system.sceneRenderer as RendererLike | undefined)) {
+    if (system.sceneRenderer instanceof WebGPURenderer) {
       this.updateWebGPUInstances(
         particles,
         system.sceneCamera,
-        system.sceneRenderer as RendererLike | undefined,
+        system.sceneRenderer,
       );
     } else {
       this.updateAttributes(particles);
@@ -221,15 +207,26 @@ class SpriteRenderer extends Renderer {
     this.points.castShadow = this.castShadow;
     this.webgpuMesh.castShadow = this.castShadow;
 
-    const environment =
-        this._materialOptions && 'envMap' in this._materialOptions
-            ? this._materialOptions.envMap ?? system.scene?.environment ?? null
-            : system.scene?.environment ?? null;
+    // Select environment
+    let environment: THREE.Texture | undefined;
+    if (this._materialOptions && 'envMap' in this._materialOptions) {
+      environment = this._materialOptions.envMap;
+    } else if (system.useLiveCubemap) {
+      environment = system.liveCubemap.map;
+    } else {
+      environment = system.scene?.environment ?? undefined;
+    }
 
-    if (this.isWebGPURenderer(system.sceneRenderer as RendererLike | undefined)) {
-      this.updateWebGPUEnvironmentMap(environment);
+    const envIntensity = system.useLiveCubemap && !('envMap' in (this._materialOptions ?? {}))
+      ? system.liveCubemap.intensity
+      : this._materialOptions && 'envIntensity' in this._materialOptions
+        ? this._materialOptions.envIntensity ?? 1
+        : system.scene?.environmentIntensity ?? 1;
+
+    if (system.sceneRenderer instanceof WebGPURenderer) {
+      this.updateWebGPUEnvironmentMap(environment ?? null, envIntensity);
       this.updateWebGPUSoftParticles(
-        system.sceneRenderer as unknown as WebGPURendererLike | undefined,
+        system.sceneRenderer,
         system.scene,
         system.sceneCamera,
       );
@@ -243,6 +240,7 @@ class SpriteRenderer extends Renderer {
 
     system.sceneRenderer?.getDrawingBufferSize(viewportSize);
     this.setUniformValue('viewportHeight', viewportSize.y || 600);
+    this.setUniformValue('envIntensity', envIntensity);
 
     // Set uniforms for soft particles
     this.setUniformValue('softParticles', Boolean(this.softParticleDistance));
@@ -278,7 +276,11 @@ class SpriteRenderer extends Renderer {
     }
 
     // Update environment map
-    this.updateEnvironmentMap(system.sceneRenderer, environment);
+    this.updateEnvironmentMap(
+      system.sceneRenderer,
+      environment ?? null,
+      system.useLiveCubemap,
+    );
   }
 
   private updateAttributes(particles: Particle[]) {
@@ -368,23 +370,16 @@ class SpriteRenderer extends Renderer {
     });
   }
 
-  private isWebGPURenderer(renderer: RendererLike | undefined): boolean {
-    return Boolean(renderer?.isWebGPURenderer);
-  }
-
-  private setActiveRenderer(renderer: RendererLike | undefined): void {
-    const usingWebGPU = this.isWebGPURenderer(renderer);
-    const usingWebGL = renderer && !usingWebGPU;
-
-    this.points.visible = Boolean(usingWebGL);
-    this.points.material = usingWebGL ? this.material : this.hiddenMaterial;
-    this.webgpuMesh.visible = usingWebGPU;
+  private setActiveRenderer(renderer: THREE.WebGLRenderer | WebGPURenderer | undefined): void {
+    this.points.visible = Boolean(renderer instanceof THREE.WebGLRenderer);
+    this.points.material = renderer instanceof THREE.WebGLRenderer ? this.material : this.hiddenMaterial;
+    this.webgpuMesh.visible = renderer instanceof WebGPURenderer;
   }
 
   private updateWebGPUInstances(
     particles: Particle[],
     camera: THREE.Camera | undefined,
-    renderer: RendererLike | undefined,
+    renderer: THREE.WebGLRenderer | WebGPURenderer,
   ): void {
     const count = Math.min(particles.length, this.webgpuCapacity);
 
@@ -409,7 +404,6 @@ class SpriteRenderer extends Renderer {
         this.getWebGPUWorldScale(
           particle,
           camera,
-          renderer,
         ),
       );
 
@@ -435,7 +429,6 @@ class SpriteRenderer extends Renderer {
   private getWebGPUWorldScale(
     particle: Particle,
     camera: THREE.Camera | undefined,
-    renderer: RendererLike | undefined,
   ): THREE.Vector3 {
     const width = particle.scale.x;
     const height = particle.scale.y;
@@ -462,20 +455,27 @@ class SpriteRenderer extends Renderer {
     );
   }
 
-  private updateWebGPUEnvironmentMap(environment: THREE.Texture | null): void {
+  private updateWebGPUEnvironmentMap(
+    environment: THREE.Texture | null,
+    intensity: number,
+  ): void {
     if (this.materialType !== SpriteMaterialType.Basic) return;
 
     const material = this.webgpuMaterial as THREE.MeshStandardMaterial;
     const nextEnvironment = environment ?? null;
 
-    if (material.envMap === nextEnvironment) return;
+    if (
+      material.envMap === nextEnvironment
+      && material.envMapIntensity === intensity
+    ) return;
 
     material.envMap = nextEnvironment;
+    material.envMapIntensity = intensity;
     material.needsUpdate = true;
   }
 
   private updateWebGPUSoftParticles(
-    renderer: WebGPURendererLike | undefined,
+    renderer: WebGPURenderer,
     scene: THREE.Scene | undefined,
     camera: THREE.Camera | undefined,
   ): void {
@@ -487,12 +487,15 @@ class SpriteRenderer extends Renderer {
 
   private updateEnvironmentMap(
     renderer: THREE.WebGLRenderer,
-    environment: THREE.Texture | null
+    environment: THREE.Texture | null,
+    force: boolean = false,
   ): void {
     if (this.materialType !== SpriteMaterialType.Basic)
       return;
 
     if (
+      !force
+      &&
       environment === this.environmentSource
       && renderer === this.environmentRenderer
     ) {
@@ -689,7 +692,7 @@ class SpriteRenderer extends Renderer {
   }
 
   private getWebGPUSceneDepth(
-    renderer: WebGPURendererLike,
+    renderer: WebGPURenderer,
     scene: THREE.Scene,
     camera: THREE.Camera,
   ): THREE.DepthTexture | undefined {

@@ -58,7 +58,6 @@ export default async function createParticleTrail() {
         textureMode: TrailTextureMode.Stretch,
         materialOptions: {
           roughness: 0.7,
-          metalness: 0,
           map: simpleSpriteTexture,
         },
       }),

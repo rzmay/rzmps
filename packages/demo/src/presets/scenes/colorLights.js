@@ -4,8 +4,6 @@ export default function loadColorLights(scene) {
   const root = new THREE.Group();
   root.name = 'Color Lights Scene';
 
-  scene.background = new THREE.Color('#101014');
-
   // Keep a little ambient light so unlit sides aren't completely black.
   const ambient = new THREE.AmbientLight(0xffffff, 0.15);
   root.add(ambient);

@@ -13,6 +13,9 @@ uniform bool sphericalNormals;
 uniform float roughness;
 uniform sampler2D roughnessMap;
 uniform bool hasRoughnessMap;
+uniform float metalness;
+uniform sampler2D metalnessMap;
+uniform bool hasMetalnessMap;
 
 uniform vec2 gridSize;
 uniform int n_frames;
@@ -109,6 +112,7 @@ void accumulateLight(
     vec3 viewDirection,
     float shininess,
     float specularStrength,
+    vec3 specularColor,
     float normalLighting,
     inout vec3 diffuseLight,
     inout vec3 specularLight
@@ -141,6 +145,7 @@ void accumulateLight(
             light.color
             * specular
             * specularStrength
+            * specularColor
             * normalLighting;
     }
 }
@@ -284,6 +289,21 @@ void main()
     roughnessValue =
         clamp(roughnessValue, 0.0, 1.0);
 
+    float metalnessValue =
+        metalness;
+
+    if (hasMetalnessMap)
+    {
+        metalnessValue *=
+            texture2D(
+                metalnessMap,
+                spriteCoord
+            ).r;
+    }
+
+    metalnessValue =
+        clamp(metalnessValue, 0.0, 1.0);
+
     // We're not implementing full PBR here.
     // Convert roughness to something sensible
     // for a Blinn-Phong highlight.
@@ -292,6 +312,9 @@ void main()
 
     float specularStrength =
         1.0 - roughnessValue;
+
+    vec3 specularColor =
+        mix(vec3(1.0), baseColor.rgb, metalnessValue);
 
 
     //
@@ -353,8 +376,12 @@ void main()
         float fresnel =
             pow(1.0 - NdotV, 5.0);
 
-        float specularFactor =
-            mix(0.04, 1.0, fresnel);
+        vec3 specularFactor =
+            mix(
+                mix(vec3(0.04), baseColor.rgb, metalnessValue),
+                vec3(1.0),
+                fresnel
+            );
 
         environmentSpecular *= specularFactor;
 
@@ -409,6 +436,7 @@ void main()
                 viewDirection,
                 shininess,
                 specularStrength,
+                specularColor,
                 normalLighting,
                 diffuseLight,
                 specularLight
@@ -451,6 +479,7 @@ void main()
                 viewDirection,
                 shininess,
                 specularStrength,
+                specularColor,
                 normalLighting,
                 diffuseLight,
                 specularLight
@@ -493,6 +522,7 @@ void main()
                 viewDirection,
                 shininess,
                 specularStrength,
+                specularColor,
                 normalLighting,
                 diffuseLight,
                 specularLight
@@ -579,7 +609,7 @@ void main()
     //
 
     vec3 litColor =
-        baseColor.rgb * diffuseLight
+        baseColor.rgb * diffuseLight * (1.0 - metalnessValue)
         + specularLight;
 
     gl_FragColor =

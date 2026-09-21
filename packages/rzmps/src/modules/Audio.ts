@@ -22,11 +22,14 @@ export interface AudioOptions extends Partial<ModuleOptions> {
   shouldPlay: (particle: Particle) => boolean;
 
   loop: boolean;
+  maxClips: number;
   ratio: number;
   collisionRatio: number;
 
   pitch: DynamicValue<number>;
   volume: DynamicValue<number>;
+  highPass: DynamicValue<number>;
+  lowPass: DynamicValue<number>;
 
   sizeAffectsPitch: number;
   sizeAffectsVolume: number;
@@ -39,12 +42,20 @@ export interface AudioOptions extends Partial<ModuleOptions> {
 
   impulseAffectsPitch: number;
   impulseAffectsVolume: number;
+  impulseAffectsHighPass: number;
+  impulseAffectsLowPass: number;
   impulseThreshhold: number;
 }
 
 interface ParticleAudio {
   audio: THREE.PositionalAudio;
   buffer: AudioBuffer;
+  filters: AudioFilters;
+}
+
+interface AudioFilters {
+  highPass?: BiquadFilterNode;
+  lowPass?: BiquadFilterNode;
 }
 
 class Audio extends Module {
@@ -58,11 +69,14 @@ class Audio extends Module {
   shouldPlay: (particle: Particle) => boolean = () => true;
 
   loop: boolean = true;
+  maxClips: number;
   ratio: number;
   collisionRatio: number;
 
   pitch: DynamicValue<number>;
   volume: DynamicValue<number>;
+  highPass: DynamicValue<number>;
+  lowPass: DynamicValue<number>;
 
   sizeAffectsPitch: number;
   sizeAffectsVolume: number;
@@ -72,6 +86,8 @@ class Audio extends Module {
   speedAffectsVolume: number;
   impulseAffectsPitch: number;
   impulseAffectsVolume: number;
+  impulseAffectsHighPass: number;
+  impulseAffectsLowPass: number;
   impulseThreshhold: number;
 
   private _system?: ParticleSystem;
@@ -103,11 +119,14 @@ class Audio extends Module {
     this.shouldPlay = options.shouldPlay ?? this.shouldPlay;
 
     this.loop = options.loop ?? this.loop;
+    this.maxClips = Math.max(0, Math.floor(options.maxClips ?? 64));
     this.ratio = THREE.MathUtils.clamp(options.ratio ?? 1, 0, 1);
     this.collisionRatio = THREE.MathUtils.clamp(options.collisionRatio ?? this.ratio, 0, 1);
 
     this.pitch = options.pitch ?? 1;
     this.volume = options.volume ?? 1;
+    this.highPass = options.highPass ?? 0;
+    this.lowPass = options.lowPass ?? 0;
 
     this.sizeAffectsPitch = Math.max(0, options.sizeAffectsPitch ?? 0);
     this.sizeAffectsVolume = Math.max(0, options.sizeAffectsVolume ?? 0);
@@ -120,6 +139,8 @@ class Audio extends Module {
 
     this.impulseAffectsPitch = Math.max(0, options.impulseAffectsPitch ?? 0);
     this.impulseAffectsVolume = Math.max(0, options.impulseAffectsVolume ?? 0);
+    this.impulseAffectsHighPass = Math.max(0, options.impulseAffectsHighPass ?? 0);
+    this.impulseAffectsLowPass = Math.max(0, options.impulseAffectsLowPass ?? 0);
     this.impulseThreshhold = Math.max(0, options.impulseThreshhold ?? 0);
   }
 
@@ -193,6 +214,7 @@ class Audio extends Module {
       state = {
         audio,
         buffer: sound,
+        filters: {},
       };
 
       this._particleAudio.set(particle.id, state);
@@ -203,6 +225,7 @@ class Audio extends Module {
     state.audio.position.copy(particle.position);
     state.audio.setPlaybackRate(this._getPitch(particle));
     state.audio.setVolume(this._getVolume(particle));
+    this._applyFilters(state.audio, particle, undefined, state.filters);
   }
 
   private _handleEvent(particle: Particle, audio?: AudioBuffer[], collisionHit?: CollisionHit): void {
@@ -224,6 +247,7 @@ class Audio extends Module {
 
   private _playOneShot(clip: AudioBuffer, particle: Particle, collisionHit?: CollisionHit) {
     if (!this.listener || !this._system) return;
+    if (this._eventAudio.size >= this.maxClips) return;
 
     const audio = new THREE.PositionalAudio(this.listener);
 
@@ -233,6 +257,7 @@ class Audio extends Module {
     audio.position.copy(particle.position);
     audio.setPlaybackRate(this._getPitch(particle, collisionHit));
     audio.setVolume(this._getVolume(particle, collisionHit));
+    this._applyFilters(audio, particle, collisionHit);
 
     this._system.add(audio);
     this._eventAudio.add(audio);
@@ -283,6 +308,97 @@ class Audio extends Module {
         * this._getEffect(particle.velocity.length(), this.speedAffectsVolume)
         * this._getEffect(collisionHit?.impulse.length() ?? 1, this.impulseAffectsVolume),
     );
+  }
+
+  private _applyFilters(
+    audio: THREE.PositionalAudio,
+    particle: Particle,
+    collisionHit?: CollisionHit,
+    filterCache: AudioFilters = {},
+  ): void {
+    const filters: BiquadFilterNode[] = [];
+
+    const highPass = this._getHighPassFrequency(particle, collisionHit);
+    if (highPass > 0) {
+      filterCache.highPass ??= this._createFilter('highpass');
+      if (filterCache.highPass) {
+        this._setFilterFrequency(filterCache.highPass, highPass);
+        filters.push(filterCache.highPass);
+      }
+    }
+
+    const lowPass = this._getLowPassFrequency(particle, collisionHit);
+    if (lowPass > 0) {
+      filterCache.lowPass ??= this._createFilter('lowpass');
+      if (filterCache.lowPass) {
+        this._setFilterFrequency(filterCache.lowPass, lowPass);
+        filters.push(filterCache.lowPass);
+      }
+    }
+
+    if (filters.length > 0 || audio.getFilters().length > 0) {
+      audio.setFilters(filters);
+    }
+  }
+
+  private _getHighPassFrequency(particle: Particle, collisionHit?: CollisionHit): number {
+    return this._getFilteredFrequency(
+      this.highPass,
+      particle,
+      collisionHit,
+      this.impulseAffectsHighPass,
+      -1,
+    );
+  }
+
+  private _getLowPassFrequency(particle: Particle, collisionHit?: CollisionHit): number {
+    return this._getFilteredFrequency(
+      this.lowPass,
+      particle,
+      collisionHit,
+      this.impulseAffectsLowPass,
+      1,
+    );
+  }
+
+  private _getFilteredFrequency(
+    value: DynamicValue<number>,
+    particle: Particle,
+    collisionHit: CollisionHit | undefined,
+    impulseEffect: number,
+    direction: 1 | -1,
+  ): number {
+    if (impulseEffect <= 0) return 0;
+
+    const impulse = collisionHit?.impulse.length() ?? 1;
+    const multiplier = this._getEffect(impulse, impulseEffect);
+    const base = evaluateDynamicNumber(
+      value,
+      particle.time,
+      particle.id,
+    );
+
+    if (base <= 0) return 0;
+
+    const frequency = base * (direction > 0 ? multiplier : 1 / Math.max(Number.EPSILON, multiplier));
+
+    return Math.max(0, frequency);
+  }
+
+  private _createFilter(type: BiquadFilterType): BiquadFilterNode | undefined {
+    if (!this.listener) return undefined;
+
+    const filter = this.listener.context.createBiquadFilter();
+    filter.type = type;
+
+    return filter;
+  }
+
+  private _setFilterFrequency(filter: BiquadFilterNode, frequency: number): void {
+    if (!this.listener) return;
+
+    const maxFrequency = this.listener.context.sampleRate * 0.5;
+    filter.frequency.value = THREE.MathUtils.clamp(frequency, 0, maxFrequency);
   }
 
   // eslint-disable-next-line class-methods-use-this
