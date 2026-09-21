@@ -87,11 +87,10 @@ export default function loadColorLights(scene) {
   root.add(ground);
   scene.add(root);
 
-  const startTime = performance.now();
-  let frameId;
+  let time = 0;
 
-  const animate = () => {
-    const time = (performance.now() - startTime) / 1000;
+  const update = (deltaTime) => {
+    time += deltaTime;
 
     for (const entry of lights) {
       const angle =
@@ -105,22 +104,19 @@ export default function loadColorLights(scene) {
 
       entry.helper.update();
     }
-
-    frameId = requestAnimationFrame(animate);
   };
 
-  animate();
+  return {
+    update,
+    cleanup: () => {
+      scene.remove(root);
 
-  return () => {
-    cancelAnimationFrame(frameId);
+      ground.geometry.dispose();
+      ground.material.dispose();
 
-    scene.remove(root);
-
-    ground.geometry.dispose();
-    ground.material.dispose();
-
-    for (const { helper } of lights) {
-      helper.dispose();
-    }
+      for (const { helper } of lights) {
+        helper.dispose();
+      }
+    },
   };
 }

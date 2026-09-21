@@ -197,15 +197,9 @@ class SpriteRenderer extends Renderer {
       this.setActiveRenderer(renderer);
 
       if (renderer instanceof THREE.WebGLRenderer) {
-        const renderTarget = renderer.getRenderTarget();
-        const viewport = renderer.getCurrentViewport(new THREE.Vector4());
-        const drawingBufferSize = renderer.getDrawingBufferSize(new THREE.Vector2());
         this.setUniformValue(
           'viewportHeight',
-          renderTarget?.height
-            ?? viewport.w
-            ?? drawingBufferSize.y
-            ?? 600,
+          this.getWebGLRenderPassHeight(renderer),
         );
 
         const isSceneCamera = !system.sceneCamera || camera === system.sceneCamera;
@@ -275,13 +269,6 @@ class SpriteRenderer extends Renderer {
       return;
     }
 
-    const viewportSize = this.getUniformValue<THREE.Vector2>(
-      'depthResolution',
-      () => new THREE.Vector2(),
-    );
-
-    system.sceneRenderer?.getDrawingBufferSize(viewportSize);
-    this.setUniformValue('viewportHeight', viewportSize.y || 600);
     this.setUniformValue('envIntensity', envIntensity);
 
     // Set uniforms for soft particles
@@ -421,6 +408,17 @@ class SpriteRenderer extends Renderer {
     this.points.visible = Boolean(renderer instanceof THREE.WebGLRenderer);
     this.points.material = renderer instanceof THREE.WebGLRenderer ? this.material : this.hiddenMaterial;
     this.webgpuMesh.visible = renderer instanceof WebGPURenderer;
+  }
+
+  private getWebGLRenderPassHeight(renderer: THREE.WebGLRenderer): number {
+    const renderTarget = renderer.getRenderTarget();
+    if (renderTarget) return renderTarget.height || 600;
+
+    const viewport = renderer.getCurrentViewport(new THREE.Vector4());
+    if (viewport.w > 0) return viewport.w;
+
+    const drawingBufferSize = renderer.getDrawingBufferSize(new THREE.Vector2());
+    return drawingBufferSize.y || 600;
   }
 
   private updateWebGPUInstances(

@@ -58,8 +58,8 @@ export default async function createCollisionSubEmitters() {
         material: 'basic',
         castShadow: true,
         materialOptions: {
-          roughness: 0,
-          metalness: 1,
+          roughness: 0.1,
+          metalness: 0.75,
           sphericalNormals: true,
           normalLighting: 1,
         },

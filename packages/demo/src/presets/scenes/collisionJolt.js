@@ -167,18 +167,11 @@ export default async function createJoltCollisionTest(scene) {
   // Normally this would be passed into the constructor, but since we don't have particle system access here we have to use scene data
   scene.userData.__rzmps_activeCollisionBackend = backend;
 
-  let previous = performance.now();
   let elapsed = 0;
   let nextRespawn = 10;
-  let frameId;
 
-  const animate = (time) => {
-    const delta = Math.min(
-      (time - previous) / 1000,
-      1 / 30,
-    );
-
-    previous = time;
+  const update = (deltaTime) => {
+    const delta = Math.min(deltaTime, 1 / 30);
     elapsed += delta;
 
     if (elapsed >= nextRespawn) {
@@ -216,9 +209,8 @@ export default async function createJoltCollisionTest(scene) {
       nextRespawn += 10;
     }
 
-    const seconds = time / 1000;
-    const x = Math.sin(seconds) * 2;
-    const rotationY = seconds * 0.75;
+    const x = Math.sin(elapsed) * 2;
+    const rotationY = elapsed * 0.75;
 
     const targetPosition = new Jolt.RVec3(
       x,
@@ -262,27 +254,24 @@ export default async function createJoltCollisionTest(scene) {
     dynamicBodies.forEach(({ mesh, body }) => {
       syncBody(mesh, body);
     });
-
-    frameId = requestAnimationFrame(animate);
   };
 
-  frameId = requestAnimationFrame(animate);
+  return {
+    update,
+    cleanup: () => {
+      delete scene.userData.__rzmps_activeCollisionBackend;
 
-  return () => {
-    cancelAnimationFrame(frameId);
+      dynamicBodies.forEach(({ body }) => {
+        const id = body.GetID();
 
-    delete scene.userData.__rzmps_activeCollisionBackend;
+        bodyInterface.RemoveBody(id);
+        bodyInterface.DestroyBody(id);
+      });
 
-    dynamicBodies.forEach(({ body }, index) => {
-      const id = body.GetID();
+      backend.destroy();
+      objects.group.removeFromParent();
 
-      bodyInterface.RemoveBody(id);
-      bodyInterface.DestroyBody(id);
-    });
-
-    backend.destroy();
-    objects.group.removeFromParent();
-
-    Jolt.destroy(physicsInterface);
+      Jolt.destroy(physicsInterface);
+    },
   };
 }

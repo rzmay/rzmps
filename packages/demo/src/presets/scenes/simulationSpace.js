@@ -63,8 +63,7 @@ export default function createSimulationSpace(scene) {
   scene.add(root);
 
   const originals = new Map();
-  let frameId;
-  let startTime = performance.now();
+  let elapsed = 0;
 
   const findActiveParticleSystem = () => {
     let particleSystem;
@@ -89,40 +88,41 @@ export default function createSimulationSpace(scene) {
         });
 
         particleSystem.simulationSpace = 'world';
-        startTime = performance.now();
+        elapsed = 0;
       }
 
-      const time = (performance.now() - startTime) / 1000;
-      const x = Math.cos(time * 0.75) * RING_SIZE.x;
-      const z = Math.sin(time * 0.75) * RING_SIZE.z;
+      const x = Math.cos(elapsed * 0.75) * RING_SIZE.x;
+      const z = Math.sin(elapsed * 0.75) * RING_SIZE.z;
       const y = particleSystem.position.y;
 
       particleSystem.position.set(x, y, z);
       marker.position.x = x;
       marker.position.z = z;
     }
-
-    frameId = requestAnimationFrame(animate);
   };
 
-  animate();
+  const update = (deltaTime) => {
+    elapsed += deltaTime;
+    animate();
+  };
 
-  return () => {
-    cancelAnimationFrame(frameId);
+  return {
+    update,
+    cleanup: () => {
+      originals.forEach((original, particleSystem) => {
+        particleSystem.simulationSpace = original.simulationSpace;
+        particleSystem.position.copy(original.position);
+      });
 
-    originals.forEach((original, particleSystem) => {
-      particleSystem.simulationSpace = original.simulationSpace;
-      particleSystem.position.copy(original.position);
-    });
+      scene.remove(root);
 
-    scene.remove(root);
-
-    floorGeometry.dispose();
-    floorMaterial.dispose();
-    checkerTexture.dispose();
-    path.geometry.dispose();
-    path.material.dispose();
-    marker.geometry.dispose();
-    marker.material.dispose();
+      floorGeometry.dispose();
+      floorMaterial.dispose();
+      checkerTexture.dispose();
+      path.geometry.dispose();
+      path.material.dispose();
+      marker.geometry.dispose();
+      marker.material.dispose();
+    },
   };
 }

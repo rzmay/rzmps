@@ -128,17 +128,15 @@ export default async function createRapierCollisionTest(scene) {
     );
   };
 
-  const clock = new THREE.Clock();
   const fixedDelta = 1 / 60;
   let accumulator = 0;
   let elapsed = 0;
   let nextRespawn = 10;
-  let frameId;
 
   world.timestep = fixedDelta;
 
-  const animate = () => {
-    const frameDelta = Math.min(clock.getDelta(), 0.1);
+  const update = (deltaTime) => {
+    const frameDelta = Math.min(deltaTime, 0.1);
     accumulator += frameDelta;
     elapsed += frameDelta;
 
@@ -175,19 +173,16 @@ export default async function createRapierCollisionTest(scene) {
     dynamicBodies.forEach(({ mesh, body }) => {
       syncBody(mesh, body);
     });
-
-    frameId = requestAnimationFrame(animate);
   };
 
-  animate();
+  return {
+    update,
+    cleanup: () => {
+      delete scene.userData.__rzmps_activeCollisionBackend;
 
-  return () => {
-    cancelAnimationFrame(frameId);
+      objects.group.removeFromParent();
 
-    delete scene.userData.__rzmps_activeCollisionBackend;
-
-    objects.group.removeFromParent();
-
-    world.free();
+      world.free();
+    },
   };
 }
