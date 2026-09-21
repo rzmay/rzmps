@@ -37,6 +37,7 @@ import {
 } from '@rzmps/rzmps';
 
 const SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY = '__rzmps_configureParticleSystem';
+const AUDIO_BUFFER_SOURCE_KEY = '__rzmpsAudioBufferSource';
 const RAW_CODE = Symbol('rawCode');
 
 const RESOURCE_LINKS = [
@@ -634,28 +635,33 @@ export class ParticleSystemGUI {
     }
     buildModule(folder, module, system = this.system) {
         this.addTags(folder, module);
-        const candidate = module;
-        if (candidate.options && typeof candidate.options === 'object') {
-            this.addObject(folder, candidate.options, new Set(['tags']));
+        if (module instanceof Audio) {
+            this.buildAudioModule(folder, module);
         }
         else {
-            const hidden = new Set([
-                'modify',
-                'noiseGenerator',
-                'dependents',
-                'priority',
-                'backend',
-                'collisionListeners',
-                'explicitForceFields',
-                'forceFields',
-                'forceFieldFilter',
-                'particleSystem',
-                'listener',
-                'tags',
-            ]);
-            Object.keys(candidate)
-                .filter((key) => !key.startsWith('_') && !hidden.has(key))
-                .forEach((key) => this.addValue(folder, candidate, key, this.prettyName(key)));
+            const candidate = module;
+            if (candidate.options && typeof candidate.options === 'object') {
+                this.addObject(folder, candidate.options, new Set(['tags']));
+            }
+            else {
+                const hidden = new Set([
+                    'modify',
+                    'noiseGenerator',
+                    'dependents',
+                    'priority',
+                    'backend',
+                    'collisionListeners',
+                    'explicitForceFields',
+                    'forceFields',
+                    'forceFieldFilter',
+                    'particleSystem',
+                    'listener',
+                    'tags',
+                ]);
+                Object.keys(candidate)
+                    .filter((key) => !key.startsWith('_') && !hidden.has(key))
+                    .forEach((key) => this.addValue(folder, candidate, key, this.prettyName(key)));
+            }
         }
         const actions = {
             remove: () => {
@@ -665,6 +671,27 @@ export class ParticleSystemGUI {
             },
         };
         folder.add(actions, 'remove').name('Remove Module');
+    }
+    buildAudioModule(folder, module) {
+        const hidden = new Set([
+            'listener',
+            'sound',
+            'onCollisionSound',
+            'onSpawnSound',
+            'onDeathSound',
+            'tags',
+        ]);
+
+        Object.keys(module)
+            .filter((key) => !key.startsWith('_') && !hidden.has(key))
+            .forEach((key) => this.addValue(folder, module, key, this.prettyName(key)));
+
+        const clipsFolder = folder.addFolder('Clips');
+        clipsFolder.open();
+        this.addAudioUpload(clipsFolder, module, 'sound', 'Loop Sound');
+        this.addAudioUpload(clipsFolder, module, 'onCollisionSound', 'Collision Sound');
+        this.addAudioUpload(clipsFolder, module, 'onSpawnSound', 'Spawn Sound');
+        this.addAudioUpload(clipsFolder, module, 'onDeathSound', 'Death Sound');
     }
     buildRenderersFolder(root, system = this.system) {
         const section = root.addFolder(`Renderers (${system.renderers.length})`);
@@ -738,6 +765,14 @@ export class ParticleSystemGUI {
         };
         folder.add(info, 'texture').name('Texture').disable();
         folder.add(info, 'alphaMap').name('Alpha Map').disable();
+        this.addTextureUpload(folder, 'Upload Texture', (texture) => {
+            renderer.texture = texture;
+            renderer.materialOptions = { ...renderer.materialOptions };
+        });
+        this.addTextureUpload(folder, 'Upload Alpha Map', (texture) => {
+            renderer.alphaMap = texture;
+            renderer.materialOptions = { ...renderer.materialOptions };
+        });
 
         this.buildSpriteMaterialOptionsFolder(
             folder.addFolder('Material Options'),
@@ -769,6 +804,25 @@ export class ParticleSystemGUI {
                         [key]: value,
                     };
                 });
+        });
+
+        this.addTextureUpload(folder, 'Upload Normal Map', (texture) => {
+            renderer.materialOptions = {
+                ...renderer.materialOptions,
+                normalMap: texture,
+            };
+        });
+        this.addTextureUpload(folder, 'Upload Roughness Map', (texture) => {
+            renderer.materialOptions = {
+                ...renderer.materialOptions,
+                roughnessMap: texture,
+            };
+        });
+        this.addTextureUpload(folder, 'Upload Metalness Map', (texture) => {
+            renderer.materialOptions = {
+                ...renderer.materialOptions,
+                metalnessMap: texture,
+            };
         });
     }
     defaultSpriteMaterialOption(key) {
@@ -1022,6 +1076,110 @@ export class ParticleSystemGUI {
                 .add(material, 'wireframe')
                 .name('Wireframe');
         }
+
+        if ('map' in material) {
+            this.addTextureUpload(folder, 'Upload Map', (texture) => {
+                material.map = texture;
+                material.needsUpdate = true;
+            });
+        }
+    }
+    addTextureUpload(folder, label, onLoad) {
+        this.addFileUpload(folder, label, 'image/*', async (file, url) => {
+            const texture = await new THREE.TextureLoader().loadAsync(url);
+            texture.name = file.name;
+            onLoad(texture);
+            this.rebuild();
+            this.emitCode();
+        });
+    }
+    addAudioUpload(folder, module, key, label) {
+        const clips = module[key] ?? [];
+        const info = {
+            clips: clips.length
+                ? clips.map((clip) => this.audioBufferLabel(clip)).join(', ')
+                : '(none)',
+        };
+
+        folder.add(info, 'clips').name(label).disable();
+        this.addFileUpload(folder, `Upload ${label}`, 'audio/*', async (files) => {
+            const loader = new THREE.AudioLoader();
+            const buffers = await Promise.all(files.map(async ({ file, url }) => {
+                const buffer = await loader.loadAsync(url);
+                return this.setAudioBufferSource(buffer, url, file.name);
+            }));
+
+            module[key] = buffers;
+            this.rebuild();
+            this.emitCode();
+        }, true);
+    }
+    addFileUpload(folder, label, accept, onFile, multiple = false) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = accept;
+        input.multiple = multiple;
+        input.hidden = true;
+        document.body.appendChild(input);
+
+        const handleFiles = async (files) => {
+            if (files.length === 0) return;
+
+            const uploads = files.map((file) => ({
+                file,
+                url: URL.createObjectURL(file),
+            }));
+
+            if (multiple) {
+                await onFile(uploads);
+            } else {
+                await onFile(uploads[0].file, uploads[0].url);
+            }
+            input.value = '';
+        };
+
+        input.addEventListener('change', async () => {
+            await handleFiles(Array.from(input.files ?? []));
+        });
+
+        const actions = {
+            choose: () => input.click(),
+        };
+        const controller = folder.add(actions, 'choose').name(label);
+        controller.domElement.classList.add('psgui-upload-controller');
+        controller.domElement.title = 'Click to choose a file, or drag and drop one here.';
+        controller.domElement.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            controller.domElement.classList.add('psgui-upload-hover');
+        });
+        controller.domElement.addEventListener('dragleave', () => {
+            controller.domElement.classList.remove('psgui-upload-hover');
+        });
+        controller.domElement.addEventListener('drop', async (event) => {
+            event.preventDefault();
+            controller.domElement.classList.remove('psgui-upload-hover');
+
+            const files = Array.from(event.dataTransfer?.files ?? [])
+                .filter((file) => this.fileMatchesAccept(file, accept));
+            await handleFiles(multiple ? files : files.slice(0, 1));
+        });
+
+        return controller;
+    }
+    fileMatchesAccept(file, accept) {
+        if (!accept) return true;
+
+        return accept
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+            .some((entry) => {
+                if (entry.endsWith('/*')) {
+                    return file.type.startsWith(entry.slice(0, -1));
+                }
+
+                return file.type === entry || file.name.toLowerCase().endsWith(entry.toLowerCase());
+            });
     }
     addTags(folder, object, label = 'Tags') {
         const state = {
@@ -1505,19 +1663,19 @@ export class ParticleSystemGUI {
             };
 
             if (module.sound?.length) {
-                options.sound = this.rawCode('undefined /* AudioBuffer | AudioBuffer[] */');
+                options.sound = this.rawCode(this.serializeAudioBuffers(module.sound));
             }
 
             if (module.onCollisionSound?.length) {
-                options.onCollisionSound = this.rawCode('undefined /* AudioBuffer | AudioBuffer[] */');
+                options.onCollisionSound = this.rawCode(this.serializeAudioBuffers(module.onCollisionSound));
             }
 
             if (module.onSpawnSound?.length) {
-                options.onSpawnSound = this.rawCode('undefined /* AudioBuffer | AudioBuffer[] */');
+                options.onSpawnSound = this.rawCode(this.serializeAudioBuffers(module.onSpawnSound));
             }
 
             if (module.onDeathSound?.length) {
-                options.onDeathSound = this.rawCode('undefined /* AudioBuffer | AudioBuffer[] */');
+                options.onDeathSound = this.rawCode(this.serializeAudioBuffers(module.onDeathSound));
             }
 
             return `new Audio(${this.serializeValue(options)})`;
@@ -1679,6 +1837,36 @@ export class ParticleSystemGUI {
                 ? JSON.stringify(source)
                 : `undefined /* texture ${JSON.stringify(texture?.name || texture?.uuid)} must be supplied manually */`);
     }
+    serializeAudioBuffers(buffers) {
+        const values = buffers.map((buffer) => {
+            const source = this.audioBufferSource(buffer);
+
+            return source
+                ? `await new THREE.AudioLoader().loadAsync(${JSON.stringify(source)})`
+                : `undefined /* audio clip ${JSON.stringify(this.audioBufferLabel(buffer))} must be supplied manually */`;
+        });
+
+        return values.length === 1
+            ? values[0]
+            : `[\n${values.map((value) => `  ${value},`).join('\n')}\n]`;
+    }
+    audioBufferSource(buffer) {
+        return buffer?.[AUDIO_BUFFER_SOURCE_KEY]?.url;
+    }
+    audioBufferLabel(buffer) {
+        const source = buffer?.[AUDIO_BUFFER_SOURCE_KEY];
+        return source?.name || source?.url || `${buffer?.duration?.toFixed?.(2) ?? '?'}s clip`;
+    }
+    setAudioBufferSource(buffer, url, name = url) {
+        if (!buffer) return buffer;
+
+        Object.defineProperty(buffer, AUDIO_BUFFER_SOURCE_KEY, {
+            value: { url, name },
+            configurable: true,
+        });
+
+        return buffer;
+    }
     textureReference(source) {
         if (source === undefined)
             return undefined;
@@ -1826,6 +2014,16 @@ export class ParticleSystemGUI {
       }
       .lil-gui .psgui-resource-link svg {
         flex: 0 0 auto;
+      }
+      .lil-gui .psgui-upload-controller {
+        outline: 1px dashed rgba(255,255,255,.22);
+        outline-offset: -2px;
+      }
+      .lil-gui .psgui-upload-controller .widget button {
+        cursor: pointer;
+      }
+      .lil-gui .psgui-upload-hover {
+        background: rgba(85,170,255,.18);
       }
     `;
         document.head.appendChild(style);

@@ -28,7 +28,7 @@ const particlePresets = {
   "Particle Trail": createParticleTrail,
   "Ribbon Trail": createRibbonTrail,
   Collision: createCollision,
-  "Collision Sparks": createCollisionSubEmitters,
+  "Metal Balls": createCollisionSubEmitters,
   "Bubbles (Audio)": createBubbles,
   "Fireworks (Subsystems)": createFireworks,
   "Cubes and Spheres (Tags)": createTags,

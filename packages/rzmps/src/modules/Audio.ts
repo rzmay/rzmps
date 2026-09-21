@@ -119,7 +119,7 @@ class Audio extends Module {
     this.shouldPlay = options.shouldPlay ?? this.shouldPlay;
 
     this.loop = options.loop ?? this.loop;
-    this.maxClips = Math.max(0, Math.floor(options.maxClips ?? 64));
+    this.maxClips = Math.max(0, Math.floor(options.maxClips ?? 256));
     this.ratio = THREE.MathUtils.clamp(options.ratio ?? 1, 0, 1);
     this.collisionRatio = THREE.MathUtils.clamp(options.collisionRatio ?? this.ratio, 0, 1);
 
@@ -268,12 +268,10 @@ class Audio extends Module {
      * THREE.Audio creates a new AudioBufferSourceNode when play() is
      * called. Clean the temporary source up once that playback ends.
      */
-    if (audio.source) {
-      audio.source.addEventListener('ended', () => {
-        this._eventAudio.delete(audio);
-        audio.removeFromParent();
-      });
-    }
+    audio.source?.addEventListener('ended', () => {
+      this._eventAudio.delete(audio);
+      audio.removeFromParent();
+    });
   }
 
   private _getPitch(particle: Particle, collisionHit?: CollisionHit): number {
@@ -416,6 +414,14 @@ class Audio extends Module {
     this._particleAudio.forEach((_state, id) => {
       if (!activeParticles.has(id)) {
         this._removeParticleAudio(id);
+      }
+    });
+
+    // If any event audio has stopped, remove it
+    this._eventAudio.forEach((audio) => {
+      if (!audio.isPlaying) {
+        this._eventAudio.delete(audio);
+        audio.removeFromParent();
       }
     });
   }

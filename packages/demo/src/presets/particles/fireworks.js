@@ -26,6 +26,14 @@ import blastSound1Url from '../../assets/audio/firework_blast_1.mp3?url';
 import blastSound2Url from '../../assets/audio/firework_blast_2.mp3?url';
 import { curvePresets } from '../curvePresets';
 
+const withAudioSource = (buffer, url) => {
+  Object.defineProperty(buffer, '__rzmpsAudioBufferSource', {
+    value: { url, name: url.split('/').pop() ?? url },
+    configurable: true,
+  });
+
+  return buffer;
+};
 
 export default async function createFireworks() {
   const audioLoader = new THREE.AudioLoader();
@@ -35,6 +43,11 @@ export default async function createFireworks() {
     audioLoader.loadAsync(blastSound1Url),
     audioLoader.loadAsync(blastSound2Url),
   ]);
+
+  withAudioSource(launchSound1, launchSound1Url);
+  withAudioSource(launchSound2, launchSound2Url);
+  withAudioSource(blastSound1, blastSound1Url);
+  withAudioSource(blastSound2, blastSound2Url);
 
   const fireworks = new ParticleSystem({
     duration: 2.6,

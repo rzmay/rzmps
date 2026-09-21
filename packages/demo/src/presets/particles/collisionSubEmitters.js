@@ -13,8 +13,18 @@ import {
 } from '@rzmps/rzmps';
 import ballHitUrl from '../../assets/audio/ball_hit.mp3?url';
 
+const withAudioSource = (buffer, url) => {
+  Object.defineProperty(buffer, '__rzmpsAudioBufferSource', {
+    value: { url, name: url.split('/').pop() ?? url },
+    configurable: true,
+  });
+
+  return buffer;
+};
+
 export default async function createCollisionSubEmitters() {
   const ballHit = await new THREE.AudioLoader().loadAsync(ballHitUrl);
+  withAudioSource(ballHit, ballHitUrl);
 
   const collision = new ParticleSystem({
     duration: 5,
@@ -48,7 +58,7 @@ export default async function createCollisionSubEmitters() {
         pitch: [0.8, 1.2],
         volume: 0.18,
         impulseAffectsVolume: 0.5,
-        impulseThreshhold: 0.1,
+        impulseThreshhold: 0.5,
         lowPass: 1800,
         impulseAffectsLowPass: 1,
       }),
@@ -82,7 +92,7 @@ export default async function createCollisionSubEmitters() {
         radialSpeed: [0.5, 2],
         initialValues: {
           lifetime: [0.18, 0.42],
-          scale: [new THREE.Vector3(0.01, 0.01, 0.01), new THREE.Vector3(0.1, 0.1, 0.1)],
+          scale: [new THREE.Vector3(0.05, 0.05, 0.05), new THREE.Vector3(0.15, 0.15, 0.15)],
           color: [
             new THREE.Color('#fff4b0'),
             new THREE.Color('#ff8a3d'),
@@ -92,7 +102,6 @@ export default async function createCollisionSubEmitters() {
     ],
     modules: [
       new ColorOverLifetime({
-        color: new THREE.Color('#ffffff'),
         alpha: (time) => Math.max(0, 1 - time),
       }),
     ],
@@ -107,7 +116,7 @@ export default async function createCollisionSubEmitters() {
         inheritParticleColor: true,
         materialOptions: {
           emissive: new THREE.Color('#ffb347'),
-          emissiveIntensity: 4,
+          emissiveIntensity: 2,
           roughness: 1,
           transparent: true,
           depthWrite: false,
@@ -115,7 +124,7 @@ export default async function createCollisionSubEmitters() {
       }),
     ],
   });
-  sparks.name = 'Collision Sparks';
+  sparks.name = 'Metal Ball Sparks';
 
   collision.addSubSystem(sparks, {
     emitContinuous: false,
@@ -127,7 +136,7 @@ export default async function createCollisionSubEmitters() {
     impulseThreshhold: 1.2,
   });
 
-  collision.name = 'Collision + Sub Emitters';
+  collision.name = 'Metal Balls';
   collision.position.set(0, 5, 0);
 
   return collision;

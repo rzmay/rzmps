@@ -17,6 +17,15 @@ import bubblePop2Url from '../../assets/audio/bubble_pop_2.mp3?url';
 
 import { curvePresets } from '../curvePresets';
 
+const withAudioSource = (buffer, url) => {
+  Object.defineProperty(buffer, '__rzmpsAudioBufferSource', {
+    value: { url, name: url.split('/').pop() ?? url },
+    configurable: true,
+  });
+
+  return buffer;
+};
+
 export default async function createBubbles() {
   const audioLoader = new THREE.AudioLoader();
 
@@ -29,6 +38,10 @@ export default async function createBubbles() {
     audioLoader.loadAsync(bubblePop1Url),
     audioLoader.loadAsync(bubblePop2Url),
   ]);
+
+  withAudioSource(bubbles, bubblesUrl);
+  withAudioSource(bubblePop1, bubblePop1Url);
+  withAudioSource(bubblePop2, bubblePop2Url);
 
   const system = new ParticleSystem({
     duration: 10,
