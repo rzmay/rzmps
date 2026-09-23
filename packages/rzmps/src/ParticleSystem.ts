@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import Particle, { ParticleOptions } from './Particle';
-import Emitter from './Emitter';
+import Emitter, { type EmissionContext } from './Emitter';
 import Module from './Module';
 import Renderer from './Renderer';
 import acceptMultiple from './helpers/acceptMultiple';
@@ -16,7 +16,8 @@ import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
 import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
-import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY } from './renderers/LiveCubemap';
+import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } from './renderers/LiveCubemap';
+import LODHelper, { type LODSettings } from './LODHelper';
 
 interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
@@ -31,11 +32,14 @@ interface ParticleSystemOptions {
   maxParticles: number;
   maxCullingMode: MaxCulling | `${MaxCulling}`;
   simulationDistance: number;
+  useUpdateLOD: boolean;
+  updateLOD: Partial<LODSettings>;
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   simulationSpace: SimulationSpace | `${SimulationSpace}`;
 
   useLiveCubemap: boolean;
+  cubemapSettings: Partial<LiveCubemapOptions>;
   liveCubemapFPS: number;
   liveCubemapResolutionScale: number;
   liveCubemapIntensity: number;
@@ -74,14 +78,6 @@ interface SubSystemEmissionRun {
 
 export type ParticleListener = (particle: Particle) => void;
 
-type EmitterContext = {
-  transform?: THREE.Matrix4;
-  time?: number;
-  duration?: number;
-  elapsedTime?: number;
-  looping?: boolean;
-};
-
 class ParticleSystem extends THREE.Object3D {
   particles: Particle[] = [];
   emitters: Emitter[] = [];
@@ -101,6 +97,8 @@ class ParticleSystem extends THREE.Object3D {
   maxParticles: number = 1000;
   maxCullingMode: MaxCulling;
   simulationDistance: number;
+  useUpdateLOD: boolean;
+  updateLOD?: Partial<LODSettings>;
 
   useLiveCubemap: boolean;
   liveCubemap: LiveCubemap;
@@ -130,6 +128,8 @@ class ParticleSystem extends THREE.Object3D {
 
   private _renderer?: THREE.WebGLRenderer | WebGPURenderer;
   get sceneRenderer() { return this._renderer; }
+  private _cameraDistanceSq = Number.MAX_SAFE_INTEGER;
+  get cameraDistanceSq(): number { return this._cameraDistanceSq; }
 
   private deltaTime = 0;
   private lastFrame: number;
@@ -155,6 +155,8 @@ class ParticleSystem extends THREE.Object3D {
 
   private _elapsedTime = 0;
   private _prewarmed = false;
+  private _lodHelper: LODHelper;
+  private _lodAccumulatedDeltaTime = 0;
 
   private _destroyed = false;
   get destroyed(): boolean { return this._destroyed; }
@@ -162,6 +164,14 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _rendererObjects = new Set<THREE.Object3D>();
   private readonly _worldRendererRoot = new THREE.Group();
   private _contextCaptureDummy: THREE.Mesh;
+  private readonly _simulationDistanceWorldPos = new THREE.Vector3();
+  private readonly _simulationDistanceCameraWorldPos = new THREE.Vector3();
+  private readonly _particleEmissionQuaternion = new THREE.Quaternion();
+  private readonly _particleEmissionEuler = new THREE.Euler();
+  private readonly _particleEmissionUnitY = new THREE.Vector3(0, 1, 0);
+  private readonly _particleEmissionAlignUp = new THREE.Vector3();
+  private readonly _particleEmissionUnitScale = new THREE.Vector3(1, 1, 1);
+  private readonly _directionNormalMatrix = new THREE.Matrix3();
 
   constructor(options: Partial<ParticleSystemOptions> = {}) {
     super();
@@ -179,14 +189,18 @@ class ParticleSystem extends THREE.Object3D {
     this.maxParticles = Math.max(options.maxParticles ?? this.maxParticles, 0);
     this.maxCullingMode = (options.maxCullingMode as MaxCulling) ?? MaxCulling.New;
     this.simulationDistance = Math.max(options.simulationDistance ?? 0, 0);
+    this.updateLOD = options.updateLOD;
+    this.useUpdateLOD = options.useUpdateLOD ?? Boolean(this.updateLOD);
+    this._lodHelper = new LODHelper(this.updateLOD);
 
     // Init live cubemap, even if unused
     this.useLiveCubemap = options.useLiveCubemap
-      ?? Boolean(options.liveCubemapFPS || options.liveCubemapResolutionScale);
+      ?? Boolean(options.cubemapSettings || options.liveCubemapFPS || options.liveCubemapResolutionScale);
     this.liveCubemap = new LiveCubemap({
-      fps: options.liveCubemapFPS,
-      resolutionScale: options.liveCubemapResolutionScale,
-      intensity: options.liveCubemapIntensity,
+      ...(options.cubemapSettings ?? {}),
+      fps: options.cubemapSettings?.fps ?? options.liveCubemapFPS,
+      resolutionScale: options.cubemapSettings?.resolutionScale ?? options.liveCubemapResolutionScale,
+      intensity: options.cubemapSettings?.intensity ?? options.liveCubemapIntensity,
     });
     this.liveCubemap.setup(this);
 
@@ -236,13 +250,35 @@ class ParticleSystem extends THREE.Object3D {
     // Subsystems are owned and ticked by parent, avoid double update
     if (this._subSystemParent) return;
 
-    // Tick delta time before checking for pause so that it stays consistent betwee frames, not between processed frames
-    this._calculateDeltaTime();
+    const now = Date.now();
+    const nextDeltaTime = this._scaleDeltaTime((now - this.lastFrame) / 1000);
 
     // Check for pauses
-    if (this._paused) return;
+    if (this._paused) {
+      this.deltaTime = nextDeltaTime;
+      this.lastFrame = now;
+      return;
+    }
 
-    if (!this._isWithinSimulationDistance()) return;
+    const simulationDistanceSq = this._getSimulationDistanceSq();
+    this._cameraDistanceSq = simulationDistanceSq;
+
+    if (!this._isWithinSimulationDistance(simulationDistanceSq)) {
+      this.deltaTime = nextDeltaTime;
+      this.lastFrame = now;
+      this._lodAccumulatedDeltaTime = 0;
+      return;
+    }
+
+    if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(simulationDistanceSq))) {
+      this._lodAccumulatedDeltaTime += nextDeltaTime;
+      this.lastFrame = now;
+      return;
+    }
+
+    this.deltaTime = nextDeltaTime + this._lodAccumulatedDeltaTime;
+    this._lodAccumulatedDeltaTime = 0;
+    this.lastFrame = now;
 
     this.syncRendererParents();
 
@@ -251,7 +287,7 @@ class ParticleSystem extends THREE.Object3D {
     if (this._playing) this._updateSystemTime();
 
     if (this._playing) this.emitters.forEach((emitter) => {
-      const particles = emitter.update(this.particles, this.getEmitterContext());
+      const particles = emitter.update(this.particles, this.getEmitterContext(), this, this.deltaTime);
       particles.forEach((p) => this._notifySpawn(p));
     });
 
@@ -265,13 +301,6 @@ class ParticleSystem extends THREE.Object3D {
     if (this.useLiveCubemap) this.liveCubemap.update(this.scene, this.sceneRenderer, this.deltaTime);
 
     this._handleEndBehavior();
-  }
-
-  private _calculateDeltaTime() {
-    const now = Date.now();
-
-    this.deltaTime = this._scaleDeltaTime((now - this.lastFrame) / 1000);
-    this.lastFrame = now;
   }
 
   private _scaleDeltaTime(deltaTime: number): number {
@@ -289,26 +318,26 @@ class ParticleSystem extends THREE.Object3D {
       else this.particles.splice(0, this.particles.length - this.maxParticles)
     }
 
-    // Moudle preparation
-    this.modules
-      .flatMap((module) => module.withDependents())
+    // Module preparation
+    const modules = this.modules
+      .flatMap((module) => module.withDependents());
+
+    modules
       .forEach((module) => module.prepare(this, this.deltaTime));
 
     // Run pre modules
-    this.modules
-      .flatMap((module) => module.withDependents())
+    modules
       .filter((module) => module.priority < 0)
-      .forEach((module) => module.modify(this.particles, this.deltaTime));
+      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
 
     // Update particles
     this._updateParticles();
 
     // Run post modules
-    this.modules
-      .flatMap((module) => module.withDependents())
+    modules
       .filter((module) => module.priority >= 0)
       .sort((a, b) => a.priority - b.priority)
-      .forEach((module) => module.modify(this.particles, this.deltaTime));
+      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
 
     this.renderers.forEach((renderer) => {
       renderer.update(this.particles, this, this.deltaTime);
@@ -316,8 +345,14 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _updateParticles() {
-    // Iterate over a copy of particles so that we can safely splice particles on death inside the loop
-    [...this.particles].forEach((p, index) => {
+    const particles = this.particles;
+    const originalLength = particles.length;
+    let writeIndex = 0;
+
+    // Compact survivors in place. This preserves order without per-death O(n) splices.
+    for (let readIndex = 0; readIndex < originalLength; readIndex += 1) {
+      const p = particles[readIndex];
+
       // Apply gravity
       p.velocity.addScaledVector(
         this.gravity,
@@ -341,13 +376,26 @@ class ParticleSystem extends THREE.Object3D {
       // Kill old particles
       if (p.realtime > p.lifetime * 1000) {
         this._notifyDeath(p);
-        this.particles.splice(index, 1);
 
         this.subSystems.forEach((_options, subSystem) => {
           subSystem.emitters.forEach((emitter) => emitter.clearContext(p.id));
         });
+
+        continue;
       }
-    });
+
+      particles[writeIndex] = p;
+      writeIndex += 1;
+    }
+
+    const appendedCount = particles.length - originalLength;
+    for (let appendIndex = 0; appendIndex < appendedCount; appendIndex += 1) {
+      particles[writeIndex + appendIndex] = particles[originalLength + appendIndex];
+    }
+
+    if (writeIndex !== originalLength) {
+      particles.length = writeIndex + appendedCount;
+    }
   }
 
   private _updateSubSystems() {
@@ -361,22 +409,36 @@ class ParticleSystem extends THREE.Object3D {
     options: SubSystemOptions,
     parentDeltaTime: number,
   ): void {
-    if (!this._playing || this._paused) return;
-    if (!this._isWithinSimulationDistance()) return;
+    if (this._destroyed || this._paused) return;
+
+    const simulationDistanceSq = this._getSimulationDistanceSq();
+    this._cameraDistanceSq = simulationDistanceSq;
+    if (!this._isWithinSimulationDistance(simulationDistanceSq)) {
+      this._lodAccumulatedDeltaTime = 0;
+      return;
+    }
+
+    const nextDeltaTime = this._scaleDeltaTime(parentDeltaTime);
+    if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(simulationDistanceSq))) {
+      this._lodAccumulatedDeltaTime += nextDeltaTime;
+      return;
+    }
 
     this.syncRendererParents();
-    this.deltaTime = this._scaleDeltaTime(parentDeltaTime);
+    this.deltaTime = nextDeltaTime + this._lodAccumulatedDeltaTime;
+    this._lodAccumulatedDeltaTime = 0;
     this._prewarm();
-    this._updateSystemTime();
+    if (this._playing) this._updateSystemTime();
 
-    if (options.emitContinuous) {
-      parentParticles
-        .filter((particle) => this._canEmitForParticle(particle, options))
-        .forEach((particle) => {
+    if (this._playing && options.emitContinuous) {
+      for (let i = 0; i < parentParticles.length; i += 1) {
+        const particle = parentParticles[i];
+
+        if (this._canEmitForParticle(particle, options)) {
           const transform = this._particleEmissionTransform(particle, options.inheritScale);
 
           this.emitters.forEach((emitter) => {
-            const particles = emitter.updateAt(this.particles, {
+            const particles = emitter.update(this.particles, {
               key: particle.id,
               transform,
               time: options.inheritLifetime ? particle.time : undefined,
@@ -386,16 +448,18 @@ class ParticleSystem extends THREE.Object3D {
               alpha: options.inheritAlpha ? particle.alpha : undefined,
               mass: options.inheritMass ? particle.mass : undefined,
               tags: particle.tags,
-            });
+            }, this, this.deltaTime);
 
             particles.forEach((p) => this._notifySpawn(p));
           });
-        });
+        }
+      }
     }
 
-    this._updateEmissionRuns(options);
+    if (this._playing) this._updateEmissionRuns(options);
     this._processParticles();
     this._updateSubSystems();
+    this._handleEndBehavior();
   }
 
   private _updateEmissionRuns(options: SubSystemOptions): void {
@@ -417,7 +481,7 @@ class ParticleSystem extends THREE.Object3D {
         if (time < 1) {
           finished = false;
 
-          const newParticles = emitter.updateAt(this.particles, {
+          const newParticles = emitter.update(this.particles, {
             key: run.id,
             transform: run.transform,
             time,
@@ -430,7 +494,7 @@ class ParticleSystem extends THREE.Object3D {
             scale: this._getImpulseEffect(run.collision, options.impulseAffectsScale),
             velocityScale: this._getImpulseEffect(run.collision, options.impulseAffectsSpeed),
             tags: run.particle.tags,
-          });
+          }, this, this.deltaTime);
 
           newParticles.forEach((particle) => this._notifySpawn(particle));
         } else {
@@ -507,11 +571,11 @@ class ParticleSystem extends THREE.Object3D {
     alignUpTo?: THREE.Vector3,
   ): THREE.Matrix4 {
     const quaternion = alignUpTo && alignUpTo.lengthSq() > 0
-      ? new THREE.Quaternion().setFromUnitVectors(
-        new THREE.Vector3(0, 1, 0),
-        alignUpTo.clone().normalize(),
+      ? this._particleEmissionQuaternion.setFromUnitVectors(
+        this._particleEmissionUnitY,
+        this._particleEmissionAlignUp.copy(alignUpTo).normalize(),
       )
-      : new THREE.Quaternion().setFromEuler(new THREE.Euler(
+      : this._particleEmissionQuaternion.setFromEuler(this._particleEmissionEuler.set(
         particle.rotation.x,
         particle.rotation.y,
         particle.rotation.z,
@@ -520,7 +584,7 @@ class ParticleSystem extends THREE.Object3D {
     return new THREE.Matrix4().compose(
       particle.position,
       quaternion,
-      inheritScale ? particle.scale : new THREE.Vector3(1, 1, 1),
+      inheritScale ? particle.scale : this._particleEmissionUnitScale,
     );
   }
 
@@ -558,6 +622,8 @@ class ParticleSystem extends THREE.Object3D {
     this._elapsedTime = 0;
     this._prewarmed = false;
     this.lastFrame = now;
+    this._lodAccumulatedDeltaTime = 0;
+    this._lodHelper.reset();
 
     this.emitters.forEach((emitter) => emitter.reset());
 
@@ -593,6 +659,8 @@ class ParticleSystem extends THREE.Object3D {
     this._playing = false;
     this._paused = false;
     this._ended = true;
+    this._lodAccumulatedDeltaTime = 0;
+    this._lodHelper.reset();
 
     this.subSystems.forEach((_options, subSystem) => {
       subSystem.stop(clearParticles);
@@ -701,7 +769,7 @@ class ParticleSystem extends THREE.Object3D {
     const index = this.renderers.indexOf(renderer);
 
     if (index !== -1) {
-      this.modules.splice(index, 1);
+      this.renderers.splice(index, 1);
       renderer.destroy();
     }
 
@@ -848,12 +916,10 @@ class ParticleSystem extends THREE.Object3D {
     this._worldRendererRoot.removeFromParent();
   }
 
-  private getEmitterContext(): EmitterContext {
-    const context: EmitterContext = {
+  private getEmitterContext(): Partial<EmissionContext> {
+    const context = {
       time: this.duration === 0 ? 1 : this._elapsedTime / this.duration,
-      duration: this.duration,
       elapsedTime: this._elapsedTime,
-      looping: this.looping,
     };
 
     if (this.simulationSpace !== SimulationSpace.World) return context;
@@ -910,7 +976,7 @@ class ParticleSystem extends THREE.Object3D {
 
       if (this._playing) {
         this.emitters.forEach((emitter) => {
-          const newParticles = emitter.update(this.particles, this.getEmitterContext());
+          const newParticles = emitter.update(this.particles, this.getEmitterContext(), this, this.deltaTime);
           newParticles.forEach((p) => this._notifySpawn(p));
         });
       }
@@ -939,19 +1005,22 @@ class ParticleSystem extends THREE.Object3D {
     particleSystems.forEach(callback);
   }
 
-  private _isWithinSimulationDistance(): boolean {
-    if (this.simulationDistance <= 0 || !this.sceneCamera) return true;
-
-    const worldPos = new THREE.Vector3();
-    const cameraWorldPos = new THREE.Vector3();
+  private _getSimulationDistanceSq(): number {
+    if (!this.sceneCamera) return Number.MAX_SAFE_INTEGER;
 
     this.updateWorldMatrix(true, false);
     this.sceneCamera.updateWorldMatrix(true, false);
 
-    this.getWorldPosition(worldPos);
-    this.sceneCamera.getWorldPosition(cameraWorldPos);
+    this.getWorldPosition(this._simulationDistanceWorldPos);
+    this.sceneCamera.getWorldPosition(this._simulationDistanceCameraWorldPos);
 
-    return worldPos.distanceToSquared(cameraWorldPos) <= this.simulationDistance ** 2;
+    return this._simulationDistanceWorldPos.distanceToSquared(this._simulationDistanceCameraWorldPos);
+  }
+
+  private _isWithinSimulationDistance(distanceSq: number): boolean {
+    if (this.simulationDistance <= 0) return true;
+
+    return distanceSq <= this.simulationDistance ** 2;
   }
 
   private _handleEndBehavior(): void {
@@ -1010,7 +1079,7 @@ class ParticleSystem extends THREE.Object3D {
         particle.cacheStartValues();
       });
     } else {
-      const normalMatrix = new THREE.Matrix3().getNormalMatrix(this.matrixWorld).invert();
+      const normalMatrix = this._directionNormalMatrix.getNormalMatrix(this.matrixWorld).invert();
 
       this.particles.forEach((particle) => {
         this.worldToLocal(particle.position);
@@ -1024,8 +1093,9 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private localDirectionToWorld(vector: THREE.Vector3): void {
-    vector.applyMatrix3(new THREE.Matrix3().getNormalMatrix(this.matrixWorld));
+    vector.applyMatrix3(this._directionNormalMatrix.getNormalMatrix(this.matrixWorld));
   }
+
 }
 
 export default ParticleSystem;

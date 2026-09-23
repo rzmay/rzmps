@@ -24,6 +24,46 @@ code {
   overflow: hidden;
 }
 
+.particle-count-monitor {
+  position: absolute;
+  top: 54px;
+  left: 0;
+  z-index: 10;
+  box-sizing: border-box;
+  min-width: 80px;
+  padding: 3px 6px;
+  color: #00ff00;
+  background: rgba(0, 0, 0, 0.9);
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 15px;
+}
+
+.benchmark-status {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  display: grid;
+  gap: 3px;
+  min-width: 220px;
+  padding: 10px 12px;
+  color: #f7fbff;
+  background: rgba(10, 13, 18, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.benchmark-status strong {
+  font-size: 13px;
+}
+
+.benchmark-status small {
+  color: #9ad7ff;
+}
 
 .code-panel {
   position: absolute;

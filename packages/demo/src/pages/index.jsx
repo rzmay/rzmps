@@ -1,5 +1,5 @@
 /* eslint-disable react/no-unknown-property */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import * as THREE from 'three';
@@ -15,6 +15,7 @@ import CameraControls from '../components/CameraControls';
 import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
 import particlePresets from '../presets/particles';
 import scenePresets from '../presets/scenes';
+import BenchmarkPage from './BenchmarkPage';
 
 const RENDERER_MODES = ['webgl', 'webgpu'];
 const PARTICLE_PRESET_NAMES = Object.keys(particlePresets);
@@ -53,6 +54,7 @@ async function createWebGPURenderer(defaultProps) {
 
 function DemoScene({
   onCodeChange,
+  onParticleCountChange,
   onPresetChange,
   onRendererChange,
   onSceneChange,
@@ -69,6 +71,7 @@ function DemoScene({
         initialPreset={particlePreset}
         initialScene={scenePreset}
         onCodeChange={onCodeChange}
+        onParticleCountChange={onParticleCountChange}
         onPresetChange={onPresetChange}
         onRendererChange={onRendererChange}
         onSceneChange={onSceneChange}
@@ -79,8 +82,9 @@ function DemoScene({
   );
 }
 
-function IndexPage() {
+function DemoPage() {
   const [code, setCode] = useState('');
+  const particleCountRef = useRef(null);
   const [showCode, setShowCode] = useState(false);
   const [rendererMode, setRendererMode] = useState(() => (
     getQueryParam('renderer', RENDERER_MODES, 'webgl')
@@ -107,6 +111,12 @@ function IndexPage() {
     setScenePreset(name);
   }, []);
 
+  const handleParticleCountChange = useCallback((count) => {
+    if (particleCountRef.current) {
+      particleCountRef.current.textContent = `${count.toLocaleString()} particles`;
+    }
+  }, []);
+
   return (
     <div className="demo-shell">
       <Canvas
@@ -117,6 +127,7 @@ function IndexPage() {
       >
         <DemoScene
           onCodeChange={setCode}
+          onParticleCountChange={handleParticleCountChange}
           onPresetChange={handlePresetChange}
           onRendererChange={handleRendererChange}
           onSceneChange={handleSceneChange}
@@ -127,6 +138,8 @@ function IndexPage() {
         />
       </Canvas>
 
+      <div ref={particleCountRef} className="particle-count-monitor">0 particles</div>
+
       {showCode && (
         <pre className="code-panel">
           <code>{code}</code>
@@ -134,6 +147,14 @@ function IndexPage() {
       )}
     </div>
   );
+}
+
+function IndexPage() {
+  if (new URLSearchParams(window.location.search).get('benchmark') === '1') {
+    return <BenchmarkPage />;
+  }
+
+  return <DemoPage />;
 }
 
 export default IndexPage;

@@ -7,10 +7,24 @@ import scenePresets from '../presets/scenes';
 
 const RZMPS_VERSION = import.meta.env.VITE_RZMPS_VERSION;
 
+function countSystemParticles(system, visited = new Set()) {
+  if (!system || visited.has(system)) return 0;
+
+  visited.add(system);
+
+  let count = system.particles?.length ?? 0;
+  system.subSystems?.forEach((_options, subSystem) => {
+    count += countSystemParticles(subSystem, visited);
+  });
+
+  return count;
+}
+
 function ParticleSystemDisplay({
   initialPreset,
   initialScene,
   onCodeChange,
+  onParticleCountChange,
   onPresetChange,
   onRendererChange,
   onSceneChange,
@@ -80,6 +94,7 @@ function ParticleSystemDisplay({
 
   useFrame((_state, delta) => {
     particleSystem.current?.update();
+    onParticleCountChange(countSystemParticles(particleSystem.current));
     guiRef.current?.update(delta);
   });
 
@@ -90,6 +105,7 @@ ParticleSystemDisplay.propTypes = {
   initialPreset: PropTypes.string.isRequired,
   initialScene: PropTypes.string.isRequired,
   onCodeChange: PropTypes.func.isRequired,
+  onParticleCountChange: PropTypes.func.isRequired,
   onPresetChange: PropTypes.func.isRequired,
   onRendererChange: PropTypes.func.isRequired,
   onSceneChange: PropTypes.func.isRequired,

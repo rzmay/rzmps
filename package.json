@@ -6,7 +6,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -k \"npm run dev --workspace @rzmps/rzmps\" \"npm start --workspace demo\""
+    "dev": "concurrently -k \"npm run dev --workspace @rzmps/rzmps\" \"npm start --workspace demo\"",
+    "build:modules": "npm run build --workspace @rzmps/rzmps && npm run build --workspace @rzmps/ammo && npm run build --workspace @rzmps/jolt && npm run build --workspace @rzmps/rapier",
+    "benchmark:run": "npm --workspace demo run benchmark:run --",
+    "benchmark:update-report": "node scripts/update-benchmark-report.mjs"
   },
   "devDependencies": {
     "tsdown": "^0.23.0"

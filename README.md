@@ -12,6 +12,16 @@
 | GitHub repo | [github.com/rzmay/rzmps](https://github.com/rzmay/rzmps)                     |
 | Live demo   | [rzmps.rzmay.com](https://rzmps.rzmay.com)                                   |
 
+## Monorepo Packages
+
+| Package | Path | Description |
+| --- | --- | --- |
+| `@rzmps/rzmps` | [packages/rzmps](packages/rzmps) | Core Three.js particle system. |
+| `@rzmps/rapier` | [packages/@rzmps:rapier](packages/@rzmps:rapier) | Rapier collision/physics extension. |
+| `@rzmps/jolt` | [packages/@rzmps:jolt](packages/@rzmps:jolt) | Jolt collision/physics extension. |
+| `@rzmps/ammo` | [packages/@rzmps:ammo](packages/@rzmps:ammo) | Ammo collision/physics extension. |
+| Demo | [packages/demo](packages/demo) | Interactive examples, GUI, and browser benchmark harness. |
+
 RZMPS is built from small composable pieces:
 
 - **Emitters** create particles from shapes.
@@ -23,6 +33,7 @@ RZMPS is built from small composable pieces:
 
 ## Contents
 
+- [Monorepo Packages](#monorepo-packages)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Core Types](#core-types)
@@ -33,6 +44,7 @@ RZMPS is built from small composable pieces:
 - [Force Fields](#force-fields)
 - [Collision And Physics](#collision-and-physics)
 - [Custom Modules](#custom-modules)
+- [Benchmarks](#benchmarks)
 - [Developer Guide](#developer-guide)
 
 ## Installation
@@ -189,13 +201,13 @@ interface ParticleSystemOptions {
   maxParticles: number;
   maxCullingMode: MaxCulling;
   simulationDistance: number;
+  useUpdateLOD: boolean;
+  updateLOD: Partial<LODSettings>;
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   simulationSpace: SimulationSpace;
   useLiveCubemap: boolean;
-  liveCubemapFPS: number;
-  liveCubemapResolutionScale: number;
-  liveCubemapIntensity: number;
+  cubemapSettings: Partial<LiveCubemapOptions>;
 }
 ```
 
@@ -210,11 +222,36 @@ Set `simulationDistance` above `0` to pause simulation while the particle system
 is farther than that distance from the active camera. The default is `0`, which
 disables distance limiting.
 
+Set `updateLOD` to reduce simulation frequency as systems move farther from
+the active camera. `useUpdateLOD` defaults to `true` when `updateLOD` is provided
+and `false` otherwise. Internally, `LODHelper` evaluates `LODSettings` with
+discrete levels by default, or continuous multipliers with `continuous: true`.
+
+```ts
+new ParticleSystem({
+  useUpdateLOD: true,
+  updateLOD: {
+    distance: 10,
+    quality: 0.5,
+    falloff: 2,
+    maxLevel: 4,
+    continuous: false,
+  },
+});
+```
+
+With `distance: 10` and `falloff: 2`, level 1 begins at 10 units and level 2
+begins at 100 units. `quality` controls the update multiplier per level, so
+`quality: 0.5` updates roughly every 2 frames at level 1 and every 4 frames at
+level 2. Skipped time is accumulated into the next processed update so the
+effect runs less often without intentionally slowing down. Emitters, modules,
+and renderers also accept `useUpdateLOD` and `updateLOD` for per-component
+update-frequency LOD.
+
 Set `useLiveCubemap: true` to render a live environment map from the particle
 system and feed it to sprite renderers using `material: "basic"`, mesh
-renderers, and trail renderers. `liveCubemapFPS`,
-`liveCubemapResolutionScale`, and `liveCubemapIntensity` control the update
-rate, resolution cost, and reflection intensity.
+renderers, and trail renderers. `cubemapSettings` accepts `LiveCubemapOptions`
+such as `fps`, `resolutionScale`, and `intensity`.
 
 `LiveCubemap` is also exported for utility use outside `ParticleSystem`. It is
 primarily an internal helper, but can be attached to any `THREE.Object3D` with
@@ -449,11 +486,34 @@ interface EmitterOptions {
   alignment: DynamicValue<number>;
   tags: StrictMultiple<Tag>;
   tagSelection: TagSelectionMethod;
+  useUpdateLOD: boolean;
+  updateLOD: Partial<LODSettings>;
+  countLOD: Partial<LODSettings>;
 }
 ```
 
 Emitter `rate` curves and burst `time` values are evaluated against the owning
 particle system's normalized timeline.
+
+`updateLOD` controls emitter update frequency. `countLOD` scales emission rate
+and burst counts without skipping the emitter update entirely.
+
+Internally, emitters use a single update entry point:
+
+```ts
+emitter.update(
+  particles,
+  context: Partial<EmissionContext>,
+  particleSystem,
+  deltaTime,
+);
+```
+
+`EmissionContext` carries only per-emission overrides such as subsystem keys,
+parent transforms, inherited lifetime timing, inherited color/alpha/mass,
+velocity/scale impulse multipliers, and tags. Defaults such as duration,
+looping, camera distance, and the current delta time come from the owning
+`ParticleSystem`.
 
 ### Initial Particle Values
 
@@ -515,8 +575,13 @@ so you only need to pass the fields you want to customize.
 interface ModuleOptions {
   priority: number;
   tags: StrictMultiple<Tag>;
+  useUpdateLOD: boolean;
+  updateLOD: Partial<LODSettings>;
 }
 ```
+
+`updateLOD` controls module update frequency. It skips the module's particle
+work on lower-detail frames while preserving the module API.
 
 | Option     | Description                                                                                                                      |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -792,8 +857,17 @@ All renderers accept shared renderer options:
 ```ts
 interface RendererOptions {
   tags: StrictMultiple<Tag>;
+  useUpdateLOD: boolean;
+  updateLOD: Partial<LODSettings>;
+  countLOD: Partial<LODSettings>;
+  compensateSize: boolean;
 }
 ```
+
+`updateLOD` controls renderer update frequency. `countLOD` reduces the number
+of particles submitted to the renderer. Set `compensateSize: true` to
+increase rendered particle size by the inverse of the count LOD multiplier,
+which can help maintain visual fullness when fewer particles are rendered.
 
 ### SpriteRenderer
 
@@ -1155,6 +1229,44 @@ system.addModule(
 Use `prepare(system, deltaTime)` for once-per-frame setup, `dependents` for
 module chains that must run together, and `cleanup()` for external resources.
 
+## Benchmarks
+
+<!-- RZMPS_BENCHMARKS_START -->
+
+_Generated by `npm run benchmark:update-report`._
+
+**RZMPS browser benchmark**
+
+Run length: 4.0s measured per case after 1.0s warmup
+Measured: 2026-09-23T05:54:06.278Z
+
+FPS and frame time are measured in a real browser render loop. `Update` is the average measured `ParticleSystem.update()` slice inside that frame.
+
+| Environment | Value |
+| --- | --- |
+| Mode | headless browser |
+| Browser | Chrome/153.0.8010.36 |
+| Viewport | 1280x720 |
+| Device Pixel Ratio | 1.00 |
+| OS | Darwin 24.1.0 arm64 |
+| CPU | Apple M4 Pro (14 logical cores) |
+| Memory | 24.0GB system, 16.0GB browser hint |
+| GPU/WebGL | ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version) (Google Inc. (Apple)) |
+
+| Case | Particles | Rendered Frames | Avg FPS | Min FPS | Max FPS | Avg Frame | Max Frame | Update | Max JS Heap |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Baseline 10k simulation only | 10,000 | 241 | 60.0 | 56.5 | 63.7 | 16.67ms | 17.70ms | 3.39ms | 52.8MB |
+| Baseline 50k simulation only | 50,000 | 241 | 60.0 | 56.2 | 64.1 | 16.66ms | 17.80ms | 5.08ms | 168.9MB |
+| Typical VFX 5k sprite | 5,000 | 241 | 60.0 | 54.6 | 65.4 | 16.67ms | 18.30ms | 4.74ms | 167.2MB |
+| Heavy modules 10k noise+forces | 10,000 | 241 | 60.0 | 56.8 | 63.7 | 16.66ms | 17.60ms | 6.21ms | 167.9MB |
+| SpriteRenderer 5k rendered | 5,000 | 240 | 60.0 | 56.8 | 64.9 | 16.67ms | 17.60ms | 3.88ms | 146.5MB |
+| SpriteRenderer 10k rendered | 10,000 | 241 | 60.0 | 56.5 | 63.7 | 16.67ms | 17.70ms | 5.03ms | 233.5MB |
+| SpriteRenderer 50k rendered | 50,000 | 102 | 25.3 | 16.9 | 32.7 | 39.50ms | 59.00ms | 39.16ms | 453.1MB |
+| MeshRenderer 10k rendered | 10,000 | 241 | 60.0 | 56.8 | 64.9 | 16.67ms | 17.60ms | 4.06ms | 391.9MB |
+| TrailRenderer 2k rendered | 2,000 | 241 | 60.0 | 42.4 | 101.0 | 16.67ms | 23.60ms | 3.66ms | 527.7MB |
+
+<!-- RZMPS_BENCHMARKS_END -->
+
 ## Developer Guide
 
 Clone the repository and install dependencies:
@@ -1195,6 +1307,38 @@ Build the physics extensions:
 npm run build --workspace @rzmps/rapier
 npm run build --workspace @rzmps/jolt
 npm run build --workspace @rzmps/ammo
+```
+
+Build all publishable packages:
+
+```bash
+npm run build:modules
+```
+
+Run the benchmark suite and print browser-rendered results to the terminal:
+
+```bash
+npm run benchmark:run
+```
+
+Open a visible browser window while running the same benchmark:
+
+```bash
+npm run benchmark:run -- --open
+```
+
+Serve the built benchmark page for visual/manual inspection:
+
+```bash
+npm run benchmark:serve --workspace demo
+```
+
+Then open `http://127.0.0.1:4173/?benchmark=1`.
+
+Update the benchmark report tables in the READMEs:
+
+```bash
+npm run benchmark:update-report
 ```
 
 ## License

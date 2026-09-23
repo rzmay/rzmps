@@ -1,6 +1,8 @@
 // ParticleSystem
 export { default as ParticleSystem } from './ParticleSystem';
 export { default as Particle } from './Particle';
+export { default as LODHelper } from './LODHelper';
+export type { LODSettings, LODSettingsOptions } from './LODHelper';
 export { EndBehavior } from './enums/EndBehavior';
 export { SimulationSpace } from './enums/SimulationSpace';
 export { MaxCulling } from './enums/MaxCulling';
@@ -8,6 +10,7 @@ export { MaxCulling } from './enums/MaxCulling';
 // Emitter
 export { default as EmissionShape } from './EmissionShape';
 export { default as Emitter } from './Emitter';
+export type { EmissionContext } from './Emitter';
 export { EmissionSource } from './enums/EmissionSource';
 export { TagSelectionMethod } from './enums/TagSelectionMethod';
 

@@ -4,12 +4,15 @@ import type { Tag } from './types/Tag';
 import type { StrictMultiple } from './types/Multiple';
 import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
+import LODHelper, { type LODSettings } from './LODHelper';
 
 export interface ModuleOptions {
   // -1 runs before movement updates, modules are sorted by priority afterwards
   priority: number;
 
   tags: StrictMultiple<Tag>;
+  useUpdateLOD: boolean;
+  updateLOD: Partial<LODSettings>;
 }
 
 export default class Module {
@@ -18,6 +21,9 @@ export default class Module {
   public dependents: Module[] = [];
 
   tags?: Tag[];
+  useUpdateLOD: boolean;
+  updateLOD?: Partial<LODSettings>;
+  private _lodHelper: LODHelper;
 
   priority = -1;
 
@@ -26,10 +32,16 @@ export default class Module {
     options: Partial<ModuleOptions> = {}
   ) {
     this.tags = acceptMultiple(options.tags);
+    this.updateLOD = options.updateLOD;
+    this.useUpdateLOD = options.useUpdateLOD ?? Boolean(this.updateLOD);
+    this._lodHelper = new LODHelper(this.updateLOD);
     this.priority = options.priority ?? this.priority;
   }
 
-  public modify(particles: Particle[], deltaTime: number): void {
+  public modify(particles: Particle[], deltaTime: number, particleSystem?: ParticleSystem): void {
+    const distanceSq = particleSystem?.cameraDistanceSq ?? Number.MAX_SAFE_INTEGER;
+    if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(distanceSq))) return;
+
     particles.filter((p) => !this.tags || tagsIntersect(this.tags, p.tags ?? []))
       .forEach((p) => this._modify(p, deltaTime));
   }

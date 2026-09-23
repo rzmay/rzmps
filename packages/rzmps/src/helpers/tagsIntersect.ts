@@ -1,6 +1,9 @@
 import type { Tag } from "../types/Tag";
 
 export default function tagsIntersect(a: Tag[], b: Tag[]) {
-  const intersection = new Set(a).intersection(new Set(b));
-  return intersection.size !== 0;
+  for (let i = 0; i < a.length; i += 1) {
+    if (b.includes(a[i])) return true;
+  }
+
+  return false;
 }

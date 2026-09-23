@@ -6,6 +6,7 @@ import createCubes from './cubes';
 import createFire from './fire';
 import createFireball from './fireball';
 import createFireworks from './fireworks';
+import createLODStress from './lodStress';
 import createParticleTrail from './particleTrail';
 import createRibbonTrail from './ribbonTrail';
 import createSmoke from './smoke';
@@ -25,6 +26,7 @@ const particlePresets = {
   Spheres: createSpheres,
   "Cube Instances": createCubes,
   "Suzanne Instances": createSuzannes,
+  "LOD Stress Test": createLODStress,
   "Particle Trail": createParticleTrail,
   "Ribbon Trail": createRibbonTrail,
   Collision: createCollision,

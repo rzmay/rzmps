@@ -1,8 +1,6 @@
 import type { DynamicValue } from '../types/DynamicValue';
 import seedrandom from 'seedrandom';
 
-type SeededMinMax<T> = DynamicValue<T>[] & { _dynamicValueSeededInterp: number };
-
 export default function evaluateDynamic<T>(
   value: DynamicValue<T>,
   interpolate: (a: T, b: T, t: number) => T,

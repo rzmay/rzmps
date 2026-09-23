@@ -11,6 +11,7 @@ import type { DynamicUntimedValue, DynamicValue } from './types/DynamicValue';
 import type { Multiple, StrictMultiple } from './types/Multiple';
 import type { Tag } from './types/Tag';
 import { TagSelectionMethod } from './enums/TagSelectionMethod';
+import LODHelper, { type LODSettings } from './LODHelper';
 
 type SpawnBurst = {
     time: number,
@@ -29,6 +30,9 @@ interface EmitterOptions {
 
     tags: StrictMultiple<Tag>;
     tagSelection: TagSelectionMethod | `${TagSelectionMethod}`;
+    useUpdateLOD: boolean;
+    updateLOD: Partial<LODSettings>;
+    countLOD: Partial<LODSettings>;
 }
 
 interface EmitterContextState {
@@ -38,18 +42,18 @@ interface EmitterContextState {
 }
 
 export interface EmissionContext {
-  key?: string;
-  transform?: THREE.Matrix4;
-  time?: number;
-  duration?: number;
-  elapsedTime?: number;
-  looping?: boolean;
-  color?: THREE.Color;
-  alpha?: number;
-  mass?: number;
-  velocityScale?: number;
-  scale?: number;
-  tags?: Tag[];
+  key: string;
+  transform: THREE.Matrix4;
+  time: number;
+  elapsedTime: number;
+  duration: number;
+  looping: boolean;
+  color: THREE.Color;
+  alpha: number;
+  mass: number;
+  velocityScale: number;
+  scale: number;
+  tags: Tag[];
 }
 
 class Emitter {
@@ -63,6 +67,11 @@ class Emitter {
 
   tags?: Tag[];
   tagSelection: TagSelectionMethod = TagSelectionMethod.All;
+  useUpdateLOD: boolean;
+  updateLOD?: Partial<LODSettings>;
+  countLOD?: Partial<LODSettings>;
+  private _lodHelper: LODHelper;
+  private _countLODHelper: LODHelper;
 
   private _lastTagIndex: number = 0;
 
@@ -82,6 +91,11 @@ class Emitter {
 
     this.tags = acceptMultiple(options.tags);
     this.tagSelection = (options.tagSelection as TagSelectionMethod) ?? this.tagSelection;
+    this.updateLOD = options.updateLOD;
+    this.useUpdateLOD = options.useUpdateLOD ?? Boolean(this.updateLOD);
+    this.countLOD = options.countLOD;
+    this._lodHelper = new LODHelper(this.updateLOD);
+    this._countLODHelper = new LODHelper(this.countLOD);
   }
 
   /*
@@ -94,6 +108,8 @@ class Emitter {
     });
 
     this._contextStates.clear();
+    this._lodHelper.reset();
+    this._countLODHelper.reset();
   }
 
   /*
@@ -104,23 +120,26 @@ class Emitter {
     particleSystem.add(this.source);
   }
 
-  update(particles: Particle[], context?: EmissionContext): Particle[] {
-    return this.updateAt(particles, {
-      ...context,
-      key: context?.key ?? '__default',
-    });
-  }
+  update(
+    particles: Particle[],
+    context: Partial<EmissionContext>,
+    particleSystem: ParticleSystem,
+    deltaTime: number,
+  ): Particle[] {
+    if (
+      this.useUpdateLOD
+      && !this._lodHelper.shouldUpdate(Math.sqrt(particleSystem.cameraDistanceSq))
+    ) return [];
 
-  updateAt(particles: Particle[], context: EmissionContext): Particle[] {
     const now = Date.now();
     const elapsedMilliseconds = context.elapsedTime === undefined
       ? undefined
       : context.elapsedTime * 1000;
     const state = this.getContextState(context.key ?? '__default', elapsedMilliseconds ?? now);
-    const duration = context.duration ?? 10;
+    const duration = context.duration ?? particleSystem.duration;
     const elapsedTime = context.elapsedTime ?? ((now - state.startTime) / 1000);
-    const time = context.time ?? (elapsedTime / duration);
-    const looping = context.looping ?? true;
+    const time = context.time ?? (duration <= 0 ? 1 : elapsedTime / duration);
+    const looping = context.looping ?? particleSystem.looping;
     const spawned: Particle[] = [];
 
     if (context.time === undefined && elapsedTime >= duration) {
@@ -133,7 +152,10 @@ class Emitter {
       return spawned;
     }
 
-    const rate = evaluateDynamicNumber(this.rate, time);
+    const emissionMultiplier = this.countLOD
+      ? this._countLODHelper.getScale(Math.sqrt(particleSystem.cameraDistanceSq))
+      : 1;
+    const rate = evaluateDynamicNumber(this.rate, time) * emissionMultiplier;
     if (rate > 0) {
       const secondsPerParticle = 1000 / rate;
       const spawnClock = elapsedMilliseconds ?? now;
@@ -152,7 +174,7 @@ class Emitter {
 
     this.bursts.forEach((burst, index) => {
       if (!state.firedBursts.has(index) && burst.time <= time) {
-        const count = evaluateDynamicNumber(burst.count)
+        const count = evaluateDynamicNumber(burst.count) * emissionMultiplier;
         for (let i = 0; i < Math.floor(count); i += 1) {
           const particle = this.spawnParticle(particles, time, context);
           spawned.push(particle);
@@ -181,12 +203,12 @@ class Emitter {
     return state;
   }
 
-  private spawnParticle(particles: Particle[], time: number, context?: EmissionContext): Particle {
+  private spawnParticle(particles: Particle[], time: number, context: Partial<EmissionContext>): Particle {
     const point = this.source.getPoint();
     const position = point.position.clone();
     const normal = point.normal.clone();
 
-    if (context?.transform) {
+    if (context.transform) {
       position.applyMatrix4(context.transform);
       normal.applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(context.transform)).normalize();
     }
@@ -207,22 +229,22 @@ class Emitter {
     );
 
     const color = evaluateDynamicColor(this.initialValues.color ?? new THREE.Color(1, 1, 1), time);
-    if (context?.color) {
+    if (context.color) {
       color.multiply(context.color);
     }
 
     let alpha = evaluateDynamicNumber(this.initialValues.alpha ?? 1, time);
-    if (context?.alpha) {
+    if (context.alpha !== undefined) {
       alpha *= context.alpha
     }
 
     let mass = evaluateDynamicNumber(this.initialValues.mass ?? 0, time);
-    if (context?.mass) {
+    if (context.mass !== undefined) {
       mass *= context.mass;
     }
 
     const scale = evaluateDynamicVector(this.initialValues.scale ?? new THREE.Vector3(1, 1, 1), time);
-    if (context?.scale !== undefined) {
+    if (context.scale !== undefined) {
       scale.multiplyScalar(context.scale);
     }
 
@@ -234,8 +256,8 @@ class Emitter {
       color,
       alpha,
       mass,
-      ...((this.tags || context?.tags) && {
-        tags: [...(context?.tags ?? []), ...(this._selectTags() ?? [])],
+      ...((this.tags || context.tags) && {
+        tags: [...(context.tags ?? []), ...(this._selectTags() ?? [])],
       }),
     });
 
@@ -246,16 +268,21 @@ class Emitter {
         evaluateDynamicNumber(this.radialSpeed, time),
       ));
 
-    if (context?.velocityScale !== undefined) {
+    if (context.velocityScale !== undefined) {
       particle.velocity.multiplyScalar(context.velocityScale);
     }
 
-    if (this.initialValues.angularVelocity) particle.angularVelocity = evaluateDynamicVector(this.initialValues.angularVelocity, time).clone();
-    if (this.initialValues.scalarVelocity) particle.scalarVelocity = evaluateDynamicVector(this.initialValues.scalarVelocity, time).clone();
+    if (this.initialValues.angularVelocity)
+      particle.angularVelocity = evaluateDynamicVector(this.initialValues.angularVelocity, time).clone();
+    if (this.initialValues.scalarVelocity)
+      particle.scalarVelocity = evaluateDynamicVector(this.initialValues.scalarVelocity, time).clone();
 
-    if (this.initialValues.acceleration) particle.acceleration = evaluateDynamicVector(this.initialValues.acceleration, time).clone();
-    if (this.initialValues.angularAcceleration) particle.angularAcceleration = evaluateDynamicVector(this.initialValues.angularAcceleration, time).clone();
-    if (this.initialValues.scalarAcceleration) particle.scalarAcceleration = evaluateDynamicVector(this.initialValues.scalarAcceleration, time).clone();
+    if (this.initialValues.acceleration)
+      particle.acceleration = evaluateDynamicVector(this.initialValues.acceleration, time).clone();
+    if (this.initialValues.angularAcceleration)
+      particle.angularAcceleration = evaluateDynamicVector(this.initialValues.angularAcceleration, time).clone();
+    if (this.initialValues.scalarAcceleration)
+      particle.scalarAcceleration = evaluateDynamicVector(this.initialValues.scalarAcceleration, time).clone();
 
     particle.cacheStartValues();
     particles.push(particle);

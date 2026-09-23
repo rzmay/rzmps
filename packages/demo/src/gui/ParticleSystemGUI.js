@@ -32,6 +32,7 @@ import {
     TrailTextureMode,
     Collision,
     EndBehavior,
+    LODHelper,
     MaxCulling,
     Textures,
 } from '@rzmps/rzmps';
@@ -39,6 +40,12 @@ import {
 const SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY = '__rzmps_configureParticleSystem';
 const AUDIO_BUFFER_SOURCE_KEY = '__rzmpsAudioBufferSource';
 const RAW_CODE = Symbol('rawCode');
+const LOD_GUI_KEYS = new Set([
+    'useUpdateLOD',
+    'updateLOD',
+    'countLOD',
+    'compensateSize',
+]);
 
 const RESOURCE_LINKS = [
     { label: 'GitHub', href: 'https://github.com/rzmay/rzmps', Icon: GitFork },
@@ -352,6 +359,7 @@ export class ParticleSystemGUI {
         folder.add(system, 'maxParticles', 0, 100000, 1).name('Max Particles');
         folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling');
         folder.add(system, 'simulationDistance', 0, 1000, 0.1).name('Simulation Distance');
+        this.buildUpdateLOD(folder.addFolder('Update LOD'), system);
         folder.add(system, 'useLiveCubemap').name('Live Cubemap');
         folder.add(system.liveCubemap, 'fps', 1, 120, 1).name('Live Cubemap FPS');
         folder.add(system.liveCubemap, 'resolutionScale', 0.05, 1, 0.01).name('Live Cubemap Scale');
@@ -403,6 +411,8 @@ export class ParticleSystemGUI {
         this.addDynamicValue(folder, emitter, 'alignment', 'Alignment');
         this.addTags(folder, emitter);
         folder.add(emitter, 'tagSelection', ['all', 'random', 'distribute']).name('Tag Selection');
+        this.buildUpdateLOD(folder.addFolder('Update LOD'), emitter);
+        this.buildCountLOD(folder.addFolder('Count LOD'), emitter);
         this.buildEmissionShape(folder.addFolder('Emission Shape'), emitter);
         this.buildInitialValues(folder.addFolder('Initial Values'), emitter);
         this.buildBursts(folder.addFolder(`Bursts (${emitter.bursts.length})`), emitter);
@@ -414,6 +424,60 @@ export class ParticleSystemGUI {
             },
         };
         folder.add(actions, 'remove').name('Remove Emitter');
+    }
+    buildUpdateLOD(folder, target) {
+        this.ensureUpdateLOD(target);
+        const refresh = () => {
+            target._lodHelper = new LODHelper(target.updateLOD);
+        };
+
+        folder.add(target, 'useUpdateLOD').name('Enabled').onChange(refresh);
+        this.addLODSettings(folder, target.updateLOD, refresh);
+    }
+    buildCountLOD(folder, target, includeSizeCompensation = false) {
+        const state = {
+            enabled: Boolean(target.countLOD),
+        };
+        const settings = this.normalizeLODSettings(target.countLOD);
+        const refresh = () => {
+            target.countLOD = state.enabled ? settings : undefined;
+            target._countLODHelper = new LODHelper(target.countLOD);
+        };
+
+        folder.add(state, 'enabled').name('Enabled').onChange(refresh);
+        this.addLODSettings(folder, settings, refresh);
+
+        if (includeSizeCompensation) {
+            target.compensateSize ??= false;
+            folder.add(target, 'compensateSize').name('Compensate Size');
+        }
+    }
+    ensureUpdateLOD(target) {
+        target.updateLOD = this.normalizeLODSettings(target.updateLOD);
+        target.useUpdateLOD ??= Boolean(target.updateLOD);
+        target._lodHelper ??= new LODHelper(target.updateLOD);
+    }
+    normalizeLODSettings(settings) {
+        return {
+            ...this.createDefaultLODSettings(),
+            ...(settings ?? {}),
+        };
+    }
+    createDefaultLODSettings() {
+        return {
+            distance: 10,
+            quality: 0.5,
+            maxLevel: 4,
+            falloff: 1.5,
+            continuous: false,
+        };
+    }
+    addLODSettings(folder, settings, onChange) {
+        folder.add(settings, 'distance', 0.1, 200, 0.1).name('Distance').onChange(onChange);
+        folder.add(settings, 'quality', 0.01, 1, 0.01).name('Quality').onChange(onChange);
+        folder.add(settings, 'falloff', 1, 4, 0.01).name('Falloff').onChange(onChange);
+        folder.add(settings, 'maxLevel', 0, 8, 1).name('Max Level').onChange(onChange);
+        folder.add(settings, 'continuous').name('Continuous').onChange(onChange);
     }
     buildEmissionShape(folder, emitter) {
         const geometry = emitter.source.geometry;
@@ -635,13 +699,14 @@ export class ParticleSystemGUI {
     }
     buildModule(folder, module, system = this.system) {
         this.addTags(folder, module);
+        this.buildUpdateLOD(folder.addFolder('Update LOD'), module);
         if (module instanceof Audio) {
             this.buildAudioModule(folder, module);
         }
         else {
             const candidate = module;
             if (candidate.options && typeof candidate.options === 'object') {
-                this.addObject(folder, candidate.options, new Set(['tags']));
+                this.addObject(folder, candidate.options, new Set(['tags', ...LOD_GUI_KEYS]));
             }
             else {
                 const hidden = new Set([
@@ -657,6 +722,7 @@ export class ParticleSystemGUI {
                     'particleSystem',
                     'listener',
                     'tags',
+                    ...LOD_GUI_KEYS,
                 ]);
                 Object.keys(candidate)
                     .filter((key) => !key.startsWith('_') && !hidden.has(key))
@@ -680,6 +746,7 @@ export class ParticleSystemGUI {
             'onSpawnSound',
             'onDeathSound',
             'tags',
+            ...LOD_GUI_KEYS,
         ]);
 
         Object.keys(module)
@@ -716,6 +783,8 @@ export class ParticleSystemGUI {
     }
     buildRenderer(folder, renderer, system = this.system) {
         this.addTags(folder, renderer);
+        this.buildUpdateLOD(folder.addFolder('Update LOD'), renderer);
+        this.buildCountLOD(folder.addFolder('Count LOD'), renderer, true);
 
         if (renderer instanceof SpriteRenderer) {
             this.buildSpriteRenderer(folder, renderer);
@@ -734,6 +803,7 @@ export class ParticleSystemGUI {
                 'geometry',
                 'material',
                 'tags',
+                ...LOD_GUI_KEYS,
             ]));
         }
 
@@ -1513,6 +1583,8 @@ export class ParticleSystemGUI {
             `  maxParticles: ${this.serializeValue(system.maxParticles)},`,
             `  maxCullingMode: ${this.serializeValue(system.maxCullingMode)},`,
             `  simulationDistance: ${this.serializeValue(system.simulationDistance)},`,
+            `  useUpdateLOD: ${this.serializeValue(system.useUpdateLOD)},`,
+            `  updateLOD: ${this.serializeValue(system.updateLOD)},`,
             `  useLiveCubemap: ${this.serializeValue(system.useLiveCubemap)},`,
             `  liveCubemapFPS: ${this.serializeValue(system.liveCubemap.fps)},`,
             `  liveCubemapResolutionScale: ${this.serializeValue(system.liveCubemap.resolutionScale)},`,
@@ -1565,12 +1637,14 @@ export class ParticleSystemGUI {
     serializeEmitter(emitter) {
         const initialValues = this.serializeValue(emitter.initialValues);
         const bursts = this.serializeValue(emitter.bursts.map(({ time, count }) => ({ time, count })));
+        const lodOptions = this.serializeLODOptions(emitter, true);
         return [
             'new Emitter({',
             `  source: ${this.serializeEmissionShape(emitter.source)},`,
             `  rate: ${this.serializeValue(emitter.rate)},`,
             `  radialSpeed: ${this.serializeValue(emitter.radialSpeed)},`,
             `  alignment: ${this.serializeValue(emitter.alignment)},`,
+            ...lodOptions,
             `  tags: ${this.serializeValue(emitter.tags)},`,
             `  tagSelection: ${this.serializeValue(emitter.tagSelection)},`,
             `  bursts: ${bursts},`,
@@ -1608,6 +1682,7 @@ export class ParticleSystemGUI {
                 radiusScale: module.radiusScale,
                 minKillSpeed: module.minKillSpeed,
                 maxKillSpeed: module.maxKillSpeed,
+                ...this.getLODOptions(module),
                 tags: module.tags,
             })})`;
         }
@@ -1621,6 +1696,7 @@ export class ParticleSystemGUI {
                 persistence: runtime.persistence,
                 time: runtime.time,
                 offset: runtime.offset,
+                ...this.getLODOptions(runtime),
                 tags: runtime.tags,
             })})`;
         }
@@ -1628,6 +1704,7 @@ export class ParticleSystemGUI {
         if (module instanceof ExternalForces) {
             const options = {
                 multiplier: module.multiplier,
+                ...this.getLODOptions(module),
                 tags: module.tags,
             };
 
@@ -1659,6 +1736,7 @@ export class ParticleSystemGUI {
                 impulseAffectsHighPass: module.impulseAffectsHighPass,
                 impulseAffectsLowPass: module.impulseAffectsLowPass,
                 impulseThreshhold: module.impulseThreshhold,
+                ...this.getLODOptions(module),
                 tags: module.tags,
             };
 
@@ -1685,9 +1763,10 @@ export class ParticleSystemGUI {
         const args = runtime.options !== undefined
             ? this.serializeValue({
                 ...runtime.options,
+                ...this.getLODOptions(runtime),
                 tags: runtime.tags,
             })
-            : this.serializeValue(runtime);
+            : this.serializeValue(this.getSerializableRuntimeOptions(runtime));
         return `new ${module.constructor.name}(${args})`;
     }
     serializeRenderer(renderer) {
@@ -1701,6 +1780,7 @@ export class ParticleSystemGUI {
                 frames: renderer.frames,
                 castShadow: renderer.castShadow,
                 softParticleDistance: renderer.softParticleDistance,
+                ...this.getLODOptions(renderer, true, true),
                 tags: renderer.tags,
                 alphaMap: renderer.alphaMap ? this.rawCode(this.serializeTexture(renderer.alphaMap)) : undefined,
                 material: renderer.materialType,
@@ -1720,14 +1800,23 @@ export class ParticleSystemGUI {
                 inheritParticleColor: renderer.inheritParticleColor,
                 sizeAffectsRange: renderer.sizeAffectsRange,
                 alphaAffectsIntensity: renderer.alphaAffectsIntensity,
+                ...this.getLODOptions(renderer, true, true),
                 tags: renderer.tags,
                 lightOptions: renderer.lightOptions,
             })})`;
         }
         if (renderer instanceof MeshRenderer) {
-            return `new MeshRenderer({\n  mesh: ${this.serializeMesh(renderer.mesh)},\n  maxParticles: ${renderer.instances.instanceMatrix.count},\n  castShadow: ${this.serializeValue(renderer.castShadow)},\n  receiveShadow: ${this.serializeValue(renderer.receiveShadow)},\n  tags: ${this.serializeValue(renderer.tags)},\n})`;
+            return `new MeshRenderer(${this.serializeValue({
+                mesh: this.rawCode(this.serializeMesh(renderer.mesh)),
+                maxParticles: renderer.instances.instanceMatrix.count,
+                castShadow: renderer.castShadow,
+                receiveShadow: renderer.receiveShadow,
+                ...this.getLODOptions(renderer, true, true),
+                tags: renderer.tags,
+            })})`;
         }
         if (renderer instanceof TrailRenderer) {
+            const lodOptions = this.serializeLODOptions(renderer, true, true);
             return [
                 'new TrailRenderer({',
                 `  mode: ${this.serializeValue(renderer.mode)},`,
@@ -1744,6 +1833,7 @@ export class ParticleSystemGUI {
                 `  inheritParticleColor: ${this.serializeValue(renderer.inheritParticleColor)},`,
                 `  castShadow: ${this.serializeValue(renderer.castShadow)},`,
                 `  receiveShadow: ${this.serializeValue(renderer.receiveShadow)},`,
+                ...lodOptions,
                 `  tags: ${this.serializeValue(renderer.tags)},`,
                 `  colorOverLifetime: ${this.serializeValue(renderer.colorOverLifetime)},`,
                 `  colorOverTrail: ${this.serializeValue(renderer.colorOverTrail)},`,
@@ -1751,7 +1841,32 @@ export class ParticleSystemGUI {
                 '})',
             ].join('\n');
         }
-        return `new ${renderer.constructor.name}(${this.serializeValue(renderer)})`;
+        return `new ${renderer.constructor.name}(${this.serializeValue(this.getSerializableRuntimeOptions(renderer))})`;
+    }
+    getLODOptions(target, includeCount = false, includeSize = false) {
+        const options = {};
+        if (target.updateLOD || target.useUpdateLOD) {
+            options.useUpdateLOD = target.useUpdateLOD;
+            options.updateLOD = target.updateLOD;
+        }
+        if (includeCount && target.countLOD) {
+            options.countLOD = target.countLOD;
+        }
+        if (includeSize && target.compensateSize) {
+            options.compensateSize = target.compensateSize;
+        }
+        return options;
+    }
+    serializeLODOptions(target, includeCount = false, includeSize = false) {
+        return Object.entries(this.getLODOptions(target, includeCount, includeSize))
+            .map(([key, value]) => `  ${key}: ${this.serializeValue(value)},`);
+    }
+    getSerializableRuntimeOptions(target) {
+        const hidden = new Set([
+        ]);
+        return Object.fromEntries(
+            Object.entries(target).filter(([key]) => !key.startsWith('_') && !hidden.has(key)),
+        );
     }
     serializeMesh(mesh) {
         const geometry = mesh.geometry;

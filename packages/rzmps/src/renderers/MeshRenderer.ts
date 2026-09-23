@@ -83,9 +83,9 @@ class MeshRenderer extends Renderer {
       this.updateMaterialEnvironment(system);
 
       particles.forEach((particle, i) => {
-        this.dummy.position.set(...particle.position.toArray());
-        this.dummy.rotation.set(...particle.rotation.toArray());
-        this.dummy.scale.set(...particle.scale.toArray());
+        this.dummy.position.copy(particle.position);
+        this.dummy.rotation.setFromVector3(particle.rotation);
+        this.dummy.scale.copy(particle.scale);
 
         this.dummy.updateMatrix();
 
