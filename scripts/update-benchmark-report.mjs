@@ -72,6 +72,7 @@ function formatGB(value) {
 const hardware = metadata.hardware ?? {};
 const environmentRows = [
   ['Mode', metadata.mode ?? 'headless browser'],
+  ['Frame Pacing', metadata.framePacing ?? 'uncapped'],
   ['Browser', metadata.browser],
   ['Viewport', `${metadata.viewport.width}x${metadata.viewport.height}`],
   ['Device Pixel Ratio', formatNumber(hardware.devicePixelRatio, 2)],
@@ -84,13 +85,16 @@ const environmentRows = [
 const systemRows = results.map((result) => [
   result.name,
   formatInteger(result.particles),
+  `${formatInteger(result.minSimulatedParticles)}-${formatInteger(result.maxSimulatedParticles)}`,
+  formatInteger(result.maxParticlesLimit),
   formatInteger(result.frames),
   formatNumber(result.avgFps),
-  formatNumber(result.minFps),
-  formatNumber(result.maxFps),
+  formatNumber(result.onePercentLowFps),
   `${formatNumber(result.avgFrameMs, 2)}ms`,
+  `${formatNumber(result.p99FrameMs, 2)}ms`,
   `${formatNumber(result.maxFrameMs, 2)}ms`,
   `${formatNumber(result.avgUpdateMs, 2)}ms`,
+  `${formatNumber(result.p95UpdateMs, 2)}ms`,
   formatMemory(result.maxHeapMB),
 ]);
 
@@ -110,7 +114,7 @@ const block = [
   `Run length: ${(metadata.durationMs / 1000).toFixed(1)}s measured per case after ${(metadata.warmupMs / 1000).toFixed(1)}s warmup`,
   `Measured: ${metadata.measuredAt}`,
   '',
-  'FPS and frame time are measured in a real browser render loop. `Update` is the average measured `ParticleSystem.update()` slice inside that frame.',
+  'FPS and frame time are measured in an uncapped browser render loop by default. `1% Low FPS` is derived from p99 frame time, which is steadier than raw single-frame min/max FPS. `Update` is the measured `ParticleSystem.update()` slice inside that frame.',
   '',
   markdownTable(
     ['Environment', 'Value'],
@@ -118,7 +122,7 @@ const block = [
   ),
   '',
   markdownTable(
-    ['Case', 'Particles', 'Rendered Frames', 'Avg FPS', 'Min FPS', 'Max FPS', 'Avg Frame', 'Max Frame', 'Update', 'Max JS Heap'],
+    ['Case', 'Target Particles', 'Simulated Particles', 'Particle Cap', 'Rendered Frames', 'Avg FPS', '1% Low FPS', 'Avg Frame', 'P99 Frame', 'Max Frame', 'Avg Update', 'P95 Update', 'Max JS Heap'],
     systemRows,
   ),
   '',

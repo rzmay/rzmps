@@ -101,6 +101,7 @@ function createSystem({ particleCount, modules = [], renderer = new NoopRenderer
     gravityModifier: 0,
     looping: false,
     maxParticles: Math.max(particleCount, 1),
+    useUpdateLOD: false,
   });
 
   for (let i = 0; i < particleCount; i += 1) {
@@ -115,22 +116,51 @@ function percentile(values, p) {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0;
 }
 
-function summarize({ name, particleCount, updateSamples, frameSamples, maxHeapMB }) {
+function slowestFrameAverage(values, fraction) {
+  if (values.length === 0) return 0;
+
+  const sorted = [...values].sort((a, b) => b - a);
+  const count = Math.max(1, Math.ceil(values.length * fraction));
+  const slowest = sorted.slice(0, count);
+  return slowest.reduce((sum, value) => sum + value, 0) / slowest.length;
+}
+
+function summarize({
+  name,
+  particleCount,
+  system,
+  updateSamples,
+  frameSamples,
+  particleSamples,
+  measuredDurationMs,
+  maxHeapMB,
+}) {
   const updateTotal = updateSamples.reduce((sum, value) => sum + value, 0);
   const frameTotal = frameSamples.reduce((sum, value) => sum + value, 0);
-  const fpsSamples = frameSamples.map((value) => 1000 / value);
+  const slowestOnePercentFrameMs = slowestFrameAverage(frameSamples, 0.01);
+  const p99FrameMs = percentile(frameSamples, 0.99);
+  const p95UpdateMs = percentile(updateSamples, 0.95);
 
   return {
     name,
     particles: particleCount,
+    minSimulatedParticles: Math.min(...particleSamples),
+    maxSimulatedParticles: Math.max(...particleSamples),
+    finalSimulatedParticles: system.particles.length,
+    maxParticlesLimit: system.maxParticles,
+    updateLODEnabled: system.useUpdateLOD
+      || system.modules.some((module) => module.useUpdateLOD)
+      || system.renderers.some((renderer) => renderer.useUpdateLOD),
+    countLODEnabled: system.renderers.some((renderer) => Boolean(renderer.countLOD)),
     frames: frameSamples.length,
-    avgFps: 1000 / (frameTotal / frameSamples.length),
-    minFps: Math.min(...fpsSamples),
-    maxFps: Math.max(...fpsSamples),
+    avgFps: frameSamples.length / (measuredDurationMs / 1000),
+    onePercentLowFps: 1000 / slowestOnePercentFrameMs,
     avgFrameMs: frameTotal / frameSamples.length,
+    slowestOnePercentFrameMs,
+    p99FrameMs,
     maxFrameMs: Math.max(...frameSamples),
     avgUpdateMs: updateTotal / updateSamples.length,
-    p95UpdateMs: percentile(updateSamples, 0.95),
+    p95UpdateMs,
     maxHeapMB,
   };
 }
@@ -240,6 +270,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       phaseStartedAt: performance.now(),
       updateSamples: [],
       frameSamples: [],
+      particleSamples: [],
       maxHeapMB: 0,
     };
     lastFrame.current = undefined;
@@ -273,6 +304,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
     lastFrame.current = frameStart;
     active.current.updateSamples.push(updateMs);
+    active.current.particleSamples.push(active.current.system.particles.length);
 
     const heapBytes = performance.memory?.usedJSHeapSize;
     if (Number.isFinite(heapBytes)) {
@@ -280,6 +312,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     }
 
     if (elapsed >= durationMs) {
+      active.current.measuredDurationMs = elapsed;
       results.current.push(summarize(active.current));
       gl.info.reset();
       startNextCase();

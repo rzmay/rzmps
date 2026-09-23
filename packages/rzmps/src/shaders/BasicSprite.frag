@@ -400,6 +400,10 @@ void main()
         ambientLightColor
         + environmentDiffuse;
 
+    #ifdef USE_LIGHT_PROBES
+        diffuseLight += getLightProbeIrradiance(lightProbe, normal);
+    #endif
+
     vec3 specularLight =
         environmentSpecular;
 

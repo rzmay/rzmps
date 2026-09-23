@@ -12,11 +12,13 @@ import createVortex from './vortex';
 import createRepulsorAttractor from './repulsor';
 import createSimulationSpace from './simulationSpace';
 import loadCornellBox from './cornellBox';
+import createLightProbeScene from './lightProbes';
 
 
 const scenePresets = {
   Checkerboard: loadCheckerboard,
   'Cornell Box': loadCornellBox,
+  'Light Probe Room': createLightProbeScene,
   'Shanghai Bund HDRI': loadHdri(shanghaiBund),
   'Ferndale Studio HDRI': loadHdri(ferndaleStudio),
   'Color Lights': loadColorLights,

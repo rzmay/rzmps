@@ -8,6 +8,8 @@ const port = Number(process.env.RZMPS_BENCHMARK_PORT ?? 4173);
 const durationMs = Number(process.env.RZMPS_BENCHMARK_DURATION_MS ?? 4000);
 const warmupMs = Number(process.env.RZMPS_BENCHMARK_WARMUP_MS ?? 1000);
 const openBrowser = process.argv.includes('--open') || process.argv.includes('--headed');
+const useVsync = process.argv.includes('--vsync');
+const pacingMode = useVsync ? 'vsync' : 'uncapped';
 const viewport = {
   width: Number(process.env.RZMPS_BENCHMARK_WIDTH ?? 1280),
   height: Number(process.env.RZMPS_BENCHMARK_HEIGHT ?? 720),
@@ -64,6 +66,23 @@ function startServer() {
   return child;
 }
 
+function getChromeArgs() {
+  const args = [
+    '--disable-dev-shm-usage',
+    '--enable-precise-memory-info',
+    '--use-angle=default',
+  ];
+
+  if (!useVsync) {
+    args.push(
+      '--disable-frame-rate-limit',
+      '--disable-gpu-vsync',
+    );
+  }
+
+  return args;
+}
+
 function collectNodeHardware() {
   const cpus = os.cpus();
   const firstCpu = cpus[0];
@@ -114,16 +133,12 @@ async function runBenchmark() {
 
     browser = await puppeteer.launch({
       headless: openBrowser ? false : 'new',
-      args: [
-        '--disable-dev-shm-usage',
-        '--enable-precise-memory-info',
-        '--use-angle=default',
-      ],
+      args: getChromeArgs(),
       defaultViewport: viewport,
     });
 
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'networkidle0' });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     const browserHardware = await collectBrowserHardware(page);
     await page.waitForFunction(
       'window.__RZMPS_BENCHMARK_DONE__ === true',
@@ -139,6 +154,7 @@ async function runBenchmark() {
       warmupMs,
       measuredAt: new Date().toISOString(),
       mode: openBrowser ? 'visible browser' : 'headless browser',
+      framePacing: pacingMode,
       hardware: {
         ...collectNodeHardware(),
         ...browserHardware,
@@ -149,6 +165,7 @@ async function runBenchmark() {
     console.log(`Browser: ${metadata.browser}`);
     console.log(`Viewport: ${viewport.width}x${viewport.height}`);
     console.log(`Mode: ${openBrowser ? 'visible browser' : 'headless browser'}`);
+    console.log(`Frame pacing: ${pacingMode}`);
     console.log(`OS: ${metadata.hardware.os}`);
     console.log(`CPU: ${metadata.hardware.cpu} (${metadata.hardware.logicalCores} logical cores)`);
     console.log(`Memory: ${formatNumber(metadata.hardware.totalMemoryGB, 1)}GB system, ${metadata.hardware.deviceMemoryGB ?? 'n/a'}GB browser hint`);
@@ -161,13 +178,18 @@ async function runBenchmark() {
       console.log([
         result.name,
         `${result.particles.toLocaleString()} particles`,
+        `${result.minSimulatedParticles.toLocaleString()}-${result.maxSimulatedParticles.toLocaleString()} simulated`,
+        `cap ${result.maxParticlesLimit.toLocaleString()}`,
+        `update LOD ${result.updateLODEnabled ? 'on' : 'off'}`,
+        `count LOD ${result.countLODEnabled ? 'on' : 'off'}`,
         `${result.frames.toLocaleString()} rendered frames`,
         `avg ${formatNumber(result.avgFps)} fps`,
-        `min ${formatNumber(result.minFps)} fps`,
-        `max ${formatNumber(result.maxFps)} fps`,
+        `1% low ${formatNumber(result.onePercentLowFps)} fps`,
         `avg frame ${formatNumber(result.avgFrameMs, 2)}ms`,
+        `p99 frame ${formatNumber(result.p99FrameMs, 2)}ms`,
         `max frame ${formatNumber(result.maxFrameMs, 2)}ms`,
         `avg update ${formatNumber(result.avgUpdateMs, 2)}ms`,
+        `p95 update ${formatNumber(result.p95UpdateMs, 2)}ms`,
         `max heap ${result.maxHeapMB > 0 ? `${formatNumber(result.maxHeapMB, 1)}MB` : 'n/a'}`,
       ].join(' | '));
     });
