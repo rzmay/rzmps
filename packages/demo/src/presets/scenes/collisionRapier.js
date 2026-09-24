@@ -2,9 +2,14 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { RapierCollisionBackend } from '@rzmps/rapier';
 import createCollisionObjects from './createCollisionObjects';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 export default async function createRapierCollisionTest(scene) {
   await RAPIER.init();
+  const particleRoot = createSceneParticleRoot(scene, [0, 5, 0]);
 
   const world = new RAPIER.World({
     x: 0,
@@ -178,6 +183,7 @@ export default async function createRapierCollisionTest(scene) {
   return {
     update,
     cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
       delete scene.userData.__rzmps_activeCollisionBackend;
 
       objects.group.removeFromParent();
@@ -186,3 +192,5 @@ export default async function createRapierCollisionTest(scene) {
     },
   };
 }
+
+createRapierCollisionTest.author = "rzmay";

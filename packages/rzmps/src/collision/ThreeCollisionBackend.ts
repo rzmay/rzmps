@@ -19,6 +19,7 @@ export interface ThreeCollisionBackendOptions {
   staticAfter?: number;
   timeQuality?: number;
   refreshQuality?: number;
+  respectMaterialSide?: boolean;
 
   objectFilter?: (object: THREE.Object3D) => boolean;
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
@@ -60,6 +61,7 @@ class ThreeCollisionBackend implements ICollisionBackend {
   staticAfter: number;
   timeQuality: number;
   refreshQuality: number;
+  respectMaterialSide: boolean;
 
   private trackedObjects = new Map<string, TrackedObject>();
 
@@ -78,6 +80,7 @@ class ThreeCollisionBackend implements ICollisionBackend {
     this.dynamicObjectFilter = options.dynamicObjectFilter;
 
     this.staticAfter = options.staticAfter ?? 2;
+    this.respectMaterialSide = options.respectMaterialSide ?? true;
 
     this.timeQuality = THREE.MathUtils.clamp(
       options.timeQuality ?? 1,
@@ -535,16 +538,79 @@ class ThreeCollisionBackend implements ICollisionBackend {
         .fromBufferAttribute(position, i + 2)
         .applyMatrix4(object.matrixWorld);
 
-      octree.addTriangle(
-        new THREE.Triangle(a, b, c),
+      count += this.addTriangleForMaterialSide(
+        octree,
+        object,
+        geometry,
+        i,
+        a,
+        b,
+        c,
       );
-
-      count++;
     }
 
     temporaryGeometry?.dispose();
 
     return count;
+  }
+
+  private addTriangleForMaterialSide(
+    octree: Octree,
+    object: THREE.Mesh,
+    geometry: THREE.BufferGeometry,
+    vertexStart: number,
+    a: THREE.Vector3,
+    b: THREE.Vector3,
+    c: THREE.Vector3,
+  ): number {
+    const side = this.respectMaterialSide
+      ? this.getMaterialSide(object, geometry, vertexStart)
+      : THREE.FrontSide;
+
+    if (side === THREE.BackSide) {
+      octree.addTriangle(new THREE.Triangle(c, b, a));
+      return 1;
+    }
+
+    octree.addTriangle(new THREE.Triangle(a, b, c));
+
+    if (side === THREE.DoubleSide) {
+      octree.addTriangle(new THREE.Triangle(c, b, a));
+      return 2;
+    }
+
+    return 1;
+  }
+
+  private getMaterialSide(
+    object: THREE.Mesh,
+    geometry: THREE.BufferGeometry,
+    vertexStart: number,
+  ): THREE.Side {
+    const material = object.material;
+
+    if (!Array.isArray(material)) {
+      return material?.side ?? THREE.FrontSide;
+    }
+
+    const materialIndex = this.getMaterialIndexForVertex(
+      geometry,
+      vertexStart,
+    );
+
+    return material[materialIndex]?.side ?? THREE.FrontSide;
+  }
+
+  private getMaterialIndexForVertex(
+    geometry: THREE.BufferGeometry,
+    vertexStart: number,
+  ): number {
+    const group = geometry.groups.find(({ start, count }) => (
+      vertexStart >= start
+      && vertexStart < start + count
+    ));
+
+    return group?.materialIndex ?? 0;
   }
 
   private matrixChanged(

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: RZMPS demo
+    url: https://rzmps.rzmay.com
+    about: Try the current hosted demo before reporting demo issues.

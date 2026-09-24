@@ -1,6 +1,11 @@
 import * as THREE from 'three';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 export default function loadCheckerboard(scene) {
+  const particleRoot = createSceneParticleRoot(scene);
   const ambient = new THREE.AmbientLight(0xffffff, 0.35);
   const point = new THREE.PointLight(0xffffff, 260);
   point.position.set(10, 20, 0);
@@ -31,9 +36,12 @@ export default function loadCheckerboard(scene) {
   scene.add(ambient, point, floor);
 
   return () => {
+    disposeSceneParticleRoot(scene, particleRoot);
     scene.remove(ambient, point, floor);
     floorGeometry.dispose();
     floorMaterial.dispose();
     checkerTexture.dispose();
   };
 }
+
+loadCheckerboard.author = "rzmay";

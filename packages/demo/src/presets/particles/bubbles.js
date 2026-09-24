@@ -142,7 +142,9 @@ export default async function createBubbles() {
   });
 
   system.name = 'Audio Bubbles';
-  system.position.set(0, 5, 0);
+  system.position.set(0, 0, 0);
 
   return system;
 }
+
+createBubbles.author = "rzmay";

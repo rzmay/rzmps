@@ -46,7 +46,9 @@ export default async function createRibbonTrail() {
   });
 
   ribbonTrail.name = 'Ribbon Trail';
-  ribbonTrail.position.set(-2, 1, 0);
+  ribbonTrail.position.set(0, 0, 0);
 
   return ribbonTrail;
 }
+
+createRibbonTrail.author = "rzmay";

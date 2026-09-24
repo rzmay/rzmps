@@ -5,10 +5,15 @@ import {
   ParticleForceFieldHelper,
   ParticleSystem,
 } from '@rzmps/rzmps';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 export default function createRepulsorAttractor(scene) {
   const root = new THREE.Group();
   root.name = 'Repulsor and Attractor Scene';
+  const particleRoot = createSceneParticleRoot(scene);
 
   /*
    * REPULSOR
@@ -16,7 +21,7 @@ export default function createRepulsorAttractor(scene) {
    * Negative gravity pushes particles away from the field center.
    */
   const repulsor = ParticleForceField.Sphere({
-    gravity: -0.1,
+    gravity: -8,
   }, 4);
 
   repulsor.name = 'Repulsor';
@@ -38,7 +43,7 @@ export default function createRepulsorAttractor(scene) {
    * Positive gravity pulls particles into the field center.
    */
   const attractor = ParticleForceField.Sphere({
-    gravity: 0.1,
+    gravity: 8,
   }, 4);
 
   attractor.name = 'Attractor';
@@ -113,19 +118,40 @@ export default function createRepulsorAttractor(scene) {
     sceneExternalForces.set(particleSystem, externalForces);
   };
 
-  return () => {
-    sceneExternalForces.forEach((externalForces, particleSystem) => {
-      particleSystem.removeModule(externalForces);
-    });
-    sceneExternalForces.clear();
-    delete scene.userData[configureParticleSystemKey];
+  return {
+    gui: (folder) => {
+      const repulsorFolder = folder.addFolder('Repulsor');
+      repulsorFolder.add(repulsor, 'gravity', -50, 50, 0.01).name('Gravity');
+      repulsorFolder.add(repulsor.position, 'x', -10, 10, 0.1).name('X').onChange(() => repulsorHelper.update());
+      repulsorFolder.add(repulsor.position, 'y', -4, 10, 0.1).name('Y').onChange(() => repulsorHelper.update());
+      repulsorFolder.add(repulsor.position, 'z', -10, 10, 0.1).name('Z').onChange(() => repulsorHelper.update());
+      repulsorFolder.add(repulsorHelper, 'visible').name('Show Helper');
 
-    scene.remove(root);
+      const attractorFolder = folder.addFolder('Attractor');
+      attractorFolder.add(attractor, 'gravity', -50, 50, 0.01).name('Gravity');
+      attractorFolder.add(attractor.position, 'x', -10, 10, 0.1).name('X').onChange(() => attractorHelper.update());
+      attractorFolder.add(attractor.position, 'y', -4, 10, 0.1).name('Y').onChange(() => attractorHelper.update());
+      attractorFolder.add(attractor.position, 'z', -10, 10, 0.1).name('Z').onChange(() => attractorHelper.update());
+      attractorFolder.add(attractorHelper, 'visible').name('Show Helper');
+    },
 
-    repulsorHelper.dispose();
-    attractorHelper.dispose();
+    cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
+      sceneExternalForces.forEach((externalForces, particleSystem) => {
+        particleSystem.removeModule(externalForces);
+      });
+      sceneExternalForces.clear();
+      delete scene.userData[configureParticleSystemKey];
 
-    ground.geometry.dispose();
-    ground.material.dispose();
+      scene.remove(root);
+
+      repulsorHelper.dispose();
+      attractorHelper.dispose();
+
+      ground.geometry.dispose();
+      ground.material.dispose();
+    },
   };
 }
+
+createRepulsorAttractor.author = "rzmay";

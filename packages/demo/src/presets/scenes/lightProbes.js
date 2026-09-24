@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { LightProbeGrid } from 'three/examples/jsm/lighting/LightProbeGrid.js';
 import { LightProbeGridHelper } from 'three/examples/jsm/helpers/LightProbeGridHelper.js';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 function disposeMaterial(material) {
   if (Array.isArray(material)) {
@@ -21,6 +25,7 @@ function addMesh(root, mesh) {
 export default async function createLightProbeScene(scene, renderer) {
   const root = new THREE.Group();
   root.name = 'Light Probe Volume Scene';
+  const particleRoot = createSceneParticleRoot(scene);
 
   scene.background = new THREE.Color(0x111111);
 
@@ -172,6 +177,17 @@ export default async function createLightProbeScene(scene, renderer) {
     near: 0.05,
     far: 20,
   };
+  const controls = {
+    lightProbes: true,
+    showHelpers: false,
+    animateSculpture: true,
+    cubemapSize: bakeOptions.cubemapSize,
+    rebake: () => {
+      bakeOptions.cubemapSize = Number(controls.cubemapSize);
+      probesLeft.bake(renderer, scene, bakeOptions);
+      probesRight.bake(renderer, scene, bakeOptions);
+    },
+  };
   const resolution = 6;
 
   const probesLeft = new LightProbeGrid(7.8, 4.7, 7.6, resolution, resolution, resolution);
@@ -185,10 +201,10 @@ export default async function createLightProbeScene(scene, renderer) {
   probesRight.visible = true;
 
   const probesHelperLeft = new LightProbeGridHelper(probesLeft);
-  probesHelperLeft.visible = false;
+  probesHelperLeft.visible = controls.showHelpers;
 
   const probesHelperRight = new LightProbeGridHelper(probesRight);
-  probesHelperRight.visible = false;
+  probesHelperRight.visible = controls.showHelpers;
 
   root.add(
     probesLeft,
@@ -202,11 +218,30 @@ export default async function createLightProbeScene(scene, renderer) {
   return {
     update: (deltaTime) => {
       elapsed += deltaTime;
-      torusKnot.rotation.x = elapsed * 0.4;
-      torusKnot.rotation.y = elapsed * 0.65;
+      if (controls.animateSculpture) {
+        torusKnot.rotation.x = elapsed * 0.4;
+        torusKnot.rotation.y = elapsed * 0.65;
+      }
+    },
+
+    gui: (folder) => {
+      folder.add(controls, 'lightProbes').name('Light Probes').onChange((value) => {
+        probesLeft.visible = value;
+        probesRight.visible = value;
+      });
+      folder.add(controls, 'showHelpers').name('Show Probe Helpers').onChange((value) => {
+        probesHelperLeft.visible = value;
+        probesHelperRight.visible = value;
+      });
+      folder.add(controls, 'animateSculpture').name('Animate Sculpture');
+      folder.add(controls, 'cubemapSize', [16, 32, 64, 128]).name('Probe Cubemap Size');
+      folder.add(controls, 'rebake').name('Rebake Probes');
+      folder.add(warmLight, 'intensity', 0, 80, 0.1).name('Warm Light');
+      folder.add(coolLight, 'intensity', 0, 80, 0.1).name('Cool Light');
     },
 
     cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
       scene.remove(root);
 
       probesLeft.dispose();
@@ -234,3 +269,5 @@ export default async function createLightProbeScene(scene, renderer) {
     },
   };
 }
+
+createLightProbeScene.author = "mrdoob";

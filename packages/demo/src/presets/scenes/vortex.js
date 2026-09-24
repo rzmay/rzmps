@@ -5,10 +5,15 @@ import {
   ParticleForceFieldHelper,
   ParticleSystem,
 } from '@rzmps/rzmps';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 export default function createVortex(scene) {
   const root = new THREE.Group();
   root.name = 'Vortex Scene';
+  const particleRoot = createSceneParticleRoot(scene);
 
   /*
    * VORTEX
@@ -17,9 +22,9 @@ export default function createVortex(scene) {
    * tangentially around the Y axis.
    */
   const vortex = ParticleForceField.Sphere({
-    rotationSpeed: 1,
-    rotationAttraction: 1,
-    drag: 0.3,
+    rotationSpeed: 18,
+    rotationAttraction: 10,
+    drag: 1.2,
   }, 4);
 
   vortex.name = 'Vortex';
@@ -95,18 +100,35 @@ export default function createVortex(scene) {
     sceneExternalForces.set(particleSystem, externalForces);
   };
 
-  return () => {
-    sceneExternalForces.forEach((externalForces, particleSystem) => {
-      particleSystem.removeModule(externalForces);
-    });
-    sceneExternalForces.clear();
-    delete scene.userData[configureParticleSystemKey];
+  return {
+    gui: (folder) => {
+      const position = folder.addFolder('Vortex Position');
+      position.add(vortex.position, 'x', -10, 10, 0.1).name('X').onChange(() => vortexHelper.update());
+      position.add(vortex.position, 'y', -4, 10, 0.1).name('Y').onChange(() => vortexHelper.update());
+      position.add(vortex.position, 'z', -10, 10, 0.1).name('Z').onChange(() => vortexHelper.update());
 
-    scene.remove(root);
+      folder.add(vortex, 'rotationSpeed', -80, 80, 0.01).name('Rotation Speed');
+      folder.add(vortex, 'rotationAttraction', -80, 80, 0.01).name('Center Pull');
+      folder.add(vortex, 'drag', 0, 12, 0.01).name('Drag');
+      folder.add(vortexHelper, 'visible').name('Show Helper');
+    },
 
-    vortexHelper.dispose();
+    cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
+      sceneExternalForces.forEach((externalForces, particleSystem) => {
+        particleSystem.removeModule(externalForces);
+      });
+      sceneExternalForces.clear();
+      delete scene.userData[configureParticleSystemKey];
 
-    ground.geometry.dispose();
-    ground.material.dispose();
+      scene.remove(root);
+
+      vortexHelper.dispose();
+
+      ground.geometry.dispose();
+      ground.material.dispose();
+    },
   };
 }
+
+createVortex.author = "rzmay";

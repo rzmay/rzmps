@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 import createCollisionObjects from './createCollisionObjects';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 export default async function createCollisionTest(scene) {
+  const particleRoot = createSceneParticleRoot(scene, [0, 5, 0]);
   const objects = createCollisionObjects();
 
   scene.add(objects.group);
@@ -19,6 +24,7 @@ export default async function createCollisionTest(scene) {
   return {
     update,
     cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
       objects.group.removeFromParent();
 
       objects.group.traverse((object) => {
@@ -36,3 +42,5 @@ export default async function createCollisionTest(scene) {
     },
   };
 }
+
+createCollisionTest.author = "rzmay";

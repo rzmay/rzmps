@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
+import { LightProbeGrid } from 'three/examples/jsm/lighting/LightProbeGrid.js';
+import { LightProbeGridHelper } from 'three/examples/jsm/helpers/LightProbeGridHelper.js';
 import { LiveCubemap } from '@rzmps/rzmps';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 let rectAreaLightsInitialized = false;
 
@@ -18,6 +24,7 @@ export default function loadCornellBox(scene, renderer) {
 
   const root = new THREE.Group();
   root.name = 'Cornell Box Scene';
+  const particleRoot = createSceneParticleRoot(scene);
 
   const roomSize = 10;
   const half = roomSize / 2;
@@ -111,15 +118,39 @@ export default function loadCornellBox(scene, renderer) {
     intensity: 1,
     excludeParent: true,
   });
+  const bakeOptions = {
+    cubemapSize: 32,
+    near: 0.05,
+    far: 20,
+  };
+  const probes = new LightProbeGrid(9.6, 9.6, 9.6, 6, 6, 6);
+  probes.position.set(0, half, 0);
+  probes.visible = false;
+  const probeHelper = new LightProbeGridHelper(probes);
+  probeHelper.visible = false;
+  const controls = {
+    liveCubemap: true,
+    lightProbes: false,
+    showProbeHelper: false,
+    probeCubemapSize: bakeOptions.cubemapSize,
+    rebakeProbes: () => {
+      bakeOptions.cubemapSize = Number(controls.probeCubemapSize);
+      probes.bake(renderer, scene, bakeOptions);
+    },
+  };
 
   metalCubemap.setup(metalSphere);
 
   const update = (deltaTime) => {
-    metalCubemap.update(scene, renderer, deltaTime);
+    if (controls.liveCubemap) {
+      metalCubemap.update(scene, renderer, deltaTime);
+    }
     if (metal.envMap !== metalCubemap.map) {
       metal.envMap = metalCubemap.map ?? null;
       metal.envMapIntensity = metalCubemap.intensity;
       metal.needsUpdate = true;
+    } else if (metal.envMapIntensity !== metalCubemap.intensity) {
+      metal.envMapIntensity = metalCubemap.intensity;
     }
   };
 
@@ -138,11 +169,31 @@ export default function loadCornellBox(scene, renderer) {
   );
 
   scene.add(root);
+  probes.bake(renderer, scene, bakeOptions);
+  root.add(probes, probeHelper);
 
   return {
     update,
+    gui: (folder) => {
+      folder.add(controls, 'liveCubemap').name('Live Cubemap');
+      folder.add(metalCubemap, 'fps', 1, 120, 1).name('Cubemap FPS');
+      folder.add(metalCubemap, 'resolutionScale', 0.01, 1, 0.01).name('Cubemap Scale');
+      folder.add(metalCubemap, 'intensity', 0, 5, 0.01).name('Reflection Intensity');
+      folder.add(controls, 'lightProbes').name('Light Probes').onChange((value) => {
+        probes.visible = value;
+      });
+      folder.add(controls, 'showProbeHelper').name('Show Probe Helper').onChange((value) => {
+        probeHelper.visible = value;
+      });
+      folder.add(controls, 'probeCubemapSize', [16, 32, 64, 128]).name('Probe Cubemap Size');
+      folder.add(controls, 'rebakeProbes').name('Rebake Probes');
+    },
     cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
       scene.remove(root);
+
+      probes.dispose();
+      probeHelper.dispose();
 
       [floor, ceiling, back, left, right, metalSphere, matteBox, lightPanel].forEach((mesh) => {
         mesh.geometry.dispose();
@@ -156,3 +207,5 @@ export default function loadCornellBox(scene, renderer) {
     },
   };
 }
+
+loadCornellBox.author = "rzmay";

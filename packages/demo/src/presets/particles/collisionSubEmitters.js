@@ -137,7 +137,9 @@ export default async function createCollisionSubEmitters() {
   });
 
   collision.name = 'Metal Balls';
-  collision.position.set(0, 5, 0);
+  collision.position.set(0, 0, 0);
 
   return collision;
 }
+
+createCollisionSubEmitters.author = "rzmay";

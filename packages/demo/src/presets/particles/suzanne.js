@@ -65,6 +65,8 @@ export default async function createSuzanne() {
   });
 
   suzanne.name = 'Suzanne';
-  suzanne.position.set(0, 2.2, 0);
+  suzanne.position.set(0, 0, 0);
   return suzanne;
 }
+
+createSuzanne.author = "rzmay";

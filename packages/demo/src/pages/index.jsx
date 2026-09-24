@@ -21,6 +21,37 @@ const RENDERER_MODES = ['webgl', 'webgpu'];
 const PARTICLE_PRESET_NAMES = Object.keys(particlePresets);
 const SCENE_PRESET_NAMES = Object.keys(scenePresets);
 
+function getPresetMetadata(presets, name) {
+  const entry = presets[name];
+  const factory = typeof entry === 'function' ? entry : entry?.create;
+
+  return {
+    sourceUrl: entry?.sourceUrl ?? factory?.sourceUrl,
+    author: entry?.author ?? factory?.author,
+  };
+}
+
+function getGithubAvatar(author) {
+  const normalized = normalizeAuthor(author);
+  if (!normalized?.url) return undefined;
+
+  const match = normalized.url.match(/^https:\/\/github\.com\/([^/?#]+)/);
+  return match ? `https://github.com/${match[1]}.png?size=64` : undefined;
+}
+
+function normalizeAuthor(author) {
+  if (!author) return undefined;
+
+  if (typeof author === 'string') {
+    return {
+      name: author,
+      url: `https://github.com/${author}`,
+    };
+  }
+
+  return author;
+}
+
 function getQueryParam(name, allowedValues, fallback) {
   const params = new URLSearchParams(window.location.search);
   const value = params.get(name);
@@ -54,6 +85,7 @@ async function createWebGPURenderer(defaultProps) {
 
 function DemoScene({
   onCodeChange,
+  onMetadataChange,
   onParticleCountChange,
   onPresetChange,
   onRendererChange,
@@ -71,6 +103,7 @@ function DemoScene({
         initialPreset={particlePreset}
         initialScene={scenePreset}
         onCodeChange={onCodeChange}
+        onMetadataChange={onMetadataChange}
         onParticleCountChange={onParticleCountChange}
         onPresetChange={onPresetChange}
         onRendererChange={onRendererChange}
@@ -79,6 +112,46 @@ function DemoScene({
         rendererMode={rendererMode}
       />
     </>
+  );
+}
+
+function PresetAttribution({ metadata }) {
+  const particleAuthor = normalizeAuthor(metadata.particle?.author);
+  const sceneAuthor = normalizeAuthor(metadata.scene?.author);
+  const particleAvatar = getGithubAvatar(particleAuthor);
+  const sceneAvatar = getGithubAvatar(sceneAuthor);
+
+  return (
+    <div className="preset-attribution" aria-label="Preset attribution">
+      <div className="preset-attribution-authors">
+        {particleAuthor?.url && (
+          <a href={particleAuthor.url} target="_blank" rel="noreferrer" className="preset-attribution-author">
+            {particleAvatar && <img src={particleAvatar} alt="" />}
+            <span>Particle system by {particleAuthor.name}</span>
+          </a>
+        )}
+
+        {sceneAuthor?.url && (
+          <a href={sceneAuthor.url} target="_blank" rel="noreferrer" className="preset-attribution-author">
+            {sceneAvatar && <img src={sceneAvatar} alt="" />}
+            <span>Scene by {sceneAuthor.name}</span>
+          </a>
+        )}
+      </div>
+
+      <div className="preset-attribution-sources">
+        {metadata.particle?.sourceUrl && (
+          <a href={metadata.particle.sourceUrl} target="_blank" rel="noreferrer">
+            Particle source
+          </a>
+        )}
+        {metadata.scene?.sourceUrl && (
+          <a href={metadata.scene.sourceUrl} target="_blank" rel="noreferrer">
+            Scene source
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -95,6 +168,10 @@ function DemoPage() {
   const [scenePreset, setScenePreset] = useState(() => (
     getQueryParam('scene', SCENE_PRESET_NAMES, 'Checkerboard')
   ));
+  const [metadata, setMetadata] = useState(() => ({
+    particle: getPresetMetadata(particlePresets, particlePreset),
+    scene: getPresetMetadata(scenePresets, scenePreset),
+  }));
 
   const handleRendererChange = useCallback((nextRendererMode) => {
     setQueryParam('renderer', nextRendererMode);
@@ -127,6 +204,7 @@ function DemoPage() {
       >
         <DemoScene
           onCodeChange={setCode}
+          onMetadataChange={setMetadata}
           onParticleCountChange={handleParticleCountChange}
           onPresetChange={handlePresetChange}
           onRendererChange={handleRendererChange}
@@ -139,6 +217,8 @@ function DemoPage() {
       </Canvas>
 
       <div ref={particleCountRef} className="particle-count-monitor">0 particles</div>
+
+      <PresetAttribution metadata={metadata} />
 
       {showCode && (
         <pre className="code-panel">

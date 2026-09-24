@@ -53,7 +53,9 @@ export default async function createSpheres() {
   });
 
   system.name = 'Spheres';
-  system.position.set(0, 1, 0);
+  system.position.set(0, 0, 0);
 
   return system;
 }
+
+createSpheres.author = "rzmay";

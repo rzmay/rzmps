@@ -66,7 +66,9 @@ export default async function createSnow() {
   });
 
   snow.name = 'Snow';
-  snow.position.set(0, 6, 0);
+  snow.position.set(0, 2, 0);
 
   return snow;
 }
+
+createSnow.author = "rzmay";

@@ -14,22 +14,29 @@ import createSimulationSpace from './simulationSpace';
 import loadCornellBox from './cornellBox';
 import createLightProbeScene from './lightProbes';
 
+const SOURCE_ROOT = 'https://github.com/rzmay/rzmps/blob/main/packages/demo/src/presets/scenes';
+
+function withMetadata(factory, fileName, author = factory.author) {
+  factory.sourceUrl = `${SOURCE_ROOT}/${fileName}`;
+  factory.author = author;
+  return factory;
+}
 
 const scenePresets = {
-  Checkerboard: loadCheckerboard,
-  'Cornell Box': loadCornellBox,
-  'Light Probe Room': createLightProbeScene,
-  'Shanghai Bund HDRI': loadHdri(shanghaiBund),
-  'Ferndale Studio HDRI': loadHdri(ferndaleStudio),
-  'Color Lights': loadColorLights,
-  'Collision (builtin/Octree)': createCollisionTest,
-  'Collision (Ammo)': createAmmoCollisionTest,
-  'Collision (Rapier)': createRapierCollisionTest,
-  'Collision (Jolt)': createJoltCollisionTest,
-  'Wind': createWind,
-  'Repulsor / Attractor': createRepulsorAttractor,
-  'Vortex': createVortex,
-  'World Simulation Space': createSimulationSpace,
+  Checkerboard: withMetadata(loadCheckerboard, 'checkerboard.js'),
+  'Cornell Box': withMetadata(loadCornellBox, 'cornellBox.js'),
+  'Light Probe Room': withMetadata(createLightProbeScene, 'lightProbes.js'),
+  'Shanghai Bund HDRI': withMetadata(loadHdri(shanghaiBund), 'hdri.js', loadHdri.author),
+  'Ferndale Studio HDRI': withMetadata(loadHdri(ferndaleStudio), 'hdri.js', loadHdri.author),
+  'Color Lights': withMetadata(loadColorLights, 'colorLights.js'),
+  'Collision (builtin/Octree)': withMetadata(createCollisionTest, 'collisionTest.js'),
+  'Collision (Ammo)': withMetadata(createAmmoCollisionTest, 'collisionAmmo.js'),
+  'Collision (Rapier)': withMetadata(createRapierCollisionTest, 'collisionRapier.js'),
+  'Collision (Jolt)': withMetadata(createJoltCollisionTest, 'collisionJolt.js'),
+  'Wind': withMetadata(createWind, 'wind.js'),
+  'Repulsor / Attractor': withMetadata(createRepulsorAttractor, 'repulsor.js'),
+  'Vortex': withMetadata(createVortex, 'vortex.js'),
+  'World Simulation Space': withMetadata(createSimulationSpace, 'simulationSpace.js'),
 };
 
 export default scenePresets;

@@ -1,8 +1,13 @@
 import * as THREE from 'three';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 export default function loadColorLights(scene) {
   const root = new THREE.Group();
   root.name = 'Color Lights Scene';
+  const particleRoot = createSceneParticleRoot(scene);
 
   // Keep a little ambient light so unlit sides aren't completely black.
   const ambient = new THREE.AmbientLight(0xffffff, 0.15);
@@ -109,6 +114,7 @@ export default function loadColorLights(scene) {
   return {
     update,
     cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
       scene.remove(root);
 
       ground.geometry.dispose();
@@ -120,3 +126,5 @@ export default function loadColorLights(scene) {
     },
   };
 }
+
+loadColorLights.author = "rzmay";

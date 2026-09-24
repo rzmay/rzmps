@@ -65,7 +65,9 @@ export default async function createParticleTrail() {
   });
 
   particleTrail.name = 'Particle Trail';
-  particleTrail.position.set(0, 1, 0);
+  particleTrail.position.set(0, 0, 0);
 
   return particleTrail;
 }
+
+createParticleTrail.author = "rzmay";

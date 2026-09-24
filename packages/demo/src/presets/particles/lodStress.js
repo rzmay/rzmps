@@ -99,7 +99,9 @@ export default async function createLODStress() {
   });
 
   system.name = 'LOD Stress Test';
-  system.position.set(0, 1, 0);
+  system.position.set(0, 0, 0);
 
   return system;
 }
+
+createLODStress.author = "rzmay";

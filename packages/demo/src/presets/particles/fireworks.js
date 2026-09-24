@@ -220,7 +220,9 @@ export default async function createFireworks() {
   });
 
   fireworks.name = 'Fireworks';
-  fireworks.position.set(0, 0.25, 0);
+  fireworks.position.set(0, 0, 0);
 
   return fireworks;
 }
+
+createFireworks.author = "rzmay";

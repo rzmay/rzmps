@@ -5,10 +5,15 @@ import {
   ParticleForceFieldHelper,
   ParticleSystem,
 } from '@rzmps/rzmps';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 export default function createWind(scene) {
   const root = new THREE.Group();
   root.name = 'Wind Scene';
+  const particleRoot = createSceneParticleRoot(scene);
 
   /*
    * WIND TUNNEL
@@ -17,8 +22,8 @@ export default function createWind(scene) {
    */
   const wind = ParticleForceField.Box(
     {
-      direction: new THREE.Vector3(6, 2, 0),
-      drag: 0.1,
+      direction: new THREE.Vector3(36, 12, 0),
+      drag: 0.6,
     },
     4, 4, 6
   );
@@ -95,18 +100,38 @@ export default function createWind(scene) {
     sceneExternalForces.set(particleSystem, externalForces);
   };
 
-  return () => {
-    sceneExternalForces.forEach((externalForces, particleSystem) => {
-      particleSystem.removeModule(externalForces);
-    });
-    sceneExternalForces.clear();
-    delete scene.userData[configureParticleSystemKey];
+  return {
+    gui: (folder) => {
+      const direction = folder.addFolder('Wind Direction');
+      direction.add(wind.direction, 'x', -120, 120, 0.1).name('X').onChange(() => windHelper.update());
+      direction.add(wind.direction, 'y', -120, 120, 0.1).name('Y').onChange(() => windHelper.update());
+      direction.add(wind.direction, 'z', -120, 120, 0.1).name('Z').onChange(() => windHelper.update());
 
-    scene.remove(root);
+      const position = folder.addFolder('Wind Position');
+      position.add(wind.position, 'x', -10, 10, 0.1).name('X').onChange(() => windHelper.update());
+      position.add(wind.position, 'y', -4, 10, 0.1).name('Y').onChange(() => windHelper.update());
+      position.add(wind.position, 'z', -10, 10, 0.1).name('Z').onChange(() => windHelper.update());
 
-    windHelper.dispose();
+      folder.add(wind, 'drag', 0, 12, 0.01).name('Drag');
+      folder.add(windHelper, 'visible').name('Show Helper');
+    },
 
-    ground.geometry.dispose();
-    ground.material.dispose();
+    cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
+      sceneExternalForces.forEach((externalForces, particleSystem) => {
+        particleSystem.removeModule(externalForces);
+      });
+      sceneExternalForces.clear();
+      delete scene.userData[configureParticleSystemKey];
+
+      scene.remove(root);
+
+      windHelper.dispose();
+
+      ground.geometry.dispose();
+      ground.material.dispose();
+    },
   };
 }
+
+createWind.author = "rzmay";

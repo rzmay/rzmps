@@ -73,7 +73,9 @@ export default async function createFireball() {
   });
 
   fireball.name = 'Fireball';
-  fireball.position.set(0, 2, 0);
+  fireball.position.set(0, 0, 0);
 
   return fireball;
 }
+
+createFireball.author = "rzmay";

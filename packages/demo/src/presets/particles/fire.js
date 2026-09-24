@@ -96,7 +96,9 @@ export default async function createFire() {
   });
 
   fire.name = 'Fire';
-  fire.position.set(0, 1, 0);
+  fire.position.set(0, 0, 0);
 
   return fire;
 }
+
+createFire.author = "rzmay";

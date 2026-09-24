@@ -61,7 +61,11 @@ class ExternalForces extends Module {
           force.applyQuaternion(inverseWorldQuaternion);
         }
 
-        particle.acceleration.addScaledVector(force, multiplier);
+        const mass = Number.isFinite(particle.mass) && particle.mass > 0
+          ? particle.mass
+          : 1;
+
+        particle.velocity.addScaledVector(force, (multiplier * deltaTime) / mass);
       });
     }, options);
 

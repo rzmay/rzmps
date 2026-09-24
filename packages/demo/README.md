@@ -11,8 +11,22 @@ Interactive browser demo for
 | GitHub repo | [github.com/rzmay/rzmps](https://github.com/rzmay/rzmps) |
 
 This app is the development playground and showcase for the RZMPS package. It
-uses React, React Three Fiber, Parcel, lil-gui, and the local monorepo packages
+uses React, React Three Fiber, Vite, lil-gui, and the local monorepo packages
 for `@rzmps/rzmps` and the optional physics integrations.
+
+## Table of Contents
+
+- [What It Shows](#what-it-shows)
+- [Demo UI](#demo-ui)
+- [Editor Structure](#editor-structure)
+- [Scene Settings](#scene-settings)
+- [Local Development](#local-development)
+- [Building](#building)
+- [Monorepo Package Notes](#monorepo-package-notes)
+- [Render Deployment](#render-deployment)
+- [Project Structure](#project-structure)
+- [Adding Presets](#adding-presets)
+- [License](#license)
 
 ## What It Shows
 
@@ -47,6 +61,7 @@ It also includes scene presets for testing environment behavior:
 - Repulsor / attractor force fields
 - Vortex force field
 - World simulation space
+- Light probe room based on the Three.js light probe example
 
 ## Demo UI
 
@@ -63,9 +78,79 @@ Use it to:
 - add and edit built-in modules
 - add and edit built-in renderers
 - toggle generated code output with `Show code`
+- open the selected particle and scene preset source files on GitHub
 
 The generated code panel is intended as a quick way to inspect how the current
 particle system is configured.
+
+## Editor Structure
+
+`src/gui/ParticleSystemGUI.js` is the public GUI entry point. Focused editor
+helpers live in `src/gui/particle-system-gui/`.
+
+The editor explicitly controls initial folder state instead of relying on
+`lil-gui` defaults.
+
+Open by default:
+
+- System
+- Each emitter
+- Each module
+- Each renderer
+- Emitter Initial Values
+- LightRenderer Point Light settings
+
+Closed by default:
+
+- Scene Settings
+- Update / Count LOD
+- Emission Shape
+- Bursts and individual bursts
+- Vector2 / Vector3 editors
+- Generic nested object / array / set editors
+- Sprite Material Options
+- Mesh / Trail Material
+- Audio Clips
+
+## Scene Settings
+
+Scene builders are backward compatible and may simply return a cleanup function:
+
+```js
+export function buildScene(scene, renderer) {
+  // setup...
+
+  return () => {
+    // cleanup...
+  };
+}
+```
+
+Scene builders can expose GUI controls by returning a lifecycle object with a
+`gui` hook. This is preferred when controls need access to objects created while
+building the scene:
+
+```js
+export function buildScene(scene, renderer) {
+  const light = new THREE.DirectionalLight(0xffffff, 2);
+  scene.add(light);
+
+  return {
+    cleanup() {
+      scene.remove(light);
+    },
+    gui(folder) {
+      folder.add(light, 'intensity', 0, 10).name('Light Intensity');
+    },
+  };
+}
+```
+
+The optional `update(deltaTime)` lifecycle member works alongside `cleanup` and
+`gui`. A scene builder can also expose static controls with
+`buildScene.gui = (folder, scene, renderer) => { ... }`; lifecycle `gui` takes
+precedence when both are present. For simple mutable state, `gui` may be an
+object and the generic value editor will expose its fields.
 
 ## Local Development
 
@@ -201,6 +286,8 @@ Add a particle preset by creating a factory in `src/presets/particles`, then
 registering it in `src/presets/particles/index.js`.
 
 ```js
+createMyPreset.author = 'github-user';
+
 const particlePresets = {
   Fire: createFire,
   "My Preset": createMyPreset,
@@ -220,6 +307,8 @@ export default function createScene(scene) {
     // Remove scene objects and dispose resources.
   };
 }
+
+createScene.author = 'github-user';
 ```
 
 ## License

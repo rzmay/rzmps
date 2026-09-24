@@ -1,11 +1,16 @@
 import * as THREE from 'three';
 import { ParticleSystem } from '@rzmps/rzmps';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 const RING_SIZE = new THREE.Vector3(5, 0, 5);
 
 export default function createSimulationSpace(scene) {
   const root = new THREE.Group();
   root.name = 'World Simulation Space Scene';
+  const particleRoot = createSceneParticleRoot(scene);
 
   const pixels = new Uint8Array([
     230, 230, 230, 255,
@@ -109,6 +114,7 @@ export default function createSimulationSpace(scene) {
   return {
     update,
     cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
       originals.forEach((original, particleSystem) => {
         particleSystem.simulationSpace = original.simulationSpace;
         particleSystem.position.copy(original.position);
@@ -126,3 +132,5 @@ export default function createSimulationSpace(scene) {
     },
   };
 }
+
+createSimulationSpace.author = "rzmay";

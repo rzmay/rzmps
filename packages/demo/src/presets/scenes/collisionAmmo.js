@@ -3,9 +3,14 @@ import AmmoModule from 'ammo.js/builds/ammo.wasm.js';
 import ammoWasmUrl from 'ammo.js/builds/ammo.wasm.wasm?url';
 import { AmmoCollisionBackend } from '@rzmps/ammo';
 import createCollisionObjects from './createCollisionObjects';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 export default async function createAmmoCollisionTest(scene) {
   const scope = {};
+  const particleRoot = createSceneParticleRoot(scene, [0, 5, 0]);
 
   await AmmoModule.call(scope, {
     locateFile: () => ammoWasmUrl,
@@ -257,6 +262,7 @@ export default async function createAmmoCollisionTest(scene) {
   return {
     update,
     cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
       delete scene.userData.__rzmps_activeCollisionBackend;
 
       objects.group.removeFromParent();
@@ -284,3 +290,5 @@ export default async function createAmmoCollisionTest(scene) {
     },
   };
 }
+
+createAmmoCollisionTest.author = "rzmay";

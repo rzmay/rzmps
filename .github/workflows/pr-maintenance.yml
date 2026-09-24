@@ -1,0 +1,48 @@
+name: PR maintenance
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  generated-updates:
+    name: Add preset author metadata
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Add preset author metadata
+        run: npm run presets:add-author -- --base "origin/${{ github.event.pull_request.base.ref }}" --github-user "${{ github.event.pull_request.user.login }}"
+
+      - name: Commit generated updates
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No generated updates to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/demo/src/presets
+          git commit -m "Add preset author metadata"
+          git push

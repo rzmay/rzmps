@@ -16,24 +16,31 @@ import createSuzanne from './suzanne';
 import createSuzannes from './suzanneInstances';
 import createTags from './tags';
 
+const SOURCE_ROOT = 'https://github.com/rzmay/rzmps/blob/main/packages/demo/src/presets/particles';
+
+function withMetadata(factory, fileName) {
+  factory.sourceUrl = `${SOURCE_ROOT}/${fileName}`;
+  return factory;
+}
+
 const particlePresets = {
-  Fire: createFire,
-  Fireball: createFireball,
-  Smoke: createSmoke,
-  "Additive Smoke": createAdditiveSmoke,
-  Snow: createSnow,
-  Suzanne: createSuzanne,
-  Spheres: createSpheres,
-  "Cube Instances": createCubes,
-  "Suzanne Instances": createSuzannes,
-  "LOD Stress Test": createLODStress,
-  "Particle Trail": createParticleTrail,
-  "Ribbon Trail": createRibbonTrail,
-  Collision: createCollision,
-  "Metal Balls": createCollisionSubEmitters,
-  "Bubbles (Audio)": createBubbles,
-  "Fireworks (Subsystems)": createFireworks,
-  "Cubes and Spheres (Tags)": createTags,
+  Fire: withMetadata(createFire, 'fire.js'),
+  Fireball: withMetadata(createFireball, 'fireball.js'),
+  Smoke: withMetadata(createSmoke, 'smoke.js'),
+  "Additive Smoke": withMetadata(createAdditiveSmoke, 'additiveSmoke.js'),
+  Snow: withMetadata(createSnow, 'snow.js'),
+  Suzanne: withMetadata(createSuzanne, 'suzanne.js'),
+  Spheres: withMetadata(createSpheres, 'spheres.js'),
+  "Cube Instances": withMetadata(createCubes, 'cubes.js'),
+  "Suzanne Instances": withMetadata(createSuzannes, 'suzanneInstances.js'),
+  "LOD Stress Test": withMetadata(createLODStress, 'lodStress.js'),
+  "Particle Trail": withMetadata(createParticleTrail, 'particleTrail.js'),
+  "Ribbon Trail": withMetadata(createRibbonTrail, 'ribbonTrail.js'),
+  Collision: withMetadata(createCollision, 'collision.js'),
+  "Metal Balls": withMetadata(createCollisionSubEmitters, 'collisionSubEmitters.js'),
+  "Bubbles (Audio)": withMetadata(createBubbles, 'bubbles.js'),
+  "Fireworks (Subsystems)": withMetadata(createFireworks, 'fireworks.js'),
+  "Cubes and Spheres (Tags)": withMetadata(createTags, 'tags.js'),
 };
 
 export default particlePresets;

@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { ParticleSystemGUI } from '../gui/ParticleSystemGUI';
 import particlePresets from '../presets/particles';
 import scenePresets from '../presets/scenes';
+import { getSceneParticleRoot } from '../presets/scenes/particleRoot';
 
 const RZMPS_VERSION = import.meta.env.VITE_RZMPS_VERSION;
 
@@ -24,6 +25,7 @@ function ParticleSystemDisplay({
   initialPreset,
   initialScene,
   onCodeChange,
+  onMetadataChange,
   onParticleCountChange,
   onPresetChange,
   onRendererChange,
@@ -44,7 +46,7 @@ function ParticleSystemDisplay({
       if (cancelled) return;
 
       particleSystem.current = system;
-      scene.add(system);
+      getSceneParticleRoot(scene).add(system);
 
       const gui = new ParticleSystemGUI({
         system,
@@ -60,6 +62,7 @@ function ParticleSystemDisplay({
           particleSystem.current = nextSystem;
         },
         onCodeChange,
+        onMetadataChange,
         onPresetChange,
         onRendererChange,
         onSceneChange,
@@ -78,12 +81,13 @@ function ParticleSystemDisplay({
       guiRef.current = null;
 
       if (particleSystem.current) {
-        scene.remove(particleSystem.current);
+        particleSystem.current.removeFromParent();
         particleSystem.current = null;
       }
     };
   }, [
     onCodeChange,
+    onMetadataChange,
     onPresetChange,
     onRendererChange,
     onSceneChange,
@@ -105,6 +109,7 @@ ParticleSystemDisplay.propTypes = {
   initialPreset: PropTypes.string.isRequired,
   initialScene: PropTypes.string.isRequired,
   onCodeChange: PropTypes.func.isRequired,
+  onMetadataChange: PropTypes.func.isRequired,
   onParticleCountChange: PropTypes.func.isRequired,
   onPresetChange: PropTypes.func.isRequired,
   onRendererChange: PropTypes.func.isRequired,

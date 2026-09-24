@@ -2,9 +2,14 @@ import * as THREE from 'three';
 import initJolt from '@barclah/jolt-physics';
 import { JoltCollisionBackend } from '@rzmps/jolt';
 import createCollisionObjects from './createCollisionObjects';
+import {
+  createSceneParticleRoot,
+  disposeSceneParticleRoot,
+} from './particleRoot';
 
 export default async function createJoltCollisionTest(scene) {
   const Jolt = await initJolt();
+  const particleRoot = createSceneParticleRoot(scene, [0, 5, 0]);
 
   const objectFilter = new Jolt.ObjectLayerPairFilterTable(2);
   objectFilter.EnableCollision(0, 1);
@@ -259,6 +264,7 @@ export default async function createJoltCollisionTest(scene) {
   return {
     update,
     cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
       delete scene.userData.__rzmps_activeCollisionBackend;
 
       dynamicBodies.forEach(({ body }) => {
@@ -275,3 +281,5 @@ export default async function createJoltCollisionTest(scene) {
     },
   };
 }
+
+createJoltCollisionTest.author = "rzmay";

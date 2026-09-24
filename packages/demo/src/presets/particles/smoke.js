@@ -75,7 +75,9 @@ export default async function createSmoke() {
   });
 
   smoke.name = 'Smoke';
-  smoke.position.set(0, 1, 0);
+  smoke.position.set(0, 0, 0);
 
   return smoke;
 }
+
+createSmoke.author = "rzmay";
