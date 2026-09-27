@@ -238,7 +238,7 @@ and renderers also accept `useUpdateLOD` and `updateLOD` for per-component
 update-frequency LOD.
 
 Set `useLiveCubemap: true` to render a live environment map from the particle
-system and feed it to sprite renderers using `material: "basic"`, mesh
+system and feed it to sprite renderers using `material: "lit"`, mesh
 renderers, and trail renderers. `cubemapSettings` accepts `LiveCubemapOptions`
 such as `fps`, `resolutionScale`, and `intensity`.
 
@@ -402,11 +402,12 @@ interface SubSystemOptions {
   emitOnCollision: boolean;
   emitOnSpawn: boolean;
   emitOnDeath: boolean;
-  inheritScale: boolean;
-  inheritLifetime: boolean;
-  inheritColor: boolean;
-  inheritAlpha: boolean;
-  inheritMass: boolean;
+  inheritScale: number;
+  inheritLifetime: number;
+  inheritColor: number;
+  inheritAlpha: number;
+  inheritMass: number;
+  inheritVelocity: number;
   impulseAffectsScale: number;
   impulseAffectsSpeed: number;
   impulseAffectsLifetime: number;
@@ -420,14 +421,21 @@ interface SubSystemOptions {
 rocketSystem.addSubSystem(sparkSystem, {
   emitOnDeath: true,
   emitContinuous: false,
-  inheritColor: true,
-  inheritAlpha: true,
-  inheritScale: true,
+  inheritColor: 1,
+  inheritAlpha: 1,
+  inheritScale: 1,
+  inheritVelocity: 0.5,
   impulseAffectsScale: 0.35,
   impulseAffectsAlignment: true,
   impulseThreshhold: 0.2,
 });
 ```
+
+Inheritance options are numeric blend amounts. `0` disables inheritance, `1`
+fully applies the parent particle value, and values between blend between the
+neutral child-authored value and the parent particle value. `inheritVelocity`
+adds a scaled parent velocity to newly spawned subsystem particles and defaults
+to `0`, so subsystems keep their own authored velocity unless requested.
 
 Subsystems are owned and updated by their parent. They can emit continuously
 from parent particles, or trigger emission runs on spawn, collision, or death.
@@ -572,10 +580,17 @@ interface ModuleOptions {
 `updateLOD` controls module update frequency. It skips the module's particle
 work on lower-detail frames while preserving the module API.
 
-| Option     | Description                                                                                                                      |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `priority` | Modules with priority below `0` run before movement. Modules with priority `0` or higher run after movement, sorted by priority. |
-| `tags`     | Restricts the module to particles with matching tags.                                                                            |
+| Option     | Description                                                                                                                                            |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `priority` | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are permanent post-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
+| `tags`     | Restricts the module to particles with matching tags.                                                                                                  |
+
+Priority also determines whether a module's changes persist into the next
+frame. Permanent phases are cached after post-movement modules run. Transient
+render-time modules run after that cache, so they can tint, fade, or scale
+particles for rendering without overwriting the particle's persistent state.
+Collision modules use the permanent post-movement phase so resolved positions
+and velocities survive into the next frame.
 
 ### VelocityOverLifetime
 
@@ -583,9 +598,9 @@ work on lower-detail frames while preserving the module API.
 new VelocityOverLifetime(options?: Partial<VelocityOverLifetimeOptions>)
 
 interface VelocityOverLifetimeOptions extends Partial<ModuleOptions> {
-  linear: DynamicValue<THREE.Vector3>;
-  orbital: DynamicValue<THREE.Vector3>;
-  orbitOffset: DynamicValue<THREE.Vector3>;
+  linear: DynamicVector3;
+  orbital: DynamicVector3;
+  orbitOffset: DynamicVector3;
   radial: DynamicValue<number>;
   speedModifier: DynamicValue<number>;
 }
@@ -600,7 +615,7 @@ and radial terms. `speedModifier` scales particle simulation speed.
 new ForceOverLifetime(options: ForceOverLifetimeOptions)
 
 interface ForceOverLifetimeOptions extends Partial<ModuleOptions> {
-  force: DynamicValue<THREE.Vector3>;
+  force: DynamicVector3;
 }
 ```
 
@@ -612,7 +627,7 @@ Adds a dynamic force to particle acceleration.
 new LimitVelocityOverLifetime(options: LimitVelocityOverLifetimeOptions)
 
 interface LimitVelocityOverLifetimeOptions extends Partial<ModuleOptions> {
-  limit: DynamicValue<THREE.Vector3>;
+  limit: DynamicVector3;
   dampen?: number;
   drag?: DynamicValue<number>;
   multiplyDragBySize?: boolean;
@@ -635,18 +650,30 @@ interface MassOverLifetimeOptions extends Partial<ModuleOptions> {
 
 Changes particle mass over lifetime. `multiplyMassBySize` defaults to `true`.
 
+### SpeedOverLifetime
+
+```ts
+new SpeedOverLifetime(options?: {
+  speed: DynamicValue<number>;
+})
+```
+
+Multiplies particle speed over lifetime. This is equivalent to
+`VelocityOverLifetime`'s `speedModifier`, but is available as a dedicated module
+for the standard parameter roster.
+
 ### ColorOverLifetime
 
 ```ts
 new ColorOverLifetime(options?: ColorOverLifetimeOptions)
 
 interface ColorOverLifetimeOptions extends Partial<ModuleOptions> {
-  color?: DynamicValue<THREE.Color>;
+  color?: DynamicColor;
   alpha?: DynamicValue<number>;
 }
 ```
 
-Multiplies each particle's start color and alpha over lifetime.
+Multiplies each particle's current-frame color and alpha over lifetime.
 
 ### ColorBySpeed
 
@@ -654,15 +681,113 @@ Multiplies each particle's start color and alpha over lifetime.
 new ColorBySpeed(options: ColorBySpeedOptions)
 
 type SpeedRange = [number, number] | { min: number; max: number };
+type ValueByParameter<T> =
+  | T
+  | ((t: number) => ValueByParameter<T>)
+  | [ValueByParameter<T>, ValueByParameter<T>];
 
 interface ColorBySpeedOptions extends Partial<ModuleOptions> {
-  color?: DynamicValue<THREE.Color>;
-  alpha?: DynamicValue<number>;
+  color?: ColorByParameter;
+  alpha?: ValueByParameter<number>;
   speedRange?: SpeedRange;
 }
 ```
 
-Multiplies start color and alpha based on normalized speed within `speedRange`.
+Multiplies current-frame color and alpha based on normalized speed within `speedRange`.
+For `ValueByParameter`, a tuple interpolates between its endpoint values by
+the normalized parameter, a standalone constant scales by the parameter, and a
+function receives the parameter and returns the exact value to use.
+
+### Size Modules
+
+Size modules use `particle.scale.length()` normalized into `sizeRange`.
+
+```ts
+type SizeRange = [number, number] | { min: number; max: number };
+
+new ColorBySize(options?: {
+  color?: ColorByParameter;
+  alpha?: ValueByParameter<number>;
+  sizeRange?: SizeRange;
+})
+
+new RotationBySize(options?: {
+  angularVelocity?: Vector3ByParameter;
+  sizeRange?: SizeRange;
+})
+
+new VelocityBySize(options?: {
+  velocity?: Vector3ByParameter;
+  sizeRange?: SizeRange;
+})
+
+new SpeedBySize(options?: {
+  speed?: ValueByParameter<number>;
+  sizeRange?: SizeRange;
+})
+
+new MassBySize(options?: {
+  mass?: ValueByParameter<number>;
+  sizeRange?: SizeRange;
+})
+
+new DistortionBySize(options?: {
+  distortionStrength?: ValueByParameter<number>;
+  sizeRange?: SizeRange;
+})
+```
+
+These are useful when visual or physical behavior should react to particle size
+after other transient scale modules have run.
+
+### Depth Modules
+
+Depth modules use camera distance normalized into `depthRange`. If no
+`depthRange` is provided, the active camera's `near` and `far` values are used.
+
+```ts
+type DepthRange = [number, number];
+
+new ColorByDepth(options?: {
+  color?: ColorByParameter;
+  alpha?: ValueByParameter<number>;
+  depthRange?: DepthRange;
+})
+
+new ScaleByDepth(options?: {
+  scale?: Vector3ByParameter;
+  depthRange?: DepthRange;
+})
+
+new RotationByDepth(options?: {
+  angularVelocity?: Vector3ByParameter;
+  depthRange?: DepthRange;
+})
+
+new VelocityByDepth(options?: {
+  velocity?: Vector3ByParameter;
+  depthRange?: DepthRange;
+})
+
+new SpeedByDepth(options?: {
+  speed?: ValueByParameter<number>;
+  depthRange?: DepthRange;
+})
+
+new MassByDepth(options?: {
+  mass?: ValueByParameter<number>;
+  depthRange?: DepthRange;
+})
+
+new DistortionByDepth(options?: {
+  distortionStrength?: ValueByParameter<number>;
+  depthRange?: DepthRange;
+})
+```
+
+These are useful with `SpriteRenderer` `sizeAttenuation: false` when you want
+explicit stylistic control over color, scale, distortion, motion, or timing
+across camera depth.
 
 ### ScaleOverLifetime
 
@@ -670,11 +795,33 @@ Multiplies start color and alpha based on normalized speed within `speedRange`.
 new ScaleOverLifetime(options: ScaleOverLifetimeOptions)
 
 interface ScaleOverLifetimeOptions extends Partial<ModuleOptions> {
-  scale: DynamicValue<THREE.Vector3>;
+  scale: DynamicVector3;
 }
 ```
 
-Multiplies each particle's start scale over lifetime.
+Multiplies each particle's current-frame scale over lifetime.
+
+### Distortion Modules
+
+```ts
+new DistortionOverLifetime(options?: {
+  distortionStrength?: DynamicValue<number>;
+})
+
+new DistortionBySpeed(options?: {
+  distortionStrength?: ValueByParameter<number>;
+  speedRange?: SpeedRange;
+})
+
+new DistortionByDepth(options?: {
+  distortionStrength?: ValueByParameter<number>;
+  depthRange?: DepthRange;
+})
+```
+
+Multiplies each particle's `distortionStrength`, which multiplies the
+`SpriteRenderer` material `distortionStrength` before sampling the transmitted
+scene color.
 
 ### ScaleBySpeed
 
@@ -682,12 +829,12 @@ Multiplies each particle's start scale over lifetime.
 new ScaleBySpeed(options: ScaleBySpeedOptions)
 
 interface ScaleBySpeedOptions extends Partial<ModuleOptions> {
-  scale: DynamicValue<THREE.Vector3>;
+  scale: Vector3ByParameter;
   speedRange?: SpeedRange;
 }
 ```
 
-Multiplies start scale based on normalized speed within `speedRange`.
+Multiplies current-frame scale based on normalized speed within `speedRange`.
 
 ### RotationOverLifetime
 
@@ -695,7 +842,7 @@ Multiplies start scale based on normalized speed within `speedRange`.
 new RotationOverLifetime(options: RotationOverLifetimeOptions)
 
 interface RotationOverLifetimeOptions extends Partial<ModuleOptions> {
-  angularVelocity: DynamicValue<THREE.Vector3>;
+  angularVelocity: DynamicVector3;
 }
 ```
 
@@ -707,7 +854,7 @@ Adjusts angular velocity over lifetime.
 new RotationBySpeed(options: RotationBySpeedOptions)
 
 interface RotationBySpeedOptions extends Partial<ModuleOptions> {
-  angularVelocity: DynamicValue<THREE.Vector3>;
+  angularVelocity: Vector3ByParameter;
   speedRange?: SpeedRange;
 }
 ```
@@ -737,7 +884,7 @@ Writes simplex noise into `particle.noise[key]` as `{ noise, noise4d }`.
 new TransformByNoise(options: Partial<TransformByNoiseOptions>)
 
 interface TransformByNoiseOptions extends Partial<ModuleOptions>, NoiseOptions {
-  strength: DynamicValue<THREE.Vector3>;
+  strength: DynamicVector3;
   scrollSpeed: DynamicValue<number>;
   damping: boolean;
 }
@@ -812,10 +959,21 @@ interface AudioOptions extends Partial<ModuleOptions> {
   lowPass: DynamicValue<number>;
   sizeAffectsPitch: number;
   sizeAffectsVolume: number;
+  sizeAffectsHighPass: number;
+  sizeAffectsLowPass: number;
   alphaAffectsPitch: number;
   alphaAffectsVolume: number;
+  alphaAffectsHighPass: number;
+  alphaAffectsLowPass: number;
   speedAffectsPitch: number;
   speedAffectsVolume: number;
+  speedAffectsHighPass: number;
+  speedAffectsLowPass: number;
+  depthAffectsPitch: number;
+  depthAffectsVolume: number;
+  depthAffectsHighPass: number;
+  depthAffectsLowPass: number;
+  dopplerEffect: number;
   impulseAffectsPitch: number;
   impulseAffectsVolume: number;
   impulseAffectsHighPass: number;
@@ -831,11 +989,12 @@ simultaneous event clips from this module. Collision event sounds can use
 `impulseAffectsVolume`; each uses `Math.pow(collision.impulse.length(), effect)`
 as a multiplier on the evaluated pitch or volume. `highPass` and `lowPass`
 create Web Audio `BiquadFilterNode` filters through Three.js.
-`impulseAffectsLowPass` raises the low-pass cutoff as impulse increases, while
-`impulseAffectsHighPass` lowers the high-pass cutoff as impulse increases, so
-gentler collisions can sound more filtered and harder impacts can sound fuller.
-Filters are only applied when both the cutoff value and the corresponding
-`impulseAffects...` value are greater than `0`.
+Pitch, volume, high-pass cutoff, and low-pass cutoff can all be modulated by
+size, alpha, speed, depth, and collision impulse using the corresponding
+`...Affects...` option. `dopplerEffect` modulates pitch from listener-relative
+particle motion: `0` disables the effect, `1` is physically scaled, and larger
+or fractional values exaggerate or soften the shift. Filters are applied
+whenever their evaluated cutoff is greater than `0`.
 `impulseThreshhold` defaults to `0`; collision sounds only play when
 `collision.impulse.length() > impulseThreshhold`.
 
@@ -868,6 +1027,7 @@ new SpriteRenderer(
 
 interface SpriteRendererOptions extends RendererOptions {
   fps: DynamicValue<number>;
+  sizeAttenuation: boolean;
   tileSize: { x: number; y: number };
   tileMargin: { x: number; y: number };
   gridSize: { x: number; y: number };
@@ -875,7 +1035,7 @@ interface SpriteRendererOptions extends RendererOptions {
   randomStartFrame: boolean;
   alphaMap: string | THREE.Texture;
   material: SpriteMaterialType;
-  materialOptions: BasicSpriteOptions | UnlitSpriteOptions;
+  materialOptions: LitSpriteOptions | UnlitSpriteOptions;
   castShadow: boolean;
   softParticleDistance: number;
 }
@@ -887,11 +1047,15 @@ frames, shadows, and soft particles. WebGL point sprites are subject to the
 browser/GPU point-size range, so very large sprites and sprites captured by
 WebGL live cubemaps may not preserve their apparent world size.
 
+`sizeAttenuation` controls whether sprite particles shrink with camera
+distance. It defaults to `true`. Set it to `false` for graphic, screen-space
+effects where particle size should stay visually consistent with distance.
+
 `SpriteMaterialType` is an enum consisting of two string values:
 
 ```ts
 enum SpriteMaterialType {
-  Basic = "basic",
+  Lit = "lit",
   Unlit = "unlit",
 }
 ```
@@ -905,21 +1069,25 @@ interface UnlitSpriteOptions {
   alphaMap: THREE.Texture;
   softParticles: boolean;
   softParticleDistance: number;
+  transmission: number;
+  transmissionMap: THREE.Texture;
+  distortionMap: THREE.Texture;
+  distortionStrength: number;
 }
 ```
 
-`material: "basic"` uses `BasicSpriteOptions`, which extends
+`material: "lit"` uses `LitSpriteOptions`, which extends
 `THREE.ShaderMaterialParameters`:
 
 ```ts
-interface BasicSpriteOptions extends THREE.ShaderMaterialParameters {
+interface LitSpriteOptions extends THREE.ShaderMaterialParameters {
   gridSize: { x: number; y: number };
   frames: number;
   alphaMap: THREE.Texture;
   normalMap: THREE.Texture;
   normalStrength: number;
   normalLighting: number;
-  sphericalNormals: boolean;
+  sphericalNormals: number;
   roughness: number;
   roughnessMap: THREE.Texture;
   metalness: number;
@@ -928,11 +1096,21 @@ interface BasicSpriteOptions extends THREE.ShaderMaterialParameters {
   envIntensity: number;
   softParticles: boolean;
   softParticleDistance: number;
+  transmission: number;
+  transmissionMap: THREE.Texture;
+  distortionMap: THREE.Texture;
+  distortionStrength: number;
 }
 ```
 
 Soft particles read scene depth from the active Three.js renderer and fade near
 intersections. Set `softParticleDistance` above `0` to enable the effect.
+`sphericalNormals` blends generated sphere-like sprite normals from `0` to `1`.
+`transmission` blends sprites with the current scene color, optionally masked by
+`transmissionMap`. `distortionMap` and `distortionStrength` offset the sampled
+scene color for heat haze, refraction, and similar screen-space distortion
+effects. A particle's `distortionStrength` multiplies the material value, so
+emitters and modules can vary distortion per particle.
 
 ### MeshRenderer
 
@@ -983,8 +1161,8 @@ interface TrailRendererOptions extends RendererOptions {
   sizeAffectsWidth: boolean;
   sizeAffectsLifetime: boolean;
   inheritParticleColor: boolean;
-  colorOverLifetime: DynamicValue<THREE.Color>;
-  colorOverTrail: DynamicValue<THREE.Color>;
+  colorOverLifetime: DynamicColor;
+  colorOverTrail: DynamicColor;
   material: THREE.Material;
   materialOptions: THREE.MeshStandardMaterialParameters;
   castShadow: boolean;
@@ -1033,7 +1211,7 @@ sampled by `ExternalForces`.
 ```ts
 interface ForceFieldOptions {
   position: THREE.Vector3;
-  direction: DynamicValue<THREE.Vector3>;
+  direction: DynamicVector3;
   gravity: DynamicValue<number>;
   rotationSpeed: DynamicValue<number>;
   rotationAttraction: DynamicValue<number>;
@@ -1304,6 +1482,17 @@ Build all publishable packages:
 ```bash
 npm run build:modules
 ```
+
+Run the core library regression tests:
+
+```bash
+npm test
+```
+
+The test suite lives in `packages/rzmps/tests` and focuses on behavior that is
+easy to regress while optimizing internals: force application, priority phases,
+depth and size mapping, distortion controls, audio effect calculations,
+mutable-value isolation, and subsystem inheritance.
 
 Run the benchmark suite and print browser-rendered results to the terminal:
 

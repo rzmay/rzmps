@@ -68,6 +68,11 @@ code {
   text-decoration: underline;
 }
 
+.preset-attribution-description {
+  max-width: min(720px, calc(100vw - 32px));
+  color: rgba(255, 255, 255, 0.84);
+}
+
 .preset-attribution-authors,
 .preset-attribution-sources {
   display: flex;

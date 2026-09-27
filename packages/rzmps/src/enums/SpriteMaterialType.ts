@@ -1,5 +1,5 @@
 enum SpriteMaterialType {
-  Basic = 'basic',
+  Lit = 'lit',
   Unlit = 'unlit',
 }
 

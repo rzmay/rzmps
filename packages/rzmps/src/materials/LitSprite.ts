@@ -1,27 +1,23 @@
 import * as THREE from 'three';
-import basicSpriteVert from '../shaders/BasicSprite.vert';
-import basicSpriteFrag from '../shaders/BasicSprite.frag';
+import litSpriteVert from '../shaders/LitSprite.vert';
+import litSpriteFrag from '../shaders/LitSprite.frag';
+import { UnlitSpriteOptions } from './UnlitSprite';
 
-export interface BasicSpriteOptions extends THREE.ShaderMaterialParameters {
-  gridSize: {x: number, y: number};
-  frames: number;
-  alphaMap: THREE.Texture;
+export interface LitSpriteOptions extends UnlitSpriteOptions, THREE.ShaderMaterialParameters {
   normalMap: THREE.Texture;
   normalStrength: number;
   normalLighting: number;
-  sphericalNormals: boolean;
+  sphericalNormals: number;
   roughness: number;
   roughnessMap: THREE.Texture;
   metalness: number;
   metalnessMap: THREE.Texture;
   envMap: THREE.Texture;
   envIntensity: number;
-  softParticles: boolean;
-  softParticleDistance: number;
 }
 
-const BasicSprite = (
-  texture: THREE.Texture, options: Partial<BasicSpriteOptions> = {},
+const LitSprite = (
+  texture: THREE.Texture, options: Partial<LitSpriteOptions> = {},
 ) => {
   const {
     gridSize,
@@ -38,12 +34,16 @@ const BasicSprite = (
     envMap,
     envIntensity = 1.0,
     softParticleDistance = 0,
+    transmission,
+    transmissionMap,
+    distortionMap,
+    distortionStrength,
     ...materialOptions
   } = options;
 
   return new THREE.ShaderMaterial({
-    vertexShader: basicSpriteVert,
-    fragmentShader: basicSpriteFrag,
+    vertexShader: litSpriteVert,
+    fragmentShader: litSpriteFrag,
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.lights,
       {
@@ -61,7 +61,7 @@ const BasicSprite = (
 
         // Normal lighting, if not already set, defaults to 1 if there is a normal map present and 0 if not.
         normalLighting: { value: normalLighting ?? (normalMap ? 1 : 0) },
-        sphericalNormals: { value: sphericalNormals ?? false },
+        sphericalNormals: { value: normalizeSphericalNormals(sphericalNormals) },
 
         roughness: { value: roughness },
         roughnessMap: { value: roughnessMap ?? null },
@@ -74,9 +74,21 @@ const BasicSprite = (
         envIntensity: { value: envIntensity },
         hasEnvMap: { value: Boolean(envMap) },
 
+        transmission: { value: transmission ?? (transmissionMap ? 1 : 0) },
+        transmissionMap: { value: transmissionMap ?? null },
+        hasTransmissionMap: { value: Boolean(transmissionMap) },
+        distortionMap: { value: distortionMap ?? normalMap ?? null },
+        hasDistortionMap: { value: Boolean(distortionMap ?? normalMap) },
+        distortionStrength: { value: distortionStrength ?? normalStrength ?? (distortionMap ?? normalMap ? 1 : 0) },
+
         softParticles: { value: Boolean(softParticleDistance) },
         softParticleDistance: { value: softParticleDistance },
         viewportHeight: { value: 600 },
+        sizeAttenuation: { value: true },
+
+        sceneColorTexture: { value: null },
+        sceneColorResolution: { value: new THREE.Vector2(1, 1) },
+
         sceneDepthTexture: { value: null },
         depthResolution: { value: new THREE.Vector2() },
         depthCameraNear: { value: 0.1 },
@@ -93,4 +105,8 @@ const BasicSprite = (
   });
 };
 
-export default BasicSprite;
+function normalizeSphericalNormals(value: number | boolean | undefined): number {
+  return THREE.MathUtils.clamp(Number(value ?? 0), 0, 1);
+}
+
+export default LitSprite;

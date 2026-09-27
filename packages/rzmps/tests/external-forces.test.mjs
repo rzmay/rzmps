@@ -5,6 +5,14 @@ import {
   Particle,
 } from '../build/index.mjs';
 
+/*
+ * Checks:
+ * - Force fields apply force directly to velocity during the current step.
+ * - Force application divides by particle mass when mass is nonzero.
+ * - Leaving a force field does not leave stale acceleration on the particle.
+ * - Massless particles preserve the old acceleration-field-style behavior.
+ */
+
 const particleSystem = {
   simulationSpace: 'world',
   updateWorldMatrix() {},

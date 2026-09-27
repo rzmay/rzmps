@@ -374,6 +374,7 @@ export class ParticleSystemGUI {
         return {
             sourceUrl: entry?.sourceUrl ?? factory?.sourceUrl,
             author: entry?.author ?? factory?.author,
+            description: entry?.description ?? factory?.description,
         };
     }
 
@@ -481,11 +482,12 @@ export class ParticleSystemGUI {
         folder.add(options, 'emitOnCollision').name('Emit On Collision');
         folder.add(options, 'emitOnSpawn').name('Emit On Spawn');
         folder.add(options, 'emitOnDeath').name('Emit On Death');
-        folder.add(options, 'inheritScale').name('Inherit Scale');
-        folder.add(options, 'inheritLifetime').name('Inherit Lifetime');
-        folder.add(options, 'inheritColor').name('Inherit Color');
-        folder.add(options, 'inheritAlpha').name('Inherit Alpha');
-        folder.add(options, 'inheritMass').name('Inherit Mass');
+        folder.add(options, 'inheritScale', 0, 1, 0.01).name('Inherit Scale');
+        folder.add(options, 'inheritLifetime', 0, 1, 0.01).name('Inherit Lifetime');
+        folder.add(options, 'inheritColor', 0, 1, 0.01).name('Inherit Color');
+        folder.add(options, 'inheritAlpha', 0, 1, 0.01).name('Inherit Alpha');
+        folder.add(options, 'inheritMass', 0, 1, 0.01).name('Inherit Mass');
+        folder.add(options, 'inheritVelocity', 0, 1, 0.01).name('Inherit Velocity');
         folder.add(options, 'impulseAffectsScale', 0, 4, 0.01).name('Impulse Affects Scale');
         folder.add(options, 'impulseAffectsSpeed', 0, 4, 0.01).name('Impulse Affects Speed');
         folder.add(options, 'impulseAffectsLifetime', 0, 4, 0.01).name('Impulse Affects Lifetime');

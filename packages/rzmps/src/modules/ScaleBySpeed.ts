@@ -1,26 +1,25 @@
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
+import type { ValueByParameter } from '../types/ValueByParameter';
+import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 import { SpeedRange } from './ColorBySpeed';
 
 export interface ScaleBySpeedOptions extends Partial<ModuleOptions> {
-    scale: DynamicValue<THREE.Vector3>;
+    scale: ValueByParameter<THREE.Vector3>;
     speedRange?: SpeedRange;
 }
 
 class ScaleBySpeed extends Module {
   constructor(public options: Partial<ScaleBySpeedOptions> = {}) {
     super((particle: Particle) => {
-      particle.scale = particle.start.scale.clone().multiply(
-        evaluateDynamicVector(
+      particle.scale.multiply(
+        evaluateByParameterVector(
           this.options.scale ?? new THREE.Vector3(1, 1, 1),
           this.getSpeedTime(particle.velocity.length()),
-          particle.id
         ),
       );
-    }, options);
+    }, { priority: 1, ...options });
   }
 
   private getSpeedTime(speed: number): number {
@@ -28,7 +27,7 @@ class ScaleBySpeed extends Module {
     const max = Array.isArray(this.options.speedRange) ? this.options.speedRange[1] : this.options.speedRange?.max ?? 1;
     if (max === min) return speed >= max ? 1 : 0;
 
-    return Math.min(Math.max((speed - min) / (max - min), 0), 1);
+    return THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(speed, min, max, 0, 1), 0, 1);
   }
 }
 

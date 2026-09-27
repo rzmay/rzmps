@@ -5,8 +5,8 @@
   "dependencies": {
     "@barclah/jolt-physics": "^0.31.0",
     "@dimforge/rapier3d-compat": "^0.20.0",
-    "@react-three/drei": "^10",
-    "@react-three/fiber": "^9",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.8.0",
     "@rzmps/ammo": "^1.1.0",
     "@rzmps/jolt": "^1.1.0",
     "@rzmps/rapier": "^1.1.0",
@@ -14,7 +14,7 @@
     "@testing-library/jest-dom": "^5.11.4",
     "@testing-library/react": "^11.1.0",
     "@testing-library/user-event": "^12.1.10",
-    "@types/three": "^0.185.4",
+    "@types/three": "^0.186.0",
     "ammo.js": "github:kripken/ammo.js.git#0f92865b2f2cff3602ff2cf203101cde0edf2c37",
     "curves": "^1.1.4",
     "eaz": "^2.0.3",
@@ -23,7 +23,7 @@
     "prop-types": "^15.7.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "three": "^0.185",
+    "three": "^0.186.0",
     "web-vitals": "^1.0.1"
   },
   "scripts": {

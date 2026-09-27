@@ -12,7 +12,6 @@ import {
   TransformByNoise,
 } from '@rzmps/rzmps';
 import smokeAlpha from '../../assets/images/smoke_alpha.jpg?url';
-import { curvePresets } from '../curvePresets';
 
 export default async function createAdditiveSmoke() {
   const smoke = new ParticleSystem({
@@ -48,13 +47,13 @@ export default async function createAdditiveSmoke() {
       }),
       new ScaleOverLifetime({
         scale: (time) => {
-          const size = curvePresets.grow.evaluate(time);
+          const size = (0.35 + (1.8 - 0.35) * time);
           return new THREE.Vector3(size, size, size);
         },
       }),
       new ColorOverLifetime({
         color: new THREE.Color('#ffffff'),
-        alpha: (time) => curvePresets.fadeInOut.evaluate(time),
+        alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
         angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
@@ -62,13 +61,13 @@ export default async function createAdditiveSmoke() {
     ],
     renderers: [
       new SpriteRenderer(Textures.Default, {
-        material: 'basic',
+        material: 'lit',
         alphaMap: smokeAlpha,
         softParticleDistance: 1,
         materialOptions: {
           roughness: 1,
           normalLighting: 0.5,
-          sphericalNormals: true,
+          sphericalNormals: 1,
           blending: THREE.AdditiveBlending,
         }
       }),
@@ -82,3 +81,4 @@ export default async function createAdditiveSmoke() {
 }
 
 createAdditiveSmoke.author = "rzmay";
+createAdditiveSmoke.description = "Sdditive blending with soft particles and layered lifetime color ramps for luminous smoke.";

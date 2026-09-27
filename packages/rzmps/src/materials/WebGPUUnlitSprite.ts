@@ -2,15 +2,23 @@ import * as THREE from 'three';
 import MeshBasicNodeMaterial from 'three/src/materials/nodes/MeshBasicNodeMaterial.js';
 import { cameraFar, cameraNear } from 'three/src/nodes/accessors/Camera.js';
 import { attribute } from 'three/src/nodes/core/AttributeNode.js';
+import { materialOpacity } from 'three/src/nodes/accessors/MaterialNode.js';
 import { positionView } from 'three/src/nodes/accessors/Position.js';
 import { texture } from 'three/src/nodes/accessors/TextureNode.js';
 import { uv } from 'three/src/nodes/accessors/UV.js';
-import { viewportUV } from 'three/src/nodes/display/ScreenNode.js';
 import { perspectiveDepthToViewZ } from 'three/src/nodes/display/ViewportDepthNode.js';
-import { abs, smoothstep } from 'three/src/nodes/math/MathNode.js';
+import { abs, cos, mix, sin, smoothstep } from 'three/src/nodes/math/MathNode.js';
 import { spritesheetUV } from 'three/src/nodes/utils/SpriteSheetUV.js';
 import { float, vec2 } from 'three/src/nodes/tsl/TSLBase.js';
 import type { UnlitSpriteOptions } from './UnlitSprite';
+import {
+  Fn,
+  output,
+  viewportSize,
+  viewportUV,
+  vec4,
+  viewportSharedTexture,
+} from 'three/tsl';
 
 type WebGPUUnlitSpriteOptions = UnlitSpriteOptions & {
   sceneDepthTexture: THREE.DepthTexture;
@@ -26,6 +34,10 @@ const WebGPUUnlitSprite = (
     softParticles,
     softParticleDistance,
     sceneDepthTexture,
+    transmission,
+    transmissionMap,
+    distortionMap,
+    distortionStrength,
     ...materialOptions
   } = options;
 
@@ -41,13 +53,16 @@ const WebGPUUnlitSprite = (
   const spriteUv = spritesheetUV(
     vec2(gridSize?.x ?? 1, gridSize?.y ?? 1),
     uv(),
-    attribute('frame', 'float'),
+    attribute('instanceSpriteData', 'vec4').x,
   );
+
   const spriteColor = texture(pointTexture, spriteUv);
-  let opacity = spriteColor.a.mul(attribute('instanceAlpha', 'float'));
+  const spriteData = attribute('instanceSpriteData', 'vec4');
+  let opacity = spriteColor.a.mul(spriteData.y);
 
   if (alphaMap) {
-    opacity = opacity.mul(texture(alphaMap, spriteUv).r);
+    const alphaSample = texture(alphaMap, spriteUv);
+    opacity = opacity.mul(alphaSample.r).mul(alphaSample.a);
   }
 
   if (softParticleDistance && sceneDepthTexture) {
@@ -56,6 +71,7 @@ const WebGPUUnlitSprite = (
       cameraNear,
       cameraFar,
     );
+
     const particleViewZ = positionView.z;
     const fade = smoothstep(
       float(0),
@@ -66,13 +82,62 @@ const WebGPUUnlitSprite = (
     opacity = opacity.mul(fade);
   }
 
+  const finalAlpha = opacity.mul(materialOpacity).toVar();
+
   material.name = 'RZMPS WebGPU Unlit Sprite';
   material.colorNode = spriteColor.rgb;
-  material.opacityNode = opacity;
+  material.opacityNode = finalAlpha;
   material.alphaTest = 0.001;
+
+  const transmissionAmount = transmission ?? (transmissionMap ? 1 : 0);
+
+  if (transmissionAmount > 0) {
+    const baseTransmission = float(THREE.MathUtils.clamp(transmissionAmount, 0, 1));
+    const transmissionValue = transmissionMap
+      ? baseTransmission.mul(texture(transmissionMap, spriteUv).r)
+      : baseTransmission;
+
+    const transmittedColor = Fn(() => {
+      if (!distortionMap || distortionStrength === 0) {
+        return viewportSharedTexture(viewportUV).rgb;
+      }
+
+      const particleDistortionStrength = spriteData.w;
+      const rotation = spriteData.z;
+
+      distortionMap.colorSpace = THREE.NoColorSpace;
+      const distortionNormal = texture(distortionMap, spriteUv).xyz.mul(2).sub(1);
+      const distortion = vec2(
+        distortionNormal.x.mul(cos(rotation)).add(distortionNormal.y.mul(sin(rotation))),
+        distortionNormal.y.mul(cos(rotation)).sub(distortionNormal.x.mul(sin(rotation))),
+      );
+
+      const distortionPixels = distortion
+        .mul(float(distortionStrength))
+        .mul(particleDistortionStrength)
+        .mul(finalAlpha)
+        .mul(float(4)); // Balancing -- for some reason its 4x weaker
+
+      const distortionUv = distortionPixels.div(viewportSize);
+
+      return viewportSharedTexture(
+        viewportUV.add(distortionUv),
+      ).rgb;
+    })();
+
+    material.outputNode = vec4(
+      mix(output.rgb, transmittedColor, transmissionValue),
+      mix(finalAlpha, float(1), transmissionValue),
+    );
+  }
+
   material.userData.frames = frames ?? 1;
   material.userData.softParticles = softParticles;
   material.userData.softParticleDistance = softParticleDistance;
+  material.userData.transmission = transmissionAmount;
+  material.userData.transmissionMap = transmissionMap;
+  material.userData.distortionMap = distortionMap;
+  material.userData.distortionStrength = distortionStrength;
 
   return material;
 };

@@ -7,7 +7,7 @@ import {
   RotationOverLifetime,
   SpriteRenderer,
 } from '@rzmps/rzmps';
-import { curvePresets } from '../curvePresets';
+import { Easing } from 'eaz';
 
 export default async function createCubes() {
   const colors = new Set([
@@ -46,7 +46,7 @@ export default async function createCubes() {
         angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
       }),
       new ColorOverLifetime({
-        alpha: (t) => curvePresets.fadeOut.evaluate(t)
+        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)))
       })
     ],
 
@@ -69,3 +69,4 @@ export default async function createCubes() {
 }
 
 createCubes.author = "rzmay";
+createCubes.description = "Instanced mesh rendering with randomized cube particles and simple lifetime rotation and fade-out.";

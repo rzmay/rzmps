@@ -70,11 +70,12 @@ export class RendererGUI extends GUIEditorBase {
 
     buildSpriteRenderer(folder, renderer) {
         this.addDynamicValue(folder, renderer, 'fps', 'FPS');
+        folder.add(renderer, 'sizeAttenuation').name('Size Attenuation');
         folder.add(renderer, 'castShadow').name('Cast Shadow');
         folder.add(renderer, 'softParticleDistance', 0).name('Soft Particle Distance');
         folder.add(renderer, 'frames').min(1).step(1).name('Frames').onFinishChange(() => this.reloadSpriteMaterial(renderer));
         const materialState = { material: renderer.materialType };
-        folder.add(materialState, 'material', ['unlit', 'basic']).name('Material').onChange((value) => {
+        folder.add(materialState, 'material', ['unlit', 'lit']).name('Material').onChange((value) => {
             renderer.materialType = value;
             this.reloadSpriteMaterial(renderer);
         });
@@ -117,6 +118,9 @@ export class RendererGUI extends GUIEditorBase {
             ['metalness', 'Metalness', 0, 1, 0.01],
             ['normalStrength', 'Normal Strength', 0, 4, 0.01],
             ['normalLighting', 'Normal Lighting', 0, 1, 0.01],
+            ['sphericalNormals', 'Spherical Normals', 0, 1, 0.01],
+            ['transmission', 'Transmission', 0, 1, 0.01],
+            ['distortionStrength', 'Distortion Strength', -64, 64, 0.1],
             ['envIntensity', 'Env Intensity', 0, 10, 0.01],
         ];
 
@@ -152,6 +156,18 @@ export class RendererGUI extends GUIEditorBase {
             renderer.materialOptions = {
                 ...renderer.materialOptions,
                 metalnessMap: texture,
+            };
+        });
+        this.addTextureUpload(folder, 'Upload Transmission Map', (texture) => {
+            renderer.materialOptions = {
+                ...renderer.materialOptions,
+                transmissionMap: texture,
+            };
+        });
+        this.addTextureUpload(folder, 'Upload Distortion Map', (texture) => {
+            renderer.materialOptions = {
+                ...renderer.materialOptions,
+                distortionMap: texture,
             };
         });
     }

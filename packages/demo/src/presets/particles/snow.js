@@ -8,10 +8,10 @@ import {
   SpriteRenderer,
   TransformByNoise,
   ColorOverLifetime,
+  ColorByDepth,
   Textures,
 } from '@rzmps/rzmps';
 import snowflakeAlpha from '../../assets/images/snowflake_alpha.png?url';
-import { curvePresets } from '../curvePresets';
 
 export default async function createSnow() {
   const snow = new ParticleSystem({
@@ -22,12 +22,12 @@ export default async function createSnow() {
     emitters: [
       new Emitter({
         source: new EmissionShape({
-          geometry: new THREE.BoxGeometry(14, 0.1, 14),
+          geometry: new THREE.BoxGeometry(30, 0.1, 30),
         }),
-        rate: 70,
+        rate: 200,
         radialSpeed: 0,
         initialValues: {
-          lifetime: 8.5,
+          lifetime: 16,
           speed: 1,
           scale: new THREE.Vector3(0.25, 0.25, 0.25),
           color: new THREE.Color('#e9f7ff'),
@@ -50,25 +50,34 @@ export default async function createSnow() {
         angularVelocity: new THREE.Vector3(0.65, 0, 0),
       }),
       new ColorOverLifetime({
-        alpha: (t) => curvePresets.fadeInOut.evaluate(t)
-      })
+        alpha: (t) => ((t) < 0.2 ? (t) / 0.2 : (t) < 0.75 ? 1 - 0.15 * (((t) - 0.2) / 0.55) : 0.85 * (1 - (((t) - 0.75) / 0.25)))
+      }),
+      new ColorByDepth({
+        alpha: [1, 0.5],
+        depthRange: [6, 24],
+      }),
+      new ColorByDepth({
+        alpha: [0, 1],
+        depthRange: [1, 2],
+      }),
     ],
     renderers: [
       new SpriteRenderer(Textures.Default, {
-        material: 'basic',
+        material: 'lit',
         alphaMap: snowflakeAlpha,
         materialOptions: {
           normalLighting: 0.25,
-          sphericalNormals: true
+          sphericalNormals: 1
         }
       }),
     ],
   });
 
   snow.name = 'Snow';
-  snow.position.set(0, 2, 0);
+  snow.position.set(0, 5, 0);
 
   return snow;
 }
 
 createSnow.author = "rzmay";
+createSnow.description = "Depth-based fading, noise-driven motion, warmup, and broad low-cost emission.";

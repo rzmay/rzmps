@@ -3,9 +3,11 @@ import createBubbles from './bubbles';
 import createCollision from './collision';
 import createCollisionSubEmitters from './collisionSubEmitters';
 import createCubes from './cubes';
+import createDopplerBullet from './dopplerBullet';
 import createFire from './fire';
 import createFireball from './fireball';
 import createFireworks from './fireworks';
+import createStylizedDepth from './stylizedDepth';
 import createLODStress from './lodStress';
 import createParticleTrail from './particleTrail';
 import createRibbonTrail from './ribbonTrail';
@@ -33,14 +35,16 @@ const particlePresets = {
   Spheres: withMetadata(createSpheres, 'spheres.js'),
   "Cube Instances": withMetadata(createCubes, 'cubes.js'),
   "Suzanne Instances": withMetadata(createSuzannes, 'suzanneInstances.js'),
+  "Stylized Depth": withMetadata(createStylizedDepth, 'stylizedDepth.js'),
+  "Doppler Bullet": withMetadata(createDopplerBullet, 'dopplerBullet.js'),
   "LOD Stress Test": withMetadata(createLODStress, 'lodStress.js'),
   "Particle Trail": withMetadata(createParticleTrail, 'particleTrail.js'),
   "Ribbon Trail": withMetadata(createRibbonTrail, 'ribbonTrail.js'),
   Collision: withMetadata(createCollision, 'collision.js'),
   "Metal Balls": withMetadata(createCollisionSubEmitters, 'collisionSubEmitters.js'),
-  "Bubbles (Audio)": withMetadata(createBubbles, 'bubbles.js'),
-  "Fireworks (Subsystems)": withMetadata(createFireworks, 'fireworks.js'),
-  "Cubes and Spheres (Tags)": withMetadata(createTags, 'tags.js'),
+  "Bubbles": withMetadata(createBubbles, 'bubbles.js'),
+  "Fireworks": withMetadata(createFireworks, 'fireworks.js'),
+  "Cubes and Spheres": withMetadata(createTags, 'tags.js'),
 };
 
 export default particlePresets;

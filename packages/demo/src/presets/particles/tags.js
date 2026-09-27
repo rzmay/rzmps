@@ -10,7 +10,7 @@ import {
   ScaleOverLifetime,
   Textures,
 } from '@rzmps/rzmps';
-import { curvePresets } from '../curvePresets';
+import { Easing } from 'eaz';
 
 export default async function createTags() {
   const colors = new Set([
@@ -51,12 +51,12 @@ export default async function createTags() {
         tags: 'cubes',
       }),
       new ColorOverLifetime({
-        alpha: (t) => curvePresets.fadeOut.evaluate(t),
+        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1))),
         tags: 'cubes',
       }),
       new ScaleOverLifetime({
         scale: (time) => {
-          const size = curvePresets.grow.evaluate(time);
+          const size = (0.35 + (1.8 - 0.35) * time);
           return new THREE.Vector3(size, size, size);
         },
         tags: 'spheres'
@@ -66,11 +66,11 @@ export default async function createTags() {
 
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'basic',
+        material: 'lit',
         tags: 'spheres',
         materialOptions: {
           roughness: 0.5,
-          sphericalNormals: true,
+          sphericalNormals: 1,
           normalLighting: 1,
         },
         castShadow: true,
@@ -94,3 +94,4 @@ export default async function createTags() {
 }
 
 createTags.author = "rzmay";
+createTags.description = "Tag-based module and renderer filtering by mixing cubes and spheres in one particle system.";

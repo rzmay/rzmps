@@ -2,12 +2,17 @@ import * as THREE from 'three';
 import unlitSpriteVert from '../shaders/UnlitSprite.vert';
 import unlitSpriteFrag from '../shaders/UnlitSprite.frag';
 
+// TODO: Should all maps be animated? Distortion?
 export interface UnlitSpriteOptions {
   gridSize: {x: number, y: number};
   frames: number;
   alphaMap: THREE.Texture;
   softParticles: boolean;
   softParticleDistance: number;
+  distortionMap: THREE.Texture;
+  distortionStrength: number;
+  transmission: number;
+  transmissionMap: THREE.Texture;
 }
 
 const UnlitSprite = (
@@ -18,6 +23,10 @@ const UnlitSprite = (
     frames,
     alphaMap,
     softParticleDistance = 0,
+    transmission,
+    transmissionMap,
+    distortionMap,
+    distortionStrength,
     ...materialOptions
   } = options;
 
@@ -30,9 +39,22 @@ const UnlitSprite = (
       n_frames: { value: frames ?? 1 },
       alphaMap: { value: alphaMap ?? null },
       hasAlphaMap: { value: Boolean(alphaMap) },
+
+      transmission: { value: transmission ?? (transmissionMap ? 1 : 0) },
+      transmissionMap: { value: transmissionMap ?? null },
+      hasTransmissionMap: { value: Boolean(transmissionMap) },
+      distortionMap: { value: distortionMap ?? null },
+      hasDistortionMap: { value: Boolean(distortionMap) },
+      distortionStrength: { value: distortionStrength ?? (distortionMap ? 1 : 0) },
+
       softParticles: { value: Boolean(softParticleDistance) },
       softParticleDistance: { value: softParticleDistance },
       viewportHeight: { value: 600 },
+      sizeAttenuation: { value: true },
+
+      sceneColorTexture: { value: null },
+      sceneColorResolution: { value: new THREE.Vector2(1, 1) },
+
       sceneDepthTexture: { value: null },
       depthResolution: { value: new THREE.Vector2() },
       depthCameraNear: { value: 0.1 },

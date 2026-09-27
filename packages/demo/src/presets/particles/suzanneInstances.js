@@ -8,7 +8,7 @@ import {
 } from '@rzmps/rzmps';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import suzanneModel from '../../assets/models/suzanne.glb?url';
-import { curvePresets } from '../curvePresets';
+import { Easing } from 'eaz';
 
 
 export default async function createSuzannes() {
@@ -59,7 +59,7 @@ export default async function createSuzannes() {
 
     modules: [
       new ColorOverLifetime({
-        alpha: (t) => curvePresets.fadeOut.evaluate(t)
+        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)))
       })
     ],
 
@@ -82,3 +82,4 @@ export default async function createSuzannes() {
 }
 
 createSuzannes.author = "rzmay";
+createSuzannes.description = "Mesh instancing with Suzanne particles and randomized transforms.";

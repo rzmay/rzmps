@@ -11,7 +11,7 @@ import {
   TransformByNoise,
   VelocityOverLifetime,
 } from '@rzmps/rzmps';
-import { curvePresets } from '../curvePresets';
+import { Easing } from 'eaz';
 
 const moduleUpdateLOD = {
   distance: 10,
@@ -79,18 +79,18 @@ export default async function createLODStress() {
       }),
       new ScaleOverLifetime({
         scale: (time) => {
-          const size = curvePresets.fadeInOut.evaluate(time);
+          const size = ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25)));
           return new THREE.Vector3(size, size, size);
         },
       }),
       new ColorOverLifetime({
-        alpha: (time) => curvePresets.fadeOut.evaluate(time),
+        alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
     ],
 
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'basic',
+        material: 'lit',
         softParticleDistance: 1,
         countLOD,
         compensateSize: true,
@@ -105,3 +105,4 @@ export default async function createLODStress() {
 }
 
 createLODStress.author = "rzmay";
+createLODStress.description = "Emitter and renderer LOD controls under a dense particle load.";

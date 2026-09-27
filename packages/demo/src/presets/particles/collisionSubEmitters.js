@@ -35,7 +35,7 @@ export default async function createCollisionSubEmitters() {
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.25),
-        rate: 30,
+        rate: 5,
         radialSpeed: [1, 5],
         initialValues: {
           lifetime: 8,
@@ -65,12 +65,12 @@ export default async function createCollisionSubEmitters() {
     ],
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'basic',
+        material: 'lit',
         castShadow: true,
         materialOptions: {
           roughness: 0.2,
           metalness: 0.6,
-          sphericalNormals: true,
+          sphericalNormals: 1,
           normalLighting: 1,
         },
       }),
@@ -129,7 +129,7 @@ export default async function createCollisionSubEmitters() {
   collision.addSubSystem(sparks, {
     emitContinuous: false,
     emitOnCollision: true,
-    inheritLifetime: false,
+    inheritLifetime: 0,
     impulseAffectsScale: 0.1,
     impulseAffectsSpeed: 0.45,
     impulseAffectsAlignment: true,
@@ -143,3 +143,4 @@ export default async function createCollisionSubEmitters() {
 }
 
 createCollisionSubEmitters.author = "rzmay";
+createCollisionSubEmitters.description = "Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces.";

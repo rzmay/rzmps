@@ -33,18 +33,31 @@ export interface AudioOptions extends Partial<ModuleOptions> {
 
   sizeAffectsPitch: number;
   sizeAffectsVolume: number;
+  sizeAffectsHighPass: number;
+  sizeAffectsLowPass: number;
 
   alphaAffectsPitch: number;
   alphaAffectsVolume: number;
+  alphaAffectsHighPass: number;
+  alphaAffectsLowPass: number;
 
   speedAffectsPitch: number;
   speedAffectsVolume: number;
+  speedAffectsHighPass: number;
+  speedAffectsLowPass: number;
+
+  depthAffectsPitch: number;
+  depthAffectsVolume: number;
+  depthAffectsHighPass: number;
+  depthAffectsLowPass: number;
 
   impulseAffectsPitch: number;
   impulseAffectsVolume: number;
   impulseAffectsHighPass: number;
   impulseAffectsLowPass: number;
   impulseThreshhold: number;
+
+  dopplerEffect: number;
 }
 
 interface ParticleAudio {
@@ -80,10 +93,26 @@ class Audio extends Module {
 
   sizeAffectsPitch: number;
   sizeAffectsVolume: number;
+  sizeAffectsHighPass: number;
+  sizeAffectsLowPass: number;
+
   alphaAffectsPitch: number;
   alphaAffectsVolume: number;
+  alphaAffectsHighPass: number;
+  alphaAffectsLowPass: number;
+
   speedAffectsPitch: number;
   speedAffectsVolume: number;
+  speedAffectsHighPass: number;
+  speedAffectsLowPass: number;
+
+  depthAffectsPitch: number;
+  depthAffectsVolume: number;
+  depthAffectsHighPass: number;
+  depthAffectsLowPass: number;
+
+  dopplerEffect: number;
+
   impulseAffectsPitch: number;
   impulseAffectsVolume: number;
   impulseAffectsHighPass: number;
@@ -94,9 +123,19 @@ class Audio extends Module {
   private _particleAudio = new Map<string, ParticleAudio>();
   private _eventAudio = new Set<THREE.PositionalAudio>();
   private _setupCallbacks: boolean = false;
+  private _cameraPosition = new THREE.Vector3();
+  private _cameraDepthRange: [number, number] = [0, 100];
+  private _relativePositions = new Map<string, THREE.Vector3>();
+  private _relativePosition = new THREE.Vector3();
+
+  // Deltatime stored for doppler effect calculation
+  private _deltaTime = 0;
 
   constructor(options: Partial<AudioOptions> = {}) {
-    super((particle) => this._updateParticle(particle), options);
+    super((particle) => this._updateParticle(particle), {
+      ...options,
+      priority: options.priority ?? 0.5,
+    });
 
     this.listener = options.listener;
 
@@ -130,22 +169,51 @@ class Audio extends Module {
 
     this.sizeAffectsPitch = Math.max(0, options.sizeAffectsPitch ?? 0);
     this.sizeAffectsVolume = Math.max(0, options.sizeAffectsVolume ?? 0);
+    this.sizeAffectsHighPass = Math.max(0, options.sizeAffectsHighPass ?? 0);
+    this.sizeAffectsLowPass = Math.max(0, options.sizeAffectsLowPass ?? 0);
 
     this.alphaAffectsPitch = Math.max(0, options.alphaAffectsPitch ?? 0);
     this.alphaAffectsVolume = Math.max(0, options.alphaAffectsVolume ?? 0);
+    this.alphaAffectsHighPass = Math.max(0, options.alphaAffectsHighPass ?? 0);
+    this.alphaAffectsLowPass = Math.max(0, options.alphaAffectsLowPass ?? 0);
 
     this.speedAffectsPitch = Math.max(0, options.speedAffectsPitch ?? 0);
     this.speedAffectsVolume = Math.max(0, options.speedAffectsVolume ?? 0);
+    this.speedAffectsHighPass = Math.max(0, options.speedAffectsHighPass ?? 0);
+    this.speedAffectsLowPass = Math.max(0, options.speedAffectsLowPass ?? 0);
+
+    this.depthAffectsPitch = Math.max(0, options.depthAffectsPitch ?? 0);
+    this.depthAffectsVolume = Math.max(0, options.depthAffectsVolume ?? 0);
+    this.depthAffectsHighPass = Math.max(0, options.depthAffectsHighPass ?? 0);
+    this.depthAffectsLowPass = Math.max(0, options.depthAffectsLowPass ?? 0);
 
     this.impulseAffectsPitch = Math.max(0, options.impulseAffectsPitch ?? 0);
     this.impulseAffectsVolume = Math.max(0, options.impulseAffectsVolume ?? 0);
     this.impulseAffectsHighPass = Math.max(0, options.impulseAffectsHighPass ?? 0);
     this.impulseAffectsLowPass = Math.max(0, options.impulseAffectsLowPass ?? 0);
     this.impulseThreshhold = Math.max(0, options.impulseThreshhold ?? 0);
+
+    this.dopplerEffect = Math.max(0, options.dopplerEffect ?? 0);
   }
 
-  public prepare(system: ParticleSystem): void {
+  public prepare(system: ParticleSystem, deltaTime: number): void {
     this._system = system;
+    this._deltaTime = deltaTime;
+
+    if (system.sceneCamera) {
+      system.sceneCamera.getWorldPosition(this._cameraPosition);
+
+      if (system.simulationSpace !== 'world') {
+        system.worldToLocal(this._cameraPosition);
+      }
+
+      if (
+        system.sceneCamera instanceof THREE.PerspectiveCamera
+        || system.sceneCamera instanceof THREE.OrthographicCamera
+      ) {
+        this._cameraDepthRange = [system.sceneCamera.near, system.sceneCamera.far];
+      }
+    }
 
     if (!this._setupCallbacks) {
       system.onCollision(
@@ -287,6 +355,8 @@ class Audio extends Module {
         * this._getEffect(particle.scale.length(), this.sizeAffectsPitch)
         * this._getEffect(particle.alpha, this.alphaAffectsPitch)
         * this._getEffect(particle.velocity.length() * particle.speed, this.speedAffectsPitch)
+        * this._getEffect(this._getDepthTime(particle), this.depthAffectsPitch)
+        * this._getDopplerEffect(particle)
         * this._getEffect(collisionHit?.impulse.length() ?? 1, this.impulseAffectsPitch),
     );
   }
@@ -304,6 +374,7 @@ class Audio extends Module {
         * this._getEffect(particle.scale.length(), this.sizeAffectsVolume)
         * this._getEffect(particle.alpha, this.alphaAffectsVolume)
         * this._getEffect(particle.velocity.length(), this.speedAffectsVolume)
+        * this._getEffect(this._getDepthTime(particle), this.depthAffectsVolume)
         * this._getEffect(collisionHit?.impulse.length() ?? 1, this.impulseAffectsVolume),
     );
   }
@@ -344,8 +415,13 @@ class Audio extends Module {
       this.highPass,
       particle,
       collisionHit,
-      this.impulseAffectsHighPass,
-      -1,
+      {
+        size: this.sizeAffectsHighPass,
+        alpha: this.alphaAffectsHighPass,
+        speed: this.speedAffectsHighPass,
+        depth: this.depthAffectsHighPass,
+        impulse: this.impulseAffectsHighPass,
+      },
     );
   }
 
@@ -354,8 +430,13 @@ class Audio extends Module {
       this.lowPass,
       particle,
       collisionHit,
-      this.impulseAffectsLowPass,
-      1,
+      {
+        size: this.sizeAffectsLowPass,
+        alpha: this.alphaAffectsLowPass,
+        speed: this.speedAffectsLowPass,
+        depth: this.depthAffectsLowPass,
+        impulse: this.impulseAffectsLowPass,
+      },
     );
   }
 
@@ -363,13 +444,14 @@ class Audio extends Module {
     value: DynamicValue<number>,
     particle: Particle,
     collisionHit: CollisionHit | undefined,
-    impulseEffect: number,
-    direction: 1 | -1,
+    effects: {
+      size: number;
+      alpha: number;
+      speed: number;
+      depth: number;
+      impulse: number;
+    },
   ): number {
-    if (impulseEffect <= 0) return 0;
-
-    const impulse = collisionHit?.impulse.length() ?? 1;
-    const multiplier = this._getEffect(impulse, impulseEffect);
     const base = evaluateDynamicNumber(
       value,
       particle.time,
@@ -378,9 +460,59 @@ class Audio extends Module {
 
     if (base <= 0) return 0;
 
-    const frequency = base * (direction > 0 ? multiplier : 1 / Math.max(Number.EPSILON, multiplier));
+    const frequency = base
+      * this._getEffect(particle.scale.length(), effects.size)
+      * this._getEffect(particle.alpha, effects.alpha)
+      * this._getEffect(particle.velocity.length(), effects.speed)
+      * this._getEffect(this._getDepthTime(particle), effects.depth)
+      * this._getEffect(collisionHit?.impulse.length() ?? 1, effects.impulse);
 
     return Math.max(0, frequency);
+  }
+
+  private _getDepthTime(particle: Particle): number {
+    const min = this._cameraDepthRange[0];
+    const max = this._cameraDepthRange[1];
+    if (max === min) {
+      return particle.position.distanceTo(this._cameraPosition) >= max ? 1 : 0;
+    }
+
+    return THREE.MathUtils.clamp(
+      THREE.MathUtils.mapLinear(
+        particle.position.distanceTo(this._cameraPosition),
+        min,
+        max,
+        0,
+        1,
+      ),
+      0,
+      1,
+    );
+  }
+
+  private _getDopplerEffect(particle: Particle): number {
+    if (this.dopplerEffect <= 0 || this._deltaTime <= 0) return 1;
+
+    this._relativePosition
+      .copy(particle.position)
+      .sub(this._cameraPosition);
+
+    const previous = this._relativePositions.get(particle.id);
+    if (!previous) {
+      this._relativePositions.set(particle.id, this._relativePosition.clone());
+      return 1;
+    }
+
+    const previousDistance = previous.length();
+    const currentDistance = this._relativePosition.length();
+    previous.copy(this._relativePosition);
+
+    const velocityAwayFromListener = (currentDistance - previousDistance) / this._deltaTime;
+    const speedOfSound = 343;
+    const denominator = Math.max(1, speedOfSound + velocityAwayFromListener);
+    const physicalFactor = THREE.MathUtils.clamp(speedOfSound / denominator, 0.25, 4);
+
+    return Math.max(0, 1 + (physicalFactor - 1) * this.dopplerEffect);
   }
 
   private _createFilter(type: BiquadFilterType): BiquadFilterNode | undefined {
@@ -414,6 +546,7 @@ class Audio extends Module {
     this._particleAudio.forEach((_state, id) => {
       if (!activeParticles.has(id)) {
         this._removeParticleAudio(id);
+        this._relativePositions.delete(id);
       }
     });
 
@@ -436,6 +569,7 @@ class Audio extends Module {
 
     state.audio.removeFromParent();
     this._particleAudio.delete(id);
+    this._relativePositions.delete(id);
   }
 
   public cleanup(): void {
@@ -452,6 +586,7 @@ class Audio extends Module {
     });
 
     this._eventAudio.clear();
+    this._relativePositions.clear();
   }
 }
 

@@ -24,7 +24,7 @@ import launchSound1Url from '../../assets/audio/firework_launch_1.mp3?url';
 import launchSound2Url from '../../assets/audio/firework_launch_2.mp3?url';
 import blastSound1Url from '../../assets/audio/firework_blast_1.mp3?url';
 import blastSound2Url from '../../assets/audio/firework_blast_2.mp3?url';
-import { curvePresets } from '../curvePresets';
+import { Easing } from 'eaz';
 
 const withAudioSource = (buffer, url) => {
   Object.defineProperty(buffer, '__rzmpsAudioBufferSource', {
@@ -80,7 +80,11 @@ export default async function createFireworks() {
     ],
     renderers: [
       new SpriteRenderer(fireworkSprite, {
-        material: 'basic',
+        material: 'lit',
+        materialOptions: {
+          normalLighting: 1.0,
+          sphericalNormals: 1.0,
+        }
       }),
     ],
   });
@@ -116,13 +120,13 @@ export default async function createFireworks() {
       }),
       new ScaleOverLifetime({
         scale: (time) => {
-          const size = curvePresets.grow.evaluate(time);
+          const size = (0.35 + (1.8 - 0.35) * time);
           return new THREE.Vector3(size, size, size);
         },
       }),
       new ColorOverLifetime({
         color: new THREE.Color('#ffffff'),
-        alpha: (time) => curvePresets.fadeOut.evaluate(time),
+        alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
       new RotationOverLifetime({
         angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
@@ -130,13 +134,13 @@ export default async function createFireworks() {
     ],
     renderers: [
       new SpriteRenderer(Textures.Default, {
-        material: 'basic',
+        material: 'lit',
         alphaMap: smokeAlpha,
         softParticleDistance: 1,
         materialOptions: {
           roughness: 1,
           normalLighting: 0.5,
-          sphericalNormals: true,
+          sphericalNormals: 1,
         }
       }),
     ],
@@ -177,7 +181,7 @@ export default async function createFireworks() {
         lifetime: 0.1,
         minimumVertexDistance: 0.02,
         dieWithParticles: false,
-        width: (t) => 0.05 * curvePresets.fadeOut.evaluate(t),
+        width: (t) => 0.05 * (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1))),
         inheritParticleColor: true,
         alpha: 0.5,
         textureMode: TrailTextureMode.Stretch,
@@ -207,16 +211,16 @@ export default async function createFireworks() {
 
   fireworks.addSubSystem(smoke, {
     emitContinuous: true,
-    inheritLifetime: false,
-    inheritColor: false,
-    inheritScale: false,
+    inheritLifetime: 0,
+    inheritColor: 0,
+    inheritScale: 0,
   });
 
   fireworks.addSubSystem(sparkles, {
     emitOnDeath: true,
-    inheritLifetime: false,
-    inheritColor: true,
-    inheritScale: false,
+    inheritLifetime: 0,
+    inheritColor: 1,
+    inheritScale: 0,
   });
 
   fireworks.name = 'Fireworks';
@@ -226,3 +230,4 @@ export default async function createFireworks() {
 }
 
 createFireworks.author = "rzmay";
+createFireworks.description = "Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks.";

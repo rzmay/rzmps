@@ -21,4 +21,5 @@ export interface InitialParticleValues {
     color: DynamicValue<THREE.Color>
     alpha: DynamicValue<number>;
     mass: DynamicValue<number>;
+    distortionStrength: DynamicValue<number>;
 }

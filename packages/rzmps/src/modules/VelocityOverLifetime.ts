@@ -24,7 +24,7 @@ class VelocityOverLifetime extends Module {
       }
 
       const offset = evaluateDynamicVector(this.options.orbitOffset ?? new THREE.Vector3(), time, particle.id).clone();
-      const center = particle.start.position.clone().add(offset);
+      const center = particle.orbitCenter.clone().add(offset);
       const fromCenter = particle.position.clone().sub(center);
 
       if (this.options.orbital !== undefined && fromCenter.lengthSq() > 0) {

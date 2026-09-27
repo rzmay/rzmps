@@ -10,6 +10,9 @@ templates for the RZMPS monorepo.
 - `CODE_OF_CONDUCT.md`: community behavior expectations.
 - `ISSUE_TEMPLATE/`: templates for reporting bugs and requesting features.
 - `PULL_REQUEST_TEMPLATE/`: templates for different contribution types.
+- `workflows/ci.yml`: runs core tests, demo build, and whitespace checks.
+- `workflows/pr-maintenance.yml`: adds missing preset author metadata on
+  same-repository pull requests.
 
 ## Before Opening an Issue
 
@@ -23,6 +26,6 @@ templates for the RZMPS monorepo.
 ## Before Opening a Pull Request
 
 - Keep the change focused.
-- Run the relevant build or benchmark command.
+- Run `npm test` plus the relevant build or benchmark command.
 - Update docs and presets when behavior changes.
 - Mention any follow-up work that should not block the pull request.

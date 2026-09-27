@@ -41,11 +41,11 @@ export default async function createSpheres() {
 
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'basic',
+        material: 'lit',
 
         materialOptions: {
           roughness: 0.5,
-          sphericalNormals: true,
+          sphericalNormals: 1,
           normalLighting: 1,
         },
       }),
@@ -59,3 +59,4 @@ export default async function createSpheres() {
 }
 
 createSpheres.author = "rzmay";
+createSpheres.description = "Lit sprite particles with spherical normals for a 3D effect.";

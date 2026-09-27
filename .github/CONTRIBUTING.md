@@ -46,6 +46,12 @@ Build the demo:
 npm run build --workspace packages/demo
 ```
 
+Run core regression tests:
+
+```bash
+npm test
+```
+
 Run browser benchmarks:
 
 ```bash
@@ -69,6 +75,11 @@ npm run presets:add-author -- --github-user your-github-name
 The PR maintenance workflow runs on same-repository pull requests and attempts
 to add missing author metadata to newly added demo preset files based on the PR
 author's GitHub username.
+
+The CI workflow runs `npm test`, builds the demo, and checks whitespace on pull
+requests and pushes to `main`. Benchmarks are intentionally not part of CI by
+default because they are hardware- and browser-environment-sensitive; include a
+benchmark report in the pull request when changing performance-sensitive code.
 
 Preset author metadata is optional and should be attached to the loader function:
 

@@ -8,7 +8,7 @@ uniform bool hasNormalMap;
 uniform float normalStrength;
 
 uniform float normalLighting;
-uniform bool sphericalNormals;
+uniform float sphericalNormals;
 
 uniform float roughness;
 uniform sampler2D roughnessMap;
@@ -16,6 +16,14 @@ uniform bool hasRoughnessMap;
 uniform float metalness;
 uniform sampler2D metalnessMap;
 uniform bool hasMetalnessMap;
+
+uniform float transmission;
+uniform sampler2D transmissionMap;
+uniform bool hasTransmissionMap;
+
+uniform sampler2D distortionMap;
+uniform bool hasDistortionMap;
+uniform float distortionStrength;
 
 uniform vec2 gridSize;
 uniform int n_frames;
@@ -26,6 +34,10 @@ uniform bool hasEnvMap;
 
 uniform bool softParticles;
 uniform float softParticleDistance;
+
+uniform sampler2D sceneColorTexture;
+uniform vec2 sceneColorResolution;
+
 uniform sampler2D sceneDepthTexture;
 uniform vec2 depthResolution;
 uniform float depthCameraNear;
@@ -34,9 +46,11 @@ uniform float depthCameraFar;
 varying vec4 vColor;
 varying float aspectRatio;
 varying float angle;
+varying float vDistortionStrength;
 
 varying vec3 vViewPosition;
 varying vec3 vNormal;
+varying vec3 vWorldPosition;
 
 flat in int fragFrame;
 
@@ -216,13 +230,16 @@ void main()
 
     if (hasAlphaMap)
     {
+        vec4 alphaSample =
+            texture2D(alphaMap, spriteCoord);
+
         baseColor.a *=
-            texture2D(alphaMap, spriteCoord).r;
+            alphaSample.r
+            * alphaSample.a;
     }
 
     if (baseColor.a <= 0.0)
         discard;
-
 
     //
     // NORMAL
@@ -231,7 +248,7 @@ void main()
     vec3 normal =
         normalize(vNormal);
 
-    if (sphericalNormals)
+    if (sphericalNormals > 0.0)
     {
         vec2 p =
             rotatedLocalCoord * 2.0 - 1.0;
@@ -240,15 +257,21 @@ void main()
 
         if (r2 <= 1.0)
         {
-            normal = normalize(vec3(
+            vec3 sphereNormal = normalize(vec3(
                 p.x,
                 -p.y,
                 sqrt(1.0 - r2)
             ));
+
+            normal = normalize(mix(
+                normal,
+                sphereNormal,
+                clamp(sphericalNormals, 0.0, 1.0)
+            ));
         }
     }
 
-    if (hasNormalMap)
+    if (hasNormalMap && normalStrength > 0.0)
     {
         vec3 mapNormal =
             texture2D(
@@ -265,18 +288,66 @@ void main()
 
         mapNormal.xy *= normalStrength;
 
-        normal =
-            normalize(mapNormal);
+        normal *= normalize(mapNormal);
     }
 
+    //
+    // TRANSMISSION / DISTORTION
+    //
+
+    float transmissionValue =
+        transmission;
+
+    if (hasTransmissionMap)
+    {
+        transmissionValue *=
+            texture2D(
+                transmissionMap,
+                spriteCoord
+            ).r;
+    }
+
+    transmissionValue =
+        clamp(
+            transmissionValue,
+            0.0,
+            1.0
+        );
+
+    vec2 distortion =
+        vec2(0.0);
+
+    if (transmissionValue > 0.0)
+    {
+        vec3 distortionNormal;
+        if (hasDistortionMap)
+        {
+            distortionNormal =
+                texture2D(
+                    distortionMap,
+                    spriteCoord
+                ).xyz * 2.0 - 1.0;
+        }
+        else
+        {
+            distortionNormal = normal;
+        }
+
+        distortionNormal.xy =
+            rotate_vector(
+                distortionNormal.xy,
+                angle
+            );
+
+        distortion =
+            distortionNormal.xy;
+    }
 
     //
-    // ROUGHNESS -> BLINN/PHONG PARAMETERS
+    // ROUGHNESS
     //
 
-    float roughnessValue =
-        roughness;
-
+    float roughnessValue = roughness;
     if (hasRoughnessMap)
     {
         roughnessValue *=
@@ -286,8 +357,7 @@ void main()
             ).r;
     }
 
-    roughnessValue =
-        clamp(roughnessValue, 0.0, 1.0);
+    roughnessValue = clamp(roughnessValue, 0.0, 1.0);
 
     float metalnessValue =
         metalness;
@@ -301,8 +371,7 @@ void main()
             ).r;
     }
 
-    metalnessValue =
-        clamp(metalnessValue, 0.0, 1.0);
+    metalnessValue = clamp(metalnessValue, 0.0, 1.0);
 
     // We're not implementing full PBR here.
     // Convert roughness to something sensible
@@ -321,8 +390,7 @@ void main()
     // LIGHTING
     //
 
-    vec3 viewDirection =
-        normalize(vViewPosition);
+    vec3 viewDirection = normalize(vViewPosition);
 
     // Sample environment lighting
     vec3 environmentSpecular = vec3(0.0);
@@ -402,6 +470,14 @@ void main()
 
     #ifdef USE_LIGHT_PROBES
         diffuseLight += getLightProbeIrradiance(lightProbe, normal);
+    #endif
+
+    #ifdef USE_LIGHT_PROBES_GRID
+        vec3 probeWorldNormal =
+            transformNormalByInverseViewMatrix(normal, viewMatrix);
+
+        diffuseLight +=
+            getLightProbeGridIrradiance(vWorldPosition, probeWorldNormal);
     #endif
 
     vec3 specularLight =
@@ -613,12 +689,57 @@ void main()
     //
 
     vec3 litColor =
-        baseColor.rgb * diffuseLight * (1.0 - metalnessValue)
+        baseColor.rgb
+        * diffuseLight
+        * (1.0 - metalnessValue)
         + specularLight;
+
+    vec3 finalColor =
+        litColor;
+
+    if (transmissionValue > 0.0)
+    {
+        vec2 screenUv =
+            gl_FragCoord.xy
+            / sceneColorResolution;
+
+        // finalAlpha controls BOTH:
+        //
+        // 1. framebuffer contribution through output alpha
+        // 2. actual refraction displacement
+        //
+        // So heat distortion smoothly collapses toward the
+        // undistorted background as the particle fades.
+        // Importantly, to avoid ghosting/background doubling,
+        // if there is any transmission, alpha should control
+        // that rather than actually using alpha blending
+        vec2 distortionUv =
+            distortion
+            * distortionStrength
+            * vDistortionStrength
+            * finalAlpha
+            / sceneColorResolution;
+
+        vec3 transmittedColor =
+            texture2D(
+                sceneColorTexture,
+                screenUv + distortionUv
+            ).rgb;
+
+        transmissionValue = 1.0 - ((1.0 - transmissionValue) * finalAlpha);
+        finalAlpha = 1.0;
+
+        finalColor =
+            mix(
+                litColor,
+                transmittedColor,
+                transmissionValue
+            );
+    }
 
     gl_FragColor =
         vec4(
-            litColor,
+            finalColor,
             finalAlpha
         );
 }

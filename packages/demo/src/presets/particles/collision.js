@@ -41,12 +41,12 @@ export default async function createCollision() {
     ],
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'basic',
+        material: 'lit',
         castShadow: true,
 
         materialOptions: {
           roughness: 0.5,
-          sphericalNormals: true,
+          sphericalNormals: 1,
           normalLighting: 1,
         },
       }),
@@ -60,3 +60,4 @@ export default async function createCollision() {
 }
 
 createCollision.author = "rzmay";
+createCollision.description = "Particle collision. Jolt, Rapier, and Ammo support impulses, allowing particles to affect other physics objects in the scene.";

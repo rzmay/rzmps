@@ -80,15 +80,13 @@ function createParticle(index) {
     ),
     rotation: new THREE.Vector3(),
     scale: new THREE.Vector3(0.08, 0.08, 0.08),
+    velocity: new THREE.Vector3(0.01, 0.02, 0),
+    angularVelocity: new THREE.Vector3(0, 0, 0.05),
     color: new THREE.Color(1, 1, 1),
     alpha: 1,
     mass: 1,
     tags: index % 2 === 0 ? ['even'] : ['odd'],
   });
-
-  particle.velocity.set(0.01, 0.02, 0);
-  particle.angularVelocity.set(0, 0, 0.05);
-  particle.cacheStartValues();
 
   return particle;
 }

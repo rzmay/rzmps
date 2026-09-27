@@ -2,20 +2,22 @@ import * as THREE from 'three';
 import {
   Audio,
   Collision,
-  ColorOverLifetime,
   Emitter,
   EmissionShape,
   ParticleSystem,
   SpriteRenderer,
   Textures,
   TransformByNoise,
+  ScaleOverLifetime,
+  DistortionBySize,
 } from '@rzmps/rzmps';
 
+import simpleNorm from '../../assets/images/simple_norm.png?url';
 import bubblesUrl from '../../assets/audio/bubbles.mp3?url';
 import bubblePop1Url from '../../assets/audio/bubble_pop_1.mp3?url';
 import bubblePop2Url from '../../assets/audio/bubble_pop_2.mp3?url';
 
-import { curvePresets } from '../curvePresets';
+import { Easing } from 'eaz';
 
 const withAudioSource = (buffer, url) => {
   Object.defineProperty(buffer, '__rzmpsAudioBufferSource', {
@@ -28,6 +30,10 @@ const withAudioSource = (buffer, url) => {
 
 export default async function createBubbles() {
   const audioLoader = new THREE.AudioLoader();
+
+  const simple = new THREE.TextureLoader().load(Textures.Simple);
+  const distortionSimple = new THREE.TextureLoader().load(simpleNorm);
+
 
   const [
     bubbles,
@@ -62,8 +68,8 @@ export default async function createBubbles() {
           lifetime: [7, 12],
 
           scale: [
-            new THREE.Vector3(0.125, 0.125, 0.125),
             new THREE.Vector3(0.25, 0.25, 0.25),
+            new THREE.Vector3(1, 1, 1),
           ],
 
           mass: 0.25,
@@ -73,8 +79,6 @@ export default async function createBubbles() {
             new THREE.Color('#d8c8ff'),
             new THREE.Color('#bfffe4'),
           ],
-
-          alpha: 0.65,
         },
       }),
     ],
@@ -92,8 +96,13 @@ export default async function createBubbles() {
         lifetimeLoss: 1,
       }),
 
-      new ColorOverLifetime({
-        alpha: (time) => 0.65 * curvePresets.fadeInOut.evaluate(time),
+      new ScaleOverLifetime({
+        scale: (time) => new THREE.Vector3(1, 1, 1).multiplyScalar(Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1))),
+      }),
+
+      new DistortionBySize({
+        sizeRange: [0, 1],
+        distortionStrength: [0, 1]
       }),
 
       new Audio({
@@ -130,12 +139,16 @@ export default async function createBubbles() {
 
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'basic',
+        material: 'lit',
 
         materialOptions: {
           roughness: 0.15,
-          sphericalNormals: true,
-          normalLighting: 0.6,
+          sphericalNormals: 1,
+          normalLighting: 0.75,
+          transmissionMap: simple,
+          transmission: 0.7,
+          distortionMap: distortionSimple,
+          distortionStrength: -8,
         },
       }),
     ],
@@ -148,3 +161,4 @@ export default async function createBubbles() {
 }
 
 createBubbles.author = "rzmay";
+createBubbles.description = "Refractive sprite transmission with spherical normals and size-driven distortion. Both continuous sounds and collision-triggered bubble pops.";

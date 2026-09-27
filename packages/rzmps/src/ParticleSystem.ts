@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import Particle, { ParticleOptions } from './Particle';
+import Particle from './Particle';
 import Emitter, { type EmissionContext } from './Emitter';
 import Module from './Module';
 import Renderer from './Renderer';
@@ -52,11 +52,12 @@ export interface SubSystemOptions {
   emitOnCollision: boolean;
   emitOnSpawn: boolean;
   emitOnDeath: boolean;
-  inheritScale: boolean;
-  inheritLifetime: boolean;
-  inheritColor: boolean;
-  inheritAlpha: boolean;
-  inheritMass: boolean;
+  inheritScale: number;
+  inheritLifetime: number;
+  inheritColor: number;
+  inheritAlpha: number;
+  inheritMass: number;
+  inheritVelocity: number;
 
   impulseAffectsScale: number;
   impulseAffectsSpeed: number;
@@ -72,7 +73,17 @@ interface SubSystemEmissionRun {
   startTime: number;
   realtime: number;
   duration?: number;
-  particle: Omit<ParticleOptions, 'tags'> & { tags?: Tag[] };
+  particle: {
+    position: THREE.Vector3;
+    rotation: THREE.Vector3;
+    scale: THREE.Vector3;
+    color: THREE.Color;
+    tags?: Tag[];
+    alpha: number;
+    lifetime: number;
+    mass: number;
+    velocity: THREE.Vector3;
+  };
   collision?: CollisionHit;
 }
 
@@ -94,7 +105,7 @@ class ParticleSystem extends THREE.Object3D {
   looping: boolean;
   endBehavior: EndBehavior;
 
-  maxParticles: number = 1000;
+  maxParticles: number = 10000;
   maxCullingMode: MaxCulling;
   simulationDistance: number;
   useUpdateLOD: boolean;
@@ -171,7 +182,11 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _particleEmissionUnitY = new THREE.Vector3(0, 1, 0);
   private readonly _particleEmissionAlignUp = new THREE.Vector3();
   private readonly _particleEmissionUnitScale = new THREE.Vector3(1, 1, 1);
+  private readonly _particleEmissionScale = new THREE.Vector3(1, 1, 1);
+  private readonly _particleEmissionColor = new THREE.Color(1, 1, 1);
+  private readonly _particleEmissionVelocity = new THREE.Vector3();
   private readonly _directionNormalMatrix = new THREE.Matrix3();
+  private readonly _inverseWorldMatrix = new THREE.Matrix4();
 
   constructor(options: Partial<ParticleSystemOptions> = {}) {
     super();
@@ -209,7 +224,6 @@ class ParticleSystem extends THREE.Object3D {
     // but if either gravity or gravityModifier are specified, they will be used.
     this.gravity = options.gravity ?? new THREE.Vector3(0, -9.81, 0);
     this.gravityModifier = options.gravityModifier ?? (options.gravity ? 1 : 0);
-
     this._simulationSpace = (options.simulationSpace as SimulationSpace) ?? this._simulationSpace;
     this._worldRendererRoot.name = 'ParticleSystem World Renderers';
 
@@ -287,7 +301,7 @@ class ParticleSystem extends THREE.Object3D {
     if (this._playing) this._updateSystemTime();
 
     if (this._playing) this.emitters.forEach((emitter) => {
-      const particles = emitter.update(this.particles, this.getEmitterContext(), this, this.deltaTime);
+      const particles = emitter.update(this.particles, this.getEmitterContext(), this);
       particles.forEach((p) => this._notifySpawn(p));
     });
 
@@ -325,17 +339,28 @@ class ParticleSystem extends THREE.Object3D {
     modules
       .forEach((module) => module.prepare(this, this.deltaTime));
 
-    // Run pre modules
+    this.particles.forEach((particle) => particle.restore());
+
+    // Run permanent pre-movement modules
     modules
       .filter((module) => module.priority < 0)
+      .sort((a, b) => a.priority - b.priority)
       .forEach((module) => module.modify(this.particles, this.deltaTime, this));
 
     // Update particles
     this._updateParticles();
 
-    // Run post modules
+    // Run permanent post-movement modules
     modules
-      .filter((module) => module.priority >= 0)
+      .filter((module) => module.priority >= 0 && module.priority < 1)
+      .sort((a, b) => a.priority - b.priority)
+      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+
+    this.particles.forEach((particle) => particle.cache());
+
+    // Run transient render-time modules
+    modules
+      .filter((module) => module.priority >= 1)
       .sort((a, b) => a.priority - b.priority)
       .forEach((module) => module.modify(this.particles, this.deltaTime, this));
 
@@ -427,8 +452,8 @@ class ParticleSystem extends THREE.Object3D {
     this.syncRendererParents();
     this.deltaTime = nextDeltaTime + this._lodAccumulatedDeltaTime;
     this._lodAccumulatedDeltaTime = 0;
-    this._prewarm();
-    if (this._playing) this._updateSystemTime();
+    if (options.emitContinuous) this._prewarm();
+    if (this._playing && options.emitContinuous) this._updateSystemTime();
 
     if (this._playing && options.emitContinuous) {
       for (let i = 0; i < parentParticles.length; i += 1) {
@@ -436,19 +461,29 @@ class ParticleSystem extends THREE.Object3D {
 
         if (this._canEmitForParticle(particle, options)) {
           const transform = this._particleEmissionTransform(particle, options.inheritScale);
+          const lifetime = options.inheritLifetime;
 
           this.emitters.forEach((emitter) => {
             const particles = emitter.update(this.particles, {
               key: particle.id,
               transform,
-              time: options.inheritLifetime ? particle.time : undefined,
-              duration: options.inheritLifetime ? particle.lifetime : undefined,
-              looping: options.inheritLifetime ? false : this.looping,
-              color: options.inheritColor ? particle.color : undefined,
-              alpha: options.inheritAlpha ? particle.alpha : undefined,
-              mass: options.inheritMass ? particle.mass : undefined,
+              time: lifetime > 0 ? particle.time * lifetime : undefined,
+              duration: lifetime > 0 ? THREE.MathUtils.lerp(this.duration, particle.lifetime, lifetime) : undefined,
+              looping: lifetime > 0 ? false : this.looping,
+              color: options.inheritColor > 0
+                ? this._particleEmissionColor.set(1, 1, 1).lerp(particle.color, options.inheritColor)
+                : undefined,
+              alpha: options.inheritAlpha > 0
+                ? THREE.MathUtils.lerp(1, particle.alpha, options.inheritAlpha)
+                : undefined,
+              mass: options.inheritMass > 0
+                ? THREE.MathUtils.lerp(1, particle.mass, options.inheritMass)
+                : undefined,
+              velocity: options.inheritVelocity > 0
+                ? this._particleEmissionVelocity.copy(particle.velocity).multiplyScalar(options.inheritVelocity)
+                : undefined,
               tags: particle.tags,
-            }, this, this.deltaTime);
+            }, this);
 
             particles.forEach((p) => this._notifySpawn(p));
           });
@@ -459,7 +494,7 @@ class ParticleSystem extends THREE.Object3D {
     if (this._playing) this._updateEmissionRuns(options);
     this._processParticles();
     this._updateSubSystems();
-    this._handleEndBehavior();
+    if (options.emitContinuous) this._handleEndBehavior();
   }
 
   private _updateEmissionRuns(options: SubSystemOptions): void {
@@ -488,13 +523,20 @@ class ParticleSystem extends THREE.Object3D {
             duration,
             elapsedTime: elapsed,
             looping: false,
-            color: options.inheritColor ? run.particle.color : undefined,
-            alpha: options.inheritAlpha ? run.particle.alpha : undefined,
+            color: options.inheritColor > 0
+              ? this._particleEmissionColor.set(1, 1, 1).lerp(run.particle.color, options.inheritColor)
+              : undefined,
+            alpha: options.inheritAlpha > 0
+              ? THREE.MathUtils.lerp(1, run.particle.alpha, options.inheritAlpha)
+              : undefined,
             mass: this._getEmissionRunMass(run, options),
+            velocity: options.inheritVelocity > 0
+              ? this._particleEmissionVelocity.copy(run.particle.velocity).multiplyScalar(options.inheritVelocity)
+              : undefined,
             scale: this._getImpulseEffect(run.collision, options.impulseAffectsScale),
             velocityScale: this._getImpulseEffect(run.collision, options.impulseAffectsSpeed),
             tags: run.particle.tags,
-          }, this, this.deltaTime);
+          }, this);
 
           newParticles.forEach((particle) => this._notifySpawn(particle));
         } else {
@@ -533,9 +575,11 @@ class ParticleSystem extends THREE.Object3D {
       options.inheritScale,
       options.impulseAffectsAlignment ? impulse : undefined,
     );
-    const baseDuration = options.inheritLifetime
-      ? particle.lifetime
-      : this.duration;
+    const baseDuration = THREE.MathUtils.lerp(
+      this.duration,
+      particle.lifetime,
+      options.inheritLifetime,
+    );
     const impulseDuration = collision && options.impulseAffectsLifetime > 0
       ? this._getImpulseEffect(collision, options.impulseAffectsLifetime)
       : 0;
@@ -561,13 +605,14 @@ class ParticleSystem extends THREE.Object3D {
         alpha: particle.alpha,
         lifetime: particle.lifetime,
         mass: particle.mass,
+        velocity: particle.velocity.clone(),
       },
     });
   }
 
   private _particleEmissionTransform(
     particle: Particle,
-    inheritScale: boolean = false,
+    inheritScale: number = 0,
     alignUpTo?: THREE.Vector3,
   ): THREE.Matrix4 {
     const quaternion = alignUpTo && alignUpTo.lengthSq() > 0
@@ -584,7 +629,9 @@ class ParticleSystem extends THREE.Object3D {
     return new THREE.Matrix4().compose(
       particle.position,
       quaternion,
-      inheritScale ? particle.scale : this._particleEmissionUnitScale,
+      inheritScale > 0
+        ? this._particleEmissionScale.copy(this._particleEmissionUnitScale).lerp(particle.scale, inheritScale)
+        : this._particleEmissionUnitScale,
     );
   }
 
@@ -597,7 +644,9 @@ class ParticleSystem extends THREE.Object3D {
     run: SubSystemEmissionRun,
     options: SubSystemOptions,
   ): number | undefined {
-    const inheritedMass = options.inheritMass ? run.particle.mass : undefined;
+    const inheritedMass = options.inheritMass > 0
+      ? THREE.MathUtils.lerp(1, run.particle.mass, options.inheritMass)
+      : undefined;
     const impulseMass = options.impulseAffectsMass > 0
       ? this._getImpulseEffect(run.collision, options.impulseAffectsMass)
       : undefined;
@@ -804,11 +853,12 @@ class ParticleSystem extends THREE.Object3D {
       emitOnCollision,
       emitOnSpawn,
       emitOnDeath,
-      inheritScale: options.inheritScale ?? true,
-      inheritLifetime: options.inheritLifetime ?? emitContinuous,
-      inheritColor: options.inheritColor ?? true,
-      inheritAlpha: options.inheritAlpha ?? true,
-      inheritMass: options.inheritMass ?? true,
+      inheritScale: options.inheritScale ?? 1,
+      inheritLifetime: options.inheritLifetime ?? (emitContinuous ? 1 : 0),
+      inheritColor: options.inheritColor ?? 1,
+      inheritAlpha: options.inheritAlpha ?? 1,
+      inheritMass: options.inheritMass ?? 1,
+      inheritVelocity: options.inheritVelocity ?? 0,
 
       // Impulse options
       impulseAffectsScale: options.impulseAffectsScale ?? 0,
@@ -976,7 +1026,7 @@ class ParticleSystem extends THREE.Object3D {
 
       if (this._playing) {
         this.emitters.forEach((emitter) => {
-          const newParticles = emitter.update(this.particles, this.getEmitterContext(), this, this.deltaTime);
+          const newParticles = emitter.update(this.particles, this.getEmitterContext(), this);
           newParticles.forEach((p) => this._notifySpawn(p));
         });
       }
@@ -1070,24 +1120,17 @@ class ParticleSystem extends THREE.Object3D {
     this.updateWorldMatrix(true, false);
 
     if (space === SimulationSpace.World) {
+      const normalMatrix = this._directionNormalMatrix.getNormalMatrix(this.matrixWorld);
+
       this.particles.forEach((particle) => {
-        this.localToWorld(particle.position);
-        this.localDirectionToWorld(particle.velocity);
-        this.localDirectionToWorld(particle.acceleration);
-        this.localDirectionToWorld(particle.scalarVelocity);
-        this.localDirectionToWorld(particle.scalarAcceleration);
-        particle.cacheStartValues();
+        particle.localToWorld(this.matrixWorld, normalMatrix);
       });
     } else {
+      const inverseWorldMatrix = this._inverseWorldMatrix.copy(this.matrixWorld).invert();
       const normalMatrix = this._directionNormalMatrix.getNormalMatrix(this.matrixWorld).invert();
 
       this.particles.forEach((particle) => {
-        this.worldToLocal(particle.position);
-        particle.velocity.applyMatrix3(normalMatrix);
-        particle.acceleration.applyMatrix3(normalMatrix);
-        particle.scalarVelocity.applyMatrix3(normalMatrix);
-        particle.scalarAcceleration.applyMatrix3(normalMatrix);
-        particle.cacheStartValues();
+        particle.worldToLocal(inverseWorldMatrix, normalMatrix);
       });
     }
   }

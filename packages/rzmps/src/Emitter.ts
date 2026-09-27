@@ -50,7 +50,9 @@ export interface EmissionContext {
   looping: boolean;
   color: THREE.Color;
   alpha: number;
-  mass: number;
+    mass: number;
+  distortionStrength: number;
+  velocity: THREE.Vector3;
   velocityScale: number;
   scale: number;
   tags: Tag[];
@@ -83,8 +85,9 @@ class Emitter {
   ) {
     this.source = options.source ?? EmissionShape.Sphere();
     this.initialValues = options.initialValues ?? {};
-    this.rate = options.rate ?? 50;
+
     this.bursts = acceptMultiple(options.bursts) ?? [];
+    this.rate = options.rate ?? (this.bursts.length > 0 ? 0 : 50);
 
     this.radialSpeed = options.radialSpeed ?? 1
     this.alignment = options.alignment ?? 0;
@@ -124,7 +127,6 @@ class Emitter {
     particles: Particle[],
     context: Partial<EmissionContext>,
     particleSystem: ParticleSystem,
-    deltaTime: number,
   ): Particle[] {
     if (
       this.useUpdateLOD
@@ -206,10 +208,12 @@ class Emitter {
   private spawnParticle(particles: Particle[], time: number, context: Partial<EmissionContext>): Particle {
     const point = this.source.getPoint();
     const position = point.position.clone();
+    const orbitCenter = new THREE.Vector3();
     const normal = point.normal.clone();
 
     if (context.transform) {
       position.applyMatrix4(context.transform);
+      orbitCenter.applyMatrix4(context.transform);
       normal.applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(context.transform)).normalize();
     }
 
@@ -243,48 +247,62 @@ class Emitter {
       mass *= context.mass;
     }
 
+    let distortionStrength = evaluateDynamicNumber(this.initialValues.distortionStrength ?? 1, time);
+    if (context.distortionStrength !== undefined) {
+      distortionStrength *= context.distortionStrength;
+    }
+
     const scale = evaluateDynamicVector(this.initialValues.scale ?? new THREE.Vector3(1, 1, 1), time);
     if (context.scale !== undefined) {
       scale.multiplyScalar(context.scale);
     }
 
-    const particle = new Particle({
-      position,
-      rotation: evaluateDynamicVector(this.initialValues.rotation ?? rotation, time),
-      scale,
-      lifetime: evaluateDynamicNumber(this.initialValues.lifetime ?? 1, time),
-      color,
-      alpha,
-      mass,
-      ...((this.tags || context.tags) && {
-        tags: [...(context.tags ?? []), ...(this._selectTags() ?? [])],
-      }),
-    });
-
-    particle.speed = evaluateDynamicNumber(this.initialValues.speed ?? 1, time);
-
-    particle.velocity = evaluateDynamicVector(this.initialValues.velocity ?? new THREE.Vector3(0, 0, 0), time).clone()
+    const speed = evaluateDynamicNumber(this.initialValues.speed ?? 1, time);
+    const velocity = evaluateDynamicVector(this.initialValues.velocity ?? new THREE.Vector3(0, 0, 0), time).clone()
       .add(normal.multiplyScalar(
         evaluateDynamicNumber(this.radialSpeed, time),
       ));
 
     if (context.velocityScale !== undefined) {
-      particle.velocity.multiplyScalar(context.velocityScale);
+      velocity.multiplyScalar(context.velocityScale);
     }
 
-    if (this.initialValues.angularVelocity)
-      particle.angularVelocity = evaluateDynamicVector(this.initialValues.angularVelocity, time).clone();
-    if (this.initialValues.scalarVelocity)
-      particle.scalarVelocity = evaluateDynamicVector(this.initialValues.scalarVelocity, time).clone();
+    if (context.velocity) {
+      velocity.add(context.velocity);
+    }
 
-    if (this.initialValues.acceleration)
-      particle.acceleration = evaluateDynamicVector(this.initialValues.acceleration, time).clone();
-    if (this.initialValues.angularAcceleration)
-      particle.angularAcceleration = evaluateDynamicVector(this.initialValues.angularAcceleration, time).clone();
-    if (this.initialValues.scalarAcceleration)
-      particle.scalarAcceleration = evaluateDynamicVector(this.initialValues.scalarAcceleration, time).clone();
+    const particle = new Particle({
+      position,
+      orbitCenter,
+      rotation: evaluateDynamicVector(this.initialValues.rotation ?? rotation, time),
+      scale,
+      velocity,
+      angularVelocity: this.initialValues.angularVelocity
+        ? evaluateDynamicVector(this.initialValues.angularVelocity, time).clone()
+        : undefined,
+      scalarVelocity: this.initialValues.scalarVelocity
+        ? evaluateDynamicVector(this.initialValues.scalarVelocity, time).clone()
+        : undefined,
+      acceleration: this.initialValues.acceleration
+        ? evaluateDynamicVector(this.initialValues.acceleration, time).clone()
+        : undefined,
+      angularAcceleration: this.initialValues.angularAcceleration
+        ? evaluateDynamicVector(this.initialValues.angularAcceleration, time).clone()
+        : undefined,
+      scalarAcceleration: this.initialValues.scalarAcceleration
+        ? evaluateDynamicVector(this.initialValues.scalarAcceleration, time).clone()
+        : undefined,
+      speed,
+      lifetime: evaluateDynamicNumber(this.initialValues.lifetime ?? 1, time),
+      color,
+      alpha,
+      mass,
+      distortionStrength,
+      ...((this.tags || context.tags) && {
+        tags: [...(context.tags ?? []), ...(this._selectTags() ?? [])],
+      }),
+    });
 
-    particle.cacheStartValues();
     particles.push(particle);
 
     return particle;

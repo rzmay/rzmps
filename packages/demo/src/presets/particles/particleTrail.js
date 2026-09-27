@@ -9,7 +9,6 @@ import {
   TrailTextureMode,
   Textures,
 } from '@rzmps/rzmps';
-import { curvePresets } from '../curvePresets';
 
 export default async function createParticleTrail() {
   const simpleSpriteTexture = new THREE.TextureLoader().load(Textures.Simple);
@@ -48,7 +47,7 @@ export default async function createParticleTrail() {
         minimumVertexDistance: 0.05,
         dieWithParticles: false,
         width: 0.18,
-        widthOverTrail: (time) => curvePresets.fadeInOut.evaluate(time),
+        widthOverTrail: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
         colorOverTrail: (time) => new THREE.Color().lerpColors(
           new THREE.Color('#00d0ff'),
           new THREE.Color('#ff66ba'),
@@ -71,3 +70,4 @@ export default async function createParticleTrail() {
 }
 
 createParticleTrail.author = "rzmay";
+createParticleTrail.description = "Per-particle trail rendering with inherited color and alpha over moving particles.";

@@ -28,6 +28,7 @@ function getPresetMetadata(presets, name) {
   return {
     sourceUrl: entry?.sourceUrl ?? factory?.sourceUrl,
     author: entry?.author ?? factory?.author,
+    description: entry?.description ?? factory?.description,
   };
 }
 
@@ -120,9 +121,19 @@ function PresetAttribution({ metadata }) {
   const sceneAuthor = normalizeAuthor(metadata.scene?.author);
   const particleAvatar = getGithubAvatar(particleAuthor);
   const sceneAvatar = getGithubAvatar(sceneAuthor);
+  const descriptions = [
+    metadata.particle?.description,
+    metadata.scene?.description,
+  ].filter(Boolean);
 
   return (
     <div className="preset-attribution" aria-label="Preset attribution">
+      {descriptions.length > 0 && (
+        <div className="preset-attribution-description">
+          {descriptions.join(' ')}
+        </div>
+      )}
+
       <div className="preset-attribution-authors">
         {particleAuthor?.url && (
           <a href={particleAuthor.url} target="_blank" rel="noreferrer" className="preset-attribution-author">

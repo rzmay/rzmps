@@ -1,19 +1,21 @@
 attribute vec4 scale;
-attribute vec3 rotation;
-attribute float frame;
+attribute vec3 spriteData;
 
 uniform float viewportHeight;
+uniform bool sizeAttenuation;
 
 varying vec4 vColor;
 varying float aspectRatio;
 varying float angle;
+varying float vDistortionStrength;
 flat out int fragFrame;
 
 void main() {
 
     vColor = color;
 
-    angle = rotation.x;
+    angle = spriteData.x;
+    vDistortionStrength = spriteData.z;
 
     vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
 
@@ -27,7 +29,7 @@ void main() {
         * 0.5;
 
     float perspectiveScale =
-        projectionMatrix[3][3] == 0.0
+        sizeAttenuation && projectionMatrix[3][3] == 0.0
             ? 1.0 / -mvPosition.z
             : 1.0;
 
@@ -38,6 +40,6 @@ void main() {
 
     gl_Position = projectionMatrix * mvPosition;
 
-    fragFrame = int(frame);
+    fragFrame = int(spriteData.y);
 
 }

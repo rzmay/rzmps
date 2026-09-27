@@ -12,17 +12,7 @@ import {
     Textures,
     TrailRenderer,
 } from '@rzmps/rzmps';
-import { curvePresetDefinitions } from '../../presets/curvePresets';
 import { AUDIO_BUFFER_SOURCE_KEY, RAW_CODE } from './constants';
-
-const CURVE_PRESET_DEFINITIONS = new Map(
-    curvePresetDefinitions.map((definition) => [definition.name, definition]),
-);
-const CURVE_PRESET_NAMES_PATTERN = curvePresetDefinitions.map(({ name }) => name).join('|');
-const CURVE_PRESET_REFERENCE_PATTERNS = [
-    new RegExp(`\\bcurvePresets\\.(${CURVE_PRESET_NAMES_PATTERN})\\.evaluate\\(([^)]*)\\)`, 'g'),
-    new RegExp(`\\((?:0,\\s*)?_[\\w$]+\\.curvePresets\\)\\.(${CURVE_PRESET_NAMES_PATTERN})\\.evaluate\\(([^)]*)\\)`, 'g'),
-];
 
 export class ParticleSystemSerializer {
     constructor(host) {
@@ -36,71 +26,24 @@ export class ParticleSystemSerializer {
     serializeParticleSystem() {
         const imports = new Set(['EndBehavior', 'ParticleSystem', 'Emitter', 'EmissionShape', 'EmissionSource']);
         this.collectImports(this.system, imports);
-        this.usedCurvePresets = new Set();
+        this.usesEasing = false;
 
         const counter = { value: 0 };
         const rootName = 'particleSystem';
         const systemLines = this.serializeParticleSystemTree(this.system, rootName, counter);
-        const curveDefinitions = this.serializeUsedCurvePresets();
 
         const lines = [
             `import * as THREE from 'three';`,
             `import { ${Array.from(imports).sort().join(', ')} } from '@rzmps/rzmps';`,
         ];
 
-        if (curveDefinitions.length > 0) {
-            lines.push(`import { Curve, NumberKeyframe } from 'curves';`);
-            if (this.usedCurvePresetsNeedEasing()) {
-                lines.push(`import { Easing } from 'eaz';`);
-            }
+        if (this.usesEasing) {
+            lines.push(`import { Easing } from 'eaz';`);
         }
 
-        lines.push('', ...curveDefinitions);
-        if (curveDefinitions.length > 0) {
-            lines.push('');
-        }
         lines.push(...systemLines, '', `export default ${rootName};`, '');
-        this.usedCurvePresets = undefined;
+        this.usesEasing = false;
         return lines.join('\n');
-    }
-
-    serializeUsedCurvePresets() {
-        if (!this.usedCurvePresets?.size) {
-            return [];
-        }
-
-        return Array.from(this.usedCurvePresets)
-            .sort()
-            .map((name) => this.serializeCurvePresetDefinition(name));
-    }
-
-    usedCurvePresetsNeedEasing() {
-        return Array.from(this.usedCurvePresets ?? []).some((name) => CURVE_PRESET_DEFINITIONS
-            .get(name)
-            ?.keyframes.some(({ easing }) => easing !== undefined));
-    }
-
-    serializeCurvePresetDefinition(name) {
-        const definition = CURVE_PRESET_DEFINITIONS.get(name);
-        if (!definition) {
-            return '';
-        }
-
-        const keyframes = definition.keyframes
-            .map(({ time, value, easing }) => {
-                const args = [time, value];
-                if (easing !== undefined) {
-                    args.push(`Easing.${easing}`);
-                }
-                return `    new NumberKeyframe(${args.join(', ')}),`;
-            })
-            .join('\n');
-
-        return [
-            `const ${name} = new Curve([`,
-            keyframes,
-            '  ]);',
-        ].join('\n');
     }
 
     collectImports(system, imports) {
@@ -189,6 +132,7 @@ export class ParticleSystemSerializer {
             inheritColor: options.inheritColor,
             inheritAlpha: options.inheritAlpha,
             inheritMass: options.inheritMass,
+            inheritVelocity: options.inheritVelocity,
             impulseAffectsScale: options.impulseAffectsScale,
             impulseAffectsSpeed: options.impulseAffectsSpeed,
             impulseAffectsLifetime: options.impulseAffectsLifetime,
@@ -341,6 +285,7 @@ export class ParticleSystemSerializer {
             const texture = this.serializeTexture(renderer.texture);
             const options = this.serializeValue({
                 fps: renderer.fps,
+                sizeAttenuation: renderer.sizeAttenuation,
                 tileSize: renderer.tileSize,
                 tileMargin: renderer.tileMargin,
                 gridSize: renderer.gridSize,
@@ -639,13 +584,10 @@ export class ParticleSystemSerializer {
     }
 
     serializeFunction(value) {
-        let source = value.toString();
-        CURVE_PRESET_REFERENCE_PATTERNS.forEach((pattern) => {
-            source = source.replace(pattern, (_match, name, timeExpression) => {
-                this.usedCurvePresets?.add(name);
-                return `${name}.evaluate(${timeExpression})`;
-            });
-        });
+        const source = value.toString();
+        if (/\bEasing\./.test(source)) {
+            this.usesEasing = true;
+        }
         return source;
     }
 

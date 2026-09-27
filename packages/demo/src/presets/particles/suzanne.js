@@ -12,7 +12,7 @@ import {
   Textures,
 } from '@rzmps/rzmps';
 import suzanneModel from '../../assets/models/suzanne.glb?url';
-import { curvePresets } from '../curvePresets';
+import { Easing } from 'eaz';
 
 
 export default async function createSuzanne() {
@@ -54,12 +54,12 @@ export default async function createSuzanne() {
     modules: [
       new ColorOverLifetime({
         color: new THREE.Color('#70d6ff'),
-        alpha: (time) => curvePresets.fadeOut.evaluate(time),
+        alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
     ],
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'basic',
+        material: 'lit',
       }),
     ],
   });
@@ -70,3 +70,4 @@ export default async function createSuzanne() {
 }
 
 createSuzanne.author = "rzmay";
+createSuzanne.description = "Mesh-surface emission from a model with lit sprite rendering.";

@@ -43,8 +43,8 @@ class Collision extends Module {
   private _system?: ParticleSystem;
 
   constructor(options: Partial<CollisionOptions> = {}) {
-    // Priority > 0, occurs after movement
-    super((particle) => this.collide(particle), { ...options, priority: 1 });
+    // Collisions need to resolve after movement and persist into the next frame.
+    super((particle) => this.collide(particle), { priority: 0.5, ...options });
 
     // Priority < 0, cache position before movement
     this.dependents = [
@@ -267,9 +267,9 @@ class Collision extends Module {
 
     if (loss === 0) return;
 
-    particle.lifetime -= particle.start.lifetime * loss;
+    particle.realtime += particle.lifetime * loss * 1000;
 
-    if (particle.lifetime <= (particle.realtime / 1000)) {
+    if (particle.realtime >= particle.lifetime * 1000) {
       this.killParticle(particle);
     }
   }
@@ -285,7 +285,7 @@ class Collision extends Module {
   }
 
   private killParticle(particle: Particle): void {
-    particle.lifetime = 0;
+    particle.realtime = Math.max(particle.realtime, particle.lifetime * 1000 + 1);
   }
 
   private cloneHit(hit: CollisionHit): CollisionHit {

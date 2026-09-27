@@ -30,16 +30,33 @@ export type { LiveCubemapOptions } from './renderers/LiveCubemap';
 export { default as Module } from './Module';
 export type { ModuleOptions } from './Module';
 export { default as NoiseModule } from './modules/NoiseModule';
-export { default as VelocityOverLifetime } from './modules/VelocityOverLifetime';
 export { default as ForceOverLifetime } from './modules/ForceOverLifetime';
 export { default as LimitVelocityOverLifetime } from './modules/LimitVelocityOverLifetime';
 export { default as TransformByNoise } from './modules/TransformByNoise';
-export { default as ColorOverLifetime } from './modules/ColorOverLifetime';
+export { default as ColorBySize } from './modules/ColorBySize';
 export { default as ColorBySpeed } from './modules/ColorBySpeed';
-export { default as ScaleOverLifetime } from './modules/ScaleOverLifetime';
+export { default as ColorByDepth } from './modules/ColorByDepth';
+export { default as ColorOverLifetime } from './modules/ColorOverLifetime';
+export { default as DistortionBySize } from './modules/DistortionBySize';
+export { default as DistortionBySpeed } from './modules/DistortionBySpeed';
+export { default as DistortionByDepth } from './modules/DistortionByDepth';
+export { default as DistortionOverLifetime } from './modules/DistortionOverLifetime';
 export { default as ScaleBySpeed } from './modules/ScaleBySpeed';
-export { default as RotationOverLifetime } from './modules/RotationOverLifetime';
+export { default as ScaleByDepth } from './modules/ScaleByDepth';
+export { default as ScaleOverLifetime } from './modules/ScaleOverLifetime';
+export { default as RotationBySize } from './modules/RotationBySize';
 export { default as RotationBySpeed } from './modules/RotationBySpeed';
+export { default as RotationByDepth } from './modules/RotationByDepth';
+export { default as RotationOverLifetime } from './modules/RotationOverLifetime';
+export { default as VelocityBySize } from './modules/VelocityBySize';
+export { default as VelocityByDepth } from './modules/VelocityByDepth';
+export { default as VelocityOverLifetime } from './modules/VelocityOverLifetime';
+export { default as SpeedBySize } from './modules/SpeedBySize';
+export { default as SpeedByDepth } from './modules/SpeedByDepth';
+export { default as SpeedOverLifetime } from './modules/SpeedOverLifetime';
+export { default as MassBySize } from './modules/MassBySize';
+export { default as MassByDepth } from './modules/MassByDepth';
+export { default as MassOverLifetime } from './modules/MassOverLifetime';
 export { default as ExternalForces } from './modules/ExternalForces';
 export { default as Collision } from './modules/Collision';
 export { default as Audio } from './modules/Audio';
@@ -55,6 +72,7 @@ export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBack
 
 // Dynamic Value
 export type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
+export type { ValueByParameter } from './types/ValueByParameter';
 
 // Texture helper
 export * as Textures from './Textures';
