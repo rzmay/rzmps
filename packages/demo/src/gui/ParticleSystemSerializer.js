@@ -150,6 +150,7 @@ export class ParticleSystemSerializer {
             'new Emitter({',
             `  source: ${this.serializeEmissionShape(emitter.source)},`,
             `  rate: ${this.serializeValue(emitter.rate)},`,
+            `  rateOverDistance: ${this.serializeValue(emitter.rateOverDistance)},`,
             `  radialSpeed: ${this.serializeValue(emitter.radialSpeed)},`,
             `  alignment: ${this.serializeValue(emitter.alignment)},`,
             ...lodOptions,
@@ -285,6 +286,7 @@ export class ParticleSystemSerializer {
             const texture = this.serializeTexture(renderer.texture);
             const options = this.serializeValue({
                 fps: renderer.fps,
+                billboard: renderer.billboard,
                 tileSize: renderer.tileSize,
                 tileMargin: renderer.tileMargin,
                 gridSize: renderer.gridSize,

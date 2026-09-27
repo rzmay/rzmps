@@ -8,6 +8,7 @@ varying vec4 vColor;
 varying float aspectRatio;
 varying float angle;
 varying float vDistortionStrength;
+varying vec2 vSpriteUv;
 
 varying vec3 vViewPosition;
 varying vec3 vNormal;
@@ -20,6 +21,7 @@ void main()
     vColor = color;
     angle = spriteData.x;
     vDistortionStrength = spriteData.z;
+    vSpriteUv = vec2(0.0);
 
     vec4 mvPosition =
         modelViewMatrix

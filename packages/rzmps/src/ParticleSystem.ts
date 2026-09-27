@@ -467,6 +467,7 @@ class ParticleSystem extends THREE.Object3D {
             const particles = emitter.update(this.particles, {
               key: particle.id,
               transform,
+              position: particle.position,
               time: lifetime > 0 ? particle.time * lifetime : undefined,
               duration: lifetime > 0 ? THREE.MathUtils.lerp(this.duration, particle.lifetime, lifetime) : undefined,
               looping: lifetime > 0 ? false : this.looping,
@@ -519,6 +520,7 @@ class ParticleSystem extends THREE.Object3D {
           const newParticles = emitter.update(this.particles, {
             key: run.id,
             transform: run.transform,
+            position: run.particle.position,
             time,
             duration,
             elapsedTime: elapsed,
@@ -970,15 +972,18 @@ class ParticleSystem extends THREE.Object3D {
     const context = {
       time: this.duration === 0 ? 1 : this._elapsedTime / this.duration,
       elapsedTime: this._elapsedTime,
+      position: this.position,
     };
 
     if (this.simulationSpace !== SimulationSpace.World) return context;
 
     this.updateWorldMatrix(true, false);
+    const transform = this.matrixWorld.clone();
 
     return {
       ...context,
-      transform: this.matrixWorld.clone(),
+      transform,
+      position: new THREE.Vector3().setFromMatrixPosition(transform),
     };
   }
 

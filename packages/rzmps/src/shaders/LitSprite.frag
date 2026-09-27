@@ -47,6 +47,7 @@ varying vec4 vColor;
 varying float aspectRatio;
 varying float angle;
 varying float vDistortionStrength;
+varying vec2 vSpriteUv;
 
 varying vec3 vViewPosition;
 varying vec3 vNormal;
@@ -171,6 +172,10 @@ void main()
     // SPRITE UV
     //
 
+    vec2 rotatedLocalCoord;
+
+    #ifdef USE_POINT_SPRITE
+
     vec2 scaleVector;
 
     if (aspectRatio < 1.0 / aspectRatio)
@@ -196,7 +201,7 @@ void main()
     vec2 scaledFromCenter =
         rotatedFromCenter * scaleVector;
 
-    vec2 rotatedLocalCoord =
+    rotatedLocalCoord =
         vec2(0.5) + scaledFromCenter;
 
     // Rotation can push us outside this sprite's tile.
@@ -210,6 +215,12 @@ void main()
     {
         discard;
     }
+
+    #else
+
+    rotatedLocalCoord = vSpriteUv;
+
+    #endif
 
     vec2 spriteCoord =
         sprite_coord(

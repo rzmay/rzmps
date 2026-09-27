@@ -479,6 +479,7 @@ interface EmitterOptions {
   source: EmissionShape;
   bursts: SpawnBurst | SpawnBurst[];
   rate: DynamicValue<number>;
+  rateOverDistance: DynamicValue<number>;
   radialSpeed: DynamicValue<number>;
   alignment: DynamicValue<number>;
   tags: StrictMultiple<Tag>;
@@ -489,11 +490,16 @@ interface EmitterOptions {
 }
 ```
 
-Emitter `rate` curves and burst `time` values are evaluated against the owning
-particle system's normalized timeline.
+Emitter `rate` curves, `rateOverDistance` curves, and burst `time` values are
+evaluated against the owning particle system's normalized timeline.
+
+`rateOverDistance` emits particles based on travel distance instead of elapsed
+time. A value of `2` emits two particles per unit moved. For continuous
+subsystems, distance is measured from the parent particle transform so trails
+follow the emitting particle rather than the subsystem object.
 
 `updateLOD` controls emitter update frequency. `countLOD` scales emission rate
-and burst counts without skipping the emitter update entirely.
+distance emission, and burst counts without skipping the emitter update entirely.
 
 Internally, emitters use a single update entry point:
 
@@ -1027,6 +1033,7 @@ new SpriteRenderer(
 
 interface SpriteRendererOptions extends RendererOptions {
   fps: DynamicValue<number>;
+  billboard: boolean;
   sizeAttenuation: boolean;
   tileSize: { x: number; y: number };
   tileMargin: { x: number; y: number };
@@ -1046,6 +1053,12 @@ instanced quads in WebGPU. It supports sprite sheets, alpha maps, random start
 frames, shadows, and soft particles. WebGL point sprites are subject to the
 browser/GPU point-size range, so very large sprites and sprites captured by
 WebGL live cubemaps may not preserve their apparent world size.
+
+`billboard` defaults to `true`, making sprites face the active camera. Set it
+to `false` to render sprite particles as oriented instanced quads instead:
+WebGL switches from point sprites to an instanced-quad path, WebGPU stops
+overriding particle rotation with the camera quaternion, and the full particle
+rotation vector is used.
 
 `sizeAttenuation` controls whether sprite particles shrink with camera
 distance. It defaults to `true`. Set it to `false` for graphic, screen-space

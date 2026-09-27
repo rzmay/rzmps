@@ -5,6 +5,8 @@ import {
 } from './particleRoot';
 
 export default function loadCheckerboard(scene) {
+  const floorSize = 40;
+  const checkerSquaresPerTexture = 2;
   const particleRoot = createSceneParticleRoot(scene);
   const ambient = new THREE.AmbientLight(0xffffff, 0.35);
   const point = new THREE.PointLight(0xffffff, 260);
@@ -20,11 +22,11 @@ export default function loadCheckerboard(scene) {
   const checkerTexture = new THREE.DataTexture(pixels, 2, 2, THREE.RGBAFormat);
   checkerTexture.wrapS = THREE.RepeatWrapping;
   checkerTexture.wrapT = THREE.RepeatWrapping;
-  checkerTexture.repeat.set(20, 20);
+  checkerTexture.repeat.set(floorSize / checkerSquaresPerTexture, floorSize / checkerSquaresPerTexture);
   checkerTexture.magFilter = THREE.NearestFilter;
   checkerTexture.needsUpdate = true;
 
-  const floorGeometry = new THREE.PlaneGeometry(40, 40);
+  const floorGeometry = new THREE.PlaneGeometry(floorSize, floorSize);
   const floorMaterial = new THREE.MeshStandardMaterial({
     map: checkerTexture,
     roughness: 0.9,

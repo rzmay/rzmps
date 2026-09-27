@@ -24,6 +24,7 @@ export class EmitterGUI extends GUIEditorBase {
 
     buildEmitter(folder, emitter, system = this.system) {
         this.addDynamicValue(folder, emitter, 'rate', 'Rate');
+        this.addDynamicValue(folder, emitter, 'rateOverDistance', 'Rate Over Distance');
         this.addDynamicValue(folder, emitter, 'radialSpeed', 'Radial Speed');
         this.addDynamicValue(folder, emitter, 'alignment', 'Alignment');
         this.addTags(folder, emitter);

@@ -10,6 +10,8 @@ const RING_SIZE = new THREE.Vector3(5, 0, 5);
 export default function createSimulationSpace(scene) {
   const root = new THREE.Group();
   root.name = 'World Simulation Space Scene';
+  const floorSize = 40;
+  const checkerSquaresPerTexture = 2;
   const particleRoot = createSceneParticleRoot(scene);
 
   const pixels = new Uint8Array([
@@ -21,11 +23,11 @@ export default function createSimulationSpace(scene) {
   const checkerTexture = new THREE.DataTexture(pixels, 2, 2, THREE.RGBAFormat);
   checkerTexture.wrapS = THREE.RepeatWrapping;
   checkerTexture.wrapT = THREE.RepeatWrapping;
-  checkerTexture.repeat.set(20, 20);
+  checkerTexture.repeat.set(floorSize / checkerSquaresPerTexture, floorSize / checkerSquaresPerTexture);
   checkerTexture.magFilter = THREE.NearestFilter;
   checkerTexture.needsUpdate = true;
 
-  const floorGeometry = new THREE.PlaneGeometry(40, 40);
+  const floorGeometry = new THREE.PlaneGeometry(floorSize, floorSize);
   const floorMaterial = new THREE.MeshStandardMaterial({
     map: checkerTexture,
     roughness: 0.9,

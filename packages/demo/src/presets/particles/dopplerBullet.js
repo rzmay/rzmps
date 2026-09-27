@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import {
   Audio as AudioModule,
   ColorOverLifetime,
@@ -10,6 +9,7 @@ import {
   ForceOverLifetime,
   MeshRenderer,
   ParticleSystem,
+  RotationOverLifetime,
   ScaleOverLifetime,
   SpriteRenderer,
   Textures,
@@ -17,40 +17,48 @@ import {
   TrailRenderer,
   TrailTextureMode,
   TransformByNoise,
-  VelocityOverLifetime,
 } from '@rzmps/rzmps';
-import warpNormal from '../../assets/images/warp_norm.jpg?url';
+import shockwaveNormal from '../../assets/images/shockwave_alt_norm.jpg?url';
+import fireballSprite from '../../assets/images/fireball_tile_5x4_n20.png?url';
+import smokeAlpha from '../../assets/images/smoke_alpha.jpg?url';
+import bulletShootUrl from '../../assets/audio/bullet_shoot.mp3?url';
+import bulletWhizzUrl from '../../assets/audio/bullet_whizz.wav?url';
 import { Easing } from 'eaz';
-
-const BULLET_MODEL_URL = '/placeholders/low-poly-bullet.glb';
-const BULLET_LOOP_SOUND_URL = '/placeholders/bullet-loop.ogg';
-const GUNSHOT_SOUND_URL = '/placeholders/gunshot.ogg';
 
 export default async function createDopplerBullet() {
   const textureLoader = new THREE.TextureLoader();
   const simpleSpriteTexture = textureLoader.load(Textures.Simple);
-  const heatDistortion = textureLoader.load(warpNormal);
+  const shockwaveDistortion = textureLoader.load(shockwaveNormal);
   const [bulletMesh, bulletLoopSound, gunshotSound] = await Promise.all([
-    loadBulletMesh(),
-    loadAudioOrPlaceholder(BULLET_LOOP_SOUND_URL, 1.5, createBulletLoopBuffer),
-    loadAudioOrPlaceholder(GUNSHOT_SOUND_URL, 0.45, createGunshotBuffer),
+    Promise.resolve(createBulletMesh()),
+    new THREE.AudioLoader().loadAsync(bulletWhizzUrl),
+    new THREE.AudioLoader().loadAsync(bulletShootUrl),
   ]);
 
   const bulletSystem = new ParticleSystem({
-    duration: 4.25,
+    duration: 5.5,
     looping: true,
-    maxParticles: 1,
+    maxParticles: 8,
+    useLiveCubemap: true,
+    cubemapSettings: {
+      fps: 8,
+      resolutionScale: 0.5,
+      intensity: 1.35,
+    },
     gravity: new THREE.Vector3(0, 0, 0),
     emitters: [
       new Emitter({
-        source: pointEmissionShape(new THREE.Vector3(0, 1.25, 15)),
-        bursts: [{ time: 0, count: 1 }],
-        rate: 0,
+        source: bulletEmissionCone(),
+        rate: 0.9,
+        radialSpeed: [0.1, 0.35],
         alignment: 1,
         initialValues: {
-          lifetime: 4.2,
-          velocity: new THREE.Vector3(0, 0, -7.25),
-          scale: new THREE.Vector3(1, 1, 1),
+          lifetime: 1.9,
+          velocity: [
+            new THREE.Vector3(-0.38, -0.16, -31),
+            new THREE.Vector3(0.38, 0.16, -36),
+          ],
+          scale: new THREE.Vector3(0.22, 0.22, 0.22),
           color: new THREE.Color('#d7c091'),
           alpha: 1,
           mass: 1,
@@ -63,28 +71,28 @@ export default async function createDopplerBullet() {
         onSpawnSound: gunshotSound,
         loop: true,
         maxClips: 8,
-        volume: 0.8,
-        pitch: 1,
+        volume: 3.5,
+        pitch: [0.82, 1.24],
         lowPass: 14000,
         speedAffectsVolume: 0.12,
         depthAffectsVolume: 0.45,
-        dopplerEffect: 3.25,
+        dopplerEffect: 2.4,
       }),
     ],
     renderers: [
       new MeshRenderer({
         mesh: bulletMesh,
-        maxParticles: 1,
+        maxParticles: 8,
         castShadow: true,
         receiveShadow: true,
       }),
       new TrailRenderer({
         mode: TrailMode.Particle,
         ratio: 1,
-        lifetime: 0.8,
+        lifetime: 0.28,
         minimumVertexDistance: 0.1,
         dieWithParticles: false,
-        width: 0.08,
+        width: 0.055,
         widthOverTrail: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
         colorOverTrail: (time) => new THREE.Color().lerpColors(
           new THREE.Color('#f9e6ae'),
@@ -110,21 +118,21 @@ export default async function createDopplerBullet() {
     inheritColor: 0,
     inheritAlpha: 0,
     inheritMass: 0,
-    inheritVelocity: 0.45,
-    ratio: 0.75,
+    inheritVelocity: 0,
+    ratio: 1,
   });
 
-  bulletSystem.addSubSystem(createHeatWake(Textures.Simple, heatDistortion), {
+  bulletSystem.addSubSystem(createHeatWake(Textures.Simple, shockwaveDistortion), {
     inheritScale: 0,
     inheritLifetime: 0,
     inheritColor: 0,
     inheritAlpha: 0,
     inheritMass: 0,
-    inheritVelocity: 0.6,
+    inheritVelocity: 0,
     ratio: 1,
   });
 
-  bulletSystem.addSubSystem(createMuzzleFlash(), {
+  bulletSystem.addSubSystem(createMuzzleFlash(fireballSprite), {
     emitOnSpawn: true,
     inheritScale: 0,
     inheritLifetime: 0,
@@ -134,7 +142,7 @@ export default async function createDopplerBullet() {
     inheritVelocity: 0,
   });
 
-  bulletSystem.addSubSystem(createSpawnShockwave(Textures.Simple, heatDistortion), {
+  bulletSystem.addSubSystem(createSpawnShockwave(Textures.Simple, shockwaveDistortion), {
     emitOnSpawn: true,
     inheritScale: 0,
     inheritLifetime: 0,
@@ -151,30 +159,31 @@ export default async function createDopplerBullet() {
 }
 
 createDopplerBullet.author = "rzmay";
-createDopplerBullet.description = "Exaggerates continuous positional audio doppler on a fast bullet particle, with smoke, faint trails, spawn blast effects, and distortion wake subsystems.";
+createDopplerBullet.description = "Doppler effect on a fast bullet particle, with smoke, faint trails, spawn blast effects, and distortion wake subsystems.";
 
 function createSmokeWake() {
   return new ParticleSystem({
-    duration: 1.35,
+    duration: 1.1,
     looping: true,
     gravity: new THREE.Vector3(0, 0.2, 0),
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.08, 8, 6),
-        rate: 16,
-        radialSpeed: 0.25,
+        rate: 0,
+        rateOverDistance: 5,
+        radialSpeed: 0.1,
         initialValues: {
-          lifetime: [0.85, 1.35],
+          lifetime: [0.55, 0.95],
           scale: [
-            new THREE.Vector3(0.25, 0.25, 0.25),
-            new THREE.Vector3(0.5, 0.5, 0.5),
+            new THREE.Vector3(0.18, 0.18, 0.18),
+            new THREE.Vector3(0.34, 0.34, 0.34),
           ],
           velocity: [
-            new THREE.Vector3(-0.08, 0.04, 0.65),
-            new THREE.Vector3(0.08, 0.28, 1.1),
+            new THREE.Vector3(-0.18, 0.02, -0.25),
+            new THREE.Vector3(0.18, 0.35, 0.25),
           ],
-          color: [new THREE.Color('#7d8085'), new THREE.Color('#c1b9aa')],
-          alpha: 0.22,
+          color: [new THREE.Color('#9a9fa4'), new THREE.Color('#d8d0c0')],
+          alpha: 0.1,
         },
       }),
     ],
@@ -189,22 +198,25 @@ function createSmokeWake() {
       new ScaleOverLifetime({
         scale: (time) => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = 0.55 + 1.7 * Easing.cubic.out(t);
+          const size = 0.85 + 2.35 * Easing.cubic.out(t);
           return new THREE.Vector3(size, size, size);
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#b7b0a5'),
+        color: new THREE.Color('#d0c8bc'),
         alpha: (time) => fadeInOut(time, 0.18, 0.65),
+      }),
+      new RotationOverLifetime({
+        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
       }),
     ],
     renderers: [
-      new SpriteRenderer(Textures.Simple, {
+      new SpriteRenderer(Textures.Default, {
         material: 'lit',
-        alphaMap: Textures.Simple,
+        alphaMap: smokeAlpha,
         softParticleDistance: 1.2,
         materialOptions: {
-          opacity: 0.55,
+          opacity: 0.62,
           roughness: 0.8,
           depthWrite: false,
         },
@@ -220,21 +232,78 @@ function createHeatWake(alphaMap, distortionMap) {
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.04, 8, 6),
-        rate: 12,
-        radialSpeed: 0.08,
+        rate: 24,
+        radialSpeed: 0.18,
         initialValues: {
-          lifetime: [0.45, 0.75],
+          lifetime: [0.5, 0.85],
           scale: [
-            new THREE.Vector3(0.75, 0.75, 0.75),
-            new THREE.Vector3(1.25, 1.25, 1.25),
+            new THREE.Vector3(0.9, 0.9, 0.9),
+            new THREE.Vector3(1.45, 1.45, 1.45),
           ],
           velocity: [
             new THREE.Vector3(-0.04, 0.02, 0.25),
             new THREE.Vector3(0.04, 0.16, 0.65),
           ],
           color: new THREE.Color('#ffffff'),
-          alpha: 0.45,
+          alpha: 0.78,
           distortionStrength: 1,
+        },
+      }),
+    ],
+    modules: [
+      new ScaleOverLifetime({
+        scale: (time) => {
+          const t = THREE.MathUtils.clamp(time, 0, 1);
+          const size = 0.45 + 1.75 * Easing.cubic.out(t);
+          return new THREE.Vector3(size, size, size);
+        },
+      }),
+      new DistortionOverLifetime({
+        distortionStrength: (time) => fadeInOut(time, 0.15, 0.55),
+      }),
+      new ColorOverLifetime({
+        alpha: (time) => 0.95 * fadeInOut(time, 0.12, 0.58),
+      }),
+    ],
+    renderers: [
+      new SpriteRenderer(Textures.Default, {
+        billboard: false,
+        alphaMap,
+        materialOptions: {
+          opacity: 0.62,
+          transmission: 1,
+          distortionMap,
+          distortionStrength: 22,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        },
+      }),
+    ],
+  });
+}
+
+function createMuzzleFlash(texture) {
+  return new ParticleSystem({
+    duration: 0.45,
+    looping: true,
+    emitters: [
+      new Emitter({
+        source: pointEmissionShape(),
+        bursts: [{ time: 0, count: 5 }],
+        rate: 0,
+        radialSpeed: [0.2, 0.8],
+        initialValues: {
+          lifetime: [0.22, 0.36],
+          scale: [
+            new THREE.Vector3(1.0, 1.0, 1.0),
+            new THREE.Vector3(1.8, 1.8, 1.8),
+          ],
+          velocity: [
+            new THREE.Vector3(-0.35, -0.12, -0.2),
+            new THREE.Vector3(0.35, 0.32, 0.8),
+          ],
+          color: [new THREE.Color('#ffffff'), new THREE.Color('#ffd07a')],
+          alpha: 1,
           rotation: [
             new THREE.Vector3(-Math.PI, 0, 0),
             new THREE.Vector3(Math.PI, 0, 0),
@@ -246,78 +315,27 @@ function createHeatWake(alphaMap, distortionMap) {
       new ScaleOverLifetime({
         scale: (time) => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = 0.4 + 1.6 * Easing.cubic.out(t);
-          return new THREE.Vector3(size, size, size);
-        },
-      }),
-      new DistortionOverLifetime({
-        distortionStrength: (time) => fadeInOut(time, 0.15, 0.55),
-      }),
-      new ColorOverLifetime({
-        alpha: (time) => 0.55 * fadeInOut(time, 0.15, 0.55),
-      }),
-    ],
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        alphaMap,
-        materialOptions: {
-          opacity: 0.3,
-          transmission: 1,
-          distortionMap,
-          distortionStrength: 6,
-          depthWrite: false,
-        },
-      }),
-    ],
-  });
-}
-
-function createMuzzleFlash() {
-  return new ParticleSystem({
-    duration: 0.3,
-    looping: true,
-    emitters: [
-      new Emitter({
-        source: pointEmissionShape(),
-        bursts: [{ time: 0, count: 10 }],
-        rate: 0,
-        radialSpeed: [0.5, 1.6],
-        initialValues: {
-          lifetime: [0.12, 0.24],
-          scale: [
-            new THREE.Vector3(0.35, 0.35, 0.35),
-            new THREE.Vector3(1.25, 1.25, 1.25),
-          ],
-          velocity: [
-            new THREE.Vector3(-0.55, -0.2, -0.15),
-            new THREE.Vector3(0.55, 0.45, 1.0),
-          ],
-          color: [new THREE.Color('#fff7d2'), new THREE.Color('#ff8b3d')],
-          alpha: 1,
-        },
-      }),
-    ],
-    modules: [
-      new ScaleOverLifetime({
-        scale: (time) => {
-          const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = 0.5 + 1.8 * Easing.cubic.out(t);
+          const size = (0.32 + 1.45 * Easing.cubic.out(t)) * (1 - 0.35 * Easing.cubic.in(t));
           return new THREE.Vector3(size, size, size);
         },
       }),
       new ColorOverLifetime({
         color: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#fff6c4'),
-          new THREE.Color('#ff5334'),
+          new THREE.Color('#fff8d7'),
+          new THREE.Color('#ff9f45'),
           THREE.MathUtils.clamp(time, 0, 1),
         ),
         alpha: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
     ],
     renderers: [
-      new SpriteRenderer(Textures.Circle, {
+      new SpriteRenderer(texture, {
+        gridSize: { x: 5, y: 4 },
+        frames: 20,
+        fps: 36,
+        softParticleDistance: 1,
         materialOptions: {
-          opacity: 0.9,
+          opacity: 0.82,
           depthWrite: false,
         },
       }),
@@ -335,19 +353,15 @@ function createSpawnShockwave(alphaMap, distortionMap) {
           geometry: new THREE.SphereGeometry(0.1, 16, 8),
           source: EmissionSource.Surface,
         }),
-        bursts: [{ time: 0, count: 8 }],
+        bursts: [{ time: 0, count: 10 }],
         rate: 0,
-        radialSpeed: 2.5,
+        radialSpeed: 2.6,
         initialValues: {
-          lifetime: 0.5,
-          scale: new THREE.Vector3(1.8, 1.8, 1.8),
+          lifetime: 0.55,
+          scale: new THREE.Vector3(2.0, 2.0, 2.0),
           color: new THREE.Color('#ffffff'),
-          alpha: 0.55,
+          alpha: 0.82,
           distortionStrength: 1,
-          rotation: [
-            new THREE.Vector3(-Math.PI, 0, 0),
-            new THREE.Vector3(Math.PI, 0, 0),
-          ],
         },
       }),
     ],
@@ -355,7 +369,7 @@ function createSpawnShockwave(alphaMap, distortionMap) {
       new ScaleOverLifetime({
         scale: (time) => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = 0.25 + 4.5 * Easing.cubic.out(t);
+          const size = 0.28 + 4.5 * Easing.cubic.out(t);
           return new THREE.Vector3(size, size, size);
         },
       }),
@@ -363,18 +377,20 @@ function createSpawnShockwave(alphaMap, distortionMap) {
         distortionStrength: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
       new ColorOverLifetime({
-        alpha: (time) => 0.8 * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
+        alpha: (time) => 1.15 * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
     ],
     renderers: [
       new SpriteRenderer(Textures.Default, {
+        billboard: false,
         alphaMap,
         softParticleDistance: 1,
         materialOptions: {
-          opacity: 0.45,
+          opacity: 0.72,
           transmission: 1,
           distortionMap,
-          distortionStrength: 10,
+          distortionStrength: 32,
+          side: THREE.DoubleSide,
           depthWrite: false,
         },
       }),
@@ -382,79 +398,19 @@ function createSpawnShockwave(alphaMap, distortionMap) {
   });
 }
 
-async function loadBulletMesh() {
-  try {
-    const gltf = await new GLTFLoader().loadAsync(BULLET_MODEL_URL);
-    const mesh = gltf.scene.getObjectByProperty('isMesh', true);
-    if (mesh instanceof THREE.Mesh) {
-      mesh.geometry.computeVertexNormals();
-      mesh.material = mesh.material ?? bulletMaterial();
-      return mesh;
-    }
-  } catch {
-    // Placeholder path is expected to fail until real assets are added.
-  }
-
-  const geometry = new THREE.ConeGeometry(0.08, 0.5, 10, 1);
-  geometry.rotateX(-Math.PI / 2);
-  geometry.translate(0, 0, -0.18);
-
-  return new THREE.Mesh(geometry, bulletMaterial());
+function createBulletMesh() {
+  return new THREE.Mesh(
+    new THREE.SphereGeometry(0.5, 24, 16),
+    bulletMaterial(),
+  );
 }
 
 function bulletMaterial() {
   return new THREE.MeshStandardMaterial({
-    color: new THREE.Color('#d7c091'),
-    metalness: 0.8,
-    roughness: 0.34,
+    color: new THREE.Color('#c99a4c'),
+    metalness: 1,
+    roughness: 0.22,
   });
-}
-
-async function loadAudioOrPlaceholder(url, duration, createFallback) {
-  try {
-    return await new THREE.AudioLoader().loadAsync(url);
-  } catch {
-    return createFallback(duration);
-  }
-}
-
-function createBulletLoopBuffer(duration) {
-  const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
-  const context = new AudioContextConstructor();
-  const sampleRate = context.sampleRate || 44100;
-  const buffer = context.createBuffer(1, Math.max(1, Math.floor(sampleRate * duration)), sampleRate);
-  const data = buffer.getChannelData(0);
-
-  for (let i = 0; i < data.length; i += 1) {
-    const t = i / sampleRate;
-    const flutter = Math.sin(Math.PI * 2 * 17 * t) * 0.12;
-    data[i] = (
-      Math.sin(Math.PI * 2 * 110 * t)
-      + Math.sin(Math.PI * 2 * 224 * t) * 0.45
-      + flutter
-    ) * 0.16;
-  }
-
-  context.close?.();
-  return buffer;
-}
-
-function createGunshotBuffer(duration) {
-  const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
-  const context = new AudioContextConstructor();
-  const sampleRate = context.sampleRate || 44100;
-  const buffer = context.createBuffer(1, Math.max(1, Math.floor(sampleRate * duration)), sampleRate);
-  const data = buffer.getChannelData(0);
-
-  for (let i = 0; i < data.length; i += 1) {
-    const t = i / sampleRate;
-    const envelope = Math.exp(-t * 18);
-    const crack = Math.sin(Math.PI * 2 * 180 * t) * 0.35;
-    data[i] = ((Math.random() * 2 - 1) * 0.85 + crack) * envelope;
-  }
-
-  context.close?.();
-  return buffer;
 }
 
 function pointEmissionShape(position = new THREE.Vector3()) {
@@ -462,6 +418,18 @@ function pointEmissionShape(position = new THREE.Vector3()) {
     geometry: new THREE.SphereGeometry(0.001, 4, 2),
   });
   shape.position.copy(position);
+  return shape;
+}
+
+function bulletEmissionCone() {
+  const shape = new EmissionShape({
+    geometry: new THREE.ConeGeometry(0.45, 2.2, 24, 1),
+    source: EmissionSource.Surface,
+  });
+
+  shape.position.set(0, 0.5, 34);
+  shape.rotation.x = -Math.PI / 2;
+
   return shape;
 }
 

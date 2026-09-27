@@ -8,6 +8,7 @@ varying vec4 vColor;
 varying float aspectRatio;
 varying float angle;
 varying float vDistortionStrength;
+varying vec2 vSpriteUv;
 flat out int fragFrame;
 
 void main() {
@@ -16,6 +17,7 @@ void main() {
 
     angle = spriteData.x;
     vDistortionStrength = spriteData.z;
+    vSpriteUv = vec2(0.0);
 
     vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
 

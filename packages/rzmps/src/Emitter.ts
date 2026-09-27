@@ -24,6 +24,7 @@ interface EmitterOptions {
     source: EmissionShape;
     bursts: Multiple<SpawnBurst>;
     rate: DynamicValue<number>;
+    rateOverDistance: DynamicValue<number>;
 
     radialSpeed: DynamicValue<number>;
     alignment: DynamicValue<number>;
@@ -38,19 +39,22 @@ interface EmitterOptions {
 interface EmitterContextState {
   startTime: number;
   lastSpawn: number;
+  distanceCredit: number;
+  lastDistancePosition?: THREE.Vector3;
   firedBursts: Set<number>;
 }
 
 export interface EmissionContext {
   key: string;
   transform: THREE.Matrix4;
+  position: THREE.Vector3;
   time: number;
   elapsedTime: number;
   duration: number;
   looping: boolean;
   color: THREE.Color;
   alpha: number;
-    mass: number;
+  mass: number;
   distortionStrength: number;
   velocity: THREE.Vector3;
   velocityScale: number;
@@ -61,6 +65,7 @@ export interface EmissionContext {
 class Emitter {
   source: EmissionShape;
   rate: DynamicValue<number>;
+  rateOverDistance: DynamicValue<number>;
 
   bursts: SpawnBurst[];
   initialValues: Partial<InitialParticleValues>;
@@ -74,6 +79,7 @@ class Emitter {
   countLOD?: Partial<LODSettings>;
   private _lodHelper: LODHelper;
   private _countLODHelper: LODHelper;
+  private _distancePosition = new THREE.Vector3();
 
   private _lastTagIndex: number = 0;
 
@@ -88,6 +94,7 @@ class Emitter {
 
     this.bursts = acceptMultiple(options.bursts) ?? [];
     this.rate = options.rate ?? (this.bursts.length > 0 ? 0 : 50);
+    this.rateOverDistance = options.rateOverDistance ?? 0;
 
     this.radialSpeed = options.radialSpeed ?? 1
     this.alignment = options.alignment ?? 0;
@@ -149,6 +156,8 @@ class Emitter {
 
       state.startTime = now;
       state.lastSpawn = now;
+      state.distanceCredit = 0;
+      state.lastDistancePosition = undefined;
       state.firedBursts.clear();
 
       return spawned;
@@ -172,6 +181,30 @@ class Emitter {
       if (particlesDue > 0) {
         state.lastSpawn = spawnClock;
       }
+    }
+
+    const rateOverDistance = evaluateDynamicNumber(this.rateOverDistance, time) * emissionMultiplier;
+    const distancePosition = this._getDistancePosition(context);
+    if (rateOverDistance > 0 && distancePosition) {
+      if (!state.lastDistancePosition) {
+        state.lastDistancePosition = distancePosition.clone();
+      } else {
+        state.distanceCredit += state.lastDistancePosition.distanceTo(distancePosition) * rateOverDistance;
+        state.lastDistancePosition.copy(distancePosition);
+      }
+
+      const particlesDue = Math.floor(state.distanceCredit);
+      if (particlesDue > 0) {
+        state.distanceCredit -= particlesDue;
+
+        for (let i = 0; i < particlesDue; i += 1) {
+          const particle = this.spawnParticle(particles, time, context);
+          spawned.push(particle);
+        }
+      }
+    } else if (distancePosition && state.lastDistancePosition) {
+      state.lastDistancePosition.copy(distancePosition);
+      state.distanceCredit = 0;
     }
 
     this.bursts.forEach((burst, index) => {
@@ -198,11 +231,18 @@ class Emitter {
       state = {
         startTime,
         lastSpawn: startTime,
+        distanceCredit: 0,
         firedBursts: new Set<number>(),
       };
       this._contextStates.set(key, state);
     }
     return state;
+  }
+
+  private _getDistancePosition(context: Partial<EmissionContext>): THREE.Vector3 | undefined {
+    if (context.position) return context.position;
+    if (!context.transform) return undefined;
+    return this._distancePosition.setFromMatrixPosition(context.transform);
   }
 
   private spawnParticle(particles: Particle[], time: number, context: Partial<EmissionContext>): Particle {

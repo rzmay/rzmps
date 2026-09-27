@@ -67,7 +67,7 @@ export default async function createSnow() {
         alphaMap: snowflakeAlpha,
         materialOptions: {
           normalLighting: 0.25,
-          sphericalNormals: 1
+          sphericalNormals: 0.1
         }
       }),
     ],

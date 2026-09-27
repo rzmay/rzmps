@@ -70,6 +70,7 @@ export class RendererGUI extends GUIEditorBase {
 
     buildSpriteRenderer(folder, renderer) {
         this.addDynamicValue(folder, renderer, 'fps', 'FPS');
+        folder.add(renderer, 'billboard').name('Billboard');
         folder.add(renderer, 'castShadow').name('Cast Shadow');
         folder.add(renderer, 'softParticleDistance', 0).name('Soft Particle Distance');
         folder.add(renderer, 'frames').min(1).step(1).name('Frames').onFinishChange(() => this.reloadSpriteMaterial(renderer));
