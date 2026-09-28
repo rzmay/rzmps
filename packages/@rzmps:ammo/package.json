@@ -37,12 +37,12 @@
   "license": "MIT",
   "peerDependencies": {
     "@rzmps/rzmps": "^1.0.0",
-    "three": "^0.186.0"
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@rzmps/rzmps": "^1.0.0",
     "concurrently": "^6.1.0",
-    "three": "^0.186.0",
+    "three": "^0.186.1",
     "typescript": "^5.0.0"
   }
 }
