@@ -2,10 +2,7 @@ import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { ValueByParameter } from '../types/ValueByParameter';
-import type { Node } from 'three/webgpu';
 import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
-import {
-  evaluateByParameterVectorGPU,} from '../helpers/evaluateByParameterGPU';
 import { SizeRange } from './ColorBySize';
 
 export interface VelocityBySizeOptions extends Partial<ModuleOptions> {
@@ -40,28 +37,6 @@ class VelocityBySize extends Module {
     }, {
       ...options,
       priority: 0.5,
-      modifyGPU: (particle) => {
-          const time = this.getSizeTimeGPU(particle.scale.length());
-
-          particle.position.assign(
-            particle.position.add(evaluateByParameterVectorGPU(
-              this.options.position ?? new THREE.Vector3(0, 0, 0),
-              time,
-            )),
-          );
-          particle.velocity.assign(
-            particle.velocity.add(evaluateByParameterVectorGPU(
-              this.options.velocity ?? new THREE.Vector3(0, 0, 0),
-              time,
-            )),
-          );
-          particle.acceleration.assign(
-            particle.acceleration.add(evaluateByParameterVectorGPU(
-              this.options.acceleration ?? new THREE.Vector3(0, 0, 0),
-              time,
-            )),
-          );
-        }
     });
   }
 
@@ -73,12 +48,6 @@ class VelocityBySize extends Module {
     return THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(size, min, max, 0, 1), 0, 1);
   }
 
-  private getSizeTimeGPU(size: Node<'float'>) {
-    const min = Array.isArray(this.options.sizeRange) ? this.options.sizeRange[0] : this.options.sizeRange?.min ?? 0;
-    const max = Array.isArray(this.options.sizeRange) ? this.options.sizeRange[1] : this.options.sizeRange?.max ?? 1;
-
-    return size.sub(min).div(max - min || 1).clamp(0, 1);
-  }
 }
 
 export default VelocityBySize;

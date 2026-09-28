@@ -15,15 +15,8 @@ import type { Tag } from './types/Tag';
 import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
-import { WebGPURenderer } from 'three/webgpu';
-import { float, Fn, If, uint, vec3 } from 'three/tsl';
 import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } from './renderers/LiveCubemap';
 import LODHelper, { type LODSettings } from './LODHelper';
-import {
-  createGPUParticleBufferState,
-  type GPUParticleBufferState,
-} from './GPUParticle';
-import { evaluateDynamicNumberGPU } from './helpers/evaluateDynamicGPU';
 
 interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
@@ -43,7 +36,6 @@ interface ParticleSystemOptions {
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   simulationSpace: SimulationSpace | `${SimulationSpace}`;
-  gpuProcessing: boolean;
 
   useLiveCubemap: boolean;
   cubemapSettings: Partial<LiveCubemapOptions>;
@@ -97,8 +89,6 @@ interface SubSystemEmissionRun {
 export type ParticleListener = (particle: Particle) => void;
 
 class ParticleSystem extends THREE.Object3D {
-  static GPU_DYNAMIC_VALUE_RESOLUTION = 16;
-
   particles: Particle[] = [];
   emitters: Emitter[] = [];
   modules: Module[] = [];
@@ -122,9 +112,6 @@ class ParticleSystem extends THREE.Object3D {
 
   useLiveCubemap: boolean;
   liveCubemap: LiveCubemap;
-  gpuProcessing: boolean;
-  private _isGPUProcessingActive = false;
-  get isGPUProcessingActive(): boolean { return this._isGPUProcessingActive; }
 
   private _simulationSpace: SimulationSpace = SimulationSpace.Local;
   get simulationSpace(): SimulationSpace {
@@ -149,7 +136,7 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _sceneCameraQuaternion = new THREE.Quaternion();
   get sceneCameraQuaternion() { return this._sceneCameraQuaternion; }
 
-  private _renderer?: THREE.WebGLRenderer | WebGPURenderer;
+  private _renderer?: THREE.WebGLRenderer;
   get sceneRenderer() { return this._renderer; }
   private _cameraDistanceSq = Number.MAX_SAFE_INTEGER;
   get cameraDistanceSq(): number { return this._cameraDistanceSq; }
@@ -211,7 +198,6 @@ class ParticleSystem extends THREE.Object3D {
     this.renderers = acceptMultiple(options.renderers ?? new SpriteRenderer()) ?? [];
     this.modules = acceptMultiple(options.modules) ?? [];
     this.simulationSpeed = options.simulationSpeed ?? 1;
-    this.gpuProcessing = options.gpuProcessing ?? false;
     this.duration = options.duration ?? 10;
     this.prewarm = options.prewarm ?? false;
     this.prewarmFPS = options.prewarmFPS ?? 24;
@@ -352,15 +338,6 @@ class ParticleSystem extends THREE.Object3D {
     // Module preparation
     const modules = this.modules
       .flatMap((module) => module.withDependents());
-
-    this._prepareGPUTagRegistry(modules);
-
-    if (this._canProcessParticlesOnGPU(modules)) {
-      this._processParticlesGPU(modules);
-      return;
-    }
-
-    this._isGPUProcessingActive = false;
 
     modules
       .forEach((module) => module.prepare(this, this.deltaTime));

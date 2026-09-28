@@ -1,12 +1,8 @@
 import * as THREE from 'three';
-import type { Node } from 'three/webgpu';
-import Module, { type ModuleGPUUpdate, type ModuleOptions, type ModuleUpdate } from '../Module';
+import Module, { type ModuleOptions, type ModuleUpdate } from '../Module';
 import Particle from '../Particle';
-import type { GPUParticle } from '../GPUParticle';
 import {
-  generateGPUParticleNoise,
   generateParticleNoise,
-  type GPUParticleNoiseValues,
   type ParticleNoiseValues,
 } from '../helpers/noise';
 
@@ -23,12 +19,6 @@ export type NoiseModuleUpdate = (
   particle: Particle,
   deltaTime: number,
   noise: ParticleNoiseValues,
-) => void;
-
-export type NoiseModuleGPUUpdate = (
-  particle: GPUParticle,
-  deltaTime: number,
-  noise: GPUParticleNoiseValues,
 ) => void;
 
 class NoiseModule extends Module {
@@ -52,11 +42,11 @@ class NoiseModule extends Module {
     );
     constructor(
       update: NoiseModuleUpdate,
-      options?: Partial<NoiseOptions> & { modifyGPU?: NoiseModuleGPUUpdate },
+      options?: Partial<NoiseOptions>,
     );
     constructor(
       keyOrUpdate: string | NoiseModuleUpdate,
-      options: Partial<NoiseOptions> & { modifyGPU?: NoiseModuleGPUUpdate } = {},
+      options: Partial<NoiseOptions> = {},
     ) {
       const key = typeof keyOrUpdate === 'string' ? keyOrUpdate : '';
       const update = typeof keyOrUpdate === 'function'
@@ -69,16 +59,7 @@ class NoiseModule extends Module {
         update(particle, deltaTime, this.generateNoise(particle));
       };
 
-      const modifyGPU: ModuleGPUUpdate = options.modifyGPU
-        ? (particle, deltaTime) => {
-          options.modifyGPU?.(particle, deltaTime, this.generateNoiseGPU(particle));
-        }
-        : Module.GPU_UNSUPPORTED;
-
-      super(modify, {
-        ...options,
-        modifyGPU,
-      });
+      super(modify, options);
 
       this.key = key;
       this.octaves = options.octaves ?? this.octaves;
@@ -91,10 +72,6 @@ class NoiseModule extends Module {
 
     public generateNoise(particle: Particle): ParticleNoiseValues {
       return generateParticleNoise(particle.position, this);
-    }
-
-    public generateNoiseGPU(particle: GPUParticle, time?: Node<'float'>): GPUParticleNoiseValues {
-      return generateGPUParticleNoise(particle.position, this, time);
     }
 }
 

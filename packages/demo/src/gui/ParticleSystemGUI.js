@@ -406,13 +406,6 @@ export class ParticleSystemGUI {
         folder.add(system, 'maxParticles', 0, 100000, 1).name('Max Particles');
         folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling');
         folder.add(system, 'simulationDistance', 0, 1000, 0.1).name('Simulation Distance');
-        folder.add(system, 'gpuProcessing').name('GPU Processing');
-        const gpuStatus = {
-            get active() {
-                return system.isGPUProcessingActive ? 'Active' : 'CPU fallback';
-            },
-        };
-        folder.add(gpuStatus, 'active').name('GPU Status').disable().listen();
         const updateLODFolder = folder.addFolder('Update LOD');
         updateLODFolder.close();
         this.buildUpdateLOD(updateLODFolder, system);

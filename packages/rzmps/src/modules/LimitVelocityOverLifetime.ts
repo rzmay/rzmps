@@ -2,13 +2,8 @@ import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
-import type { Node } from 'three/webgpu';
-import { abs, float, max, sign, vec3 } from 'three/tsl';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
-import {
-  evaluateDynamicNumberGPU,
-  evaluateDynamicVectorGPU,} from '../helpers/evaluateDynamicGPU';
 
 export interface LimitVelocityOverLifetimeOptions extends Partial<ModuleOptions> {
     limit: DynamicValue<THREE.Vector3>;
@@ -46,35 +41,6 @@ class LimitVelocityOverLifetime extends Module {
       }
     }, {
       ...options,
-      modifyGPU: (particle, deltaTime) => {
-          const limit = evaluateDynamicVectorGPU(
-            this.options.limit ?? new THREE.Vector3(1, 1, 1),
-            particle.time,
-            new THREE.Vector3(1, 1, 1),
-            particle.index,
-          );
-          const dampen = Math.min(Math.max(this.options.dampen ?? 1, 0), 1);
-
-          particle.velocity.assign(vec3(
-            this.dampenAxisGPU(particle.velocity.x, abs(limit.x), dampen),
-            this.dampenAxisGPU(particle.velocity.y, abs(limit.y), dampen),
-            this.dampenAxisGPU(particle.velocity.z, abs(limit.z), dampen),
-          ));
-
-          if (this.options.drag !== undefined) {
-            let drag = evaluateDynamicNumberGPU(this.options.drag, particle.time, 0, particle.index);
-            if (this.options.multiplyDragBySize) {
-              drag = drag.mul(particle.scale.x.add(particle.scale.y).add(particle.scale.z).div(3));
-            }
-            if (this.options.multiplyDragByVelocity) {
-              drag = drag.mul(particle.velocity.length());
-            }
-
-            particle.velocity.assign(
-              particle.velocity.mul(max(float(0), float(1).sub(drag.mul(deltaTime)))),
-            );
-          }
-        }
     });
   }
 
@@ -92,16 +58,6 @@ class LimitVelocityOverLifetime extends Module {
   }
 
   // eslint-disable-next-line class-methods-use-this
-  private dampenAxisGPU(
-    velocity: Node<'float'>,
-    limit: Node<'float'>,
-    dampen: number,
-  ): Node<'float'> {
-    const clamped = sign(velocity).mul(limit);
-    const dampened = velocity.add(clamped.sub(velocity).mul(dampen));
-
-    return abs(velocity).greaterThan(limit).select(dampened, velocity);
-  }
 }
 
 export default LimitVelocityOverLifetime;

@@ -60,4 +60,4 @@ export default async function createCollision() {
 }
 
 createCollision.author = "rzmay";
-createCollision.description = "Particle collision. Jolt, Rapier, and Ammo support impulses, allowing particles to affect other physics objects in the scene.";
+createCollision.description = "Particle collision with automatic mesh detection and sorting between static and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, Rapier, and Ammo can be used as external physics backends, allowing particles to affect other physics objects in the scene.";

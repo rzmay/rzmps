@@ -1,0 +1,101 @@
+name: PR Benchmarks
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    if: github.event.pull_request.draft == false
+
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout base
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.base.repo.full_name }}
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            base/package-lock.json
+            head/package-lock.json
+
+      - name: Create results directory
+        run: mkdir -p "$GITHUB_WORKSPACE/benchmark-results"
+
+      - name: Install base dependencies
+        working-directory: base
+        run: npm ci
+
+      - name: Benchmark base
+        working-directory: base
+        run: |
+          npm run benchmark:export -- \
+            "$GITHUB_WORKSPACE/benchmark-results/base.json"
+
+      - name: Install PR dependencies
+        working-directory: head
+        run: npm ci
+
+      - name: Benchmark PR
+        working-directory: head
+        run: |
+          npm run benchmark:export -- \
+            "$GITHUB_WORKSPACE/benchmark-results/head.json"
+
+      - name: Write PR metadata
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          jq -n \
+            --argjson pr "$PR_NUMBER" \
+            --arg baseSha "$BASE_SHA" \
+            --arg headSha "$HEAD_SHA" \
+            --arg baseRef "$BASE_REF" \
+            --arg headRef "$HEAD_REF" \
+            '{
+              pr: $pr,
+              baseSha: $baseSha,
+              headSha: $headSha,
+              baseRef: $baseRef,
+              headRef: $headRef
+            }' \
+            > benchmark-results/metadata.json
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark-results
+          retention-days: 30

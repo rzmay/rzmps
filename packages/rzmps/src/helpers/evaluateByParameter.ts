@@ -1,5 +1,4 @@
 import type { ValueByParameter } from '../types/ValueByParameter';
-import isTSLNode from './isTSLNode';
 
 export default function evaluateByParameter<T>(
   value: ValueByParameter<T>,
@@ -7,10 +6,6 @@ export default function evaluateByParameter<T>(
   interpolate: (a: T, b: T, t: number) => T,
   scale: (value: T, t: number) => T,
 ): T {
-  if (isTSLNode(value)) {
-    throw new Error('TSL nodes can only be used during GPU processing.');
-  }
-
   if (typeof value === 'function') {
     const result = (value as ((t: number) => ValueByParameter<T>))(parameter);
 
@@ -37,10 +32,6 @@ function resolveEndpoint<T>(
   interpolate: (a: T, b: T, t: number) => T,
   scale: (value: T, t: number) => T,
 ): T {
-  if (isTSLNode(value)) {
-    throw new Error('TSL nodes can only be used during GPU processing.');
-  }
-
   if (typeof value === 'function') {
     const result = (value as ((t: number) => ValueByParameter<T>))(parameter);
 

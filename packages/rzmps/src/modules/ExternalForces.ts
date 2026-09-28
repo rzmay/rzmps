@@ -1,11 +1,8 @@
 import * as THREE from 'three';
-import { StorageBufferAttribute } from 'three/webgpu';
-import { float, storage } from 'three/tsl';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
-import { evaluateDynamicNumberGPU } from '../helpers/evaluateDynamicGPU';
 import type { IParticleForceField } from '../interfaces/IParticleForceField';
 import ParticleForceField from '../ParticleForceField';
 import ParticleSystem from '../ParticleSystem';
@@ -26,8 +23,6 @@ class ExternalForces extends Module {
   private forceFields: Set<IParticleForceField> = new Set();
 
   private particleSystem?: ParticleSystem;
-  private forceSamples = new Float32Array(3);
-  private forceSampleAttribute = new StorageBufferAttribute(this.forceSamples, 3);
 
   constructor(options: Partial<ExternalForcesOptions> = {}) {
     super((particle: Particle, deltaTime: number) => {
@@ -40,31 +35,13 @@ class ExternalForces extends Module {
       particle.velocity.addScaledVector(force, (multiplier * deltaTime) / mass);
     }, {
       ...options,
-      modifyGPU: (particle, deltaTime, context) => {
-        const force = storage(
-          this.forceSampleAttribute,
-          'vec3',
-          Math.max(1, context.buffers.capacity),
-        ).element(particle.index);
-        const multiplier = evaluateDynamicNumberGPU(
-          this.multiplier ?? 1,
-          particle.time,
-          1,
-          particle.index,
-        );
-        const mass = particle.mass.greaterThan(float(0)).select(particle.mass, float(1));
-
-        particle.velocity.assign(
-          particle.velocity.add(force.mul(multiplier).mul(deltaTime).div(mass)),
-        );
-      },
     });
 
     this.explicitForceFields = options.forceFields;
     this.forceFieldFilter = options.forceFieldFilter ?? (() => true );
   }
 
-  public prepare(particleSystem: ParticleSystem, deltaTime: number): void {
+  public prepare(particleSystem: ParticleSystem): void {
     this.particleSystem = particleSystem;
 
     // If explicit force fields are provided, just use those
@@ -82,35 +59,6 @@ class ExternalForces extends Module {
       });
     }
 
-    if (particleSystem.isGPUProcessingActive) {
-      this.sampleForces(particleSystem, deltaTime);
-    }
-  }
-
-  private sampleForces(particleSystem: ParticleSystem, deltaTime: number): void {
-    if (!Array.isArray(particleSystem.particles)) return;
-
-    const capacity = Math.max(1, particleSystem.maxParticles, particleSystem.particles.length);
-
-    if (this.forceSamples.length < capacity * 3) {
-      this.forceSamples = new Float32Array(capacity * 3);
-      this.forceSampleAttribute = new StorageBufferAttribute(this.forceSamples, 3);
-    }
-
-    particleSystem.particles.forEach((particle, index) => {
-      const force = this.getSampledForce(particle, deltaTime);
-      const offset = index * 3;
-
-      this.forceSamples[offset] = force.x;
-      this.forceSamples[offset + 1] = force.y;
-      this.forceSamples[offset + 2] = force.z;
-    });
-
-    for (let index = particleSystem.particles.length * 3; index < this.forceSamples.length; index += 1) {
-      this.forceSamples[index] = 0;
-    }
-
-    this.forceSampleAttribute.needsUpdate = true;
   }
 
   private getSampledForce(particle: Particle, deltaTime: number): THREE.Vector3 {

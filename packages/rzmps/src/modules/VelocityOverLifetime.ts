@@ -4,9 +4,6 @@ import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
-import {
-  evaluateDynamicNumberGPU,
-  evaluateDynamicVectorGPU,} from '../helpers/evaluateDynamicGPU';
 
 export interface VelocityOverLifetimeOptions extends Partial<ModuleOptions> {
     position: DynamicValue<THREE.Vector3>;
@@ -59,81 +56,6 @@ class VelocityOverLifetime extends Module {
     }, {
       ...options,
       priority: 0.5,
-      modifyGPU: (particle) => {
-          if (this.options.position !== undefined) {
-            particle.position.assign(
-              particle.position.add(evaluateDynamicVectorGPU(
-                this.options.position,
-                particle.time,
-                new THREE.Vector3(0, 0, 0),
-                particle.index,
-              )),
-            );
-          }
-
-          if (this.options.linear !== undefined) {
-            particle.velocity.assign(
-              particle.velocity.add(evaluateDynamicVectorGPU(
-                this.options.linear,
-                particle.time,
-                new THREE.Vector3(0, 0, 0),
-                particle.index,
-              )),
-            );
-          }
-
-          if (this.options.acceleration !== undefined) {
-            particle.acceleration.assign(
-              particle.acceleration.add(evaluateDynamicVectorGPU(
-                this.options.acceleration,
-                particle.time,
-                new THREE.Vector3(0, 0, 0),
-                particle.index,
-              )),
-            );
-          }
-
-          const offset = evaluateDynamicVectorGPU(
-            this.options.orbitOffset ?? new THREE.Vector3(),
-            particle.time,
-            new THREE.Vector3(),
-            particle.index,
-          );
-          const center = particle.orbitCenter.add(offset);
-          const fromCenter = particle.position.sub(center);
-          const fromCenterDirection = fromCenter.normalize();
-
-          if (this.options.orbital !== undefined) {
-            const angularVelocity = evaluateDynamicVectorGPU(
-              this.options.orbital,
-              particle.time,
-              new THREE.Vector3(0, 0, 0),
-              particle.index,
-            );
-
-            particle.velocity.assign(
-              particle.velocity.add(angularVelocity.cross(fromCenterDirection)),
-            );
-          }
-
-          if (this.options.radial !== undefined) {
-            particle.velocity.assign(
-              particle.velocity.add(
-                fromCenterDirection.mul(
-                  evaluateDynamicNumberGPU(this.options.radial, particle.time, 0, particle.index),
-                )
-              ),
-            );
-          }
-
-          if (this.options.speedModifier !== undefined) {
-            particle.speed.assign(
-              particle.speed.mul(
-                evaluateDynamicNumberGPU(this.options.speedModifier, particle.time, 1, particle.index)
-              ),
-            );
-          }
-        }
     });
   }
 }
