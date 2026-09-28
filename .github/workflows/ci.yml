@@ -30,6 +30,9 @@ jobs:
       - name: Run core tests
         run: npm test
 
+      - name: Build packages
+        run: npm run build:modules
+
       - name: Build demo
         run: npm run build --workspace demo
 
