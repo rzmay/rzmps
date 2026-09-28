@@ -11,6 +11,8 @@
     "build:modules": "npm run build --workspace @rzmps/rzmps && npm run build --workspace @rzmps/ammo && npm run build --workspace @rzmps/jolt && npm run build --workspace @rzmps/rapier",
     "benchmark:run": "npm --workspace demo run benchmark:run --",
     "benchmark:update-report": "node scripts/update-benchmark-report.mjs",
+    "benchmark:export": "node scripts/update-benchmark-report.mjs --json-only",
+    "benchmark:compare": "node scripts/compare-benchmarks.mjs",
     "presets:add-author": "node scripts/add-preset-author.mjs"
   },
   "devDependencies": {
