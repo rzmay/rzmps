@@ -65,7 +65,8 @@ export default async function createDopplerBullet() {
         },
       }),
     ],
-    modules: [
+    modules: [],
+    renderers: [
       new AudioModule({
         sound: bulletLoopSound,
         onSpawnSound: gunshotSound,
@@ -78,8 +79,6 @@ export default async function createDopplerBullet() {
         depthAffectsVolume: 0.45,
         dopplerEffect: 2.4,
       }),
-    ],
-    renderers: [
       new MeshRenderer({
         mesh: bulletMesh,
         maxParticles: 8,

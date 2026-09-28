@@ -167,6 +167,11 @@ enum TagSelectionMethod {
 | `Random`     | Each particle receives one random tag.                   |
 | `Distribute` | Tags are assigned round-robin.                           |
 
+GPU processing encodes GPU-visible tag filters as a per-`ParticleSystem`
+32-bit mask. CPU processing and CPU-only effects still support any number of
+string tags, but GPU processing falls back to CPU when more than 32 distinct
+tags are referenced by GPU module filters and renderer filters.
+
 ## Particle Systems
 
 `ParticleSystem` extends `THREE.Object3D`, so it can be added, moved, rotated,
@@ -197,6 +202,7 @@ interface ParticleSystemOptions {
   simulationSpace: SimulationSpace;
   useLiveCubemap: boolean;
   cubemapSettings: Partial<LiveCubemapOptions>;
+  gpuProcessing: boolean;
 }
 ```
 
@@ -210,6 +216,13 @@ first renders. `prewarmFPS` controls the fixed warmup step rate and defaults to
 Set `simulationDistance` above `0` to pause simulation while the particle system
 is farther than that distance from the active camera. The default is `0`, which
 disables distance limiting.
+
+Set `gpuProcessing: true` to allow WebGPU particle updates when every
+non-effect module in the system can use GPU particle buffers. Renderers that
+support GPU input can consume those buffers directly; CPU-only renderers use
+the CPU particle mirror after GPU readback.
+`particleSystem.isGPUProcessingActive` reports whether the current update is
+actually using the GPU path after fallback checks.
 
 Set `updateLOD` to reduce simulation frequency as systems move farther from the
 active camera. `useUpdateLOD` defaults to `true` when `updateLOD` is provided
@@ -540,7 +553,11 @@ Common `initialValues` fields include:
 | `alpha`               | `number`        | Initial opacity.                                                   |
 | `mass`                | `number`        | Particle mass for collision impulses. Defaults to `0`.             |
 
-Most initial values can be dynamic.
+Most initial values can be dynamic. On the GPU path, TSL nodes can be supplied
+directly. JavaScript functions are sampled into a uniform lookup table and
+interpolated; adjust `ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION` to trade
+curve fidelity for uniform data size. TSL nodes are GPU-only and throw if a CPU
+evaluator receives them.
 
 ### Emission Shapes
 
@@ -581,6 +598,7 @@ interface ModuleOptions {
   tags: StrictMultiple<Tag>;
   useUpdateLOD: boolean;
   updateLOD: Partial<LODSettings>;
+  isEffect: boolean;
 }
 ```
 
@@ -591,6 +609,7 @@ work on lower-detail frames while preserving the module API.
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `priority` | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are transient pre-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
 | `tags`     | Restricts the module to particles with matching tags.                                                                                                                                                                                                                      |
+| `isEffect` | Marks a module as reactive rather than particle-mutating. Effects are allowed to run on the CPU alongside GPU processing.                                                                                     |
 
 Priority also determines whether a module's changes persist into the next frame.
 Permanent pre-movement changes are cached into the next persistent particle
@@ -944,6 +963,11 @@ Samples `ParticleForceField` objects and applies their forces to particles. If
 `forceFields` is omitted, fields are discovered from the particle system's
 scene.
 
+In GPU processing, force fields are sampled on the CPU during `prepare()` for
+the current live particle list, uploaded as a force buffer, and applied by
+particle index during the GPU update. This keeps arbitrary CPU force-field code
+usable in GPU systems, with forces evaluated at the start of the GPU frame.
+
 ### Collision
 
 ```ts
@@ -976,6 +1000,12 @@ Collision runs as a late permanent pre-movement module. It predicts each
 particle's current-frame travel segment from position and velocity, resolves
 position/velocity before movement, then lets the normal movement step carry the
 particle away from the surface.
+
+In GPU processing, collision queries are approximated on the CPU during
+`prepare()` using the same current position and projected velocity. The sampled
+hit position and normal are uploaded to GPU buffers and applied during the GPU
+update. This keeps CPU collision backends available to GPU systems without
+mixing CPU processing into the middle of the GPU pipeline.
 
 ### Audio
 
@@ -1321,9 +1351,14 @@ interface ThreeCollisionBackendOptions {
   // Defaults to 1 => once per update.
   refreshQuality?: number;
 
-  // Leave null to use Three.js defaults.
+  // Leave null to use Three.js defaults. When GPU collision flattening is
+  // active, null defaults become maxLevel: 8 and trianglesPerLeaf: 32.
   maxLevel?: number | null;
   trianglesPerLeaf?: number | null;
+
+  // Whether to prepare GPU-friendly flattened octrees during GPU processing.
+  // Defaults to true.
+  gpuCollision?: boolean;
 
   objectFilter?: (object: THREE.Object3D) => boolean;
   staticObjectFilter?: (object: THREE.Object3D) => boolean;

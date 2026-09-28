@@ -104,6 +104,22 @@ export default async function createBubbles() {
         sizeRange: [0, 1],
         distortionStrength: [0, 1]
       }),
+    ],
+
+    renderers: [
+      new SpriteRenderer(Textures.Circle, {
+        material: 'lit',
+
+        materialOptions: {
+          roughness: 0.15,
+          sphericalNormals: 1,
+          normalLighting: 0.75,
+          transmissionMap: simple,
+          transmission: 0.7,
+          distortionMap: distortionSimple,
+          distortionStrength: -8,
+        },
+      }),
 
       new Audio({
         sound: bubbles,
@@ -134,22 +150,6 @@ export default async function createBubbles() {
         // Fast-moving bubbles become slightly more animated sounding.
         speedAffectsPitch: 0.08,
         speedAffectsVolume: 0.05,
-      }),
-    ],
-
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: 'lit',
-
-        materialOptions: {
-          roughness: 0.15,
-          sphericalNormals: 1,
-          normalLighting: 0.75,
-          transmissionMap: simple,
-          transmission: 0.7,
-          distortionMap: distortionSimple,
-          distortionStrength: -8,
-        },
       }),
     ],
   });

@@ -15,8 +15,15 @@ import type { Tag } from './types/Tag';
 import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
+import { WebGPURenderer } from 'three/webgpu';
+import { float, Fn, If, uint, vec3 } from 'three/tsl';
 import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } from './renderers/LiveCubemap';
 import LODHelper, { type LODSettings } from './LODHelper';
+import {
+  createGPUParticleBufferState,
+  type GPUParticleBufferState,
+} from './GPUParticle';
+import { evaluateDynamicNumberGPU } from './helpers/evaluateDynamicGPU';
 
 interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
@@ -36,6 +43,9 @@ interface ParticleSystemOptions {
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   simulationSpace: SimulationSpace | `${SimulationSpace}`;
+  gpuProcessing: boolean;
+  gpuDebug: boolean;
+  gpuDebugInterval: number;
 
   useLiveCubemap: boolean;
   cubemapSettings: Partial<LiveCubemapOptions>;
@@ -89,6 +99,10 @@ interface SubSystemEmissionRun {
 export type ParticleListener = (particle: Particle) => void;
 
 class ParticleSystem extends THREE.Object3D {
+  static GPU_DYNAMIC_VALUE_RESOLUTION = 16;
+  static GPU_DEBUG = false;
+  static GPU_DEBUG_INTERVAL = 30;
+
   particles: Particle[] = [];
   emitters: Emitter[] = [];
   modules: Module[] = [];
@@ -112,6 +126,11 @@ class ParticleSystem extends THREE.Object3D {
 
   useLiveCubemap: boolean;
   liveCubemap: LiveCubemap;
+  gpuProcessing: boolean;
+  gpuDebug: boolean;
+  gpuDebugInterval: number;
+  private _isGPUProcessingActive = false;
+  get isGPUProcessingActive(): boolean { return this._isGPUProcessingActive; }
 
   private _simulationSpace: SimulationSpace = SimulationSpace.Local;
   get simulationSpace(): SimulationSpace {
@@ -136,7 +155,7 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _sceneCameraQuaternion = new THREE.Quaternion();
   get sceneCameraQuaternion() { return this._sceneCameraQuaternion; }
 
-  private _renderer?: THREE.WebGLRenderer;
+  private _renderer?: THREE.WebGLRenderer | WebGPURenderer;
   get sceneRenderer() { return this._renderer; }
   private _cameraDistanceSq = Number.MAX_SAFE_INTEGER;
   get cameraDistanceSq(): number { return this._cameraDistanceSq; }
@@ -187,9 +206,16 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _directionNormalMatrix = new THREE.Matrix3();
   private readonly _inverseWorldMatrix = new THREE.Matrix4();
   private _gpuBuffers?: GPUParticleBufferState;
+  private _gpuTransientBaseBuffers?: GPUParticleBufferState;
+  private _gpuRenderBuffers?: GPUParticleBufferState;
   private readonly _gpuTagRegistry = new Map<Tag, number>();
   private _gpuTagOverflow = false;
   private _gpuReadbackPending = false;
+  private _gpuReadbacksInFlight = 0;
+  private _gpuReadbackSequence = 0;
+  private _latestAppliedGPUReadbackSequence = 0;
+  private _gpuDebugFrame = 0;
+  private _gpuDebugActiveFrame: number | undefined;
 
   constructor(options: Partial<ParticleSystemOptions> = {}) {
     super();
@@ -198,6 +224,9 @@ class ParticleSystem extends THREE.Object3D {
     this.renderers = acceptMultiple(options.renderers ?? new SpriteRenderer()) ?? [];
     this.modules = acceptMultiple(options.modules) ?? [];
     this.simulationSpeed = options.simulationSpeed ?? 1;
+    this.gpuProcessing = options.gpuProcessing ?? true;
+    this.gpuDebug = options.gpuDebug ?? false;
+    this.gpuDebugInterval = Math.max(1, options.gpuDebugInterval ?? ParticleSystem.GPU_DEBUG_INTERVAL);
     this.duration = options.duration ?? 10;
     this.prewarm = options.prewarm ?? false;
     this.prewarmFPS = options.prewarmFPS ?? 24;
@@ -339,6 +368,15 @@ class ParticleSystem extends THREE.Object3D {
     const modules = this.modules
       .flatMap((module) => module.withDependents());
 
+    this._prepareGPUTagRegistry(modules);
+
+    if (this._canProcessParticlesOnGPU(modules)) {
+      this._processParticlesGPU(modules);
+      return;
+    }
+
+    this._isGPUProcessingActive = false;
+
     modules
       .forEach((module) => module.prepare(this, this.deltaTime));
 
@@ -386,35 +424,55 @@ class ParticleSystem extends THREE.Object3D {
     return this.gpuProcessing
       && this.sceneRenderer instanceof WebGPURenderer
       && !this._gpuTagOverflow
-      && modules.every((module) => module.isEffect || module.supportsGPU);
+      && modules.every((module) => module.supportsGPU);
   }
 
   private _processParticlesGPU(modules: Module[]): void {
     const sceneRenderer = this.sceneRenderer;
     if (!(sceneRenderer instanceof WebGPURenderer)) return;
 
-    if (this._gpuReadbackPending) {
-      this.renderers.forEach((renderer) => {
-        renderer.update(this.particles, this, this.deltaTime);
-      });
-      return;
-    }
+    const debugFrame = this._beginGPUDebugFrame(modules);
+    const hasPendingReadback = this._gpuReadbackPending;
 
-    this.particles.forEach((particle) => particle.restore());
-    this._compactExpiredParticles();
+    if (hasPendingReadback) {
+      this._logGPUDebug('readback pending; preserving GPU state', {
+        inFlight: this._gpuReadbacksInFlight,
+        particleCount: this.particles.length,
+        gpuCount: this._gpuBuffers?.count,
+        sample: this._sampleGPUParticles(this.particles),
+      });
+    } else {
+      this._logGPUDebug('before restore', {
+        particleCount: this.particles.length,
+        sample: this._sampleGPUParticles(this.particles),
+      });
+      this.particles.forEach((particle) => particle.restore());
+      this._compactExpiredParticles();
+      this._logGPUDebug('after restore + compact', {
+        particleCount: this.particles.length,
+        sample: this._sampleGPUParticles(this.particles),
+      });
+    }
 
     this._isGPUProcessingActive = true;
 
     modules
       .forEach((module) => module.prepare(this, this.deltaTime));
 
-    const effectModules = modules.filter((module) => module.isEffect);
-    const modifierModules = modules.filter((module) => !module.isEffect);
+    this._logGPUDebug('prepared modules', {
+      modifiers: this._describeGPUModules(modules),
+    });
 
     if (!this._gpuBuffers) {
       this._gpuBuffers = createGPUParticleBufferState(
         this.particles,
         this.maxParticles,
+        (particle) => this._getParticleGPUTagMask(particle),
+      );
+    } else if (hasPendingReadback) {
+      this._gpuBuffers.uploadRange(
+        this.particles,
+        this._gpuBuffers.count,
         (particle) => this._getParticleGPUTagMask(particle),
       );
     } else {
@@ -423,6 +481,58 @@ class ParticleSystem extends THREE.Object3D {
         (particle) => this._getParticleGPUTagMask(particle),
       );
     }
+    const mainBufferInitialization = this._gpuBuffers.initialize(sceneRenderer);
+    this._logGPUDebug('uploaded main buffer', {
+      count: this._gpuBuffers.count,
+      capacity: this._gpuBuffers.capacity,
+      initialization: mainBufferInitialization,
+      sample: this._sampleGPUParticles(this.particles),
+    });
+
+    if (!this._gpuTransientBaseBuffers) {
+      this._gpuTransientBaseBuffers = createGPUParticleBufferState(
+        this.particles,
+        this.maxParticles,
+        (particle) => this._getParticleGPUTagMask(particle),
+      );
+    } else if (hasPendingReadback) {
+      this._gpuTransientBaseBuffers.uploadRange(
+        this.particles,
+        this._gpuTransientBaseBuffers.count,
+        (particle) => this._getParticleGPUTagMask(particle),
+      );
+    } else {
+      this._gpuTransientBaseBuffers.upload(
+        this.particles,
+        (particle) => this._getParticleGPUTagMask(particle),
+      );
+    }
+    const transientBaseBufferInitialization = this._gpuTransientBaseBuffers.initialize(sceneRenderer);
+    this._logGPUDebug('uploaded transient-base buffer', {
+      count: this._gpuTransientBaseBuffers.count,
+      capacity: this._gpuTransientBaseBuffers.capacity,
+      initialization: transientBaseBufferInitialization,
+    });
+
+    if (!this._gpuRenderBuffers) {
+      this._gpuRenderBuffers = createGPUParticleBufferState(
+        this.particles,
+        this.maxParticles,
+        (particle) => this._getParticleGPUTagMask(particle),
+      );
+    } else if (hasPendingReadback) {
+      this._gpuRenderBuffers.uploadRange(
+        this.particles,
+        this._gpuRenderBuffers.count,
+        (particle) => this._getParticleGPUTagMask(particle),
+      );
+    } else {
+      this._gpuRenderBuffers.upload(
+        this.particles,
+        (particle) => this._getParticleGPUTagMask(particle),
+      );
+    }
+    const renderBufferInitialization = this._gpuRenderBuffers.initialize(sceneRenderer);
 
     const context = {
       system: this,
@@ -430,65 +540,170 @@ class ParticleSystem extends THREE.Object3D {
       deltaTime: this.deltaTime,
     };
 
-    this._computeGPUModulePhase(
-      modifierModules
-        .filter((module) => module.priority < 0)
-        .sort((a, b) => a.priority - b.priority),
-      context,
-    );
+    const permanentPreMovementModules = modules
+      .filter((module) => module.priority < 0)
+      .sort((a, b) => a.priority - b.priority);
 
-    this._computeGPUModulePhase(
-      modifierModules
-        .filter((module) => module.priority >= 0 && module.priority < 1)
-        .sort((a, b) => a.priority - b.priority),
-      context,
-    );
+    this._logGPUDebug('phase: permanent pre-movement', {
+      modules: this._describeGPUModules(permanentPreMovementModules),
+    });
+    this._computeGPUModulePhase(permanentPreMovementModules, context);
 
+    const transientPreMovementModules = modules
+      .filter((module) => module.priority >= 0 && module.priority < 1)
+      .sort((a, b) => a.priority - b.priority);
+
+    if (transientPreMovementModules.length > 0) {
+      this._logGPUDebug('copy main -> transient base before transient phase');
+      this._copyGPUParticleBuffer(this._gpuBuffers, this._gpuTransientBaseBuffers);
+
+      this._logGPUDebug('phase: transient pre-movement', {
+        modules: this._describeGPUModules(transientPreMovementModules),
+      });
+      this._computeGPUModulePhase(
+        transientPreMovementModules,
+        context,
+      );
+    }
+
+    this._logGPUDebug('phase: movement');
     this._computeGPUParticleMovement();
 
+    if (transientPreMovementModules.length > 0) {
+      this._logGPUDebug('commit transient frame -> permanent GPU state');
+      this._commitGPUTransientFrame(this._gpuBuffers, this._gpuTransientBaseBuffers);
+    }
+
+    this._gpuReadbacksInFlight += 1;
     this._gpuReadbackPending = true;
-    const readbackParticles = [...this.particles];
+    const readbackSequence = this._gpuReadbackSequence + 1;
+    this._gpuReadbackSequence = readbackSequence;
+    const readbackParticles = this.particles.slice(0, this._gpuBuffers.count);
+    const readbackStart = performance.now();
+    this._logGPUDebug('readback requested', {
+      readbackSequence,
+      readbackSource: 'main',
+      readbackParticleCount: readbackParticles.length,
+      sample: this._sampleGPUParticles(readbackParticles),
+    });
     const cpuMirrorUpdate = this._gpuBuffers.readback(sceneRenderer, readbackParticles);
 
-    this._computeGPUModulePhase(
-      modifierModules
-        .filter((module) => module.priority >= 1)
-        .sort((a, b) => a.priority - b.priority),
-      context,
-    );
+    const transientRenderModules = modules
+      .filter((module) => module.priority >= 1)
+      .sort((a, b) => a.priority - b.priority);
 
     const cpuInputRenderers = this.renderers.filter((renderer) => !renderer.supportsGPUInput);
+    const gpuInputRenderers = this.renderers.filter((renderer) => renderer.supportsGPUInput);
+    const needsRenderBuffer = transientRenderModules.length > 0
+      || gpuInputRenderers.length > 0
+      || cpuInputRenderers.length > 0;
 
-    this.renderers.forEach((renderer) => {
-      if (renderer.supportsGPUInput) {
-        renderer.updateGPU(this._gpuBuffers!, this, this.deltaTime);
-      }
+    if (needsRenderBuffer) {
+      this._logGPUDebug('copy permanent state -> render buffer before render-time phase', {
+        initialization: renderBufferInitialization,
+      });
+      this._copyGPUParticleBuffer(this._gpuBuffers, this._gpuRenderBuffers);
+
+      this._logGPUDebug('phase: render-time transient', {
+        target: 'render buffer',
+        modules: this._describeGPUModules(transientRenderModules),
+      });
+      this._computeGPUModulePhase(transientRenderModules, {
+        system: this,
+        buffers: this._gpuRenderBuffers,
+        deltaTime: this.deltaTime,
+      });
+    } else {
+      this._logGPUDebug('phase: render-time transient skipped on GPU', {
+        reason: 'no renderers',
+        modules: this._describeGPUModules(transientRenderModules),
+      });
+    }
+
+    this._logGPUDebug('renderer handoff', {
+      gpuRenderers: gpuInputRenderers.map((renderer) => renderer.constructor.name),
+      cpuRenderers: cpuInputRenderers.map((renderer) => renderer.constructor.name),
     });
 
-    void cpuMirrorUpdate
-      .then(() => {
-        this._gpuReadbackPending = false;
+    gpuInputRenderers.forEach((renderer) => {
+      renderer.updateGPU(this._gpuRenderBuffers!, this, this.deltaTime);
+    });
 
-        modifierModules
-          .filter((module) => module.priority >= 1)
-          .sort((a, b) => a.priority - b.priority)
-          .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+    const renderReadbackParticles = cpuInputRenderers.length > 0 && needsRenderBuffer
+      ? this._cloneParticlesForGPUReadback(this.particles.slice(0, this._gpuRenderBuffers.count))
+      : readbackParticles;
+    const renderMirrorUpdate: Promise<Particle[]> = cpuInputRenderers.length > 0 && needsRenderBuffer
+      ? this._gpuRenderBuffers.readback(sceneRenderer, renderReadbackParticles)
+        .then(() => renderReadbackParticles)
+      : cpuMirrorUpdate.then(() => readbackParticles);
+
+    void (async () => {
+      try {
+        await cpuMirrorUpdate;
+
+        this._gpuReadbacksInFlight = Math.max(0, this._gpuReadbacksInFlight - 1);
+        this._gpuReadbackPending = this._gpuReadbacksInFlight > 0;
+        this._logGPUDebug('readback resolved', {
+          readbackSequence,
+          durationMs: Number((performance.now() - readbackStart).toFixed(2)),
+          sample: this._sampleGPUParticles(readbackParticles),
+        });
+
+        if (readbackSequence <= this._latestAppliedGPUReadbackSequence) {
+          this._logGPUDebug('readback ignored: stale sequence', {
+            readbackSequence,
+            latestAppliedReadbackSequence: this._latestAppliedGPUReadbackSequence,
+          });
+          this._endGPUDebugFrame(debugFrame);
+          return;
+        }
+
+        this._latestAppliedGPUReadbackSequence = readbackSequence;
+
+        const renderParticles = await renderMirrorUpdate;
+
+        if (readbackSequence < this._latestAppliedGPUReadbackSequence) {
+          this._logGPUDebug('render readback ignored: stale sequence', {
+            readbackSequence,
+            latestAppliedReadbackSequence: this._latestAppliedGPUReadbackSequence,
+          });
+          this._endGPUDebugFrame(debugFrame);
+          return;
+        }
+
+        if (cpuInputRenderers.length > 0) {
+          this._logGPUDebug('cpu renderer render-buffer readback resolved', {
+            readbackSequence,
+            sample: this._sampleGPUParticles(renderParticles),
+          });
+
+          cpuInputRenderers.forEach((renderer) => {
+            renderer.update(renderParticles, this, this.deltaTime);
+          });
+        } else {
+          this._logGPUDebug('cpu renderer render-buffer readback skipped', {
+            reason: 'no CPU-input renderers',
+          });
+        }
+
+        this._endGPUDebugFrame(debugFrame);
+      } catch (error) {
+        this._gpuReadbacksInFlight = Math.max(0, this._gpuReadbacksInFlight - 1);
+        this._gpuReadbackPending = this._gpuReadbacksInFlight > 0;
+        this._logGPUDebug('readback failed', {
+          readbackSequence,
+          error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          sample: this._sampleGPUParticles(this.particles),
+        });
 
         cpuInputRenderers.forEach((renderer) => {
           renderer.update(this.particles, this, this.deltaTime);
         });
 
-        this._runCPUEffects(effectModules);
-      })
-      .catch(() => {
-        this._gpuReadbackPending = false;
-
-        cpuInputRenderers.forEach((renderer) => {
-          renderer.update(this.particles, this, this.deltaTime);
-        });
-
-        this._runCPUEffects(effectModules);
-      });
+        this._endGPUDebugFrame(debugFrame);
+      }
+    })();
   }
 
   private _computeGPUParticleMovement(): void {
@@ -527,10 +742,126 @@ class ParticleSystem extends THREE.Object3D {
     this.sceneRenderer.compute(computeNode);
   }
 
-  private _runCPUEffects(modules: Module[]): void {
-    modules
-      .sort((a, b) => a.priority - b.priority)
-      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+  private _copyGPUParticleBuffer(
+    source: GPUParticleBufferState,
+    target: GPUParticleBufferState,
+  ): void {
+    if (!source.count) return;
+    if (!(this.sceneRenderer instanceof WebGPURenderer)) return;
+
+    const sourceParticle = source.particle;
+    const targetParticle = target.particle;
+
+    const computeNode = Fn(() => {
+      this._assignGPUParticleValues(targetParticle, sourceParticle);
+    })().compute(source.count);
+
+    this.sceneRenderer.compute(computeNode);
+  }
+
+  private _commitGPUTransientFrame(
+    frameBuffers: GPUParticleBufferState,
+    baseBuffers: GPUParticleBufferState,
+  ): void {
+    if (!frameBuffers.count) return;
+    if (!(this.sceneRenderer instanceof WebGPURenderer)) return;
+
+    const frame = frameBuffers.particle;
+    const base = baseBuffers.particle;
+    const deltaTime = float(this.deltaTime);
+    const gravity = vec3(this.gravity);
+
+    const computeNode = Fn(() => {
+      const frameStep = deltaTime.mul(frame.speed);
+      const baseStep = deltaTime.mul(base.speed);
+      const gravityModifier = evaluateDynamicNumberGPU(
+        this.gravityModifier,
+        base.time,
+        0,
+        base.index,
+      );
+      const gravityVelocity = gravity.mul(deltaTime.mul(gravityModifier));
+      const frameVelocity = frame.velocity.sub(frame.acceleration.mul(frameStep));
+      const frameAngularVelocity = frame.angularVelocity.sub(frame.angularAcceleration.mul(frameStep));
+      const frameScalarVelocity = frame.scalarVelocity.sub(frame.scalarAcceleration.mul(frameStep));
+      const baseVelocity = base.velocity.add(gravityVelocity);
+
+      frame.lifetime.assign(base.lifetime);
+      frame.position.assign(base.position.add(frameVelocity.mul(frameStep)));
+      frame.orbitCenter.assign(base.orbitCenter);
+      frame.rotation.assign(base.rotation.add(frameAngularVelocity.mul(frameStep)));
+      frame.scale.assign(base.scale.add(frameScalarVelocity.mul(frameStep)));
+      frame.velocity.assign(baseVelocity.add(base.acceleration.mul(baseStep)));
+      frame.angularVelocity.assign(base.angularVelocity.add(base.angularAcceleration.mul(baseStep)));
+      frame.scalarVelocity.assign(base.scalarVelocity.add(base.scalarAcceleration.mul(baseStep)));
+      frame.acceleration.assign(base.acceleration);
+      frame.angularAcceleration.assign(base.angularAcceleration);
+      frame.scalarAcceleration.assign(base.scalarAcceleration);
+      frame.speed.assign(base.speed);
+      frame.mass.assign(base.mass);
+      frame.distortionStrength.assign(base.distortionStrength);
+      frame.color.assign(base.color);
+      frame.alpha.assign(base.alpha);
+    })().compute(frameBuffers.count);
+
+    this.sceneRenderer.compute(computeNode);
+  }
+
+  private _assignGPUParticleValues(
+    target: GPUParticleBufferState['particle'],
+    source: GPUParticleBufferState['particle'],
+  ): void {
+    target.position.assign(source.position);
+    target.orbitCenter.assign(source.orbitCenter);
+    target.rotation.assign(source.rotation);
+    target.scale.assign(source.scale);
+    target.velocity.assign(source.velocity);
+    target.angularVelocity.assign(source.angularVelocity);
+    target.scalarVelocity.assign(source.scalarVelocity);
+    target.acceleration.assign(source.acceleration);
+    target.angularAcceleration.assign(source.angularAcceleration);
+    target.scalarAcceleration.assign(source.scalarAcceleration);
+    target.color.assign(source.color);
+    target.speed.assign(source.speed);
+    target.alpha.assign(source.alpha);
+    target.mass.assign(source.mass);
+    target.distortionStrength.assign(source.distortionStrength);
+    target.lifetime.assign(source.lifetime);
+    target.time.assign(source.time);
+    target.realtime.assign(source.realtime);
+  }
+
+  private _cloneParticlesForGPUReadback(particles: Particle[]): Particle[] {
+    return particles.map((particle) => {
+      const clone = new Particle({
+        position: particle.position,
+        orbitCenter: particle.orbitCenter,
+        rotation: particle.rotation,
+        scale: particle.scale,
+        velocity: particle.velocity,
+        angularVelocity: particle.angularVelocity,
+        scalarVelocity: particle.scalarVelocity,
+        acceleration: particle.acceleration,
+        angularAcceleration: particle.angularAcceleration,
+        scalarAcceleration: particle.scalarAcceleration,
+        speed: particle.speed,
+        color: particle.color,
+        tags: particle.tags ? [...particle.tags] : undefined,
+        alpha: particle.alpha,
+        lifetime: particle.lifetime,
+        mass: particle.mass,
+        distortionStrength: particle.distortionStrength,
+      });
+
+      clone.id = particle.id;
+      clone.startTime = particle.startTime;
+      clone.time = particle.time;
+      clone.realtime = particle.realtime;
+      clone.noise = { ...particle.noise };
+      clone.data = particle.data;
+
+      return clone;
+    });
   }
 
   private _computeGPUModulePhase(
@@ -541,18 +872,19 @@ class ParticleSystem extends THREE.Object3D {
     if (!(this.sceneRenderer instanceof WebGPURenderer)) return;
 
     const renderer = this.sceneRenderer;
-    const particleCount = this._gpuBuffers.count;
+    const buffers = context.buffers;
+    const particleCount = buffers.count;
 
     modules.forEach((module) => {
       const computeNode = Fn(() => {
         const tagMask = this._getGPUTagMask(module.tags);
         if (tagMask === undefined) {
-          module.modifyGPU(this._gpuBuffers!.particle, this.deltaTime, context);
+          module.modifyGPU(buffers.particle, this.deltaTime, context);
           return;
         }
 
-        If(this._gpuBuffers!.particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)), () => {
-          module.modifyGPU(this._gpuBuffers!.particle, this.deltaTime, context);
+        If(buffers.particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)), () => {
+          module.modifyGPU(buffers.particle, this.deltaTime, context);
         });
       })().compute(particleCount);
 
@@ -560,11 +892,124 @@ class ParticleSystem extends THREE.Object3D {
     });
   }
 
+  private _beginGPUDebugFrame(modules: Module[]): number | undefined {
+    this._gpuDebugFrame += 1;
+
+    if (!this._isGPUDebugEnabled()) return undefined;
+
+    const interval = Math.max(1, this.gpuDebugInterval || ParticleSystem.GPU_DEBUG_INTERVAL);
+    if (this._gpuDebugFrame % interval !== 0) return undefined;
+
+    this._gpuDebugActiveFrame = this._gpuDebugFrame;
+    this._logGPUDebug('begin', {
+      deltaTime: this.deltaTime,
+      particleCount: this.particles.length,
+      renderer: this.sceneRenderer?.constructor.name,
+      modules: this._describeGPUModules(modules),
+      tagRegistry: Array.from(this._gpuTagRegistry.entries()),
+      tagOverflow: this._gpuTagOverflow,
+    });
+
+    return this._gpuDebugFrame;
+  }
+
+  private _endGPUDebugFrame(frame: number | undefined): void {
+    if (frame === undefined) return;
+
+    this._logGPUDebug('end', {
+      particleCount: this.particles.length,
+      sample: this._sampleGPUParticles(this.particles),
+    });
+
+    if (this._gpuDebugActiveFrame === frame) {
+      this._gpuDebugActiveFrame = undefined;
+    }
+  }
+
+  private _isGPUDebugEnabled(): boolean {
+    return this.gpuDebug || ParticleSystem.GPU_DEBUG;
+  }
+
+  private _logGPUDebug(message: string, data?: unknown): void {
+    if (this._gpuDebugActiveFrame === undefined) return;
+
+    const prefix = `[RZMPS GPU frame ${this._gpuDebugActiveFrame}] ${message}`;
+    if (data === undefined) {
+      console.debug(prefix);
+      return;
+    }
+
+    console.debug(prefix, data);
+  }
+
+  private _describeGPUModules(modules: Module[]): Array<{
+    name: string;
+    priority: number;
+    tags?: Tag[];
+    supportsGPU: boolean;
+  }> {
+    return modules.map((module) => ({
+      name: module.constructor.name,
+      priority: module.priority,
+      tags: module.tags ? [...module.tags] : undefined,
+      supportsGPU: module.supportsGPU,
+    }));
+  }
+
+  private _sampleGPUParticles(particles: Particle[]): Array<{
+    index: number;
+    id: string;
+    tags?: Tag[];
+    tagMask: number;
+    time: number;
+    realtime: number;
+    lifetime: number;
+    position: number[];
+    rotation: number[];
+    scale: number[];
+    velocity: number[];
+    angularVelocity: number[];
+    scalarVelocity: number[];
+    speed: number;
+    alpha: number;
+  }> {
+    return particles.slice(0, 3).map((particle, index) => ({
+      index,
+      id: particle.id,
+      tags: particle.tags ? [...particle.tags] : undefined,
+      tagMask: this._getParticleGPUTagMask(particle),
+      time: this._debugNumber(particle.time),
+      realtime: this._debugNumber(particle.realtime),
+      lifetime: this._debugNumber(particle.lifetime),
+      position: this._debugVector(particle.position),
+      rotation: this._debugVector(particle.rotation),
+      scale: this._debugVector(particle.scale),
+      velocity: this._debugVector(particle.velocity),
+      angularVelocity: this._debugVector(particle.angularVelocity),
+      scalarVelocity: this._debugVector(particle.scalarVelocity),
+      speed: this._debugNumber(particle.speed),
+      alpha: this._debugNumber(particle.alpha),
+    }));
+  }
+
+  private _debugVector(vector: THREE.Vector3): number[] {
+    return [
+      this._debugNumber(vector.x),
+      this._debugNumber(vector.y),
+      this._debugNumber(vector.z),
+    ];
+  }
+
+  private _debugNumber(value: number): number {
+    if (!Number.isFinite(value)) return value;
+    return Number(value.toFixed(4));
+  }
+
   private _prepareGPUTagRegistry(modules: Module[]): void {
     this._gpuTagRegistry.clear();
     this._gpuTagOverflow = false;
 
-    modules.filter((module) => !module.isEffect).forEach((module) => {
+    modules.forEach((module) => {
       module.tags?.forEach((tag) => this._registerGPUTag(tag));
     });
     this.renderers.forEach((renderer) => {
@@ -1027,7 +1472,12 @@ class ParticleSystem extends THREE.Object3D {
   public clearParticles(children: boolean = true): void {
     this.particles.length = 0;
     this._gpuBuffers = undefined;
+    this._gpuTransientBaseBuffers = undefined;
+    this._gpuRenderBuffers = undefined;
     this._gpuReadbackPending = false;
+    this._gpuReadbacksInFlight = 0;
+    this._gpuReadbackSequence = 0;
+    this._latestAppliedGPUReadbackSequence = 0;
     this._prewarmed = false;
 
     this.renderers.forEach((renderer) => {

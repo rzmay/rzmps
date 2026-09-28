@@ -3,6 +3,8 @@ import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
+import {
+  evaluateDynamicVectorGPU,} from '../helpers/evaluateDynamicGPU';
 
 export interface ScaleOverLifetimeOptions extends Partial<ModuleOptions> {
     scale: DynamicValue<THREE.Vector3>;
@@ -32,6 +34,32 @@ class ScaleOverLifetime extends Module {
     }, {
       ...options,
       priority: 1,
+      modifyGPU: (particle) => {
+          particle.scale.assign(
+            particle.scale.mul(evaluateDynamicVectorGPU(
+              this.options.scale ?? new THREE.Vector3(1, 1, 1),
+              particle.time,
+              new THREE.Vector3(1, 1, 1),
+              particle.index,
+            )),
+          );
+          particle.scalarVelocity.assign(
+            particle.scalarVelocity.add(evaluateDynamicVectorGPU(
+              this.options.scalarVelocity ?? new THREE.Vector3(),
+              particle.time,
+              new THREE.Vector3(),
+              particle.index,
+            )),
+          );
+          particle.scalarAcceleration.assign(
+            particle.scalarAcceleration.add(evaluateDynamicVectorGPU(
+              this.options.scalarAcceleration ?? new THREE.Vector3(),
+              particle.time,
+              new THREE.Vector3(),
+              particle.index,
+            )),
+          );
+        }
     });
   }
 }

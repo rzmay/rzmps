@@ -59,12 +59,27 @@ export interface GPUParticleBufferState {
   capacity: number;
   attributes: GPUParticleAttributes;
   particle: GPUParticle;
+  initialize(renderer: GPUStorageBufferRenderer): GPUParticleBufferInitialization;
   upload(particles: Particle[], tagMaskForParticle?: (particle: Particle) => number): void;
+  uploadRange(
+    particles: Particle[],
+    startIndex: number,
+    tagMaskForParticle?: (particle: Particle) => number,
+  ): void;
   sync(particles: Particle[], tagMaskForParticle?: (particle: Particle) => number): void;
   readback(renderer: GPUReadbackRenderer, particles: Particle[]): Promise<void>;
 }
 
-export interface GPUReadbackRenderer {
+export interface GPUParticleBufferInitialization {
+  floatCreated: boolean;
+  uintCreated: boolean;
+}
+
+export interface GPUStorageBufferRenderer {
+  backend?: unknown;
+}
+
+export interface GPUReadbackRenderer extends GPUStorageBufferRenderer {
   getArrayBufferAsync(
     attribute: StorageBufferAttribute,
     target?: ArrayBuffer | null,
@@ -165,6 +180,13 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.upload(particles, tagMaskForParticle);
   }
 
+  initialize(renderer: GPUStorageBufferRenderer): GPUParticleBufferInitialization {
+    return {
+      floatCreated: initializeStorageAttribute(renderer, this.attributes.floatData),
+      uintCreated: initializeStorageAttribute(renderer, this.attributes.uintData),
+    };
+  }
+
   upload(particles: Particle[], tagMaskForParticle?: (particle: Particle) => number): void {
     this.ensureCapacity(particles.length);
 
@@ -180,6 +202,31 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
 
     this.attributes.floatData.needsUpdate = true;
     this.attributes.uintData.needsUpdate = true;
+  }
+
+  uploadRange(
+    particles: Particle[],
+    startIndex: number,
+    tagMaskForParticle?: (particle: Particle) => number,
+  ): void {
+    if (startIndex >= particles.length) return;
+
+    this.ensureCapacity(particles.length);
+
+    for (let index = startIndex; index < particles.length; index += 1) {
+      this.writeParticle(index, particles[index], tagMaskForParticle);
+    }
+
+    const floatStart = startIndex * FLOAT_SLOT_COUNT * 4;
+    const floatCount = (particles.length - startIndex) * FLOAT_SLOT_COUNT * 4;
+    const uintStart = startIndex * UINT_SLOT_COUNT * 4;
+    const uintCount = (particles.length - startIndex) * UINT_SLOT_COUNT * 4;
+
+    this.attributes.floatData.addUpdateRange(floatStart, floatCount);
+    this.attributes.uintData.addUpdateRange(uintStart, uintCount);
+    this.attributes.floatData.needsUpdate = true;
+    this.attributes.uintData.needsUpdate = true;
+    this.count = particles.length;
   }
 
   sync(particles: Particle[], tagMaskForParticle?: (particle: Particle) => number): void {
@@ -262,6 +309,24 @@ function createAttributes(floatData: Float32Array, uintData: Uint32Array): GPUPa
     floatData: new StorageBufferAttribute(floatData, 4),
     uintData: new StorageBufferAttribute(uintData, 4),
   };
+}
+
+function initializeStorageAttribute(
+  renderer: GPUStorageBufferRenderer,
+  attribute: StorageBufferAttribute,
+): boolean {
+  const backend = renderer.backend as {
+    get?(attribute: StorageBufferAttribute): { buffer?: unknown };
+    createStorageAttribute?(attribute: StorageBufferAttribute): void;
+  } | undefined;
+  const data = backend?.get?.(attribute);
+
+  if (!data?.buffer) {
+    backend?.createStorageAttribute?.(attribute);
+    return true;
+  }
+
+  return false;
 }
 
 function createVectorNodes(floatStorage: PackedFloatStorage): GPUParticleVectorNodes {

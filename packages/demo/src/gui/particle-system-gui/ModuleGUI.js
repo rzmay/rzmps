@@ -1,4 +1,3 @@
-import { Audio } from '@rzmps/rzmps';
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
 
@@ -26,38 +25,39 @@ export class ModuleGUI extends GUIEditorBase {
     }
 
     buildModule(folder, module, system = this.system) {
+        const gpuStatus = {
+            get compatible() {
+                return module.supportsGPU ? 'GPU compatible' : 'CPU only';
+            },
+        };
+        folder.add(gpuStatus, 'compatible').name('GPU').disable().listen();
         this.addTags(folder, module);
         const updateLODFolder = folder.addFolder('Update LOD');
         updateLODFolder.close();
         this.buildUpdateLOD(updateLODFolder, module);
-        if (module instanceof Audio) {
-            this.buildAudioModule(folder, module);
+        const candidate = module;
+        if (candidate.options && typeof candidate.options === 'object') {
+            this.addObject(folder, candidate.options, new Set(['tags', ...LOD_GUI_KEYS]));
         }
         else {
-            const candidate = module;
-            if (candidate.options && typeof candidate.options === 'object') {
-                this.addObject(folder, candidate.options, new Set(['tags', ...LOD_GUI_KEYS]));
-            }
-            else {
-                const hidden = new Set([
-                    'modify',
-                    'noiseGenerator',
-                    'dependents',
-                    'priority',
-                    'backend',
-                    'collisionListeners',
-                    'explicitForceFields',
-                    'forceFields',
-                    'forceFieldFilter',
-                    'particleSystem',
-                    'listener',
-                    'tags',
-                    ...LOD_GUI_KEYS,
-                ]);
-                Object.keys(candidate)
-                    .filter((key) => !key.startsWith('_') && !hidden.has(key))
-                    .forEach((key) => this.addValue(folder, candidate, key, this.prettyName(key)));
-            }
+            const hidden = new Set([
+                'modify',
+                'noiseGenerator',
+                'dependents',
+                'priority',
+                'backend',
+                'collisionListeners',
+                'explicitForceFields',
+                'forceFields',
+                'forceFieldFilter',
+                'particleSystem',
+                'listener',
+                'tags',
+                ...LOD_GUI_KEYS,
+            ]);
+            Object.keys(candidate)
+                .filter((key) => !key.startsWith('_') && !hidden.has(key))
+                .forEach((key) => this.addValue(folder, candidate, key, this.prettyName(key)));
         }
         const actions = {
             remove: () => {
@@ -69,28 +69,6 @@ export class ModuleGUI extends GUIEditorBase {
         folder.add(actions, 'remove').name('Remove Module');
     }
 
-    buildAudioModule(folder, module) {
-        const hidden = new Set([
-            'listener',
-            'sound',
-            'onCollisionSound',
-            'onSpawnSound',
-            'onDeathSound',
-            'tags',
-            ...LOD_GUI_KEYS,
-        ]);
-
-        Object.keys(module)
-            .filter((key) => !key.startsWith('_') && !hidden.has(key))
-            .forEach((key) => this.addValue(folder, module, key, this.prettyName(key)));
-
-        const clipsFolder = folder.addFolder('Clips');
-        clipsFolder.close();
-        this.addAudioUpload(clipsFolder, module, 'sound', 'Loop Sound');
-        this.addAudioUpload(clipsFolder, module, 'onCollisionSound', 'Collision Sound');
-        this.addAudioUpload(clipsFolder, module, 'onSpawnSound', 'Spawn Sound');
-        this.addAudioUpload(clipsFolder, module, 'onDeathSound', 'Death Sound');
-    }
     // -------------------------------------------------------------------------
     // Renderers and materials
     // -------------------------------------------------------------------------

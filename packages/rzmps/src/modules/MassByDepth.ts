@@ -3,7 +3,11 @@ import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { ValueByParameter } from '../types/ValueByParameter';
+import type { Node } from 'three/webgpu';
+import { vec3 } from 'three/tsl';
 import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import {
+  evaluateByParameterNumberGPU,} from '../helpers/evaluateByParameterGPU';
 
 export interface MassByDepthOptions extends Partial<ModuleOptions> {
   mass: ValueByParameter<number>;
@@ -38,6 +42,15 @@ class MassByDepth extends Module {
     }, {
       ...options,
       priority: 1,
+      modifyGPU: (particle) => {
+          particle.mass.assign(
+            particle.mass.mul(evaluateByParameterNumberGPU(
+              this.options.mass ?? 1,
+              this.getDepthTimeGPU(particle.position),
+              1,
+            )),
+          );
+        }
     });
 
     this.depthRange = options.depthRange;
@@ -59,6 +72,12 @@ class MassByDepth extends Module {
     }
   }
 
+  private getDepthTimeGPU(position: Node<'vec3'>) {
+    const min = this.depthRange?.[0] ?? this._cameraDepthRange[0];
+    const max = this.depthRange?.[1] ?? this._cameraDepthRange[1];
+
+    return position.sub(vec3(this.cameraPosition)).length().sub(min).div(max - min || 1).clamp(0, 1);
+  }
 }
 
 export default MassByDepth;

@@ -2,6 +2,8 @@ import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
+import {
+  evaluateDynamicNumberGPU,} from '../helpers/evaluateDynamicGPU';
 
 export interface DistortionOverLifetimeOptions extends Partial<ModuleOptions> {
     distortionStrength: DynamicValue<number>;
@@ -19,6 +21,13 @@ class DistortionOverLifetime extends Module {
     }, {
       ...options,
       priority: 1,
+      modifyGPU: (particle) => {
+          particle.distortionStrength.assign(
+            particle.distortionStrength.mul(
+              evaluateDynamicNumberGPU(this.options.distortionStrength ?? 1, particle.time, 1, particle.index),
+            ),
+          );
+        }
     });
   }
 }

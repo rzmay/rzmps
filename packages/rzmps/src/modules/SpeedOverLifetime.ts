@@ -2,6 +2,8 @@ import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
+import {
+  evaluateDynamicNumberGPU,} from '../helpers/evaluateDynamicGPU';
 
 export interface SpeedOverLifetimeOptions extends Partial<ModuleOptions> {
     speed: DynamicValue<number>;
@@ -19,6 +21,11 @@ class SpeedOverLifetime extends Module {
     }, {
       ...options,
       priority: 0.5,
+      modifyGPU: (particle) => {
+          particle.speed.assign(
+            particle.speed.mul(evaluateDynamicNumberGPU(this.options.speed ?? 1, particle.time, 1, particle.index)),
+          );
+        }
     });
   }
 }

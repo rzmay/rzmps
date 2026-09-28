@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Node } from 'three/webgpu';
 import Renderer, { type RendererOptions } from '../Renderer';
 import Particle from '../Particle';
 import ParticleSystem from '../ParticleSystem';
@@ -16,6 +17,8 @@ import { SpriteMaterialType } from '../enums/SpriteMaterialType';
 import { TRAIL_RENDERER_USER_DATA_KEY } from './TrailRenderer';
 import LiveCubemap from './LiveCubemap';
 import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
+import { cos, positionLocal, sin, vec3 } from 'three/tsl';
+import type { GPUParticleBufferState } from '../GPUParticle';
 
 export const SCENE_COLOR_DATA_USER_DATA_KEY = "__rzmps_sceneColorData";
 

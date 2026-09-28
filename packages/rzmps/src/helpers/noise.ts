@@ -1,5 +1,12 @@
 import { makeNoise4D } from 'fast-simplex-noise';
 import * as THREE from 'three';
+import type { Node } from 'three/webgpu';
+import {
+  float,
+  mx_fractal_noise_float,
+  vec3,
+  vec4,
+} from 'three/tsl';
 
 export interface NoiseSettings {
   octaves: number;
@@ -15,6 +22,11 @@ export interface ParticleNoiseValues {
   noise4d: number;
 }
 
+export interface GPUParticleNoiseValues {
+  noise: Node<'float'>;
+  noise4d: Node<'float'>;
+}
+
 const noiseGenerator = makeNoise4D();
 
 export function generateParticleNoise(
@@ -25,6 +37,51 @@ export function generateParticleNoise(
     noise: generateNoise(position, settings, false),
     noise4d: generateNoise(position, settings, true),
   };
+}
+
+export function generateGPUParticleNoise(
+  position: Node<'vec3'>,
+  settings: NoiseSettings,
+  time?: Node<'float'>,
+): GPUParticleNoiseValues {
+  const samplePosition = position.add(vec3(settings.offset).toVar()).mul(float(settings.frequency));
+  const samplePosition4d = vec4(
+    samplePosition.x,
+    samplePosition.y,
+    samplePosition.z,
+    time ?? float(settings.time),
+  );
+  const amplitudeSum = getAmplitudeSum(settings);
+  const normalizeNoise = (noise: Node<'float'>) => noise
+    .div(float(amplitudeSum))
+    .mul(0.5)
+    .add(0.5)
+    .clamp(0, 1);
+
+  return {
+    noise: normalizeNoise(mx_fractal_noise_float(
+      samplePosition,
+      settings.octaves,
+      settings.lacunarity,
+      settings.persistence,
+    )),
+    noise4d: normalizeNoise(mx_fractal_noise_float(
+      samplePosition4d,
+      settings.octaves,
+      settings.lacunarity,
+      settings.persistence,
+    )),
+  };
+}
+
+function getAmplitudeSum(settings: NoiseSettings): number {
+  let sum = 0;
+
+  for (let index = 0; index < settings.octaves; index += 1) {
+    sum += settings.persistence ** index;
+  }
+
+  return sum || 1;
 }
 
 function generateNoise(position: THREE.Vector3, settings: NoiseSettings, w = false): number {

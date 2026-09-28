@@ -52,6 +52,8 @@ export default async function createCollisionSubEmitters() {
         radiusScale: 1,
         applyImpulses: true,
       }),
+    ],
+    renderers: [
       new Audio({
         onCollisionSound: ballHit,
         collisionRatio: 1,
@@ -62,8 +64,6 @@ export default async function createCollisionSubEmitters() {
         lowPass: 1800,
         impulseAffectsLowPass: 1,
       }),
-    ],
-    renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
         castShadow: true,

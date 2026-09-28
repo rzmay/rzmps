@@ -10,6 +10,10 @@ import type {
 import ParticleSystem from '../ParticleSystem';
 import { TRAIL_RENDERER_USER_DATA_KEY } from '../renderers/TrailRenderer';
 import { SPRITE_RENDERER_USER_DATA_KEY } from '../renderers/SpriteRenderer';
+import {
+  flattenThreeOctree,
+  type FlattenedOctree,
+} from '../helpers/octreeFlattener';
 
 export interface ThreeCollisionBackendOptions {
   world?: THREE.Object3D;
@@ -20,8 +24,9 @@ export interface ThreeCollisionBackendOptions {
   timeQuality?: number;
   refreshQuality?: number;
   respectMaterialSide?: boolean;
-  maxLevel?: number;
-  trianglesPerLeaf?: number;
+  maxLevel?: number | null;
+  trianglesPerLeaf?: number | null;
+  gpuCollision?: boolean;
 
   objectFilter?: (object: THREE.Object3D) => boolean;
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
@@ -64,15 +69,19 @@ class ThreeCollisionBackend implements ICollisionBackend {
   timeQuality: number;
   refreshQuality: number;
   respectMaterialSide: boolean;
+  maxLevel: number | null;
+  trianglesPerLeaf: number | null;
+  gpuCollision: boolean;
 
-  maxLevel?: number;
-  trianglesPerLeaf?: number;
+  flattenedStaticOctree?: FlattenedOctree;
+  flattenedDynamicOctree?: FlattenedOctree;
 
   private trackedObjects = new Map<string, TrackedObject>();
 
   private elapsedTime = 0;
   private dynamicUpdateAccumulator = 0;
   private refreshAccumulator = 0;
+  private gpuProcessingActive = false;
 
   constructor(options: ThreeCollisionBackendOptions = {}) {
     this.world = options.world;
@@ -86,8 +95,9 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
     this.staticAfter = options.staticAfter ?? 2;
     this.respectMaterialSide = options.respectMaterialSide ?? true;
-    this.maxLevel = options.maxLevel;
-    this.trianglesPerLeaf = options.trianglesPerLeaf;
+    this.maxLevel = options.maxLevel ?? null;
+    this.trianglesPerLeaf = options.trianglesPerLeaf ?? null;
+    this.gpuCollision = options.gpuCollision ?? true;
 
     this.timeQuality = THREE.MathUtils.clamp(
       options.timeQuality ?? 1,
@@ -102,6 +112,14 @@ class ThreeCollisionBackend implements ICollisionBackend {
     );
 
     this.initialize();
+  }
+
+  setGPUProcessingActive(active: boolean): void {
+    if (this.gpuProcessingActive === active) return;
+
+    this.gpuProcessingActive = active;
+    this.rebuildStaticOctree();
+    this.rebuildDynamicOctree();
   }
 
   update(deltaTime: number): void {
@@ -470,6 +488,9 @@ class ThreeCollisionBackend implements ICollisionBackend {
       .map((tracked) => tracked.object);
 
     this.staticOctree = this.buildOctree(objects);
+    this.flattenedStaticOctree = this.shouldFlattenOctree(this.staticOctree)
+      ? flattenThreeOctree(this.staticOctree as Parameters<typeof flattenThreeOctree>[0])
+      : undefined;
   }
 
   private rebuildDynamicOctree(): void {
@@ -480,14 +501,18 @@ class ThreeCollisionBackend implements ICollisionBackend {
       .map((tracked) => tracked.object);
 
     this.dynamicOctree = this.buildOctree(objects);
+    this.flattenedDynamicOctree = this.shouldFlattenOctree(this.dynamicOctree)
+      ? flattenThreeOctree(this.dynamicOctree as Parameters<typeof flattenThreeOctree>[0])
+      : undefined;
   }
 
   private buildOctree(
     objects: THREE.Mesh[],
   ): Octree {
     const octree = new Octree();
-    if (this.maxLevel) octree.maxLevel = this.maxLevel;
-    if (this.trianglesPerLeaf) octree.trianglesPerLeaf = this.trianglesPerLeaf;
+    const settings = this.getOctreeSettings();
+    if (settings.maxLevel !== null) octree.maxLevel = settings.maxLevel;
+    if (settings.trianglesPerLeaf !== null) octree.trianglesPerLeaf = settings.trianglesPerLeaf;
 
     let triangleCount = 0;
 
@@ -503,6 +528,28 @@ class ThreeCollisionBackend implements ICollisionBackend {
     }
 
     return octree;
+  }
+
+  private getOctreeSettings(): { maxLevel: number | null; trianglesPerLeaf: number | null } {
+    if (this.shouldUseGPUFriendlyDefaults()) {
+      return {
+        maxLevel: this.maxLevel ?? 8,
+        trianglesPerLeaf: this.trianglesPerLeaf ?? 32,
+      };
+    }
+
+    return {
+      maxLevel: this.maxLevel,
+      trianglesPerLeaf: this.trianglesPerLeaf,
+    };
+  }
+
+  private shouldUseGPUFriendlyDefaults(): boolean {
+    return this.gpuCollision && this.gpuProcessingActive;
+  }
+
+  private shouldFlattenOctree(octree: Octree): boolean {
+    return this.shouldUseGPUFriendlyDefaults() && Boolean(octree.box);
   }
 
   private addMeshToOctree(

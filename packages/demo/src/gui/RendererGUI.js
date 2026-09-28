@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SpriteRenderer, LightRenderer, MeshRenderer, TrailRenderer, TrailMode, TrailTextureMode } from '@rzmps/rzmps';
+import { Audio, SpriteRenderer, LightRenderer, MeshRenderer, TrailRenderer, TrailMode, TrailTextureMode } from '@rzmps/rzmps';
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
 
@@ -45,6 +45,8 @@ export class RendererGUI extends GUIEditorBase {
             this.buildMeshRenderer(folder, renderer);
         } else if (renderer instanceof TrailRenderer) {
             this.buildTrailRenderer(folder, renderer);
+        } else if (renderer instanceof Audio) {
+            this.buildAudioRenderer(folder, renderer);
         } else {
             this.addObject(folder, renderer, new Set([
                 'setup',
@@ -338,6 +340,29 @@ export class RendererGUI extends GUIEditorBase {
 
     buildTrailMaterialFolder(folder, renderer) {
         this.buildMaterialFolder(folder, renderer.material);
+    }
+
+    buildAudioRenderer(folder, renderer) {
+        const hidden = new Set([
+            'listener',
+            'sound',
+            'onCollisionSound',
+            'onSpawnSound',
+            'onDeathSound',
+            'tags',
+            ...LOD_GUI_KEYS,
+        ]);
+
+        Object.keys(renderer)
+            .filter((key) => !key.startsWith('_') && !hidden.has(key))
+            .forEach((key) => this.addValue(folder, renderer, key, this.prettyName(key)));
+
+        const clipsFolder = folder.addFolder('Clips');
+        clipsFolder.close();
+        this.addAudioUpload(clipsFolder, renderer, 'sound', 'Loop Sound');
+        this.addAudioUpload(clipsFolder, renderer, 'onCollisionSound', 'Collision Sound');
+        this.addAudioUpload(clipsFolder, renderer, 'onSpawnSound', 'Spawn Sound');
+        this.addAudioUpload(clipsFolder, renderer, 'onDeathSound', 'Death Sound');
     }
 
     buildMaterialFolder(folder, materialOrMaterials) {
