@@ -44,7 +44,7 @@
     "seedrandom": "^3.0.5"
   },
   "peerDependencies": {
-    "three": "^0.186.0"
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@types/seedrandom": "^3.0.8",
@@ -53,7 +53,7 @@
     "concurrently": "^6.1.0",
     "eslint": "^7.26.0",
     "eslint-config-airbnb": "^18.2.1",
-    "three": "^0.186.0",
+    "three": "^0.186.1",
     "typescript": "5.9",
     "watch": "^0.13.0"
   }
