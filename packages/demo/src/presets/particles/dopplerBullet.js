@@ -360,7 +360,6 @@ function createSpawnShockwave(alphaMap, distortionMap) {
           lifetime: 0.55,
           scale: new THREE.Vector3(2.0, 2.0, 2.0),
           color: new THREE.Color('#ffffff'),
-          alpha: 0.82,
           distortionStrength: 1,
         },
       }),
@@ -376,9 +375,6 @@ function createSpawnShockwave(alphaMap, distortionMap) {
       new DistortionOverLifetime({
         distortionStrength: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
-      new ColorOverLifetime({
-        alpha: (time) => 1.15 * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
-      }),
     ],
     renderers: [
       new SpriteRenderer(Textures.Default, {
@@ -386,10 +382,9 @@ function createSpawnShockwave(alphaMap, distortionMap) {
         alphaMap,
         softParticleDistance: 1,
         materialOptions: {
-          opacity: 0.72,
           transmission: 1,
           distortionMap,
-          distortionStrength: 32,
+          distortionStrength: 64,
           side: THREE.DoubleSide,
           depthWrite: false,
         },
