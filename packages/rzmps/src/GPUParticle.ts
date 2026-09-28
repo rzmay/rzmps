@@ -183,20 +183,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
   }
 
   sync(particles: Particle[], tagMaskForParticle?: (particle: Particle) => number): void {
-    if (particles.length < this.count) {
-      this.upload(particles, tagMaskForParticle);
-      return;
-    }
-
-    this.ensureCapacity(particles.length);
-
-    for (let index = this.count; index < particles.length; index += 1) {
-      this.writeParticle(index, particles[index], tagMaskForParticle);
-    }
-
-    this.count = particles.length;
-    this.attributes.floatData.needsUpdate = true;
-    this.attributes.uintData.needsUpdate = true;
+    this.upload(particles, tagMaskForParticle);
   }
 
   async readback(renderer: GPUReadbackRenderer, particles: Particle[]): Promise<void> {

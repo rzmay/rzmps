@@ -85,6 +85,20 @@ buffers.upload([particle], (p) => (
 assert.equal(buffers.attributes.uintData.array[1], 3);
 assert.equal(buffers.attributes.uintData.array[5], 0);
 
+const survivor = new Particle({
+  lifetime: 100,
+  position: new THREE.Vector3(9, 8, 7),
+});
+survivor.tags = ['survivor'];
+buffers.sync([survivor], (p) => (p.tags?.includes('survivor') ? 4 : 0));
+
+assert.equal(buffers.count, 1);
+assert.equal(buffers.attributes.floatData.array[0], 9);
+assert.equal(buffers.attributes.floatData.array[1], 8);
+assert.equal(buffers.attributes.floatData.array[2], 7);
+assert.equal(buffers.attributes.uintData.array[1], 4);
+assert.equal(buffers.attributes.uintData.array[4], 0);
+
 let cpuFallbackRan = false;
 const system = new ParticleSystem({
   gpuProcessing: true,

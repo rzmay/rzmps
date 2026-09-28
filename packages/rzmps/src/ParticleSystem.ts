@@ -202,6 +202,7 @@ class ParticleSystem extends THREE.Object3D {
   private _gpuBuffers?: GPUParticleBufferState;
   private readonly _gpuTagRegistry = new Map<Tag, number>();
   private _gpuTagOverflow = false;
+  private _gpuReadbackPending = false;
 
   constructor(options: Partial<ParticleSystemOptions> = {}) {
     super();
@@ -415,8 +416,14 @@ class ParticleSystem extends THREE.Object3D {
     const sceneRenderer = this.sceneRenderer;
     if (!(sceneRenderer instanceof WebGPURenderer)) return;
 
-    const wasGPUProcessingActive = this._isGPUProcessingActive;
+    if (this._gpuReadbackPending) {
+      this.renderers.forEach((renderer) => {
+        renderer.update(this.particles, this, this.deltaTime);
+      });
+      return;
+    }
 
+    this.particles.forEach((particle) => particle.restore());
     this._compactExpiredParticles();
 
     this._isGPUProcessingActive = true;
@@ -433,13 +440,8 @@ class ParticleSystem extends THREE.Object3D {
         this.maxParticles,
         (particle) => this._getParticleGPUTagMask(particle),
       );
-    } else if (!wasGPUProcessingActive) {
-      this._gpuBuffers.upload(
-        this.particles,
-        (particle) => this._getParticleGPUTagMask(particle),
-      );
     } else {
-      this._gpuBuffers.sync(
+      this._gpuBuffers.upload(
         this.particles,
         (particle) => this._getParticleGPUTagMask(particle),
       );
@@ -467,7 +469,9 @@ class ParticleSystem extends THREE.Object3D {
 
     this._computeGPUParticleMovement();
 
-    const cpuMirrorUpdate = this._gpuBuffers.readback(sceneRenderer, this.particles);
+    this._gpuReadbackPending = true;
+    const readbackParticles = [...this.particles];
+    const cpuMirrorUpdate = this._gpuBuffers.readback(sceneRenderer, readbackParticles);
 
     this._computeGPUModulePhase(
       modifierModules
@@ -486,6 +490,13 @@ class ParticleSystem extends THREE.Object3D {
 
     void cpuMirrorUpdate
       .then(() => {
+        this._gpuReadbackPending = false;
+
+        modifierModules
+          .filter((module) => module.priority >= 1)
+          .sort((a, b) => a.priority - b.priority)
+          .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+
         cpuInputRenderers.forEach((renderer) => {
           renderer.update(this.particles, this, this.deltaTime);
         });
@@ -493,6 +504,8 @@ class ParticleSystem extends THREE.Object3D {
         this._runCPUEffects(effectModules);
       })
       .catch(() => {
+        this._gpuReadbackPending = false;
+
         cpuInputRenderers.forEach((renderer) => {
           renderer.update(this.particles, this, this.deltaTime);
         });
@@ -1037,6 +1050,7 @@ class ParticleSystem extends THREE.Object3D {
   public clearParticles(children: boolean = true): void {
     this.particles.length = 0;
     this._gpuBuffers = undefined;
+    this._gpuReadbackPending = false;
     this._prewarmed = false;
 
     this.renderers.forEach((renderer) => {
