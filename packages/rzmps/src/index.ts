@@ -28,7 +28,7 @@ export type { LiveCubemapOptions } from './renderers/LiveCubemap';
 
 // Modules
 export { default as Module } from './Module';
-export type { ModuleOptions } from './Module';
+export type { ModuleOptions, ModuleUpdate } from './Module';
 export { default as NoiseModule } from './modules/NoiseModule';
 export { default as ForceOverLifetime } from './modules/ForceOverLifetime';
 export { default as LimitVelocityOverLifetime } from './modules/LimitVelocityOverLifetime';

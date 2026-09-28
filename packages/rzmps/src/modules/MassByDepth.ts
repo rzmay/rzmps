@@ -17,6 +17,7 @@ class MassByDepth extends Module {
   private _cameraDepthRange: [number, number] = [0, 100];
 
   constructor(public options: Partial<MassByDepthOptions> = {}) {
+
     super((particle: Particle) => {
       const t = THREE.MathUtils.clamp(
         THREE.MathUtils.mapLinear(
@@ -30,11 +31,14 @@ class MassByDepth extends Module {
         1,
       );
 
-      particle.mass = particle.start.mass * evaluateByParameterNumber(
+      particle.mass *= evaluateByParameterNumber(
         this.options.mass ?? 1,
         t,
       );
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 1,
+    });
 
     this.depthRange = options.depthRange;
   }
@@ -54,6 +58,7 @@ class MassByDepth extends Module {
       }
     }
   }
+
 }
 
 export default MassByDepth;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import CubeRenderTarget from 'three/src/renderers/common/CubeRenderTarget.js';
-import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
+import { WebGPURenderer } from 'three/webgpu';
 
 export const LIVE_CUBEMAP_CAMERA_KEY = '__rzmps_liveCubemapCamera';
 export const PARTICLE_RENDERER_OBJECT_KEY = '__rzmps_particleRendererObject';

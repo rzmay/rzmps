@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { attribute } from 'three/src/nodes/core/AttributeNode.js';
+import { attribute } from 'three/tsl';
 import Renderer, { type RendererOptions } from '../Renderer';
 import ParticleSystem from '../ParticleSystem';
 import Particle from '../Particle';

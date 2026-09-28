@@ -9,13 +9,17 @@ export interface SpeedOverLifetimeOptions extends Partial<ModuleOptions> {
 
 class SpeedOverLifetime extends Module {
   constructor(public options: Partial<SpeedOverLifetimeOptions> = {}) {
+
     super((particle: Particle) => {
-      particle.speed = particle.start.speed * evaluateDynamicNumber(
+      particle.speed *= evaluateDynamicNumber(
         this.options.speed ?? 1,
         particle.time,
         particle.id,
       );
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 0.5,
+    });
   }
 }
 

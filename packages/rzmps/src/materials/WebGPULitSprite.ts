@@ -1,16 +1,32 @@
 import * as THREE from 'three';
-import MeshStandardNodeMaterial from 'three/src/materials/nodes/MeshStandardNodeMaterial.js';
-import { cameraFar, cameraNear } from 'three/src/nodes/accessors/Camera.js';
-import { attribute } from 'three/src/nodes/core/AttributeNode.js';
-import { materialOpacity } from 'three/src/nodes/accessors/MaterialNode.js';
-import { positionView } from 'three/src/nodes/accessors/Position.js';
-import { texture } from 'three/src/nodes/accessors/TextureNode.js';
-import { uv } from 'three/src/nodes/accessors/UV.js';
-import { perspectiveDepthToViewZ } from 'three/src/nodes/display/ViewportDepthNode.js';
-import { abs, clamp, cos, dot, mix, sin, smoothstep } from 'three/src/nodes/math/MathNode.js';
-import { spritesheetUV } from 'three/src/nodes/utils/SpriteSheetUV.js';
-import { float, vec2, vec3 } from 'three/src/nodes/tsl/TSLBase.js';
-import { Fn, output, viewportSize, viewportUV, vec4, viewportSharedTexture } from 'three/tsl';
+import { MeshStandardNodeMaterial } from 'three/webgpu';
+import {
+  abs,
+  attribute,
+  cameraFar,
+  cameraNear,
+  clamp,
+  cos,
+  dot,
+  float,
+  Fn,
+  materialOpacity,
+  mix,
+  output,
+  perspectiveDepthToViewZ,
+  positionView,
+  sin,
+  smoothstep,
+  spritesheetUV,
+  texture,
+  uv,
+  vec2,
+  vec3,
+  vec4,
+  viewportSharedTexture,
+  viewportSize,
+  viewportUV,
+} from 'three/tsl';
 import type { LitSpriteOptions } from './LitSprite';
 
 type WebGPULitSpriteOptions = LitSpriteOptions & {
@@ -172,9 +188,12 @@ const WebGPULitSprite = (
       return viewportSharedTexture(refractedUv).rgb;
     })();
 
+
+    const finalTransmisison = float(1.0).sub(finalAlpha.mul(float(1.0).sub(transmissionValue)));
+
     material.outputNode = vec4(
-      mix(output.rgb, transmittedColor, transmissionValue),
-      finalAlpha,
+      mix(output.rgb, transmittedColor, finalTransmisison),
+      float(1.0),
     );
   }
 

@@ -17,6 +17,7 @@ class DistortionByDepth extends Module {
   private _cameraDepthRange: [number, number] = [0, 100];
 
   constructor(public options: Partial<DistortionByDepthOptions> = {}) {
+
     super((particle: Particle) => {
       const t = THREE.MathUtils.clamp(
         THREE.MathUtils.mapLinear(
@@ -34,7 +35,10 @@ class DistortionByDepth extends Module {
         this.options.distortionStrength ?? 1,
         t,
       );
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 1,
+    });
 
     this.depthRange = options.depthRange;
   }
@@ -54,6 +58,7 @@ class DistortionByDepth extends Module {
       }
     }
   }
+
 }
 
 export default DistortionByDepth;

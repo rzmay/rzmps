@@ -17,8 +17,9 @@ class SpeedByDepth extends Module {
   private _cameraDepthRange: [number, number] = [0, 100];
 
   constructor(public options: Partial<SpeedByDepthOptions> = {}) {
+
     super((particle: Particle) => {
-      particle.speed = particle.start.speed * evaluateByParameterNumber(
+      particle.speed *= evaluateByParameterNumber(
         this.options.speed ?? 1,
         THREE.MathUtils.clamp(
           THREE.MathUtils.mapLinear(
@@ -32,7 +33,10 @@ class SpeedByDepth extends Module {
           1,
         ),
       );
-    }, options);
+    }, {
+      ...options,
+      priority: 0.5,
+    });
 
     this.depthRange = options.depthRange;
   }
@@ -52,6 +56,7 @@ class SpeedByDepth extends Module {
       }
     }
   }
+
 }
 
 export default SpeedByDepth;

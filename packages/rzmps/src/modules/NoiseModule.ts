@@ -1,7 +1,10 @@
-import { makeNoise4D } from 'fast-simplex-noise';
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
+import Module, { type ModuleOptions, type ModuleUpdate } from '../Module';
 import Particle from '../Particle';
+import {
+  generateParticleNoise,
+  type ParticleNoiseValues,
+} from '../helpers/noise';
 
 export interface NoiseOptions extends Partial<ModuleOptions> {
     octaves: number;
@@ -11,6 +14,12 @@ export interface NoiseOptions extends Partial<ModuleOptions> {
     time: number;
     offset: THREE.Vector3;
 }
+
+export type NoiseModuleUpdate = (
+  particle: Particle,
+  deltaTime: number,
+  noise: ParticleNoiseValues,
+) => void;
 
 class NoiseModule extends Module {
     public octaves = 1;
@@ -27,15 +36,30 @@ class NoiseModule extends Module {
 
     public key: string;
 
-    private noiseGenerator = makeNoise4D();
+    constructor(
+      key: string,
+      options?: Partial<NoiseOptions>,
+    );
+    constructor(
+      update: NoiseModuleUpdate,
+      options?: Partial<NoiseOptions>,
+    );
+    constructor(
+      keyOrUpdate: string | NoiseModuleUpdate,
+      options: Partial<NoiseOptions> = {},
+    ) {
+      const key = typeof keyOrUpdate === 'string' ? keyOrUpdate : '';
+      const update = typeof keyOrUpdate === 'function'
+        ? keyOrUpdate
+        : ((particle: Particle, _deltaTime: number, noise: ParticleNoiseValues) => {
+          particle.noise[key] = noise;
+        });
 
-    constructor(key: string, options: Partial<NoiseOptions> = {}) {
-      super((particle: Particle) => {
-        particle.noise[key] = {
-          noise: this.generateNoise(particle),
-          noise4d: this.generateNoise(particle, true),
-        };
-      }, options);
+      const modify: ModuleUpdate = (particle, deltaTime) => {
+        update(particle, deltaTime, this.generateNoise(particle));
+      };
+
+      super(modify, options);
 
       this.key = key;
       this.octaves = options.octaves ?? this.octaves;
@@ -46,29 +70,8 @@ class NoiseModule extends Module {
       this.offset = options.offset ?? this.offset;
     }
 
-    private generateNoise(particle: Particle, w = false): number {
-      const layers = [];
-      for (let i = 0; i < this.octaves; i += 1) {
-        const frequency = this.frequency * (this.lacunarity ** i);
-        const amplitude = this.persistence ** i;
-
-        // Clamp because float math is nuts
-        const rawNoise = Math.min(Math.max((this.noiseGenerator(
-          (particle.position.x + this.offset.x) * frequency,
-          (particle.position.y + this.offset.y) * frequency,
-          (particle.position.z + this.offset.z) * frequency,
-          w ? this.time : 0,
-        ) + 1) / 2, 0), 1);
-
-        layers.push({
-          value: rawNoise * amplitude,
-          weight: amplitude,
-        });
-      }
-
-      // Use weighted average to maintain 0 - 1 range
-      return layers.map((layer) => layer.value).reduce((a, b) => a + b)
-          / layers.map((layer) => layer.weight).reduce((a, b) => a + b);
+    public generateNoise(particle: Particle): ParticleNoiseValues {
+      return generateParticleNoise(particle.position, this);
     }
 }
 

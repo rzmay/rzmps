@@ -15,6 +15,7 @@ export interface ColorBySpeedOptions extends Partial<ModuleOptions> {
 
 class ColorBySpeed extends Module {
   constructor(public options: Partial<ColorBySpeedOptions> = {}) {
+
     super((particle: Particle) => {
       const t = this.getSpeedTime(particle.velocity.length());
 
@@ -24,7 +25,10 @@ class ColorBySpeed extends Module {
       if (this.options.alpha !== undefined) {
         particle.alpha *= evaluateByParameterNumber(this.options.alpha, t);
       }
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 1,
+    });
   }
 
   private getSpeedTime(speed: number): number {
@@ -34,6 +38,7 @@ class ColorBySpeed extends Module {
 
     return THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(speed, min, max, 0, 1), 0, 1);
   }
+
 }
 
 export default ColorBySpeed;

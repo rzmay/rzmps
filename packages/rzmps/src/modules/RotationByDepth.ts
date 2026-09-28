@@ -6,7 +6,9 @@ import type { ValueByParameter } from '../types/ValueByParameter';
 import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 
 export interface RotationByDepthOptions extends Partial<ModuleOptions> {
+  angle: ValueByParameter<THREE.Vector3>;
   angularVelocity: ValueByParameter<THREE.Vector3>;
+  angularAcceleration: ValueByParameter<THREE.Vector3>;
   depthRange?: [number, number];
 }
 
@@ -17,24 +19,42 @@ class RotationByDepth extends Module {
   private _cameraDepthRange: [number, number] = [0, 100];
 
   constructor(public options: Partial<RotationByDepthOptions> = {}) {
+
     super((particle: Particle) => {
-      particle.angularVelocity = particle.start.angularVelocity.clone().add(
+      const time = THREE.MathUtils.clamp(
+        THREE.MathUtils.mapLinear(
+          particle.position.distanceTo(this.cameraPosition),
+          this.depthRange?.[0] ?? this._cameraDepthRange[0],
+          this.depthRange?.[1] ?? this._cameraDepthRange[1],
+          0,
+          1,
+        ),
+        0,
+        1,
+      );
+
+      particle.rotation.add(
         evaluateByParameterVector(
-          this.options.angularVelocity ?? new THREE.Vector3(),
-          THREE.MathUtils.clamp(
-            THREE.MathUtils.mapLinear(
-              particle.position.distanceTo(this.cameraPosition),
-              this.depthRange?.[0] ?? this._cameraDepthRange[0],
-              this.depthRange?.[1] ?? this._cameraDepthRange[1],
-              0,
-              1,
-            ),
-            0,
-            1,
-          ),
+          this.options.angle ?? new THREE.Vector3(),
+          time,
         ),
       );
-    }, options);
+      particle.angularVelocity.add(
+        evaluateByParameterVector(
+          this.options.angularVelocity ?? new THREE.Vector3(),
+          time,
+        ),
+      );
+      particle.angularAcceleration.add(
+        evaluateByParameterVector(
+          this.options.angularAcceleration ?? new THREE.Vector3(),
+          time,
+        ),
+      );
+    }, {
+      ...options,
+      priority: 0.5,
+    });
 
     this.depthRange = options.depthRange;
   }
@@ -54,6 +74,7 @@ class RotationByDepth extends Module {
       }
     }
   }
+
 }
 
 export default RotationByDepth;

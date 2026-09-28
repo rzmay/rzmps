@@ -15,6 +15,7 @@ export interface ColorBySizeOptions extends Partial<ModuleOptions> {
 
 class ColorBySize extends Module {
   constructor(public options: Partial<ColorBySizeOptions> = {}) {
+
     super((particle: Particle) => {
       const t = this.getSizeTime(particle.scale.length());
 
@@ -24,7 +25,10 @@ class ColorBySize extends Module {
       if (this.options.alpha !== undefined) {
         particle.alpha *= evaluateByParameterNumber(this.options.alpha, t);
       }
-    }, { priority: 1, ...options });
+    }, {
+      priority: 1,
+      ...options,
+    });
   }
 
   private getSizeTime(size: number): number {
@@ -34,6 +38,7 @@ class ColorBySize extends Module {
 
     return THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(size, min, max, 0, 1), 0, 1);
   }
+
 }
 
 export default ColorBySize;

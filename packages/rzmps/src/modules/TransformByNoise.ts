@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
+import type { ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
@@ -12,42 +12,45 @@ export interface TransformByNoiseOptions extends Partial<ModuleOptions>, NoiseOp
     damping: boolean;
 }
 
-class TransformByNoise extends Module {
-    private noiseX: NoiseModule;
-    private noiseY: NoiseModule;
-    private noiseZ: NoiseModule;
-
+class TransformByNoise extends NoiseModule {
     constructor(public options: Partial<TransformByNoiseOptions> = {}) {
-      const key = `transformByNoise-${Math.random().toString(36).slice(2)}`;
-      const noiseX = new NoiseModule(`${key}-x`, { ...options, offset: new THREE.Vector3(0, 0, 0) });
-      const noiseY = new NoiseModule(`${key}-y`, { ...options, offset: new THREE.Vector3(31.416, 0, 0) });
-      const noiseZ = new NoiseModule(`${key}-z`, { ...options, offset: new THREE.Vector3(0, 31.416, 0) });
-
       super((particle: Particle, deltaTime: number) => {
         const scrollSpeed = evaluateDynamicNumber(this.options.scrollSpeed ?? 0, particle.time, particle.id);
         const time = (particle.realtime / 1000) * scrollSpeed;
 
-        this.noiseX.time = time;
-        this.noiseY.time = time;
-        this.noiseZ.time = time;
-
         const strength = evaluateDynamicVector(this.options.strength, particle.time, particle.id);
         if (this.options.damping) strength.multiplyScalar(1 / Math.max(this.options.frequency ?? 1, 1));
 
+        const noiseX = this.generateOffsetNoise(particle, time, new THREE.Vector3(0, 0, 0));
+        const noiseY = this.generateOffsetNoise(particle, time, new THREE.Vector3(31.416, 0, 0));
+        const noiseZ = this.generateOffsetNoise(particle, time, new THREE.Vector3(0, 31.416, 0));
+
         const force = new THREE.Vector3(
-          (particle.noise[this.noiseX.key].noise4d * 2 - 1) * strength.x,
-          (particle.noise[this.noiseY.key].noise4d * 2 - 1) * strength.y,
-          (particle.noise[this.noiseZ.key].noise4d * 2 - 1) * strength.z,
+          (noiseX.noise4d * 2 - 1) * strength.x,
+          (noiseY.noise4d * 2 - 1) * strength.y,
+          (noiseZ.noise4d * 2 - 1) * strength.z,
         );
 
         particle.velocity.addScaledVector(force, deltaTime);
-      }, options);
-
-      this.noiseX = noiseX;
-      this.noiseY = noiseY;
-      this.noiseZ = noiseZ;
-      this.dependents.push(noiseX, noiseY, noiseZ);
+      }, { ...options });
     }
+
+    private generateOffsetNoise(
+      particle: Particle,
+      time: number,
+      offset: THREE.Vector3,
+    ) {
+      const previousTime = this.time;
+      const previousOffset = this.offset;
+      this.time = time;
+      this.offset = offset;
+      const noise = this.generateNoise(particle);
+      this.time = previousTime;
+      this.offset = previousOffset;
+      return noise;
+    }
+
+
 }
 
 export default TransformByNoise;

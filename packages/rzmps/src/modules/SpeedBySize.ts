@@ -12,12 +12,16 @@ export interface SpeedBySizeOptions extends Partial<ModuleOptions> {
 
 class SpeedBySize extends Module {
   constructor(public options: Partial<SpeedBySizeOptions> = {}) {
+
     super((particle: Particle) => {
       particle.speed *= evaluateByParameterNumber(
         this.options.speed ?? 1,
         this.getSizeTime(particle.scale.length()),
       );
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 0.5,
+    });
   }
 
   private getSizeTime(size: number): number {
@@ -27,6 +31,7 @@ class SpeedBySize extends Module {
 
     return THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(size, min, max, 0, 1), 0, 1);
   }
+
 }
 
 export default SpeedBySize;

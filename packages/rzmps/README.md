@@ -211,8 +211,8 @@ Set `simulationDistance` above `0` to pause simulation while the particle system
 is farther than that distance from the active camera. The default is `0`, which
 disables distance limiting.
 
-Set `updateLOD` to reduce simulation frequency as systems move farther from
-the active camera. `useUpdateLOD` defaults to `true` when `updateLOD` is provided
+Set `updateLOD` to reduce simulation frequency as systems move farther from the
+active camera. `useUpdateLOD` defaults to `true` when `updateLOD` is provided
 and `false` otherwise. Internally, `LODHelper` evaluates `LODSettings` with
 discrete levels by default, or continuous multipliers with `continuous: true`.
 
@@ -238,9 +238,9 @@ and renderers also accept `useUpdateLOD` and `updateLOD` for per-component
 update-frequency LOD.
 
 Set `useLiveCubemap: true` to render a live environment map from the particle
-system and feed it to sprite renderers using `material: "lit"`, mesh
-renderers, and trail renderers. `cubemapSettings` accepts `LiveCubemapOptions`
-such as `fps`, `resolutionScale`, and `intensity`.
+system and feed it to sprite renderers using `material: "lit"`, mesh renderers,
+and trail renderers. `cubemapSettings` accepts `LiveCubemapOptions` such as
+`fps`, `resolutionScale`, and `intensity`.
 
 `LiveCubemap` is also exported for utility use outside `ParticleSystem`. It is
 primarily an internal helper, but can be attached to any `THREE.Object3D` with
@@ -261,21 +261,21 @@ interface LiveCubemapOptions {
 }
 ```
 
-| Option                     | Description                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------- |
-| `resolutionScale`          | Multiplies the renderer size before choosing the cubemap face resolution. Defaults to `1/16`. |
-| `fps`                      | Maximum cubemap update rate. Defaults to `24`.                                              |
-| `intensity`                | Reflection intensity used when particle renderers consume the cubemap. Defaults to `1`.      |
+| Option                     | Description                                                                                         |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `resolutionScale`          | Multiplies the renderer size before choosing the cubemap face resolution. Defaults to `1/16`.       |
+| `fps`                      | Maximum cubemap update rate. Defaults to `24`.                                                      |
+| `intensity`                | Reflection intensity used when particle renderers consume the cubemap. Defaults to `1`.             |
 | `excludeParent`            | Hides the parent from the cubemap color/depth pass so reflective objects do not capture themselves. |
-| `excludeParticleRenderers` | Hides particle renderer objects while the cubemap is rendered. Defaults to `false`.          |
+| `excludeParticleRenderers` | Hides particle renderer objects while the cubemap is rendered. Defaults to `false`.                 |
 
-| Member                                      | Description                                      |
-| ------------------------------------------- | ------------------------------------------------ |
-| `map`                                       | The generated cubemap texture, if initialized.   |
-| `setup(parent)`                             | Attaches the cubemap helper to an object.        |
-| `update(scene, renderer, deltaTime)`        | Updates the cubemap when its `fps` interval elapses. |
-| `dispose()`                                 | Disposes the cubemap render target.              |
-| `LiveCubemap.isLiveCubemapCamera(camera)`   | Returns `true` for cameras used by this helper.  |
+| Member                                    | Description                                          |
+| ----------------------------------------- | ---------------------------------------------------- |
+| `map`                                     | The generated cubemap texture, if initialized.       |
+| `setup(parent)`                           | Attaches the cubemap helper to an object.            |
+| `update(scene, renderer, deltaTime)`      | Updates the cubemap when its `fps` interval elapses. |
+| `dispose()`                               | Disposes the cubemap render target.                  |
+| `LiveCubemap.isLiveCubemapCamera(camera)` | Returns `true` for cameras used by this helper.      |
 
 WebGL renders `SpriteRenderer` particles with `gl.POINTS`, whose size is
 implementation-limited by `ALIASED_POINT_SIZE_RANGE`. In WebGL live cubemaps,
@@ -499,7 +499,8 @@ subsystems, distance is measured from the parent particle transform so trails
 follow the emitting particle rather than the subsystem object.
 
 `updateLOD` controls emitter update frequency. `countLOD` scales emission rate
-distance emission, and burst counts without skipping the emitter update entirely.
+distance emission, and burst counts without skipping the emitter update
+entirely.
 
 Internally, emitters use a single update entry point:
 
@@ -586,17 +587,19 @@ interface ModuleOptions {
 `updateLOD` controls module update frequency. It skips the module's particle
 work on lower-detail frames while preserving the module API.
 
-| Option     | Description                                                                                                                                            |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `priority` | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are permanent post-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
-| `tags`     | Restricts the module to particles with matching tags.                                                                                                  |
+| Option     | Description                                                                                                                                                                                                                                                                |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `priority` | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are transient pre-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
+| `tags`     | Restricts the module to particles with matching tags.                                                                                                                                                                                                                      |
 
-Priority also determines whether a module's changes persist into the next
-frame. Permanent phases are cached after post-movement modules run. Transient
-render-time modules run after that cache, so they can tint, fade, or scale
-particles for rendering without overwriting the particle's persistent state.
-Collision modules use the permanent post-movement phase so resolved positions
-and velocities survive into the next frame.
+Priority also determines whether a module's changes persist into the next frame.
+Permanent pre-movement changes are cached into the next persistent particle
+state. Transient pre-movement modules can affect the current movement step
+without accumulating their direct edits across frames, and transient render-time
+modules can tint, fade, or scale particles for rendering without overwriting
+persistent state. Collision modules use a late permanent pre-movement priority
+so they can predict the current frame's travel segment and resolve velocity
+before movement.
 
 ### VelocityOverLifetime
 
@@ -604,7 +607,9 @@ and velocities survive into the next frame.
 new VelocityOverLifetime(options?: Partial<VelocityOverLifetimeOptions>)
 
 interface VelocityOverLifetimeOptions extends Partial<ModuleOptions> {
+  position: DynamicVector3;
   linear: DynamicVector3;
+  acceleration: DynamicVector3;
   orbital: DynamicVector3;
   orbitOffset: DynamicVector3;
   radial: DynamicValue<number>;
@@ -612,8 +617,8 @@ interface VelocityOverLifetimeOptions extends Partial<ModuleOptions> {
 }
 ```
 
-Sets particle velocity from the start velocity plus optional linear, orbital,
-and radial terms. `speedModifier` scales particle simulation speed.
+Adds optional position, linear velocity, acceleration, orbital, and radial
+terms. `speedModifier` multiplies particle simulation speed.
 
 ### ForceOverLifetime
 
@@ -699,10 +704,11 @@ interface ColorBySpeedOptions extends Partial<ModuleOptions> {
 }
 ```
 
-Multiplies current-frame color and alpha based on normalized speed within `speedRange`.
-For `ValueByParameter`, a tuple interpolates between its endpoint values by
-the normalized parameter, a standalone constant scales by the parameter, and a
-function receives the parameter and returns the exact value to use.
+Multiplies current-frame color and alpha based on normalized speed within
+`speedRange`. For `ValueByParameter`, a tuple interpolates between its endpoint
+values by the normalized parameter, a standalone constant scales by the
+parameter, and a function receives the parameter and returns the exact value to
+use.
 
 ### Size Modules
 
@@ -718,12 +724,16 @@ new ColorBySize(options?: {
 })
 
 new RotationBySize(options?: {
+  angle?: Vector3ByParameter;
   angularVelocity?: Vector3ByParameter;
+  angularAcceleration?: Vector3ByParameter;
   sizeRange?: SizeRange;
 })
 
 new VelocityBySize(options?: {
+  position?: Vector3ByParameter;
   velocity?: Vector3ByParameter;
+  acceleration?: Vector3ByParameter;
   sizeRange?: SizeRange;
 })
 
@@ -762,16 +772,22 @@ new ColorByDepth(options?: {
 
 new ScaleByDepth(options?: {
   scale?: Vector3ByParameter;
+  scalarVelocity?: Vector3ByParameter;
+  scalarAcceleration?: Vector3ByParameter;
   depthRange?: DepthRange;
 })
 
 new RotationByDepth(options?: {
+  angle?: Vector3ByParameter;
   angularVelocity?: Vector3ByParameter;
+  angularAcceleration?: Vector3ByParameter;
   depthRange?: DepthRange;
 })
 
 new VelocityByDepth(options?: {
+  position?: Vector3ByParameter;
   velocity?: Vector3ByParameter;
+  acceleration?: Vector3ByParameter;
   depthRange?: DepthRange;
 })
 
@@ -802,10 +818,13 @@ new ScaleOverLifetime(options: ScaleOverLifetimeOptions)
 
 interface ScaleOverLifetimeOptions extends Partial<ModuleOptions> {
   scale: DynamicVector3;
+  scalarVelocity: DynamicVector3;
+  scalarAcceleration: DynamicVector3;
 }
 ```
 
-Multiplies each particle's current-frame scale over lifetime.
+Multiplies each particle's current-frame scale over lifetime and can add scalar
+velocity or scalar acceleration.
 
 ### Distortion Modules
 
@@ -836,11 +855,14 @@ new ScaleBySpeed(options: ScaleBySpeedOptions)
 
 interface ScaleBySpeedOptions extends Partial<ModuleOptions> {
   scale: Vector3ByParameter;
+  scalarVelocity: Vector3ByParameter;
+  scalarAcceleration: Vector3ByParameter;
   speedRange?: SpeedRange;
 }
 ```
 
-Multiplies current-frame scale based on normalized speed within `speedRange`.
+Multiplies current-frame scale and can add scalar velocity or scalar
+acceleration based on normalized speed within `speedRange`.
 
 ### RotationOverLifetime
 
@@ -848,11 +870,15 @@ Multiplies current-frame scale based on normalized speed within `speedRange`.
 new RotationOverLifetime(options: RotationOverLifetimeOptions)
 
 interface RotationOverLifetimeOptions extends Partial<ModuleOptions> {
+  angle: DynamicVector3;
   angularVelocity: DynamicVector3;
+  angularAcceleration: DynamicVector3;
 }
 ```
 
-Adjusts angular velocity over lifetime.
+Adds current-frame rotation, angular velocity, and angular acceleration over
+lifetime. These changes are transient pre-movement edits, so they influence the
+current movement step without accumulating direct angular velocity every frame.
 
 ### RotationBySpeed
 
@@ -860,12 +886,15 @@ Adjusts angular velocity over lifetime.
 new RotationBySpeed(options: RotationBySpeedOptions)
 
 interface RotationBySpeedOptions extends Partial<ModuleOptions> {
+  angle: Vector3ByParameter;
   angularVelocity: Vector3ByParameter;
+  angularAcceleration: Vector3ByParameter;
   speedRange?: SpeedRange;
 }
 ```
 
-Adjusts angular velocity based on normalized speed within `speedRange`.
+Adds current-frame rotation, angular velocity, and angular acceleration based on
+normalized speed within `speedRange`.
 
 ### NoiseModule
 
@@ -943,6 +972,11 @@ normal multiplied by normal impact speed and particle mass, keeping
 collision-triggered effects consistent across the built-in octree backend and
 the external Rapier, Jolt, and Ammo backends.
 
+Collision runs as a late permanent pre-movement module. It predicts each
+particle's current-frame travel segment from position and velocity, resolves
+position/velocity before movement, then lets the normal movement step carry the
+particle away from the surface.
+
 ### Audio
 
 ```ts
@@ -991,16 +1025,15 @@ interface AudioOptions extends Partial<ModuleOptions> {
 Adds positional audio to particles and can play event sounds for spawn,
 collision, and death. `maxClips` defaults to `100` and limits the number of
 simultaneous event clips from this module. Collision event sounds can use
-`impulseAffectsPitch` and
-`impulseAffectsVolume`; each uses `Math.pow(collision.impulse.length(), effect)`
-as a multiplier on the evaluated pitch or volume. `highPass` and `lowPass`
-create Web Audio `BiquadFilterNode` filters through Three.js.
-Pitch, volume, high-pass cutoff, and low-pass cutoff can all be modulated by
-size, alpha, speed, depth, and collision impulse using the corresponding
-`...Affects...` option. `dopplerEffect` modulates pitch from listener-relative
-particle motion: `0` disables the effect, `1` is physically scaled, and larger
-or fractional values exaggerate or soften the shift. Filters are applied
-whenever their evaluated cutoff is greater than `0`.
+`impulseAffectsPitch` and `impulseAffectsVolume`; each uses
+`Math.pow(collision.impulse.length(), effect)` as a multiplier on the evaluated
+pitch or volume. `highPass` and `lowPass` create Web Audio `BiquadFilterNode`
+filters through Three.js. Pitch, volume, high-pass cutoff, and low-pass cutoff
+can all be modulated by size, alpha, speed, depth, and collision impulse using
+the corresponding `...Affects...` option. `dopplerEffect` modulates pitch from
+listener-relative particle motion: `0` disables the effect, `1` is physically
+scaled, and larger or fractional values exaggerate or soften the shift. Filters
+are applied whenever their evaluated cutoff is greater than `0`.
 `impulseThreshhold` defaults to `0`; collision sounds only play when
 `collision.impulse.length() > impulseThreshhold`.
 
@@ -1018,10 +1051,10 @@ interface RendererOptions {
 }
 ```
 
-`updateLOD` controls renderer update frequency. `countLOD` reduces the number
-of particles submitted to the renderer. Set `compensateSize: true` to
-increase rendered particle size by the inverse of the count LOD multiplier,
-which can help maintain visual fullness when fewer particles are rendered.
+`updateLOD` controls renderer update frequency. `countLOD` reduces the number of
+particles submitted to the renderer. Set `compensateSize: true` to increase
+rendered particle size by the inverse of the count LOD multiplier, which can
+help maintain visual fullness when fewer particles are rendered.
 
 ### SpriteRenderer
 
@@ -1054,15 +1087,15 @@ frames, shadows, and soft particles. WebGL point sprites are subject to the
 browser/GPU point-size range, so very large sprites and sprites captured by
 WebGL live cubemaps may not preserve their apparent world size.
 
-`billboard` defaults to `true`, making sprites face the active camera. Set it
-to `false` to render sprite particles as oriented instanced quads instead:
-WebGL switches from point sprites to an instanced-quad path, WebGPU stops
-overriding particle rotation with the camera quaternion, and the full particle
-rotation vector is used.
+`billboard` defaults to `true`, making sprites face the active camera. Set it to
+`false` to render sprite particles as oriented instanced quads instead: WebGL
+switches from point sprites to an instanced-quad path, WebGPU stops overriding
+particle rotation with the camera quaternion, and the full particle rotation
+vector is used.
 
-`sizeAttenuation` controls whether sprite particles shrink with camera
-distance. It defaults to `true`. Set it to `false` for graphic, screen-space
-effects where particle size should stay visually consistent with distance.
+`sizeAttenuation` controls whether sprite particles shrink with camera distance.
+It defaults to `true`. Set it to `false` for graphic, screen-space effects where
+particle size should stay visually consistent with distance.
 
 `SpriteMaterialType` is an enum consisting of two string values:
 
@@ -1288,6 +1321,10 @@ interface ThreeCollisionBackendOptions {
   // Defaults to 1 => once per update.
   refreshQuality?: number;
 
+  // Leave null to use Three.js defaults.
+  maxLevel?: number | null;
+  trianglesPerLeaf?: number | null;
+
   objectFilter?: (object: THREE.Object3D) => boolean;
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
   dynamicObjectFilter?: (object: THREE.Object3D) => boolean;
@@ -1417,34 +1454,37 @@ _Generated by `npm run benchmark:update-report`._
 
 **RZMPS browser benchmark**
 
-Run length: 4.0s measured per case after 1.0s warmup
-Measured: 2026-09-23T16:42:55.620Z
+Run length: 4.0s measured per case after 1.0s warmup Measured:
+2026-09-28T07:49:37.739Z
 
-FPS and frame time are measured in an uncapped browser render loop by default. `1% Low FPS` is derived from p99 frame time, which is steadier than raw single-frame min/max FPS. `Update` is the measured `ParticleSystem.update()` slice inside that frame.
+FPS and frame time are measured in an uncapped browser render loop by default.
+`1% Low FPS` is derived from p99 frame time, which is steadier than raw
+single-frame min/max FPS. `Update` is the measured `ParticleSystem.update()`
+slice inside that frame.
 
-| Environment | Value |
-| --- | --- |
-| Mode | headless browser |
-| Frame Pacing | uncapped |
-| Browser | Chrome/153.0.8010.36 |
-| Viewport | 1280x720 |
-| Device Pixel Ratio | 1.00 |
-| OS | Darwin 24.1.0 arm64 |
-| CPU | Apple M4 Pro (14 logical cores) |
-| Memory | 24.0GB system, 16.0GB browser hint |
-| GPU/WebGL | ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version) (Google Inc. (Apple)) |
+| Environment        | Value                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| Mode               | headless browser                                                                             |
+| Frame Pacing       | uncapped                                                                                     |
+| Browser            | Chrome/154.0.8037.57                                                                         |
+| Viewport           | 1280x720                                                                                     |
+| Device Pixel Ratio | 1.00                                                                                         |
+| OS                 | Darwin 24.1.0 arm64                                                                          |
+| CPU                | Apple M4 Pro (14 logical cores)                                                              |
+| Memory             | 24.0GB system, 16.0GB browser hint                                                           |
+| GPU/WebGL          | ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version) (Google Inc. (Apple)) |
 
-| Case | Target Particles | Simulated Particles | Particle Cap | Rendered Frames | Avg FPS | 1% Low FPS | Avg Frame | P99 Frame | Max Frame | Avg Update | P95 Update | Max JS Heap |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Baseline 10k simulation only | 10,000 | 10,000-10,000 | 10,000 | 5,522 | 1380.5 | 355.1 | 0.72ms | 2.20ms | 12.50ms | 0.30ms | 0.50ms | 68.1MB |
-| Baseline 50k simulation only | 50,000 | 50,000-50,000 | 50,000 | 1,135 | 283.7 | 251.0 | 3.52ms | 3.90ms | 4.20ms | 3.41ms | 3.70ms | 173.7MB |
-| Typical VFX 5k sprite | 5,000 | 5,000-5,000 | 5,000 | 1,197 | 299.3 | 223.9 | 3.34ms | 4.30ms | 4.80ms | 3.22ms | 3.80ms | 545.9MB |
-| Heavy modules 10k noise+forces | 10,000 | 10,000-10,000 | 10,000 | 796 | 198.8 | 132.5 | 5.03ms | 6.60ms | 10.00ms | 4.92ms | 5.60ms | 216.5MB |
-| SpriteRenderer 5k rendered | 5,000 | 5,000-5,000 | 5,000 | 2,341 | 585.1 | 258.1 | 1.71ms | 2.70ms | 7.60ms | 1.61ms | 1.90ms | 297.7MB |
-| SpriteRenderer 10k rendered | 10,000 | 10,000-10,000 | 10,000 | 930 | 232.3 | 113.9 | 4.30ms | 7.30ms | 12.50ms | 4.14ms | 6.00ms | 370.8MB |
-| SpriteRenderer 50k rendered | 50,000 | 50,000-50,000 | 50,000 | 109 | 27.0 | 17.8 | 36.98ms | 50.60ms | 61.80ms | 36.67ms | 46.00ms | 534.9MB |
-| MeshRenderer 10k rendered | 10,000 | 10,000-10,000 | 10,000 | 1,745 | 436.2 | 249.3 | 2.29ms | 2.60ms | 10.10ms | 1.95ms | 2.10ms | 310.2MB |
-| TrailRenderer 2k rendered | 2,000 | 2,000-2,000 | 2,000 | 2,800 | 699.8 | 256.9 | 1.43ms | 2.50ms | 8.10ms | 1.30ms | 1.90ms | 398.1MB |
+| Case                           | Target Particles | Simulated Particles | Particle Cap | Rendered Frames | Avg FPS | 1% Low FPS | Avg Frame | P99 Frame | Max Frame | Avg Update | P95 Update | Max JS Heap |
+| ------------------------------ | ---------------- | ------------------- | ------------ | --------------- | ------- | ---------- | --------- | --------- | --------- | ---------- | ---------- | ----------- |
+| Baseline 10k simulation only   | 10,000           | 10,000-10,000       | 10,000       | 3,824           | 955.9   | 707.8      | 1.05ms    | 1.30ms    | 2.10ms    | 0.96ms     | 1.10ms     | 80.8MB      |
+| Baseline 50k simulation only   | 50,000           | 50,000-50,000       | 50,000       | 515             | 128.8   | 107.9      | 7.77ms    | 8.60ms    | 10.30ms   | 7.64ms     | 8.10ms     | 188.3MB     |
+| Typical VFX 5k sprite          | 5,000            | 5,000-5,000         | 5,000        | 822             | 205.3   | 117.5      | 4.87ms    | 7.10ms    | 10.30ms   | 4.71ms     | 5.60ms     | 449.1MB     |
+| Heavy modules 10k noise+forces | 10,000           | 10,000-10,000       | 10,000       | 693             | 173.2   | 135.4      | 5.77ms    | 6.70ms    | 8.70ms    | 5.64ms     | 6.10ms     | 254.3MB     |
+| SpriteRenderer 5k rendered     | 5,000            | 5,000-5,000         | 5,000        | 1,851           | 462.6   | 218.9      | 2.16ms    | 3.50ms    | 8.90ms    | 2.03ms     | 2.50ms     | 303.0MB     |
+| SpriteRenderer 10k rendered    | 10,000           | 10,000-10,000       | 10,000       | 905             | 226.1   | 125.6      | 4.42ms    | 6.30ms    | 14.50ms   | 4.26ms     | 5.20ms     | 440.2MB     |
+| SpriteRenderer 50k rendered    | 50,000           | 50,000-50,000       | 50,000       | 76              | 18.9    | 15.5       | 52.87ms   | 64.50ms   | 64.50ms   | 52.52ms    | 53.80ms    | 533.5MB     |
+| MeshRenderer 10k rendered      | 10,000           | 10,000-10,000       | 10,000       | 1,509           | 377.2   | 294.7      | 2.65ms    | 3.20ms    | 4.20ms    | 2.50ms     | 2.70ms     | 269.4MB     |
+| TrailRenderer 2k rendered      | 2,000            | 2,000-2,000         | 2,000        | 2,450           | 612.5   | 227.7      | 1.63ms    | 2.60ms    | 10.20ms   | 1.50ms     | 2.00ms     | 588.9MB     |
 
 <!-- RZMPS_BENCHMARKS_END -->
 

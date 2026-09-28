@@ -71,12 +71,6 @@ export default async function createLODStress() {
         useUpdateLOD: true,
         updateLOD: moduleUpdateLOD,
       }),
-      new NoiseModule('lodStress', {
-        frequency: 1.5,
-        octaves: 3,
-        useUpdateLOD: true,
-        updateLOD: moduleUpdateLOD,
-      }),
       new ScaleOverLifetime({
         scale: (time) => {
           const size = ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25)));

@@ -12,12 +12,16 @@ export interface DistortionBySpeedOptions extends Partial<ModuleOptions> {
 
 class DistortionBySpeed extends Module {
   constructor(public options: Partial<DistortionBySpeedOptions> = {}) {
+
     super((particle: Particle) => {
       particle.distortionStrength *= evaluateByParameterNumber(
         this.options.distortionStrength ?? 1,
         this.getSpeedTime(particle.velocity.length()),
       );
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 1,
+    });
   }
 
   private getSpeedTime(speed: number): number {
@@ -27,6 +31,7 @@ class DistortionBySpeed extends Module {
 
     return THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(speed, min, max, 0, 1), 0, 1);
   }
+
 }
 
 export default DistortionBySpeed;

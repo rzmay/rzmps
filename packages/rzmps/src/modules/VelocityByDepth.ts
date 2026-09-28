@@ -6,7 +6,9 @@ import type { ValueByParameter } from '../types/ValueByParameter';
 import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 
 export interface VelocityByDepthOptions extends Partial<ModuleOptions> {
+  position: ValueByParameter<THREE.Vector3>;
   velocity: ValueByParameter<THREE.Vector3>;
+  acceleration: ValueByParameter<THREE.Vector3>;
   depthRange?: [number, number];
 }
 
@@ -17,24 +19,42 @@ class VelocityByDepth extends Module {
   private _cameraDepthRange: [number, number] = [0, 100];
 
   constructor(public options: Partial<VelocityByDepthOptions> = {}) {
+
     super((particle: Particle) => {
-      particle.velocity = particle.start.velocity.clone().add(
+      const time = THREE.MathUtils.clamp(
+        THREE.MathUtils.mapLinear(
+          particle.position.distanceTo(this.cameraPosition),
+          this.depthRange?.[0] ?? this._cameraDepthRange[0],
+          this.depthRange?.[1] ?? this._cameraDepthRange[1],
+          0,
+          1,
+        ),
+        0,
+        1,
+      );
+
+      particle.position.add(
         evaluateByParameterVector(
-          this.options.velocity ?? new THREE.Vector3(),
-          THREE.MathUtils.clamp(
-            THREE.MathUtils.mapLinear(
-              particle.position.distanceTo(this.cameraPosition),
-              this.depthRange?.[0] ?? this._cameraDepthRange[0],
-              this.depthRange?.[1] ?? this._cameraDepthRange[1],
-              0,
-              1,
-            ),
-            0,
-            1,
-          ),
+          this.options.position ?? new THREE.Vector3(),
+          time,
         ),
       );
-    }, options);
+      particle.velocity.add(
+        evaluateByParameterVector(
+          this.options.velocity ?? new THREE.Vector3(),
+          time,
+        ),
+      );
+      particle.acceleration.add(
+        evaluateByParameterVector(
+          this.options.acceleration ?? new THREE.Vector3(),
+          time,
+        ),
+      );
+    }, {
+      ...options,
+      priority: 0.5,
+    });
 
     this.depthRange = options.depthRange;
   }
@@ -54,6 +74,7 @@ class VelocityByDepth extends Module {
       }
     }
   }
+
 }
 
 export default VelocityByDepth;

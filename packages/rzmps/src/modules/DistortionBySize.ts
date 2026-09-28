@@ -12,12 +12,16 @@ export interface DistortionBySizeOptions extends Partial<ModuleOptions> {
 
 class DistortionBySize extends Module {
   constructor(public options: Partial<DistortionBySizeOptions> = {}) {
+
     super((particle: Particle) => {
       particle.distortionStrength *= evaluateByParameterNumber(
         this.options.distortionStrength ?? 1,
         this.getSizeTime(particle.scale.length()),
       );
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 1,
+    });
   }
 
   private getSizeTime(size: number): number {
@@ -27,6 +31,7 @@ class DistortionBySize extends Module {
 
     return THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(size, min, max, 0, 1), 0, 1);
   }
+
 }
 
 export default DistortionBySize;

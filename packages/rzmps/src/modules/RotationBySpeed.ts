@@ -6,20 +6,38 @@ import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 import { SpeedRange } from './ColorBySpeed';
 
 export interface RotationBySpeedOptions extends Partial<ModuleOptions> {
+    angle: ValueByParameter<THREE.Vector3>;
     angularVelocity: ValueByParameter<THREE.Vector3>;
+    angularAcceleration: ValueByParameter<THREE.Vector3>;
     speedRange: SpeedRange;
 }
 
 class RotationBySpeed extends Module {
   constructor(public options: Partial<RotationBySpeedOptions> = {}) {
+
     super((particle: Particle) => {
-      particle.angularVelocity = particle.start.angularVelocity.clone().add(
+      particle.rotation.add(
+        evaluateByParameterVector(
+          this.options.angle ?? new THREE.Vector3(0, 0, 0),
+          this.getSpeedTime(particle.velocity.length()),
+        ),
+      );
+      particle.angularVelocity.add(
         evaluateByParameterVector(
           this.options.angularVelocity ?? new THREE.Vector3(0, 0, 0),
           this.getSpeedTime(particle.velocity.length()),
         ),
       );
-    }, options);
+      particle.angularAcceleration.add(
+        evaluateByParameterVector(
+          this.options.angularAcceleration ?? new THREE.Vector3(0, 0, 0),
+          this.getSpeedTime(particle.velocity.length()),
+        ),
+      );
+    }, {
+      ...options,
+      priority: 0.5,
+    });
   }
 
   private getSpeedTime(speed: number): number {
@@ -29,6 +47,7 @@ class RotationBySpeed extends Module {
 
     return THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(speed, min, max, 0, 1), 0, 1);
   }
+
 }
 
 export default RotationBySpeed;

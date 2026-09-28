@@ -9,8 +9,6 @@ import ThreeCollisionBackend from '../collision/ThreeCollisionBackend';
 import ParticleSystem from '../ParticleSystem';
 
 const ACTIVE_COLLISION_BACKEND_KEY = "__rzmps_activeCollisionBackend";
-const PREVIOUS_POSITION_KEY = "__rzmps_collision_prevPosition";
-
 export type CollisionListener = (particle: Particle, collision: CollisionHit) => void;
 
 export interface CollisionOptions extends Partial<ModuleOptions> {
@@ -43,16 +41,11 @@ class Collision extends Module {
   private _system?: ParticleSystem;
 
   constructor(options: Partial<CollisionOptions> = {}) {
-    // Collisions need to resolve after movement and persist into the next frame.
-    super((particle) => this.collide(particle), { priority: 0.5, ...options });
-
-    // Priority < 0, cache position before movement
-    this.dependents = [
-      new Module(
-        (particle) => particle.data[PREVIOUS_POSITION_KEY] = particle.position.clone(),
-        { ...options, priority: -1 }
-      )
-    ];
+    // Collisions run immediately before movement so they can predict this frame's travel segment.
+    super((particle, deltaTime) => this.collide(particle, deltaTime), {
+      ...options,
+      priority: -0.01,
+    });
 
     this.dampen = options.dampen ?? this.dampen;
     this.bounce = options.bounce ?? this.bounce;
@@ -93,11 +86,12 @@ class Collision extends Module {
     this.backend?.update?.(deltaTime);
   }
 
-  private collide(particle: Particle): void {
+  private collide(particle: Particle, deltaTime: number): void {
     if (!this.backend || !this._system) return;
 
-    const startPosition = particle.data[PREVIOUS_POSITION_KEY] as THREE.Vector3;
-    const endPosition = particle.position;
+    const startPosition = particle.position.clone();
+    const endPosition = particle.position.clone()
+      .addScaledVector(particle.velocity, deltaTime * particle.speed);
 
     if (startPosition.equals(endPosition)) return;
 

@@ -15,6 +15,7 @@ export interface LimitVelocityOverLifetimeOptions extends Partial<ModuleOptions>
 
 class LimitVelocityOverLifetime extends Module {
   constructor(public options: Partial<LimitVelocityOverLifetimeOptions> = {}) {
+
     super((particle: Particle, deltaTime: number) => {
       const limit = evaluateDynamicVector(
         this.options.limit ?? new THREE.Vector3(1, 1, 1),
@@ -38,7 +39,9 @@ class LimitVelocityOverLifetime extends Module {
 
         particle.velocity.multiplyScalar(Math.max(0, 1 - drag * deltaTime));
       }
-    }, options);
+    }, {
+      ...options,
+    });
   }
 
   // eslint-disable-next-line class-methods-use-this
@@ -53,6 +56,8 @@ class LimitVelocityOverLifetime extends Module {
     const clamped = Math.sign(velocity[axis]) * limit;
     velocity[axis] += (clamped - velocity[axis]) * Math.min(Math.max(dampen, 0), 1);
   }
+
+  // eslint-disable-next-line class-methods-use-this
 }
 
 export default LimitVelocityOverLifetime;

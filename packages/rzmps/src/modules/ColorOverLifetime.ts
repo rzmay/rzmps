@@ -12,6 +12,7 @@ export interface ColorOverLifetimeOptions extends Partial<ModuleOptions> {
 
 class ColorOverLifetime extends Module {
   constructor(public options: ColorOverLifetimeOptions = {}) {
+
     super((particle: Particle) => {
       if (this.options.color !== undefined) {
         particle.color.multiply(evaluateDynamicColor(this.options.color, particle.time, particle.id));
@@ -19,7 +20,10 @@ class ColorOverLifetime extends Module {
       if (this.options.alpha !== undefined) {
         particle.alpha *= evaluateDynamicNumber(this.options.alpha, particle.time, particle.id);
       }
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 1,
+    });
   }
 }
 

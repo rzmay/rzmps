@@ -1,21 +1,27 @@
 import * as THREE from 'three';
-import MeshBasicNodeMaterial from 'three/src/materials/nodes/MeshBasicNodeMaterial.js';
-import { cameraFar, cameraNear } from 'three/src/nodes/accessors/Camera.js';
-import { attribute } from 'three/src/nodes/core/AttributeNode.js';
-import { materialOpacity } from 'three/src/nodes/accessors/MaterialNode.js';
-import { positionView } from 'three/src/nodes/accessors/Position.js';
-import { texture } from 'three/src/nodes/accessors/TextureNode.js';
-import { uv } from 'three/src/nodes/accessors/UV.js';
-import { perspectiveDepthToViewZ } from 'three/src/nodes/display/ViewportDepthNode.js';
-import { abs, cos, mix, sin, smoothstep } from 'three/src/nodes/math/MathNode.js';
-import { spritesheetUV } from 'three/src/nodes/utils/SpriteSheetUV.js';
-import { float, vec2 } from 'three/src/nodes/tsl/TSLBase.js';
+import { MeshBasicNodeMaterial } from 'three/webgpu';
 import type { UnlitSpriteOptions } from './UnlitSprite';
 import {
+  abs,
+  attribute,
+  cameraFar,
+  cameraNear,
+  cos,
   Fn,
+  float,
+  materialOpacity,
+  mix,
   output,
+  perspectiveDepthToViewZ,
+  positionView,
   viewportSize,
   viewportUV,
+  sin,
+  smoothstep,
+  spritesheetUV,
+  texture,
+  uv,
+  vec2,
   vec4,
   viewportSharedTexture,
 } from 'three/tsl';
@@ -125,9 +131,11 @@ const WebGPUUnlitSprite = (
       ).rgb;
     })();
 
+    const finalTransmisison = float(1.0).sub(finalAlpha.mul(float(1.0).sub(transmissionValue)));
+
     material.outputNode = vec4(
-      mix(output.rgb, transmittedColor, transmissionValue),
-      mix(finalAlpha, float(1), transmissionValue),
+      mix(output.rgb, transmittedColor, finalTransmisison),
+      float(1.0),
     );
   }
 

@@ -160,9 +160,9 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
           return new THREE.Vector3(size, size, size);
         },
       }),
-      // new ColorOverLifetime({
-      //   alpha: (time) => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)) * (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
-      // }),
+      new ColorOverLifetime({
+        alpha: (time) => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)) * (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
+      }),
       new RotationOverLifetime({
         angularVelocity: [
           new THREE.Vector3(-0.45, 0, 0),

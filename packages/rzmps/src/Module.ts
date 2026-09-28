@@ -6,8 +6,10 @@ import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
 import LODHelper, { type LODSettings } from './LODHelper';
 
+export type ModuleUpdate = (particle: Particle, deltaTime: number) => void;
+
 export interface ModuleOptions {
-  // -1 runs before movement updates, modules are sorted by priority afterwards
+  // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
   priority: number;
 
   tags: StrictMultiple<Tag>;
@@ -28,7 +30,7 @@ export default class Module {
   priority = -1;
 
   constructor(
-    public _modify: ((particle: Particle, deltaTime: number) => void),
+    public _modify: ModuleUpdate,
     options: Partial<ModuleOptions> = {}
   ) {
     this.tags = acceptMultiple(options.tags);

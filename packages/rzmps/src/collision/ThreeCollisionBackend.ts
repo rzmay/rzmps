@@ -20,6 +20,8 @@ export interface ThreeCollisionBackendOptions {
   timeQuality?: number;
   refreshQuality?: number;
   respectMaterialSide?: boolean;
+  maxLevel?: number;
+  trianglesPerLeaf?: number;
 
   objectFilter?: (object: THREE.Object3D) => boolean;
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
@@ -63,6 +65,9 @@ class ThreeCollisionBackend implements ICollisionBackend {
   refreshQuality: number;
   respectMaterialSide: boolean;
 
+  maxLevel?: number;
+  trianglesPerLeaf?: number;
+
   private trackedObjects = new Map<string, TrackedObject>();
 
   private elapsedTime = 0;
@@ -81,6 +86,8 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
     this.staticAfter = options.staticAfter ?? 2;
     this.respectMaterialSide = options.respectMaterialSide ?? true;
+    this.maxLevel = options.maxLevel;
+    this.trianglesPerLeaf = options.trianglesPerLeaf;
 
     this.timeQuality = THREE.MathUtils.clamp(
       options.timeQuality ?? 1,
@@ -479,6 +486,8 @@ class ThreeCollisionBackend implements ICollisionBackend {
     objects: THREE.Mesh[],
   ): Octree {
     const octree = new Octree();
+    if (this.maxLevel) octree.maxLevel = this.maxLevel;
+    if (this.trianglesPerLeaf) octree.trianglesPerLeaf = this.trianglesPerLeaf;
 
     let triangleCount = 0;
 

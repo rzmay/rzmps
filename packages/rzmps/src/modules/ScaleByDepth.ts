@@ -7,6 +7,8 @@ import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 
 export interface ScaleByDepthOptions extends Partial<ModuleOptions> {
   scale: ValueByParameter<THREE.Vector3>;
+  scalarVelocity: ValueByParameter<THREE.Vector3>;
+  scalarAcceleration: ValueByParameter<THREE.Vector3>;
   depthRange?: [number, number]
 }
 
@@ -17,24 +19,42 @@ class ScaleByDepth extends Module {
   private _cameraDepthRange: [number, number] = [0, 100];
 
   constructor(public options: ScaleByDepthOptions) {
+
     super((particle: Particle) => {
+      const time = THREE.MathUtils.clamp(
+        THREE.MathUtils.mapLinear(
+          particle.position.distanceTo(this.cameraPosition),
+          this.depthRange?.[0] ?? this._cameraDepthRange[0],
+          this.depthRange?.[1] ?? this._cameraDepthRange[1],
+          0,
+          1,
+        ),
+        0,
+        1,
+      );
+
       particle.scale.multiply(
         evaluateByParameterVector(
-          this.options.scale,
-          THREE.MathUtils.clamp(
-            THREE.MathUtils.mapLinear(
-              particle.position.distanceTo(this.cameraPosition),
-              this.depthRange?.[0] ?? this._cameraDepthRange[0],
-              this.depthRange?.[1] ?? this._cameraDepthRange[1],
-              0,
-              1,
-            ),
-            0,
-            1,
-          ),
+          this.options.scale ?? new THREE.Vector3(1, 1, 1),
+          time,
         ),
       );
-    }, { priority: 1, ...options });
+      particle.scalarVelocity.add(
+        evaluateByParameterVector(
+          this.options.scalarVelocity ?? new THREE.Vector3(),
+          time,
+        ),
+      );
+      particle.scalarAcceleration.add(
+        evaluateByParameterVector(
+          this.options.scalarAcceleration ?? new THREE.Vector3(),
+          time,
+        ),
+      );
+    }, {
+      ...options,
+      priority: 1,
+    });
 
     this.depthRange = options.depthRange;
   }
@@ -54,6 +74,7 @@ class ScaleByDepth extends Module {
       }
     }
   }
+
 }
 
 export default ScaleByDepth;

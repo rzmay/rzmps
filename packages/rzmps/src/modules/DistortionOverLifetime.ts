@@ -9,13 +9,17 @@ export interface DistortionOverLifetimeOptions extends Partial<ModuleOptions> {
 
 class DistortionOverLifetime extends Module {
   constructor(public options: Partial<DistortionOverLifetimeOptions> = {}) {
+
     super((particle: Particle) => {
       particle.distortionStrength *= evaluateDynamicNumber(
         this.options.distortionStrength ?? 1,
         particle.time,
         particle.id,
       );
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 1,
+    });
   }
 }
 

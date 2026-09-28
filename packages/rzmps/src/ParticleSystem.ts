@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import Particle from './Particle';
+import Particle, { type ParticleCachedValues } from './Particle';
 import Emitter, { type EmissionContext } from './Emitter';
 import Module from './Module';
 import Renderer from './Renderer';
@@ -15,7 +15,6 @@ import type { Tag } from './types/Tag';
 import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
-import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
 import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } from './renderers/LiveCubemap';
 import LODHelper, { type LODSettings } from './LODHelper';
 
@@ -137,7 +136,7 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _sceneCameraQuaternion = new THREE.Quaternion();
   get sceneCameraQuaternion() { return this._sceneCameraQuaternion; }
 
-  private _renderer?: THREE.WebGLRenderer | WebGPURenderer;
+  private _renderer?: THREE.WebGLRenderer;
   get sceneRenderer() { return this._renderer; }
   private _cameraDistanceSq = Number.MAX_SAFE_INTEGER;
   get cameraDistanceSq(): number { return this._cameraDistanceSq; }
@@ -341,27 +340,37 @@ class ParticleSystem extends THREE.Object3D {
 
     this.particles.forEach((particle) => particle.restore());
 
-    // Run permanent pre-movement modules
-    modules
+    const permanentPreMovementModules = modules
       .filter((module) => module.priority < 0)
       .sort((a, b) => a.priority - b.priority)
-      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
-
-    // Update particles
-    this._updateParticles();
-
-    // Run permanent post-movement modules
-    modules
+    const transientPreMovementModules = modules
       .filter((module) => module.priority >= 0 && module.priority < 1)
-      .sort((a, b) => a.priority - b.priority)
+      .sort((a, b) => a.priority - b.priority);
+    const transientRenderModules = modules
+      .filter((module) => module.priority >= 1)
+      .sort((a, b) => a.priority - b.priority);
+
+    // Run permanent pre-movement modules
+    permanentPreMovementModules
       .forEach((module) => module.modify(this.particles, this.deltaTime, this));
 
-    this.particles.forEach((particle) => particle.cache());
+    const transientBaseValues = transientPreMovementModules.length > 0
+      ? this.particles.map((particle) => particle.snapshot())
+      : undefined;
+
+    // Run transient pre-movement modules
+    transientPreMovementModules
+      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+
+    // Update particles, caching permanent state before render-time transients.
+    this._updateParticles(transientBaseValues);
+
+    if (!transientBaseValues) {
+      this.particles.forEach((particle) => particle.cache());
+    }
 
     // Run transient render-time modules
-    modules
-      .filter((module) => module.priority >= 1)
-      .sort((a, b) => a.priority - b.priority)
+    transientRenderModules
       .forEach((module) => module.modify(this.particles, this.deltaTime, this));
 
     this.renderers.forEach((renderer) => {
@@ -369,7 +378,7 @@ class ParticleSystem extends THREE.Object3D {
     });
   }
 
-  private _updateParticles() {
+  private _updateParticles(transientBaseValues?: ParticleCachedValues[]) {
     const particles = this.particles;
     const originalLength = particles.length;
     let writeIndex = 0;
@@ -377,11 +386,14 @@ class ParticleSystem extends THREE.Object3D {
     // Compact survivors in place. This preserves order without per-death O(n) splices.
     for (let readIndex = 0; readIndex < originalLength; readIndex += 1) {
       const p = particles[readIndex];
+      const transientBase = transientBaseValues?.[readIndex];
+      const transientFrame = transientBase ? p.snapshot() : undefined;
 
       // Apply gravity
+      const gravityScale = this.deltaTime * evaluateDynamicNumber(this.gravityModifier, p.time, p.id);
       p.velocity.addScaledVector(
         this.gravity,
-        this.deltaTime * evaluateDynamicNumber(this.gravityModifier, p.time, p.id),
+        gravityScale,
       );
 
       // Update time
@@ -409,6 +421,10 @@ class ParticleSystem extends THREE.Object3D {
         continue;
       }
 
+      if (transientBase && transientFrame) {
+        p.cacheValues(this._getAdvancedPermanentValues(p, transientBase, transientFrame, gravityScale));
+      }
+
       particles[writeIndex] = p;
       writeIndex += 1;
     }
@@ -421,6 +437,36 @@ class ParticleSystem extends THREE.Object3D {
     if (writeIndex !== originalLength) {
       particles.length = writeIndex + appendedCount;
     }
+  }
+
+  private _getAdvancedPermanentValues(
+    particle: Particle,
+    base: ParticleCachedValues,
+    frame: ParticleCachedValues,
+    gravityScale: number,
+  ): ParticleCachedValues {
+    const next = particle.snapshot();
+    const frameVelocity = frame.velocity.clone().addScaledVector(this.gravity, gravityScale);
+    const baseVelocity = base.velocity.clone().addScaledVector(this.gravity, gravityScale);
+
+    next.lifetime = base.lifetime;
+    next.position.copy(base.position).addScaledVector(frameVelocity, this.deltaTime * frame.speed);
+    next.orbitCenter.copy(base.orbitCenter);
+    next.rotation.copy(base.rotation).addScaledVector(frame.angularVelocity, this.deltaTime * frame.speed);
+    next.scale.copy(base.scale).addScaledVector(frame.scalarVelocity, this.deltaTime * frame.speed);
+    next.velocity.copy(baseVelocity).addScaledVector(base.acceleration, this.deltaTime * base.speed);
+    next.angularVelocity.copy(base.angularVelocity).addScaledVector(base.angularAcceleration, this.deltaTime * base.speed);
+    next.scalarVelocity.copy(base.scalarVelocity).addScaledVector(base.scalarAcceleration, this.deltaTime * base.speed);
+    next.acceleration.copy(base.acceleration);
+    next.angularAcceleration.copy(base.angularAcceleration);
+    next.scalarAcceleration.copy(base.scalarAcceleration);
+    next.speed = base.speed;
+    next.mass = base.mass;
+    next.distortionStrength = base.distortionStrength;
+    next.color.copy(base.color);
+    next.alpha = base.alpha;
+
+    return next;
   }
 
   private _updateSubSystems() {

@@ -41,6 +41,7 @@ export default abstract class Renderer {
         system: ParticleSystem,
         deltaTime: number,
     ): void;
+
     public update(
         particles: Particle[],
         system: ParticleSystem,

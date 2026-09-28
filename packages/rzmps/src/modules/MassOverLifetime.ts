@@ -10,13 +10,11 @@ export interface MassOverLifetimeOptions extends Partial<ModuleOptions> {
 
 class MassOverLifetime extends Module {
   constructor(public options: Partial<MassOverLifetimeOptions> = {}) {
-    super((particle: Particle) => {
-      const sizeRatio = particle.scale.length() / particle.start.scale.length();
 
-      particle.mass = particle.start.mass
-        * evaluateDynamicNumber(this.options.mass ?? 1, particle.time, particle.id)
-        * (options.multiplyMassBySize ?? true ? sizeRatio : 1);
-    }, options);
+    super((particle: Particle) => {
+      particle.mass *= evaluateDynamicNumber(this.options.mass ?? 1, particle.time, particle.id)
+        * (options.multiplyMassBySize ?? true ? particle.scale.length() : 1);
+    }, { ...options });
   }
 }
 

@@ -20,6 +20,7 @@ class ColorByDepth extends Module {
   private _cameraDepthRange: [number, number] = [0, 100];
 
   constructor(public options: Partial<ColorByDepthOptions> = {}) {
+
     super((particle: Particle) => {
       const t = THREE.MathUtils.clamp(
         THREE.MathUtils.mapLinear(
@@ -39,7 +40,10 @@ class ColorByDepth extends Module {
       if (this.options.alpha !== undefined) {
         particle.alpha *= evaluateByParameterNumber(this.options.alpha, t);
       }
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 1,
+    });
 
     this.depthRange = options.depthRange;
   }
@@ -59,6 +63,7 @@ class ColorByDepth extends Module {
       }
     }
   }
+
 }
 
 export default ColorByDepth;

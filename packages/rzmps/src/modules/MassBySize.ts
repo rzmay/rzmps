@@ -12,12 +12,16 @@ export interface MassBySizeOptions extends Partial<ModuleOptions> {
 
 class MassBySize extends Module {
   constructor(public options: Partial<MassBySizeOptions> = {}) {
+
     super((particle: Particle) => {
       particle.mass *= evaluateByParameterNumber(
         this.options.mass ?? 1,
         this.getSizeTime(particle.scale.length()),
       );
-    }, { priority: 1, ...options });
+    }, {
+      ...options,
+      priority: 1,
+    });
   }
 
   private getSizeTime(size: number): number {
@@ -27,6 +31,7 @@ class MassBySize extends Module {
 
     return THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(size, min, max, 0, 1), 0, 1);
   }
+
 }
 
 export default MassBySize;
