@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-    Audio,
+    AudioRenderer,
     Collision,
     EmissionSource,
     EndBehavior,
@@ -79,6 +79,7 @@ export class ParticleSystemSerializer {
             `const ${variableName} = new ParticleSystem({`,
             `  gravity: ${this.serializeValue(system.gravity)},`,
             `  gravityModifier: ${this.serializeValue(system.gravityModifier)},`,
+            `  inheritVelocity: ${this.serializeValue(system.inheritVelocity)},`,
             `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
             `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
             `  duration: ${this.serializeValue(system.duration)},`,
@@ -226,50 +227,6 @@ export class ParticleSystemSerializer {
             return `new ExternalForces(${this.serializeValue(options)})`;
         }
 
-        if (module instanceof Audio) {
-            const options = {
-                loop: module.loop,
-                maxClips: module.maxClips,
-                ratio: module.ratio,
-                collisionRatio: module.collisionRatio,
-                pitch: module.pitch,
-                volume: module.volume,
-                highPass: module.highPass,
-                lowPass: module.lowPass,
-                sizeAffectsPitch: module.sizeAffectsPitch,
-                sizeAffectsVolume: module.sizeAffectsVolume,
-                alphaAffectsPitch: module.alphaAffectsPitch,
-                alphaAffectsVolume: module.alphaAffectsVolume,
-                speedAffectsPitch: module.speedAffectsPitch,
-                speedAffectsVolume: module.speedAffectsVolume,
-                impulseAffectsPitch: module.impulseAffectsPitch,
-                impulseAffectsVolume: module.impulseAffectsVolume,
-                impulseAffectsHighPass: module.impulseAffectsHighPass,
-                impulseAffectsLowPass: module.impulseAffectsLowPass,
-                impulseThreshhold: module.impulseThreshhold,
-                ...this.getLODOptions(module),
-                tags: module.tags,
-            };
-
-            if (module.sound?.length) {
-                options.sound = this.rawCode(this.serializeAudioBuffers(module.sound));
-            }
-
-            if (module.onCollisionSound?.length) {
-                options.onCollisionSound = this.rawCode(this.serializeAudioBuffers(module.onCollisionSound));
-            }
-
-            if (module.onSpawnSound?.length) {
-                options.onSpawnSound = this.rawCode(this.serializeAudioBuffers(module.onSpawnSound));
-            }
-
-            if (module.onDeathSound?.length) {
-                options.onDeathSound = this.rawCode(this.serializeAudioBuffers(module.onDeathSound));
-            }
-
-            return `new Audio(${this.serializeValue(options)})`;
-        }
-
         const runtime = module;
         const args = runtime.options !== undefined
             ? this.serializeValue({
@@ -282,6 +239,60 @@ export class ParticleSystemSerializer {
     }
 
     serializeRenderer(renderer) {
+        if (renderer instanceof AudioRenderer) {
+            const options = {
+                loop: renderer.loop,
+                maxClips: renderer.maxClips,
+                ratio: renderer.ratio,
+                collisionRatio: renderer.collisionRatio,
+                pitch: renderer.pitch,
+                volume: renderer.volume,
+                highPass: renderer.highPass,
+                lowPass: renderer.lowPass,
+                sizeAffectsPitch: renderer.sizeAffectsPitch,
+                sizeAffectsVolume: renderer.sizeAffectsVolume,
+                sizeAffectsHighPass: renderer.sizeAffectsHighPass,
+                sizeAffectsLowPass: renderer.sizeAffectsLowPass,
+                alphaAffectsPitch: renderer.alphaAffectsPitch,
+                alphaAffectsVolume: renderer.alphaAffectsVolume,
+                alphaAffectsHighPass: renderer.alphaAffectsHighPass,
+                alphaAffectsLowPass: renderer.alphaAffectsLowPass,
+                speedAffectsPitch: renderer.speedAffectsPitch,
+                speedAffectsVolume: renderer.speedAffectsVolume,
+                speedAffectsHighPass: renderer.speedAffectsHighPass,
+                speedAffectsLowPass: renderer.speedAffectsLowPass,
+                depthAffectsPitch: renderer.depthAffectsPitch,
+                depthAffectsVolume: renderer.depthAffectsVolume,
+                depthAffectsHighPass: renderer.depthAffectsHighPass,
+                depthAffectsLowPass: renderer.depthAffectsLowPass,
+                dopplerEffect: renderer.dopplerEffect,
+                impulseAffectsPitch: renderer.impulseAffectsPitch,
+                impulseAffectsVolume: renderer.impulseAffectsVolume,
+                impulseAffectsHighPass: renderer.impulseAffectsHighPass,
+                impulseAffectsLowPass: renderer.impulseAffectsLowPass,
+                impulseThreshhold: renderer.impulseThreshhold,
+                ...this.getLODOptions(renderer, true, true),
+                tags: renderer.tags,
+            };
+
+            if (renderer.sound?.length) {
+                options.sound = this.rawCode(this.serializeAudioBuffers(renderer.sound));
+            }
+
+            if (renderer.onCollisionSound?.length) {
+                options.onCollisionSound = this.rawCode(this.serializeAudioBuffers(renderer.onCollisionSound));
+            }
+
+            if (renderer.onSpawnSound?.length) {
+                options.onSpawnSound = this.rawCode(this.serializeAudioBuffers(renderer.onSpawnSound));
+            }
+
+            if (renderer.onDeathSound?.length) {
+                options.onDeathSound = this.rawCode(this.serializeAudioBuffers(renderer.onDeathSound));
+            }
+
+            return `new AudioRenderer(${this.serializeValue(options)})`;
+        }
         if (renderer instanceof SpriteRenderer) {
             const texture = this.serializeTexture(renderer.texture);
             const options = this.serializeValue({

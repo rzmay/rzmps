@@ -19,6 +19,7 @@ export { default as Renderer } from './Renderer';
 export { default as LightRenderer } from './renderers/LightRenderer';
 export { default as MeshRenderer } from './renderers/MeshRenderer';
 export { default as SpriteRenderer } from './renderers/SpriteRenderer';
+export { default as AudioRenderer } from './renderers/AudioRenderer';
 export { SpriteMaterialType } from './enums/SpriteMaterialType';
 export { default as TrailRenderer } from './renderers/TrailRenderer';
 export { TrailMode } from './enums/TrailMode';
@@ -59,7 +60,6 @@ export { default as MassByDepth } from './modules/MassByDepth';
 export { default as MassOverLifetime } from './modules/MassOverLifetime';
 export { default as ExternalForces } from './modules/ExternalForces';
 export { default as Collision } from './modules/Collision';
-export { default as Audio } from './modules/Audio';
 
 // Force Fields
 export type { IParticleForceField } from './interfaces/IParticleForceField';

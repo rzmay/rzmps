@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
-  Audio,
+  AudioRenderer,
   Particle,
 } from '../build/index.mjs';
 
@@ -22,7 +22,7 @@ const particle = new Particle({
 });
 
 {
-  const audio = new Audio({
+  const audio = new AudioRenderer({
     pitch: 2,
     sizeAffectsPitch: 1,
     alphaAffectsPitch: 1,
@@ -33,7 +33,7 @@ const particle = new Particle({
 }
 
 {
-  const audio = new Audio({
+  const audio = new AudioRenderer({
     volume: 2,
     depthAffectsVolume: 1,
   });
@@ -44,7 +44,7 @@ const particle = new Particle({
 }
 
 {
-  const audio = new Audio({
+  const audio = new AudioRenderer({
     highPass: 1000,
     alphaAffectsHighPass: 1,
   });
@@ -53,7 +53,7 @@ const particle = new Particle({
 }
 
 {
-  const audio = new Audio({
+  const audio = new AudioRenderer({
     lowPass: 1000,
     speedAffectsLowPass: 1,
   });
@@ -62,7 +62,7 @@ const particle = new Particle({
 }
 
 {
-  const audio = new Audio({
+  const audio = new AudioRenderer({
     pitch: 1,
     dopplerEffect: 0,
   });
@@ -71,7 +71,7 @@ const particle = new Particle({
 }
 
 {
-  const audio = new Audio({
+  const audio = new AudioRenderer({
     pitch: 1,
     dopplerEffect: 1,
   });

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  Audio,
+  AudioRenderer,
   Collision,
   ColorOverLifetime,
   Emitter,
@@ -51,16 +51,6 @@ export default async function createCollisionSubEmitters() {
         dampen: 0.05,
         radiusScale: 1,
         applyImpulses: true,
-      }),
-      new Audio({
-        onCollisionSound: ballHit,
-        collisionRatio: 1,
-        pitch: [0.8, 1.2],
-        volume: 0.18,
-        impulseAffectsVolume: 0.5,
-        impulseThreshhold: 0.5,
-        lowPass: 1800,
-        impulseAffectsLowPass: 1,
       }),
     ],
     renderers: [
@@ -121,6 +111,16 @@ export default async function createCollisionSubEmitters() {
           transparent: true,
           depthWrite: false,
         },
+      }),
+      new AudioRenderer({
+        onCollisionSound: ballHit,
+        collisionRatio: 1,
+        pitch: [0.8, 1.2],
+        volume: 0.18,
+        impulseAffectsVolume: 0.5,
+        impulseThreshhold: 0.5,
+        lowPass: 1800,
+        impulseAffectsLowPass: 1,
       }),
     ],
   });

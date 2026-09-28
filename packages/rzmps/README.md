@@ -194,6 +194,7 @@ interface ParticleSystemOptions {
   updateLOD: Partial<LODSettings>;
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
+  inheritVelocity: number;
   simulationSpace: SimulationSpace;
   useLiveCubemap: boolean;
   cubemapSettings: Partial<LiveCubemapOptions>;
@@ -210,6 +211,11 @@ first renders. `prewarmFPS` controls the fixed warmup step rate and defaults to
 Set `simulationDistance` above `0` to pause simulation while the particle system
 is farther than that distance from the active camera. The default is `0`, which
 disables distance limiting.
+
+Set `inheritVelocity` above `0` to add the particle system's parent-transform
+velocity to newly emitted top-level particles. `1` applies the full transform
+velocity and fractional values apply a scaled amount. This uses the same
+emission-context velocity path as subsystem velocity inheritance.
 
 Set `updateLOD` to reduce simulation frequency as systems move farther from the
 active camera. `useUpdateLOD` defaults to `true` when `updateLOD` is provided
@@ -977,12 +983,45 @@ particle's current-frame travel segment from position and velocity, resolves
 position/velocity before movement, then lets the normal movement step carry the
 particle away from the surface.
 
-### Audio
+## Built-In Renderers
+
+All renderers accept shared renderer options:
 
 ```ts
-new Audio(options?: Partial<AudioOptions>)
+interface RendererOptions {
+  tags: StrictMultiple<Tag>;
+  useUpdateLOD: boolean;
+  updateLOD: Partial<LODSettings>;
+  countLOD: Partial<LODSettings>;
+  compensateSize: boolean;
+}
+```
 
-interface AudioOptions extends Partial<ModuleOptions> {
+`updateLOD` controls renderer update frequency. `countLOD` reduces the number of
+particles submitted to the renderer. Set `compensateSize: true` to increase
+rendered particle size by the inverse of the count LOD multiplier, which can
+help maintain visual fullness when fewer particles are rendered.
+
+Renderers can also be used for custom non-mutating effects. Extend `Renderer`
+when you want to react to particle data without changing the simulation:
+
+```ts
+class LoggingEffect extends Renderer {
+  setup(system: ParticleSystem) {}
+  protected _update(particles: Particle[], system: ParticleSystem, deltaTime: number) {
+    particles.forEach((particle) => console.log(particle.position));
+  }
+  destroy() {}
+  clear() {}
+}
+```
+
+### AudioRenderer
+
+```ts
+new AudioRenderer(options?: Partial<AudioRendererOptions>)
+
+interface AudioRendererOptions extends Partial<RendererOptions> {
   listener: THREE.AudioListener;
   sound: AudioBuffer | AudioBuffer[];
   onCollisionSound: AudioBuffer | AudioBuffer[];
@@ -1023,8 +1062,8 @@ interface AudioOptions extends Partial<ModuleOptions> {
 ```
 
 Adds positional audio to particles and can play event sounds for spawn,
-collision, and death. `maxClips` defaults to `100` and limits the number of
-simultaneous event clips from this module. Collision event sounds can use
+collision, and death. `maxClips` defaults to `256` and limits the number of
+simultaneous event clips from this renderer. Collision event sounds can use
 `impulseAffectsPitch` and `impulseAffectsVolume`; each uses
 `Math.pow(collision.impulse.length(), effect)` as a multiplier on the evaluated
 pitch or volume. `highPass` and `lowPass` create Web Audio `BiquadFilterNode`
@@ -1036,25 +1075,6 @@ scaled, and larger or fractional values exaggerate or soften the shift. Filters
 are applied whenever their evaluated cutoff is greater than `0`.
 `impulseThreshhold` defaults to `0`; collision sounds only play when
 `collision.impulse.length() > impulseThreshhold`.
-
-## Built-In Renderers
-
-All renderers accept shared renderer options:
-
-```ts
-interface RendererOptions {
-  tags: StrictMultiple<Tag>;
-  useUpdateLOD: boolean;
-  updateLOD: Partial<LODSettings>;
-  countLOD: Partial<LODSettings>;
-  compensateSize: boolean;
-}
-```
-
-`updateLOD` controls renderer update frequency. `countLOD` reduces the number of
-particles submitted to the renderer. Set `compensateSize: true` to increase
-rendered particle size by the inverse of the count LOD multiplier, which can
-help maintain visual fullness when fewer particles are rendered.
 
 ### SpriteRenderer
 

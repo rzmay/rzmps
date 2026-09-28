@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  Audio as AudioModule,
+  AudioRenderer,
   ColorOverLifetime,
   Emitter,
   EmissionShape,
@@ -70,15 +70,14 @@ export default async function createFireworks() {
         },
       }),
     ],
-    modules: [
-      new AudioModule({
+    modules: [],
+    renderers: [
+      new AudioRenderer({
         sound: [launchSound1, launchSound2],
         onDeathSound: [blastSound1, blastSound2],
         pitch: [0.8, 1.2],
         loop: false,
       }),
-    ],
-    renderers: [
       new SpriteRenderer(fireworkSprite, {
         material: 'lit',
         materialOptions: {

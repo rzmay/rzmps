@@ -398,6 +398,7 @@ export class ParticleSystemGUI {
         this.addVector3(gravityFolder, system.gravity, 'Gravity');
         this.addDynamicValue(folder, system, 'gravityModifier', 'Gravity Modifier');
         folder.add(system, 'simulationSpeed', 0, 4, 0.01).name('Simulation Speed');
+        folder.add(system, 'inheritVelocity', 0, 4, 0.01).name('Inherit Velocity');
         folder.add(system, 'duration', 0.01).name('Duration');
         folder.add(system, 'prewarm').name('Prewarm');
         folder.add(system, 'prewarmFPS', 1, 120, 1).name('Prewarm FPS');

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
+import Renderer, { type RendererOptions } from '../Renderer';
 import Particle from '../Particle';
 import ParticleSystem from '../ParticleSystem';
 import type { DynamicValue } from '../types/DynamicValue';
@@ -11,7 +11,7 @@ import { CollisionHit } from '../interfaces/ICollisionBackend';
 
 const AUDIO_LISTENER_KEY = "__rzmps_audioListener";
 
-export interface AudioOptions extends Partial<ModuleOptions> {
+export interface AudioRendererOptions extends Partial<RendererOptions> {
   listener: THREE.AudioListener;
 
   sound: StrictMultiple<AudioBuffer>;
@@ -71,7 +71,7 @@ interface AudioFilters {
   lowPass?: BiquadFilterNode;
 }
 
-class Audio extends Module {
+export default class AudioRenderer extends Renderer {
   listener?: THREE.AudioListener;
 
   sound?: AudioBuffer[];
@@ -131,11 +131,8 @@ class Audio extends Module {
   // Deltatime stored for doppler effect calculation
   private _deltaTime = 0;
 
-  constructor(options: Partial<AudioOptions> = {}) {
-    super((particle) => this._updateParticle(particle), {
-      ...options,
-      priority: options.priority ?? 0.5,
-    });
+  constructor(options: Partial<AudioRendererOptions> = {}) {
+    super(options);
 
     this.listener = options.listener;
 
@@ -196,10 +193,24 @@ class Audio extends Module {
     this.dopplerEffect = Math.max(0, options.dopplerEffect ?? 0);
   }
 
-  public prepare(system: ParticleSystem, deltaTime: number): void {
+  public setup(system: ParticleSystem): void {
+    this._system = system;
+    this._setupEventCallbacks(system);
+    this._ensureListener(system);
+  }
+
+  protected _update(particles: Particle[], system: ParticleSystem, deltaTime: number): void {
     this._system = system;
     this._deltaTime = deltaTime;
+    this._updateCameraState(system);
+    this._setupEventCallbacks(system);
+    this._ensureListener(system);
+    this._cleanParticleAudio(particles);
 
+    particles.forEach((particle) => this._updateParticle(particle));
+  }
+
+  private _updateCameraState(system: ParticleSystem): void {
     if (system.sceneCamera) {
       system.sceneCamera.getWorldPosition(this._cameraPosition);
 
@@ -214,7 +225,9 @@ class Audio extends Module {
         this._cameraDepthRange = [system.sceneCamera.near, system.sceneCamera.far];
       }
     }
+  }
 
+  private _setupEventCallbacks(system: ParticleSystem): void {
     if (!this._setupCallbacks) {
       system.onCollision(
         (particle, collisionHit) => {
@@ -233,7 +246,9 @@ class Audio extends Module {
 
       this._setupCallbacks = true;
     }
+  }
 
+  private _ensureListener(system: ParticleSystem): void {
     if (!this.listener) {
       // Try to get listener from cache
       if (system.scene) this.listener = system.scene.userData[AUDIO_LISTENER_KEY];
@@ -256,8 +271,6 @@ class Audio extends Module {
       // If we found a listener, add it to the scene cache
       if (this.listener && system.scene) system.scene.userData[AUDIO_LISTENER_KEY] = this.listener;
     }
-
-    this._cleanParticleAudio(system.particles);
   }
 
   private _updateParticle(particle: Particle): void {
@@ -572,7 +585,7 @@ class Audio extends Module {
     this._relativePositions.delete(id);
   }
 
-  public cleanup(): void {
+  public destroy(): void {
     this._particleAudio.forEach((_state, id) => {
       this._removeParticleAudio(id);
     });
@@ -588,6 +601,8 @@ class Audio extends Module {
     this._eventAudio.clear();
     this._relativePositions.clear();
   }
-}
 
-export default Audio;
+  public clear(): void {
+    this.destroy();
+  }
+}
