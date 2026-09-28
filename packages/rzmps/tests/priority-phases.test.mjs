@@ -8,8 +8,9 @@ import {
 
 /*
  * Checks:
- * - Particle movement runs before priority 0..1 modules.
- * - Priority 0..1 module changes persist across frames.
+ * - Priority 0..1 modules run before movement.
+ * - Priority 0..1 changes affect the current movement step.
+ * - Priority 0..1 changes do not persist across frames.
  * - Priority >= 1 module changes are transient render-time changes.
  * - Transient changes do not mutate particle start values.
  */
@@ -23,13 +24,16 @@ const particle = new Particle({
 });
 
 const postMovementPositions = [];
+const preMovementVelocities = [];
 
 const system = new ParticleSystem({
   emitters: [],
   modules: [
     new Module((p) => {
       p.mass += 1;
+      p.velocity.x += 1;
       postMovementPositions.push(p.position.x);
+      preMovementVelocities.push(p.velocity.x);
     }, { priority: 0.5 }),
     new Module((p) => {
       p.scale.multiplyScalar(2);
@@ -45,13 +49,17 @@ system.deltaTime = 1;
 
 system._processParticles();
 
-assert.equal(postMovementPositions[0], 1);
+assert.equal(postMovementPositions[0], 0);
+assert.equal(preMovementVelocities[0], 2);
+assert.equal(particle.position.x, 2);
 assert.equal(particle.mass, 2);
 assert.equal(particle.scale.x, 2);
 
 system._processParticles();
 
 assert.equal(postMovementPositions[1], 2);
-assert.equal(particle.mass, 3);
+assert.equal(preMovementVelocities[1], 2);
+assert.equal(particle.position.x, 4);
+assert.equal(particle.mass, 2);
 assert.equal(particle.scale.x, 2);
 assert.equal(particle.start.scale.x, 1);

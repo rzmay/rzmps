@@ -1,5 +1,6 @@
 import type { DynamicValue } from '../types/DynamicValue';
 import seedrandom from 'seedrandom';
+import isTSLNode from './isTSLNode';
 
 export default function evaluateDynamic<T>(
   value: DynamicValue<T>,
@@ -7,6 +8,10 @@ export default function evaluateDynamic<T>(
   time = 0,
   seed: string | undefined = undefined,
 ): T {
+  if (isTSLNode(value)) {
+    throw new Error('TSL nodes can only be used during GPU processing.');
+  }
+
   if (typeof value === 'function') {
     return evaluateDynamic((value as ((t: number) => T))(time), interpolate, time, seed);
   } else if (Array.isArray(value)) {

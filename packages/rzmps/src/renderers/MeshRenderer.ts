@@ -1,8 +1,11 @@
 import * as THREE from 'three';
-import { attribute } from 'three/src/nodes/core/AttributeNode.js';
+import { attribute } from 'three/tsl';
+import type { Node } from 'three/webgpu';
+import { cos, positionLocal, sin, vec3 } from 'three/tsl';
 import Renderer, { type RendererOptions } from '../Renderer';
 import ParticleSystem from '../ParticleSystem';
 import Particle from '../Particle';
+import type { GPUParticleBufferState } from '../GPUParticle';
 
 /*
   * A mesh can be passed, including geometry and a material.
@@ -35,6 +38,7 @@ class MeshRenderer extends Renderer {
     private _alphaAttr: THREE.InstancedBufferAttribute;
 
     private dummy: THREE.Object3D;
+    private identityMatrixCapacity = 0;
 
     private materialEnvironmentState = new Map<THREE.Material, {
       envMap?: THREE.Texture | null;
@@ -75,6 +79,10 @@ class MeshRenderer extends Renderer {
       system.addRendererObject(this.instances);
     }
 
+    get supportsGPUInput(): boolean {
+      return false;
+    }
+
     _update(particles: Particle[], system: ParticleSystem): void {
       this.instances.count = particles.length;
 
@@ -98,6 +106,19 @@ class MeshRenderer extends Renderer {
       if (this.instances.instanceColor) this.instances.instanceColor.needsUpdate = true;
       this.instances.instanceMatrix.needsUpdate = true;
       this._alphaAttr.needsUpdate = true;
+    }
+
+    updateGPU(
+      buffers: GPUParticleBufferState,
+      system: ParticleSystem,
+    ): void {
+      this.instances.count = buffers.count;
+
+      this.instances.castShadow = this.castShadow;
+      this.instances.receiveShadow = this.receiveShadow;
+      this.updateMaterialEnvironment(system);
+      this.syncIdentityInstanceMatrices(buffers.count);
+      this.applyGPUNodes(buffers);
     }
 
     destroy(): void {
@@ -142,6 +163,46 @@ gl_FragColor.a *= vInstanceAlpha;`
       };
 
       material.needsUpdate = true;
+    }
+
+    private applyGPUNodes(buffers: GPUParticleBufferState): void {
+      const particle = buffers.particle;
+      const localPosition = rotateXYZ(positionLocal.mul(particle.scale), particle.rotation)
+        .add(particle.position);
+      const materials = Array.isArray(this.instances.material)
+        ? this.instances.material
+        : [this.instances.material];
+
+      materials.forEach((material) => {
+        const nodeMaterial = material as THREE.Material & {
+          colorNode?: Node;
+          opacityNode?: Node;
+          positionNode?: Node;
+        };
+
+        nodeMaterial.positionNode = localPosition;
+        nodeMaterial.colorNode = particle.color;
+        nodeMaterial.opacityNode = particle.alpha;
+        material.needsUpdate = true;
+      });
+    }
+
+    private syncIdentityInstanceMatrices(count: number): void {
+      if (this.identityMatrixCapacity >= count) return;
+
+      this.dummy.position.set(0, 0, 0);
+      this.dummy.rotation.set(0, 0, 0);
+      this.dummy.scale.set(1, 1, 1);
+      this.dummy.updateMatrix();
+
+      for (let index = this.identityMatrixCapacity; index < count; index += 1) {
+        this.instances.setMatrixAt(index, this.dummy.matrix);
+        this._alphaAttr.setX(index, 1);
+      }
+
+      this.identityMatrixCapacity = count;
+      this.instances.instanceMatrix.needsUpdate = true;
+      this._alphaAttr.needsUpdate = true;
     }
 
     private updateMaterialEnvironment(system: ParticleSystem): void {
@@ -213,6 +274,32 @@ gl_FragColor.a *= vInstanceAlpha;`
         material.needsUpdate = true;
       }
     }
+}
+
+function rotateXYZ(position: Node<'vec3'>, rotation: Node<'vec3'>): Node<'vec3'> {
+  const cx = cos(rotation.x);
+  const sx = sin(rotation.x);
+  const cy = cos(rotation.y);
+  const sy = sin(rotation.y);
+  const cz = cos(rotation.z);
+  const sz = sin(rotation.z);
+
+  const xRotated = vec3(
+    position.x,
+    position.y.mul(cx).sub(position.z.mul(sx)),
+    position.y.mul(sx).add(position.z.mul(cx)),
+  );
+  const yRotated = vec3(
+    xRotated.x.mul(cy).add(xRotated.z.mul(sy)),
+    xRotated.y,
+    xRotated.z.mul(cy).sub(xRotated.x.mul(sy)),
+  );
+
+  return vec3(
+    yRotated.x.mul(cz).sub(yRotated.y.mul(sz)),
+    yRotated.x.mul(sz).add(yRotated.y.mul(cz)),
+    yRotated.z,
+  );
 }
 
 export default MeshRenderer;

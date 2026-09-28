@@ -26,6 +26,14 @@ export class ModuleGUI extends GUIEditorBase {
     }
 
     buildModule(folder, module, system = this.system) {
+        const gpuStatus = {
+            get compatible() {
+                if (module.isEffect)
+                    return 'Effect';
+                return module.supportsGPU ? 'GPU compatible' : 'CPU only';
+            },
+        };
+        folder.add(gpuStatus, 'compatible').name('GPU').disable().listen();
         this.addTags(folder, module);
         const updateLODFolder = folder.addFolder('Update LOD');
         updateLODFolder.close();

@@ -5,17 +5,35 @@ import type { StrictMultiple } from './types/Multiple';
 import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
 import LODHelper, { type LODSettings } from './LODHelper';
+import type { GPUParticle, GPUParticleUpdateContext } from './GPUParticle';
+
+export type ModuleUpdate = (particle: Particle, deltaTime: number) => void;
+export type ModuleGPUUpdate = (
+  particle: GPUParticle,
+  deltaTime: number,
+  context: GPUParticleUpdateContext,
+) => void;
 
 export interface ModuleOptions {
-  // -1 runs before movement updates, modules are sorted by priority afterwards
+  // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
   priority: number;
 
   tags: StrictMultiple<Tag>;
   useUpdateLOD: boolean;
   updateLOD: Partial<LODSettings>;
+  modifyGPU: ModuleGPUUpdate | null;
+  isEffect: boolean;
 }
 
 export default class Module {
+  static CPU_UNSUPPORTED: ModuleUpdate = () => {
+    throw new Error('This particle module does not support CPU processing.');
+  };
+
+  static GPU_UNSUPPORTED: ModuleGPUUpdate = () => {
+    throw new Error('This particle module does not support GPU processing.');
+  };
+
   // Sub-modules on which this module depends.
   // Useful for pre-processing or combining priority stages.
   public dependents: Module[] = [];
@@ -26,9 +44,11 @@ export default class Module {
   private _lodHelper: LODHelper;
 
   priority = -1;
+  modifyGPU: ModuleGPUUpdate;
+  isEffect: boolean;
 
   constructor(
-    public _modify: ((particle: Particle, deltaTime: number) => void),
+    public _modify: ModuleUpdate,
     options: Partial<ModuleOptions> = {}
   ) {
     this.tags = acceptMultiple(options.tags);
@@ -36,6 +56,12 @@ export default class Module {
     this.useUpdateLOD = options.useUpdateLOD ?? Boolean(this.updateLOD);
     this._lodHelper = new LODHelper(this.updateLOD);
     this.priority = options.priority ?? this.priority;
+    this.modifyGPU = options.modifyGPU ?? Module.GPU_UNSUPPORTED;
+    this.isEffect = options.isEffect ?? false;
+  }
+
+  get supportsGPU(): boolean {
+    return this.modifyGPU !== Module.GPU_UNSUPPORTED;
   }
 
   public modify(particles: Particle[], deltaTime: number, particleSystem?: ParticleSystem): void {

@@ -3,8 +3,13 @@ import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { ValueByParameter } from '../types/ValueByParameter';
+import type { Node } from 'three/webgpu';
+import { vec3 } from 'three/tsl';
 import evaluateByParameterColor from '../helpers/evaluateByParameterColor';
 import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import {
+  evaluateByParameterColorGPU,
+  evaluateByParameterNumberGPU,} from '../helpers/evaluateByParameterGPU';
 
 export interface ColorByDepthOptions extends Partial<ModuleOptions> {
   color: ValueByParameter<THREE.Color>;
@@ -20,6 +25,7 @@ class ColorByDepth extends Module {
   private _cameraDepthRange: [number, number] = [0, 100];
 
   constructor(public options: Partial<ColorByDepthOptions> = {}) {
+
     super((particle: Particle) => {
       const t = THREE.MathUtils.clamp(
         THREE.MathUtils.mapLinear(
@@ -39,7 +45,24 @@ class ColorByDepth extends Module {
       if (this.options.alpha !== undefined) {
         particle.alpha *= evaluateByParameterNumber(this.options.alpha, t);
       }
-    }, { priority: 1, ...options });
+    }, {
+      priority: 1,
+      ...options,
+      modifyGPU: (particle) => {
+          const t = this.getDepthTimeGPU(particle.position);
+
+          if (this.options.color !== undefined) {
+            particle.color.assign(
+              particle.color.mul(evaluateByParameterColorGPU(this.options.color, t)),
+            );
+          }
+          if (this.options.alpha !== undefined) {
+            particle.alpha.assign(
+              particle.alpha.mul(evaluateByParameterNumberGPU(this.options.alpha, t, 1)),
+            );
+          }
+        }
+    });
 
     this.depthRange = options.depthRange;
   }
@@ -58,6 +81,13 @@ class ColorByDepth extends Module {
         this._cameraDepthRange = [camera.near, camera.far];
       }
     }
+  }
+
+  private getDepthTimeGPU(position: Node<'vec3'>) {
+    const min = this.depthRange?.[0] ?? this._cameraDepthRange[0];
+    const max = this.depthRange?.[1] ?? this._cameraDepthRange[1];
+
+    return position.sub(vec3(this.cameraPosition)).length().sub(min).div(max - min || 1).clamp(0, 1);
   }
 }
 

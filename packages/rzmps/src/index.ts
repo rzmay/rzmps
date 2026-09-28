@@ -1,6 +1,15 @@
 // ParticleSystem
 export { default as ParticleSystem } from './ParticleSystem';
 export { default as Particle } from './Particle';
+export {
+  GPUParticle,
+  createGPUParticleBufferState,
+} from './GPUParticle';
+export type {
+  GPUParticleAttributes,
+  GPUParticleBufferState,
+  GPUParticleUpdateContext,
+} from './GPUParticle';
 export { default as LODHelper } from './LODHelper';
 export type { LODSettings, LODSettingsOptions } from './LODHelper';
 export { EndBehavior } from './enums/EndBehavior';
@@ -28,7 +37,7 @@ export type { LiveCubemapOptions } from './renderers/LiveCubemap';
 
 // Modules
 export { default as Module } from './Module';
-export type { ModuleOptions } from './Module';
+export type { ModuleGPUUpdate, ModuleOptions, ModuleUpdate } from './Module';
 export { default as NoiseModule } from './modules/NoiseModule';
 export { default as ForceOverLifetime } from './modules/ForceOverLifetime';
 export { default as LimitVelocityOverLifetime } from './modules/LimitVelocityOverLifetime';

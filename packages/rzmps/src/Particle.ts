@@ -23,7 +23,7 @@ export interface ParticleOptions {
 }
 
 export type ParticleStartValues = Required<Omit<ParticleOptions, 'tags'>> & { tags?: Tag[] };
-type ParticleCachedValues = Omit<ParticleStartValues, 'tags'>;
+export type ParticleCachedValues = Omit<ParticleStartValues, 'tags'>;
 
 export interface ParticleNoiseValues {
   noise: number;
@@ -121,10 +121,34 @@ class Particle {
     this._cachedValues = this.writeValues(this._cachedValues);
   }
 
+  cacheValues(values: ParticleCachedValues) {
+    this._cachedValues = this.writeValues(this._cachedValues);
+    this._cachedValues.lifetime = values.lifetime;
+    this._cachedValues.position.copy(values.position);
+    this._cachedValues.orbitCenter.copy(values.orbitCenter);
+    this._cachedValues.rotation.copy(values.rotation);
+    this._cachedValues.scale.copy(values.scale);
+    this._cachedValues.velocity.copy(values.velocity);
+    this._cachedValues.angularVelocity.copy(values.angularVelocity);
+    this._cachedValues.scalarVelocity.copy(values.scalarVelocity);
+    this._cachedValues.acceleration.copy(values.acceleration);
+    this._cachedValues.angularAcceleration.copy(values.angularAcceleration);
+    this._cachedValues.scalarAcceleration.copy(values.scalarAcceleration);
+    this._cachedValues.speed = values.speed;
+    this._cachedValues.mass = values.mass;
+    this._cachedValues.distortionStrength = values.distortionStrength;
+    this._cachedValues.color.copy(values.color);
+    this._cachedValues.alpha = values.alpha;
+  }
+
   restore() {
     if (!this._cachedValues) return;
 
     this.applyValues(this._cachedValues);
+  }
+
+  snapshot(): ParticleCachedValues {
+    return this.writeValues();
   }
 
   localToWorld(matrixWorld: THREE.Matrix4, normalMatrix: THREE.Matrix3): void {

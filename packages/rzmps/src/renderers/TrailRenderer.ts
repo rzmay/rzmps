@@ -9,7 +9,7 @@ import evaluateDynamicColor from '../helpers/evaluateDynamicColor';
 import { TrailMode } from '../enums/TrailMode';
 import { TrailTextureMode } from '../enums/TrailTextureMode';
 import defaultTex from '../assets/textures/default.png';
-import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
+import { WebGPURenderer } from 'three/webgpu';
 
 export const TRAIL_RENDERER_USER_DATA_KEY = "__rzmps_trailRenderer";
 

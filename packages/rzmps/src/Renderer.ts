@@ -5,6 +5,7 @@ import type { Tag } from './types/Tag';
 import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
 import LODHelper, { type LODSettings } from './LODHelper';
+import type { GPUParticleBufferState } from './GPUParticle';
 
 export interface RendererOptions {
     tags: StrictMultiple<Tag>;
@@ -41,6 +42,22 @@ export default abstract class Renderer {
         system: ParticleSystem,
         deltaTime: number,
     ): void;
+
+    get supportsGPUInput(): boolean {
+        return this.updateGPU !== Renderer.prototype.updateGPU;
+    }
+
+    public updateGPU(
+        buffers: GPUParticleBufferState,
+        system: ParticleSystem,
+        deltaTime: number = 0,
+    ): void {
+        void buffers;
+        void system;
+        void deltaTime;
+        throw new Error('This particle renderer does not support GPU particle buffers.');
+    }
+
     public update(
         particles: Particle[],
         system: ParticleSystem,

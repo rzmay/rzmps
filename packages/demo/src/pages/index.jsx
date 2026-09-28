@@ -3,13 +3,15 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import * as THREE from 'three';
-import WebGPURenderer from 'three/src/renderers/webgpu/WebGPURenderer.js';
-import AmbientLightNode from 'three/src/nodes/lighting/AmbientLightNode.js';
-import DirectionalLightNode from 'three/src/nodes/lighting/DirectionalLightNode.js';
-import HemisphereLightNode from 'three/src/nodes/lighting/HemisphereLightNode.js';
-import PointLightNode from 'three/src/nodes/lighting/PointLightNode.js';
-import RectAreaLightNode from 'three/src/nodes/lighting/RectAreaLightNode.js';
-import SpotLightNode from 'three/src/nodes/lighting/SpotLightNode.js';
+import {
+  AmbientLightNode,
+  DirectionalLightNode,
+  HemisphereLightNode,
+  PointLightNode,
+  RectAreaLightNode,
+  SpotLightNode,
+  WebGPURenderer,
+} from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import CameraControls from '../components/CameraControls';
 import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
