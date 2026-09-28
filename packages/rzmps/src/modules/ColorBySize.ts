@@ -28,7 +28,6 @@ class ColorBySize extends Module {
     }, {
       priority: 1,
       ...options,
-
     });
   }
 

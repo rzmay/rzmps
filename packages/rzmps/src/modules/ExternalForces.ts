@@ -35,14 +35,13 @@ class ExternalForces extends Module {
       particle.velocity.addScaledVector(force, (multiplier * deltaTime) / mass);
     }, {
       ...options,
-
     });
 
     this.explicitForceFields = options.forceFields;
     this.forceFieldFilter = options.forceFieldFilter ?? (() => true );
   }
 
-  public prepare(particleSystem: ParticleSystem, deltaTime: number): void {
+  public prepare(particleSystem: ParticleSystem): void {
     this.particleSystem = particleSystem;
 
     // If explicit force fields are provided, just use those

@@ -19,9 +19,8 @@ class MassBySize extends Module {
         this.getSizeTime(particle.scale.length()),
       );
     }, {
-      priority: 1,
       ...options,
-
+      priority: 1,
     });
   }
 

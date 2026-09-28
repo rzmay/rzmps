@@ -43,9 +43,8 @@ class Collision extends Module {
   constructor(options: Partial<CollisionOptions> = {}) {
     // Collisions run immediately before movement so they can predict this frame's travel segment.
     super((particle, deltaTime) => this.collide(particle, deltaTime), {
-      priority: -0.01,
       ...options,
-
+      priority: -0.01,
     });
 
     this.dampen = options.dampen ?? this.dampen;

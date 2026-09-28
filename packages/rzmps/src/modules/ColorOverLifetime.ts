@@ -21,9 +21,8 @@ class ColorOverLifetime extends Module {
         particle.alpha *= evaluateDynamicNumber(this.options.alpha, particle.time, particle.id);
       }
     }, {
-      priority: 1,
       ...options,
-
+      priority: 1,
     });
   }
 }

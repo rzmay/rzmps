@@ -19,9 +19,8 @@ class DistortionBySpeed extends Module {
         this.getSpeedTime(particle.velocity.length()),
       );
     }, {
-      priority: 1,
       ...options,
-
+      priority: 1,
     });
   }
 

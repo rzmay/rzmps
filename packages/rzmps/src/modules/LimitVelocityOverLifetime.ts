@@ -41,7 +41,6 @@ class LimitVelocityOverLifetime extends Module {
       }
     }, {
       ...options,
-
     });
   }
 

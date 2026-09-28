@@ -36,9 +36,8 @@ class MassByDepth extends Module {
         t,
       );
     }, {
-      priority: 1,
       ...options,
-
+      priority: 1,
     });
 
     this.depthRange = options.depthRange;

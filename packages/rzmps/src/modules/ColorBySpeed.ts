@@ -26,9 +26,8 @@ class ColorBySpeed extends Module {
         particle.alpha *= evaluateByParameterNumber(this.options.alpha, t);
       }
     }, {
-      priority: 1,
       ...options,
-
+      priority: 1,
     });
   }
 

@@ -37,7 +37,6 @@ class RotationBySize extends Module {
     }, {
       ...options,
       priority: 0.5,
-
     });
   }
 

@@ -14,10 +14,7 @@ class MassOverLifetime extends Module {
     super((particle: Particle) => {
       particle.mass *= evaluateDynamicNumber(this.options.mass ?? 1, particle.time, particle.id)
         * (options.multiplyMassBySize ?? true ? particle.scale.length() : 1);
-    }, {
-      ...options,
-
-    });
+    }, { ...options });
   }
 }
 

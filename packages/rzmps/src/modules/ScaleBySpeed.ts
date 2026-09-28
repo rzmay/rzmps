@@ -37,9 +37,8 @@ class ScaleBySpeed extends Module {
         ),
       );
     }, {
-      priority: 1,
       ...options,
-
+      priority: 1,
     });
   }
 

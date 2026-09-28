@@ -41,9 +41,8 @@ class ColorByDepth extends Module {
         particle.alpha *= evaluateByParameterNumber(this.options.alpha, t);
       }
     }, {
-      priority: 1,
       ...options,
-
+      priority: 1,
     });
 
     this.depthRange = options.depthRange;

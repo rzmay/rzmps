@@ -54,7 +54,6 @@ class RotationByDepth extends Module {
     }, {
       ...options,
       priority: 0.5,
-
     });
 
     this.depthRange = options.depthRange;

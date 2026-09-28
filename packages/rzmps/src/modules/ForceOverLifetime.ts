@@ -18,7 +18,6 @@ class ForceOverLifetime extends Module {
     }, {
       ...options,
       priority: 1,
-
     });
   }
 }

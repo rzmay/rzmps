@@ -30,9 +30,8 @@ class ScaleOverLifetime extends Module {
         particle.id,
       ));
     }, {
-      priority: 1,
       ...options,
-
+      priority: 1,
     });
   }
 }

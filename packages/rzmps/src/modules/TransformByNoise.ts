@@ -32,10 +32,7 @@ class TransformByNoise extends NoiseModule {
         );
 
         particle.velocity.addScaledVector(force, deltaTime);
-      }, {
-        ...options,
-
-      });
+      }, { ...options });
     }
 
     private generateOffsetNoise(
