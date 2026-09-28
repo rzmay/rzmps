@@ -3,11 +3,7 @@ import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { ValueByParameter } from '../types/ValueByParameter';
-import type { Node } from 'three/webgpu';
-import { vec3 } from 'three/tsl';
 import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
-import {
-  evaluateByParameterNumberGPU,} from '../helpers/evaluateByParameterGPU';
 
 export interface SpeedByDepthOptions extends Partial<ModuleOptions> {
   speed: ValueByParameter<number>;
@@ -40,15 +36,7 @@ class SpeedByDepth extends Module {
     }, {
       ...options,
       priority: 0.5,
-      modifyGPU: (particle) => {
-          particle.speed.assign(
-            particle.speed.mul(evaluateByParameterNumberGPU(
-              this.options.speed ?? 1,
-              this.getDepthTimeGPU(particle.position),
-              1,
-            )),
-          );
-        }
+
     });
 
     this.depthRange = options.depthRange;
@@ -70,12 +58,6 @@ class SpeedByDepth extends Module {
     }
   }
 
-  private getDepthTimeGPU(position: Node<'vec3'>) {
-    const min = this.depthRange?.[0] ?? this._cameraDepthRange[0];
-    const max = this.depthRange?.[1] ?? this._cameraDepthRange[1];
-
-    return position.sub(vec3(this.cameraPosition)).length().sub(min).div(max - min || 1).clamp(0, 1);
-  }
 }
 
 export default SpeedByDepth;

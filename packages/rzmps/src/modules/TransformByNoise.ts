@@ -5,9 +5,6 @@ import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
 import NoiseModule, { NoiseOptions } from './NoiseModule';
-import type { GPUParticle } from '../GPUParticle';
-import type { Node } from 'three/webgpu';
-import { float, vec3 } from 'three/tsl';
 
 export interface TransformByNoiseOptions extends Partial<ModuleOptions>, NoiseOptions {
     strength: DynamicValue<THREE.Vector3>;
@@ -37,24 +34,7 @@ class TransformByNoise extends NoiseModule {
         particle.velocity.addScaledVector(force, deltaTime);
       }, {
         ...options,
-        modifyGPU: (particle: GPUParticle, deltaTime: number) => {
-          const strength = this.getGPUStrength();
-          const scrollSpeed = typeof this.options.scrollSpeed === 'number'
-            ? this.options.scrollSpeed
-            : 0;
-          const time = particle.realtime.div(1000).mul(scrollSpeed);
-          const noiseX = this.generateOffsetNoiseGPU(particle, time, new THREE.Vector3(0, 0, 0));
-          const noiseY = this.generateOffsetNoiseGPU(particle, time, new THREE.Vector3(31.416, 0, 0));
-          const noiseZ = this.generateOffsetNoiseGPU(particle, time, new THREE.Vector3(0, 31.416, 0));
 
-          const force = vec3(
-            noiseX.noise4d.mul(2).sub(1).mul(strength.x),
-            noiseY.noise4d.mul(2).sub(1).mul(strength.y),
-            noiseZ.noise4d.mul(2).sub(1).mul(strength.z),
-          );
-
-          particle.velocity.assign(particle.velocity.add(force.mul(float(deltaTime))));
-        },
       });
     }
 
@@ -73,29 +53,7 @@ class TransformByNoise extends NoiseModule {
       return noise;
     }
 
-    private generateOffsetNoiseGPU(
-      particle: GPUParticle,
-      time: Node<'float'>,
-      offset: THREE.Vector3,
-    ) {
-      const previousOffset = this.offset;
-      this.offset = offset;
-      const noise = this.generateNoiseGPU(particle, time);
-      this.offset = previousOffset;
-      return noise;
-    }
 
-    private getGPUStrength(): THREE.Vector3 {
-      const strength = this.options.strength instanceof THREE.Vector3
-        ? this.options.strength.clone()
-        : new THREE.Vector3();
-
-      if (this.options.damping) {
-        strength.multiplyScalar(1 / Math.max(this.options.frequency ?? 1, 1));
-      }
-
-      return strength;
-    }
 }
 
 export default TransformByNoise;

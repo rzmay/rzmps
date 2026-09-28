@@ -3,11 +3,7 @@ import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { ValueByParameter } from '../types/ValueByParameter';
-import type { Node } from 'three/webgpu';
-import { vec3 } from 'three/tsl';
 import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
-import {
-  evaluateByParameterVectorGPU,} from '../helpers/evaluateByParameterGPU';
 
 export interface ScaleByDepthOptions extends Partial<ModuleOptions> {
   scale: ValueByParameter<THREE.Vector3>;
@@ -58,29 +54,7 @@ class ScaleByDepth extends Module {
     }, {
       priority: 1,
       ...options,
-      modifyGPU: (particle) => {
-          const time = this.getDepthTimeGPU(particle.position);
 
-          particle.scale.assign(
-            particle.scale.mul(evaluateByParameterVectorGPU(
-              this.options.scale ?? new THREE.Vector3(1, 1, 1),
-              time,
-              new THREE.Vector3(1, 1, 1),
-            )),
-          );
-          particle.scalarVelocity.assign(
-            particle.scalarVelocity.add(evaluateByParameterVectorGPU(
-              this.options.scalarVelocity ?? new THREE.Vector3(),
-              time,
-            )),
-          );
-          particle.scalarAcceleration.assign(
-            particle.scalarAcceleration.add(evaluateByParameterVectorGPU(
-              this.options.scalarAcceleration ?? new THREE.Vector3(),
-              time,
-            )),
-          );
-        }
     });
 
     this.depthRange = options.depthRange;
@@ -102,12 +76,6 @@ class ScaleByDepth extends Module {
     }
   }
 
-  private getDepthTimeGPU(position: Node<'vec3'>) {
-    const min = this.depthRange?.[0] ?? this._cameraDepthRange[0];
-    const max = this.depthRange?.[1] ?? this._cameraDepthRange[1];
-
-    return position.sub(vec3(this.cameraPosition)).length().sub(min).div(max - min || 1).clamp(0, 1);
-  }
 }
 
 export default ScaleByDepth;

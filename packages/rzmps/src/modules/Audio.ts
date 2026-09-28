@@ -135,7 +135,6 @@ class Audio extends Module {
     super((particle) => this._updateParticle(particle), {
       ...options,
       priority: options.priority ?? 0.5,
-      isEffect: true,
     });
 
     this.listener = options.listener;

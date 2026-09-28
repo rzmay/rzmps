@@ -24,7 +24,6 @@ export interface CollisionHit {
 }
 
 export interface ICollisionBackend {
-  setGPUProcessingActive?(active: boolean): void;
   update?(deltaTime: number): void;
   collide(query: CollisionQuery): CollisionHit | null;
   applyImpulse?(
