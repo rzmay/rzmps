@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import ForceField from './ParticleForceField';
+import ParticleForceField from './ParticleForceField';
 
-class ForceFieldHelper extends THREE.Object3D {
-  forceField: ForceField;
+class ParticleForceFieldHelper extends THREE.Object3D {
+  forceField: ParticleForceField;
 
   color: THREE.Color;
 
@@ -13,7 +13,7 @@ class ForceFieldHelper extends THREE.Object3D {
   private sourceGeometry?: THREE.BufferGeometry;
 
   constructor(
-    forceField: ForceField,
+    forceField: ParticleForceField,
     color: THREE.ColorRepresentation = 0xffff00,
   ) {
     super();
@@ -21,7 +21,7 @@ class ForceFieldHelper extends THREE.Object3D {
     this.forceField = forceField;
     this.color = new THREE.Color(color);
 
-    this.name = `${forceField.name || 'ForceField'}Helper`;
+    this.name = `${forceField.name || 'ParticleForceField'}Helper`;
 
     this.update();
   }
@@ -166,4 +166,4 @@ class ForceFieldHelper extends THREE.Object3D {
   }
 }
 
-export default ForceFieldHelper;
+export default ParticleForceFieldHelper;

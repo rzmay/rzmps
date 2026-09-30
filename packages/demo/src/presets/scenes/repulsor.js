@@ -1,8 +1,6 @@
 import * as THREE from 'three';
 import {
   ExternalForces,
-  ParticleForceField,
-  ParticleForceFieldHelper,
   ParticleSystem,
 } from '@rzmps/rzmps';
 import {
@@ -20,14 +18,14 @@ export default function createRepulsorAttractor(scene) {
    *
    * Negative gravity pushes particles away from the field center.
    */
-  const repulsor = ParticleForceField.Sphere({
+  const repulsor = ExternalForces.ParticleForceField.Sphere({
     gravity: -8,
   }, 4);
 
   repulsor.name = 'Repulsor';
   repulsor.position.set(0, 3, -4);
 
-  const repulsorHelper = new ParticleForceFieldHelper(
+  const repulsorHelper = new ExternalForces.ParticleForceFieldHelper(
     repulsor,
     0xff655e,
   );
@@ -42,14 +40,14 @@ export default function createRepulsorAttractor(scene) {
    *
    * Positive gravity pulls particles into the field center.
    */
-  const attractor = ParticleForceField.Sphere({
+  const attractor = ExternalForces.ParticleForceField.Sphere({
     gravity: 8,
   }, 4);
 
   attractor.name = 'Attractor';
   attractor.position.set(0, 3, 4);
 
-  const attractorHelper = new ParticleForceFieldHelper(
+  const attractorHelper = new ExternalForces.ParticleForceFieldHelper(
     attractor,
     0x65ff5e,
   );

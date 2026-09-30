@@ -11,7 +11,12 @@ import {
  * - Force application divides by particle mass when mass is nonzero.
  * - Leaving a force field does not leave stale acceleration on the particle.
  * - Massless particles preserve the old acceleration-field-style behavior.
+ * - Force field helpers are exposed under ExternalForces.
  */
+
+assert.equal(typeof ExternalForces.ParticleForceField, 'function');
+assert.equal(typeof ExternalForces.ParticleForceFieldHelper, 'function');
+assert.ok(ExternalForces.ParticleForceField.Sphere() instanceof ExternalForces.ParticleForceField);
 
 const particleSystem = {
   simulationSpace: 'world',

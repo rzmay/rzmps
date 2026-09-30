@@ -57,7 +57,7 @@ class Particle {
 
   alpha: number;
 
-  mass: number = 0;
+  mass: number = 1;
 
   distortionStrength: number = 1;
 

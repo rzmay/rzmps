@@ -58,13 +58,11 @@ export { default as SpeedOverLifetime } from './modules/SpeedOverLifetime';
 export { default as MassBySize } from './modules/MassBySize';
 export { default as MassByDepth } from './modules/MassByDepth';
 export { default as MassOverLifetime } from './modules/MassOverLifetime';
-export { default as ExternalForces } from './modules/ExternalForces';
+export { default as ExternalForces } from './modules/ExternalForces/ExternalForces';
 export { default as Collision } from './modules/Collision';
 
 // Force Fields
 export type { IParticleForceField } from './interfaces/IParticleForceField';
-export { default as ParticleForceField } from './ParticleForceField';
-export { default as ParticleForceFieldHelper } from './ParticleForceFieldHelper';
 
 // Collision
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';

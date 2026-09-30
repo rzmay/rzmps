@@ -54,13 +54,13 @@ export default async function createFire() {
         frequency: 1.35,
       }),
       new ForceOverLifetime({
-        force: new THREE.Vector3(0, 0.35, 0),
+        force: new THREE.Vector3(0, 0.5, 0),
       }),
-      new LimitVelocityOverLifetime({
-        limit: new THREE.Vector3(12, 12, 12),
-        drag: 0.3,
-        multiplyDragByVelocity: true,
-      }),
+      // new LimitVelocityOverLifetime({
+      //   limit: new THREE.Vector3(12, 12, 12),
+      //   drag: 0.3,
+      //   multiplyDragByVelocity: true,
+      // }),
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (1.3 + (0.2 - 1.3) * time);
@@ -112,7 +112,7 @@ export default async function createFire() {
     inheritColor: 0,
     inheritAlpha: 0,
     inheritMass: 0,
-    inheritVelocity: 0.35,
+    // inheritVelocity: 0.35,
     ratio: 0.5,
   });
 
@@ -175,7 +175,6 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
         alphaMap,
         softParticleDistance: 2.5,
         materialOptions: {
-          opacity: 0.35,
           transmission: 1,
           distortionMap,
           distortionStrength: 8,

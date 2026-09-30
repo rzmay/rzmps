@@ -35,7 +35,7 @@ export default class Module {
   updateLOD?: Partial<LODSettings>;
   private _lodHelper: LODHelper;
 
-  priority = -1;
+  priority = Priority.Permanent;
 
   constructor(
     public _modify: ModuleUpdate,

@@ -949,14 +949,14 @@ new ExternalForces(options: ExternalForcesOptions)
 
 interface ExternalForcesOptions extends Partial<ModuleOptions> {
   multiplier?: DynamicValue<number>;
-  forceFieldFilter?: (forceField: ParticleForceField) => boolean;
+  forceFieldFilter?: (forceField: InstanceType<typeof ExternalForces.ParticleForceField>) => boolean;
   forceFields?: IParticleForceField[];
 }
 ```
 
-Samples `ParticleForceField` objects and applies their forces to particles. If
-`forceFields` is omitted, fields are discovered from the particle system's
-scene.
+Samples `ExternalForces.ParticleForceField` objects and applies their forces to
+particles. If `forceFields` is omitted, fields are discovered from the particle
+system's scene.
 
 ### Collision
 
@@ -1279,8 +1279,8 @@ control how many particles can create lights.
 
 ## Force Fields
 
-`ParticleForceField` is a `THREE.Object3D` that can be placed in the scene and
-sampled by `ExternalForces`.
+`ExternalForces.ParticleForceField` is a `THREE.Object3D` that can be placed in
+the scene and sampled by `ExternalForces`.
 
 ```ts
 interface ForceFieldOptions {
@@ -1299,16 +1299,16 @@ interface ForceFieldOptions {
 Helpers:
 
 ```ts
-ParticleForceField.Box(options?, ...boxGeometryArgs)
-ParticleForceField.Sphere(options?, ...sphereGeometryArgs)
-ParticleForceField.Cone(options?, ...coneGeometryArgs)
-ParticleForceField.Torus(options?, ...torusGeometryArgs)
+ExternalForces.ParticleForceField.Box(options?, ...boxGeometryArgs)
+ExternalForces.ParticleForceField.Sphere(options?, ...sphereGeometryArgs)
+ExternalForces.ParticleForceField.Cone(options?, ...coneGeometryArgs)
+ExternalForces.ParticleForceField.Torus(options?, ...torusGeometryArgs)
 ```
 
 Example:
 
 ```ts
-const attractor = ParticleForceField.Sphere({
+const attractor = ExternalForces.ParticleForceField.Sphere({
   gravity: 10,
   drag: 0.2,
   scale: new THREE.Vector3(4, 4, 4),
@@ -1324,7 +1324,8 @@ system.addModule(
 );
 ```
 
-Use `ParticleForceFieldHelper` to visualize a field while tuning.
+Use `ExternalForces.ParticleForceFieldHelper` to visualize a field while
+tuning.
 
 ## Collision And Physics
 

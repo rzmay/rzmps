@@ -729,7 +729,6 @@ class ParticleSystem extends THREE.Object3D {
     this._paused = false;
     this._ended = false;
     this._elapsedTime = 0;
-    this._prewarmed = false;
     this.lastFrame = now;
     this._lodAccumulatedDeltaTime = 0;
     this._resetEmitterContextVelocity();
@@ -769,7 +768,7 @@ class ParticleSystem extends THREE.Object3D {
     this._playing = false;
     this._paused = false;
     this._ended = true;
-    this._lodAccumulatedDeltaTime = 0;
+    this._prewarmed = false
     this._resetEmitterContextVelocity();
     this._lodHelper.reset();
 
@@ -794,7 +793,6 @@ class ParticleSystem extends THREE.Object3D {
   // Clear particles
   public clearParticles(children: boolean = true): void {
     this.particles.length = 0;
-    this._prewarmed = false;
 
     this.renderers.forEach((renderer) => {
       renderer.update(this.particles, this);
@@ -1110,6 +1108,10 @@ class ParticleSystem extends THREE.Object3D {
 
     if (this.duration <= 0) return;
 
+    // Make sure live cubemap isn't udpated during this phase
+    const lastUseLiveCubemap = this.useLiveCubemap;
+    this.useLiveCubemap = false;
+
     const fps = Number.isFinite(this.prewarmFPS) && this.prewarmFPS > 0
       ? this.prewarmFPS
       : 24;
@@ -1134,10 +1136,11 @@ class ParticleSystem extends THREE.Object3D {
 
       this._processParticles();
       this._updateSubSystems();
-      this._handleEndBehavior();
 
       remaining -= this.deltaTime;
     }
+
+    this.useLiveCubemap = lastUseLiveCubemap;
 
     this.deltaTime = previousDeltaTime;
     this.lastFrame = Date.now();

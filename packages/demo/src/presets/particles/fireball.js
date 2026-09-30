@@ -127,7 +127,7 @@ function createHeatDistortion(alphaMap, distortionMap) {
         linear: new THREE.Vector3(0, 0.5, 0),
       }),
       new ForceOverLifetime({
-        force: new THREE.Vector3(0, 0.2, 0),
+        force: new THREE.Vector3(0, 0.5, 0),
       }),
       new TransformByNoise({
         strength: new THREE.Vector3(0.55, 0.3, 0.55),

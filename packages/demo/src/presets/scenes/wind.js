@@ -1,8 +1,6 @@
 import * as THREE from 'three';
 import {
   ExternalForces,
-  ParticleForceField,
-  ParticleForceFieldHelper,
   ParticleSystem,
 } from '@rzmps/rzmps';
 import {
@@ -20,7 +18,7 @@ export default function createWind(scene) {
    *
    * A rectangular region applying a directional force.
    */
-  const wind = ParticleForceField.Box(
+  const wind = ExternalForces.ParticleForceField.Box(
     {
       direction: new THREE.Vector3(36, 12, 0),
       drag: 0.6,
@@ -31,7 +29,7 @@ export default function createWind(scene) {
   wind.name = 'Wind';
   wind.position.set(4, 3, 0);
 
-  const windHelper = new ParticleForceFieldHelper(
+  const windHelper = new ExternalForces.ParticleForceFieldHelper(
     wind,
     0x5edcff,
   );

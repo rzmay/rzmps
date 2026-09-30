@@ -11,15 +11,23 @@ export interface ForceOverLifetimeOptions extends Partial<ModuleOptions> {
 class ForceOverLifetime extends Module {
   constructor(public options: Partial<ForceOverLifetimeOptions> = {}) {
 
-    super((particle: Particle) => {
-      particle.acceleration.add(
-        evaluateDynamicVector(
-          this.options.force ?? new THREE.Vector3(0, 0, 0), particle.time, particle.id
-        ).divideScalar(particle.mass),
+    super((particle: Particle, deltaTime) => {
+      const force = evaluateDynamicVector(
+          this.options.force ?? new THREE.Vector3(0, 0, 0),
+          particle.time,
+          particle.id
+        )
+      const mass = Number.isFinite(particle.mass) && particle.mass > 0
+        ? particle.mass
+        : 1;
+
+      particle.velocity.addScaledVector(
+        force,
+        deltaTime / mass,
       );
     }, {
       ...options,
-      priority: Module.Priority.PreMovementTransient,
+      priority: Module.Priority.Permanent,
     });
   }
 }

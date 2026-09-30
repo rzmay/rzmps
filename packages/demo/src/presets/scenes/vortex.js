@@ -1,8 +1,6 @@
 import * as THREE from 'three';
 import {
   ExternalForces,
-  ParticleForceField,
-  ParticleForceFieldHelper,
   ParticleSystem,
 } from '@rzmps/rzmps';
 import {
@@ -21,7 +19,7 @@ export default function createVortex(scene) {
    * Pulls particles toward its center while accelerating them
    * tangentially around the Y axis.
    */
-  const vortex = ParticleForceField.Sphere({
+  const vortex = ExternalForces.ParticleForceField.Sphere({
     rotationSpeed: 18,
     rotationAttraction: 10,
     drag: 1.2,
@@ -30,7 +28,7 @@ export default function createVortex(scene) {
   vortex.name = 'Vortex';
   vortex.position.set(0, 0, 0);
 
-  const vortexHelper = new ParticleForceFieldHelper(
+  const vortexHelper = new ExternalForces.ParticleForceFieldHelper(
     vortex,
     0xa66cff,
   );
