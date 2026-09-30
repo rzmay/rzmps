@@ -26,7 +26,7 @@ class ColorBySize extends Module {
         particle.alpha *= evaluateByParameterNumber(this.options.alpha, t);
       }
     }, {
-      priority: 1,
+      priority: Module.Priority.Transient,
       ...options,
     });
   }

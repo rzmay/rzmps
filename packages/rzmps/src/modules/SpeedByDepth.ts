@@ -35,7 +35,7 @@ class SpeedByDepth extends Module {
       );
     }, {
       ...options,
-      priority: 0.5,
+      priority: Module.Priority.PreMovementTransient,
     });
 
     this.depthRange = options.depthRange;

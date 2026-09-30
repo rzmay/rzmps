@@ -465,7 +465,9 @@ class ParticleSystem extends THREE.Object3D {
     next.rotation.copy(base.rotation).addScaledVector(frame.angularVelocity, this.deltaTime * frame.speed);
     next.scale.copy(base.scale).addScaledVector(frame.scalarVelocity, this.deltaTime * frame.speed);
     next.velocity.copy(baseVelocity).addScaledVector(base.acceleration, this.deltaTime * base.speed);
-    next.angularVelocity.copy(base.angularVelocity).addScaledVector(base.angularAcceleration, this.deltaTime * base.speed);
+    next.angularVelocity
+      .copy(base.angularVelocity)
+      .addScaledVector(base.angularAcceleration, this.deltaTime * base.speed);
     next.scalarVelocity.copy(base.scalarVelocity).addScaledVector(base.scalarAcceleration, this.deltaTime * base.speed);
     next.acceleration.copy(base.acceleration);
     next.angularAcceleration.copy(base.angularAcceleration);

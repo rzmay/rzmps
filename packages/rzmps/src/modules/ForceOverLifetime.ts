@@ -13,11 +13,13 @@ class ForceOverLifetime extends Module {
 
     super((particle: Particle) => {
       particle.acceleration.add(
-        evaluateDynamicVector(this.options.force ?? new THREE.Vector3(0, 0, 0), particle.time, particle.id),
+        evaluateDynamicVector(
+          this.options.force ?? new THREE.Vector3(0, 0, 0), particle.time, particle.id
+        ).divideScalar(particle.mass),
       );
     }, {
       ...options,
-      priority: 1,
+      priority: Module.Priority.PreMovementTransient,
     });
   }
 }

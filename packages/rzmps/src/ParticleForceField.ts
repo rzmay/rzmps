@@ -27,19 +27,31 @@ class ParticleForceField extends THREE.Object3D implements IParticleForceField {
     { side: THREE.DoubleSide },
   );
 
-  static Box(options?: Partial<ForceFieldOptions>, ...args: any[]): ParticleForceField {
+  static Box(
+    options?: Partial<ForceFieldOptions>,
+    ...args: ConstructorParameters<typeof THREE.BoxGeometry>
+  ): ParticleForceField {
     return new ParticleForceField({ ...options, geometry: new THREE.BoxGeometry(...args) });
   }
 
-  static Sphere(options?: Partial<ForceFieldOptions>, ...args: any[]): ParticleForceField {
+  static Sphere(
+    options?: Partial<ForceFieldOptions>,
+    ...args: ConstructorParameters<typeof THREE.SphereGeometry>
+  ): ParticleForceField {
     return new ParticleForceField({ ...options, geometry: new THREE.SphereGeometry(...args) });
   }
 
-  static Cone(options?: Partial<ForceFieldOptions>, ...args: any[]): ParticleForceField {
+  static Cone(
+    options?: Partial<ForceFieldOptions>,
+    ...args: ConstructorParameters<typeof THREE.ConeGeometry>
+  ): ParticleForceField {
     return new ParticleForceField({ ...options, geometry: new THREE.ConeGeometry(...args) });
   }
 
-  static Torus(options?: Partial<ForceFieldOptions>, ...args: any[]): ParticleForceField {
+  static Torus(
+    options?: Partial<ForceFieldOptions>,
+    ...args: ConstructorParameters<typeof THREE.TorusGeometry>
+  ): ParticleForceField {
     return new ParticleForceField({ ...options, geometry: new THREE.TorusGeometry(...args) });
   }
 
@@ -170,7 +182,7 @@ class ParticleForceField extends THREE.Object3D implements IParticleForceField {
 
     const size = new THREE.Vector3();
 
-    this._geometry.boundingBox!.getSize(size);
+    this._geometry.boundingBox?.getSize(size);
 
     const radius = size.length() * 0.5;
 

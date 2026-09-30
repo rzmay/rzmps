@@ -6,11 +6,17 @@ import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
 import LODHelper, { type LODSettings } from './LODHelper';
 
+enum Priority {
+  Permanent = -1,
+  PreMovementTransient = 0.5,
+  Transient = 1,
+}
+
 export type ModuleUpdate = (particle: Particle, deltaTime: number) => void;
 
 export interface ModuleOptions {
   // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
-  priority: number;
+  priority: number | Priority;
 
   tags: StrictMultiple<Tag>;
   useUpdateLOD: boolean;
@@ -18,6 +24,8 @@ export interface ModuleOptions {
 }
 
 export default class Module {
+  public static readonly Priority = Priority;
+
   // Sub-modules on which this module depends.
   // Useful for pre-processing or combining priority stages.
   public dependents: Module[] = [];

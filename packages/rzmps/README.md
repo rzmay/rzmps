@@ -583,7 +583,7 @@ so you only need to pass the fields you want to customize.
 
 ```ts
 interface ModuleOptions {
-  priority: number;
+  priority: number | Module.Priority;
   tags: StrictMultiple<Tag>;
   useUpdateLOD: boolean;
   updateLOD: Partial<LODSettings>;
@@ -597,6 +597,14 @@ work on lower-detail frames while preserving the module API.
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `priority` | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are transient pre-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
 | `tags`     | Restricts the module to particles with matching tags.                                                                                                                                                                                                                      |
+
+Common priority values are exposed on `Module.Priority`:
+
+```ts
+Module.Priority.Permanent; // -1
+Module.Priority.PreMovementTransient; // 0.5
+Module.Priority.Transient; // 1
+```
 
 Priority also determines whether a module's changes persist into the next frame.
 Permanent pre-movement changes are cached into the next persistent particle

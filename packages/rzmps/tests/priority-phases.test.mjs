@@ -34,10 +34,10 @@ const system = new ParticleSystem({
       p.velocity.x += 1;
       postMovementPositions.push(p.position.x);
       preMovementVelocities.push(p.velocity.x);
-    }, { priority: 0.5 }),
+    }, { priority: Module.Priority.PreMovementTransient }),
     new Module((p) => {
       p.scale.multiplyScalar(2);
-    }, { priority: 1 }),
+    }, { priority: Module.Priority.Transient }),
   ],
   renderers: [],
   gravityModifier: 0,

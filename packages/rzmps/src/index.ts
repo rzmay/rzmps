@@ -64,7 +64,7 @@ export { default as Collision } from './modules/Collision';
 // Force Fields
 export type { IParticleForceField } from './interfaces/IParticleForceField';
 export { default as ParticleForceField } from './ParticleForceField';
-export { default as ParticleForceFieldHelper } from './ParticleForceFieldHelper'
+export { default as ParticleForceFieldHelper } from './ParticleForceFieldHelper';
 
 // Collision
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';

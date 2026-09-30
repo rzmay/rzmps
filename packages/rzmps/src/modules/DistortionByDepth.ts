@@ -37,7 +37,7 @@ class DistortionByDepth extends Module {
       );
     }, {
       ...options,
-      priority: 1,
+      priority: Module.Priority.Transient,
     });
 
     this.depthRange = options.depthRange;
