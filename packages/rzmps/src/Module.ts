@@ -7,6 +7,12 @@ import tagsIntersect from './helpers/tagsIntersect';
 import LODHelper, { type LODSettings } from './LODHelper';
 import type { GPUParticle, GPUParticleUpdateContext } from './GPUParticle';
 
+enum Priority {
+  Permanent = -1,
+  PreMovementTransient = 0.5,
+  Transient = 1,
+}
+
 export type ModuleUpdate = (particle: Particle, deltaTime: number) => void;
 export type ModuleGPUUpdate = (
   particle: GPUParticle,
@@ -16,7 +22,7 @@ export type ModuleGPUUpdate = (
 
 export interface ModuleOptions {
   // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
-  priority: number;
+  priority: number | Priority;
 
   tags: StrictMultiple<Tag>;
   useUpdateLOD: boolean;
@@ -25,6 +31,8 @@ export interface ModuleOptions {
 }
 
 export default class Module {
+  public static readonly Priority = Priority;
+
   static CPU_UNSUPPORTED: ModuleUpdate = () => {
     throw new Error('This particle module does not support CPU processing.');
   };
@@ -42,7 +50,7 @@ export default class Module {
   updateLOD?: Partial<LODSettings>;
   private _lodHelper: LODHelper;
 
-  priority = -1;
+  priority = Priority.Permanent;
   modifyGPU: ModuleGPUUpdate;
 
   constructor(

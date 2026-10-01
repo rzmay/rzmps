@@ -58,7 +58,7 @@ class VelocityOverLifetime extends Module {
       }
     }, {
       ...options,
-      priority: 0.5,
+      priority: Module.Priority.PreMovementTransient,
       modifyGPU: (particle) => {
           if (this.options.position !== undefined) {
             particle.position.assign(

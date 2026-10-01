@@ -25,7 +25,7 @@ class ColorOverLifetime extends Module {
       }
     }, {
       ...options,
-      priority: 1,
+      priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           if (this.options.color !== undefined) {
             particle.color.assign(

@@ -30,7 +30,7 @@ class RotationOverLifetime extends Module {
           particle.id));
     }, {
       ...options,
-      priority: 0.5,
+      priority: Module.Priority.PreMovementTransient,
       modifyGPU: (particle) => {
           particle.rotation.assign(
             particle.rotation.add(evaluateDynamicVectorGPU(

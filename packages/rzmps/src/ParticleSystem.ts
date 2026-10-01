@@ -42,6 +42,7 @@ interface ParticleSystemOptions {
   updateLOD: Partial<LODSettings>;
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
+  inheritVelocity: number;
   simulationSpace: SimulationSpace | `${SimulationSpace}`;
   gpuProcessing: boolean;
   gpuDebug: boolean;
@@ -111,6 +112,7 @@ class ParticleSystem extends THREE.Object3D {
 
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
+  inheritVelocity: number;
   simulationSpeed: number;
   duration: number;
   prewarm: boolean;
@@ -195,6 +197,10 @@ class ParticleSystem extends THREE.Object3D {
   private _contextCaptureDummy: THREE.Mesh;
   private readonly _simulationDistanceWorldPos = new THREE.Vector3();
   private readonly _simulationDistanceCameraWorldPos = new THREE.Vector3();
+  private readonly _emitterContextWorldPosition = new THREE.Vector3();
+  private readonly _emitterContextPreviousWorldPosition = new THREE.Vector3();
+  private readonly _emitterContextVelocity = new THREE.Vector3();
+  private _hasEmitterContextPreviousWorldPosition = false;
   private readonly _particleEmissionQuaternion = new THREE.Quaternion();
   private readonly _particleEmissionEuler = new THREE.Euler();
   private readonly _particleEmissionUnitY = new THREE.Vector3(0, 1, 0);
@@ -256,6 +262,7 @@ class ParticleSystem extends THREE.Object3D {
     // but if either gravity or gravityModifier are specified, they will be used.
     this.gravity = options.gravity ?? new THREE.Vector3(0, -9.81, 0);
     this.gravityModifier = options.gravityModifier ?? (options.gravity ? 1 : 0);
+    this.inheritVelocity = Math.max(0, options.inheritVelocity ?? 0);
     this._simulationSpace = (options.simulationSpace as SimulationSpace) ?? this._simulationSpace;
     this._worldRendererRoot.name = 'ParticleSystem World Renderers';
 
@@ -303,6 +310,7 @@ class ParticleSystem extends THREE.Object3D {
     if (this._paused) {
       this.deltaTime = nextDeltaTime;
       this.lastFrame = now;
+      this._updateEmitterContextVelocity();
       return;
     }
 
@@ -313,6 +321,7 @@ class ParticleSystem extends THREE.Object3D {
       this.deltaTime = nextDeltaTime;
       this.lastFrame = now;
       this._lodAccumulatedDeltaTime = 0;
+      this._updateEmitterContextVelocity();
       return;
     }
 
@@ -327,6 +336,7 @@ class ParticleSystem extends THREE.Object3D {
     this.lastFrame = now;
 
     this.syncRendererParents();
+    this._updateEmitterContextVelocity();
 
     this._prewarm();
 
@@ -1146,7 +1156,9 @@ class ParticleSystem extends THREE.Object3D {
     next.rotation.copy(base.rotation).addScaledVector(frame.angularVelocity, this.deltaTime * frame.speed);
     next.scale.copy(base.scale).addScaledVector(frame.scalarVelocity, this.deltaTime * frame.speed);
     next.velocity.copy(baseVelocity).addScaledVector(base.acceleration, this.deltaTime * base.speed);
-    next.angularVelocity.copy(base.angularVelocity).addScaledVector(base.angularAcceleration, this.deltaTime * base.speed);
+    next.angularVelocity
+      .copy(base.angularVelocity)
+      .addScaledVector(base.angularAcceleration, this.deltaTime * base.speed);
     next.scalarVelocity.copy(base.scalarVelocity).addScaledVector(base.scalarAcceleration, this.deltaTime * base.speed);
     next.acceleration.copy(base.acceleration);
     next.angularAcceleration.copy(base.angularAcceleration);
@@ -1408,9 +1420,9 @@ class ParticleSystem extends THREE.Object3D {
     this._paused = false;
     this._ended = false;
     this._elapsedTime = 0;
-    this._prewarmed = false;
     this.lastFrame = now;
     this._lodAccumulatedDeltaTime = 0;
+    this._resetEmitterContextVelocity();
     this._lodHelper.reset();
 
     this.emitters.forEach((emitter) => emitter.reset());
@@ -1447,7 +1459,8 @@ class ParticleSystem extends THREE.Object3D {
     this._playing = false;
     this._paused = false;
     this._ended = true;
-    this._lodAccumulatedDeltaTime = 0;
+    this._prewarmed = false
+    this._resetEmitterContextVelocity();
     this._lodHelper.reset();
 
     this.subSystems.forEach((_options, subSystem) => {
@@ -1717,6 +1730,9 @@ class ParticleSystem extends THREE.Object3D {
       time: this.duration === 0 ? 1 : this._elapsedTime / this.duration,
       elapsedTime: this._elapsedTime,
       position: this.position,
+      velocity: this.inheritVelocity > 0
+        ? this._emitterContextVelocity.clone().multiplyScalar(this.inheritVelocity)
+        : undefined,
     };
 
     if (this.simulationSpace !== SimulationSpace.World) return context;
@@ -1729,6 +1745,39 @@ class ParticleSystem extends THREE.Object3D {
       transform,
       position: new THREE.Vector3().setFromMatrixPosition(transform),
     };
+  }
+
+  private _updateEmitterContextVelocity(): void {
+    this.updateWorldMatrix(true, false);
+    this._emitterContextWorldPosition.setFromMatrixPosition(this.matrixWorld);
+
+    if (
+      !this._hasEmitterContextPreviousWorldPosition
+      || this.deltaTime <= 0
+    ) {
+      this._emitterContextVelocity.set(0, 0, 0);
+      this._emitterContextPreviousWorldPosition.copy(this._emitterContextWorldPosition);
+      this._hasEmitterContextPreviousWorldPosition = true;
+      return;
+    }
+
+    this._emitterContextVelocity
+      .copy(this._emitterContextWorldPosition)
+      .sub(this._emitterContextPreviousWorldPosition)
+      .divideScalar(this.deltaTime);
+
+    this._emitterContextPreviousWorldPosition.copy(this._emitterContextWorldPosition);
+
+    if (this.simulationSpace === SimulationSpace.World) return;
+
+    const worldQuaternion = new THREE.Quaternion();
+    this.getWorldQuaternion(worldQuaternion).invert();
+    this._emitterContextVelocity.applyQuaternion(worldQuaternion);
+  }
+
+  private _resetEmitterContextVelocity(): void {
+    this._emitterContextVelocity.set(0, 0, 0);
+    this._hasEmitterContextPreviousWorldPosition = false;
   }
 
   private _updateSystemTime(): void {
@@ -1758,6 +1807,10 @@ class ParticleSystem extends THREE.Object3D {
 
     if (this.duration <= 0) return;
 
+    // Make sure live cubemap isn't udpated during this phase
+    const lastUseLiveCubemap = this.useLiveCubemap;
+    this.useLiveCubemap = false;
+
     const fps = Number.isFinite(this.prewarmFPS) && this.prewarmFPS > 0
       ? this.prewarmFPS
       : 24;
@@ -1782,10 +1835,11 @@ class ParticleSystem extends THREE.Object3D {
 
       this._processParticles();
       this._updateSubSystems();
-      this._handleEndBehavior();
 
       remaining -= this.deltaTime;
     }
+
+    this.useLiveCubemap = lastUseLiveCubemap;
 
     this.deltaTime = previousDeltaTime;
     this.lastFrame = Date.now();

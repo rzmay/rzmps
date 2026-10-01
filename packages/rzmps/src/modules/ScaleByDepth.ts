@@ -57,7 +57,7 @@ class ScaleByDepth extends Module {
       );
     }, {
       ...options,
-      priority: 1,
+      priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           const time = this.getDepthTimeGPU(particle.position);
 

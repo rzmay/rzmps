@@ -31,7 +31,7 @@ class ColorBySpeed extends Module {
       }
     }, {
       ...options,
-      priority: 1,
+      priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           const t = this.getSpeedTimeGPU(particle.velocity.length());
 

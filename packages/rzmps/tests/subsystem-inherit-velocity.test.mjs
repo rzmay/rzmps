@@ -60,3 +60,35 @@ assert.equal(child.particles[0].color.g, 0.5);
 assert.equal(child.particles[0].color.b, 0.5);
 assert.equal(child.particles[0].alpha, 0.8);
 assert.equal(child.particles[0].mass, 5);
+
+const movingSystemEmitter = new Emitter({
+  rate: 0,
+  radialSpeed: 0,
+  bursts: [{ time: 0, count: 1 }],
+  initialValues: {
+    lifetime: 1,
+    velocity: new THREE.Vector3(1, 2, 3),
+  },
+});
+const movingSystem = new ParticleSystem({
+  renderers: [],
+  emitters: movingSystemEmitter,
+  inheritVelocity: 0.5,
+});
+
+movingSystem.deltaTime = 1;
+movingSystem._updateEmitterContextVelocity();
+movingSystem.position.x = 10;
+movingSystem.deltaTime = 2;
+movingSystem._updateEmitterContextVelocity();
+
+const movingSystemParticles = movingSystemEmitter.update(
+  movingSystem.particles,
+  movingSystem.getEmitterContext(),
+  movingSystem,
+);
+
+assert.equal(movingSystemParticles.length, 1);
+assert.equal(movingSystemParticles[0].velocity.x, 3.5);
+assert.equal(movingSystemParticles[0].velocity.y, 2);
+assert.equal(movingSystemParticles[0].velocity.z, 3);

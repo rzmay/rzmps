@@ -47,7 +47,7 @@ class ColorByDepth extends Module {
       }
     }, {
       ...options,
-      priority: 1,
+      priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           const t = this.getDepthTimeGPU(particle.position);
 

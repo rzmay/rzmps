@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  Audio,
+  AudioRenderer,
   Collision,
   Emitter,
   EmissionShape,
@@ -120,8 +120,7 @@ export default async function createBubbles() {
           distortionStrength: -8,
         },
       }),
-
-      new Audio({
+      new AudioRenderer({
         sound: bubbles,
 
         onCollisionSound: [

@@ -41,7 +41,7 @@ class DistortionByDepth extends Module {
       );
     }, {
       ...options,
-      priority: 1,
+      priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           particle.distortionStrength.assign(
             particle.distortionStrength.mul(evaluateByParameterNumberGPU(

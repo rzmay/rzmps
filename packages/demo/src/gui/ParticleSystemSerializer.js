@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-    Audio,
+    AudioRenderer,
     Collision,
     EmissionSource,
     EndBehavior,
@@ -79,6 +79,7 @@ export class ParticleSystemSerializer {
             `const ${variableName} = new ParticleSystem({`,
             `  gravity: ${this.serializeValue(system.gravity)},`,
             `  gravityModifier: ${this.serializeValue(system.gravityModifier)},`,
+            `  inheritVelocity: ${this.serializeValue(system.inheritVelocity)},`,
             `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
             `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
             `  duration: ${this.serializeValue(system.duration)},`,
@@ -238,7 +239,7 @@ export class ParticleSystemSerializer {
     }
 
     serializeRenderer(renderer) {
-        if (renderer instanceof Audio) {
+        if (renderer instanceof AudioRenderer) {
             const options = {
                 loop: renderer.loop,
                 maxClips: renderer.maxClips,
@@ -290,7 +291,7 @@ export class ParticleSystemSerializer {
                 options.onDeathSound = this.rawCode(this.serializeAudioBuffers(renderer.onDeathSound));
             }
 
-            return `new Audio(${this.serializeValue(options)})`;
+            return `new AudioRenderer(${this.serializeValue(options)})`;
         }
         if (renderer instanceof SpriteRenderer) {
             const texture = this.serializeTexture(renderer.texture);

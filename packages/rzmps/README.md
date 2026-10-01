@@ -199,6 +199,7 @@ interface ParticleSystemOptions {
   updateLOD: Partial<LODSettings>;
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
+  inheritVelocity: number;
   simulationSpace: SimulationSpace;
   useLiveCubemap: boolean;
   cubemapSettings: Partial<LiveCubemapOptions>;
@@ -223,6 +224,11 @@ support GPU input can consume those buffers directly; CPU-only renderers use
 the CPU particle mirror after GPU readback.
 `particleSystem.isGPUProcessingActive` reports whether the current update is
 actually using the GPU path after fallback checks.
+
+Set `inheritVelocity` above `0` to add the particle system's parent-transform
+velocity to newly emitted top-level particles. `1` applies the full transform
+velocity and fractional values apply a scaled amount. This uses the same
+emission-context velocity path as subsystem velocity inheritance.
 
 Set `updateLOD` to reduce simulation frequency as systems move farther from the
 active camera. `useUpdateLOD` defaults to `true` when `updateLOD` is provided
@@ -594,7 +600,7 @@ so you only need to pass the fields you want to customize.
 
 ```ts
 interface ModuleOptions {
-  priority: number;
+  priority: number | Module.Priority;
   tags: StrictMultiple<Tag>;
   useUpdateLOD: boolean;
   updateLOD: Partial<LODSettings>;
@@ -610,6 +616,14 @@ work on lower-detail frames while preserving the module API.
 | `priority` | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are transient pre-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
 | `tags`     | Restricts the module to particles with matching tags.                                                                                                                                                                                                                      |
 | `isEffect` | Marks a module as reactive rather than particle-mutating. Effects are allowed to run on the CPU alongside GPU processing.                                                                                     |
+
+Common priority values are exposed on `Module.Priority`:
+
+```ts
+Module.Priority.Permanent; // -1
+Module.Priority.PreMovementTransient; // 0.5
+Module.Priority.Transient; // 1
+```
 
 Priority also determines whether a module's changes persist into the next frame.
 Permanent pre-movement changes are cached into the next persistent particle
@@ -954,14 +968,14 @@ new ExternalForces(options: ExternalForcesOptions)
 
 interface ExternalForcesOptions extends Partial<ModuleOptions> {
   multiplier?: DynamicValue<number>;
-  forceFieldFilter?: (forceField: ParticleForceField) => boolean;
+  forceFieldFilter?: (forceField: InstanceType<typeof ExternalForces.ParticleForceField>) => boolean;
   forceFields?: IParticleForceField[];
 }
 ```
 
-Samples `ParticleForceField` objects and applies their forces to particles. If
-`forceFields` is omitted, fields are discovered from the particle system's
-scene.
+Samples `ExternalForces.ParticleForceField` objects and applies their forces to
+particles. If `forceFields` is omitted, fields are discovered from the particle
+system's scene.
 
 In GPU processing, force fields are sampled on the CPU during `prepare()` for
 the current live particle list, uploaded as a force buffer, and applied by
@@ -1007,12 +1021,45 @@ hit position and normal are uploaded to GPU buffers and applied during the GPU
 update. This keeps CPU collision backends available to GPU systems without
 mixing CPU processing into the middle of the GPU pipeline.
 
-### Audio
+## Built-In Renderers
+
+All renderers accept shared renderer options:
 
 ```ts
-new Audio(options?: Partial<AudioOptions>)
+interface RendererOptions {
+  tags: StrictMultiple<Tag>;
+  useUpdateLOD: boolean;
+  updateLOD: Partial<LODSettings>;
+  countLOD: Partial<LODSettings>;
+  compensateSize: boolean;
+}
+```
 
-interface AudioOptions extends Partial<ModuleOptions> {
+`updateLOD` controls renderer update frequency. `countLOD` reduces the number of
+particles submitted to the renderer. Set `compensateSize: true` to increase
+rendered particle size by the inverse of the count LOD multiplier, which can
+help maintain visual fullness when fewer particles are rendered.
+
+Renderers can also be used for custom non-mutating effects. Extend `Renderer`
+when you want to react to particle data without changing the simulation:
+
+```ts
+class LoggingEffect extends Renderer {
+  setup(system: ParticleSystem) {}
+  protected _update(particles: Particle[], system: ParticleSystem, deltaTime: number) {
+    particles.forEach((particle) => console.log(particle.position));
+  }
+  destroy() {}
+  clear() {}
+}
+```
+
+### AudioRenderer
+
+```ts
+new AudioRenderer(options?: Partial<AudioRendererOptions>)
+
+interface AudioRendererOptions extends Partial<RendererOptions> {
   listener: THREE.AudioListener;
   sound: AudioBuffer | AudioBuffer[];
   onCollisionSound: AudioBuffer | AudioBuffer[];
@@ -1053,8 +1100,8 @@ interface AudioOptions extends Partial<ModuleOptions> {
 ```
 
 Adds positional audio to particles and can play event sounds for spawn,
-collision, and death. `maxClips` defaults to `100` and limits the number of
-simultaneous event clips from this module. Collision event sounds can use
+collision, and death. `maxClips` defaults to `256` and limits the number of
+simultaneous event clips from this renderer. Collision event sounds can use
 `impulseAffectsPitch` and `impulseAffectsVolume`; each uses
 `Math.pow(collision.impulse.length(), effect)` as a multiplier on the evaluated
 pitch or volume. `highPass` and `lowPass` create Web Audio `BiquadFilterNode`
@@ -1066,25 +1113,6 @@ scaled, and larger or fractional values exaggerate or soften the shift. Filters
 are applied whenever their evaluated cutoff is greater than `0`.
 `impulseThreshhold` defaults to `0`; collision sounds only play when
 `collision.impulse.length() > impulseThreshhold`.
-
-## Built-In Renderers
-
-All renderers accept shared renderer options:
-
-```ts
-interface RendererOptions {
-  tags: StrictMultiple<Tag>;
-  useUpdateLOD: boolean;
-  updateLOD: Partial<LODSettings>;
-  countLOD: Partial<LODSettings>;
-  compensateSize: boolean;
-}
-```
-
-`updateLOD` controls renderer update frequency. `countLOD` reduces the number of
-particles submitted to the renderer. Set `compensateSize: true` to increase
-rendered particle size by the inverse of the count LOD multiplier, which can
-help maintain visual fullness when fewer particles are rendered.
 
 ### SpriteRenderer
 
@@ -1281,8 +1309,8 @@ control how many particles can create lights.
 
 ## Force Fields
 
-`ParticleForceField` is a `THREE.Object3D` that can be placed in the scene and
-sampled by `ExternalForces`.
+`ExternalForces.ParticleForceField` is a `THREE.Object3D` that can be placed in
+the scene and sampled by `ExternalForces`.
 
 ```ts
 interface ForceFieldOptions {
@@ -1301,16 +1329,16 @@ interface ForceFieldOptions {
 Helpers:
 
 ```ts
-ParticleForceField.Box(options?, ...boxGeometryArgs)
-ParticleForceField.Sphere(options?, ...sphereGeometryArgs)
-ParticleForceField.Cone(options?, ...coneGeometryArgs)
-ParticleForceField.Torus(options?, ...torusGeometryArgs)
+ExternalForces.ParticleForceField.Box(options?, ...boxGeometryArgs)
+ExternalForces.ParticleForceField.Sphere(options?, ...sphereGeometryArgs)
+ExternalForces.ParticleForceField.Cone(options?, ...coneGeometryArgs)
+ExternalForces.ParticleForceField.Torus(options?, ...torusGeometryArgs)
 ```
 
 Example:
 
 ```ts
-const attractor = ParticleForceField.Sphere({
+const attractor = ExternalForces.ParticleForceField.Sphere({
   gravity: 10,
   drag: 0.2,
   scale: new THREE.Vector3(4, 4, 4),
@@ -1326,7 +1354,8 @@ system.addModule(
 );
 ```
 
-Use `ParticleForceFieldHelper` to visualize a field while tuning.
+Use `ExternalForces.ParticleForceFieldHelper` to visualize a field while
+tuning.
 
 ## Collision And Physics
 

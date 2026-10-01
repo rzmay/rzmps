@@ -6,7 +6,7 @@ import {
   Particle,
   ParticleSystem,
   Renderer,
-  Audio,
+  AudioRenderer,
   ColorOverLifetime,
   Collision,
   ExternalForces,
@@ -37,26 +37,22 @@ const gpuModule = new Module(Module.CPU_UNSUPPORTED, {
 const explicitUnsupportedGPU = new Module(() => {}, {
   modifyGPU: null,
 });
-const cpuOnlyEffect = new Module(() => {}, {
-  isEffect: true,
-});
 
 assert.equal(cpuOnlyModule.supportsGPU, false);
 assert.equal(gpuModule.supportsGPU, true);
 assert.equal(explicitUnsupportedGPU.supportsGPU, false);
-assert.equal(cpuOnlyEffect.isEffect, true);
-assert.equal(new Audio().isEffect, true);
 assert.throws(() => Module.CPU_UNSUPPORTED(new Particle(), 0), /does not support CPU processing/);
 assert.throws(() => Module.GPU_UNSUPPORTED(gpuModule, 0, {}), /does not support GPU processing/);
 
 assert.equal(new CPUOnlyRenderer().supportsGPUInput, false);
 assert.equal(new GPUCapableRenderer().supportsGPUInput, true);
+assert.equal(new AudioRenderer().supportsGPUInput, false);
 assert.equal(new ColorOverLifetime({ alpha: [1, 0] }).supportsGPU, true);
 assert.equal(new ScaleOverLifetime({ scale: () => new THREE.Vector3(1, 1, 1) }).supportsGPU, true);
 assert.equal(new ScaleOverLifetime({ scale: new Set([new THREE.Vector3(1, 1, 1)]) }).supportsGPU, true);
 assert.equal(new ExternalForces().supportsGPU, true);
 assert.equal(new Collision().supportsGPU, true);
-assert.equal(new Collision().withDependents().every((module) => module.supportsGPU || module.isEffect), true);
+assert.equal(new Collision().withDependents().every((module) => module.supportsGPU), true);
 assert.equal(new ThreeCollisionBackend().gpuCollision, true);
 assert.equal(new ThreeCollisionBackend({ maxLevel: 4, trianglesPerLeaf: 12, gpuCollision: false }).maxLevel, 4);
 
@@ -131,7 +127,7 @@ const gpuEligibilitySystem = new ParticleSystem({
 gpuEligibilitySystem._renderer = Object.create(WebGPURenderer.prototype);
 gpuEligibilitySystem._gpuTagOverflow = false;
 
-assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule, cpuOnlyEffect]), true);
+assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule]), true);
 assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule, cpuOnlyModule]), false);
 assert.equal(new CPUOnlyRenderer().supportsGPUInput, false);
 assert.equal(new GPUCapableRenderer().supportsGPUInput, true);
@@ -141,8 +137,7 @@ gpuEligibilitySystem.particles = [
 ];
 gpuEligibilitySystem._prepareGPUTagRegistry([
   new Module(() => {}, {
-    isEffect: true,
-    tags: Array.from({ length: 64 }, (_unused, index) => `effect-${index}`),
+    tags: Array.from({ length: 32 }, (_unused, index) => `gpu-${index}`),
   }),
 ]);
 

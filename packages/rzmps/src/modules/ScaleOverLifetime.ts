@@ -33,7 +33,7 @@ class ScaleOverLifetime extends Module {
       ));
     }, {
       ...options,
-      priority: 1,
+      priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           particle.scale.assign(
             particle.scale.mul(evaluateDynamicVectorGPU(

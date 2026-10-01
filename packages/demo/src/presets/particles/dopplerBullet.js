@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  Audio as AudioModule,
+  AudioRenderer,
   ColorOverLifetime,
   DistortionOverLifetime,
   Emitter,
@@ -65,9 +65,8 @@ export default async function createDopplerBullet() {
         },
       }),
     ],
-    modules: [],
     renderers: [
-      new AudioModule({
+      new AudioRenderer({
         sound: bulletLoopSound,
         onSpawnSound: gunshotSound,
         loop: true,
@@ -107,6 +106,18 @@ export default async function createDopplerBullet() {
           depthWrite: false,
           roughness: 0.9,
         },
+      }),
+      new AudioRenderer({
+        sound: bulletLoopSound,
+        onSpawnSound: gunshotSound,
+        loop: true,
+        maxClips: 8,
+        volume: 3.5,
+        pitch: [0.82, 1.24],
+        lowPass: 14000,
+        speedAffectsVolume: 0.12,
+        depthAffectsVolume: 0.45,
+        dopplerEffect: 2.4,
       }),
     ],
   });
@@ -244,7 +255,6 @@ function createHeatWake(alphaMap, distortionMap) {
             new THREE.Vector3(0.04, 0.16, 0.65),
           ],
           color: new THREE.Color('#ffffff'),
-          alpha: 0.78,
           distortionStrength: 1,
         },
       }),
@@ -272,7 +282,7 @@ function createHeatWake(alphaMap, distortionMap) {
           opacity: 0.62,
           transmission: 1,
           distortionMap,
-          distortionStrength: 22,
+          distortionStrength: 32,
           side: THREE.DoubleSide,
           depthWrite: false,
         },

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Audio, SpriteRenderer, LightRenderer, MeshRenderer, TrailRenderer, TrailMode, TrailTextureMode } from '@rzmps/rzmps';
+import { AudioRenderer, SpriteRenderer, LightRenderer, MeshRenderer, TrailRenderer, TrailMode, TrailTextureMode } from '@rzmps/rzmps';
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
 
@@ -45,7 +45,7 @@ export class RendererGUI extends GUIEditorBase {
             this.buildMeshRenderer(folder, renderer);
         } else if (renderer instanceof TrailRenderer) {
             this.buildTrailRenderer(folder, renderer);
-        } else if (renderer instanceof Audio) {
+        } else if (renderer instanceof AudioRenderer) {
             this.buildAudioRenderer(folder, renderer);
         } else {
             this.addObject(folder, renderer, new Set([

@@ -28,6 +28,7 @@ export { default as Renderer } from './Renderer';
 export { default as LightRenderer } from './renderers/LightRenderer';
 export { default as MeshRenderer } from './renderers/MeshRenderer';
 export { default as SpriteRenderer } from './renderers/SpriteRenderer';
+export { default as AudioRenderer } from './renderers/AudioRenderer';
 export { SpriteMaterialType } from './enums/SpriteMaterialType';
 export { default as TrailRenderer } from './renderers/TrailRenderer';
 export { TrailMode } from './enums/TrailMode';
@@ -57,6 +58,7 @@ export { default as RotationBySize } from './modules/RotationBySize';
 export { default as RotationBySpeed } from './modules/RotationBySpeed';
 export { default as RotationByDepth } from './modules/RotationByDepth';
 export { default as RotationOverLifetime } from './modules/RotationOverLifetime';
+export { default as OrientToDirection } from './modules/OrientToDirection';
 export { default as VelocityBySize } from './modules/VelocityBySize';
 export { default as VelocityByDepth } from './modules/VelocityByDepth';
 export { default as VelocityOverLifetime } from './modules/VelocityOverLifetime';
@@ -66,14 +68,11 @@ export { default as SpeedOverLifetime } from './modules/SpeedOverLifetime';
 export { default as MassBySize } from './modules/MassBySize';
 export { default as MassByDepth } from './modules/MassByDepth';
 export { default as MassOverLifetime } from './modules/MassOverLifetime';
-export { default as ExternalForces } from './modules/ExternalForces';
+export { default as ExternalForces } from './modules/ExternalForces/ExternalForces';
 export { default as Collision } from './modules/Collision';
-export { default as Audio } from './renderers/Audio';
 
 // Force Fields
 export type { IParticleForceField } from './interfaces/IParticleForceField';
-export { default as ParticleForceField } from './ParticleForceField';
-export { default as ParticleForceFieldHelper } from './ParticleForceFieldHelper'
 
 // Collision
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';

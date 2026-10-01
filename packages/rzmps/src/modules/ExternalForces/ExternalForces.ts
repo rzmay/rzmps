@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
 import { float, storage } from 'three/tsl';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
-import { evaluateDynamicNumberGPU } from '../helpers/evaluateDynamicGPU';
-import type { IParticleForceField } from '../interfaces/IParticleForceField';
-import ParticleForceField from '../ParticleForceField';
-import ParticleSystem from '../ParticleSystem';
+import Module, { type ModuleOptions } from '../../Module';
+import Particle from '../../Particle';
+import type { DynamicValue } from '../../types/DynamicValue';
+import evaluateDynamicNumber from '../../helpers/evaluateDynamicNumber';
+import { evaluateDynamicNumberGPU } from '../../helpers/evaluateDynamicGPU';
+import type { IParticleForceField } from '../../interfaces/IParticleForceField';
+import ParticleForceField from './ParticleForceField';
+import ParticleForceFieldHelper from './ParticleForceFieldHelper';
+import ParticleSystem from '../../ParticleSystem';
 
 export interface ExternalForcesOptions extends Partial<ModuleOptions> {
     multiplier: DynamicValue<number>;
@@ -17,6 +18,9 @@ export interface ExternalForcesOptions extends Partial<ModuleOptions> {
 }
 
 class ExternalForces extends Module {
+  static readonly ParticleForceField = ParticleForceField;
+  static readonly ParticleForceFieldHelper = ParticleForceFieldHelper;
+
   multiplier: DynamicValue<number> = 1;
 
   explicitForceFields?: IParticleForceField[];
@@ -40,6 +44,7 @@ class ExternalForces extends Module {
       particle.velocity.addScaledVector(force, (multiplier * deltaTime) / mass);
     }, {
       ...options,
+      priority: Module.Priority.Permanent,
       modifyGPU: (particle, deltaTime, context) => {
         const force = storage(
           this.forceSampleAttribute,

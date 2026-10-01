@@ -39,7 +39,7 @@ class RotationBySize extends Module {
       );
     }, {
       ...options,
-      priority: 0.5,
+      priority: Module.Priority.PreMovementTransient,
       modifyGPU: (particle) => {
           const time = this.getSizeTimeGPU(particle.scale.length());
 

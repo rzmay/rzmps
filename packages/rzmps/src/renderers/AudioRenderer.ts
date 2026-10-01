@@ -11,7 +11,7 @@ import { CollisionHit } from '../interfaces/ICollisionBackend';
 
 const AUDIO_LISTENER_KEY = "__rzmps_audioListener";
 
-export interface AudioOptions extends Partial<RendererOptions> {
+export interface AudioRendererOptions extends Partial<RendererOptions> {
   listener: THREE.AudioListener;
 
   sound: StrictMultiple<AudioBuffer>;
@@ -71,7 +71,7 @@ interface AudioFilters {
   lowPass?: BiquadFilterNode;
 }
 
-class Audio extends Renderer {
+export default class AudioRenderer extends Renderer {
   listener?: THREE.AudioListener;
 
   sound?: AudioBuffer[];
@@ -131,7 +131,7 @@ class Audio extends Renderer {
   // Deltatime stored for doppler effect calculation
   private _deltaTime = 0;
 
-  constructor(options: Partial<AudioOptions> = {}) {
+  constructor(options: Partial<AudioRendererOptions> = {}) {
     super(options);
 
     this.listener = options.listener;
@@ -606,5 +606,3 @@ class Audio extends Renderer {
     this.destroy();
   }
 }
-
-export default Audio;
