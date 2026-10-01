@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import Particle from '../../Particle';
 import ParticleForceField from './ParticleForceField';
 
 class ParticleForceFieldHelper extends THREE.Object3D {
@@ -8,9 +9,16 @@ class ParticleForceFieldHelper extends THREE.Object3D {
 
   private shapeHelper?: THREE.LineSegments;
 
-  private directionHelper?: THREE.ArrowHelper;
+  private sampleArrows: THREE.ArrowHelper[] = [];
 
   private sourceGeometry?: THREE.BufferGeometry;
+  private sampleParticle = new Particle({ lifetime: 1 });
+  private sampleLocalPosition = new THREE.Vector3();
+  private sampleWorldPosition = new THREE.Vector3();
+  private sampleForce = new THREE.Vector3();
+  private sampleBounds = new THREE.Box3();
+  private sampleBoundsSize = new THREE.Vector3();
+  private inverseWorldQuaternion = new THREE.Quaternion();
 
   constructor(
     forceField: ParticleForceField,
@@ -61,43 +69,8 @@ class ParticleForceFieldHelper extends THREE.Object3D {
       this.sourceGeometry = this.forceField.geometry;
     }
 
-    /*
-     * Rebuild the directional arrow.
-     *
-     * We can only show a meaningful static arrow when direction is
-     * actually a Vector3. Functional/curve-based DynamicValues don't
-     * have one universal direction to visualize.
-     */
-    this._disposeDirection();
-
-    if (this.forceField.direction instanceof THREE.Vector3) {
-      const direction = this.forceField.direction.clone();
-      const length = direction.length();
-
-      if (length > 0) {
-        direction.normalize();
-
-        this.directionHelper = new THREE.ArrowHelper(
-          direction,
-          new THREE.Vector3(),
-          Math.min(length, 2),
-          this.color,
-        );
-
-        /*
-         * Keep the arrow readable even when the force itself is very
-         * weak or very strong.
-         */
-        this.directionHelper.setLength(
-          Math.min(Math.max(length, 0.5), 2),
-          0.35,
-          0.2,
-        );
-
-        this.add(this.directionHelper);
-      }
-    }
-
+    this._disposeSampleArrows();
+    this._buildSampleArrows();
     this._updateTransform();
   }
 
@@ -111,12 +84,12 @@ class ParticleForceFieldHelper extends THREE.Object3D {
       this.shapeHelper.material.color.copy(this.color);
     }
 
-    this.directionHelper?.setColor(this.color);
+    this.sampleArrows.forEach((arrow) => arrow.setColor(this.color));
   }
 
   dispose(): void {
     this._disposeShape();
-    this._disposeDirection();
+    this._disposeSampleArrows();
 
     this.sourceGeometry = undefined;
   }
@@ -152,13 +125,67 @@ class ParticleForceFieldHelper extends THREE.Object3D {
     this.shapeHelper = undefined;
   }
 
-  private _disposeDirection(): void {
-    if (!this.directionHelper) return;
+  private _buildSampleArrows(): void {
+    this.forceField.updateWorldMatrix(true, false);
+    this.forceField.getWorldQuaternion(this.inverseWorldQuaternion).invert();
 
-    this.directionHelper.removeFromParent();
-    this.directionHelper.dispose();
+    if (!this.forceField.geometry.boundingBox) {
+      this.forceField.geometry.computeBoundingBox();
+    }
 
-    this.directionHelper = undefined;
+    const bounds = this.forceField.geometry.boundingBox;
+    if (!bounds) return;
+
+    this.sampleBounds.copy(bounds);
+    bounds.getCenter(this.sampleWorldPosition);
+    bounds.getSize(this.sampleBoundsSize).multiplyScalar(0.5);
+    this.sampleBounds.setFromCenterAndSize(this.sampleWorldPosition, this.sampleBoundsSize);
+
+    for (let x = 0; x < 3; x += 1) {
+      for (let y = 0; y < 3; y += 1) {
+        for (let z = 0; z < 3; z += 1) {
+          this.sampleLocalPosition.set(
+            THREE.MathUtils.lerp(this.sampleBounds.min.x, this.sampleBounds.max.x, x / 2),
+            THREE.MathUtils.lerp(this.sampleBounds.min.y, this.sampleBounds.max.y, y / 2),
+            THREE.MathUtils.lerp(this.sampleBounds.min.z, this.sampleBounds.max.z, z / 2),
+          );
+
+          this.sampleWorldPosition.copy(this.sampleLocalPosition);
+          this.forceField.localToWorld(this.sampleWorldPosition);
+          this.sampleParticle.position.copy(this.sampleWorldPosition);
+          this.sampleParticle.velocity.set(0, 0, 0);
+          this.sampleParticle.time = 0;
+          this.sampleForce.copy(this.forceField.getForce(this.sampleParticle));
+
+          if (this.sampleForce.lengthSq() <= Number.EPSILON) continue;
+
+          const length = THREE.MathUtils.clamp(this.sampleForce.length() * 0.35, 0.25, 1.25);
+          this.sampleForce.normalize().applyQuaternion(this.inverseWorldQuaternion);
+
+          const arrow = new THREE.ArrowHelper(
+            this.sampleForce,
+            this.sampleLocalPosition.clone(),
+            length,
+            this.color,
+            length * 0.35,
+            length * 0.18,
+          );
+
+          arrow.renderOrder = 1000;
+          this.sampleArrows.push(arrow);
+          this.add(arrow);
+        }
+      }
+    }
+  }
+
+  private _disposeSampleArrows(): void {
+    this.sampleArrows.forEach((arrow) => {
+      arrow.removeFromParent();
+      arrow.dispose();
+    });
+
+    this.sampleArrows = [];
   }
 
   onBeforeRender(): void {
