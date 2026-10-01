@@ -21,7 +21,7 @@ assert.ok(ExternalForces.ParticleForceField.Sphere() instanceof ExternalForces.P
 
 const particleSystem = {
   simulationSpace: 'world',
-  updateWorldMatrix() {},
+  updateWorldMatrix() { },
 };
 
 {
