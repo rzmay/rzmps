@@ -110,7 +110,8 @@ export default function createWind(scene) {
       position.add(wind.position, 'y', -4, 10, 0.1).name('Y').onChange(() => windHelper.update());
       position.add(wind.position, 'z', -10, 10, 0.1).name('Z').onChange(() => windHelper.update());
 
-      folder.add(wind, 'drag', 0, 12, 0.01).name('Drag');
+      folder.add(wind, 'drag', 0, 12, 0.01).name('Drag').onChange(() => windHelper.update());
+      folder.add(wind, 'inverted').name('Inverted').onChange(() => windHelper.update());
       folder.add(windHelper, 'visible').name('Show Helper');
     },
 
