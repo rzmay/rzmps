@@ -96,7 +96,7 @@ class BoidAffector extends THREE.Object3D {
     }
 
     this.weight = options.weight ?? Weight.Target;
-    this.distance = options.distance ?? 0;
+    this.distance = options.distance ?? 1;
     this.inverted = options.inverted ?? false;
     this.tags = acceptMultiple(options.tags);
     this.bvhOptions = options.bvhOptions;

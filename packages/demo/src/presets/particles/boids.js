@@ -40,6 +40,23 @@ export default async function createBoids() {
     },
   });
 
+  const hazardBoids = new Boids({
+    tags: 'hazard',
+    alignmentWeight: 1.25,
+    cohesionWeight: 1,
+    separationWeight: 2.15,
+    affectorWeight: 5.5,
+    affectorDistance: 3.2,
+    steering: 3.35,
+    particleAffectors: {
+      boid: {
+        tags: 'hazard',
+        weight: Boids.BoidAffector.Weight.Target,
+        distance: 2.6,
+      },
+    },
+  });
+
   const system = new ParticleSystem({
     duration: 24,
     looping: true,
@@ -66,12 +83,12 @@ export default async function createBoids() {
       }),
       new Emitter({
         source: hazardSource,
-        rate: 1,
-        radialSpeed: 0.45,
+        rate: 2,
+        radialSpeed: 0.72,
         tags: 'hazard',
         initialValues: {
           lifetime: [14, 22],
-          speed: [0.55, 0.9],
+          speed: [2.6, 3.7],
           color: hazardColors,
           scale: [
             new THREE.Vector3(0.65, 0.65, 0.65),
@@ -84,6 +101,7 @@ export default async function createBoids() {
 
     modules: [
       boids,
+      hazardBoids,
       new OrientToDirection({
         axis: new THREE.Vector3(0, 1, 0),
       }),
