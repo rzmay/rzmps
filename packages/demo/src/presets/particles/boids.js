@@ -20,22 +20,17 @@ export default async function createBoids() {
     new THREE.Color('#ff9a4c'),
   ]);
 
-  const flockSource = EmissionShape.Sphere(7, 32, 16);
-  const hazardSource = EmissionShape.Torus(4.2, 0.35, 16, 48);
+  const flockSource = EmissionShape.Sphere(12, 32, 16);
+  const hazardSource = EmissionShape.Torus(7.5, 0.45, 16, 48);
 
   const boids = new Boids({
     tags: 'boid',
-    octreeOptions: {
-      maxDepth: 5,
-      maxParticlesPerLeaf: 10,
-      timeQuality: 0.35,
-    },
     alignmentWeight: 1.55,
     cohesionWeight: 1.35,
     separationWeight: 2.4,
     affectorWeight: 2.2,
     affectorDistance: 1.8,
-    steering: 7.5,
+    steering: 3.75,
     particleAffectors: {
       hazard: {
         tags: 'boid',
@@ -50,12 +45,12 @@ export default async function createBoids() {
     looping: true,
     gravity: new THREE.Vector3(0, 0, 0),
     gravityModifier: 0,
-    maxParticles: 1200,
+    maxParticles: 700,
 
     emitters: [
       new Emitter({
         source: flockSource,
-        rate: 70,
+        rate: 38,
         radialSpeed: 0.9,
         tags: 'boid',
         initialValues: {
@@ -71,7 +66,7 @@ export default async function createBoids() {
       }),
       new Emitter({
         source: hazardSource,
-        rate: 2,
+        rate: 1,
         radialSpeed: 0.45,
         tags: 'hazard',
         initialValues: {

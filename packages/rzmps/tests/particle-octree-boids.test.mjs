@@ -55,7 +55,7 @@ const octree = new ParticleOctree({
     new THREE.Vector3(1, 1, 1),
   ),
   maxDepth: 3,
-  maxParticlesPerLeaf: 1,
+  particlesPerLeaf: 1,
 }, aggregate);
 
 octree.rebuild(octreeParticles);
@@ -80,12 +80,20 @@ const taggedOctree = new ParticleOctree({
     new THREE.Vector3(1, 1, 1),
   ),
   maxDepth: 3,
-  maxParticlesPerLeaf: 8,
+  particlesPerLeaf: 8,
 }, aggregate);
 
 assert.equal(taggedOctree.rebuild(octreeParticles, ['included']), true);
 assert.equal(taggedOctree.root.aggregate.count, 1);
 assert.deepEqual(taggedOctree.root.aggregate.center.toArray(), octreeParticles[0].position.toArray());
+
+taggedOctree.setBounds(new THREE.Box3(
+  new THREE.Vector3(-1, -1, -1),
+  new THREE.Vector3(2, 2, 2),
+));
+assert.equal(taggedOctree.rebuild(octreeParticles), true);
+assert.deepEqual(taggedOctree.bounds.min.toArray(), [-1, -1, -1]);
+assert.deepEqual(taggedOctree.bounds.max.toArray(), [2, 2, 2]);
 
 const throttledOctree = new ParticleOctree({
   bounds: new THREE.Box3(
@@ -93,7 +101,7 @@ const throttledOctree = new ParticleOctree({
     new THREE.Vector3(1, 1, 1),
   ),
   maxDepth: 2,
-  maxParticlesPerLeaf: 2,
+  particlesPerLeaf: 2,
   timeQuality: 0.5,
 }, aggregate);
 
@@ -120,7 +128,7 @@ const boids = new Boids({
       new THREE.Vector3(2, 2, 2),
     ),
     maxDepth: 3,
-    maxParticlesPerLeaf: 1,
+    particlesPerLeaf: 1,
   },
   alignmentWeight: 1,
   cohesionWeight: 1,
@@ -159,7 +167,7 @@ const quickTurnBoids = new Boids({
       new THREE.Vector3(2, 2, 2),
     ),
     maxDepth: 3,
-    maxParticlesPerLeaf: 1,
+    particlesPerLeaf: 1,
   },
   alignmentWeight: 1,
   cohesionWeight: 0,
@@ -192,7 +200,7 @@ const distantNeighbor = new Particle({
 const autoBoundsBoids = new Boids({
   octreeOptions: {
     maxDepth: 3,
-    maxParticlesPerLeaf: 1,
+    particlesPerLeaf: 1,
   },
   alignmentWeight: 1,
   cohesionWeight: 1,
@@ -212,6 +220,106 @@ autoBoundsBoids.modify([distantBoid], 1, autoBoundsSystem);
 
 assert.ok(distantBoid.velocity.y > 0);
 
+const neutralSpeedBoid = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(0, 0, 0),
+  velocity: new THREE.Vector3(1, 0, 0),
+});
+const neutralSpeedBoids = new Boids({
+  octreeOptions: {
+    bounds: new THREE.Box3(
+      new THREE.Vector3(-1, -1, -1),
+      new THREE.Vector3(1, 1, 1),
+    ),
+  },
+  alignmentWeight: 0,
+  cohesionWeight: 0,
+  separationWeight: 0,
+  affectorWeight: 0,
+  speed: 2,
+  steering: 1,
+});
+const neutralSpeedSystem = new ParticleSystem({
+  emitters: [],
+  renderers: [],
+  modules: [],
+});
+
+neutralSpeedSystem.particles.push(neutralSpeedBoid);
+neutralSpeedBoids.prepare(neutralSpeedSystem);
+neutralSpeedBoids.modify([neutralSpeedBoid], 1, neutralSpeedSystem);
+
+assert.deepEqual(neutralSpeedBoid.velocity.toArray(), [2, 0, 0]);
+
+const neutralNoMaintainBoid = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(0, 0, 0),
+  velocity: new THREE.Vector3(1, 0, 0),
+});
+const neutralNoMaintainBoids = new Boids({
+  octreeOptions: {
+    bounds: new THREE.Box3(
+      new THREE.Vector3(-1, -1, -1),
+      new THREE.Vector3(1, 1, 1),
+    ),
+  },
+  alignmentWeight: 0,
+  cohesionWeight: 0,
+  separationWeight: 0,
+  affectorWeight: 0,
+  maintainSpeed: false,
+  speed: 2,
+  steering: 1,
+});
+const neutralNoMaintainSystem = new ParticleSystem({
+  emitters: [],
+  renderers: [],
+  modules: [],
+});
+
+neutralNoMaintainSystem.particles.push(neutralNoMaintainBoid);
+neutralNoMaintainBoids.prepare(neutralNoMaintainSystem);
+neutralNoMaintainBoids.modify([neutralNoMaintainBoid], 1, neutralNoMaintainSystem);
+
+assert.deepEqual(neutralNoMaintainBoid.velocity.toArray(), [1, 0, 0]);
+
+const opposingBoid = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(0, 0, 0),
+  velocity: new THREE.Vector3(1, 0, 0),
+});
+const opposingNeighbor = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(0.5, 0, 0),
+  velocity: new THREE.Vector3(-1, 0, 0),
+});
+const opposingBoids = new Boids({
+  octreeOptions: {
+    bounds: new THREE.Box3(
+      new THREE.Vector3(-1, -1, -1),
+      new THREE.Vector3(1, 1, 1),
+    ),
+    maxDepth: 2,
+    particlesPerLeaf: 1,
+  },
+  alignmentWeight: 1,
+  cohesionWeight: 0,
+  separationWeight: 0,
+  speed: 1,
+  steering: 0.5,
+});
+const opposingSystem = new ParticleSystem({
+  emitters: [],
+  renderers: [],
+  modules: [],
+});
+
+opposingSystem.particles.push(opposingBoid, opposingNeighbor);
+opposingBoids.prepare(opposingSystem);
+opposingBoids.modify([opposingBoid], 1, opposingSystem);
+
+assert.ok(Math.abs(opposingBoid.velocity.length() - 1) < Number.EPSILON);
+
 const targetBoid = new Particle({
   lifetime: 10,
   position: new THREE.Vector3(0, 0, 0),
@@ -228,7 +336,7 @@ const targetBoids = new Boids({
       new THREE.Vector3(2, 2, 2),
     ),
     maxDepth: 1,
-    maxParticlesPerLeaf: 8,
+    particlesPerLeaf: 8,
   },
   affectors: [targetAffector],
   alignmentWeight: 0,
@@ -269,7 +377,7 @@ const excludedBoids = new Boids({
       new THREE.Vector3(2, 2, 2),
     ),
     maxDepth: 1,
-    maxParticlesPerLeaf: 8,
+    particlesPerLeaf: 8,
   },
   affectors: [excludedAffector],
   alignmentWeight: 0,
@@ -327,7 +435,7 @@ const particleAffectorBoids = new Boids({
       new THREE.Vector3(2, 2, 2),
     ),
     maxDepth: 1,
-    maxParticlesPerLeaf: 8,
+    particlesPerLeaf: 8,
   },
   tags: ['boid'],
   particleAffectors: {
@@ -375,7 +483,7 @@ const particleTargetBoids = new Boids({
       new THREE.Vector3(2, 2, 2),
     ),
     maxDepth: 1,
-    maxParticlesPerLeaf: 8,
+    particlesPerLeaf: 8,
   },
   tags: ['boid'],
   particleAffectors: {

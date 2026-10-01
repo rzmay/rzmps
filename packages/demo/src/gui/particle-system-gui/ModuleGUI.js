@@ -55,7 +55,6 @@ export class ModuleGUI extends GUIEditorBase {
                 'affector',
                 'toNode',
                 'desiredVelocity',
-                'affectorSamplePoint',
                 'affectorDirection',
                 'affectorParticlePosition',
                 'particleAffectorDirection',

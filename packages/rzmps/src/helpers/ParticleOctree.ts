@@ -6,10 +6,10 @@ import type { Multiple } from '../types/Multiple';
 import type { Tag } from '../types/Tag';
 
 export interface OctreeConfig {
-  bounds?: THREE.Box3;
+  bounds: THREE.Box3;
   maxDepth: number;
-  maxParticlesPerLeaf: number;
-  timeQuality?: number;
+  particlesPerLeaf: number;
+  timeQuality: number;
 }
 
 export interface OctreeNode<TAggregate = unknown> {
@@ -36,7 +36,10 @@ export interface OctreeAggregator<TAggregate> {
 
 class ParticleOctree<TAggregate> {
   root: OctreeNode<TAggregate>;
+  bounds = new THREE.Box3();
   timeQuality: number;
+  maxDepth: number;
+  particlesPerLeaf: number;
 
   private particles: Particle[] = [];
   private nodeId = 0;
@@ -47,13 +50,30 @@ class ParticleOctree<TAggregate> {
   private hasBuiltTree = false;
 
   constructor(
-    public config: OctreeConfig,
+    config: Partial<OctreeConfig>,
     private aggregator: OctreeAggregator<TAggregate>,
   ) {
-    this.sanitizeConfig();
-    this.timeQuality = THREE.MathUtils.clamp(this.config.timeQuality ?? 1, Number.EPSILON, 1);
+    this.maxDepth = Math.max(0, Math.floor(config.maxDepth ?? 8));
+    this.particlesPerLeaf = Math.max(1, Math.floor(config.particlesPerLeaf ?? 4));
+    this.timeQuality = THREE.MathUtils.clamp(config.timeQuality ?? 1, Number.EPSILON, 1);
+    this.setBounds(config.bounds);
     this.root = this.buildNode(0, this.min, this.size, null, []);
     this.assignNeighbors();
+  }
+
+  setBounds(bounds?: THREE.Box3): this {
+    const nextBounds = bounds ?? new THREE.Box3(
+      new THREE.Vector3(-0.5, -0.5, -0.5),
+      new THREE.Vector3(0.5, 0.5, 0.5),
+    );
+    const boundsSize = new THREE.Vector3();
+
+    this.bounds.copy(nextBounds);
+    this.bounds.getSize(boundsSize);
+    this.min.copy(this.bounds.min);
+    this.size = Math.max(boundsSize.x, boundsSize.y, boundsSize.z, Number.EPSILON);
+
+    return this;
   }
 
   rebuild(particles: Particle[], tags?: Multiple<Tag>): boolean {
@@ -65,7 +85,6 @@ class ParticleOctree<TAggregate> {
     this.particles = particles.slice();
     this.nodeId = 0;
     this.nodes = [];
-    this.sanitizeConfig();
 
     const acceptedTags = acceptMultiple(tags);
     const useTags = Boolean(acceptedTags?.length);
@@ -73,7 +92,10 @@ class ParticleOctree<TAggregate> {
       .map((_particle, index) => index)
       .filter((index) => (
         this.containsPosition(this.particles[index].position)
-        && (!useTags || tagsIntersect(acceptedTags!, this.particles[index].tags ?? []))
+        && (!useTags || (
+          acceptedTags
+          && tagsIntersect(acceptedTags, this.particles[index].tags ?? [])
+        ))
       ));
 
     this.root = this.buildNode(0, this.min, this.size, null, particleIndices);
@@ -83,11 +105,11 @@ class ParticleOctree<TAggregate> {
     return true;
   }
 
-  locate(position: THREE.Vector3, maxDepth: number = this.config.maxDepth): OctreeNode<TAggregate> {
+  locate(position: THREE.Vector3, maxDepth: number = this.maxDepth): OctreeNode<TAggregate> {
     if (!this.containsPosition(position)) return this.root;
 
     let node = this.root;
-    const targetDepth = Math.max(0, Math.min(Math.floor(maxDepth), this.config.maxDepth));
+    const targetDepth = Math.max(0, Math.min(Math.floor(maxDepth), this.maxDepth));
 
     while (node.depth < targetDepth && node.children.length > 0) {
       const child = node.children.find((candidate) => this.containsPosition(position, candidate));
@@ -114,7 +136,7 @@ class ParticleOctree<TAggregate> {
     const node: OctreeNode<TAggregate> = {
       id: this.nodeId++,
       depth,
-      maxDepth: depth === this.config.maxDepth,
+      maxDepth: depth === this.maxDepth,
       min: nodeMin,
       max: nodeMax,
       center: nodeMin.clone().addScalar(size * 0.5),
@@ -131,8 +153,8 @@ class ParticleOctree<TAggregate> {
     this.nodes.push(node);
 
     if (
-      depth < this.config.maxDepth
-      && particleIndices.length > this.config.maxParticlesPerLeaf
+      depth < this.maxDepth
+      && particleIndices.length > this.particlesPerLeaf
     ) {
       const halfSize = size * 0.5;
       const childIndices: number[][] = Array.from({ length: 8 }, () => []);
@@ -214,21 +236,6 @@ class ParticleOctree<TAggregate> {
     return position.x >= min.x && position.x <= min.x + size
       && position.y >= min.y && position.y <= min.y + size
       && position.z >= min.z && position.z <= min.z + size;
-  }
-
-  private sanitizeConfig(): void {
-    this.config.maxDepth = Math.max(0, Math.floor(this.config.maxDepth));
-    this.config.maxParticlesPerLeaf = Math.max(1, Math.floor(this.config.maxParticlesPerLeaf));
-
-    const boundsSize = new THREE.Vector3();
-    const bounds = this.config.bounds ?? new THREE.Box3(
-      new THREE.Vector3(-0.5, -0.5, -0.5),
-      new THREE.Vector3(0.5, 0.5, 0.5),
-    );
-
-    bounds.getSize(boundsSize);
-    this.min.copy(bounds.min);
-    this.size = Math.max(boundsSize.x, boundsSize.y, boundsSize.z, Number.EPSILON);
   }
 }
 

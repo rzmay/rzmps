@@ -8,6 +8,8 @@ class BoidAffectorHelper extends THREE.Object3D {
   private shapeHelper?: THREE.LineSegments;
   private sampleArrows: THREE.ArrowHelper[] = [];
   private sourceGeometry?: THREE.BufferGeometry;
+  private sampleArrowWeight = Number.NaN;
+  private sampleArrowInverted?: boolean;
   private sampleBounds = new THREE.Box3();
   private sampleBoundsSize = new THREE.Vector3();
   private sampleLocalPosition = new THREE.Vector3();
@@ -29,7 +31,12 @@ class BoidAffectorHelper extends THREE.Object3D {
   }
 
   update(): void {
-    if (!this.shapeHelper || this.sourceGeometry !== this.affector.geometry) {
+    const geometryChanged = this.sourceGeometry !== this.affector.geometry;
+    const arrowsChanged = geometryChanged
+      || this.sampleArrowWeight !== this.affector.weight
+      || this.sampleArrowInverted !== this.affector.inverted;
+
+    if (!this.shapeHelper || geometryChanged) {
       this._disposeShape();
 
       if (this.affector.geometry) {
@@ -52,8 +59,13 @@ class BoidAffectorHelper extends THREE.Object3D {
       this.sourceGeometry = this.affector.geometry;
     }
 
-    this._disposeSampleArrows();
-    this._buildSampleArrows();
+    if (arrowsChanged) {
+      this._disposeSampleArrows();
+      this._buildSampleArrows();
+      this.sampleArrowWeight = this.affector.weight;
+      this.sampleArrowInverted = this.affector.inverted;
+    }
+
     this._updateTransform();
   }
 
@@ -98,10 +110,12 @@ class BoidAffectorHelper extends THREE.Object3D {
     this.sampleBounds.setFromCenterAndSize(this.sampleWorldPosition, this.sampleBoundsSize);
 
     for (let x = 0; x < 3; x += 1) {
-      for (let y = 0; y < 3; y += 1) {
-        for (let z = 0; z < 3; z += 1) {
-          this.sampleLocalPosition.set(
-            THREE.MathUtils.lerp(this.sampleBounds.min.x, this.sampleBounds.max.x, x / 2),
+        for (let y = 0; y < 3; y += 1) {
+          for (let z = 0; z < 3; z += 1) {
+            if (x === 1 && y === 1 && z === 1) continue;
+
+            this.sampleLocalPosition.set(
+              THREE.MathUtils.lerp(this.sampleBounds.min.x, this.sampleBounds.max.x, x / 2),
             THREE.MathUtils.lerp(this.sampleBounds.min.y, this.sampleBounds.max.y, y / 2),
             THREE.MathUtils.lerp(this.sampleBounds.min.z, this.sampleBounds.max.z, z / 2),
           );

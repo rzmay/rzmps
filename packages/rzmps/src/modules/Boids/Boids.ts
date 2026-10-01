@@ -47,7 +47,7 @@ type ParsedBoidParticleAffector = {
 };
 
 export interface BoidsOptions extends Partial<ModuleOptions> {
-  octreeOptions: OctreeConfig;
+  octreeOptions: Partial<OctreeConfig>;
   timeQuality: number;
   speed: DynamicValue<number>;
   alignmentWeight: DynamicValue<number>;
@@ -56,6 +56,7 @@ export interface BoidsOptions extends Partial<ModuleOptions> {
   affectorWeight: DynamicValue<number>;
   affectorDistance: DynamicValue<number>;
   steering: DynamicValue<number>;
+  maintainSpeed: boolean;
   affectors: BoidAffector[];
   affectorFilter: (affector: BoidAffector) => boolean;
   particleAffectors: BoidParticleAffectorMap;
@@ -75,6 +76,7 @@ class Boids extends Module {
   affectorWeight: DynamicValue<number>;
   affectorDistance: DynamicValue<number>;
   steering: DynamicValue<number>;
+  maintainSpeed: boolean;
   explicitAffectors?: BoidAffector[];
   affectorFilter?: (affector: BoidAffector) => boolean;
   particleAffectors?: BoidParticleAffectorMap;
@@ -85,9 +87,9 @@ class Boids extends Module {
   private affector = new THREE.Vector3();
   private toNode = new THREE.Vector3();
   private desiredVelocity = new THREE.Vector3();
+  private currentDirection = new THREE.Vector3();
   private affectors: Set<BoidAffector> = new Set();
   private particleSystem?: ParticleSystem;
-  private affectorSamplePoint = new THREE.Vector3();
   private affectorDirection = new THREE.Vector3();
   private affectorParticlePosition = new THREE.Vector3();
   private particleAffectorDirection = new THREE.Vector3();
@@ -115,25 +117,47 @@ class Boids extends Module {
         .add(influence.separation)
         .add(influence.affector);
 
-      if (this.desiredVelocity.lengthSq() === 0) return;
+      if (this.desiredVelocity.lengthSq() === 0) {
+        if (!this.maintainSpeed || particle.velocity.lengthSq() === 0) return;
+        this.desiredVelocity.copy(particle.velocity);
+      }
 
       this.desiredVelocity.normalize().multiplyScalar(speed);
 
       const steering = Math.max(0, evaluateDynamicNumber(this.steering, particle.time, particle.id));
+      const steeringAlpha = Math.min(Math.max(deltaTime * steering, 0), 1);
 
-      particle.velocity.lerp(
-        this.desiredVelocity,
-        Math.min(Math.max(deltaTime * steering, 0), 1),
-      );
+      if (!this.maintainSpeed) {
+        particle.velocity.lerp(this.desiredVelocity, steeringAlpha);
+        return;
+      }
+
+      this.currentDirection.copy(particle.velocity);
+      if (this.currentDirection.lengthSq() === 0) {
+        this.currentDirection.copy(this.desiredVelocity);
+      }
+
+      this.currentDirection.normalize();
+      this.desiredVelocity.normalize();
+      this.currentDirection.lerp(this.desiredVelocity, steeringAlpha);
+
+      if (this.currentDirection.lengthSq() === 0) {
+        this.currentDirection.copy(this.desiredVelocity);
+      }
+
+      particle.velocity.copy(this.currentDirection.normalize().multiplyScalar(speed));
     }, {
       ...options,
       priority: options.priority ?? Module.Priority.Permanent,
     });
 
     this.octreeOptions = {
-      bounds: options.octreeOptions?.bounds?.clone(),
+      bounds: options.octreeOptions?.bounds?.clone() ?? new THREE.Box3(
+        new THREE.Vector3(-0.5, -0.5, -0.5),
+        new THREE.Vector3(0.5, 0.5, 0.5),
+      ),
       maxDepth: options.octreeOptions?.maxDepth ?? 8,
-      maxParticlesPerLeaf: options.octreeOptions?.maxParticlesPerLeaf ?? 8,
+      particlesPerLeaf: options.octreeOptions?.particlesPerLeaf ?? 4,
       timeQuality: THREE.MathUtils.clamp(
         options.timeQuality ?? options.octreeOptions?.timeQuality ?? 0.5,
         Number.EPSILON,
@@ -146,7 +170,8 @@ class Boids extends Module {
     this.separationWeight = options.separationWeight ?? 1.5;
     this.affectorWeight = options.affectorWeight ?? 1;
     this.affectorDistance = options.affectorDistance ?? 0;
-    this.steering = options.steering ?? 1;
+    this.steering = options.steering ?? 0.5;
+    this.maintainSpeed = options.maintainSpeed ?? true;
     this.explicitAffectors = options.affectors;
     this.affectorFilter = options.affectorFilter ?? (() => true);
     this.particleAffectors = options.particleAffectors;
@@ -165,7 +190,7 @@ class Boids extends Module {
         {
           bounds: this.octreeOptions.bounds?.clone(),
           maxDepth: this.octreeOptions.maxDepth,
-          maxParticlesPerLeaf: this.octreeOptions.maxParticlesPerLeaf,
+          particlesPerLeaf: this.octreeOptions.particlesPerLeaf,
           timeQuality: this.octreeOptions.timeQuality,
         },
         this.createAggregator(),
@@ -396,7 +421,7 @@ class Boids extends Module {
   private updateOctreeBounds(particleSystem: ParticleSystem): void {
     this.octreeOptions.bounds = this.getQuantizedOctreeBounds(particleSystem.boundingBox).clone();
 
-    if (this.octree) this.octree.config.bounds = this.octreeOptions.bounds.clone();
+    if (this.octree) this.octree.setBounds(this.octreeOptions.bounds);
   }
 
   private getQuantizedOctreeBounds(bounds: THREE.Box3): THREE.Box3 {
@@ -459,7 +484,6 @@ class Boids extends Module {
     this.affectors.forEach((affector) => {
       if (!affector.matchesTags(particle.tags)) return;
 
-      affector.samplePoint(this.affectorParticlePosition, this.affectorSamplePoint);
       affector.getInfluenceDirection(this.affectorParticlePosition, this.affectorDirection);
 
       const distance = this.affectorDirection.length();

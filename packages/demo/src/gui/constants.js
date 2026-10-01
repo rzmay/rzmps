@@ -92,7 +92,7 @@ export const DEFAULT_MODULE_FACTORIES = {
     Boids: () => new Boids({
         octreeOptions: {
             maxDepth: 4,
-            maxParticlesPerLeaf: 8,
+            particlesPerLeaf: 8,
         },
         alignmentWeight: 1,
         cohesionWeight: 1,
