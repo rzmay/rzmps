@@ -155,4 +155,3 @@ export default function createRepulsorAttractor(scene) {
 }
 
 createRepulsorAttractor.author = "rzmay";
-g
