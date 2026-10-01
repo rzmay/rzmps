@@ -958,6 +958,113 @@ Samples `ExternalForces.ParticleForceField` objects and applies their forces to
 particles. If `forceFields` is omitted, fields are discovered from the particle
 system's scene.
 
+### Boids
+
+```ts
+new Boids(options?: Partial<BoidsOptions>)
+
+interface BoidsOptions extends Partial<ModuleOptions> {
+  octreeOptions: OctreeConfig;
+  timeQuality: number;
+  speed: DynamicValue<number>;
+  alignmentWeight: DynamicValue<number>;
+  cohesionWeight: DynamicValue<number>;
+  separationWeight: DynamicValue<number>;
+  affectorWeight: DynamicValue<number>;
+  affectorDistance: DynamicValue<number>;
+  steering: DynamicValue<number>;
+  affectors: BoidAffector[];
+  affectorFilter: (affector: BoidAffector) => boolean;
+  particleAffectors: BoidParticleAffectorMap;
+}
+```
+
+Steers particles using local flocking behavior sampled from a `ParticleOctree`.
+`alignmentWeight` points particles toward nearby average velocity direction,
+`cohesionWeight` points them toward nearby average position, and
+`separationWeight` points them away from nearby aggregate centers.
+`affectorWeight` controls response to `Boids.BoidAffector` objects. `speed` sets the
+target boid speed; when omitted, each particle keeps its current velocity
+magnitude. `steering` controls how quickly velocity lerps toward the boid
+target.
+
+`octreeOptions` is passed to the internal `ParticleOctree` constructor and
+should cover the boid simulation space. If the Boids module has tags, those
+tags are passed to the octree so flocking samples only include matching
+particles. If `affectors` is omitted, `Boids` scans the scene for
+`Boids.BoidAffector` objects, similar to how `ExternalForces` discovers force fields:
+
+```ts
+const target = new Boids.BoidAffector({
+  position: new THREE.Vector3(3, 0, 0),
+  weight: Boids.BoidAffector.Weight.Target,
+});
+
+const obstacle = Boids.BoidAffector.Sphere(
+  {
+    position: new THREE.Vector3(0, 0, 0),
+    weight: Boids.BoidAffector.Weight.Obstacle,
+    distance: 0.25,
+  },
+  1,
+  16,
+  8,
+);
+
+new Boids({
+  octreeOptions: {
+    bounds: new THREE.Box3(
+      new THREE.Vector3(-10, -10, -10),
+      new THREE.Vector3(10, 10, 10),
+    ),
+    maxDepth: 4,
+    maxParticlesPerLeaf: 8,
+  },
+  timeQuality: 0.5,
+  affectors: [target, obstacle],
+});
+```
+
+`particleAffectors` can treat particles with matching tags as temporary
+affectors during octree aggregation. Object keys select source particles by
+tag; use `|` or `,` for an OR-list. The mapped value accepts `weight`,
+`distance`, and `tags` from `BoidAffectorOptions`: `weight` defaults to
+`Boids.BoidAffector.Weight.Obstacle`, `distance` is multiplied by the source
+particle's largest scale axis, and `tags` optionally filters which boids are
+affected.
+
+```ts
+new Boids({
+  particleAffectors: {
+    predator: {
+      tags: ['prey'],
+      distance: 1.5,
+    },
+    'friend,leader': {
+      tags: ['follower'],
+      weight: Boids.BoidAffector.Weight.Target,
+      distance: 1,
+    },
+  },
+});
+```
+
+`timeQuality` follows the same accumulator pattern as
+`ParticleOctree`: `1` rebuilds the octree every update, `0.5` rebuilds about
+every other update, and lower values trade responsiveness for less CPU work.
+
+`Boids.BoidAffector` is a signed target/obstacle. Positive weights pull boids toward
+the sampled point and negative weights push them away; use
+`Boids.BoidAffector.Weight.Target` (`1`) and `Boids.BoidAffector.Weight.Obstacle` (`-1`)
+for the common cases. When an affector has geometry, it builds a
+`three-mesh-bvh` acceleration structure and samples the closest surface point
+instead of its object position. `Boids.BoidAffector.Box`, `.Sphere`, `.Cone`,
+and `.Torus` are provided as geometry shorthands. Set `inverted: true` to
+invert the sampled influence direction; paired with obstacle weights, this is
+useful for containment volumes. Affector tags are optional; an
+untagged affector applies to all boids, and a tagged affector applies only to
+particles with at least one matching tag.
+
 ### Collision
 
 ```ts
@@ -1293,6 +1400,7 @@ interface ForceFieldOptions {
   scale: THREE.Vector3;
   geometry: THREE.BufferGeometry;
   tags: StrictMultiple<Tag>;
+  inverted: boolean;
 }
 ```
 
@@ -1304,6 +1412,10 @@ ExternalForces.ParticleForceField.Sphere(options?, ...sphereGeometryArgs)
 ExternalForces.ParticleForceField.Cone(options?, ...coneGeometryArgs)
 ExternalForces.ParticleForceField.Torus(options?, ...torusGeometryArgs)
 ```
+
+Set `inverted: true` to apply a field outside its shape instead of inside it.
+For example, an inverted spherical attractor can pull particles from outside
+the volume toward its center.
 
 Example:
 
@@ -1326,6 +1438,56 @@ system.addModule(
 
 Use `ExternalForces.ParticleForceFieldHelper` to visualize a field while
 tuning.
+
+## Spatial Utilities
+
+### ParticleOctree
+
+`ParticleOctree` stores particles in a sparse spatial octree and returns
+node-level aggregate data. Nodes also store deduplicated neighboring nodes in
+`neighbors`. It is useful when a module needs nearby-particle information
+without doing an all-pairs scan each update. The built-in `Boids` module uses
+`ParticleOctree` to aggregate local flocking direction, center of mass,
+separation data, and affector influence.
+
+```ts
+type OctreeConfig = {
+  bounds: THREE.Box3;
+  maxDepth: number;
+  maxParticlesPerLeaf: number;
+  timeQuality?: number;
+};
+
+type OctreeAggregator<TAggregate> = {
+  "new"(particle?: Particle, particleIndex?: number): TAggregate;
+  combine(a: TAggregate, b: TAggregate): TAggregate;
+};
+
+const octree = new ParticleOctree(config, aggregator);
+const didRebuild = octree.rebuild(particles, tags);
+
+const node = octree.locate(particle.position);
+const neighbors = node.neighbors;
+```
+
+`aggregator.new()` creates an empty aggregate, while
+`aggregator.new(particle, particleIndex)` creates the aggregate contribution
+for one particle. `rebuild(particles, tags)` accepts an optional tag or tag
+list; omit it or pass an empty list to include every particle. It returns
+`true` when the tree was rebuilt and `false` when `timeQuality` skipped this
+update.
+
+Aggregates should be written as small mutable summaries that can be combined
+quickly. For example, a steering module can store a particle count plus summed
+positions and velocities, then derive average position or direction in
+`combine`. Query a particle's local node with `locate(particle.position)` and
+sample that node plus its `neighbors` for nearby information.
+
+`locate(position)` resolves to the theoretical max-depth cell containing the
+position when that node exists, or to the smallest existing sparse ancestor
+containing that cell. Each node stores neighboring nodes by querying the 26
+adjacent positions at that node's depth and resolving each to an existing node
+of the same size or larger.
 
 ## Collision And Physics
 

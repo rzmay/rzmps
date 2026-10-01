@@ -119,14 +119,16 @@ export default function createRepulsorAttractor(scene) {
   return {
     gui: (folder) => {
       const repulsorFolder = folder.addFolder('Repulsor');
-      repulsorFolder.add(repulsor, 'gravity', -50, 50, 0.01).name('Gravity');
+      repulsorFolder.add(repulsor, 'gravity', -50, 50, 0.01).name('Gravity').onChange(() => repulsorHelper.update());
+      repulsorFolder.add(repulsor, 'inverted').name('Inverted').onChange(() => repulsorHelper.update());
       repulsorFolder.add(repulsor.position, 'x', -10, 10, 0.1).name('X').onChange(() => repulsorHelper.update());
       repulsorFolder.add(repulsor.position, 'y', -4, 10, 0.1).name('Y').onChange(() => repulsorHelper.update());
       repulsorFolder.add(repulsor.position, 'z', -10, 10, 0.1).name('Z').onChange(() => repulsorHelper.update());
       repulsorFolder.add(repulsorHelper, 'visible').name('Show Helper');
 
       const attractorFolder = folder.addFolder('Attractor');
-      attractorFolder.add(attractor, 'gravity', -50, 50, 0.01).name('Gravity');
+      attractorFolder.add(attractor, 'gravity', -50, 50, 0.01).name('Gravity').onChange(() => attractorHelper.update());
+      attractorFolder.add(attractor, 'inverted').name('Inverted').onChange(() => attractorHelper.update());
       attractorFolder.add(attractor.position, 'x', -10, 10, 0.1).name('X').onChange(() => attractorHelper.update());
       attractorFolder.add(attractor.position, 'y', -4, 10, 0.1).name('Y').onChange(() => attractorHelper.update());
       attractorFolder.add(attractor.position, 'z', -10, 10, 0.1).name('Z').onChange(() => attractorHelper.update());

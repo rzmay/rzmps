@@ -95,6 +95,7 @@ class ParticleSystem extends THREE.Object3D {
   modules: Module[] = [];
   renderers: Renderer[] = [];
   subSystems = new Map<ParticleSystem, SubSystemOptions>();
+  boundingBox = new THREE.Box3();
 
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
@@ -190,6 +191,9 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _particleEmissionScale = new THREE.Vector3(1, 1, 1);
   private readonly _particleEmissionColor = new THREE.Color(1, 1, 1);
   private readonly _particleEmissionVelocity = new THREE.Vector3();
+  private readonly _particleBoundsMin = new THREE.Vector3();
+  private readonly _particleBoundsMax = new THREE.Vector3();
+  private readonly _particleBoundsSize = new THREE.Vector3(1, 1, 1);
   private readonly _directionNormalMatrix = new THREE.Matrix3();
   private readonly _inverseWorldMatrix = new THREE.Matrix4();
 
@@ -341,14 +345,15 @@ class ParticleSystem extends THREE.Object3D {
       else this.particles.splice(0, this.particles.length - this.maxParticles)
     }
 
+    this.particles.forEach((particle) => particle.restore());
+    this.updateBoundingBox();
+
     // Module preparation
     const modules = this.modules
       .flatMap((module) => module.withDependents());
 
     modules
       .forEach((module) => module.prepare(this, this.deltaTime));
-
-    this.particles.forEach((particle) => particle.restore());
 
     const permanentPreMovementModules = modules
       .filter((module) => module.priority < 0)
@@ -382,6 +387,7 @@ class ParticleSystem extends THREE.Object3D {
     // Run transient render-time modules
     transientRenderModules
       .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+    this.updateBoundingBox();
 
     this.renderers.forEach((renderer) => {
       renderer.update(this.particles, this, this.deltaTime);
@@ -446,6 +452,35 @@ class ParticleSystem extends THREE.Object3D {
 
     if (writeIndex !== originalLength) {
       particles.length = writeIndex + appendedCount;
+    }
+  }
+
+  public updateBoundingBox(): void {
+    this.boundingBox.makeEmpty();
+
+    this.particles.forEach((particle) => {
+      const particleRadius = Math.max(
+        Math.abs(particle.scale.x),
+        Math.abs(particle.scale.y),
+        Math.abs(particle.scale.z),
+        Number.EPSILON,
+      );
+
+      this._particleBoundsMin
+        .copy(particle.position)
+        .addScalar(-particleRadius);
+      this._particleBoundsMax
+        .copy(particle.position)
+        .addScalar(particleRadius);
+      this.boundingBox.expandByPoint(this._particleBoundsMin);
+      this.boundingBox.expandByPoint(this._particleBoundsMax);
+    });
+
+    if (this.boundingBox.isEmpty()) {
+      this.boundingBox.setFromCenterAndSize(
+        this._particleBoundsMin.set(0, 0, 0),
+        this._particleBoundsSize,
+      );
     }
   }
 

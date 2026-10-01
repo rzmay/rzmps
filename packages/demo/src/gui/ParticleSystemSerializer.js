@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
     AudioRenderer,
+    Boids,
     Collision,
     EmissionSource,
     EndBehavior,
@@ -8,6 +9,7 @@ import {
     LightRenderer,
     MeshRenderer,
     NoiseModule,
+    OrientToDirection,
     SpriteRenderer,
     Textures,
     TrailRenderer,
@@ -225,6 +227,22 @@ export class ParticleSystemSerializer {
             }
 
             return `new ExternalForces(${this.serializeValue(options)})`;
+        }
+
+        if (module instanceof Boids) {
+            return `new Boids(${this.serializeValue({
+                octreeOptions: module.octreeOptions,
+                speed: module.speed,
+                alignmentWeight: module.alignmentWeight,
+                cohesionWeight: module.cohesionWeight,
+                separationWeight: module.separationWeight,
+                affectorWeight: module.affectorWeight,
+                affectorDistance: module.affectorDistance,
+                steering: module.steering,
+                particleAffectors: module.particleAffectors,
+                ...this.getLODOptions(module),
+                tags: module.tags,
+            })})`;
         }
 
         const runtime = module;
@@ -570,6 +588,8 @@ export class ParticleSystemSerializer {
             return this.serializeFunction(value);
         if (value instanceof THREE.Vector3)
             return `new THREE.Vector3(${value.x}, ${value.y}, ${value.z})`;
+        if (value instanceof THREE.Box3)
+            return `new THREE.Box3(${this.serializeValue(value.min, seen)}, ${this.serializeValue(value.max, seen)})`;
         if (value instanceof THREE.Vector2)
             return `new THREE.Vector2(${value.x}, ${value.y})`;
         if (value instanceof THREE.Color)

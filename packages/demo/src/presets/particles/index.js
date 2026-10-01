@@ -1,5 +1,6 @@
 import createAdditiveSmoke from './additiveSmoke';
 import createBubbles from './bubbles';
+import createBoids from './boids';
 import createCollision from './collision';
 import createCollisionSubEmitters from './collisionSubEmitters';
 import createCubes from './cubes';
@@ -45,6 +46,7 @@ const particlePresets = {
   "Bubbles": withMetadata(createBubbles, 'bubbles.js'),
   "Fireworks": withMetadata(createFireworks, 'fireworks.js'),
   "Cubes and Spheres": withMetadata(createTags, 'tags.js'),
+  "Boids": withMetadata(createBoids, 'boids.js'),
 };
 
 export default particlePresets;

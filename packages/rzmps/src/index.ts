@@ -49,6 +49,7 @@ export { default as RotationBySize } from './modules/RotationBySize';
 export { default as RotationBySpeed } from './modules/RotationBySpeed';
 export { default as RotationByDepth } from './modules/RotationByDepth';
 export { default as RotationOverLifetime } from './modules/RotationOverLifetime';
+export { default as OrientToDirection } from './modules/OrientToDirection';
 export { default as VelocityBySize } from './modules/VelocityBySize';
 export { default as VelocityByDepth } from './modules/VelocityByDepth';
 export { default as VelocityOverLifetime } from './modules/VelocityOverLifetime';
@@ -58,6 +59,15 @@ export { default as SpeedOverLifetime } from './modules/SpeedOverLifetime';
 export { default as MassBySize } from './modules/MassBySize';
 export { default as MassByDepth } from './modules/MassByDepth';
 export { default as MassOverLifetime } from './modules/MassOverLifetime';
+export { default as Boids } from './modules/Boids/Boids';
+export type {
+  BoidParticleAffectorMap,
+  BoidParticleAffectorOptions,
+  BoidsOptions,
+} from './modules/Boids/Boids';
+export { default as BoidAffector } from './modules/Boids/BoidAffector';
+export type { BoidAffectorOptions } from './modules/Boids/BoidAffector';
+export { default as BoidAffectorHelper } from './modules/Boids/BoidAffectorHelper';
 export { default as ExternalForces } from './modules/ExternalForces/ExternalForces';
 export { default as Collision } from './modules/Collision';
 
@@ -71,6 +81,12 @@ export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBack
 // Dynamic Value
 export type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
 export type { ValueByParameter } from './types/ValueByParameter';
+export { default as ParticleOctree } from './helpers/ParticleOctree';
+export type {
+  OctreeAggregator,
+  OctreeConfig,
+  OctreeNode,
+} from './helpers/ParticleOctree';
 
 // Texture helper
 export * as Textures from './Textures';
