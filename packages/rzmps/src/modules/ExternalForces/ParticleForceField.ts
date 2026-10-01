@@ -20,6 +20,7 @@ export interface ForceFieldOptions {
     scale: THREE.Vector3;
     geometry: THREE.BufferGeometry;
     tags: StrictMultiple<Tag>;
+    inverted: boolean;
 }
 
 class ParticleForceField extends THREE.Object3D implements IParticleForceField {
@@ -64,6 +65,7 @@ class ParticleForceField extends THREE.Object3D implements IParticleForceField {
   drag?: DynamicValue<number>;
 
   tags?: Tag[];
+  inverted: boolean;
 
   private _geometry: THREE.BufferGeometry;
   set geometry(value: THREE.BufferGeometry) {
@@ -95,6 +97,7 @@ class ParticleForceField extends THREE.Object3D implements IParticleForceField {
     this.rotationSpeed = options.rotationSpeed;
     this.rotationAttraction = options.rotationAttraction;
     this.drag = options.drag;
+    this.inverted = options.inverted ?? false;
 
     this.tags = acceptMultiple(options.tags);
 
@@ -110,9 +113,10 @@ class ParticleForceField extends THREE.Object3D implements IParticleForceField {
 
   getForce(particle: Particle): THREE.Vector3 {
     this.updateWorldMatrix(true, false);
+    const contains = this.contains(particle.position);
 
     if (
-      !this.contains(particle.position)
+      contains === this.inverted
       || (this.tags && !tagsIntersect(this.tags, particle.tags ?? []))
     ) return new THREE.Vector3();
 
@@ -188,8 +192,14 @@ class ParticleForceField extends THREE.Object3D implements IParticleForceField {
 
     if (radius <= 0) return 0;
 
+    const ratio = localPosition.length() / radius;
+
+    if (this.inverted) {
+      return Math.min(Math.max(ratio, 0), 1);
+    }
+
     return 1 - Math.min(
-      localPosition.length() / radius,
+      ratio,
       1,
     );
   }
