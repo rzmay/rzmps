@@ -49,6 +49,7 @@ export { default as RotationBySize } from './modules/RotationBySize';
 export { default as RotationBySpeed } from './modules/RotationBySpeed';
 export { default as RotationByDepth } from './modules/RotationByDepth';
 export { default as RotationOverLifetime } from './modules/RotationOverLifetime';
+export { default as OrientToDirection } from './modules/OrientToDirection';
 export { default as VelocityBySize } from './modules/VelocityBySize';
 export { default as VelocityByDepth } from './modules/VelocityByDepth';
 export { default as VelocityOverLifetime } from './modules/VelocityOverLifetime';
