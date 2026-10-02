@@ -1,0 +1,155 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - release
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish bumped packages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Sync demo package versions
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const demoPackagePath = path.join('packages', 'demo', 'package.json');
+          const demoPackage = JSON.parse(fs.readFileSync(demoPackagePath, 'utf8'));
+
+          const packageVersions = new Map();
+
+          for (const entry of fs.readdirSync('packages')) {
+            const packagePath = path.join('packages', entry, 'package.json');
+            if (!fs.existsSync(packagePath)) continue;
+
+            const manifest = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+            if (manifest.private || !manifest.name?.startsWith('@rzmps/')) continue;
+
+            packageVersions.set(manifest.name, manifest.version);
+          }
+
+          let changed = false;
+
+          for (const sectionName of ['dependencies', 'devDependencies']) {
+            const section = demoPackage[sectionName];
+            if (!section) continue;
+
+            for (const [name, version] of packageVersions) {
+              if (!Object.prototype.hasOwnProperty.call(section, name)) continue;
+
+              const next = `^${version}`;
+              if (section[name] !== next) {
+                section[name] = next;
+                changed = true;
+              }
+            }
+          }
+
+          if (changed) {
+            fs.writeFileSync(
+              demoPackagePath,
+              `${JSON.stringify(demoPackage, null, 2)}\n`,
+            );
+          }
+          NODE
+
+          npm install --package-lock-only --ignore-scripts
+
+          if git diff --quiet -- package-lock.json packages/demo/package.json; then
+            echo "Demo package versions already match local package versions."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json packages/demo/package.json
+          git commit -m "chore: sync demo package versions for release"
+          git push
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run core tests
+        run: npm test
+
+      - name: Build packages
+        run: npm run build:modules
+
+      - name: Publish packages with bumped versions
+        run: |
+          set -euo pipefail
+
+          mapfile -t packages < <(node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const packagePaths = fs
+            .readdirSync('packages')
+            .map((entry) => path.join('packages', entry, 'package.json'))
+            .filter((packagePath) => fs.existsSync(packagePath));
+
+          const packages = packagePaths
+            .map((packagePath) => ({
+              packagePath,
+              directory: path.dirname(packagePath),
+              manifest: JSON.parse(fs.readFileSync(packagePath, 'utf8')),
+            }))
+            .filter(({ manifest }) => !manifest.private)
+            .sort((a, b) => {
+              if (a.manifest.name === '@rzmps/rzmps') return -1;
+              if (b.manifest.name === '@rzmps/rzmps') return 1;
+              return a.manifest.name.localeCompare(b.manifest.name);
+            });
+
+          for (const { directory, manifest } of packages) {
+            console.log(`${manifest.name}\t${manifest.version}\t${directory}`);
+          }
+          NODE
+          )
+
+          published=0
+
+          for package_info in "${packages[@]}"; do
+            IFS=$'\t' read -r name version directory <<< "$package_info"
+
+            if npm view "${name}@${version}" version >/dev/null 2>&1; then
+              echo "Skipping ${name}@${version}; version already exists on npm."
+              continue
+            fi
+
+            echo "Staging ${name}@${version} from ${directory}..."
+            npm stage publish "$directory" --access public
+            published=$((published + 1))
+          done
+
+          if [ "$published" -eq 0 ]; then
+            echo "No bumped package versions found to stage."
+          else
+            echo "Staged ${published} package(s). Approve them in npm to publish."
+          fi
