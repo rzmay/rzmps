@@ -4,9 +4,13 @@ import type ParticleSystem from '../ParticleSystem';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
+import getParticleWorldPosition from '../helpers/getParticleWorldPosition';
 import type { StrictMultiple } from '../types/Multiple';
 import type { Tag } from '../types/Tag';
-import SpatialEffect, { type SpatialEffectOptions } from '../SpatialEffect';
+import SpatialEffect, {
+  type SpatialEffectModifier,
+  type SpatialEffectOptions,
+} from '../SpatialEffect';
 import Priority from '../enums/Priority';
 
 export interface ForceFieldOptions extends SpatialEffectOptions {
@@ -19,33 +23,42 @@ export interface ForceFieldOptions extends SpatialEffectOptions {
     tags: StrictMultiple<Tag>;
 }
 
+type BoxGeometryArgs = ConstructorParameters<typeof THREE.BoxGeometry>;
+type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
+type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
+type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
+
 class ParticleForceField extends SpatialEffect {
   static Box(
-    options?: Partial<ForceFieldOptions>,
-    ...args: ConstructorParameters<typeof THREE.BoxGeometry>
+    _modify: SpatialEffectModifier | null,
+    options: Partial<ForceFieldOptions> | null,
+    ...args: BoxGeometryArgs
   ): ParticleForceField {
-    return new ParticleForceField({ ...options, geometry: new THREE.BoxGeometry(...args) });
+    return new ParticleForceField({ ...(options ?? {}), geometry: new THREE.BoxGeometry(...args) });
   }
 
   static Sphere(
-    options?: Partial<ForceFieldOptions>,
-    ...args: ConstructorParameters<typeof THREE.SphereGeometry>
+    _modify: SpatialEffectModifier | null,
+    options: Partial<ForceFieldOptions> | null,
+    ...args: SphereGeometryArgs
   ): ParticleForceField {
-    return new ParticleForceField({ ...options, geometry: new THREE.SphereGeometry(...args) });
+    return new ParticleForceField({ ...(options ?? {}), geometry: new THREE.SphereGeometry(...args) });
   }
 
   static Cone(
-    options?: Partial<ForceFieldOptions>,
-    ...args: ConstructorParameters<typeof THREE.ConeGeometry>
+    _modify: SpatialEffectModifier | null,
+    options: Partial<ForceFieldOptions> | null,
+    ...args: ConeGeometryArgs
   ): ParticleForceField {
-    return new ParticleForceField({ ...options, geometry: new THREE.ConeGeometry(...args) });
+    return new ParticleForceField({ ...(options ?? {}), geometry: new THREE.ConeGeometry(...args) });
   }
 
   static Torus(
-    options?: Partial<ForceFieldOptions>,
-    ...args: ConstructorParameters<typeof THREE.TorusGeometry>
+    _modify: SpatialEffectModifier | null,
+    options: Partial<ForceFieldOptions> | null,
+    ...args: TorusGeometryArgs
   ): ParticleForceField {
-    return new ParticleForceField({ ...options, geometry: new THREE.TorusGeometry(...args) });
+    return new ParticleForceField({ ...(options ?? {}), geometry: new THREE.TorusGeometry(...args) });
   }
 
   direction?: DynamicValue<THREE.Vector3>;
@@ -57,7 +70,6 @@ class ParticleForceField extends SpatialEffect {
   drag?: DynamicValue<number>;
   multiplier: DynamicValue<number> = 1;
 
-  private readonly _particleWorldPosition = new THREE.Vector3();
   private readonly _particleWorldVelocity = new THREE.Vector3();
   private readonly _worldQuaternion = new THREE.Quaternion();
   private readonly _inverseWorldQuaternion = new THREE.Quaternion();
@@ -102,7 +114,7 @@ class ParticleForceField extends SpatialEffect {
   getForce(particle: Particle, particleSystem?: ParticleSystem): THREE.Vector3 {
     this.updateWorldMatrix(true, false);
 
-    const position = this.getWorldParticlePosition(particle, particleSystem);
+    const position = getParticleWorldPosition(particle, particleSystem);
 
     if (!this.containsWorldPosition(position)) return new THREE.Vector3();
 
@@ -162,20 +174,6 @@ class ParticleForceField extends SpatialEffect {
     }
 
     return force;
-  }
-
-  private getWorldParticlePosition(
-    particle: Particle,
-    particleSystem?: ParticleSystem,
-  ): THREE.Vector3 {
-    this._particleWorldPosition.copy(particle.position);
-
-    if (particleSystem?.simulationSpace === 'local') {
-      particleSystem.updateWorldMatrix(true, false);
-      particleSystem.localToWorld(this._particleWorldPosition);
-    }
-
-    return this._particleWorldPosition;
   }
 
   private getWorldParticleVelocity(

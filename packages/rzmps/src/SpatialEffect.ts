@@ -3,6 +3,7 @@ import { MeshBVH, type HitPointInfo } from 'three-mesh-bvh';
 import Particle from './Particle';
 import type ParticleSystem from './ParticleSystem';
 import acceptMultiple from './helpers/acceptMultiple';
+import getParticleWorldPosition from './helpers/getParticleWorldPosition';
 import isPointInMesh from './helpers/isPointInMesh';
 import tagsIntersect from './helpers/tagsIntersect';
 import type { StrictMultiple } from './types/Multiple';
@@ -42,59 +43,70 @@ export interface SpatialEffectOptions {
   automaticFeather: boolean;
 }
 
+type BoxGeometryArgs = ConstructorParameters<typeof THREE.BoxGeometry>;
+type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
+type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
+type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
+
 class SpatialEffect extends THREE.Object3D {
   private static readonly _doubleSidedMaterial = new THREE.MeshBasicMaterial(
     { side: THREE.DoubleSide },
   );
 
-  static Box(...factoryArgs: unknown[]): SpatialEffect {
-    const resolved = SpatialEffect._resolveFactoryArgs(factoryArgs);
-    return new SpatialEffect(resolved.modify, { ...resolved.options, geometry: new THREE.BoxGeometry(...resolved.args) });
+  static Box(
+    modify: SpatialEffectModifier | null,
+    options: Partial<SpatialEffectOptions> | null,
+    ...args: BoxGeometryArgs
+  ): SpatialEffect {
+    return new SpatialEffect(
+      modify,
+      {
+        ...(options ?? {}),
+        geometry: new THREE.BoxGeometry(...args),
+      },
+    );
   }
 
-  static Sphere(...factoryArgs: unknown[]): SpatialEffect {
-    const resolved = SpatialEffect._resolveFactoryArgs(factoryArgs);
-    return new SpatialEffect(resolved.modify, { ...resolved.options, geometry: new THREE.SphereGeometry(...resolved.args) });
+  static Sphere(
+    modify: SpatialEffectModifier | null,
+    options: Partial<SpatialEffectOptions> | null,
+    ...args: SphereGeometryArgs
+  ): SpatialEffect {
+    return new SpatialEffect(
+      modify,
+      {
+        ...(options ?? {}),
+        geometry: new THREE.SphereGeometry(...args),
+      },
+    );
   }
 
-  static Cone(...factoryArgs: unknown[]): SpatialEffect {
-    const resolved = SpatialEffect._resolveFactoryArgs(factoryArgs);
-    return new SpatialEffect(resolved.modify, { ...resolved.options, geometry: new THREE.ConeGeometry(...resolved.args) });
+  static Cone(
+    modify: SpatialEffectModifier | null,
+    options: Partial<SpatialEffectOptions> | null,
+    ...args: ConeGeometryArgs
+  ): SpatialEffect {
+    return new SpatialEffect(
+      modify,
+      {
+        ...(options ?? {}),
+        geometry: new THREE.ConeGeometry(...args),
+      },
+    );
   }
 
-  static Torus(...factoryArgs: unknown[]): SpatialEffect {
-    const resolved = SpatialEffect._resolveFactoryArgs(factoryArgs);
-    return new SpatialEffect(resolved.modify, { ...resolved.options, geometry: new THREE.TorusGeometry(...resolved.args) });
-  }
-
-  private static _resolveFactoryArgs(factoryArgs: unknown[]): {
-      modify: SpatialEffectModifier | null;
-      options: Partial<SpatialEffectOptions>;
-      args: never[];
-    } {
-    const [modifyOrOptions, optionsOrFirstGeometryArg, ...args] = factoryArgs;
-    const firstArgIsModify = typeof modifyOrOptions === 'function' || modifyOrOptions === null;
-    const secondArgIsOptions = typeof optionsOrFirstGeometryArg === 'object'
-      && optionsOrFirstGeometryArg !== null
-      && !(optionsOrFirstGeometryArg instanceof Number);
-
-    if (firstArgIsModify) {
-      return {
-        modify: modifyOrOptions as SpatialEffectModifier | null,
-        options: secondArgIsOptions ? optionsOrFirstGeometryArg as Partial<SpatialEffectOptions> : {},
-        args: (secondArgIsOptions || optionsOrFirstGeometryArg === undefined
-          ? args
-          : [optionsOrFirstGeometryArg, ...args]) as never[],
-      };
-    }
-
-    return {
-      modify: null,
-      options: modifyOrOptions ?? {},
-      args: (optionsOrFirstGeometryArg === undefined
-        ? args
-        : [optionsOrFirstGeometryArg, ...args]) as never[],
-    };
+  static Torus(
+    modify: SpatialEffectModifier | null,
+    options: Partial<SpatialEffectOptions> | null,
+    ...args: TorusGeometryArgs
+  ): SpatialEffect {
+    return new SpatialEffect(
+      modify,
+      {
+        ...(options ?? {}),
+        geometry: new THREE.TorusGeometry(...args),
+      },
+    );
   }
 
   static Plane(
@@ -110,28 +122,13 @@ class SpatialEffect extends THREE.Object3D {
     const particleWorldPosition = new THREE.Vector3();
 
     return (particle, particleSystem) => {
-      SpatialEffect.getParticleWorldPosition(particle, particleSystem, particleWorldPosition);
+      getParticleWorldPosition(particle, particleSystem, particleWorldPosition);
 
       const signedDistance = particleWorldPosition.sub(position).dot(normal.clone().normalize());
       const isPositiveSide = signedDistance >= 0;
 
       return inverted ? !isPositiveSide : isPositiveSide;
     };
-  }
-
-  static getParticleWorldPosition(
-    particle: Particle,
-    particleSystem: ParticleSystem,
-    target = new THREE.Vector3(),
-  ): THREE.Vector3 {
-    target.copy(particle.position);
-
-    if (particleSystem.simulationSpace !== 'world') {
-      particleSystem.updateWorldMatrix(true, false);
-      particleSystem.localToWorld(target);
-    }
-
-    return target;
   }
 
   tags?: Tag[];
@@ -147,6 +144,7 @@ class SpatialEffect extends THREE.Object3D {
   private _bvhGeometry?: THREE.BufferGeometry;
   private _mesh: THREE.Mesh;
   private localParticlePosition = new THREE.Vector3();
+  private worldEffectPosition = new THREE.Vector3();
   private closestPointInfo?: HitPointInfo;
 
   set geometry(value: THREE.BufferGeometry | undefined) {
@@ -163,29 +161,30 @@ class SpatialEffect extends THREE.Object3D {
 
   constructor(
     modify: SpatialEffectModifier | null,
-    options: Partial<SpatialEffectOptions> = {},
+    options: Partial<SpatialEffectOptions> | null = {},
   ) {
     super();
+    const resolvedOptions = options ?? {};
 
     this._mesh = new THREE.Mesh(
       new THREE.BufferGeometry(),
       SpatialEffect._doubleSidedMaterial,
     );
-    if (modify && options.automaticFeather === false) {
+    if (modify && resolvedOptions.automaticFeather === false) {
       this._modifyFeather = modify as SpatialEffectFeatherUpdate;
     } else {
       this._modify = modify as SpatialEffectUpdate | null;
     }
 
-    if (options.position) this.position.copy(options.position);
-    if (options.scale) this.scale.copy(options.scale);
+    if (resolvedOptions.position) this.position.copy(resolvedOptions.position);
+    if (resolvedOptions.scale) this.scale.copy(resolvedOptions.scale);
 
-    this.inverted = options.inverted ?? false;
-    this.tags = acceptMultiple(options.tags);
-    this.priority = options.priority ?? this.priority;
-    this.feather = Math.max(options.feather ?? 0, 0);
-    this._test = options.test;
-    this.geometry = options.geometry;
+    this.inverted = resolvedOptions.inverted ?? false;
+    this.tags = acceptMultiple(resolvedOptions.tags);
+    this.priority = resolvedOptions.priority ?? this.priority;
+    this.feather = Math.max(resolvedOptions.feather ?? 0, 0);
+    this._test = resolvedOptions.test;
+    this.geometry = resolvedOptions.geometry;
   }
 
   get modifiesParticles(): boolean {
@@ -197,9 +196,8 @@ class SpatialEffect extends THREE.Object3D {
   test(particle: Particle, particleSystem: ParticleSystem): boolean {
     if (this.tags && !tagsIntersect(this.tags, particle.tags ?? [])) return false;
     if (this._test) return this._test(particle, particleSystem, this);
-    if (!this.geometry) return false;
 
-    SpatialEffect.getParticleWorldPosition(
+    getParticleWorldPosition(
       particle,
       particleSystem,
       this.localParticlePosition,
@@ -209,24 +207,30 @@ class SpatialEffect extends THREE.Object3D {
   }
 
   containsWorldPosition(position: THREE.Vector3): boolean {
-    return this.getFeather(position) >= 1;
-  }
+    if (!this.geometry) {
+      this.getWorldPosition(this.worldEffectPosition);
+      const contains = position.distanceToSquared(this.worldEffectPosition) <= Number.EPSILON;
+      return this.inverted ? !contains : contains;
+    }
 
-  getParticleFeather(particle: Particle, particleSystem: ParticleSystem): number {
-    if (this.tags && !tagsIntersect(this.tags, particle.tags ?? [])) return 0;
-    if (this._test) return this._test(particle, particleSystem, this) ? 1 : 0;
+    this.localParticlePosition.copy(position);
+    this.updateWorldMatrix(true, false);
+    this.worldToLocal(this.localParticlePosition);
 
-    SpatialEffect.getParticleWorldPosition(
-      particle,
-      particleSystem,
-      this.localParticlePosition,
-    );
-
-    return this.getFeather(this.localParticlePosition);
+    const contains = isPointInMesh(this.localParticlePosition, this._mesh);
+    return this.inverted ? !contains : contains;
   }
 
   getFeather(position: THREE.Vector3): number {
-    if (!this.geometry) return 0;
+    if (!this.geometry) {
+      this.getWorldPosition(this.worldEffectPosition);
+      const distance = position.distanceTo(this.worldEffectPosition);
+
+      if (this.inverted) return distance <= Number.EPSILON ? 0 : 1;
+      if (this.feather <= 0) return distance <= Number.EPSILON ? 1 : 0;
+
+      return Math.min(Math.max(1 - distance / this.feather, 0), 1);
+    }
 
     this.localParticlePosition.copy(position);
     this.updateWorldMatrix(true, false);
@@ -238,39 +242,22 @@ class SpatialEffect extends THREE.Object3D {
     if (this.inverted) return 1;
     if (this.feather <= 0) return 0;
 
-    const distance = this.getLocalFeatherDistance(this.localParticlePosition);
-    if (distance === undefined) return 0;
+    if (!this._bvh || this._bvhGeometry !== this.geometry) {
+      this._bvh = new MeshBVH(this.geometry);
+      this._bvhGeometry = this.geometry;
+    }
 
-    return Math.min(Math.max(1 - distance / this.feather, 0), 1);
-  }
-
-  private getLocalFeatherDistance(position: THREE.Vector3): number | undefined {
-    if (!this.geometry) return undefined;
-
-    const bvh = this.getBVH();
-    if (!bvh) return undefined;
-
-    const hit = bvh.closestPointToPoint(
-      position,
+    const hit = this._bvh.closestPointToPoint(
+      this.localParticlePosition,
       this.closestPointInfo,
       0,
       this.feather,
     );
 
-    if (!hit) return undefined;
+    if (!hit) return 0;
 
     this.closestPointInfo = hit;
-    return hit.distance;
-  }
-
-  private getBVH(): MeshBVH | undefined {
-    if (!this.geometry) return undefined;
-    if (this._bvh && this._bvhGeometry === this.geometry) return this._bvh;
-
-    this._bvh = new MeshBVH(this.geometry);
-    this._bvhGeometry = this.geometry;
-
-    return this._bvh;
+    return Math.min(Math.max(1 - hit.distance / this.feather, 0), 1);
   }
 
   modify(particles: Particle[], deltaTime: number, particleSystem: ParticleSystem): void {
@@ -284,7 +271,13 @@ class SpatialEffect extends THREE.Object3D {
     deltaTime: number,
     particleSystem: ParticleSystem,
   ): void {
-    const feather = this.getParticleFeather(particle, particleSystem);
+    getParticleWorldPosition(
+      particle,
+      particleSystem,
+      this.localParticlePosition,
+    );
+
+    const feather = this._test ? 1 : this.getFeather(this.localParticlePosition);
     if (feather <= 0) return;
 
     if (this._modifyFeather) {

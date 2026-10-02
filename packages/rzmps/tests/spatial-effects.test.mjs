@@ -24,7 +24,7 @@ assert.equal(typeof SpatialEffectHelper, 'function');
 
 {
   const scene = new THREE.Scene();
-  const killZone = KillZone.Sphere({}, 1, 16, 8);
+  const killZone = KillZone.Sphere(null, {}, 1, 16, 8);
   scene.add(killZone);
 
   const system = new ParticleSystem({
@@ -49,7 +49,7 @@ assert.equal(typeof SpatialEffectHelper, 'function');
   const root = new THREE.Group();
   root.position.set(0, 3, 0);
   scene.add(root);
-  scene.add(KillZone.Sphere({ position: new THREE.Vector3(0, 3, 0) }, 1, 16, 8));
+  scene.add(KillZone.Sphere(null, { position: new THREE.Vector3(0, 3, 0) }, 1, 16, 8));
 
   const system = new ParticleSystem({
     emitters: [],
@@ -104,7 +104,7 @@ assert.equal(typeof SpatialEffectHelper, 'function');
 
 {
   const scene = new THREE.Scene();
-  scene.add(ParticleForceField.Sphere({
+  scene.add(ParticleForceField.Sphere(null, {
     direction: new THREE.Vector3(2, 0, 0),
   }, 2, 16, 8));
 
@@ -136,7 +136,7 @@ assert.equal(typeof SpatialEffectHelper, 'function');
     mass: 1,
     position: new THREE.Vector3(3, 0, 0),
   });
-  const invertedField = ParticleForceField.Sphere({
+  const invertedField = ParticleForceField.Sphere(null, {
     inverted: true,
     gravity: 2,
   }, 1, 16, 8);
@@ -228,6 +228,17 @@ assert.equal(typeof SpatialEffectHelper, 'function');
 
   assert.equal(effect.getFeather(new THREE.Vector3(1.8, 1.8, 0)), 0);
   assert.ok(effect.getFeather(new THREE.Vector3(1.5, 0, 0)) > 0);
+}
+
+{
+  const effect = new SpatialEffect(null, {
+    position: new THREE.Vector3(2, 0, 0),
+    feather: 2,
+  });
+
+  assert.equal(effect.getFeather(new THREE.Vector3(2, 0, 0)), 1);
+  assert.equal(effect.getFeather(new THREE.Vector3(3, 0, 0)), 0.5);
+  assert.equal(effect.getFeather(new THREE.Vector3(5, 0, 0)), 0);
 }
 
 {

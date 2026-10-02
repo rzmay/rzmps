@@ -39,6 +39,7 @@ export default function createKillZoneScene(scene) {
   const particleRoot = createSceneParticleRoot(scene, [0, 3, 0]);
 
   const sphereKillZone = KillZone.Sphere(
+    null,
     {
       position: new THREE.Vector3(-3.5, 3, 0),
     },

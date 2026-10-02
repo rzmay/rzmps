@@ -1,42 +1,52 @@
 import Particle from '../Particle';
-import ParticleSystem from '../ParticleSystem';
-import SpatialEffect, { type SpatialEffectOptions } from '../SpatialEffect';
+import SpatialEffect, {
+  type SpatialEffectModifier,
+  type SpatialEffectOptions,
+} from '../SpatialEffect';
 import * as THREE from 'three';
 import Priority from '../enums/Priority';
 
 export type KillZoneOptions = SpatialEffectOptions;
+type BoxGeometryArgs = ConstructorParameters<typeof THREE.BoxGeometry>;
+type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
+type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
+type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
 class KillZone extends SpatialEffect {
   static Box(
-    options?: Partial<KillZoneOptions>,
-    ...args: ConstructorParameters<typeof THREE.BoxGeometry>
+    _modify: SpatialEffectModifier | null,
+    options: Partial<KillZoneOptions> | null,
+    ...args: BoxGeometryArgs
   ): KillZone {
-    return new KillZone({ ...options, geometry: new THREE.BoxGeometry(...args) });
+    return new KillZone({ ...(options ?? {}), geometry: new THREE.BoxGeometry(...args) });
   }
 
   static Sphere(
-    options?: Partial<KillZoneOptions>,
-    ...args: ConstructorParameters<typeof THREE.SphereGeometry>
+    _modify: SpatialEffectModifier | null,
+    options: Partial<KillZoneOptions> | null,
+    ...args: SphereGeometryArgs
   ): KillZone {
-    return new KillZone({ ...options, geometry: new THREE.SphereGeometry(...args) });
+    return new KillZone({ ...(options ?? {}), geometry: new THREE.SphereGeometry(...args) });
   }
 
   static Cone(
-    options?: Partial<KillZoneOptions>,
-    ...args: ConstructorParameters<typeof THREE.ConeGeometry>
+    _modify: SpatialEffectModifier | null,
+    options: Partial<KillZoneOptions> | null,
+    ...args: ConeGeometryArgs
   ): KillZone {
-    return new KillZone({ ...options, geometry: new THREE.ConeGeometry(...args) });
+    return new KillZone({ ...(options ?? {}), geometry: new THREE.ConeGeometry(...args) });
   }
 
   static Torus(
-    options?: Partial<KillZoneOptions>,
-    ...args: ConstructorParameters<typeof THREE.TorusGeometry>
+    _modify: SpatialEffectModifier | null,
+    options: Partial<KillZoneOptions> | null,
+    ...args: TorusGeometryArgs
   ): KillZone {
-    return new KillZone({ ...options, geometry: new THREE.TorusGeometry(...args) });
+    return new KillZone({ ...(options ?? {}), geometry: new THREE.TorusGeometry(...args) });
   }
 
   constructor(options: Partial<KillZoneOptions> = {}) {
-    super((particle: Particle, _deltaTime: number, _particleSystem: ParticleSystem) => {
+    super((particle: Particle) => {
       particle.kill();
     }, {
       priority: Priority.Permanent,
