@@ -104,7 +104,7 @@ export class ParticleSystemGUI {
         const previous = this.system;
         previous.removeEventListener?.('destroyed', this.handleSystemDestroyed);
         if (this.scene) {
-            previous.removeFromParent();
+            previous.destroy();
             getSceneParticleRoot(this.scene).add(next);
         }
         this.system = next;

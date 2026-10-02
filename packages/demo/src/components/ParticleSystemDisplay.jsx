@@ -81,7 +81,7 @@ function ParticleSystemDisplay({
       guiRef.current = null;
 
       if (particleSystem.current) {
-        particleSystem.current.removeFromParent();
+        particleSystem.current.destroy();
         particleSystem.current = null;
       }
     };
