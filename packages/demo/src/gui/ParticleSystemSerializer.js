@@ -4,7 +4,6 @@ import {
     Collision,
     EmissionSource,
     EndBehavior,
-    ExternalForces,
     LightRenderer,
     MeshRenderer,
     NoiseModule,
@@ -81,6 +80,7 @@ export class ParticleSystemSerializer {
             `  gravityModifier: ${this.serializeValue(system.gravityModifier)},`,
             `  inheritVelocity: ${this.serializeValue(system.inheritVelocity)},`,
             `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
+            `  useSpatialEffects: ${this.serializeValue(system.useSpatialEffects)},`,
             `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
             `  duration: ${this.serializeValue(system.duration)},`,
             `  prewarm: ${this.serializeValue(system.prewarm)},`,
@@ -211,20 +211,6 @@ export class ParticleSystemSerializer {
                 ...this.getLODOptions(runtime),
                 tags: runtime.tags,
             })})`;
-        }
-
-        if (module instanceof ExternalForces) {
-            const options = {
-                multiplier: module.multiplier,
-                ...this.getLODOptions(module),
-                tags: module.tags,
-            };
-
-            if (Array.isArray(module.explicitForceFields)) {
-                options.forceFields = module.explicitForceFields;
-            }
-
-            return `new ExternalForces(${this.serializeValue(options)})`;
         }
 
         const runtime = module;

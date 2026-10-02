@@ -151,6 +151,50 @@ class Particle {
     return this.writeValues();
   }
 
+  kill(): void {
+    this.realtime = Number.POSITIVE_INFINITY;
+    this.time = Number.POSITIVE_INFINITY;
+  }
+
+  clone(): Particle {
+    const particle = new Particle({
+      ...this.snapshot(),
+      tags: this.tags ? [...this.tags] : undefined,
+    });
+
+    particle.startTime = this.startTime;
+    particle.time = this.time;
+    particle.realtime = this.realtime;
+    particle.id = this.id;
+    particle.noise = { ...this.noise };
+    particle.data = { ...this.data };
+
+    return particle;
+  }
+
+  lerp(target: Particle | ParticleCachedValues, alpha: number): this {
+    const ratio = Math.min(Math.max(alpha, 0), 1);
+
+    this.lifetime += (target.lifetime - this.lifetime) * ratio;
+    this.position.lerp(target.position, ratio);
+    this.orbitCenter.lerp(target.orbitCenter, ratio);
+    this.rotation.lerp(target.rotation, ratio);
+    this.scale.lerp(target.scale, ratio);
+    this.velocity.lerp(target.velocity, ratio);
+    this.angularVelocity.lerp(target.angularVelocity, ratio);
+    this.scalarVelocity.lerp(target.scalarVelocity, ratio);
+    this.acceleration.lerp(target.acceleration, ratio);
+    this.angularAcceleration.lerp(target.angularAcceleration, ratio);
+    this.scalarAcceleration.lerp(target.scalarAcceleration, ratio);
+    this.speed += (target.speed - this.speed) * ratio;
+    this.mass += (target.mass - this.mass) * ratio;
+    this.distortionStrength += (target.distortionStrength - this.distortionStrength) * ratio;
+    this.color.lerp(target.color, ratio);
+    this.alpha += (target.alpha - this.alpha) * ratio;
+
+    return this;
+  }
+
   localToWorld(matrixWorld: THREE.Matrix4, normalMatrix: THREE.Matrix3): void {
     this.position.applyMatrix4(matrixWorld);
     this.orbitCenter.applyMatrix4(matrixWorld);

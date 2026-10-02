@@ -28,7 +28,6 @@ import {
     MassOverLifetime,
     MassBySize,
     MassByDepth,
-    ExternalForces,
     SpriteRenderer,
     MeshRenderer,
     LightRenderer,
@@ -87,7 +86,6 @@ export const DEFAULT_MODULE_FACTORIES = {
     'Mass By Size': () => new MassBySize({ mass: [1, 1], sizeRange: [0, 10] }),
     'Mass By Depth': () => new MassByDepth({ mass: [1, 1], depthRange: [0, 20] }),
     'Noise Module': () => new NoiseModule('noise'),
-    'External Forces': () => new ExternalForces({ forceFields: [], multiplier: 1 }),
     Collision: () => new Collision(),
 };
 
