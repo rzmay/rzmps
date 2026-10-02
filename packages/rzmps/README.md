@@ -596,6 +596,7 @@ only need to pass the fields you want to customize.
 interface ModuleOptions {
   priority: number | Module.Priority;
   tags: StrictMultiple<Tag>;
+  condition: (particle: Particle) => boolean;
   useUpdateLOD: boolean;
   updateLOD: Partial<LODSettings>;
   spatialEffects: SpatialEffect[];
@@ -611,6 +612,7 @@ work on lower-detail frames while preserving the module API.
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `priority` | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are transient pre-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
 | `tags`     | Restricts the module to particles with matching tags.                                                                                                                                                                                                                      |
+| `condition` | Optional per-particle predicate called before modification. Return `false` to skip that particle. |
 
 Modules can also discover scene-level `SpatialEffect` objects. Pass
 `requireSpatialEffects` to select the spatial effect class a module consumes,
@@ -640,7 +642,8 @@ before movement.
 `SpatialEffect` is a scene-space object for effects that occupy a volume or
 use a custom spatial test. By default it tests whether a particle is inside its
 geometry, respecting `inverted` and `tags`. You can also pass a custom `test`
-function.
+function. Use `condition` when the spatial range test should stay separate from
+the per-particle rule for whether the effect should operate.
 
 ```ts
 interface SpatialEffectOptions {
@@ -649,6 +652,7 @@ interface SpatialEffectOptions {
   geometry: THREE.BufferGeometry;
   inverted: boolean;
   tags: StrictMultiple<Tag>;
+  condition: (particle: Particle) => boolean;
   test: (
     particle: Particle,
     particleSystem: ParticleSystem,
