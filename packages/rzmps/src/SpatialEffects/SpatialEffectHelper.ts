@@ -166,8 +166,9 @@ class SpatialEffectHelper extends THREE.Object3D {
     return expanded;
   }
 
-  onBeforeRender(): void {
+  updateMatrixWorld(force?: boolean): void {
     this.updateTransform();
+    super.updateMatrixWorld(force);
   }
 }
 

@@ -371,13 +371,7 @@ class ParticleSystem extends THREE.Object3D {
     this.particles.forEach((particle) => particle.restore());
 
     const spatialEffects = this._getSpatialEffects();
-    const modifiers = [
-      ...modules.map((module) => ({ priority: module.priority, modify: () => module.modify(this.particles, this.deltaTime, this) })),
-      ...spatialEffects.map((spatialEffect) => ({
-        priority: spatialEffect.priority,
-        modify: () => this._modifyParticlesWithSpatialEffect(spatialEffect),
-      })),
-    ];
+    const modifiers = [...modules, ...spatialEffects];
 
     const permanentPreMovementModifiers = modifiers
       .filter((modifier) => modifier.priority < 0)
@@ -391,7 +385,7 @@ class ParticleSystem extends THREE.Object3D {
 
     // Run permanent pre-movement modules
     permanentPreMovementModifiers
-      .forEach((modifier) => modifier.modify());
+      .forEach((modifier) => modifier.modify(this.particles, this.deltaTime, this));
 
     const transientBaseValues = transientPreMovementModifiers.length > 0
       ? this.particles.map((particle) => particle.snapshot())
@@ -399,7 +393,7 @@ class ParticleSystem extends THREE.Object3D {
 
     // Run transient pre-movement modules
     transientPreMovementModifiers
-      .forEach((modifier) => modifier.modify());
+      .forEach((modifier) => modifier.modify(this.particles, this.deltaTime, this));
 
     // Update particles, caching permanent state before render-time transients.
     this._updateParticles(transientBaseValues);
@@ -410,7 +404,7 @@ class ParticleSystem extends THREE.Object3D {
 
     // Run transient render-time modules
     transientRenderModifiers
-      .forEach((modifier) => modifier.modify());
+      .forEach((modifier) => modifier.modify(this.particles, this.deltaTime, this));
 
     this.renderers.forEach((renderer) => {
       renderer.update(this.particles, this, this.deltaTime);
@@ -436,14 +430,6 @@ class ParticleSystem extends THREE.Object3D {
     });
 
     return spatialEffects;
-  }
-
-  private _modifyParticlesWithSpatialEffect(spatialEffect: SpatialEffect): void {
-    this.particles.forEach((particle) => {
-      if (spatialEffect.test(particle, this)) {
-        spatialEffect.modify(particle, this.deltaTime, this);
-      }
-    });
   }
 
   private _updateParticles(transientBaseValues?: ParticleCachedValues[]) {

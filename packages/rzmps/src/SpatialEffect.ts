@@ -191,7 +191,7 @@ class SpatialEffect extends THREE.Object3D {
   get modifiesParticles(): boolean {
     return this._modify !== null
       || this._modifyFeather !== undefined
-      || this.modify !== SpatialEffect.prototype.modify;
+      || this._modifyParticle !== SpatialEffect.prototype._modifyParticle;
   }
 
   test(particle: Particle, particleSystem: ParticleSystem): boolean {
@@ -273,7 +273,17 @@ class SpatialEffect extends THREE.Object3D {
     return this._bvh;
   }
 
-  modify(particle: Particle, deltaTime: number, particleSystem: ParticleSystem): void {
+  modify(particles: Particle[], deltaTime: number, particleSystem: ParticleSystem): void {
+    particles
+      .filter((particle) => this.test(particle, particleSystem))
+      .forEach((particle) => this._modifyParticle(particle, deltaTime, particleSystem));
+  }
+
+  protected _modifyParticle(
+    particle: Particle,
+    deltaTime: number,
+    particleSystem: ParticleSystem,
+  ): void {
     const feather = this.getParticleFeather(particle, particleSystem);
     if (feather <= 0) return;
 

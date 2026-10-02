@@ -141,8 +141,7 @@ assert.equal(typeof SpatialEffectHelper, 'function');
     gravity: 2,
   }, 1, 16, 8);
 
-  invertedField.modify(inside, 1, createSystem());
-  invertedField.modify(outside, 1, createSystem());
+  invertedField.modify([inside, outside], 1, createSystem());
 
   assert.equal(inside.velocity.length(), 0);
   assert.ok(outside.velocity.x < 0);

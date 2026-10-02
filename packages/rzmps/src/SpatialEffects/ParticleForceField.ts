@@ -85,13 +85,11 @@ class ParticleForceField extends SpatialEffect {
     this.multiplier = options.multiplier ?? this.multiplier;
   }
 
-  override modify(
+  protected override _modifyParticle(
     particle: Particle,
     deltaTime: number,
     particleSystem: ParticleSystem,
   ): void {
-    if (!this.test(particle, particleSystem)) return;
-
     const multiplier = evaluateDynamicNumber(this.multiplier, particle.time, particle.id);
     const force = this.getForce(particle, particleSystem);
     const mass = Number.isFinite(particle.mass) && particle.mass > 0
