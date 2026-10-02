@@ -8,6 +8,8 @@ import particleRatio from '../helpers/particleRatio';
 import type { StrictMultiple } from '../types/Multiple';
 import acceptMultiple from '../helpers/acceptMultiple';
 import { CollisionHit } from '../interfaces/ICollisionBackend';
+import type { CollisionListener } from '../modules/Collision';
+import type { ParticleListener } from '../ParticleSystem';
 
 const AUDIO_LISTENER_KEY = "__rzmps_audioListener";
 
@@ -120,9 +122,12 @@ export default class AudioRenderer extends Renderer {
   impulseThreshhold: number;
 
   private _system?: ParticleSystem;
+  private _eventSystem?: ParticleSystem;
+  private _collisionListener?: CollisionListener;
+  private _deathListener?: ParticleListener;
+  private _spawnListener?: ParticleListener;
   private _particleAudio = new Map<string, ParticleAudio>();
   private _eventAudio = new Set<THREE.PositionalAudio>();
-  private _setupCallbacks: boolean = false;
   private _cameraPosition = new THREE.Vector3();
   private _cameraDepthRange: [number, number] = [0, 100];
   private _relativePositions = new Map<string, THREE.Vector3>();
@@ -228,24 +233,22 @@ export default class AudioRenderer extends Renderer {
   }
 
   private _setupEventCallbacks(system: ParticleSystem): void {
-    if (!this._setupCallbacks) {
-      system.onCollision(
-        (particle, collisionHit) => {
-          if (collisionHit.impulse.length() <= this.impulseThreshhold) return;
-          this._handleEvent(particle, this.onCollisionSound, collisionHit);
-        },
-      );
+    if (this._eventSystem === system) return;
 
-      system.onDeath(
-        (particle) => this._handleEvent(particle, this.onDeathSound),
-      );
+    this._removeEventCallbacks();
 
-      system.onSpawn(
-        (particle) => this._handleEvent(particle, this.onSpawnSound),
-      )
+    this._collisionListener = (particle, collisionHit) => {
+      if (collisionHit.impulse.length() <= this.impulseThreshhold) return;
+      this._handleEvent(particle, this.onCollisionSound, collisionHit, this.collisionRatio);
+    };
+    this._deathListener = (particle) => this._handleEvent(particle, this.onDeathSound, undefined, this.ratio);
+    this._spawnListener = (particle) => this._handleEvent(particle, this.onSpawnSound, undefined, this.ratio);
 
-      this._setupCallbacks = true;
-    }
+    system.onCollision(this._collisionListener);
+    system.onDeath(this._deathListener);
+    system.onSpawn(this._spawnListener);
+
+    this._eventSystem = system;
   }
 
   private _ensureListener(system: ParticleSystem): void {
@@ -309,11 +312,16 @@ export default class AudioRenderer extends Renderer {
     this._applyFilters(state.audio, particle, undefined, state.filters);
   }
 
-  private _handleEvent(particle: Particle, audio?: AudioBuffer[], collisionHit?: CollisionHit): void {
+  private _handleEvent(
+    particle: Particle,
+    audio?: AudioBuffer[],
+    collisionHit?: CollisionHit,
+    ratio: number = this.ratio,
+  ): void {
     if (
       !audio
       || audio?.length === 0
-      || !particleRatio(particle, this.collisionRatio)
+      || !particleRatio(particle, ratio)
       || !this.shouldPlay(particle)
     ) {
       return;
@@ -585,7 +593,30 @@ export default class AudioRenderer extends Renderer {
     this._relativePositions.delete(id);
   }
 
+  private _removeEventCallbacks(): void {
+    if (!this._eventSystem) return;
+
+    if (this._collisionListener) {
+      this._eventSystem.removeCollisionListener(this._collisionListener);
+    }
+
+    if (this._deathListener) {
+      this._eventSystem.removeDeathListener(this._deathListener);
+    }
+
+    if (this._spawnListener) {
+      this._eventSystem.removeSpawnListener(this._spawnListener);
+    }
+
+    this._eventSystem = undefined;
+    this._collisionListener = undefined;
+    this._deathListener = undefined;
+    this._spawnListener = undefined;
+  }
+
   public destroy(): void {
+    this._removeEventCallbacks();
+
     this._particleAudio.forEach((_state, id) => {
       this._removeParticleAudio(id);
     });
@@ -600,6 +631,7 @@ export default class AudioRenderer extends Renderer {
 
     this._eventAudio.clear();
     this._relativePositions.clear();
+    this._system = undefined;
   }
 
   public clear(): void {

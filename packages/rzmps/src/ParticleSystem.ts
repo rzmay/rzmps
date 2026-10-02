@@ -1097,6 +1097,8 @@ class ParticleSystem extends THREE.Object3D {
       .flatMap((module) => module.withDependents())
       .forEach((module) => module.cleanup());
 
+    this.renderers.forEach((renderer) => renderer.clear());
+
     this._worldRendererRoot.removeFromParent();
   }
 
