@@ -4,9 +4,9 @@
   "private": true,
   "dependencies": {
     "@barclah/jolt-physics": "^0.31.0",
-    "@dimforge/rapier3d-compat": "^0.20.0",
-    "@react-three/drei": "^10.7.8",
-    "@react-three/fiber": "^9.8.0",
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.1",
     "@rzmps/ammo": "^1.1.0",
     "@rzmps/jolt": "^1.1.0",
     "@rzmps/rapier": "^1.1.0",
@@ -19,11 +19,11 @@
     "curves": "^1.1.4",
     "eaz": "^2.1.0",
     "lil-gui": "^0.21.0",
-    "lucide-react": "^1.45.0",
+    "lucide-react": "^1.49.0",
     "prop-types": "^15.7.2",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "three": "^0.186.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "three": "^0.186.1",
     "web-vitals": "^1.0.1"
   },
   "scripts": {
