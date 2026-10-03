@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
-  ExternalForces,
-  ParticleSystem,
+  ParticleForceField,
+  ParticleForceFieldHelper,
 } from '@rzmps/rzmps';
 import {
   createSceneParticleRoot,
@@ -18,14 +18,14 @@ export default function createRepulsorAttractor(scene) {
    *
    * Negative gravity pushes particles away from the field center.
    */
-  const repulsor = ExternalForces.ParticleForceField.Sphere({
+  const repulsor = ParticleForceField.Sphere(null, {
     gravity: -8,
   }, 4);
 
   repulsor.name = 'Repulsor';
   repulsor.position.set(0, 3, -4);
 
-  const repulsorHelper = new ExternalForces.ParticleForceFieldHelper(
+  const repulsorHelper = new ParticleForceFieldHelper(
     repulsor,
     0xff655e,
   );
@@ -40,14 +40,14 @@ export default function createRepulsorAttractor(scene) {
    *
    * Positive gravity pulls particles into the field center.
    */
-  const attractor = ExternalForces.ParticleForceField.Sphere({
+  const attractor = ParticleForceField.Sphere(null, {
     gravity: 8,
   }, 4);
 
   attractor.name = 'Attractor';
   attractor.position.set(0, 3, 4);
 
-  const attractorHelper = new ExternalForces.ParticleForceFieldHelper(
+  const attractorHelper = new ParticleForceFieldHelper(
     attractor,
     0x65ff5e,
   );
@@ -92,30 +92,6 @@ export default function createRepulsorAttractor(scene) {
 
   scene.add(root);
 
-  /*
-   * Add ExternalForces specifically for this scene.
-   *
-   * The module doesn't explicitly reference any of the fields below;
-   * it discovers ParticleForceFields from the scene automatically.
-   */
-  const configureParticleSystemKey = '__rzmps_configureParticleSystem';
-  const sceneExternalForces = new Map();
-
-  scene.userData[configureParticleSystemKey] = (particleSystem) => {
-    if (
-      !(particleSystem instanceof ParticleSystem)
-      || particleSystem.isSubSystem
-      || sceneExternalForces.has(particleSystem)
-      || particleSystem.modules.some((module) => module instanceof ExternalForces)
-    ) {
-      return;
-    }
-
-    const externalForces = new ExternalForces();
-    particleSystem.addModule(externalForces);
-    sceneExternalForces.set(particleSystem, externalForces);
-  };
-
   return {
     gui: (folder) => {
       const repulsorFolder = folder.addFolder('Repulsor');
@@ -137,12 +113,6 @@ export default function createRepulsorAttractor(scene) {
 
     cleanup: () => {
       disposeSceneParticleRoot(scene, particleRoot);
-      sceneExternalForces.forEach((externalForces, particleSystem) => {
-        particleSystem.removeModule(externalForces);
-      });
-      sceneExternalForces.clear();
-      delete scene.userData[configureParticleSystemKey];
-
       scene.remove(root);
 
       repulsorHelper.dispose();

@@ -482,7 +482,7 @@ class Boids extends Module {
     }
 
     this.affectors.forEach((affector) => {
-      if (!affector.matchesTags(particle.tags)) return;
+      if (!particleSystem || !affector.test(particle, particleSystem)) return;
 
       affector.getInfluenceDirection(this.affectorParticlePosition, this.affectorDirection);
 

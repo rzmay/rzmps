@@ -8,6 +8,8 @@ import createBoidAffectors from './boidAffectors';
 import createAmmoCollisionTest from './collisionAmmo';
 import createRapierCollisionTest from './collisionRapier';
 import createJoltCollisionTest from './collisionJolt';
+import createKillZoneScene from './killZones';
+import createCustomSpatialEffects from './customSpatialEffects';
 import createWind from './wind';
 import createVortex from './vortex';
 import createRepulsorAttractor from './repulsor';
@@ -35,6 +37,8 @@ const scenePresets = {
   'Collision (Ammo)': withMetadata(createAmmoCollisionTest, 'collisionAmmo.js'),
   'Collision (Rapier)': withMetadata(createRapierCollisionTest, 'collisionRapier.js'),
   'Collision (Jolt)': withMetadata(createJoltCollisionTest, 'collisionJolt.js'),
+  'Kill Zones': withMetadata(createKillZoneScene, 'killZones.js'),
+  'Custom Spatial Effects': withMetadata(createCustomSpatialEffects, 'customSpatialEffects.js'),
   'Wind': withMetadata(createWind, 'wind.js'),
   'Repulsor / Attractor': withMetadata(createRepulsorAttractor, 'repulsor.js'),
   'Vortex': withMetadata(createVortex, 'vortex.js'),

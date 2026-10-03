@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
-  ExternalForces,
-  ParticleSystem,
+  ParticleForceField,
+  ParticleForceFieldHelper,
 } from '@rzmps/rzmps';
 import {
   createSceneParticleRoot,
@@ -18,7 +18,8 @@ export default function createWind(scene) {
    *
    * A rectangular region applying a directional force.
    */
-  const wind = ExternalForces.ParticleForceField.Box(
+  const wind = ParticleForceField.Box(
+    null,
     {
       direction: new THREE.Vector3(36, 12, 0),
       drag: 0.6,
@@ -29,7 +30,7 @@ export default function createWind(scene) {
   wind.name = 'Wind';
   wind.position.set(4, 3, 0);
 
-  const windHelper = new ExternalForces.ParticleForceFieldHelper(
+  const windHelper = new ParticleForceFieldHelper(
     wind,
     0x5edcff,
   );
@@ -74,30 +75,6 @@ export default function createWind(scene) {
 
   scene.add(root);
 
-  /*
-   * Add ExternalForces specifically for this scene.
-   *
-   * The module doesn't explicitly reference any of the fields below;
-   * it discovers ParticleForceFields from the scene automatically.
-   */
-  const configureParticleSystemKey = '__rzmps_configureParticleSystem';
-  const sceneExternalForces = new Map();
-
-  scene.userData[configureParticleSystemKey] = (particleSystem) => {
-    if (
-      !(particleSystem instanceof ParticleSystem)
-      || particleSystem.isSubSystem
-      || sceneExternalForces.has(particleSystem)
-      || particleSystem.modules.some((module) => module instanceof ExternalForces)
-    ) {
-      return;
-    }
-
-    const externalForces = new ExternalForces();
-    particleSystem.addModule(externalForces);
-    sceneExternalForces.set(particleSystem, externalForces);
-  };
-
   return {
     gui: (folder) => {
       const direction = folder.addFolder('Wind Direction');
@@ -117,12 +94,6 @@ export default function createWind(scene) {
 
     cleanup: () => {
       disposeSceneParticleRoot(scene, particleRoot);
-      sceneExternalForces.forEach((externalForces, particleSystem) => {
-        particleSystem.removeModule(externalForces);
-      });
-      sceneExternalForces.clear();
-      delete scene.userData[configureParticleSystemKey];
-
       scene.remove(root);
 
       windHelper.dispose();

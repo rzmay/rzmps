@@ -30,7 +30,6 @@ import {
     MassBySize,
     MassByDepth,
     Boids,
-    ExternalForces,
     SpriteRenderer,
     MeshRenderer,
     LightRenderer,
@@ -103,7 +102,6 @@ export const DEFAULT_MODULE_FACTORIES = {
         particleAffectors: {},
     }),
     'Noise Module': () => new NoiseModule('noise'),
-    'External Forces': () => new ExternalForces({ forceFields: [], multiplier: 1 }),
     Collision: () => new Collision(),
 };
 

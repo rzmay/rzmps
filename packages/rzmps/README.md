@@ -16,6 +16,7 @@ RZMPS is built from small composable pieces:
 
 - **Emitters** create particles from shapes.
 - **Modules** modify particles over time.
+- **Spatial effects** modify particles from scene-space volumes or custom tests.
 - **Renderers** decide how particles appear in a Three.js scene.
 - **Subsystems** let particles emit other particle systems.
 - **Physics backends** let particles collide with Three.js objects or external
@@ -28,6 +29,8 @@ RZMPS is built from small composable pieces:
 - [Core Types](#core-types)
 - [Particle Systems](#particle-systems)
 - [Emitters](#emitters)
+- [Modules](#modules)
+- [Spatial Effects](#spatial-effects)
 - [Built-In Modules](#built-in-modules)
 - [Built-In Renderers](#built-in-renderers)
 - [Force Fields](#force-fields)
@@ -181,6 +184,9 @@ interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
   renderers: Multiple<Renderer>;
   modules: Multiple<Module>;
+  spatialEffects: Multiple<SpatialEffect>;
+  spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
+  useSpatialEffects: boolean;
   simulationSpeed: number;
   duration: number;
   prewarm: boolean;
@@ -216,6 +222,11 @@ Set `inheritVelocity` above `0` to add the particle system's parent-transform
 velocity to newly emitted top-level particles. `1` applies the full transform
 velocity and fractional values apply a scaled amount. This uses the same
 emission-context velocity path as subsystem velocity inheritance.
+
+Generic spatial effects are enabled by default. The particle system discovers
+generic `SpatialEffect` instances in its scene and also accepts an explicit
+`spatialEffects` list. Use `spatialEffectFilter` to restrict which generic
+effects a system responds to, or set `useSpatialEffects: false` to opt out.
 
 Set `updateLOD` to reduce simulation frequency as systems move farther from the
 active camera. `useUpdateLOD` defaults to `true` when `updateLOD` is provided
@@ -576,17 +587,21 @@ EmissionShape.Cone(...coneGeometryArgs);
 EmissionShape.Torus(...torusGeometryArgs);
 ```
 
-## Built-In Modules
+## Modules
 
-All built-in modules extend `Module`. Constructor option objects are partials,
-so you only need to pass the fields you want to customize.
+All modules extend `Module`. Constructor option objects are partials, so you
+only need to pass the fields you want to customize.
 
 ```ts
 interface ModuleOptions {
   priority: number | Module.Priority;
   tags: StrictMultiple<Tag>;
+  condition: (particle: Particle) => boolean;
   useUpdateLOD: boolean;
   updateLOD: Partial<LODSettings>;
+  spatialEffects: SpatialEffect[];
+  spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
+  requireSpatialEffects: typeof SpatialEffect | Array<typeof SpatialEffect>;
 }
 ```
 
@@ -597,6 +612,13 @@ work on lower-detail frames while preserving the module API.
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `priority` | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are transient pre-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
 | `tags`     | Restricts the module to particles with matching tags.                                                                                                                                                                                                                      |
+| `condition` | Optional per-particle predicate called before modification. Return `false` to skip that particle. |
+
+Modules can also discover scene-level `SpatialEffect` objects. Pass
+`requireSpatialEffects` to select the spatial effect class a module consumes,
+`spatialEffects` for an explicit list, or `spatialEffectFilter` for additional
+filtering. Module update functions receive `(particle, deltaTime,
+particleSystem)`; existing two-argument functions continue to work.
 
 Common priority values are exposed on `Module.Priority`:
 
@@ -614,6 +636,119 @@ modules can tint, fade, or scale particles for rendering without overwriting
 persistent state. Collision modules use a late permanent pre-movement priority
 so they can predict the current frame's travel segment and resolve velocity
 before movement.
+
+## Spatial Effects
+
+`SpatialEffect` is a scene-space object for effects that occupy a volume or
+use a custom spatial test. By default it tests whether a particle is inside its
+geometry, respecting `inverted` and `tags`. You can also pass a custom `test`
+function. Use `condition` when the spatial range test should stay separate from
+the per-particle rule for whether the effect should operate.
+
+```ts
+interface SpatialEffectOptions {
+  position: THREE.Vector3;
+  scale: THREE.Vector3;
+  geometry: THREE.BufferGeometry;
+  inverted: boolean;
+  tags: StrictMultiple<Tag>;
+  condition: (particle: Particle) => boolean;
+  test: (
+    particle: Particle,
+    particleSystem: ParticleSystem,
+    effect: SpatialEffect,
+  ) => boolean;
+  priority: number | Module.Priority;
+  feather: number;
+  automaticFeather: boolean;
+}
+```
+
+Spatial effects come in two flavors:
+
+- Generic spatial effects directly mutate particles in `modify(...)`. Use
+  them when the spatial object itself contains all the behavior. The particle
+  system discovers generic spatial effects in its scene automatically, or you
+  can pass them directly with `spatialEffects`.
+- Domain-specific spatial effects expose specialized APIs and are consumed by
+  a matching module. This is useful when the spatial object only describes
+  queryable scene data and a module owns the particle behavior.
+
+```ts
+const zone = KillZone.Sphere(null, { tags: "killable" }, 2, 32, 16);
+scene.add(zone);
+```
+
+Plane tests are useful for kill planes and other half-space effects:
+
+```ts
+const killPlane = new KillZone({
+  tags: "killable",
+  test: SpatialEffect.Plane({
+    position: new THREE.Vector3(0, -2, 0),
+    normal: new THREE.Vector3(0, 1, 0),
+  }),
+});
+```
+
+Use `SpatialEffectHelper` to visualize generic spatial effect geometry.
+`ParticleForceFieldHelper` extends it with sampled force arrows.
+
+To create a generic spatial effect, pass a modifier function as the first
+constructor argument. The base class handles scene placement, geometry containment,
+`inverted`, `tags`, priority, feathering, and custom tests.
+Generic spatial effects default to `Module.Priority.Transient`; effects that
+should persist into particle state can opt into `Module.Priority.Permanent`.
+
+```ts
+const color = new THREE.Color("#ffd166");
+
+scene.add(new SpatialEffect((particle) => {
+  particle.color.lerp(color, 0.2);
+}, {
+  geometry: new THREE.SphereGeometry(2, 32, 16),
+  priority: Module.Priority.Transient,
+  feather: 1,
+}));
+```
+
+When `feather` is greater than `0`, particles in the softened edge are blended
+between their pre-effect and post-effect values using `Particle.lerp(...)`.
+Set `automaticFeather: false` when you want the strength value directly
+instead of automatic clone/lerp blending:
+
+```ts
+new SpatialEffect((particle, deltaTime, particleSystem, feather) => {
+  particle.alpha *= feather;
+}, {
+  geometry: new THREE.SphereGeometry(2),
+  feather: 1,
+  automaticFeather: false,
+});
+```
+
+To create a domain-specific effect, extend `SpatialEffect` but expose methods
+for a matching module to consume. The module should pass
+`requireSpatialEffects` and then use `this.spatialEffects` in `prepare` or
+`modify`. See [Developing With Spatial Effects](#developing-with-spatial-effects)
+for a module extension example.
+
+### KillZone
+
+```ts
+new KillZone(options?: Partial<KillZoneOptions>)
+KillZone.Box(null, options, ...boxGeometryArgs)
+KillZone.Sphere(null, options, ...sphereGeometryArgs)
+KillZone.Cone(null, options, ...coneGeometryArgs)
+KillZone.Torus(null, options, ...torusGeometryArgs)
+```
+
+Kills particles that pass its spatial test by calling `particle.kill()`.
+`KillZone` runs at permanent priority by default so killed particles are
+compacted immediately. Geometry kill zones use the default inside-geometry
+test; plane kill zones can be created with `SpatialEffect.Plane(...)`.
+
+## Built-In Modules
 
 ### VelocityOverLifetime
 
@@ -942,22 +1077,6 @@ interface TransformByNoiseOptions extends Partial<ModuleOptions>, NoiseOptions {
 Pushes particles through animated 3D noise. Internally, it creates dependent
 `NoiseModule` instances for the X, Y, and Z axes.
 
-### ExternalForces
-
-```ts
-new ExternalForces(options: ExternalForcesOptions)
-
-interface ExternalForcesOptions extends Partial<ModuleOptions> {
-  multiplier?: DynamicValue<number>;
-  forceFieldFilter?: (forceField: InstanceType<typeof ExternalForces.ParticleForceField>) => boolean;
-  forceFields?: IParticleForceField[];
-}
-```
-
-Samples `ExternalForces.ParticleForceField` objects and applies their forces to
-particles. If `forceFields` is omitted, fields are discovered from the particle
-system's scene.
-
 ### Boids
 
 ```ts
@@ -992,7 +1111,7 @@ target.
 should cover the boid simulation space. If the Boids module has tags, those
 tags are passed to the octree so flocking samples only include matching
 particles. If `affectors` is omitted, `Boids` scans the scene for
-`Boids.BoidAffector` objects, similar to how `ExternalForces` discovers force fields:
+`Boids.BoidAffector` objects:
 
 ```ts
 const target = new Boids.BoidAffector({
@@ -1063,7 +1182,9 @@ and `.Torus` are provided as geometry shorthands. Set `inverted: true` to
 invert the sampled influence direction; paired with obstacle weights, this is
 useful for containment volumes. Affector tags are optional; an
 untagged affector applies to all boids, and a tagged affector applies only to
-particles with at least one matching tag.
+particles with at least one matching tag. `BoidAffector` extends `SpatialEffect`,
+so it also accepts `condition` and custom `test` options. Feathering is ignored
+by boid affectors because boid influence already uses distance-based falloff.
 
 ### Collision
 
@@ -1386,8 +1507,9 @@ control how many particles can create lights.
 
 ## Force Fields
 
-`ExternalForces.ParticleForceField` is a `THREE.Object3D` that can be placed in
-the scene and sampled by `ExternalForces`.
+`ParticleForceField` is a `SpatialEffect` that can be placed in the scene. It
+applies its own force directly when `ParticleSystem.useSpatialEffects` is true,
+so no translator module is required.
 
 ```ts
 interface ForceFieldOptions {
@@ -1397,20 +1519,22 @@ interface ForceFieldOptions {
   rotationSpeed: DynamicValue<number>;
   rotationAttraction: DynamicValue<number>;
   drag: DynamicValue<number>;
+  multiplier: DynamicValue<number>;
   scale: THREE.Vector3;
   geometry: THREE.BufferGeometry;
   tags: StrictMultiple<Tag>;
   inverted: boolean;
+  priority: number | Module.Priority;
 }
 ```
 
 Helpers:
 
 ```ts
-ExternalForces.ParticleForceField.Box(options?, ...boxGeometryArgs)
-ExternalForces.ParticleForceField.Sphere(options?, ...sphereGeometryArgs)
-ExternalForces.ParticleForceField.Cone(options?, ...coneGeometryArgs)
-ExternalForces.ParticleForceField.Torus(options?, ...torusGeometryArgs)
+ParticleForceField.Box(null, options, ...boxGeometryArgs)
+ParticleForceField.Sphere(null, options, ...sphereGeometryArgs)
+ParticleForceField.Cone(null, options, ...coneGeometryArgs)
+ParticleForceField.Torus(null, options, ...torusGeometryArgs)
 ```
 
 Set `inverted: true` to apply a field outside its shape instead of inside it.
@@ -1420,7 +1544,7 @@ the volume toward its center.
 Example:
 
 ```ts
-const attractor = ExternalForces.ParticleForceField.Sphere({
+const attractor = ParticleForceField.Sphere(null, {
   gravity: 10,
   drag: 0.2,
   scale: new THREE.Vector3(4, 4, 4),
@@ -1428,16 +1552,10 @@ const attractor = ExternalForces.ParticleForceField.Sphere({
 });
 
 scene.add(attractor);
-
-system.addModule(
-  new ExternalForces({
-    forceFieldFilter: (field) => field.tags?.includes("attractor") ?? false,
-  }),
-);
 ```
 
-Use `ExternalForces.ParticleForceFieldHelper` to visualize a field while
-tuning.
+Use `ParticleForceFieldHelper` to visualize a field while tuning. It extends the
+generic `SpatialEffectHelper` and adds sampled force arrows.
 
 ## Spatial Utilities
 
@@ -1617,6 +1735,7 @@ class GustModule extends Module {
   }
 
   prepare(system: ParticleSystem, deltaTime: number) {
+    super.prepare(system, deltaTime);
     this.elapsed += deltaTime;
     this.direction.normalize();
   }
@@ -1636,6 +1755,66 @@ system.addModule(
 
 Use `prepare(system, deltaTime)` for once-per-frame setup, `dependents` for
 module chains that must run together, and `cleanup()` for external resources.
+When a subclass uses `requireSpatialEffects`, its `prepare(...)` override should
+call `super.prepare(system, deltaTime)` before reading `this.spatialEffects`.
+
+### Developing With Spatial Effects
+
+Use a plain `SpatialEffect` when the spatial object can apply its own behavior.
+Use `requireSpatialEffects` on a module when the spatial object is only
+queryable data and the module owns the particle behavior. This keeps domain
+logic in the module while still letting artists and scenes place effect volumes
+as regular `THREE.Object3D` instances.
+
+```ts
+import {
+  Module,
+  ModuleOptions,
+  Particle,
+  ParticleSystem,
+  SpatialEffect,
+  SpatialEffectOptions,
+} from "@rzmps/rzmps";
+
+class HeatField extends SpatialEffect {
+  temperature = 1;
+
+  constructor(options: Partial<SpatialEffectOptions> & { temperature?: number } = {}) {
+    super(null, options);
+    this.temperature = options.temperature ?? this.temperature;
+  }
+
+  sample(particle: Particle, system: ParticleSystem) {
+    return this.test(particle, system) ? this.temperature : 0;
+  }
+}
+
+class HeatModule extends Module {
+  constructor(options: Partial<ModuleOptions> = {}) {
+    super((particle, deltaTime, system) => {
+      if (!system) return;
+
+      this.spatialEffects.forEach((effect) => {
+        const heat = (effect as HeatField).sample(particle, system);
+        particle.alpha = Math.max(0, particle.alpha - heat * deltaTime);
+      });
+    }, {
+      ...options,
+      requireSpatialEffects: HeatField,
+    });
+  }
+
+  prepare(system: ParticleSystem, deltaTime: number) {
+    super.prepare(system, deltaTime);
+    // Additional per-frame setup can go here.
+  }
+}
+```
+
+If you pass an explicit `spatialEffects` list to the module, only that list is
+used. Otherwise the module discovers matching effects from the particle system's
+scene. Add `spatialEffectFilter` when a module should consume only a subset of
+matching effects.
 
 ## Benchmarks
 
@@ -1645,37 +1824,34 @@ _Generated by `npm run benchmark:update-report`._
 
 **RZMPS browser benchmark**
 
-Run length: 4.0s measured per case after 1.0s warmup Measured:
-2026-09-28T07:49:37.739Z
+Run length: 4.0s measured per case after 1.0s warmup
+Measured: 2026-10-02T23:48:28.572Z
 
-FPS and frame time are measured in an uncapped browser render loop by default.
-`1% Low FPS` is derived from p99 frame time, which is steadier than raw
-single-frame min/max FPS. `Update` is the measured `ParticleSystem.update()`
-slice inside that frame.
+FPS and frame time are measured in an uncapped browser render loop by default. `1% Low FPS` is derived from p99 frame time, which is steadier than raw single-frame min/max FPS. `Update` is the measured `ParticleSystem.update()` slice inside that frame.
 
-| Environment        | Value                                                                                        |
-| ------------------ | -------------------------------------------------------------------------------------------- |
-| Mode               | headless browser                                                                             |
-| Frame Pacing       | uncapped                                                                                     |
-| Browser            | Chrome/154.0.8037.57                                                                         |
-| Viewport           | 1280x720                                                                                     |
-| Device Pixel Ratio | 1.00                                                                                         |
-| OS                 | Darwin 24.1.0 arm64                                                                          |
-| CPU                | Apple M4 Pro (14 logical cores)                                                              |
-| Memory             | 24.0GB system, 16.0GB browser hint                                                           |
-| GPU/WebGL          | ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version) (Google Inc. (Apple)) |
+| Environment | Value |
+| --- | --- |
+| Mode | headless browser |
+| Frame Pacing | uncapped |
+| Browser | Chrome/154.0.8037.57 |
+| Viewport | 1280x720 |
+| Device Pixel Ratio | 1.00 |
+| OS | Darwin 24.1.0 arm64 |
+| CPU | Apple M4 Pro (14 logical cores) |
+| Memory | 24.0GB system, 16.0GB browser hint |
+| GPU/WebGL | ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version) (Google Inc. (Apple)) |
 
-| Case                           | Target Particles | Simulated Particles | Particle Cap | Rendered Frames | Avg FPS | 1% Low FPS | Avg Frame | P99 Frame | Max Frame | Avg Update | P95 Update | Max JS Heap |
-| ------------------------------ | ---------------- | ------------------- | ------------ | --------------- | ------- | ---------- | --------- | --------- | --------- | ---------- | ---------- | ----------- |
-| Baseline 10k simulation only   | 10,000           | 10,000-10,000       | 10,000       | 3,824           | 955.9   | 707.8      | 1.05ms    | 1.30ms    | 2.10ms    | 0.96ms     | 1.10ms     | 80.8MB      |
-| Baseline 50k simulation only   | 50,000           | 50,000-50,000       | 50,000       | 515             | 128.8   | 107.9      | 7.77ms    | 8.60ms    | 10.30ms   | 7.64ms     | 8.10ms     | 188.3MB     |
-| Typical VFX 5k sprite          | 5,000            | 5,000-5,000         | 5,000        | 822             | 205.3   | 117.5      | 4.87ms    | 7.10ms    | 10.30ms   | 4.71ms     | 5.60ms     | 449.1MB     |
-| Heavy modules 10k noise+forces | 10,000           | 10,000-10,000       | 10,000       | 693             | 173.2   | 135.4      | 5.77ms    | 6.70ms    | 8.70ms    | 5.64ms     | 6.10ms     | 254.3MB     |
-| SpriteRenderer 5k rendered     | 5,000            | 5,000-5,000         | 5,000        | 1,851           | 462.6   | 218.9      | 2.16ms    | 3.50ms    | 8.90ms    | 2.03ms     | 2.50ms     | 303.0MB     |
-| SpriteRenderer 10k rendered    | 10,000           | 10,000-10,000       | 10,000       | 905             | 226.1   | 125.6      | 4.42ms    | 6.30ms    | 14.50ms   | 4.26ms     | 5.20ms     | 440.2MB     |
-| SpriteRenderer 50k rendered    | 50,000           | 50,000-50,000       | 50,000       | 76              | 18.9    | 15.5       | 52.87ms   | 64.50ms   | 64.50ms   | 52.52ms    | 53.80ms    | 533.5MB     |
-| MeshRenderer 10k rendered      | 10,000           | 10,000-10,000       | 10,000       | 1,509           | 377.2   | 294.7      | 2.65ms    | 3.20ms    | 4.20ms    | 2.50ms     | 2.70ms     | 269.4MB     |
-| TrailRenderer 2k rendered      | 2,000            | 2,000-2,000         | 2,000        | 2,450           | 612.5   | 227.7      | 1.63ms    | 2.60ms    | 10.20ms   | 1.50ms     | 2.00ms     | 588.9MB     |
+| Case | Target Particles | Simulated Particles | Particle Cap | Rendered Frames | Avg FPS | 1% Low FPS | Avg Frame | P99 Frame | Max Frame | Avg Update | P95 Update | Max JS Heap |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Baseline 10k simulation only | 10,000 | 10,000-10,000 | 10,000 | 3,877 | 969.1 | 738.6 | 1.03ms | 1.30ms | 1.70ms | 0.95ms | 1.10ms | 81.5MB |
+| Baseline 50k simulation only | 50,000 | 50,000-50,000 | 50,000 | 536 | 134.0 | 105.4 | 7.46ms | 9.10ms | 10.60ms | 7.32ms | 8.00ms | 190.2MB |
+| Typical VFX 5k sprite | 5,000 | 5,000-5,000 | 5,000 | 519 | 129.6 | 78.6 | 7.72ms | 11.70ms | 13.80ms | 7.54ms | 9.80ms | 364.1MB |
+| Heavy modules 10k noise+forces | 10,000 | 10,000-10,000 | 10,000 | 521 | 130.2 | 66.8 | 7.68ms | 10.10ms | 28.40ms | 7.50ms | 8.80ms | 515.2MB |
+| SpriteRenderer 5k rendered | 5,000 | 5,000-5,000 | 5,000 | 1,680 | 419.9 | 211.4 | 2.38ms | 3.20ms | 9.10ms | 2.25ms | 2.60ms | 356.5MB |
+| SpriteRenderer 10k rendered | 10,000 | 10,000-10,000 | 10,000 | 800 | 199.9 | 73.7 | 5.00ms | 9.10ms | 29.20ms | 4.80ms | 6.10ms | 427.9MB |
+| SpriteRenderer 50k rendered | 50,000 | 50,000-50,000 | 50,000 | 75 | 18.5 | 18.1 | 54.05ms | 55.30ms | 55.30ms | 53.81ms | 54.80ms | 557.6MB |
+| MeshRenderer 10k rendered | 10,000 | 10,000-10,000 | 10,000 | 1,098 | 274.5 | 190.0 | 3.64ms | 5.00ms | 5.60ms | 3.49ms | 4.00ms | 581.7MB |
+| TrailRenderer 2k rendered | 2,000 | 2,000-2,000 | 2,000 | 1,597 | 398.9 | 159.2 | 2.51ms | 3.80ms | 12.90ms | 2.33ms | 3.10ms | 1114.1MB |
 
 <!-- RZMPS_BENCHMARKS_END -->
 

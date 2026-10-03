@@ -68,11 +68,23 @@ export type {
 export { default as BoidAffector } from './modules/Boids/BoidAffector';
 export type { BoidAffectorOptions } from './modules/Boids/BoidAffector';
 export { default as BoidAffectorHelper } from './modules/Boids/BoidAffectorHelper';
-export { default as ExternalForces } from './modules/ExternalForces/ExternalForces';
+export { default as SpatialEffect } from './SpatialEffect';
+export type {
+  SpatialEffectFeatherUpdate,
+  SpatialEffectModifier,
+  SpatialEffectOptions,
+  SpatialEffectTest,
+  SpatialEffectUpdate,
+} from './SpatialEffect';
+export { default as SpatialEffectHelper } from './SpatialEffects/SpatialEffectHelper';
+export { default as KillZone } from './SpatialEffects/KillZone';
+export type { KillZoneOptions } from './SpatialEffects/KillZone';
 export { default as Collision } from './modules/Collision';
 
 // Force Fields
-export type { IParticleForceField } from './interfaces/IParticleForceField';
+export { default as ParticleForceField } from './SpatialEffects/ParticleForceField';
+export type { ForceFieldOptions } from './SpatialEffects/ParticleForceField';
+export { default as ParticleForceFieldHelper } from './SpatialEffects/ParticleForceFieldHelper';
 
 // Collision
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';

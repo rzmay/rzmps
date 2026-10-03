@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
-  ExternalForces,
-  ParticleSystem,
+  ParticleForceField,
+  ParticleForceFieldHelper,
 } from '@rzmps/rzmps';
 import {
   createSceneParticleRoot,
@@ -19,7 +19,7 @@ export default function createVortex(scene) {
    * Pulls particles toward its center while accelerating them
    * tangentially around the Y axis.
    */
-  const vortex = ExternalForces.ParticleForceField.Sphere({
+  const vortex = ParticleForceField.Sphere(null, {
     rotationSpeed: 18,
     rotationAttraction: 10,
     drag: 1.2,
@@ -28,7 +28,7 @@ export default function createVortex(scene) {
   vortex.name = 'Vortex';
   vortex.position.set(0, 0, 0);
 
-  const vortexHelper = new ExternalForces.ParticleForceFieldHelper(
+  const vortexHelper = new ParticleForceFieldHelper(
     vortex,
     0xa66cff,
   );
@@ -74,30 +74,6 @@ export default function createVortex(scene) {
 
   scene.add(root);
 
-  /*
-   * Add ExternalForces specifically for this scene.
-   *
-   * The module doesn't explicitly reference any of the fields below;
-   * it discovers ParticleForceFields from the scene automatically.
-   */
-  const configureParticleSystemKey = '__rzmps_configureParticleSystem';
-  const sceneExternalForces = new Map();
-
-  scene.userData[configureParticleSystemKey] = (particleSystem) => {
-    if (
-      !(particleSystem instanceof ParticleSystem)
-      || particleSystem.isSubSystem
-      || sceneExternalForces.has(particleSystem)
-      || particleSystem.modules.some((module) => module instanceof ExternalForces)
-    ) {
-      return;
-    }
-
-    const externalForces = new ExternalForces();
-    particleSystem.addModule(externalForces);
-    sceneExternalForces.set(particleSystem, externalForces);
-  };
-
   return {
     gui: (folder) => {
       const position = folder.addFolder('Vortex Position');
@@ -114,12 +90,6 @@ export default function createVortex(scene) {
 
     cleanup: () => {
       disposeSceneParticleRoot(scene, particleRoot);
-      sceneExternalForces.forEach((externalForces, particleSystem) => {
-        particleSystem.removeModule(externalForces);
-      });
-      sceneExternalForces.clear();
-      delete scene.userData[configureParticleSystemKey];
-
       scene.remove(root);
 
       vortexHelper.dispose();

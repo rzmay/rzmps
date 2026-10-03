@@ -17,11 +17,15 @@ import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
 import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } from './renderers/LiveCubemap';
 import LODHelper, { type LODSettings } from './LODHelper';
+import SpatialEffect from './SpatialEffect';
 
 interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
   renderers: Multiple<Renderer>;
   modules: Multiple<Module>;
+  spatialEffects: Multiple<SpatialEffect>;
+  spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
+  useSpatialEffects: boolean;
   simulationSpeed: number;
   duration: number;
   prewarm: boolean;
@@ -93,6 +97,7 @@ class ParticleSystem extends THREE.Object3D {
   particles: Particle[] = [];
   emitters: Emitter[] = [];
   modules: Module[] = [];
+  spatialEffects: SpatialEffect[] = [];
   renderers: Renderer[] = [];
   subSystems = new Map<ParticleSystem, SubSystemOptions>();
   boundingBox = new THREE.Box3();
@@ -100,6 +105,8 @@ class ParticleSystem extends THREE.Object3D {
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   inheritVelocity: number;
+  useSpatialEffects: boolean;
+  spatialEffectFilter?: (spatialEffect: SpatialEffect) => boolean;
   simulationSpeed: number;
   duration: number;
   prewarm: boolean;
@@ -132,7 +139,17 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _scene?: THREE.Scene;
-  get scene() { return this._scene; }
+  get scene() {
+    if (this._scene) return this._scene;
+
+    let parent = this.parent;
+    while (parent) {
+      if (parent instanceof THREE.Scene) return parent;
+      parent = parent.parent;
+    }
+
+    return undefined;
+  }
 
   private _camera?: THREE.Camera;
   get sceneCamera() { return this._camera; }
@@ -203,6 +220,9 @@ class ParticleSystem extends THREE.Object3D {
     this.emitters = acceptMultiple(options.emitters ?? new Emitter()) ?? [];
     this.renderers = acceptMultiple(options.renderers ?? new SpriteRenderer()) ?? [];
     this.modules = acceptMultiple(options.modules) ?? [];
+    this.spatialEffects = acceptMultiple(options.spatialEffects) ?? [];
+    this.spatialEffectFilter = options.spatialEffectFilter;
+    this.useSpatialEffects = options.useSpatialEffects ?? true;
     this.simulationSpeed = options.simulationSpeed ?? 1;
     this.duration = options.duration ?? 10;
     this.prewarm = options.prewarm ?? false;
@@ -355,27 +375,30 @@ class ParticleSystem extends THREE.Object3D {
     modules
       .forEach((module) => module.prepare(this, this.deltaTime));
 
-    const permanentPreMovementModules = modules
-      .filter((module) => module.priority < 0)
+    const spatialEffects = this._getSpatialEffects();
+    const modifiers = [...modules, ...spatialEffects];
+
+    const permanentPreMovementModifiers = modifiers
+      .filter((modifier) => modifier.priority < 0)
       .sort((a, b) => a.priority - b.priority)
-    const transientPreMovementModules = modules
-      .filter((module) => module.priority >= 0 && module.priority < 1)
-      .sort((a, b) => a.priority - b.priority);
-    const transientRenderModules = modules
-      .filter((module) => module.priority >= 1)
+    const transientPreMovementModifiers = modifiers
+      .filter((modifier) => modifier.priority >= 0 && modifier.priority < 1)
+      .sort((a, b) => a.priority - b.priority)
+    const transientRenderModifiers = modifiers
+      .filter((modifier) => modifier.priority >= 1)
       .sort((a, b) => a.priority - b.priority);
 
     // Run permanent pre-movement modules
-    permanentPreMovementModules
-      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+    permanentPreMovementModifiers
+      .forEach((modifier) => modifier.modify(this.particles, this.deltaTime, this));
 
-    const transientBaseValues = transientPreMovementModules.length > 0
+    const transientBaseValues = transientPreMovementModifiers.length > 0
       ? this.particles.map((particle) => particle.snapshot())
       : undefined;
 
     // Run transient pre-movement modules
-    transientPreMovementModules
-      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+    transientPreMovementModifiers
+      .forEach((modifier) => modifier.modify(this.particles, this.deltaTime, this));
 
     // Update particles, caching permanent state before render-time transients.
     this._updateParticles(transientBaseValues);
@@ -385,13 +408,33 @@ class ParticleSystem extends THREE.Object3D {
     }
 
     // Run transient render-time modules
-    transientRenderModules
-      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
-    this.updateBoundingBox();
+    transientRenderModifiers
+      .forEach((modifier) => modifier.modify(this.particles, this.deltaTime, this));
 
     this.renderers.forEach((renderer) => {
       renderer.update(this.particles, this, this.deltaTime);
     });
+  }
+
+  private _getSpatialEffects(): SpatialEffect[] {
+    if (!this.useSpatialEffects) return [];
+
+    const spatialEffects = this.spatialEffects
+      .filter((spatialEffect) => (
+        spatialEffect.modifiesParticles
+        && (!this.spatialEffectFilter || this.spatialEffectFilter(spatialEffect))
+      ));
+
+    this.scene?.traverse((object) => {
+      if (
+        object instanceof SpatialEffect
+        && object.modifiesParticles
+        && (!this.spatialEffectFilter || this.spatialEffectFilter(object))
+        && !spatialEffects.includes(object)
+      ) spatialEffects.push(object);
+    });
+
+    return spatialEffects;
   }
 
   private _updateParticles(transientBaseValues?: ParticleCachedValues[]) {
@@ -901,6 +944,22 @@ class ParticleSystem extends THREE.Object3D {
     return this;
   }
 
+  public addSpatialEffect(spatialEffect: SpatialEffect): this {
+    this.spatialEffects.push(spatialEffect);
+
+    return this;
+  }
+
+  public removeSpatialEffect(spatialEffect: SpatialEffect): this {
+    const index = this.spatialEffects.indexOf(spatialEffect);
+
+    if (index !== -1) {
+      this.spatialEffects.splice(index, 1);
+    }
+
+    return this;
+  }
+
   public addRenderer(renderer: Renderer): this {
     this.renderers.push(renderer);
     renderer.setup(this);
@@ -1057,6 +1116,8 @@ class ParticleSystem extends THREE.Object3D {
     this.modules
       .flatMap((module) => module.withDependents())
       .forEach((module) => module.cleanup());
+
+    this.renderers.forEach((renderer) => renderer.clear());
 
     this._worldRendererRoot.removeFromParent();
   }
