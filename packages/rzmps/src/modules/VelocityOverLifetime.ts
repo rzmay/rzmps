@@ -7,6 +7,7 @@ import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
 import {
   evaluateDynamicNumberGPU,
   evaluateDynamicVectorGPU,} from '../helpers/evaluateDynamicGPU';
+import { vec3 } from 'three/tsl';
 
 export interface VelocityOverLifetimeOptions extends Partial<ModuleOptions> {
     position: DynamicValue<THREE.Vector3>;
@@ -101,7 +102,8 @@ class VelocityOverLifetime extends Module {
           );
           const center = particle.orbitCenter.add(offset);
           const fromCenter = particle.position.sub(center);
-          const fromCenterDirection = fromCenter.normalize();
+          const fromCenterLength = fromCenter.length();
+          const fromCenterDirection = fromCenter.div(fromCenterLength.max(Number.EPSILON));
 
           if (this.options.orbital !== undefined) {
             const angularVelocity = evaluateDynamicVectorGPU(
@@ -112,15 +114,23 @@ class VelocityOverLifetime extends Module {
             );
 
             particle.velocity.assign(
-              particle.velocity.add(angularVelocity.cross(fromCenterDirection)),
+              particle.velocity.add(
+                fromCenterLength.greaterThan(Number.EPSILON).select(
+                  angularVelocity.cross(fromCenterDirection),
+                  vec3(0, 0, 0),
+                ),
+              ),
             );
           }
 
           if (this.options.radial !== undefined) {
             particle.velocity.assign(
               particle.velocity.add(
-                fromCenterDirection.mul(
-                  evaluateDynamicNumberGPU(this.options.radial, particle.time, 0, particle.index),
+                fromCenterLength.greaterThan(Number.EPSILON).select(
+                  fromCenterDirection.mul(
+                    evaluateDynamicNumberGPU(this.options.radial, particle.time, 0, particle.index),
+                  ),
+                  vec3(0, 0, 0),
                 )
               ),
             );

@@ -74,6 +74,16 @@ export default async function createCollisionSubEmitters() {
           normalLighting: 1,
         },
       }),
+      new AudioRenderer({
+        onCollisionSound: ballHit,
+        collisionRatio: 1,
+        pitch: [0.8, 1.2],
+        volume: 0.18,
+        impulseAffectsVolume: 0.5,
+        impulseThreshhold: 0.5,
+        lowPass: 1800,
+        impulseAffectsLowPass: 1,
+      }),
     ],
   });
 
@@ -121,16 +131,6 @@ export default async function createCollisionSubEmitters() {
           transparent: true,
           depthWrite: false,
         },
-      }),
-      new AudioRenderer({
-        onCollisionSound: ballHit,
-        collisionRatio: 1,
-        pitch: [0.8, 1.2],
-        volume: 0.18,
-        impulseAffectsVolume: 0.5,
-        impulseThreshhold: 0.5,
-        lowPass: 1800,
-        impulseAffectsLowPass: 1,
       }),
     ],
   });

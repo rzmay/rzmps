@@ -6,10 +6,11 @@ import {
   Particle,
   ParticleSystem,
   Renderer,
+  SpatialEffect,
   AudioRenderer,
   ColorOverLifetime,
   Collision,
-  ExternalForces,
+  ParticleForceField,
   ScaleOverLifetime,
   ThreeCollisionBackend,
   createGPUParticleBufferState,
@@ -50,7 +51,6 @@ assert.equal(new AudioRenderer().supportsGPUInput, false);
 assert.equal(new ColorOverLifetime({ alpha: [1, 0] }).supportsGPU, true);
 assert.equal(new ScaleOverLifetime({ scale: () => new THREE.Vector3(1, 1, 1) }).supportsGPU, true);
 assert.equal(new ScaleOverLifetime({ scale: new Set([new THREE.Vector3(1, 1, 1)]) }).supportsGPU, true);
-assert.equal(new ExternalForces().supportsGPU, true);
 assert.equal(new Collision().supportsGPU, true);
 assert.equal(new Collision().withDependents().every((module) => module.supportsGPU), true);
 assert.equal(new ThreeCollisionBackend().gpuCollision, true);
@@ -127,8 +127,20 @@ const gpuEligibilitySystem = new ParticleSystem({
 gpuEligibilitySystem._renderer = Object.create(WebGPURenderer.prototype);
 gpuEligibilitySystem._gpuTagOverflow = false;
 
-assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule]), true);
-assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule, cpuOnlyModule]), false);
+assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule], []), true);
+assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule, cpuOnlyModule], []), false);
+assert.equal(
+  gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule], [new ParticleForceField()]),
+  true,
+);
+assert.equal(
+  gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule], [
+    new SpatialEffect((p) => {
+      p.alpha = 0;
+    }),
+  ]),
+  false,
+);
 assert.equal(new CPUOnlyRenderer().supportsGPUInput, false);
 assert.equal(new GPUCapableRenderer().supportsGPUInput, true);
 

@@ -13,6 +13,7 @@ import {
  * - Low-pass cutoff can be computed from its base value plus speed effects.
  * - Filter cutoff calculations do not require collision impulse modifiers.
  * - Doppler pitch is off by default and increases pitch for particles approaching the listener.
+ * - Renderer event callbacks are removed on destroy.
  */
 
 const particle = new Particle({
@@ -81,4 +82,51 @@ const particle = new Particle({
   particle.position.set(0, 0, 9);
 
   assert.ok(audio._getPitch(particle) > 1);
+}
+
+{
+  const listeners = {
+    collision: [],
+    death: [],
+    spawn: [],
+  };
+  const system = {
+    onCollision(listener) {
+      listeners.collision.push(listener);
+      return this;
+    },
+    removeCollisionListener(listener) {
+      listeners.collision = listeners.collision.filter((value) => value !== listener);
+      return this;
+    },
+    onDeath(listener) {
+      listeners.death.push(listener);
+      return this;
+    },
+    removeDeathListener(listener) {
+      listeners.death = listeners.death.filter((value) => value !== listener);
+      return this;
+    },
+    onSpawn(listener) {
+      listeners.spawn.push(listener);
+      return this;
+    },
+    removeSpawnListener(listener) {
+      listeners.spawn = listeners.spawn.filter((value) => value !== listener);
+      return this;
+    },
+  };
+  const audio = new AudioRenderer();
+
+  audio.setup(system);
+
+  assert.equal(listeners.collision.length, 1);
+  assert.equal(listeners.death.length, 1);
+  assert.equal(listeners.spawn.length, 1);
+
+  audio.destroy();
+
+  assert.equal(listeners.collision.length, 0);
+  assert.equal(listeners.death.length, 0);
+  assert.equal(listeners.spawn.length, 0);
 }

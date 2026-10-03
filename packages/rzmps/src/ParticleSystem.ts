@@ -22,13 +22,18 @@ import LODHelper, { type LODSettings } from './LODHelper';
 import {
   createGPUParticleBufferState,
   type GPUParticleBufferState,
+  type GPUParticleUpdateContext,
 } from './GPUParticle';
 import { evaluateDynamicNumberGPU } from './helpers/evaluateDynamicGPU';
+import SpatialEffect from './SpatialEffect';
 
 interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
   renderers: Multiple<Renderer>;
   modules: Multiple<Module>;
+  spatialEffects: Multiple<SpatialEffect>;
+  spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
+  useSpatialEffects: boolean;
   simulationSpeed: number;
   duration: number;
   prewarm: boolean;
@@ -107,12 +112,15 @@ class ParticleSystem extends THREE.Object3D {
   particles: Particle[] = [];
   emitters: Emitter[] = [];
   modules: Module[] = [];
+  spatialEffects: SpatialEffect[] = [];
   renderers: Renderer[] = [];
   subSystems = new Map<ParticleSystem, SubSystemOptions>();
 
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
   inheritVelocity: number;
+  useSpatialEffects: boolean;
+  spatialEffectFilter?: (spatialEffect: SpatialEffect) => boolean;
   simulationSpeed: number;
   duration: number;
   prewarm: boolean;
@@ -150,7 +158,17 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _scene?: THREE.Scene;
-  get scene() { return this._scene; }
+  get scene() {
+    if (this._scene) return this._scene;
+
+    let parent = this.parent;
+    while (parent) {
+      if (parent instanceof THREE.Scene) return parent;
+      parent = parent.parent;
+    }
+
+    return undefined;
+  }
 
   private _camera?: THREE.Camera;
   get sceneCamera() { return this._camera; }
@@ -229,6 +247,9 @@ class ParticleSystem extends THREE.Object3D {
     this.emitters = acceptMultiple(options.emitters ?? new Emitter()) ?? [];
     this.renderers = acceptMultiple(options.renderers ?? new SpriteRenderer()) ?? [];
     this.modules = acceptMultiple(options.modules) ?? [];
+    this.spatialEffects = acceptMultiple(options.spatialEffects) ?? [];
+    this.spatialEffectFilter = options.spatialEffectFilter;
+    this.useSpatialEffects = options.useSpatialEffects ?? true;
     this.simulationSpeed = options.simulationSpeed ?? 1;
     this.gpuProcessing = options.gpuProcessing ?? true;
     this.gpuDebug = options.gpuDebug ?? false;
@@ -377,11 +398,12 @@ class ParticleSystem extends THREE.Object3D {
     // Module preparation
     const modules = this.modules
       .flatMap((module) => module.withDependents());
+    const spatialEffects = this._getSpatialEffects();
 
-    this._prepareGPUTagRegistry(modules);
+    this._prepareGPUTagRegistry(modules, spatialEffects);
 
-    if (this._canProcessParticlesOnGPU(modules)) {
-      this._processParticlesGPU(modules);
+    if (this._canProcessParticlesOnGPU(modules, spatialEffects)) {
+      this._processParticlesGPU(modules, spatialEffects);
       return;
     }
 
@@ -392,27 +414,29 @@ class ParticleSystem extends THREE.Object3D {
 
     this.particles.forEach((particle) => particle.restore());
 
-    const permanentPreMovementModules = modules
-      .filter((module) => module.priority < 0)
+    const modifiers = [...modules, ...spatialEffects];
+
+    const permanentPreMovementModifiers = modifiers
+      .filter((modifier) => modifier.priority < 0)
       .sort((a, b) => a.priority - b.priority)
-    const transientPreMovementModules = modules
-      .filter((module) => module.priority >= 0 && module.priority < 1)
-      .sort((a, b) => a.priority - b.priority);
-    const transientRenderModules = modules
-      .filter((module) => module.priority >= 1)
+    const transientPreMovementModifiers = modifiers
+      .filter((modifier) => modifier.priority >= 0 && modifier.priority < 1)
+      .sort((a, b) => a.priority - b.priority)
+    const transientRenderModifiers = modifiers
+      .filter((modifier) => modifier.priority >= 1)
       .sort((a, b) => a.priority - b.priority);
 
     // Run permanent pre-movement modules
-    permanentPreMovementModules
-      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+    permanentPreMovementModifiers
+      .forEach((modifier) => modifier.modify(this.particles, this.deltaTime, this));
 
-    const transientBaseValues = transientPreMovementModules.length > 0
+    const transientBaseValues = transientPreMovementModifiers.length > 0
       ? this.particles.map((particle) => particle.snapshot())
       : undefined;
 
     // Run transient pre-movement modules
-    transientPreMovementModules
-      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+    transientPreMovementModifiers
+      .forEach((modifier) => modifier.modify(this.particles, this.deltaTime, this));
 
     // Update particles, caching permanent state before render-time transients.
     this._updateParticles(transientBaseValues);
@@ -422,22 +446,23 @@ class ParticleSystem extends THREE.Object3D {
     }
 
     // Run transient render-time modules
-    transientRenderModules
-      .forEach((module) => module.modify(this.particles, this.deltaTime, this));
+    transientRenderModifiers
+      .forEach((modifier) => modifier.modify(this.particles, this.deltaTime, this));
 
     this.renderers.forEach((renderer) => {
       renderer.update(this.particles, this, this.deltaTime);
     });
   }
 
-  private _canProcessParticlesOnGPU(modules: Module[]): boolean {
+  private _canProcessParticlesOnGPU(modules: Module[], spatialEffects: SpatialEffect[]): boolean {
     return this.gpuProcessing
       && this.sceneRenderer instanceof WebGPURenderer
       && !this._gpuTagOverflow
-      && modules.every((module) => module.supportsGPU);
+      && modules.every((module) => module.supportsGPU)
+      && spatialEffects.every((spatialEffect) => spatialEffect.supportsGPU);
   }
 
-  private _processParticlesGPU(modules: Module[]): void {
+  private _processParticlesGPU(modules: Module[], spatialEffects: SpatialEffect[]): void {
     const sceneRenderer = this.sceneRenderer;
     if (!(sceneRenderer instanceof WebGPURenderer)) return;
 
@@ -544,34 +569,35 @@ class ParticleSystem extends THREE.Object3D {
     }
     const renderBufferInitialization = this._gpuRenderBuffers.initialize(sceneRenderer);
 
-    const context = {
+    const context: GPUParticleUpdateContext = {
       system: this,
       buffers: this._gpuBuffers,
       deltaTime: this.deltaTime,
     };
+    const modifiers = [...modules, ...spatialEffects];
 
-    const permanentPreMovementModules = modules
+    const permanentPreMovementModifiers = modifiers
       .filter((module) => module.priority < 0)
       .sort((a, b) => a.priority - b.priority);
 
     this._logGPUDebug('phase: permanent pre-movement', {
-      modules: this._describeGPUModules(permanentPreMovementModules),
+      modifiers: this._describeGPUModifiers(permanentPreMovementModifiers),
     });
-    this._computeGPUModulePhase(permanentPreMovementModules, context);
+    this._computeGPUModifierPhase(permanentPreMovementModifiers, context);
 
-    const transientPreMovementModules = modules
+    const transientPreMovementModifiers = modifiers
       .filter((module) => module.priority >= 0 && module.priority < 1)
       .sort((a, b) => a.priority - b.priority);
 
-    if (transientPreMovementModules.length > 0) {
+    if (transientPreMovementModifiers.length > 0) {
       this._logGPUDebug('copy main -> transient base before transient phase');
       this._copyGPUParticleBuffer(this._gpuBuffers, this._gpuTransientBaseBuffers);
 
       this._logGPUDebug('phase: transient pre-movement', {
-        modules: this._describeGPUModules(transientPreMovementModules),
+        modifiers: this._describeGPUModifiers(transientPreMovementModifiers),
       });
-      this._computeGPUModulePhase(
-        transientPreMovementModules,
+      this._computeGPUModifierPhase(
+        transientPreMovementModifiers,
         context,
       );
     }
@@ -579,7 +605,7 @@ class ParticleSystem extends THREE.Object3D {
     this._logGPUDebug('phase: movement');
     this._computeGPUParticleMovement();
 
-    if (transientPreMovementModules.length > 0) {
+    if (transientPreMovementModifiers.length > 0) {
       this._logGPUDebug('commit transient frame -> permanent GPU state');
       this._commitGPUTransientFrame(this._gpuBuffers, this._gpuTransientBaseBuffers);
     }
@@ -598,13 +624,13 @@ class ParticleSystem extends THREE.Object3D {
     });
     const cpuMirrorUpdate = this._gpuBuffers.readback(sceneRenderer, readbackParticles);
 
-    const transientRenderModules = modules
+    const transientRenderModifiers = modifiers
       .filter((module) => module.priority >= 1)
       .sort((a, b) => a.priority - b.priority);
 
     const cpuInputRenderers = this.renderers.filter((renderer) => !renderer.supportsGPUInput);
     const gpuInputRenderers = this.renderers.filter((renderer) => renderer.supportsGPUInput);
-    const needsRenderBuffer = transientRenderModules.length > 0
+    const needsRenderBuffer = transientRenderModifiers.length > 0
       || gpuInputRenderers.length > 0
       || cpuInputRenderers.length > 0;
 
@@ -616,9 +642,9 @@ class ParticleSystem extends THREE.Object3D {
 
       this._logGPUDebug('phase: render-time transient', {
         target: 'render buffer',
-        modules: this._describeGPUModules(transientRenderModules),
+        modifiers: this._describeGPUModifiers(transientRenderModifiers),
       });
-      this._computeGPUModulePhase(transientRenderModules, {
+      this._computeGPUModifierPhase(transientRenderModifiers, {
         system: this,
         buffers: this._gpuRenderBuffers,
         deltaTime: this.deltaTime,
@@ -626,7 +652,7 @@ class ParticleSystem extends THREE.Object3D {
     } else {
       this._logGPUDebug('phase: render-time transient skipped on GPU', {
         reason: 'no renderers',
-        modules: this._describeGPUModules(transientRenderModules),
+        modifiers: this._describeGPUModifiers(transientRenderModifiers),
       });
     }
 
@@ -874,28 +900,47 @@ class ParticleSystem extends THREE.Object3D {
     });
   }
 
-  private _computeGPUModulePhase(
-    modules: Module[],
-    context: { system: ParticleSystem; buffers: GPUParticleBufferState; deltaTime: number },
+  private _computeGPUModifierPhase(
+    modifiers: Array<Module | SpatialEffect>,
+    context: GPUParticleUpdateContext,
   ): void {
-    if (!modules.length || !this._gpuBuffers?.count) return;
+    if (!modifiers.length || !context.buffers.count) return;
     if (!(this.sceneRenderer instanceof WebGPURenderer)) return;
 
     const renderer = this.sceneRenderer;
     const buffers = context.buffers;
     const particleCount = buffers.count;
 
-    modules.forEach((module) => {
+    modifiers.forEach((modifier) => {
       const computeNode = Fn(() => {
-        const tagMask = this._getGPUTagMask(module.tags);
-        if (tagMask === undefined) {
-          module.modifyGPU(buffers.particle, this.deltaTime, context);
+        if (modifier instanceof Module) {
+          const tagMask = this._getGPUTagMask(modifier.tags);
+          if (tagMask === undefined) {
+            modifier.modifyGPU(buffers.particle, this.deltaTime, context);
+            return;
+          }
+
+          If(buffers.particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)), () => {
+            modifier.modifyGPU(buffers.particle, this.deltaTime, context);
+          });
           return;
         }
 
-        If(buffers.particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)), () => {
-          module.modifyGPU(buffers.particle, this.deltaTime, context);
-        });
+        const strength = modifier.testGPU(buffers.particle, context);
+        const tagMask = this._getGPUTagMask(modifier.tags);
+
+        const applySpatialEffect = () => {
+          If(strength.greaterThan(float(0)), () => {
+            modifier.modifyGPU(buffers.particle, this.deltaTime, context, strength);
+          });
+        };
+
+        if (tagMask === undefined) {
+          applySpatialEffect();
+          return;
+        }
+
+        If(buffers.particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)), applySpatialEffect);
       })().compute(particleCount);
 
       renderer.compute(computeNode);
@@ -966,6 +1011,22 @@ class ParticleSystem extends THREE.Object3D {
     }));
   }
 
+  private _describeGPUModifiers(modifiers: Array<Module | SpatialEffect>): Array<{
+    name: string;
+    priority: number;
+    tags?: Tag[];
+    supportsGPU: boolean;
+    type: 'module' | 'spatialEffect';
+  }> {
+    return modifiers.map((modifier) => ({
+      name: modifier.constructor.name,
+      priority: modifier.priority,
+      tags: modifier.tags ? [...modifier.tags] : undefined,
+      supportsGPU: modifier.supportsGPU,
+      type: modifier instanceof Module ? 'module' : 'spatialEffect',
+    }));
+  }
+
   private _sampleGPUParticles(particles: Particle[]): Array<{
     index: number;
     id: string;
@@ -1015,12 +1076,15 @@ class ParticleSystem extends THREE.Object3D {
     return Number(value.toFixed(4));
   }
 
-  private _prepareGPUTagRegistry(modules: Module[]): void {
+  private _prepareGPUTagRegistry(modules: Module[], spatialEffects: SpatialEffect[] = []): void {
     this._gpuTagRegistry.clear();
     this._gpuTagOverflow = false;
 
     modules.forEach((module) => {
       module.tags?.forEach((tag) => this._registerGPUTag(tag));
+    });
+    spatialEffects.forEach((spatialEffect) => {
+      spatialEffect.tags?.forEach((tag) => this._registerGPUTag(tag));
     });
     this.renderers.forEach((renderer) => {
       renderer.tags?.forEach((tag) => this._registerGPUTag(tag));
@@ -1077,6 +1141,27 @@ class ParticleSystem extends THREE.Object3D {
     }
 
     particles.length = writeIndex;
+  }
+
+  private _getSpatialEffects(): SpatialEffect[] {
+    if (!this.useSpatialEffects) return [];
+
+    const spatialEffects = this.spatialEffects
+      .filter((spatialEffect) => (
+        spatialEffect.modifiesParticles
+        && (!this.spatialEffectFilter || this.spatialEffectFilter(spatialEffect))
+      ));
+
+    this.scene?.traverse((object) => {
+      if (
+        object instanceof SpatialEffect
+        && object.modifiesParticles
+        && (!this.spatialEffectFilter || this.spatialEffectFilter(object))
+        && !spatialEffects.includes(object)
+      ) spatialEffects.push(object);
+    });
+
+    return spatialEffects;
   }
 
   private _updateParticles(transientBaseValues?: ParticleCachedValues[]) {
@@ -1565,6 +1650,22 @@ class ParticleSystem extends THREE.Object3D {
     return this;
   }
 
+  public addSpatialEffect(spatialEffect: SpatialEffect): this {
+    this.spatialEffects.push(spatialEffect);
+
+    return this;
+  }
+
+  public removeSpatialEffect(spatialEffect: SpatialEffect): this {
+    const index = this.spatialEffects.indexOf(spatialEffect);
+
+    if (index !== -1) {
+      this.spatialEffects.splice(index, 1);
+    }
+
+    return this;
+  }
+
   public addRenderer(renderer: Renderer): this {
     this.renderers.push(renderer);
     renderer.setup(this);
@@ -1721,6 +1822,8 @@ class ParticleSystem extends THREE.Object3D {
     this.modules
       .flatMap((module) => module.withDependents())
       .forEach((module) => module.cleanup());
+
+    this.renderers.forEach((renderer) => renderer.clear());
 
     this._worldRendererRoot.removeFromParent();
   }

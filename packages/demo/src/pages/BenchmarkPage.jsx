@@ -3,8 +3,19 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
+  AmbientLightNode,
+  DirectionalLightNode,
+  HemisphereLightNode,
+  PointLightNode,
+  RectAreaLightNode,
+  SpotLightNode,
+  WebGPURenderer,
+} from 'three/webgpu';
+import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
+import {
   ColorOverLifetime,
   ForceOverLifetime,
+  KillZone,
   MeshRenderer,
   NoiseModule,
   Particle,
@@ -23,6 +34,23 @@ class NoopRenderer extends Renderer {
   _update() {}
   destroy() {}
   clear() {}
+}
+
+async function createBenchmarkRenderer(defaultProps) {
+  const renderer = new WebGPURenderer(defaultProps);
+
+  RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init());
+
+  renderer.library.addLight(AmbientLightNode, THREE.AmbientLight);
+  renderer.library.addLight(DirectionalLightNode, THREE.DirectionalLight);
+  renderer.library.addLight(HemisphereLightNode, THREE.HemisphereLight);
+  renderer.library.addLight(PointLightNode, THREE.PointLight);
+  renderer.library.addLight(RectAreaLightNode, THREE.RectAreaLight);
+  renderer.library.addLight(SpotLightNode, THREE.SpotLight);
+
+  await renderer.init();
+
+  return renderer;
 }
 
 function makeCurve() {
@@ -91,12 +119,20 @@ function createParticle(index) {
   return particle;
 }
 
-function createSystem({ particleCount, modules = [], renderer = new NoopRenderer() }) {
+function createSystem({
+  particleCount,
+  modules = [],
+  spatialEffects = [],
+  renderer = new NoopRenderer(),
+  gpuProcessing = false,
+}) {
   const system = new ParticleSystem({
     emitters: [],
     renderers: renderer,
     modules,
+    spatialEffects,
     gravityModifier: 0,
+    gpuProcessing,
     looping: false,
     maxParticles: Math.max(particleCount, 1),
     useUpdateLOD: false,
@@ -132,6 +168,9 @@ function summarize({
   particleSamples,
   measuredDurationMs,
   maxHeapMB,
+  requireGPU,
+  gpuActiveSamples,
+  rendererType,
 }) {
   const updateTotal = updateSamples.reduce((sum, value) => sum + value, 0);
   const frameTotal = frameSamples.reduce((sum, value) => sum + value, 0);
@@ -160,6 +199,11 @@ function summarize({
     avgUpdateMs: updateTotal / updateSamples.length,
     p95UpdateMs,
     maxHeapMB,
+    gpuProcessingRequested: Boolean(requireGPU),
+    gpuActiveFrames: gpuActiveSamples.filter(Boolean).length,
+    gpuMeasuredFrames: gpuActiveSamples.length,
+    gpuProcessingActive: gpuActiveSamples.length > 0 && gpuActiveSamples.every(Boolean),
+    rendererType,
   };
 }
 
@@ -182,6 +226,53 @@ function BenchmarkScene({ onComplete, onProgress }) {
       name: 'Baseline 50k simulation only',
       particleCount: 50_000,
       create: () => ({ modules: [] }),
+    },
+    {
+      name: 'GPU forced baseline 10k simulation only',
+      particleCount: 10_000,
+      requireGPU: true,
+      create: () => ({
+        gpuProcessing: true,
+        modules: [
+          new ForceOverLifetime({ force: new THREE.Vector3(0.1, -0.15, 0.05) }),
+          new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) }),
+        ],
+      }),
+    },
+    {
+      name: 'GPU forced heavy modules 10k',
+      particleCount: 10_000,
+      requireGPU: true,
+      create: () => ({
+        gpuProcessing: true,
+        modules: [
+          new ForceOverLifetime({ force: new THREE.Vector3(0.1, -0.15, 0.05) }),
+          new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) }),
+          new ColorOverLifetime({
+            color: (time) => new THREE.Color(1, 0.6 + 0.4 * fadeCurve.evaluate(time), 0.25),
+            alpha: (time) => fadeCurve.evaluate(time),
+          }),
+          new ScaleOverLifetime({
+            scale: (time) => new THREE.Vector3(1, 1, 1).multiplyScalar(0.5 + growCurve.evaluate(time)),
+          }),
+          new RotationOverLifetime({ angularVelocity: new THREE.Vector3(0, 0, 1) }),
+        ],
+      }),
+    },
+    {
+      name: 'GPU forced spatial kill zones 10k',
+      particleCount: 10_000,
+      requireGPU: true,
+      create: () => ({
+        gpuProcessing: true,
+        modules: [
+          new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) }),
+        ],
+        spatialEffects: [
+          KillZone.Sphere({ position: new THREE.Vector3(0, 0, 0), feather: 0.4 }, 1.5, 16, 8),
+          KillZone.Torus({ position: new THREE.Vector3(1.5, 0, 0), feather: 0.25 }, 1, 0.25, 16, 8),
+        ],
+      }),
     },
     {
       name: 'Typical VFX 5k sprite',
@@ -269,7 +360,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
       updateSamples: [],
       frameSamples: [],
       particleSamples: [],
+      gpuActiveSamples: [],
       maxHeapMB: 0,
+      rendererType: gl.isWebGPURenderer ? 'WebGPURenderer' : gl.constructor.name,
     };
     lastFrame.current = undefined;
     onProgress(nextCase.name);
@@ -303,6 +396,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
     lastFrame.current = frameStart;
     active.current.updateSamples.push(updateMs);
     active.current.particleSamples.push(active.current.system.particles.length);
+    active.current.gpuActiveSamples.push(active.current.system.isGPUProcessingActive);
+
+    if (active.current.requireGPU && !active.current.system.isGPUProcessingActive) {
+      throw new Error(`${active.current.name} did not activate GPU processing.`);
+    }
 
     const heapBytes = performance.memory?.usedJSHeapSize;
     if (Number.isFinite(heapBytes)) {
@@ -329,7 +427,11 @@ function BenchmarkPage() {
 
   return (
     <div className="demo-shell">
-      <Canvas camera={{ position: [0, 0, 8], near: 0.1, far: 100 }} onCreated={({ gl }) => gl.setClearColor('#202020')}>
+      <Canvas
+        camera={{ position: [0, 0, 8], near: 0.1, far: 100 }}
+        gl={createBenchmarkRenderer}
+        onCreated={({ gl }) => gl.setClearColor('#202020')}
+      >
         <ambientLight intensity={1} />
         <BenchmarkScene onComplete={setResults} onProgress={setActiveCase} />
       </Canvas>
