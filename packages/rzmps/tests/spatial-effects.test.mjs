@@ -17,14 +17,41 @@ const createSystem = (scene = new THREE.Scene()) => ({
   updateWorldMatrix() {},
 });
 
+const geometrySize = (geometry) => {
+  geometry.computeBoundingBox();
+  return geometry.boundingBox
+    .getSize(new THREE.Vector3())
+    .toArray()
+    .map((value) => Number(value.toFixed(4)));
+};
+
 assert.equal(typeof SpatialEffect, 'function');
 assert.equal(typeof KillZone, 'function');
 assert.equal(typeof ParticleForceField, 'function');
 assert.equal(typeof SpatialEffectHelper, 'function');
 
 {
+  assert.deepEqual(
+    geometrySize(KillZone.Sphere(2, 16, 8).geometry),
+    [4, 4, 4],
+  );
+  assert.deepEqual(
+    geometrySize(KillZone.Box(4, 5, 6).geometry),
+    [4, 5, 6],
+  );
+  assert.deepEqual(
+    geometrySize(ParticleForceField.Sphere({ gravity: 1 }, 3, 16, 8).geometry),
+    [6, 6, 6],
+  );
+  assert.deepEqual(
+    geometrySize(ParticleForceField.Box(4, 5, 6).geometry),
+    [4, 5, 6],
+  );
+}
+
+{
   const scene = new THREE.Scene();
-  const killZone = KillZone.Sphere(null, {}, 1, 16, 8);
+  const killZone = KillZone.Sphere({}, 1, 16, 8);
   scene.add(killZone);
 
   const system = new ParticleSystem({
@@ -49,7 +76,7 @@ assert.equal(typeof SpatialEffectHelper, 'function');
   const root = new THREE.Group();
   root.position.set(0, 3, 0);
   scene.add(root);
-  scene.add(KillZone.Sphere(null, { position: new THREE.Vector3(0, 3, 0) }, 1, 16, 8));
+  scene.add(KillZone.Sphere({ position: new THREE.Vector3(0, 3, 0) }, 1, 16, 8));
 
   const system = new ParticleSystem({
     emitters: [],
@@ -104,7 +131,7 @@ assert.equal(typeof SpatialEffectHelper, 'function');
 
 {
   const scene = new THREE.Scene();
-  scene.add(ParticleForceField.Sphere(null, {
+  scene.add(ParticleForceField.Sphere({
     direction: new THREE.Vector3(2, 0, 0),
   }, 2, 16, 8));
 
@@ -136,7 +163,7 @@ assert.equal(typeof SpatialEffectHelper, 'function');
     mass: 1,
     position: new THREE.Vector3(3, 0, 0),
   });
-  const invertedField = ParticleForceField.Sphere(null, {
+  const invertedField = ParticleForceField.Sphere({
     inverted: true,
     gravity: 2,
   }, 1, 16, 8);
