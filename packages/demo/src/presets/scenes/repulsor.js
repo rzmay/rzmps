@@ -18,7 +18,7 @@ export default function createRepulsorAttractor(scene) {
    *
    * Negative gravity pushes particles away from the field center.
    */
-  const repulsor = ParticleForceField.Sphere(null, {
+  const repulsor = ParticleForceField.Sphere({
     gravity: -8,
   }, 4);
 
@@ -40,7 +40,7 @@ export default function createRepulsorAttractor(scene) {
    *
    * Positive gravity pulls particles into the field center.
    */
-  const attractor = ParticleForceField.Sphere(null, {
+  const attractor = ParticleForceField.Sphere({
     gravity: 8,
   }, 4);
 

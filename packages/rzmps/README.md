@@ -675,7 +675,7 @@ Spatial effects come in two flavors:
   queryable scene data and a module owns the particle behavior.
 
 ```ts
-const zone = KillZone.Sphere(null, { tags: "killable" }, 2, 32, 16);
+const zone = KillZone.Sphere({ tags: "killable" }, 2, 32, 16);
 scene.add(zone);
 ```
 
@@ -737,10 +737,10 @@ for a module extension example.
 
 ```ts
 new KillZone(options?: Partial<KillZoneOptions>)
-KillZone.Box(null, options, ...boxGeometryArgs)
-KillZone.Sphere(null, options, ...sphereGeometryArgs)
-KillZone.Cone(null, options, ...coneGeometryArgs)
-KillZone.Torus(null, options, ...torusGeometryArgs)
+KillZone.Box(options, ...boxGeometryArgs)
+KillZone.Sphere(options, ...sphereGeometryArgs)
+KillZone.Cone(options, ...coneGeometryArgs)
+KillZone.Torus(options, ...torusGeometryArgs)
 ```
 
 Kills particles that pass its spatial test by calling `particle.kill()`.
@@ -1422,16 +1422,16 @@ interface ForceFieldOptions {
 Helpers:
 
 ```ts
-ParticleForceField.Box(null, options, ...boxGeometryArgs)
-ParticleForceField.Sphere(null, options, ...sphereGeometryArgs)
-ParticleForceField.Cone(null, options, ...coneGeometryArgs)
-ParticleForceField.Torus(null, options, ...torusGeometryArgs)
+ParticleForceField.Box(options, ...boxGeometryArgs)
+ParticleForceField.Sphere(options, ...sphereGeometryArgs)
+ParticleForceField.Cone(options, ...coneGeometryArgs)
+ParticleForceField.Torus(options, ...torusGeometryArgs)
 ```
 
 Example:
 
 ```ts
-const attractor = ParticleForceField.Sphere(null, {
+const attractor = ParticleForceField.Sphere({
   gravity: 10,
   drag: 0.2,
   scale: new THREE.Vector3(4, 4, 4),

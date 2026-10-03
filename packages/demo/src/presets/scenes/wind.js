@@ -19,7 +19,6 @@ export default function createWind(scene) {
    * A rectangular region applying a directional force.
    */
   const wind = ParticleForceField.Box(
-    null,
     {
       direction: new THREE.Vector3(36, 12, 0),
       drag: 0.6,

@@ -19,7 +19,7 @@ export default function createVortex(scene) {
    * Pulls particles toward its center while accelerating them
    * tangentially around the Y axis.
    */
-  const vortex = ParticleForceField.Sphere(null, {
+  const vortex = ParticleForceField.Sphere({
     rotationSpeed: 18,
     rotationAttraction: 10,
     drag: 1.2,

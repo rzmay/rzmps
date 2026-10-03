@@ -30,35 +30,132 @@ type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
 class ParticleForceField extends SpatialEffect {
   static Box(
-    _modify: SpatialEffectModifier | null,
+    modify: SpatialEffectModifier | null,
     options: Partial<ForceFieldOptions> | null,
     ...args: BoxGeometryArgs
+  ): ParticleForceField;
+  static Box(
+    options?: Partial<ForceFieldOptions>,
+    ...args: BoxGeometryArgs
+  ): ParticleForceField;
+  static Box(
+    ...args: BoxGeometryArgs
+  ): ParticleForceField;
+  static Box(
+    first?: unknown,
+    second?: unknown,
+    ...args: unknown[]
   ): ParticleForceField {
-    return new ParticleForceField({ ...(options ?? {}), geometry: new THREE.BoxGeometry(...args) });
+    const { options, geometryArgs } = ParticleForceField.resolveFactoryArgs<BoxGeometryArgs>(
+      first,
+      second,
+      args,
+    );
+    return new ParticleForceField({ ...options, geometry: new THREE.BoxGeometry(...geometryArgs) });
   }
 
   static Sphere(
-    _modify: SpatialEffectModifier | null,
+    modify: SpatialEffectModifier | null,
     options: Partial<ForceFieldOptions> | null,
     ...args: SphereGeometryArgs
+  ): ParticleForceField;
+  static Sphere(
+    options?: Partial<ForceFieldOptions>,
+    ...args: SphereGeometryArgs
+  ): ParticleForceField;
+  static Sphere(
+    ...args: SphereGeometryArgs
+  ): ParticleForceField;
+  static Sphere(
+    first?: unknown,
+    second?: unknown,
+    ...args: unknown[]
   ): ParticleForceField {
-    return new ParticleForceField({ ...(options ?? {}), geometry: new THREE.SphereGeometry(...args) });
+    const { options, geometryArgs } = ParticleForceField.resolveFactoryArgs<SphereGeometryArgs>(
+      first,
+      second,
+      args,
+    );
+    return new ParticleForceField({
+      ...options,
+      geometry: new THREE.SphereGeometry(...geometryArgs),
+    });
   }
 
   static Cone(
-    _modify: SpatialEffectModifier | null,
+    modify: SpatialEffectModifier | null,
     options: Partial<ForceFieldOptions> | null,
     ...args: ConeGeometryArgs
+  ): ParticleForceField;
+  static Cone(
+    options?: Partial<ForceFieldOptions>,
+    ...args: ConeGeometryArgs
+  ): ParticleForceField;
+  static Cone(
+    ...args: ConeGeometryArgs
+  ): ParticleForceField;
+  static Cone(
+    first?: unknown,
+    second?: unknown,
+    ...args: unknown[]
   ): ParticleForceField {
-    return new ParticleForceField({ ...(options ?? {}), geometry: new THREE.ConeGeometry(...args) });
+    const { options, geometryArgs } = ParticleForceField.resolveFactoryArgs<ConeGeometryArgs>(
+      first,
+      second,
+      args,
+    );
+    return new ParticleForceField({ ...options, geometry: new THREE.ConeGeometry(...geometryArgs) });
   }
 
   static Torus(
-    _modify: SpatialEffectModifier | null,
+    modify: SpatialEffectModifier | null,
     options: Partial<ForceFieldOptions> | null,
     ...args: TorusGeometryArgs
+  ): ParticleForceField;
+  static Torus(
+    options?: Partial<ForceFieldOptions>,
+    ...args: TorusGeometryArgs
+  ): ParticleForceField;
+  static Torus(
+    ...args: TorusGeometryArgs
+  ): ParticleForceField;
+  static Torus(
+    first?: unknown,
+    second?: unknown,
+    ...args: unknown[]
   ): ParticleForceField {
-    return new ParticleForceField({ ...(options ?? {}), geometry: new THREE.TorusGeometry(...args) });
+    const { options, geometryArgs } = ParticleForceField.resolveFactoryArgs<TorusGeometryArgs>(
+      first,
+      second,
+      args,
+    );
+    return new ParticleForceField({ ...options, geometry: new THREE.TorusGeometry(...geometryArgs) });
+  }
+
+  private static resolveFactoryArgs<T extends unknown[]>(
+    first: unknown,
+    second: unknown,
+    rest: unknown[],
+  ): { options: Partial<ForceFieldOptions>; geometryArgs: T } {
+    if (typeof first === 'function' || first === null) {
+      return {
+        options: (second && typeof second === 'object' && !Array.isArray(second)
+          ? second as Partial<ForceFieldOptions>
+          : {}) ?? {},
+        geometryArgs: rest as T,
+      };
+    }
+
+    return {
+      options: first && typeof first === 'object' && !Array.isArray(first)
+        ? first as Partial<ForceFieldOptions>
+        : {},
+      geometryArgs: (
+        first && typeof first === 'object' && !Array.isArray(first)
+          ? (second === undefined ? rest : [second, ...rest])
+          : [first, second, ...rest].filter((value) => value !== undefined)
+      ) as T,
+    };
   }
 
   direction?: DynamicValue<THREE.Vector3>;
