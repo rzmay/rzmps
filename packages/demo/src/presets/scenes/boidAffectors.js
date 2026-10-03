@@ -144,19 +144,6 @@ export default async function createBoidAffectors(scene) {
   const suzanneHelper = new Boids.BoidAffectorHelper(suzanne, 0xc68cff);
   const containerHelper = new Boids.BoidAffectorHelper(container, 0x66d9ff);
 
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(56, 50),
-    new THREE.MeshStandardMaterial({
-      color: 0x20252a,
-      roughness: 0.88,
-      metalness: 0,
-    }),
-  );
-
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.05;
-  ground.receiveShadow = true;
-
   const ambient = new THREE.AmbientLight(0xffffff, 0.55);
   const light = new THREE.DirectionalLight(0xffffff, 3);
   light.position.set(10, 16, 8);
@@ -177,7 +164,6 @@ export default async function createBoidAffectors(scene) {
     gateHelper,
     suzanneHelper,
     containerHelper,
-    ground,
     ambient,
     light,
   );
@@ -291,8 +277,6 @@ export default async function createBoidAffectors(scene) {
       suzanneMesh.material.dispose();
       suzanneGeometry.dispose();
       containerMesh.material.dispose();
-      ground.geometry.dispose();
-      ground.material.dispose();
     },
   };
 }

@@ -59,15 +59,15 @@ export { default as SpeedOverLifetime } from './modules/SpeedOverLifetime';
 export { default as MassBySize } from './modules/MassBySize';
 export { default as MassByDepth } from './modules/MassByDepth';
 export { default as MassOverLifetime } from './modules/MassOverLifetime';
-export { default as Boids } from './modules/Boids/Boids';
+export { default as Boids } from './modules/Boids';
 export type {
-  BoidParticleAffectorMap,
   BoidParticleAffectorOptions,
+  BoidParticleAffectorTest,
   BoidsOptions,
-} from './modules/Boids/Boids';
-export { default as BoidAffector } from './modules/Boids/BoidAffector';
-export type { BoidAffectorOptions } from './modules/Boids/BoidAffector';
-export { default as BoidAffectorHelper } from './modules/Boids/BoidAffectorHelper';
+} from './modules/Boids';
+export { default as BoidAffector } from './SpatialEffects/BoidAffector';
+export type { BoidAffectorOptions } from './SpatialEffects/BoidAffector';
+export { default as BoidAffectorHelper } from './SpatialEffects/BoidAffectorHelper';
 export { default as SpatialEffect } from './SpatialEffect';
 export type {
   SpatialEffectFeatherUpdate,

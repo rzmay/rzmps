@@ -31,13 +31,14 @@ export default async function createBoids() {
     affectorWeight: 2.2,
     affectorDistance: 1.8,
     steering: 3.75,
-    particleAffectors: {
-      hazard: {
+    particleAffectors: [
+      {
+        sourceTags: 'hazard',
         tags: 'boid',
         weight: Boids.BoidAffector.Weight.Obstacle,
         distance: 1.8,
       },
-    },
+    ],
   });
 
   const hazardBoids = new Boids({
@@ -48,13 +49,14 @@ export default async function createBoids() {
     affectorWeight: 5.5,
     affectorDistance: 3.2,
     steering: 3.35,
-    particleAffectors: {
-      boid: {
+    particleAffectors: [
+      {
+        sourceTags: 'boid',
         tags: 'hazard',
         weight: Boids.BoidAffector.Weight.Target,
         distance: 2.6,
       },
-    },
+    ],
   });
 
   const system = new ParticleSystem({

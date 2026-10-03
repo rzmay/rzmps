@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { MeshBVH, type MeshBVHOptions } from 'three-mesh-bvh';
-import tagsIntersect from '../../helpers/tagsIntersect';
-import type { Tag } from '../../types/Tag';
-import type Particle from '../../Particle';
-import type ParticleSystem from '../../ParticleSystem';
+import tagsIntersect from '../helpers/tagsIntersect';
+import type { Tag } from '../types/Tag';
+import type Particle from '../Particle';
+import type ParticleSystem from '../ParticleSystem';
 import SpatialEffect, {
   type SpatialEffectModifier,
   type SpatialEffectOptions,
   type SpatialEffectTest,
-} from '../../SpatialEffect';
+} from '../SpatialEffect';
 
 export interface BoidAffectorOptions extends SpatialEffectOptions {
   weight: number;
@@ -34,6 +34,9 @@ class BoidAffector extends SpatialEffect {
     ...args: ConstructorParameters<typeof THREE.BoxGeometry>
   ): BoidAffector;
   static Box(
+    ...args: ConstructorParameters<typeof THREE.BoxGeometry>
+  ): BoidAffector;
+  static Box(
     first?: unknown,
     second?: unknown,
     ...args: unknown[]
@@ -51,6 +54,9 @@ class BoidAffector extends SpatialEffect {
   ): BoidAffector;
   static Sphere(
     options?: Partial<BoidAffectorOptions>,
+    ...args: ConstructorParameters<typeof THREE.SphereGeometry>
+  ): BoidAffector;
+  static Sphere(
     ...args: ConstructorParameters<typeof THREE.SphereGeometry>
   ): BoidAffector;
   static Sphere(
@@ -77,6 +83,9 @@ class BoidAffector extends SpatialEffect {
     ...args: ConstructorParameters<typeof THREE.ConeGeometry>
   ): BoidAffector;
   static Cone(
+    ...args: ConstructorParameters<typeof THREE.ConeGeometry>
+  ): BoidAffector;
+  static Cone(
     first?: unknown,
     second?: unknown,
     ...args: unknown[]
@@ -97,6 +106,9 @@ class BoidAffector extends SpatialEffect {
   ): BoidAffector;
   static Torus(
     options?: Partial<BoidAffectorOptions>,
+    ...args: ConstructorParameters<typeof THREE.TorusGeometry>
+  ): BoidAffector;
+  static Torus(
     ...args: ConstructorParameters<typeof THREE.TorusGeometry>
   ): BoidAffector;
   static Torus(
@@ -131,7 +143,11 @@ class BoidAffector extends SpatialEffect {
       options: first && typeof first === 'object' && !Array.isArray(first)
         ? first as Partial<BoidAffectorOptions>
         : {},
-      geometryArgs: (second === undefined ? rest : [second, ...rest]) as T,
+      geometryArgs: (
+        first && typeof first === 'object' && !Array.isArray(first)
+          ? (second === undefined ? rest : [second, ...rest])
+          : [first, second, ...rest].filter((value) => value !== undefined)
+      ) as T,
     };
   }
 
@@ -182,8 +198,12 @@ class BoidAffector extends SpatialEffect {
     return true;
   }
 
-  samplePoint(position: THREE.Vector3, target = new THREE.Vector3()): THREE.Vector3 {
-    this.updateWorldMatrix(true, false);
+  samplePoint(
+    position: THREE.Vector3,
+    target = new THREE.Vector3(),
+    updateMatrix = true,
+  ): THREE.Vector3 {
+    if (updateMatrix) this.updateWorldMatrix(true, false);
 
     const bvh = this.bvh;
 
@@ -206,8 +226,12 @@ class BoidAffector extends SpatialEffect {
     return target.copy(this.worldSamplePoint);
   }
 
-  getInfluenceDirection(position: THREE.Vector3, target = new THREE.Vector3()): THREE.Vector3 {
-    this.samplePoint(position, this.influenceSamplePoint);
+  getInfluenceDirection(
+    position: THREE.Vector3,
+    target = new THREE.Vector3(),
+    updateMatrix = true,
+  ): THREE.Vector3 {
+    this.samplePoint(position, this.influenceSamplePoint, updateMatrix);
     target.copy(position).sub(this.influenceSamplePoint);
 
     if (!this.geometry || target.lengthSq() === 0) return target;
@@ -215,7 +239,7 @@ class BoidAffector extends SpatialEffect {
     this.influenceLocalPosition.copy(position);
     this.worldToLocal(this.influenceLocalPosition);
 
-    const contains = this.containsWorldPosition(position);
+    const contains = this.containsWorldPosition(position, updateMatrix);
     const inside = this.inverted ? !contains : contains;
     if (inside !== this.inverted) target.multiplyScalar(-1);
 

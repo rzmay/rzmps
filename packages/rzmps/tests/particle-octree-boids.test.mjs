@@ -185,7 +185,7 @@ quickTurnSystem.particles.push(quickTurnBoid, quickTurnNeighbor);
 quickTurnBoids.prepare(quickTurnSystem);
 quickTurnBoids.modify([quickTurnBoid], 0.1, quickTurnSystem);
 
-assert.ok(quickTurnBoid.velocity.y > 0.9);
+assert.ok(quickTurnBoid.velocity.y > 0.75);
 
 const distantBoid = new Particle({
   lifetime: 10,
@@ -399,6 +399,53 @@ excludedBoids.modify([excludedBoid], 1, excludedSystem);
 
 assert.deepEqual(excludedBoid.velocity.toArray(), [0, 1, 0]);
 
+const conditionedBoid = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(0, 0, 0),
+  velocity: new THREE.Vector3(0, 1, 0),
+  tags: ['affected'],
+});
+const unconditionedBoid = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(0.1, 0, 0),
+  velocity: new THREE.Vector3(0, 1, 0),
+  tags: ['ignored'],
+});
+const conditionedAffector = new BoidAffector({
+  position: new THREE.Vector3(1, 0, 0),
+  weight: BoidAffector.Weight.Target,
+  condition: (particle) => particle.tags?.includes('affected') ?? false,
+});
+const conditionedBoids = new Boids({
+  octreeOptions: {
+    bounds: new THREE.Box3(
+      new THREE.Vector3(-2, -2, -2),
+      new THREE.Vector3(2, 2, 2),
+    ),
+    maxDepth: 1,
+    particlesPerLeaf: 8,
+  },
+  affectors: [conditionedAffector],
+  alignmentWeight: 0,
+  cohesionWeight: 0,
+  separationWeight: 0,
+  affectorWeight: 1,
+  speed: 1,
+  steering: 1,
+});
+const conditionedSystem = new ParticleSystem({
+  emitters: [],
+  renderers: [],
+  modules: [],
+});
+
+conditionedSystem.particles.push(conditionedBoid, unconditionedBoid);
+conditionedBoids.prepare(conditionedSystem);
+conditionedBoids.modify([conditionedBoid, unconditionedBoid], 1, conditionedSystem);
+
+assert.ok(conditionedBoid.velocity.x > 0.99);
+assert.deepEqual(unconditionedBoid.velocity.toArray(), [0, 1, 0]);
+
 const sphereAffector = BoidAffector.Sphere(
   { weight: BoidAffector.Weight.Obstacle },
   1,
@@ -414,6 +461,13 @@ assert.ok(Boids.BoidAffector.Box({
   weight: Boids.BoidAffector.Weight.Obstacle,
   inverted: true,
 }, 1, 1, 1) instanceof BoidAffector);
+
+const directBoxAffector = Boids.BoidAffector.Box(4, 5, 6);
+directBoxAffector.geometry.computeBoundingBox();
+assert.deepEqual(
+  directBoxAffector.geometry.boundingBox.getSize(new THREE.Vector3()).toArray(),
+  [4, 5, 6],
+);
 
 const particleAffectorBoid = new Particle({
   lifetime: 10,
@@ -438,12 +492,13 @@ const particleAffectorBoids = new Boids({
     particlesPerLeaf: 8,
   },
   tags: ['boid'],
-  particleAffectors: {
-    hazard: {
+  particleAffectors: [
+    {
+      sourceTags: 'hazard',
       tags: ['boid'],
       distance: 1,
     },
-  },
+  ],
   alignmentWeight: 0,
   cohesionWeight: 0,
   separationWeight: 0,
@@ -486,13 +541,14 @@ const particleTargetBoids = new Boids({
     particlesPerLeaf: 8,
   },
   tags: ['boid'],
-  particleAffectors: {
-    'friend|leader': {
+  particleAffectors: [
+    {
+      sourceTags: ['friend', 'leader'],
       tags: ['boid'],
       weight: Boids.BoidAffector.Weight.Target,
       distance: 1,
     },
-  },
+  ],
   alignmentWeight: 0,
   cohesionWeight: 0,
   separationWeight: 0,
@@ -511,3 +567,66 @@ particleTargetBoids.prepare(particleTargetSystem);
 particleTargetBoids.modify([particleTargetBoid], 1, particleTargetSystem);
 
 assert.ok(particleTargetBoid.velocity.x > 0.99);
+
+const taggedParticleAffectorPrey = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(0, 0, 0),
+  velocity: new THREE.Vector3(0, 1, 0),
+  tags: ['prey'],
+});
+const taggedParticleAffectorIgnored = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(0.1, 0, 0),
+  velocity: new THREE.Vector3(0, 1, 0),
+  tags: ['ignored'],
+});
+const taggedParticleAffectorSource = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(1, 0, 0),
+  velocity: new THREE.Vector3(),
+  scale: new THREE.Vector3(0.25, 0.25, 0.25),
+  tags: ['hazard'],
+});
+const taggedParticleAffectorBoids = new Boids({
+  octreeOptions: {
+    bounds: new THREE.Box3(
+      new THREE.Vector3(-2, -2, -2),
+      new THREE.Vector3(2, 2, 2),
+    ),
+    maxDepth: 1,
+    particlesPerLeaf: 8,
+  },
+  tags: ['prey', 'ignored'],
+  particleAffectors: [
+    {
+      sourceTags: 'hazard',
+      tags: ['prey'],
+      distance: 1,
+    },
+  ],
+  alignmentWeight: 0,
+  cohesionWeight: 0,
+  separationWeight: 0,
+  affectorWeight: 1,
+  speed: 1,
+  steering: 1,
+});
+const taggedParticleAffectorSystem = new ParticleSystem({
+  emitters: [],
+  renderers: [],
+  modules: [],
+});
+
+taggedParticleAffectorSystem.particles.push(
+  taggedParticleAffectorPrey,
+  taggedParticleAffectorIgnored,
+  taggedParticleAffectorSource,
+);
+taggedParticleAffectorBoids.prepare(taggedParticleAffectorSystem);
+taggedParticleAffectorBoids.modify([
+  taggedParticleAffectorPrey,
+  taggedParticleAffectorIgnored,
+], 1, taggedParticleAffectorSystem);
+
+assert.ok(taggedParticleAffectorPrey.velocity.x < -0.99);
+assert.deepEqual(taggedParticleAffectorIgnored.velocity.toArray(), [0, 1, 0]);

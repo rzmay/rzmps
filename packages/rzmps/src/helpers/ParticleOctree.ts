@@ -10,6 +10,7 @@ export interface OctreeConfig {
   maxDepth: number;
   particlesPerLeaf: number;
   timeQuality: number;
+  quantizeBounds: number;
 }
 
 export interface OctreeNode<TAggregate = unknown> {
@@ -30,7 +31,7 @@ export interface OctreeNode<TAggregate = unknown> {
 }
 
 export interface OctreeAggregator<TAggregate> {
-  "new"(particle?: Particle, particleIndex?: number): TAggregate;
+  "new"(particle?: Particle, particleIndex?: number, node?: OctreeNode<TAggregate>): TAggregate;
   combine(a: TAggregate, b: TAggregate): TAggregate;
 }
 
@@ -40,6 +41,7 @@ class ParticleOctree<TAggregate> {
   timeQuality: number;
   maxDepth: number;
   particlesPerLeaf: number;
+  quantizeBounds: number;
 
   private particles: Particle[] = [];
   private nodeId = 0;
@@ -48,6 +50,9 @@ class ParticleOctree<TAggregate> {
   private size = 1;
   private updateAccumulator = 0;
   private hasBuiltTree = false;
+  private quantizedBounds = new THREE.Box3();
+  private boundsCenter = new THREE.Vector3();
+  private boundsSize = new THREE.Vector3();
 
   constructor(
     config: Partial<OctreeConfig>,
@@ -56,6 +61,7 @@ class ParticleOctree<TAggregate> {
     this.maxDepth = Math.max(0, Math.floor(config.maxDepth ?? 8));
     this.particlesPerLeaf = Math.max(1, Math.floor(config.particlesPerLeaf ?? 4));
     this.timeQuality = THREE.MathUtils.clamp(config.timeQuality ?? 1, Number.EPSILON, 1);
+    this.quantizeBounds = Math.max(0, config.quantizeBounds ?? 0);
     this.setBounds(config.bounds);
     this.root = this.buildNode(0, this.min, this.size, null, []);
     this.assignNeighbors();
@@ -68,7 +74,7 @@ class ParticleOctree<TAggregate> {
     );
     const boundsSize = new THREE.Vector3();
 
-    this.bounds.copy(nextBounds);
+    this.bounds.copy(this.getResolvedBounds(nextBounds));
     this.bounds.getSize(boundsSize);
     this.min.copy(this.bounds.min);
     this.size = Math.max(boundsSize.x, boundsSize.y, boundsSize.z, Number.EPSILON);
@@ -141,7 +147,7 @@ class ParticleOctree<TAggregate> {
       max: nodeMax,
       center: nodeMin.clone().addScalar(size * 0.5),
       size,
-      aggregate: this.aggregator.new(),
+      aggregate: undefined as TAggregate,
       parent,
       children: [],
       neighbors: [],
@@ -150,6 +156,7 @@ class ParticleOctree<TAggregate> {
       isEmpty: particleIndices.length === 0,
     };
 
+    node.aggregate = this.aggregator.new(undefined, undefined, node);
     this.nodes.push(node);
 
     if (
@@ -190,7 +197,7 @@ class ParticleOctree<TAggregate> {
       node.particleIndices.forEach((particleIndex) => {
         node.aggregate = this.aggregator.combine(
           node.aggregate,
-          this.aggregator.new(this.particles[particleIndex], particleIndex),
+          this.aggregator.new(this.particles[particleIndex], particleIndex, node),
         );
       });
     } else {
@@ -236,6 +243,34 @@ class ParticleOctree<TAggregate> {
     return position.x >= min.x && position.x <= min.x + size
       && position.y >= min.y && position.y <= min.y + size
       && position.z >= min.z && position.z <= min.z + size;
+  }
+
+  private getResolvedBounds(bounds: THREE.Box3): THREE.Box3 {
+    if (this.quantizeBounds <= 1) return bounds;
+
+    bounds.getCenter(this.boundsCenter);
+    bounds.getSize(this.boundsSize);
+
+    const rawSize = Math.max(
+      this.boundsSize.x,
+      this.boundsSize.y,
+      this.boundsSize.z,
+      Number.EPSILON,
+    );
+    const base = this.quantizeBounds;
+    const size = base ** Math.ceil(Math.log(rawSize) / Math.log(base));
+    const halfSize = size * 0.5;
+
+    this.boundsCenter.set(
+      Math.round(this.boundsCenter.x / halfSize) * halfSize,
+      Math.round(this.boundsCenter.y / halfSize) * halfSize,
+      Math.round(this.boundsCenter.z / halfSize) * halfSize,
+    );
+
+    return this.quantizedBounds.setFromCenterAndSize(
+      this.boundsCenter,
+      this.boundsSize.set(size, size, size),
+    );
   }
 }
 

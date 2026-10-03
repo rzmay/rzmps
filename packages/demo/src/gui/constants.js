@@ -99,7 +99,7 @@ export const DEFAULT_MODULE_FACTORIES = {
         affectorWeight: 1,
         affectorDistance: 0,
         steering: 1,
-        particleAffectors: {},
+        particleAffectors: [],
     }),
     'Noise Module': () => new NoiseModule('noise'),
     Collision: () => new Collision(),
