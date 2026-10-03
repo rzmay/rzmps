@@ -42,7 +42,7 @@ type BoidInfluence = {
 };
 
 export type BoidParticleAffectorOptions = Partial<
-  Omit<BoidAffectorOptions, 'position' | 'geometry' | 'bvhOptions' | 'test'>
+  Omit<BoidAffectorOptions, 'position' | 'geometry' | 'bvhOptions' | 'test' | 'range'>
 > & {
   sourceTags: Multiple<Tag>;
 };
@@ -487,7 +487,11 @@ class Boids extends Module {
       if (!(affector instanceof BoidAffector)) return sum;
       if (!particleSystem || !affector.test(particle, particleSystem)) return sum;
 
-      affector.getInfluenceDirection(this.affectorSamplePosition, this.affectorDirection, false);
+      affector.getInfluenceDirection(
+        this.affectorSamplePosition,
+        this.affectorDirection,
+        false,
+      );
 
       const distance = this.affectorDirection.length();
       if (distance <= Number.EPSILON) return sum;

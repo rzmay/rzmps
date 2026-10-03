@@ -7,12 +7,13 @@ import type ParticleSystem from '../ParticleSystem';
 import SpatialEffect, {
   type SpatialEffectModifier,
   type SpatialEffectOptions,
-  type SpatialEffectTest,
 } from '../SpatialEffect';
 
-export interface BoidAffectorOptions extends SpatialEffectOptions {
+// No custom test allowed here
+export interface BoidAffectorOptions extends Omit<SpatialEffectOptions, 'test'> {
   weight: number;
   distance: number;
+  range: number;
   bvhOptions: MeshBVHOptions;
 }
 
@@ -22,6 +23,9 @@ enum Weight {
 }
 
 class BoidAffector extends SpatialEffect {
+  // Decides default range for boid affectors
+  static InfluenceThreshold = 1e-6;
+
   static readonly Weight = Weight;
 
   static Box(
@@ -153,15 +157,16 @@ class BoidAffector extends SpatialEffect {
 
   weight: number;
   distance: number;
+  range: number;
   bvhOptions?: MeshBVHOptions;
 
   private _affectorBVH?: MeshBVH;
   private _affectorBVHGeometry?: THREE.BufferGeometry;
-  private _affectorTest?: SpatialEffectTest;
   private localSamplePoint = new THREE.Vector3();
   private worldSamplePoint = new THREE.Vector3();
   private influenceSamplePoint = new THREE.Vector3();
   private influenceLocalPosition = new THREE.Vector3();
+  private worldPosition = new THREE.Vector3();
 
   get bvh(): MeshBVH | undefined {
     if (!this.geometry) return undefined;
@@ -182,8 +187,8 @@ class BoidAffector extends SpatialEffect {
 
     this.weight = options.weight ?? Weight.Target;
     this.distance = options.distance ?? 1;
+    this.range = options.range ?? this.getDefaultRange();
     this.bvhOptions = options.bvhOptions;
-    this._affectorTest = options.test;
   }
 
   matchesTags(tags?: Tag[]): boolean {
@@ -193,7 +198,7 @@ class BoidAffector extends SpatialEffect {
   override test(particle: Particle, particleSystem: ParticleSystem): boolean {
     if (!this.matchesTags(particle.tags)) return false;
     if (!this.condition(particle)) return false;
-    if (this._affectorTest) return this._affectorTest(particle, particleSystem, this);
+    if (!this.isWithinRange(particle.position)) return false;
 
     return true;
   }
@@ -244,6 +249,34 @@ class BoidAffector extends SpatialEffect {
     if (inside !== this.inverted) target.multiplyScalar(-1);
 
     return target;
+  }
+
+  private isWithinRange(position: THREE.Vector3): boolean {
+    this.worldPosition.setFromMatrixPosition(this.matrixWorld);
+
+    return position.distanceToSquared(this.worldPosition)
+      <= this.range * this.range;
+  }
+
+  private getDefaultRange(): number {
+    // Default range can be approximated from weight and bounding box
+    const influenceRange = Math.sqrt(
+      Math.abs(this.weight) / BoidAffector.InfluenceThreshold,
+    );
+
+    if (!this.geometry) return influenceRange;
+
+    this.geometry.computeBoundingBox();
+
+    const box = this.geometry.boundingBox;
+    if (!box) return influenceRange;
+
+    const geometryRadius = Math.max(
+      box.min.length(),
+      box.max.length(),
+    );
+
+    return geometryRadius + influenceRange;
   }
 }
 

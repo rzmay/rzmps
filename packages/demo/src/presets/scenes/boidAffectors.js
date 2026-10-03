@@ -226,6 +226,7 @@ export default async function createBoidAffectors(scene) {
       targetFolder.add(target.position, 'z', -24, 24, 0.1).name('Z').onChange(updateMeshes);
       targetFolder.add(target, 'weight', -10, 10, 0.01).name('Weight').onChange(updateMeshes);
       targetFolder.add(target, 'distance', 0, 8, 0.01).name('Distance').onChange(updateMeshes);
+      targetFolder.add(target, 'range', 0, 40, 0.1).name('Range').onChange(updateMeshes);
       targetFolder.add(targetMesh, 'visible').name('Show Mesh');
 
       const obstacleFolder = folder.addFolder('Obstacle');
@@ -234,6 +235,7 @@ export default async function createBoidAffectors(scene) {
       obstacleFolder.add(obstacle.position, 'z', -24, 24, 0.1).name('Z').onChange(updateMeshes);
       obstacleFolder.add(obstacle, 'weight', -10, 10, 0.01).name('Weight').onChange(updateMeshes);
       obstacleFolder.add(obstacle, 'distance', 0, 8, 0.01).name('Distance').onChange(updateMeshes);
+      obstacleFolder.add(obstacle, 'range', 0, 40, 0.1).name('Range').onChange(updateMeshes);
       obstacleFolder.add(obstacleMesh, 'visible').name('Show Mesh');
 
       const wallFolder = folder.addFolder('Wall');
@@ -243,6 +245,7 @@ export default async function createBoidAffectors(scene) {
       wallFolder.add(gate.rotation, 'y', -Math.PI, Math.PI, 0.01).name('Yaw').onChange(updateMeshes);
       wallFolder.add(gate, 'weight', -10, 10, 0.01).name('Weight').onChange(updateMeshes);
       wallFolder.add(gate, 'distance', 0, 8, 0.01).name('Distance').onChange(updateMeshes);
+      wallFolder.add(gate, 'range', 0, 40, 0.1).name('Range').onChange(updateMeshes);
       wallFolder.add(gateMesh, 'visible').name('Show Mesh');
 
       const suzanneFolder = folder.addFolder('Suzanne');
@@ -251,6 +254,7 @@ export default async function createBoidAffectors(scene) {
       suzanneFolder.add(suzanne.position, 'z', -24, 24, 0.1).name('Z').onChange(updateMeshes);
       suzanneFolder.add(suzanne, 'weight', -10, 10, 0.01).name('Weight').onChange(updateMeshes);
       suzanneFolder.add(suzanne, 'distance', 0, 8, 0.01).name('Distance').onChange(updateMeshes);
+      suzanneFolder.add(suzanne, 'range', 0, 40, 0.1).name('Range').onChange(updateMeshes);
       suzanneFolder.add(suzanneMesh, 'visible').name('Show Mesh');
 
       const containerFolder = folder.addFolder('Container');
@@ -259,6 +263,7 @@ export default async function createBoidAffectors(scene) {
       containerFolder.add(container.position, 'z', -24, 24, 0.1).name('Z').onChange(updateMeshes);
       containerFolder.add(container, 'weight', -10, 10, 0.01).name('Weight').onChange(updateMeshes);
       containerFolder.add(container, 'distance', 0, 8, 0.01).name('Distance').onChange(updateMeshes);
+      containerFolder.add(container, 'range', 0, 40, 0.1).name('Range').onChange(updateMeshes);
       containerFolder.add(containerMesh, 'visible').name('Show Mesh');
     },
 
