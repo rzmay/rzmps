@@ -23,6 +23,7 @@ export interface ModuleOptions {
   priority: number | Priority;
 
   tags: StrictMultiple<Tag>;
+  condition: (particle: Particle) => boolean;
   useUpdateLOD: boolean;
   updateLOD: Partial<LODSettings>;
   spatialEffects: SpatialEffect[];
@@ -38,6 +39,7 @@ export default class Module {
   public dependents: Module[] = [];
 
   tags?: Tag[];
+  condition: (particle: Particle) => boolean;
   useUpdateLOD: boolean;
   updateLOD?: Partial<LODSettings>;
   private _lodHelper: LODHelper;
@@ -53,6 +55,7 @@ export default class Module {
     options: Partial<ModuleOptions> = {}
   ) {
     this.tags = acceptMultiple(options.tags);
+    this.condition = options.condition ?? (() => true);
     this.updateLOD = options.updateLOD;
     this.useUpdateLOD = options.useUpdateLOD ?? Boolean(this.updateLOD);
     this._lodHelper = new LODHelper(this.updateLOD);
@@ -66,7 +69,10 @@ export default class Module {
     const distanceSq = particleSystem?.cameraDistanceSq ?? Number.MAX_SAFE_INTEGER;
     if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(distanceSq))) return;
 
-    particles.filter((p) => !this.tags || tagsIntersect(this.tags, p.tags ?? []))
+    particles.filter((p) => (
+      (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
+      && this.condition(p)
+    ))
       .forEach((p) => this._modify(p, deltaTime, particleSystem));
   }
 

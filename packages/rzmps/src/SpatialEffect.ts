@@ -37,6 +37,7 @@ export interface SpatialEffectOptions {
   geometry: THREE.BufferGeometry;
   inverted: boolean;
   tags: StrictMultiple<Tag>;
+  condition: (particle: Particle) => boolean;
   test: SpatialEffectTest;
   priority: number | Priority;
   feather: number;
@@ -132,6 +133,7 @@ class SpatialEffect extends THREE.Object3D {
   }
 
   tags?: Tag[];
+  condition: (particle: Particle) => boolean;
   inverted: boolean;
   priority = Priority.Transient;
   feather: number;
@@ -181,6 +183,7 @@ class SpatialEffect extends THREE.Object3D {
 
     this.inverted = resolvedOptions.inverted ?? false;
     this.tags = acceptMultiple(resolvedOptions.tags);
+    this.condition = resolvedOptions.condition ?? (() => true);
     this.priority = resolvedOptions.priority ?? this.priority;
     this.feather = Math.max(resolvedOptions.feather ?? 0, 0);
     this._test = resolvedOptions.test;
@@ -263,6 +266,7 @@ class SpatialEffect extends THREE.Object3D {
   modify(particles: Particle[], deltaTime: number, particleSystem: ParticleSystem): void {
     particles
       .filter((particle) => this.test(particle, particleSystem))
+      .filter((particle) => this.condition(particle))
       .forEach((particle) => this._modifyParticle(particle, deltaTime, particleSystem));
   }
 
