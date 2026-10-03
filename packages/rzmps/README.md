@@ -660,6 +660,7 @@ interface SpatialEffectOptions {
   ) => boolean;
   priority: number | Module.Priority;
   feather: number;
+  featherEasing: (feather: number) => number;
   automaticFeather: boolean;
 }
 ```
@@ -712,9 +713,30 @@ scene.add(new SpatialEffect((particle) => {
 }));
 ```
 
-When `feather` is greater than `0`, particles in the softened edge are blended
-between their pre-effect and post-effect values using `Particle.lerp(...)`.
-Set `automaticFeather: false` when you want the strength value directly
+When `feather` is greater than `0`, the effect extends beyond its geometry by
+that many world units and returns a normalized boundary strength. A particle on
+the original surface receives strength `1`, and the strength fades to `0` at
+the outer feather edge. For automatic feathering, particles in this softened
+edge are blended between their pre-effect and post-effect values using
+`Particle.lerp(...)`.
+
+Use `featherEasing` to reshape that normalized `0..1` feather strength. It can
+be any function receiving the linear feather value and returning a new strength.
+For example, with [eaz](https://www.npmjs.com/package/eaz):
+
+```ts
+import { Easing } from "eaz";
+
+new SpatialEffect((particle) => {
+  particle.scale.multiplyScalar(2);
+}, {
+  geometry: new THREE.SphereGeometry(2),
+  feather: 1,
+  featherEasing: Easing.cubic.inOut,
+});
+```
+
+Set `automaticFeather: false` when you want the eased strength value directly
 instead of automatic clone/lerp blending:
 
 ```ts
@@ -1520,13 +1542,29 @@ interface ForceFieldOptions {
   rotationAttraction: DynamicValue<number>;
   drag: DynamicValue<number>;
   multiplier: DynamicValue<number>;
+  radialFalloff: boolean;
   scale: THREE.Vector3;
   geometry: THREE.BufferGeometry;
   tags: StrictMultiple<Tag>;
   inverted: boolean;
   priority: number | Module.Priority;
+  feather: number;
+  featherEasing: (feather: number) => number;
 }
 ```
+
+Force fields apply at full strength throughout their spatial range by default.
+Set `radialFalloff: true` to multiply the force by a distance-from-origin
+falloff based on the field geometry's bounding radius. This preserves the older
+"strongest at the center, weakest near the edge" behavior, but it is intentionally
+opt-in because it is radial even for non-spherical geometry.
+
+`radialFalloff` is different from `feather`. `feather` controls how a spatial
+effect blends at its boundary, extending the effect region outward and easing
+from full strength to zero. `radialFalloff` changes force magnitude inside the
+field based on distance from the field origin. Use `feather`/`featherEasing` for
+soft boundaries, and `radialFalloff` only when you specifically want the force
+itself to weaken away from the center.
 
 Helpers:
 

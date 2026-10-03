@@ -25,6 +25,8 @@ export type SpatialEffectFeatherUpdate = (
 
 export type SpatialEffectModifier = SpatialEffectUpdate | SpatialEffectFeatherUpdate;
 
+export type SpatialEffectFeatherEasing = (feather: number) => number;
+
 export type SpatialEffectTest = (
   particle: Particle,
   particleSystem: ParticleSystem,
@@ -41,6 +43,7 @@ export interface SpatialEffectOptions {
   test: SpatialEffectTest;
   priority: number | Priority;
   feather: number;
+  featherEasing: SpatialEffectFeatherEasing;
   automaticFeather: boolean;
 }
 
@@ -137,6 +140,7 @@ class SpatialEffect extends THREE.Object3D {
   inverted: boolean;
   priority = Priority.Transient;
   feather: number;
+  featherEasing: SpatialEffectFeatherEasing;
 
   private readonly _modify: SpatialEffectUpdate | null = null;
   private readonly _modifyFeather?: SpatialEffectFeatherUpdate;
@@ -186,6 +190,7 @@ class SpatialEffect extends THREE.Object3D {
     this.condition = resolvedOptions.condition ?? (() => true);
     this.priority = resolvedOptions.priority ?? this.priority;
     this.feather = Math.max(resolvedOptions.feather ?? 0, 0);
+    this.featherEasing = resolvedOptions.featherEasing ?? ((feather) => feather);
     this._test = resolvedOptions.test;
     this.geometry = resolvedOptions.geometry;
   }
@@ -232,7 +237,7 @@ class SpatialEffect extends THREE.Object3D {
       if (this.inverted) return distance <= Number.EPSILON ? 0 : 1;
       if (this.feather <= 0) return distance <= Number.EPSILON ? 1 : 0;
 
-      return Math.min(Math.max(1 - distance / this.feather, 0), 1);
+      return this.easeFeather(1 - distance / this.feather);
     }
 
     this.localParticlePosition.copy(position);
@@ -260,7 +265,7 @@ class SpatialEffect extends THREE.Object3D {
     if (!hit) return 0;
 
     this.closestPointInfo = hit;
-    return Math.min(Math.max(1 - hit.distance / this.feather, 0), 1);
+    return this.easeFeather(1 - hit.distance / this.feather);
   }
 
   modify(particles: Particle[], deltaTime: number, particleSystem: ParticleSystem): void {
@@ -302,6 +307,14 @@ class SpatialEffect extends THREE.Object3D {
     particle
       .lerp(before, 1)
       .lerp(after, feather);
+  }
+
+  private easeFeather(feather: number): number {
+    const clamped = Math.min(Math.max(feather, 0), 1);
+    const eased = this.featherEasing(clamped);
+    return Number.isFinite(eased)
+      ? Math.min(Math.max(eased, 0), 1)
+      : clamped;
   }
 }
 

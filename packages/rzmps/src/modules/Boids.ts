@@ -12,9 +12,9 @@ import ParticleOctree, {
 import type { DynamicValue } from '../types/DynamicValue';
 import type { Multiple } from '../types/Multiple';
 import type { Tag } from '../types/Tag';
-import BoidAffector from '../SpatialEffects/BoidAffector';
-import BoidAffectorHelper from '../SpatialEffects/BoidAffectorHelper';
-import type { BoidAffectorOptions } from '../SpatialEffects/BoidAffector';
+import BoidAffector from '../spatial/BoidAffector';
+import BoidAffectorHelper from '../spatial/BoidAffectorHelper';
+import type { BoidAffectorOptions } from '../spatial/BoidAffector';
 
 type BoidParticleAffectorAggregate = {
   count: number;

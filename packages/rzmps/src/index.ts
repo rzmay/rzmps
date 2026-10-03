@@ -64,9 +64,9 @@ export type {
   BoidParticleAffectorOptions,
   BoidsOptions,
 } from './modules/Boids';
-export { default as BoidAffector } from './SpatialEffects/BoidAffector';
-export type { BoidAffectorOptions } from './SpatialEffects/BoidAffector';
-export { default as BoidAffectorHelper } from './SpatialEffects/BoidAffectorHelper';
+export { default as BoidAffector } from './spatial/BoidAffector';
+export type { BoidAffectorOptions } from './spatial/BoidAffector';
+export { default as BoidAffectorHelper } from './spatial/BoidAffectorHelper';
 export { default as SpatialEffect } from './SpatialEffect';
 export type {
   SpatialEffectFeatherUpdate,
@@ -75,15 +75,15 @@ export type {
   SpatialEffectTest,
   SpatialEffectUpdate,
 } from './SpatialEffect';
-export { default as SpatialEffectHelper } from './SpatialEffects/SpatialEffectHelper';
-export { default as KillZone } from './SpatialEffects/KillZone';
-export type { KillZoneOptions } from './SpatialEffects/KillZone';
+export { default as SpatialEffectHelper } from './spatial/SpatialEffectHelper';
+export { default as KillZone } from './spatial/KillZone';
+export type { KillZoneOptions } from './spatial/KillZone';
 export { default as Collision } from './modules/Collision';
 
 // Force Fields
-export { default as ParticleForceField } from './SpatialEffects/ParticleForceField';
-export type { ForceFieldOptions } from './SpatialEffects/ParticleForceField';
-export { default as ParticleForceFieldHelper } from './SpatialEffects/ParticleForceFieldHelper';
+export { default as ParticleForceField } from './spatial/ParticleForceField';
+export type { ForceFieldOptions } from './spatial/ParticleForceField';
+export { default as ParticleForceFieldHelper } from './spatial/ParticleForceFieldHelper';
 
 // Collision
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';

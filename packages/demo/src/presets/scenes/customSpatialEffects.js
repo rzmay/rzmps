@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Easing } from 'eaz';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import {
   Module,
@@ -52,6 +53,7 @@ export default async function createCustomSpatialEffects(scene) {
   }, {
     position: new THREE.Vector3(-5, 2.4, 0),
     feather: 1.35,
+    featherEasing: Easing.cubic.inOut,
     priority: Module.Priority.PreMovementTransient,
   }, 2.7, 32, 16);
   warmRegion.name = 'Warm Glow Size Region';
