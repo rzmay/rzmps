@@ -62,7 +62,6 @@ export { default as MassOverLifetime } from './modules/MassOverLifetime';
 export { default as Boids } from './modules/Boids';
 export type {
   BoidParticleAffectorOptions,
-  BoidParticleAffectorTest,
   BoidsOptions,
 } from './modules/Boids';
 export { default as BoidAffector } from './SpatialEffects/BoidAffector';

@@ -41,16 +41,10 @@ type BoidInfluence = {
   affector: THREE.Vector3;
 };
 
-export type BoidParticleAffectorTest = (
-  particle: Particle,
-  particleSystem: ParticleSystem,
-) => boolean;
-
 export type BoidParticleAffectorOptions = Partial<
   Omit<BoidAffectorOptions, 'position' | 'geometry' | 'bvhOptions' | 'test'>
 > & {
   sourceTags: Multiple<Tag>;
-  test?: BoidParticleAffectorTest;
 };
 
 export interface BoidsOptions extends Partial<ModuleOptions> {
@@ -296,11 +290,6 @@ class Boids extends Module {
           || (
             particleAffector.condition
             && !particleAffector.condition(particle)
-          )
-          || (
-            particleAffector.test
-            && this.particleSystem
-            && !particleAffector.test(particle, this.particleSystem)
           )
         ) {
           return;
