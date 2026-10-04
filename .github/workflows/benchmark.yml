@@ -86,18 +86,32 @@ jobs:
           npm run benchmark:export -- \
             "$GITHUB_WORKSPACE/benchmark-results/base-b.json"
 
+      - name: Benchmark base C
+        working-directory: base
+        run: |
+          npm run benchmark:export -- \
+            "$GITHUB_WORKSPACE/benchmark-results/base-c.json"
+
+      - name: Benchmark PR C
+        working-directory: head
+        run: |
+          npm run benchmark:export -- \
+            "$GITHUB_WORKSPACE/benchmark-results/head-c.json"
+
       - name: Aggregate benchmark samples
         working-directory: head
         run: |
           node scripts/aggregate-benchmarks.mjs \
             "$GITHUB_WORKSPACE/benchmark-results/base.json" \
             "$GITHUB_WORKSPACE/benchmark-results/base-a.json" \
-            "$GITHUB_WORKSPACE/benchmark-results/base-b.json"
+            "$GITHUB_WORKSPACE/benchmark-results/base-b.json" \
+            "$GITHUB_WORKSPACE/benchmark-results/base-c.json"
 
           node scripts/aggregate-benchmarks.mjs \
             "$GITHUB_WORKSPACE/benchmark-results/head.json" \
             "$GITHUB_WORKSPACE/benchmark-results/head-a.json" \
-            "$GITHUB_WORKSPACE/benchmark-results/head-b.json"
+            "$GITHUB_WORKSPACE/benchmark-results/head-b.json" \
+            "$GITHUB_WORKSPACE/benchmark-results/head-c.json"
 
       - name: Write PR metadata
         env:
