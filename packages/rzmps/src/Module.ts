@@ -96,7 +96,8 @@ export default class Module {
     if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(distanceSq))) return;
 
     particles.filter((p) => (
-      (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
+      p.alive
+      && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
       && this.condition(p)
     ))
       .forEach((p) => this._modify(p, deltaTime, particleSystem));

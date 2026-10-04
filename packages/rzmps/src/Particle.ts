@@ -61,6 +61,8 @@ class Particle {
 
   distortionStrength: number = 1;
 
+  alive: boolean = true;
+
   startTime: number;
 
   lifetime: number;
@@ -154,6 +156,7 @@ class Particle {
   kill(): void {
     this.realtime = Number.POSITIVE_INFINITY;
     this.time = Number.POSITIVE_INFINITY;
+    this.alive = false;
   }
 
   clone(): Particle {
@@ -165,6 +168,7 @@ class Particle {
     particle.startTime = this.startTime;
     particle.time = this.time;
     particle.realtime = this.realtime;
+    particle.alive = this.alive;
     particle.id = this.id;
     particle.noise = { ...this.noise };
     particle.data = { ...this.data };

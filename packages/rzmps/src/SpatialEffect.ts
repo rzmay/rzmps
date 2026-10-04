@@ -581,6 +581,7 @@ class SpatialEffect extends THREE.Object3D {
 
   modify(particles: Particle[], deltaTime: number, particleSystem: ParticleSystem): void {
     particles
+      .filter((particle) => particle.alive)
       .filter((particle) => this.test(particle, particleSystem))
       .filter((particle) => this.condition(particle))
       .forEach((particle) => this._modifyParticle(particle, deltaTime, particleSystem));

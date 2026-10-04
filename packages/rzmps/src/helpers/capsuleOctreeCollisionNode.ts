@@ -13,6 +13,7 @@ export interface CollisionQuery {
 
 // Shader Struct Definition to return structured output parameters natively
 const CollisionHitStruct = struct({
+  hit: 'int',
   point: 'vec3',
   normal: 'vec3',
   impulse: 'vec3',
@@ -35,6 +36,7 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
 
     // Output Struct Node tracker initialization
     const hit = CollisionHitStruct();
+    hit.get('hit').assign(int(0));
     hit.get('point').assign(vec3(0, 0, 0));
     hit.get('normal').assign(vec3(0, 0, 0));
     hit.get('impulse').assign(vec3(0, 0, 0));
@@ -42,8 +44,6 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
 
     // Tracking the minimum distance to locate the absolute closest collision instance
     const minDistance = float(radius).toVar();
-    const hasHitOccurred = int(0).toVar();
-
     Loop(() => {
       if (stackPtr.lessThan(int(0))) return;
 
@@ -57,15 +57,17 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
       const center = vec3(boundsData.xyz);
       const halfExtent = float(boundsData.w);
 
-      // Expand bounding box checks dynamically to catch early radius contacts
-      const expandedExtent = float(halfExtent.add(radius));
+      // Expand bounding box checks by capsule radius and travel to catch swept contacts.
+      const segmentCenter = vec3(capsuleStart.add(capsuleEnd).mul(0.5));
+      const segmentReach = float(capsuleEnd.sub(capsuleStart).length().mul(0.5).add(radius));
+      const expandedExtent = float(halfExtent.add(segmentReach));
       const clampedPos = vec3(
-        capsuleStart.x.clamp(center.x.sub(expandedExtent), center.x.add(expandedExtent)),
-        capsuleStart.y.clamp(center.y.sub(expandedExtent), center.y.add(expandedExtent)),
-        capsuleStart.z.clamp(center.z.sub(expandedExtent), center.z.add(expandedExtent))
+        segmentCenter.x.clamp(center.x.sub(expandedExtent), center.x.add(expandedExtent)),
+        segmentCenter.y.clamp(center.y.sub(expandedExtent), center.y.add(expandedExtent)),
+        segmentCenter.z.clamp(center.z.sub(expandedExtent), center.z.add(expandedExtent))
       );
 
-      if (float(capsuleStart.distance(clampedPos)).greaterThan(radius)) {
+      if (float(segmentCenter.distance(clampedPos)).greaterThan(segmentReach)) {
         return; // Early prune path branch
       }
 
@@ -125,7 +127,7 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
           // Track the closest point of intersection across leaf geometry
           if (distance.lessThan(minDistance)) {
             minDistance.assign(distance);
-            hasHitOccurred.assign(int(1));
+            hit.get('hit').assign(int(1));
 
             const finalNormal = vec3(distance.equal(0.0).select(triNormal, separationVector.normalize()));
             const penetrationDepth = float(radius.sub(distance));
@@ -147,25 +149,21 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
       const children1 = nodes.element(baseOffset.add(int(2)));
       const children2 = nodes.element(baseOffset.add(int(3)));
 
-      const bitX = int(capsuleStart.x.greaterThan(center.x).select(int(1), int(0)));
-      const bitY = int(capsuleStart.y.greaterThan(center.y).select(int(2), int(0)));
-      const bitZ = int(capsuleStart.z.greaterThan(center.z).select(int(4), int(0)));
-      const targetOctant = int(bitX.add(bitY).add(bitZ));
-
-      const nextChildIdx = int(-1).toVar();
-      if (targetOctant.equal(int(0))) nextChildIdx.assign(int(children1.x));
-      if (targetOctant.equal(int(1))) nextChildIdx.assign(int(children1.y));
-      if (targetOctant.equal(int(2))) nextChildIdx.assign(int(children1.z));
-      if (targetOctant.equal(int(3))) nextChildIdx.assign(int(children1.w));
-      if (targetOctant.equal(int(4))) nextChildIdx.assign(int(children2.x));
-      if (targetOctant.equal(int(5))) nextChildIdx.assign(int(children2.y));
-      if (targetOctant.equal(int(6))) nextChildIdx.assign(int(children2.z));
-      if (targetOctant.equal(int(7))) nextChildIdx.assign(int(children2.w));
-
-      if (nextChildIdx.greaterThanEqual(int(0))) {
-        stackPtr.addAssign(int(1));
-        stack.element(stackPtr).assign(nextChildIdx);
+      const pushChild = (nextChildIdx: Node<'int'>) => {
+        if (nextChildIdx.greaterThanEqual(int(0)).and(stackPtr.lessThan(int(23)))) {
+          stackPtr.addAssign(int(1));
+          stack.element(stackPtr).assign(nextChildIdx);
+        }
       }
+
+      pushChild(int(children1.x));
+      pushChild(int(children1.y));
+      pushChild(int(children1.z));
+      pushChild(int(children1.w));
+      pushChild(int(children2.x));
+      pushChild(int(children2.y));
+      pushChild(int(children2.z));
+      pushChild(int(children2.w));
     });
 
     return hit;

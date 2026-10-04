@@ -238,6 +238,7 @@ class ParticleSystem extends THREE.Object3D {
   private _gpuReadbacksInFlight = 0;
   private _gpuReadbackSequence = 0;
   private _latestAppliedGPUReadbackSequence = 0;
+  private readonly _gpuDirtyParticleSlots = new Set<number>();
   private _gpuDebugFrame = 0;
   private _gpuDebugActiveFrame: number | undefined;
 
@@ -391,7 +392,16 @@ class ParticleSystem extends THREE.Object3D {
   private _processParticles() {
     // Cull particles
     if (this.particles.length > this.maxParticles) {
-      if (this.maxCullingMode == MaxCulling.New) this.particles.splice(this.maxParticles)
+      if (this._usesGPUStableParticleSlots()) {
+        this.particles
+          .slice(this.maxParticles)
+          .forEach((particle) => {
+            if (!particle.alive) return;
+            particle.alive = false;
+            this._notifyParticleDeath(particle);
+          });
+        this.particles.length = this.maxParticles;
+      } else if (this.maxCullingMode == MaxCulling.New) this.particles.splice(this.maxParticles)
       else this.particles.splice(0, this.particles.length - this.maxParticles)
     }
 
@@ -481,9 +491,11 @@ class ParticleSystem extends THREE.Object3D {
         particleCount: this.particles.length,
         sample: this._sampleGPUParticles(this.particles),
       });
-      this.particles.forEach((particle) => particle.restore());
-      this._compactExpiredParticles();
-      this._logGPUDebug('after restore + compact', {
+      this.particles.forEach((particle) => {
+        if (particle.alive) particle.restore();
+      });
+      this._markExpiredGPUParticleSlots();
+      this._logGPUDebug('after restore + death sync', {
         particleCount: this.particles.length,
         sample: this._sampleGPUParticles(this.particles),
       });
@@ -510,6 +522,7 @@ class ParticleSystem extends THREE.Object3D {
         this._gpuBuffers.count,
         (particle) => this._getParticleGPUTagMask(particle),
       );
+      this._uploadDirtyGPUParticleSlots(this._gpuBuffers);
     } else {
       this._gpuBuffers.upload(
         this.particles,
@@ -536,6 +549,7 @@ class ParticleSystem extends THREE.Object3D {
         this._gpuTransientBaseBuffers.count,
         (particle) => this._getParticleGPUTagMask(particle),
       );
+      this._uploadDirtyGPUParticleSlots(this._gpuTransientBaseBuffers);
     } else {
       this._gpuTransientBaseBuffers.upload(
         this.particles,
@@ -561,12 +575,14 @@ class ParticleSystem extends THREE.Object3D {
         this._gpuRenderBuffers.count,
         (particle) => this._getParticleGPUTagMask(particle),
       );
+      this._uploadDirtyGPUParticleSlots(this._gpuRenderBuffers);
     } else {
       this._gpuRenderBuffers.upload(
         this.particles,
         (particle) => this._getParticleGPUTagMask(particle),
       );
     }
+    this._gpuDirtyParticleSlots.clear();
     const renderBufferInitialization = this._gpuRenderBuffers.initialize(sceneRenderer);
 
     const context: GPUParticleUpdateContext = {
@@ -618,6 +634,7 @@ class ParticleSystem extends THREE.Object3D {
     const readbackSequence = this._gpuReadbackSequence + 1;
     this._gpuReadbackSequence = readbackSequence;
     const readbackParticles = this.particles.slice(0, this._gpuBuffers.count);
+    const readbackWasAlive = readbackParticles.map((particle) => particle.alive);
     const readbackStart = performance.now();
     this._logGPUDebug('readback requested', {
       readbackSequence,
@@ -699,6 +716,7 @@ class ParticleSystem extends THREE.Object3D {
         }
 
         this._latestAppliedGPUReadbackSequence = readbackSequence;
+        this._applyGPUReadbackDeaths(readbackParticles, readbackWasAlive);
 
         const renderParticles = await renderMirrorUpdate;
 
@@ -751,32 +769,39 @@ class ParticleSystem extends THREE.Object3D {
     if (!(this.sceneRenderer instanceof WebGPURenderer)) return;
 
     const particle = this._gpuBuffers.particle;
+    const alive = this._gpuBuffers.alive;
     const deltaTime = float(this.deltaTime);
     const gravity = vec3(this.gravity);
 
     const computeNode = Fn(() => {
-      const gravityModifier = evaluateDynamicNumberGPU(
-        this.gravityModifier,
-        particle.time,
-        0,
-        particle.index,
-      );
-      const nextVelocity = particle.velocity.add(gravity.mul(deltaTime.mul(gravityModifier)));
-      const nextRealtime = particle.realtime.add(deltaTime.mul(1000));
-      const nextTime = nextRealtime.div(1000).div(particle.lifetime);
-      const step = deltaTime.mul(particle.speed);
+      If(alive.notEqual(uint(0)), () => {
+        const gravityModifier = evaluateDynamicNumberGPU(
+          this.gravityModifier,
+          particle.time,
+          0,
+          particle.index,
+        );
+        const nextVelocity = particle.velocity.add(gravity.mul(deltaTime.mul(gravityModifier)));
+        const nextRealtime = particle.realtime.add(deltaTime.mul(1000));
+        const nextTime = nextRealtime.div(1000).div(particle.lifetime);
+        const step = deltaTime.mul(particle.speed);
 
-      particle.velocity.assign(nextVelocity);
-      particle.realtime.assign(nextRealtime);
-      particle.time.assign(nextTime);
+        particle.velocity.assign(nextVelocity);
+        particle.realtime.assign(nextRealtime);
+        particle.time.assign(nextTime);
 
-      particle.position.assign(particle.position.add(nextVelocity.mul(step)));
-      particle.rotation.assign(particle.rotation.add(particle.angularVelocity.mul(step)));
-      particle.scale.assign(particle.scale.add(particle.scalarVelocity.mul(step)));
+        particle.position.assign(particle.position.add(nextVelocity.mul(step)));
+        particle.rotation.assign(particle.rotation.add(particle.angularVelocity.mul(step)));
+        particle.scale.assign(particle.scale.add(particle.scalarVelocity.mul(step)));
 
-      particle.velocity.assign(nextVelocity.add(particle.acceleration.mul(step)));
-      particle.angularVelocity.assign(particle.angularVelocity.add(particle.angularAcceleration.mul(step)));
-      particle.scalarVelocity.assign(particle.scalarVelocity.add(particle.scalarAcceleration.mul(step)));
+        particle.velocity.assign(nextVelocity.add(particle.acceleration.mul(step)));
+        particle.angularVelocity.assign(particle.angularVelocity.add(particle.angularAcceleration.mul(step)));
+        particle.scalarVelocity.assign(particle.scalarVelocity.add(particle.scalarAcceleration.mul(step)));
+
+        If(nextRealtime.greaterThan(particle.lifetime.mul(1000)), () => {
+          alive.assign(uint(0));
+        });
+      });
     })().compute(this._gpuBuffers.count);
 
     this.sceneRenderer.compute(computeNode);
@@ -794,6 +819,8 @@ class ParticleSystem extends THREE.Object3D {
 
     const computeNode = Fn(() => {
       this._assignGPUParticleValues(targetParticle, sourceParticle);
+      target.alive.assign(source.alive);
+      target.tagMask.assign(source.tagMask);
     })().compute(source.count);
 
     this.sceneRenderer.compute(computeNode);
@@ -808,40 +835,47 @@ class ParticleSystem extends THREE.Object3D {
 
     const frame = frameBuffers.particle;
     const base = baseBuffers.particle;
+    const alive = frameBuffers.alive;
     const deltaTime = float(this.deltaTime);
     const gravity = vec3(this.gravity);
 
     const computeNode = Fn(() => {
-      const frameStep = deltaTime.mul(frame.speed);
-      const baseStep = deltaTime.mul(base.speed);
-      const gravityModifier = evaluateDynamicNumberGPU(
-        this.gravityModifier,
-        base.time,
-        0,
-        base.index,
-      );
-      const gravityVelocity = gravity.mul(deltaTime.mul(gravityModifier));
-      const frameVelocity = frame.velocity.sub(frame.acceleration.mul(frameStep));
-      const frameAngularVelocity = frame.angularVelocity.sub(frame.angularAcceleration.mul(frameStep));
-      const frameScalarVelocity = frame.scalarVelocity.sub(frame.scalarAcceleration.mul(frameStep));
-      const baseVelocity = base.velocity.add(gravityVelocity);
+      If(alive.notEqual(uint(0)), () => {
+        const frameStep = deltaTime.mul(frame.speed);
+        const baseStep = deltaTime.mul(base.speed);
+        const gravityModifier = evaluateDynamicNumberGPU(
+          this.gravityModifier,
+          base.time,
+          0,
+          base.index,
+        );
+        const gravityVelocity = gravity.mul(deltaTime.mul(gravityModifier));
+        const frameVelocity = frame.velocity.sub(frame.acceleration.mul(frameStep));
+        const frameAngularVelocity = frame.angularVelocity.sub(frame.angularAcceleration.mul(frameStep));
+        const frameScalarVelocity = frame.scalarVelocity.sub(frame.scalarAcceleration.mul(frameStep));
+        const baseVelocity = base.velocity.add(gravityVelocity);
 
-      frame.lifetime.assign(base.lifetime);
-      frame.position.assign(base.position.add(frameVelocity.mul(frameStep)));
-      frame.orbitCenter.assign(base.orbitCenter);
-      frame.rotation.assign(base.rotation.add(frameAngularVelocity.mul(frameStep)));
-      frame.scale.assign(base.scale.add(frameScalarVelocity.mul(frameStep)));
-      frame.velocity.assign(baseVelocity.add(base.acceleration.mul(baseStep)));
-      frame.angularVelocity.assign(base.angularVelocity.add(base.angularAcceleration.mul(baseStep)));
-      frame.scalarVelocity.assign(base.scalarVelocity.add(base.scalarAcceleration.mul(baseStep)));
-      frame.acceleration.assign(base.acceleration);
-      frame.angularAcceleration.assign(base.angularAcceleration);
-      frame.scalarAcceleration.assign(base.scalarAcceleration);
-      frame.speed.assign(base.speed);
-      frame.mass.assign(base.mass);
-      frame.distortionStrength.assign(base.distortionStrength);
-      frame.color.assign(base.color);
-      frame.alpha.assign(base.alpha);
+        frame.lifetime.assign(base.lifetime);
+        frame.position.assign(base.position.add(frameVelocity.mul(frameStep)));
+        frame.orbitCenter.assign(base.orbitCenter);
+        frame.rotation.assign(base.rotation.add(frameAngularVelocity.mul(frameStep)));
+        frame.scale.assign(base.scale.add(frameScalarVelocity.mul(frameStep)));
+        frame.velocity.assign(baseVelocity.add(base.acceleration.mul(baseStep)));
+        frame.angularVelocity.assign(base.angularVelocity.add(base.angularAcceleration.mul(baseStep)));
+        frame.scalarVelocity.assign(base.scalarVelocity.add(base.scalarAcceleration.mul(baseStep)));
+        frame.acceleration.assign(base.acceleration);
+        frame.angularAcceleration.assign(base.angularAcceleration);
+        frame.scalarAcceleration.assign(base.scalarAcceleration);
+        frame.speed.assign(base.speed);
+        frame.mass.assign(base.mass);
+        frame.distortionStrength.assign(base.distortionStrength);
+        frame.color.assign(base.color);
+        frame.alpha.assign(base.alpha);
+
+        If(frame.realtime.greaterThan(frame.lifetime.mul(1000)), () => {
+          alive.assign(uint(0));
+        });
+      });
     })().compute(frameBuffers.count);
 
     this.sceneRenderer.compute(computeNode);
@@ -897,6 +931,7 @@ class ParticleSystem extends THREE.Object3D {
       clone.startTime = particle.startTime;
       clone.time = particle.time;
       clone.realtime = particle.realtime;
+      clone.alive = particle.alive;
       clone.noise = { ...particle.noise };
       clone.data = particle.data;
 
@@ -917,10 +952,14 @@ class ParticleSystem extends THREE.Object3D {
     const particleCount = buffers.count;
 
     modifiers.forEach((modifier) => {
+      const readbackSensitiveModifier = modifier instanceof Module
+        ? modifier as Module & { canRunWithoutFreshGPUReadback?: () => boolean }
+        : undefined;
       if (
         options.skipReadbackSensitive
-        && modifier instanceof Module
-        && modifier.requiresFreshGPUReadback
+        && readbackSensitiveModifier
+        && readbackSensitiveModifier.requiresFreshGPUReadback
+        && !readbackSensitiveModifier.canRunWithoutFreshGPUReadback?.()
       ) {
         this._logGPUDebug('skipping GPU modifier while CPU mirror is stale', {
           modifier: modifier.constructor.name,
@@ -929,34 +968,39 @@ class ParticleSystem extends THREE.Object3D {
       }
 
       const computeNode = Fn(() => {
+        const alive = buffers.alive.notEqual(uint(0));
+
         if (modifier instanceof Module) {
           const tagMask = this._getGPUTagMask(modifier.tags);
-          if (tagMask === undefined) {
+          const modifyParticle = () => {
             modifier.modifyGPU(buffers.particle, this.deltaTime, context);
+          };
+
+          if (tagMask === undefined) {
+            If(alive, modifyParticle);
             return;
           }
 
-          If(buffers.particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)), () => {
-            modifier.modifyGPU(buffers.particle, this.deltaTime, context);
-          });
+          If(alive.and(buffers.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0))), modifyParticle);
           return;
         }
 
-        const strength = modifier.testGPU(buffers.particle, context);
         const tagMask = this._getGPUTagMask(modifier.tags);
 
         const applySpatialEffect = () => {
+          const strength = modifier.testGPU(buffers.particle, context);
+
           If(strength.greaterThan(float(0)), () => {
             modifier.modifyGPU(buffers.particle, this.deltaTime, context, strength);
           });
         };
 
         if (tagMask === undefined) {
-          applySpatialEffect();
+          If(alive, applySpatialEffect);
           return;
         }
 
-        If(buffers.particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)), applySpatialEffect);
+        If(alive.and(buffers.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0))), applySpatialEffect);
       })().compute(particleCount);
 
       renderer.compute(computeNode);
@@ -1046,6 +1090,7 @@ class ParticleSystem extends THREE.Object3D {
   private _sampleGPUParticles(particles: Particle[]): Array<{
     index: number;
     id: string;
+    alive: boolean;
     tags?: Tag[];
     tagMask: number;
     time: number;
@@ -1063,6 +1108,7 @@ class ParticleSystem extends THREE.Object3D {
     return particles.slice(0, 3).map((particle, index) => ({
       index,
       id: particle.id,
+      alive: particle.alive,
       tags: particle.tags ? [...particle.tags] : undefined,
       tagMask: this._getParticleGPUTagMask(particle),
       time: this._debugNumber(particle.time),
@@ -1134,6 +1180,56 @@ class ParticleSystem extends THREE.Object3D {
     return mask >>> 0;
   }
 
+  private _usesGPUStableParticleSlots(): boolean {
+    return this._isGPUProcessingActive
+      || (this.gpuProcessing && this.sceneRenderer instanceof WebGPURenderer);
+  }
+
+  private _uploadDirtyGPUParticleSlots(buffer: GPUParticleBufferState): void {
+    this._gpuDirtyParticleSlots.forEach((index) => {
+      const particle = this.particles[index];
+      if (!particle) return;
+
+      buffer.uploadIndex(
+        index,
+        particle,
+        (value) => this._getParticleGPUTagMask(value),
+      );
+    });
+  }
+
+  private _markExpiredGPUParticleSlots(): void {
+    this.particles.forEach((particle, index) => {
+      if (!particle.alive) return;
+      if (particle.realtime <= particle.lifetime * 1000) return;
+
+      particle.alive = false;
+      this._gpuDirtyParticleSlots.add(index);
+      this._notifyParticleDeath(particle);
+    });
+  }
+
+  private _applyGPUReadbackDeaths(particles: Particle[], wasAlive: boolean[]): void {
+    particles.forEach((particle, index) => {
+      if (particle.alive && particle.realtime > particle.lifetime * 1000) {
+        particle.alive = false;
+        this._gpuDirtyParticleSlots.add(index);
+      }
+
+      if (wasAlive[index] && !particle.alive) {
+        this._notifyParticleDeath(particle);
+      }
+    });
+  }
+
+  private _notifyParticleDeath(particle: Particle): void {
+    this._notifyDeath(particle);
+
+    this.subSystems.forEach((_options, subSystem) => {
+      subSystem.emitters.forEach((emitter) => emitter.clearContext(particle.id));
+    });
+  }
+
   private _compactExpiredParticles(): void {
     const particles = this.particles;
     const originalLength = particles.length;
@@ -1142,13 +1238,9 @@ class ParticleSystem extends THREE.Object3D {
     for (let readIndex = 0; readIndex < originalLength; readIndex += 1) {
       const particle = particles[readIndex];
 
-      if (particle.realtime > particle.lifetime * 1000) {
-        this._notifyDeath(particle);
-
-        this.subSystems.forEach((_options, subSystem) => {
-          subSystem.emitters.forEach((emitter) => emitter.clearContext(particle.id));
-        });
-
+      if (!particle.alive || particle.realtime > particle.lifetime * 1000) {
+        particle.alive = false;
+        this._notifyParticleDeath(particle);
         continue;
       }
 
@@ -1191,6 +1283,11 @@ class ParticleSystem extends THREE.Object3D {
       const transientBase = transientBaseValues?.[readIndex];
       const transientFrame = transientBase ? p.snapshot() : undefined;
 
+      if (!p.alive) {
+        this._notifyParticleDeath(p);
+        continue;
+      }
+
       // Apply gravity
       const gravityScale = this.deltaTime * evaluateDynamicNumber(this.gravityModifier, p.time, p.id);
       p.velocity.addScaledVector(
@@ -1214,12 +1311,8 @@ class ParticleSystem extends THREE.Object3D {
 
       // Kill old particles
       if (p.realtime > p.lifetime * 1000) {
-        this._notifyDeath(p);
-
-        this.subSystems.forEach((_options, subSystem) => {
-          subSystem.emitters.forEach((emitter) => emitter.clearContext(p.id));
-        });
-
+        p.alive = false;
+        this._notifyParticleDeath(p);
         continue;
       }
 
@@ -1592,6 +1685,7 @@ class ParticleSystem extends THREE.Object3D {
     this._gpuReadbacksInFlight = 0;
     this._gpuReadbackSequence = 0;
     this._latestAppliedGPUReadbackSequence = 0;
+    this._gpuDirtyParticleSlots.clear();
     this._prewarmed = false;
 
     this.renderers.forEach((renderer) => {
@@ -1630,6 +1724,38 @@ class ParticleSystem extends THREE.Object3D {
   /*
     * ACCESSING
   */
+
+  public addParticle(particle: Particle, particles: Particle[] = this.particles): boolean {
+    if (this.maxParticles <= 0) return false;
+
+    if (!this._usesGPUStableParticleSlots() || particles !== this.particles) {
+      particles.push(particle);
+      return true;
+    }
+
+    const deadIndex = particles.findIndex((candidate) => !candidate.alive);
+    if (deadIndex !== -1) {
+      particles[deadIndex] = particle;
+      this._gpuDirtyParticleSlots.add(deadIndex);
+      return true;
+    }
+
+    if (particles.length >= this.maxParticles) {
+      if (this.maxCullingMode === MaxCulling.New) return false;
+
+      if (particles[0]?.alive) {
+        particles[0].alive = false;
+        this._notifyParticleDeath(particles[0]);
+      }
+      particles[0] = particle;
+      this._gpuDirtyParticleSlots.add(0);
+      return true;
+    }
+
+    particles.push(particle);
+    this._gpuDirtyParticleSlots.add(particles.length - 1);
+    return true;
+  }
 
   public addEmitter(emitter: Emitter): this {
     this.emitters.push(emitter);

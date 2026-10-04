@@ -173,9 +173,9 @@ class Emitter {
       const particlesDue = Math.floor((spawnClock - state.lastSpawn) / secondsPerParticle);
 
       for (let i = 0; i < particlesDue; i += 1) {
-        const particle = this.spawnParticle(particles, time, context);
+        const particle = this.spawnParticle(particles, time, context, particleSystem);
 
-        spawned.push(particle);
+        if (particle) spawned.push(particle);
       }
 
       if (particlesDue > 0) {
@@ -198,8 +198,8 @@ class Emitter {
         state.distanceCredit -= particlesDue;
 
         for (let i = 0; i < particlesDue; i += 1) {
-          const particle = this.spawnParticle(particles, time, context);
-          spawned.push(particle);
+          const particle = this.spawnParticle(particles, time, context, particleSystem);
+          if (particle) spawned.push(particle);
         }
       }
     } else if (distancePosition && state.lastDistancePosition) {
@@ -211,8 +211,8 @@ class Emitter {
       if (!state.firedBursts.has(index) && burst.time <= time) {
         const count = evaluateDynamicNumber(burst.count) * emissionMultiplier;
         for (let i = 0; i < Math.floor(count); i += 1) {
-          const particle = this.spawnParticle(particles, time, context);
-          spawned.push(particle);
+          const particle = this.spawnParticle(particles, time, context, particleSystem);
+          if (particle) spawned.push(particle);
         }
         state.firedBursts.add(index);
       }
@@ -245,7 +245,12 @@ class Emitter {
     return this._distancePosition.setFromMatrixPosition(context.transform);
   }
 
-  private spawnParticle(particles: Particle[], time: number, context: Partial<EmissionContext>): Particle {
+  private spawnParticle(
+    particles: Particle[],
+    time: number,
+    context: Partial<EmissionContext>,
+    particleSystem: ParticleSystem,
+  ): Particle | undefined {
     const point = this.source.getPoint();
     const position = point.position.clone();
     const orbitCenter = new THREE.Vector3();
@@ -343,9 +348,7 @@ class Emitter {
       }),
     });
 
-    particles.push(particle);
-
-    return particle;
+    return particleSystem.addParticle(particle, particles) ? particle : undefined;
   }
 
   private _selectTags(): Tag[] | undefined {

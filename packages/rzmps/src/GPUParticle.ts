@@ -59,11 +59,18 @@ export interface GPUParticleBufferState {
   capacity: number;
   attributes: GPUParticleAttributes;
   particle: GPUParticle;
+  alive: Node<'uint'>;
+  tagMask: Node<'uint'>;
   initialize(renderer: GPUStorageBufferRenderer): GPUParticleBufferInitialization;
   upload(particles: Particle[], tagMaskForParticle?: (particle: Particle) => number): void;
   uploadRange(
     particles: Particle[],
     startIndex: number,
+    tagMaskForParticle?: (particle: Particle) => number,
+  ): void;
+  uploadIndex(
+    index: number,
+    particle: Particle,
     tagMaskForParticle?: (particle: Particle) => number,
   ): void;
   sync(particles: Particle[], tagMaskForParticle?: (particle: Particle) => number): void;
@@ -116,7 +123,6 @@ export class GPUParticle {
   readonly lifetime: Node<'float'>;
   readonly time: Node<'float'>;
   readonly realtime: Node<'float'>;
-  readonly alive: Node<'uint'>;
   readonly tagMask: Node<'uint'>;
 
   constructor(attributes: GPUParticleAttributes, capacity: number) {
@@ -145,7 +151,6 @@ export class GPUParticle {
     this.lifetime = scalars.lifetime;
     this.time = scalars.time;
     this.realtime = scalars.realtime;
-    this.alive = state.x;
     this.tagMask = state.y;
   }
 }
@@ -163,6 +168,8 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
   capacity: number;
   attributes: GPUParticleAttributes;
   particle: GPUParticle;
+  alive: Node<'uint'>;
+  tagMask: Node<'uint'>;
 
   private floatData: Float32Array;
   private uintData: Uint32Array;
@@ -177,6 +184,9 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.uintData = new Uint32Array(capacity * UINT_SLOT_COUNT * 4);
     this.attributes = createAttributes(this.floatData, this.uintData);
     this.particle = new GPUParticle(this.attributes, capacity);
+    const state = stateElement(this.attributes, capacity);
+    this.alive = state.x;
+    this.tagMask = state.y;
     this.upload(particles, tagMaskForParticle);
   }
 
@@ -229,6 +239,24 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.count = particles.length;
   }
 
+  uploadIndex(
+    index: number,
+    particle: Particle,
+    tagMaskForParticle?: (particle: Particle) => number,
+  ): void {
+    this.ensureCapacity(index + 1);
+    this.writeParticle(index, particle, tagMaskForParticle);
+
+    const floatStart = index * FLOAT_SLOT_COUNT * 4;
+    const uintStart = index * UINT_SLOT_COUNT * 4;
+
+    this.attributes.floatData.addUpdateRange(floatStart, FLOAT_SLOT_COUNT * 4);
+    this.attributes.uintData.addUpdateRange(uintStart, UINT_SLOT_COUNT * 4);
+    this.attributes.floatData.needsUpdate = true;
+    this.attributes.uintData.needsUpdate = true;
+    this.count = Math.max(this.count, index + 1);
+  }
+
   sync(particles: Particle[], tagMaskForParticle?: (particle: Particle) => number): void {
     this.upload(particles, tagMaskForParticle);
   }
@@ -264,6 +292,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
       particle.lifetime = readScalar(this.floatData, index, SLOT.velocityLifetime);
       particle.time = readScalar(this.floatData, index, SLOT.angularVelocityTime);
       particle.realtime = readScalar(this.floatData, index, SLOT.scalarVelocityRealtime);
+      particle.alive = readState(this.uintData, index) !== 0;
       particle.cache();
     }
   }
@@ -274,13 +303,16 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     const previousFloatData = this.floatData;
     const previousUintData = this.uintData;
 
-    this.capacity = Math.max(1, nextCount);
+    this.capacity = nextPowerOfTwo(nextCount);
     this.floatData = new Float32Array(this.capacity * FLOAT_SLOT_COUNT * 4);
     this.uintData = new Uint32Array(this.capacity * UINT_SLOT_COUNT * 4);
     this.floatData.set(previousFloatData);
     this.uintData.set(previousUintData);
     this.attributes = createAttributes(this.floatData, this.uintData);
     this.particle = new GPUParticle(this.attributes, this.capacity);
+    const state = stateElement(this.attributes, this.capacity);
+    this.alive = state.x;
+    this.tagMask = state.y;
   }
 
   private writeParticle(
@@ -300,7 +332,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     writeVectorAndScalar(this.floatData, index, SLOT.scalarAcceleration, particle.scalarAcceleration, 0);
     writeColor(this.floatData, index, SLOT.color, particle.color);
 
-    writeState(this.uintData, index, 1, tagMaskForParticle?.(particle) ?? 0);
+    writeState(this.uintData, index, particle.alive ? 1 : 0, tagMaskForParticle?.(particle) ?? 0);
   }
 }
 
@@ -309,6 +341,10 @@ function createAttributes(floatData: Float32Array, uintData: Uint32Array): GPUPa
     floatData: new StorageBufferAttribute(floatData, 4),
     uintData: new StorageBufferAttribute(uintData, 4),
   };
+}
+
+function nextPowerOfTwo(value: number): number {
+  return 2 ** Math.ceil(Math.log2(Math.max(1, value)));
 }
 
 function initializeStorageAttribute(
@@ -355,6 +391,11 @@ function createScalarNodes(floatStorage: PackedFloatStorage): GPUParticleScalarN
     time: floatElement(floatStorage, SLOT.angularVelocityTime).w,
     realtime: floatElement(floatStorage, SLOT.scalarVelocityRealtime).w,
   };
+}
+
+function stateElement(attributes: GPUParticleAttributes, capacity: number): Node<'uvec4'> {
+  const uintStorage = storage(attributes.uintData, 'uvec4', capacity * UINT_SLOT_COUNT) as PackedUintStorage;
+  return uintStorage.element(instanceIndex.mul(UINT_SLOT_COUNT));
 }
 
 function floatElement(floatStorage: PackedFloatStorage, slot: number): Node<'vec4'> {
@@ -411,4 +452,8 @@ function readColor(array: Float32Array, index: number, slot: number, color: THRE
 
 function readScalar(array: Float32Array, index: number, slot: number): number {
   return array[packedOffset(index, slot) + 3];
+}
+
+function readState(array: Uint32Array, index: number): number {
+  return array[stateOffset(index)];
 }

@@ -66,7 +66,10 @@ export default abstract class Renderer {
         const distanceSq = system.cameraDistanceSq;
         if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(distanceSq))) return;
 
-        const visibleParticles = particles.filter((p) => !this.tags || tagsIntersect(this.tags, p.tags ?? []));
+        const visibleParticles = particles.filter((p) => (
+            p.alive
+            && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
+        ));
         const countScale = this.countLOD ? this._countLODHelper.getScale(Math.sqrt(distanceSq)) : 1;
 
         if (countScale < 1) {

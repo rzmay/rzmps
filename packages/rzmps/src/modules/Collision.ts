@@ -1,6 +1,12 @@
 import * as THREE from 'three';
-import { StorageBufferAttribute } from 'three/webgpu';
-import { float, If, storage, uint } from 'three/tsl';
+import type { Node } from 'three/webgpu';
+import {
+  abs,
+  float,
+  If,
+  max,
+  vec3,
+} from 'three/tsl';
 
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -10,6 +16,10 @@ import { evaluateDynamicNumberGPU } from '../helpers/evaluateDynamicGPU';
 import type { ICollisionBackend, CollisionHit } from '../interfaces/ICollisionBackend';
 import ThreeCollisionBackend from '../collision/ThreeCollisionBackend';
 import ParticleSystem from '../ParticleSystem';
+import { SimulationSpace } from '../enums/SimulationSpace';
+import { capsuleOctreeCollisionNode } from '../helpers/capsuleOctreeCollisionNode';
+import type { FlattenedOctree } from '../helpers/octreeFlattener';
+import type { GPUParticle, GPUParticleUpdateContext } from '../GPUParticle';
 
 const ACTIVE_COLLISION_BACKEND_KEY = "__rzmps_activeCollisionBackend";
 export type CollisionListener = (particle: Particle, collision: CollisionHit) => void;
@@ -44,12 +54,6 @@ class Collision extends Module {
   private collisionListeners: CollisionListener[] = [];
 
   private _system?: ParticleSystem;
-  private collisionHitSamples = new Uint32Array(1);
-  private collisionPositionSamples = new Float32Array(3);
-  private collisionNormalSamples = new Float32Array(3);
-  private collisionHitAttribute = new StorageBufferAttribute(this.collisionHitSamples, 1);
-  private collisionPositionAttribute = new StorageBufferAttribute(this.collisionPositionSamples, 3);
-  private collisionNormalAttribute = new StorageBufferAttribute(this.collisionNormalSamples, 3);
 
   constructor(options: Partial<CollisionOptions> = {}) {
     // Collisions run immediately before movement so they can predict this frame's travel segment.
@@ -57,52 +61,7 @@ class Collision extends Module {
       ...options,
       priority: -0.01,
       modifyGPU: (particle, _deltaTime, context) => {
-        const capacity = Math.max(1, context.buffers.capacity);
-        const hit = storage(this.collisionHitAttribute, 'uint', capacity).element(particle.index);
-        const hitPosition = storage(this.collisionPositionAttribute, 'vec3', capacity).element(particle.index);
-        const sampledNormal = storage(this.collisionNormalAttribute, 'vec3', capacity).element(particle.index);
-
-        If(hit.equal(uint(1)), () => {
-          const hitNormal = sampledNormal.normalize();
-
-          particle.position.assign(hitPosition);
-
-          const bounce = evaluateDynamicNumberGPU(this.bounce ?? 1, particle.time, 1, particle.index).clamp(0, 1);
-          const dampen = evaluateDynamicNumberGPU(this.dampen ?? 0, particle.time, 0, particle.index).clamp(0, 1);
-          const normalSpeed = particle.velocity.dot(hitNormal);
-          const normalVelocity = hitNormal.mul(normalSpeed);
-          const tangentVelocity = particle.velocity.sub(normalVelocity);
-          const resolvedVelocity = tangentVelocity
-            .add(normalVelocity.mul(bounce.negate()))
-            .mul(float(1).sub(dampen));
-
-          particle.velocity.assign(
-            normalSpeed.lessThan(float(0)).select(resolvedVelocity, particle.velocity),
-          );
-
-          const lifetimeLoss = evaluateDynamicNumberGPU(
-            this.lifetimeLoss ?? 0,
-            particle.time,
-            0,
-            particle.index,
-          ).clamp(0, 1);
-
-          particle.realtime.assign(
-            particle.realtime.add(particle.lifetime.mul(lifetimeLoss).mul(1000)),
-          );
-
-          const speed = particle.velocity.length();
-          if (this.minKillSpeed > 0) {
-            If(speed.lessThan(this.minKillSpeed), () => {
-              particle.realtime.assign(particle.lifetime.mul(1000).add(1));
-            });
-          }
-          if (Number.isFinite(this.maxKillSpeed)) {
-            If(speed.greaterThan(this.maxKillSpeed), () => {
-              particle.realtime.assign(particle.lifetime.mul(1000).add(1));
-            });
-          }
-        });
+        this.getGPUOctrees().forEach((octree) => this.modifyGPUWithOctree(particle, context, octree));
       },
     });
 
@@ -117,7 +76,10 @@ class Collision extends Module {
     this.gpuCollision = options.gpuCollision ?? this.gpuCollision;
 
     if (options.onCollision) this.collisionListeners.push(options.onCollision);
-    this.requiresFreshGPUReadback = true;
+  }
+
+  override get supportsGPU(): boolean {
+    return this.gpuCollision;
   }
 
   public onCollision(listener: CollisionListener) {
@@ -154,9 +116,141 @@ class Collision extends Module {
     this.backend?.setGPUProcessingActive?.(system.isGPUProcessingActive);
     this.backend?.update?.(deltaTime);
 
-    if (system.isGPUProcessingActive) {
-      this.sampleCollisions(system, deltaTime);
-    }
+  }
+
+  private getGPUOctrees(): FlattenedOctree[] {
+    if (!this.gpuCollision) return [];
+    if (!(this.backend instanceof ThreeCollisionBackend)) return [];
+
+    return [
+      this.backend.flattenedStaticOctree,
+      this.backend.flattenedDynamicOctree,
+    ].filter((octree): octree is FlattenedOctree => octree !== undefined);
+  }
+
+  private modifyGPUWithOctree(
+    particle: GPUParticle,
+    context: GPUParticleUpdateContext,
+    octree: FlattenedOctree,
+  ): void {
+    const radius = max(
+      abs(particle.scale.x),
+      max(abs(particle.scale.y), abs(particle.scale.z)),
+    ).mul(float(0.5 * (this.radiusScale ?? 1)));
+    const step = float(context.deltaTime).mul(particle.speed);
+    const localStart = particle.position;
+    const localVelocity = particle.velocity;
+    const localEnd = localStart.add(localVelocity.mul(step));
+    const start = this.gpuPointToWorld(localStart, context.system);
+    const end = this.gpuPointToWorld(localEnd, context.system);
+    const velocity = this.gpuDirectionToWorld(localVelocity, context.system);
+    const mass = particle.mass.greaterThan(float(0)).select(
+      particle.mass,
+      float(1),
+    ) as Node<'float'>;
+    const hit = capsuleOctreeCollisionNode(octree)({
+      start,
+      end,
+      velocity,
+      radius,
+      mass,
+    });
+
+    this.applyGPUCollisionHit(
+      particle,
+      (hit.get('hit') as Node<'int'>).equal(1),
+      this.gpuPointToSimulationSpace(hit.get('position') as Node<'vec3'>, context.system),
+      this.gpuDirectionToSimulationSpace(hit.get('normal') as Node<'vec3'>, context.system),
+    );
+  }
+
+  private applyGPUCollisionHit(
+    particle: GPUParticle,
+    hit: Node<'bool'>,
+    hitPosition: Node<'vec3'>,
+    sampledNormal: Node<'vec3'>,
+  ): void {
+    If(hit, () => {
+      const hitNormal = sampledNormal.normalize();
+
+      particle.position.assign(hitPosition);
+
+      const bounce = evaluateDynamicNumberGPU(this.bounce ?? 1, particle.time, 1, particle.index).clamp(0, 1);
+      const dampen = evaluateDynamicNumberGPU(this.dampen ?? 0, particle.time, 0, particle.index).clamp(0, 1);
+      const normalSpeed = particle.velocity.dot(hitNormal);
+      const normalVelocity = hitNormal.mul(normalSpeed);
+      const tangentVelocity = particle.velocity.sub(normalVelocity);
+      const resolvedVelocity = tangentVelocity
+        .add(normalVelocity.mul(bounce.negate()))
+        .mul(float(1).sub(dampen));
+
+      particle.velocity.assign(
+        normalSpeed.lessThan(float(0)).select(resolvedVelocity, particle.velocity),
+      );
+
+      const lifetimeLoss = evaluateDynamicNumberGPU(
+        this.lifetimeLoss ?? 0,
+        particle.time,
+        0,
+        particle.index,
+      ).clamp(0, 1);
+
+      particle.realtime.assign(
+        particle.realtime.add(particle.lifetime.mul(lifetimeLoss).mul(1000)),
+      );
+
+      const speed = particle.velocity.length();
+      if (this.minKillSpeed > 0) {
+        If(speed.lessThan(this.minKillSpeed), () => {
+          particle.realtime.assign(particle.lifetime.mul(1000).add(1));
+        });
+      }
+      if (Number.isFinite(this.maxKillSpeed)) {
+        If(speed.greaterThan(this.maxKillSpeed), () => {
+          particle.realtime.assign(particle.lifetime.mul(1000).add(1));
+        });
+      }
+    });
+  }
+
+  private gpuPointToWorld(
+    point: Node<'vec3'>,
+    system: ParticleSystem,
+  ): Node<'vec3'> {
+    if (system.simulationSpace === SimulationSpace.World) return point;
+
+    system.updateWorldMatrix(true, false);
+    return transformPointGPU(point, system.matrixWorld);
+  }
+
+  private gpuPointToSimulationSpace(
+    point: Node<'vec3'>,
+    system: ParticleSystem,
+  ): Node<'vec3'> {
+    if (system.simulationSpace === SimulationSpace.World) return point;
+
+    system.updateWorldMatrix(true, false);
+    return transformPointGPU(point, system.matrixWorld.clone().invert());
+  }
+
+  private gpuDirectionToWorld(
+    vector: Node<'vec3'>,
+    system: ParticleSystem,
+  ): Node<'vec3'> {
+    if (system.simulationSpace === SimulationSpace.World) return vector;
+
+    system.updateWorldMatrix(true, false);
+    return transformDirectionGPU(vector, system.matrixWorld);
+  }
+
+  private gpuDirectionToSimulationSpace(
+    vector: Node<'vec3'>,
+    system: ParticleSystem,
+  ): Node<'vec3'> {
+    if (system.simulationSpace === SimulationSpace.World) return vector;
+
+    system.updateWorldMatrix(true, false);
+    return transformDirectionGPU(vector, system.matrixWorld.clone().invert());
   }
 
   private collide(particle: Particle, deltaTime: number): void {
@@ -376,111 +470,26 @@ class Collision extends Module {
       .multiplyScalar(length);
   }
 
-  private sampleCollisions(system: ParticleSystem, deltaTime: number): void {
-    const capacity = Math.max(1, system.maxParticles, system.particles.length);
+}
 
-    if (this.collisionHitSamples.length < capacity) {
-      this.collisionHitSamples = new Uint32Array(capacity);
-      this.collisionPositionSamples = new Float32Array(capacity * 3);
-      this.collisionNormalSamples = new Float32Array(capacity * 3);
-      this.collisionHitAttribute = new StorageBufferAttribute(this.collisionHitSamples, 1);
-      this.collisionPositionAttribute = new StorageBufferAttribute(this.collisionPositionSamples, 3);
-      this.collisionNormalAttribute = new StorageBufferAttribute(this.collisionNormalSamples, 3);
-    }
+function transformPointGPU(point: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
+  const e = matrix.elements;
 
-    this.collisionHitSamples.fill(0);
-    this.collisionPositionSamples.fill(0);
-    this.collisionNormalSamples.fill(0);
+  return vec3(
+    point.x.mul(e[0]).add(point.y.mul(e[4])).add(point.z.mul(e[8])).add(e[12]),
+    point.x.mul(e[1]).add(point.y.mul(e[5])).add(point.z.mul(e[9])).add(e[13]),
+    point.x.mul(e[2]).add(point.y.mul(e[6])).add(point.z.mul(e[10])).add(e[14]),
+  ) as Node<'vec3'>;
+}
 
-    system.particles.forEach((particle, index) => {
-      const sample = this.sampleCollision(particle, deltaTime);
-      if (!sample) return;
+function transformDirectionGPU(vector: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
+  const e = matrix.elements;
 
-      const { hit, position } = sample;
-      const offset = index * 3;
-
-      this.collisionHitSamples[index] = 1;
-      this.collisionPositionSamples[offset] = position.x;
-      this.collisionPositionSamples[offset + 1] = position.y;
-      this.collisionPositionSamples[offset + 2] = position.z;
-      this.collisionNormalSamples[offset] = hit.normal.x;
-      this.collisionNormalSamples[offset + 1] = hit.normal.y;
-      this.collisionNormalSamples[offset + 2] = hit.normal.z;
-
-      this.collisionListeners.forEach((listener) => listener(particle, hit));
-      system.notifyCollision(particle, hit);
-    });
-
-    this.collisionHitAttribute.needsUpdate = true;
-    this.collisionPositionAttribute.needsUpdate = true;
-    this.collisionNormalAttribute.needsUpdate = true;
-  }
-
-  private sampleCollision(
-    particle: Particle,
-    deltaTime: number,
-  ): { hit: CollisionHit; position: THREE.Vector3 } | null {
-    if (!this.backend || !this._system) return null;
-
-    this._system.updateWorldMatrix(true, false);
-
-    const localStart = particle.position.clone();
-    const localEnd = particle.position.clone()
-      .addScaledVector(particle.velocity, deltaTime * particle.speed);
-
-    if (localStart.equals(localEnd)) return null;
-
-    const start = this._system.simulationSpace === 'world'
-      ? localStart.clone()
-      : this._system.localToWorld(localStart.clone());
-    const end = this._system.simulationSpace === 'world'
-      ? localEnd.clone()
-      : this._system.localToWorld(localEnd.clone());
-    const velocity = this._system.simulationSpace === 'world'
-      ? particle.velocity.clone()
-      : this.localDirectionToWorld(particle.velocity);
-
-    const radius = this.getParticleRadius(particle);
-
-    const hit = this.backend.collide({
-      particle,
-      start,
-      end,
-      velocity,
-      radius,
-    });
-
-    if (!hit) return null;
-
-    if (this._system.simulationSpace === 'local') {
-      const inverseWorld = this._system.matrixWorld.clone().invert();
-      const impulseLength = hit.impulse.length();
-
-      hit.point = this._system.worldToLocal(hit.point.clone());
-
-      if (hit.position) {
-        hit.position = this._system.worldToLocal(hit.position.clone());
-      }
-
-      hit.normal = hit.normal
-        .clone()
-        .transformDirection(inverseWorld)
-        .normalize();
-
-      if (impulseLength > 0) {
-        hit.impulse = hit.impulse
-          .clone()
-          .transformDirection(inverseWorld)
-          .multiplyScalar(impulseLength);
-      }
-    }
-
-    const position = hit.position
-      ? hit.position.clone()
-      : hit.point.clone().addScaledVector(hit.normal, radius);
-
-    return { hit, position };
-  }
+  return vec3(
+    vector.x.mul(e[0]).add(vector.y.mul(e[4])).add(vector.z.mul(e[8])),
+    vector.x.mul(e[1]).add(vector.y.mul(e[5])).add(vector.z.mul(e[9])),
+    vector.x.mul(e[2]).add(vector.y.mul(e[6])).add(vector.z.mul(e[10])),
+  ) as Node<'vec3'>;
 }
 
 export default Collision;
