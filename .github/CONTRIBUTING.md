@@ -77,7 +77,7 @@ to add missing author metadata to newly added demo preset files based on the PR
 author's GitHub username.
 
 The CI workflow runs `npm test`, builds the demo, and checks whitespace on pull
-requests and pushes to `main`. Benchmarks are intentionally not part of CI by
+requests and pushes to `develop`. Benchmarks are intentionally not part of CI by
 default because they are hardware- and browser-environment-sensitive; include a
 benchmark report in the pull request when changing performance-sensitive code.
 
