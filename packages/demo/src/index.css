@@ -38,6 +38,7 @@ code {
   font-size: 9px;
   font-weight: 700;
   line-height: 15px;
+  white-space: pre-line;
 }
 
 .preset-attribution {

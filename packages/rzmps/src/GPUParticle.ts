@@ -57,6 +57,7 @@ export interface GPUParticleAttributes {
 export interface GPUParticleBufferState {
   count: number;
   capacity: number;
+  version: number;
   attributes: GPUParticleAttributes;
   particle: GPUParticle;
   alive: Node<'uint'>;
@@ -160,12 +161,13 @@ export function createGPUParticleBufferState(
   capacity = particles.length,
   tagMaskForParticle?: (particle: Particle) => number,
 ): GPUParticleBufferState {
-  return new GPUParticleBufferStateImpl(Math.max(1, capacity, particles.length), particles, tagMaskForParticle);
+  return new GPUParticleBufferStateImpl(nextPowerOfTwo(Math.max(1, capacity, particles.length)), particles, tagMaskForParticle);
 }
 
 class GPUParticleBufferStateImpl implements GPUParticleBufferState {
   count = 0;
   capacity: number;
+  version = 0;
   attributes: GPUParticleAttributes;
   particle: GPUParticle;
   alive: Node<'uint'>;
@@ -313,6 +315,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     const state = stateElement(this.attributes, this.capacity);
     this.alive = state.x;
     this.tagMask = state.y;
+    this.version += 1;
   }
 
   private writeParticle(

@@ -106,6 +106,8 @@ export type ParticleListener = (particle: Particle) => void;
 
 class ParticleSystem extends THREE.Object3D {
   static GPU_DYNAMIC_VALUE_RESOLUTION = 16;
+  static GPU_INITIAL_BUFFER_SIZE = 256;
+  static GPU_READBACK_RATE = 24;
   static GPU_DEBUG = false;
   static GPU_DEBUG_INTERVAL = 30;
 
@@ -141,6 +143,26 @@ class ParticleSystem extends THREE.Object3D {
   gpuDebugInterval: number;
   private _isGPUProcessingActive = false;
   get isGPUProcessingActive(): boolean { return this._isGPUProcessingActive; }
+  get liveParticleCount(): number {
+    return this.particles.reduce((count, particle) => count + (particle.alive ? 1 : 0), 0);
+  }
+  get gpuBufferStats(): {
+    allocated: number;
+    activeSlots: number;
+    live: number;
+    usage: number;
+  } {
+    const allocated = this._gpuBuffers?.capacity ?? 0;
+    const activeSlots = this._gpuBuffers?.count ?? this.particles.length;
+    const live = this.liveParticleCount;
+
+    return {
+      allocated,
+      activeSlots,
+      live,
+      usage: allocated > 0 ? live / allocated : 0,
+    };
+  }
 
   private _simulationSpace: SimulationSpace = SimulationSpace.Local;
   get simulationSpace(): SimulationSpace {
@@ -238,6 +260,8 @@ class ParticleSystem extends THREE.Object3D {
   private _gpuReadbacksInFlight = 0;
   private _gpuReadbackSequence = 0;
   private _latestAppliedGPUReadbackSequence = 0;
+  private _lastGPUReadbackRequestTime = Number.NEGATIVE_INFINITY;
+  private _gpuCPUMirrorStale = false;
   private readonly _gpuDirtyParticleSlots = new Set<number>();
   private _gpuDebugFrame = 0;
   private _gpuDebugActiveFrame: number | undefined;
@@ -478,9 +502,10 @@ class ParticleSystem extends THREE.Object3D {
 
     const debugFrame = this._beginGPUDebugFrame(modules);
     const hasPendingReadback = this._gpuReadbackPending;
+    const preserveGPUState = hasPendingReadback || this._gpuCPUMirrorStale;
 
-    if (hasPendingReadback) {
-      this._logGPUDebug('readback pending; preserving GPU state', {
+    if (preserveGPUState) {
+      this._logGPUDebug('CPU mirror stale; preserving GPU state', {
         inFlight: this._gpuReadbacksInFlight,
         particleCount: this.particles.length,
         gpuCount: this._gpuBuffers?.count,
@@ -513,10 +538,10 @@ class ParticleSystem extends THREE.Object3D {
     if (!this._gpuBuffers) {
       this._gpuBuffers = createGPUParticleBufferState(
         this.particles,
-        this.maxParticles,
+        this._getInitialGPUBufferCapacity(),
         (particle) => this._getParticleGPUTagMask(particle),
       );
-    } else if (hasPendingReadback) {
+    } else if (preserveGPUState) {
       this._gpuBuffers.uploadRange(
         this.particles,
         this._gpuBuffers.count,
@@ -540,10 +565,10 @@ class ParticleSystem extends THREE.Object3D {
     if (!this._gpuTransientBaseBuffers) {
       this._gpuTransientBaseBuffers = createGPUParticleBufferState(
         this.particles,
-        this.maxParticles,
+        this._getInitialGPUBufferCapacity(),
         (particle) => this._getParticleGPUTagMask(particle),
       );
-    } else if (hasPendingReadback) {
+    } else if (preserveGPUState) {
       this._gpuTransientBaseBuffers.uploadRange(
         this.particles,
         this._gpuTransientBaseBuffers.count,
@@ -566,10 +591,10 @@ class ParticleSystem extends THREE.Object3D {
     if (!this._gpuRenderBuffers) {
       this._gpuRenderBuffers = createGPUParticleBufferState(
         this.particles,
-        this.maxParticles,
+        this._getInitialGPUBufferCapacity(),
         (particle) => this._getParticleGPUTagMask(particle),
       );
-    } else if (hasPendingReadback) {
+    } else if (preserveGPUState) {
       this._gpuRenderBuffers.uploadRange(
         this.particles,
         this._gpuRenderBuffers.count,
@@ -600,7 +625,7 @@ class ParticleSystem extends THREE.Object3D {
       modifiers: this._describeGPUModifiers(permanentPreMovementModifiers),
     });
     this._computeGPUModifierPhase(permanentPreMovementModifiers, context, {
-      skipReadbackSensitive: hasPendingReadback,
+      skipReadbackSensitive: preserveGPUState,
     });
 
     const transientPreMovementModifiers = modifiers
@@ -617,7 +642,7 @@ class ParticleSystem extends THREE.Object3D {
       this._computeGPUModifierPhase(
         transientPreMovementModifiers,
         context,
-        { skipReadbackSensitive: hasPendingReadback },
+        { skipReadbackSensitive: preserveGPUState },
       );
     }
 
@@ -629,20 +654,40 @@ class ParticleSystem extends THREE.Object3D {
       this._commitGPUTransientFrame(this._gpuBuffers, this._gpuTransientBaseBuffers);
     }
 
-    this._gpuReadbacksInFlight += 1;
-    this._gpuReadbackPending = true;
-    const readbackSequence = this._gpuReadbackSequence + 1;
-    this._gpuReadbackSequence = readbackSequence;
-    const readbackParticles = this.particles.slice(0, this._gpuBuffers.count);
-    const readbackWasAlive = readbackParticles.map((particle) => particle.alive);
+    const shouldRequestReadback = !hasPendingReadback && this._shouldRequestGPUReadback();
+    const readbackSequence = shouldRequestReadback ? this._gpuReadbackSequence + 1 : 0;
+    const readbackParticles = shouldRequestReadback
+      ? this.particles.slice(0, this._gpuBuffers.count)
+      : [];
+    const readbackWasAlive = shouldRequestReadback
+      ? readbackParticles.map((particle) => particle.alive)
+      : [];
     const readbackStart = performance.now();
-    this._logGPUDebug('readback requested', {
-      readbackSequence,
-      readbackSource: 'main',
-      readbackParticleCount: readbackParticles.length,
-      sample: this._sampleGPUParticles(readbackParticles),
-    });
-    const cpuMirrorUpdate = this._gpuBuffers.readback(sceneRenderer, readbackParticles);
+    let cpuMirrorUpdate: Promise<void> | undefined;
+
+    if (shouldRequestReadback) {
+      this._gpuReadbacksInFlight += 1;
+      this._gpuReadbackPending = true;
+      this._gpuCPUMirrorStale = true;
+      this._gpuReadbackSequence = readbackSequence;
+      this._lastGPUReadbackRequestTime = readbackStart;
+      this._logGPUDebug('readback requested', {
+        readbackSequence,
+        readbackSource: 'main',
+        readbackParticleCount: readbackParticles.length,
+        readbackRate: ParticleSystem.GPU_READBACK_RATE,
+        sample: this._sampleGPUParticles(readbackParticles),
+      });
+      cpuMirrorUpdate = this._gpuBuffers.readback(sceneRenderer, readbackParticles);
+    } else {
+      this._gpuCPUMirrorStale = true;
+      this._logGPUDebug('readback skipped', {
+        reason: hasPendingReadback ? 'pending' : 'rate limit',
+        readbackRate: ParticleSystem.GPU_READBACK_RATE,
+        particleCount: this.particles.length,
+        gpuCount: this._gpuBuffers.count,
+      });
+    }
 
     const transientRenderModifiers = modifiers
       .filter((module) => module.priority >= 1)
@@ -686,13 +731,20 @@ class ParticleSystem extends THREE.Object3D {
       renderer.updateGPU(renderBuffers!, this, this.deltaTime);
     });
 
-    const renderReadbackParticles = cpuInputRenderers.length > 0 && needsRenderBuffer
+    const renderReadbackParticles = shouldRequestReadback && cpuInputRenderers.length > 0 && needsRenderBuffer
       ? this._cloneParticlesForGPUReadback(this.particles.slice(0, this._gpuRenderBuffers.count))
       : readbackParticles;
-    const renderMirrorUpdate: Promise<Particle[]> = cpuInputRenderers.length > 0 && needsRenderBuffer
+    const renderMirrorUpdate: Promise<Particle[]> | undefined = shouldRequestReadback
+      && cpuInputRenderers.length > 0
+      && needsRenderBuffer
       ? this._gpuRenderBuffers.readback(sceneRenderer, renderReadbackParticles)
         .then(() => renderReadbackParticles)
-      : cpuMirrorUpdate.then(() => readbackParticles);
+      : cpuMirrorUpdate?.then(() => readbackParticles);
+
+    if (!shouldRequestReadback || !cpuMirrorUpdate || !renderMirrorUpdate) {
+      this._endGPUDebugFrame(debugFrame);
+      return;
+    }
 
     void (async () => {
       try {
@@ -716,6 +768,7 @@ class ParticleSystem extends THREE.Object3D {
         }
 
         this._latestAppliedGPUReadbackSequence = readbackSequence;
+        this._gpuCPUMirrorStale = this._gpuReadbackPending;
         this._applyGPUReadbackDeaths(readbackParticles, readbackWasAlive);
 
         const renderParticles = await renderMirrorUpdate;
@@ -1183,6 +1236,25 @@ class ParticleSystem extends THREE.Object3D {
   private _usesGPUStableParticleSlots(): boolean {
     return this._isGPUProcessingActive
       || (this.gpuProcessing && this.sceneRenderer instanceof WebGPURenderer);
+  }
+
+  private _shouldRequestGPUReadback(): boolean {
+    const rate = Math.max(0, ParticleSystem.GPU_READBACK_RATE);
+    if (rate <= 0) return false;
+
+    const interval = 1000 / rate;
+    return performance.now() - this._lastGPUReadbackRequestTime >= interval;
+  }
+
+  private _getInitialGPUBufferCapacity(): number {
+    return Math.min(
+      Math.max(
+        ParticleSystem.GPU_INITIAL_BUFFER_SIZE,
+        this.particles.length,
+        1,
+      ),
+      Math.max(this.maxParticles, 1),
+    );
   }
 
   private _uploadDirtyGPUParticleSlots(buffer: GPUParticleBufferState): void {
@@ -1685,6 +1757,8 @@ class ParticleSystem extends THREE.Object3D {
     this._gpuReadbacksInFlight = 0;
     this._gpuReadbackSequence = 0;
     this._latestAppliedGPUReadbackSequence = 0;
+    this._lastGPUReadbackRequestTime = Number.NEGATIVE_INFINITY;
+    this._gpuCPUMirrorStale = false;
     this._gpuDirtyParticleSlots.clear();
     this._prewarmed = false;
 

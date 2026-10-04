@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { attribute } from 'three/tsl';
+import { attribute, float, uint } from 'three/tsl';
 import type { Node } from 'three/webgpu';
 import { cos, positionLocal, sin, vec3 } from 'three/tsl';
 import Renderer, { type RendererOptions } from '../Renderer';
@@ -77,10 +77,6 @@ class MeshRenderer extends Renderer {
 
     setup(system: ParticleSystem): void {
       system.addRendererObject(this.instances);
-    }
-
-    get supportsGPUInput(): boolean {
-      return false;
     }
 
     _update(particles: Particle[], system: ParticleSystem): void {
@@ -167,7 +163,8 @@ gl_FragColor.a *= vInstanceAlpha;`
 
     private applyGPUNodes(buffers: GPUParticleBufferState): void {
       const particle = buffers.particle;
-      const localPosition = rotateXYZ(positionLocal.mul(particle.scale), particle.rotation)
+      const alive = buffers.alive.notEqual(uint(0)).select(float(1), float(0));
+      const localPosition = rotateXYZ(positionLocal.mul(particle.scale).mul(alive), particle.rotation)
         .add(particle.position);
       const materials = Array.isArray(this.instances.material)
         ? this.instances.material
@@ -182,7 +179,7 @@ gl_FragColor.a *= vInstanceAlpha;`
 
         nodeMaterial.positionNode = localPosition;
         nodeMaterial.colorNode = particle.color;
-        nodeMaterial.opacityNode = particle.alpha;
+        nodeMaterial.opacityNode = particle.alpha.mul(alive);
         material.needsUpdate = true;
       });
     }

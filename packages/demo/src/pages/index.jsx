@@ -201,9 +201,21 @@ function DemoPage() {
     setScenePreset(name);
   }, []);
 
-  const handleParticleCountChange = useCallback((count) => {
+  const handleParticleCountChange = useCallback((stats) => {
     if (particleCountRef.current) {
-      particleCountRef.current.textContent = `${count.toLocaleString()} particles`;
+      const count = typeof stats === 'number' ? stats : stats.particles;
+      const allocated = typeof stats === 'number' ? 0 : stats.allocated;
+      const activeSlots = typeof stats === 'number' ? 0 : stats.activeSlots;
+      const usage = allocated > 0 ? (count / allocated) * 100 : 0;
+      const lines = [`${count.toLocaleString()} particles`];
+
+      if (allocated > 0) {
+        lines.push(`${allocated.toLocaleString()} GPU slots, ${usage.toFixed(1)}% live`);
+      } else if (activeSlots > 0) {
+        lines.push(`${activeSlots.toLocaleString()} active slots`);
+      }
+
+      particleCountRef.current.textContent = lines.join('\n');
     }
   }, []);
 

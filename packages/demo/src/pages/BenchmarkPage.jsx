@@ -395,7 +395,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
     lastFrame.current = frameStart;
     active.current.updateSamples.push(updateMs);
-    active.current.particleSamples.push(active.current.system.particles.length);
+    active.current.particleSamples.push(active.current.system.liveParticleCount ?? active.current.system.particles.length);
     active.current.gpuActiveSamples.push(active.current.system.isGPUProcessingActive);
 
     if (active.current.requireGPU && !active.current.system.isGPUProcessingActive) {

@@ -8,17 +8,31 @@ import { getSceneParticleRoot } from '../presets/scenes/particleRoot';
 
 const RZMPS_VERSION = import.meta.env.VITE_RZMPS_VERSION;
 
-function countSystemParticles(system, visited = new Set()) {
-  if (!system || visited.has(system)) return 0;
+function collectSystemStats(system, visited = new Set()) {
+  if (!system || visited.has(system)) {
+    return {
+      particles: 0,
+      allocated: 0,
+      activeSlots: 0,
+    };
+  }
 
   visited.add(system);
 
-  let count = system.particles?.length ?? 0;
+  const stats = {
+    particles: system.liveParticleCount ?? system.particles?.filter((particle) => particle.alive).length ?? 0,
+    allocated: system.gpuBufferStats?.allocated ?? 0,
+    activeSlots: system.gpuBufferStats?.activeSlots ?? 0,
+  };
+
   system.subSystems?.forEach((_options, subSystem) => {
-    count += countSystemParticles(subSystem, visited);
+    const childStats = collectSystemStats(subSystem, visited);
+    stats.particles += childStats.particles;
+    stats.allocated += childStats.allocated;
+    stats.activeSlots += childStats.activeSlots;
   });
 
-  return count;
+  return stats;
 }
 
 function ParticleSystemDisplay({
@@ -98,7 +112,7 @@ function ParticleSystemDisplay({
 
   useFrame((_state, delta) => {
     particleSystem.current?.update();
-    onParticleCountChange(countSystemParticles(particleSystem.current));
+    onParticleCountChange(collectSystemStats(particleSystem.current));
     guiRef.current?.update(delta);
   });
 
