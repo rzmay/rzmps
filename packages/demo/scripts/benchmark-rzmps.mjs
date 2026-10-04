@@ -71,14 +71,18 @@ function getChromeArgs() {
   const args = [
     '--disable-dev-shm-usage',
     '--enable-precise-memory-info',
-    '--use-angle=default',
   ];
 
   if (process.env.CI === 'true') {
     args.push(
       '--no-sandbox',
       '--disable-setuid-sandbox',
+      '--use-gl=angle',
+      '--use-angle=swiftshader',
+      '--enable-unsafe-swiftshader',
     );
+  } else {
+    args.push('--use-angle=default');
   }
 
   if (!useVsync) {
@@ -135,6 +139,7 @@ async function collectBrowserHardware(page) {
 async function runBenchmark() {
   const server = startServer();
   let browser;
+  let pageError;
 
   try {
     await waitForServer(`http://${host}:${port}/`);
@@ -152,6 +157,7 @@ async function runBenchmark() {
       }
     });
     page.on('pageerror', (error) => {
+      pageError = error;
       console.error(`[browser pageerror] ${error.stack ?? error.message}`);
     });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
@@ -162,6 +168,10 @@ async function runBenchmark() {
         { timeout: timeoutMs },
       );
     } catch (error) {
+      if (pageError) {
+        throw pageError;
+      }
+
       const progress = await page.evaluate(() => ({
         activeCase: document.querySelector('.benchmark-status span')?.textContent,
         status: document.querySelector('.benchmark-status small')?.textContent,
