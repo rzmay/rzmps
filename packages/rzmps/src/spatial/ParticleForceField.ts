@@ -27,6 +27,8 @@ export interface ForceFieldOptions extends SpatialEffectOptions {
     rotationAttraction: DynamicValue<number>;
     drag: DynamicValue<number>;
     multiplier: DynamicValue<number>;
+    radialFalloff: boolean;
+    radialFalloffEasing: (falloff: number) => number;
     tags: StrictMultiple<Tag>;
 }
 
@@ -173,6 +175,8 @@ class ParticleForceField extends SpatialEffect {
 
   drag?: DynamicValue<number>;
   multiplier: DynamicValue<number> = 1;
+  radialFalloff = false;
+  radialFalloffEasing: (falloff: number) => number;
 
   private readonly _particleWorldVelocity = new THREE.Vector3();
   private readonly _worldQuaternion = new THREE.Quaternion();
@@ -292,6 +296,8 @@ class ParticleForceField extends SpatialEffect {
     this.rotationAttraction = options.rotationAttraction;
     this.drag = options.drag;
     this.multiplier = options.multiplier ?? this.multiplier;
+    this.radialFalloffEasing = options.radialFalloffEasing ?? ((falloff: number) => falloff);
+    this.radialFalloff = options.radialFalloff ?? Boolean(options.radialFalloffEasing);
   }
 
   protected override _modifyParticle(
@@ -364,7 +370,7 @@ class ParticleForceField extends SpatialEffect {
       force.addScaledVector(velocity, -evaluateDynamicNumber(this.drag, time));
     }
 
-    force.multiplyScalar(this.getFalloff(position));
+    if (this.radialFalloff) force.multiplyScalar(this.getFalloff(position));
 
     if (particleSystem?.simulationSpace === 'local') {
       force.applyQuaternion(this._inverseWorldQuaternion);
@@ -423,14 +429,11 @@ class ParticleForceField extends SpatialEffect {
 
     const ratio = localPosition.length() / radius;
 
-    if (this.inverted) {
-      return Math.min(Math.max(ratio, 0), 1);
-    }
+    const falloff = this.inverted
+      ? Math.min(Math.max(ratio, 0), 1)
+      : 1 - Math.min(ratio, 1);
 
-    return 1 - Math.min(
-      ratio,
-      1,
-    );
+    return this.radialFalloffEasing(falloff);
   }
 }
 

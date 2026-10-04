@@ -7,6 +7,7 @@ const host = '127.0.0.1';
 const port = Number(process.env.RZMPS_BENCHMARK_PORT ?? 4173);
 const durationMs = Number(process.env.RZMPS_BENCHMARK_DURATION_MS ?? 4000);
 const warmupMs = Number(process.env.RZMPS_BENCHMARK_WARMUP_MS ?? 1000);
+const timeoutMs = Number(process.env.RZMPS_BENCHMARK_TIMEOUT_MS ?? 180_000);
 const openBrowser = process.argv.includes('--open') || process.argv.includes('--headed');
 const useVsync = process.argv.includes('--vsync');
 const pacingMode = useVsync ? 'vsync' : 'uncapped';
@@ -70,8 +71,19 @@ function getChromeArgs() {
   const args = [
     '--disable-dev-shm-usage',
     '--enable-precise-memory-info',
-    '--use-angle=default',
   ];
+
+  if (process.env.CI === 'true') {
+    args.push(
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--use-gl=angle',
+      '--use-angle=swiftshader',
+      '--enable-unsafe-swiftshader',
+    );
+  } else {
+    args.push('--use-angle=default');
+  }
 
   if (!useVsync) {
     args.push(
@@ -127,6 +139,7 @@ async function collectBrowserHardware(page) {
 async function runBenchmark() {
   const server = startServer();
   let browser;
+  let pageError;
 
   try {
     await waitForServer(`http://${host}:${port}/`);
@@ -138,12 +151,40 @@ async function runBenchmark() {
     });
 
     const page = await browser.newPage();
+    page.on('console', (message) => {
+      if (message.type() === 'error') {
+        console.error(`[browser ${message.type()}] ${message.text()}`);
+      }
+    });
+    page.on('pageerror', (error) => {
+      pageError = error;
+      console.error(`[browser pageerror] ${error.stack ?? error.message}`);
+    });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     const browserHardware = await collectBrowserHardware(page);
-    await page.waitForFunction(
-      'window.__RZMPS_BENCHMARK_DONE__ === true',
-      { timeout: 180_000 },
-    );
+    try {
+      await page.waitForFunction(
+        'window.__RZMPS_BENCHMARK_DONE__ === true',
+        { timeout: timeoutMs },
+      );
+    } catch (error) {
+      if (pageError) {
+        throw pageError;
+      }
+
+      const progress = await page.evaluate(() => ({
+        activeCase: document.querySelector('.benchmark-status span')?.textContent,
+        status: document.querySelector('.benchmark-status small')?.textContent,
+        results: window.__RZMPS_BENCHMARK_RESULTS__ ?? [],
+      })).catch(() => null);
+
+      if (progress) {
+        console.error('Benchmark timed out with page progress:');
+        console.error(JSON.stringify(progress, null, 2));
+      }
+
+      throw error;
+    }
 
     const results = await page.evaluate(() => window.__RZMPS_BENCHMARK_RESULTS__ ?? []);
     const browserVersion = await browser.version();
@@ -152,6 +193,7 @@ async function runBenchmark() {
       viewport,
       durationMs,
       warmupMs,
+      timeoutMs,
       measuredAt: new Date().toISOString(),
       mode: openBrowser ? 'visible browser' : 'headless browser',
       framePacing: pacingMode,

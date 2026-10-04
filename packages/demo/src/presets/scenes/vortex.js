@@ -84,6 +84,7 @@ export default function createVortex(scene) {
       folder.add(vortex, 'rotationSpeed', -80, 80, 0.01).name('Rotation Speed').onChange(() => vortexHelper.update());
       folder.add(vortex, 'rotationAttraction', -80, 80, 0.01).name('Center Pull').onChange(() => vortexHelper.update());
       folder.add(vortex, 'drag', 0, 12, 0.01).name('Drag').onChange(() => vortexHelper.update());
+      folder.add(vortex, 'radialFalloff').name('Radial Falloff').onChange(() => vortexHelper.update());
       folder.add(vortex, 'inverted').name('Inverted').onChange(() => vortexHelper.update());
       folder.add(vortexHelper, 'visible').name('Show Helper');
     },

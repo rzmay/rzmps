@@ -155,6 +155,56 @@ assert.equal(typeof SpatialEffectHelper, 'function');
 }
 
 {
+  const particle = new Particle({
+    mass: 1,
+    lifetime: 2,
+    position: new THREE.Vector3(1.9, 0, 0),
+  });
+  const field = ParticleForceField.Sphere({
+    direction: new THREE.Vector3(2, 0, 0),
+  }, 2, 16, 8);
+
+  field.modify([particle], 0.5, createSystem());
+
+  assert.equal(Number(particle.velocity.x.toFixed(4)), 1);
+}
+
+{
+  const particle = new Particle({
+    mass: 1,
+    lifetime: 2,
+    position: new THREE.Vector3(1.9, 0, 0),
+  });
+  const field = ParticleForceField.Sphere({
+    direction: new THREE.Vector3(2, 0, 0),
+    radialFalloff: true,
+  }, 2, 16, 8);
+
+  field.modify([particle], 0.5, createSystem());
+
+  assert.ok(particle.velocity.x > 0);
+  assert.ok(particle.velocity.x < 1);
+}
+
+{
+  const particle = new Particle({
+    mass: 1,
+    lifetime: 2,
+    position: new THREE.Vector3(1.9, 0, 0),
+  });
+  const field = ParticleForceField.Sphere({
+    direction: new THREE.Vector3(2, 0, 0),
+    radialFalloffEasing: (falloff) => falloff ** 2,
+  }, 2, 16, 8);
+
+  field.modify([particle], 0.5, createSystem());
+
+  assert.equal(field.radialFalloff, true);
+  assert.ok(particle.velocity.x > 0);
+  assert.ok(particle.velocity.x < 0.25);
+}
+
+{
   const inside = new Particle({
     mass: 1,
     position: new THREE.Vector3(0, 0, 0),
@@ -208,6 +258,34 @@ assert.equal(typeof SpatialEffectHelper, 'function');
 
   assert.ok(system.particles[0].scale.x > 1);
   assert.ok(system.particles[0].scale.x < 3);
+}
+
+{
+  const scene = new THREE.Scene();
+  const effect = SpatialEffect.Sphere((particle) => {
+    particle.scale.set(3, 3, 3);
+  }, {
+    feather: 1,
+    featherEasing: (feather) => feather * feather,
+    priority: Module.Priority.Transient,
+  }, 1, 16, 8);
+  scene.add(effect);
+
+  const system = new ParticleSystem({
+    emitters: [],
+    renderers: [],
+    modules: [],
+    gravityModifier: 0,
+  });
+  system._scene = scene;
+  system.particles.push(new Particle({
+    lifetime: 2,
+    position: new THREE.Vector3(1.5, 0, 0),
+  }));
+
+  system._processParticles();
+
+  assert.equal(Number(system.particles[0].scale.x.toFixed(4)), 1.5);
 }
 
 {

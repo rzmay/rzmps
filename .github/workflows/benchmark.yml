@@ -3,7 +3,7 @@ name: PR Benchmarks
 on:
   pull_request:
     branches:
-      - main
+      - develop
     types:
       - opened
       - synchronize
@@ -22,6 +22,10 @@ jobs:
     if: github.event.pull_request.draft == false
 
     runs-on: ubuntu-24.04
+    env:
+      RZMPS_BENCHMARK_DURATION_MS: 1500
+      RZMPS_BENCHMARK_WARMUP_MS: 500
+      RZMPS_BENCHMARK_TIMEOUT_MS: 180000
 
     steps:
       - name: Checkout base
@@ -54,21 +58,60 @@ jobs:
         working-directory: base
         run: npm ci
 
-      - name: Benchmark base
+      - name: Benchmark base A
         working-directory: base
         run: |
           npm run benchmark:export -- \
-            "$GITHUB_WORKSPACE/benchmark-results/base.json"
+            "$GITHUB_WORKSPACE/benchmark-results/base-a.json"
 
       - name: Install PR dependencies
         working-directory: head
         run: npm ci
 
-      - name: Benchmark PR
+      - name: Benchmark PR A
         working-directory: head
         run: |
           npm run benchmark:export -- \
-            "$GITHUB_WORKSPACE/benchmark-results/head.json"
+            "$GITHUB_WORKSPACE/benchmark-results/head-a.json"
+
+      - name: Benchmark PR B
+        working-directory: head
+        run: |
+          npm run benchmark:export -- \
+            "$GITHUB_WORKSPACE/benchmark-results/head-b.json"
+
+      - name: Benchmark base B
+        working-directory: base
+        run: |
+          npm run benchmark:export -- \
+            "$GITHUB_WORKSPACE/benchmark-results/base-b.json"
+
+      - name: Benchmark base C
+        working-directory: base
+        run: |
+          npm run benchmark:export -- \
+            "$GITHUB_WORKSPACE/benchmark-results/base-c.json"
+
+      - name: Benchmark PR C
+        working-directory: head
+        run: |
+          npm run benchmark:export -- \
+            "$GITHUB_WORKSPACE/benchmark-results/head-c.json"
+
+      - name: Aggregate benchmark samples
+        working-directory: head
+        run: |
+          node scripts/aggregate-benchmarks.mjs \
+            "$GITHUB_WORKSPACE/benchmark-results/base.json" \
+            "$GITHUB_WORKSPACE/benchmark-results/base-a.json" \
+            "$GITHUB_WORKSPACE/benchmark-results/base-b.json" \
+            "$GITHUB_WORKSPACE/benchmark-results/base-c.json"
+
+          node scripts/aggregate-benchmarks.mjs \
+            "$GITHUB_WORKSPACE/benchmark-results/head.json" \
+            "$GITHUB_WORKSPACE/benchmark-results/head-a.json" \
+            "$GITHUB_WORKSPACE/benchmark-results/head-b.json" \
+            "$GITHUB_WORKSPACE/benchmark-results/head-c.json"
 
       - name: Write PR metadata
         env:
