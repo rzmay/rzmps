@@ -542,11 +542,6 @@ class ParticleSystem extends THREE.Object3D {
         (particle) => this._getParticleGPUTagMask(particle),
       );
     } else if (preserveGPUState) {
-      this._gpuBuffers.uploadRange(
-        this.particles,
-        this._gpuBuffers.count,
-        (particle) => this._getParticleGPUTagMask(particle),
-      );
       this._uploadDirtyGPUParticleSlots(this._gpuBuffers);
     } else {
       this._gpuBuffers.upload(
@@ -569,11 +564,6 @@ class ParticleSystem extends THREE.Object3D {
         (particle) => this._getParticleGPUTagMask(particle),
       );
     } else if (preserveGPUState) {
-      this._gpuTransientBaseBuffers.uploadRange(
-        this.particles,
-        this._gpuTransientBaseBuffers.count,
-        (particle) => this._getParticleGPUTagMask(particle),
-      );
       this._uploadDirtyGPUParticleSlots(this._gpuTransientBaseBuffers);
     } else {
       this._gpuTransientBaseBuffers.upload(
@@ -595,11 +585,6 @@ class ParticleSystem extends THREE.Object3D {
         (particle) => this._getParticleGPUTagMask(particle),
       );
     } else if (preserveGPUState) {
-      this._gpuRenderBuffers.uploadRange(
-        this.particles,
-        this._gpuRenderBuffers.count,
-        (particle) => this._getParticleGPUTagMask(particle),
-      );
       this._uploadDirtyGPUParticleSlots(this._gpuRenderBuffers);
     } else {
       this._gpuRenderBuffers.upload(
@@ -731,6 +716,16 @@ class ParticleSystem extends THREE.Object3D {
       renderer.updateGPU(renderBuffers!, this, this.deltaTime);
     });
 
+    const debugRenderReadbackParticles = debugFrame !== undefined
+      && shouldRequestReadback
+      && needsRenderBuffer
+      ? this._cloneParticlesForGPUReadback(this.particles.slice(0, this._gpuRenderBuffers.count))
+      : undefined;
+    const debugRenderMirrorUpdate = debugRenderReadbackParticles
+      ? this._gpuRenderBuffers.readback(sceneRenderer, debugRenderReadbackParticles)
+        .then(() => debugRenderReadbackParticles)
+      : undefined;
+
     const renderReadbackParticles = shouldRequestReadback && cpuInputRenderers.length > 0 && needsRenderBuffer
       ? this._cloneParticlesForGPUReadback(this.particles.slice(0, this._gpuRenderBuffers.count))
       : readbackParticles;
@@ -772,6 +767,7 @@ class ParticleSystem extends THREE.Object3D {
         this._applyGPUReadbackDeaths(readbackParticles, readbackWasAlive);
 
         const renderParticles = await renderMirrorUpdate;
+        const debugRenderParticles = await debugRenderMirrorUpdate;
 
         if (readbackSequence < this._latestAppliedGPUReadbackSequence) {
           this._logGPUDebug('render readback ignored: stale sequence', {
@@ -780,6 +776,13 @@ class ParticleSystem extends THREE.Object3D {
           });
           this._endGPUDebugFrame(debugFrame);
           return;
+        }
+
+        if (debugRenderParticles) {
+          this._logGPUDebug('debug render-buffer readback resolved', {
+            readbackSequence,
+            sample: this._sampleGPUParticles(debugRenderParticles),
+          });
         }
 
         if (cpuInputRenderers.length > 0) {
@@ -1157,6 +1160,7 @@ class ParticleSystem extends THREE.Object3D {
     scalarVelocity: number[];
     speed: number;
     alpha: number;
+    distortionStrength: number;
   }> {
     return particles.slice(0, 3).map((particle, index) => ({
       index,
@@ -1175,6 +1179,7 @@ class ParticleSystem extends THREE.Object3D {
       scalarVelocity: this._debugVector(particle.scalarVelocity),
       speed: this._debugNumber(particle.speed),
       alpha: this._debugNumber(particle.alpha),
+      distortionStrength: this._debugNumber(particle.distortionStrength),
     }));
   }
 
