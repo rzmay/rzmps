@@ -582,10 +582,23 @@ Helpers:
 
 ```ts
 EmissionShape.Box(...boxGeometryArgs);
+EmissionShape.Box(options, ...boxGeometryArgs);
 EmissionShape.Sphere(...sphereGeometryArgs);
+EmissionShape.Sphere(options, ...sphereGeometryArgs);
 EmissionShape.Cone(...coneGeometryArgs);
+EmissionShape.Cone(options, ...coneGeometryArgs);
 EmissionShape.Torus(...torusGeometryArgs);
+EmissionShape.Torus(options, ...torusGeometryArgs);
 ```
+
+Factory `options` use `Partial<Omit<EmissionShapeOptions, "geometry">>`, so
+the helper factories can set fields like `source` while still constructing the
+underlying geometry from the remaining arguments.
+
+When `source` is `EmissionSource.Volume`, the shape samples random points in
+the geometry's bounding box and tests whether each point is inside the geometry.
+`EmissionShape.MAX_VOLUME_ITERATIONS` controls how many points one call will try
+before falling back to surface emission. It defaults to `5`.
 
 ## Modules
 

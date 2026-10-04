@@ -4,32 +4,68 @@ import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.j
 import { EmissionSource } from './enums/EmissionSource';
 import isPointInMesh from './helpers/isPointInMesh';
 
-interface EmissionShapeOptions {
+export interface EmissionShapeOptions {
     geometry: THREE.BufferGeometry;
     source: EmissionSource | `${EmissionSource}`;
 }
 
+export type EmissionShapeFactoryOptions = Omit<Partial<EmissionShapeOptions>, 'geometry'>;
+
+type BoxGeometryArgs = ConstructorParameters<typeof THREE.BoxGeometry>;
+type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
+type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
+type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
+
 class EmissionShape extends THREE.Object3D {
-    static maxVolumeIterations = 5;
+    static MAX_VOLUME_ITERATIONS = 5;
 
     private static readonly _doubleSidedMaterial = new THREE.MeshBasicMaterial(
       { side: THREE.DoubleSide },
     );
 
-    static Box(...args: any[]): EmissionShape {
-      return new EmissionShape({ geometry: new THREE.BoxGeometry(...args) });
+    static Box(options: EmissionShapeFactoryOptions, ...args: BoxGeometryArgs): EmissionShape;
+    static Box(...args: BoxGeometryArgs): EmissionShape;
+    static Box(first?: EmissionShapeFactoryOptions | BoxGeometryArgs[0], ...rest: unknown[]): EmissionShape {
+      const { options, geometryArgs } = EmissionShape.resolveFactoryArgs<BoxGeometryArgs>(first, rest);
+      return new EmissionShape({ ...options, geometry: new THREE.BoxGeometry(...geometryArgs) });
     }
 
-    static Sphere(...args: any[]): EmissionShape {
-      return new EmissionShape({ geometry: new THREE.SphereGeometry(...args) });
+    static Sphere(options: EmissionShapeFactoryOptions, ...args: SphereGeometryArgs): EmissionShape;
+    static Sphere(...args: SphereGeometryArgs): EmissionShape;
+    static Sphere(first?: EmissionShapeFactoryOptions | SphereGeometryArgs[0], ...rest: unknown[]): EmissionShape {
+      const { options, geometryArgs } = EmissionShape.resolveFactoryArgs<SphereGeometryArgs>(first, rest);
+      return new EmissionShape({ ...options, geometry: new THREE.SphereGeometry(...geometryArgs) });
     }
 
-    static Cone(...args: any[]): EmissionShape {
-      return new EmissionShape({ geometry: new THREE.ConeGeometry(...args) });
+    static Cone(options: EmissionShapeFactoryOptions, ...args: ConeGeometryArgs): EmissionShape;
+    static Cone(...args: ConeGeometryArgs): EmissionShape;
+    static Cone(first?: EmissionShapeFactoryOptions | ConeGeometryArgs[0], ...rest: unknown[]): EmissionShape {
+      const { options, geometryArgs } = EmissionShape.resolveFactoryArgs<ConeGeometryArgs>(first, rest);
+      return new EmissionShape({ ...options, geometry: new THREE.ConeGeometry(...geometryArgs) });
     }
 
-    static Torus(...args: any[]): EmissionShape {
-      return new EmissionShape({ geometry: new THREE.TorusGeometry(...args) });
+    static Torus(options: EmissionShapeFactoryOptions, ...args: TorusGeometryArgs): EmissionShape;
+    static Torus(...args: TorusGeometryArgs): EmissionShape;
+    static Torus(first?: EmissionShapeFactoryOptions | TorusGeometryArgs[0], ...rest: unknown[]): EmissionShape {
+      const { options, geometryArgs } = EmissionShape.resolveFactoryArgs<TorusGeometryArgs>(first, rest);
+      return new EmissionShape({ ...options, geometry: new THREE.TorusGeometry(...geometryArgs) });
+    }
+
+    private static resolveFactoryArgs<T extends unknown[]>(
+      first: unknown,
+      rest: unknown[],
+    ): { options: EmissionShapeFactoryOptions; geometryArgs: T } {
+      if (first && typeof first === 'object' && !Array.isArray(first)) {
+        return {
+          options: first as EmissionShapeFactoryOptions,
+          geometryArgs: rest as T,
+        };
+      }
+
+      return {
+        options: {},
+        geometryArgs: (first === undefined ? rest : [first, ...rest]) as T,
+      };
     }
 
     source: EmissionSource;
@@ -39,8 +75,6 @@ class EmissionShape extends THREE.Object3D {
     private _surfaceSampler: MeshSurfaceSampler;
 
     private _vertexNormals: THREE.Vector3[] = [];
-
-    private _raycaster: THREE.Raycaster = new THREE.Raycaster();
 
     private _mesh: THREE.Mesh;
 
@@ -179,15 +213,17 @@ class EmissionShape extends THREE.Object3D {
 
           // Choose random points in bounding box until one is contained by geometry (volume)
           const { min, max } = this._geometry.boundingBox;
-          const randomPoint = new THREE.Vector3(
-            THREE.MathUtils.lerp(min.x, max.x, Math.random()),
-            THREE.MathUtils.lerp(min.y, max.y, Math.random()),
-            THREE.MathUtils.lerp(min.z, max.z, Math.random()),
-          );
+          const randomPoint = new THREE.Vector3();
 
           // Search for the allotted iterations
           let iterations = 0;
-          while (iterations < EmissionShape.maxVolumeIterations) {
+          while (iterations < EmissionShape.MAX_VOLUME_ITERATIONS) {
+            randomPoint.set(
+              THREE.MathUtils.lerp(min.x, max.x, Math.random()),
+              THREE.MathUtils.lerp(min.y, max.y, Math.random()),
+              THREE.MathUtils.lerp(min.z, max.z, Math.random()),
+            );
+
             if (isPointInMesh(randomPoint, this._mesh)) {
               return {
                 position: this._toParentPosition(randomPoint),
