@@ -195,12 +195,15 @@ class SpatialEffect extends THREE.Object3D {
     this.geometry = resolvedOptions.geometry;
   }
 
+  // If this directly modifies particles and should be picked up by particle systems
+  // This will be true for most spatial effects, but not special ones like boid affectors
   get modifiesParticles(): boolean {
     return this._modify !== null
       || this._modifyFeather !== undefined
       || this._modifyParticle !== SpatialEffect.prototype._modifyParticle;
   }
 
+  // Spatial test, whether or not this is within the effect's jurisdiction
   test(particle: Particle, particleSystem: ParticleSystem): boolean {
     if (this.tags && !tagsIntersect(this.tags, particle.tags ?? [])) return false;
     if (this._test) return this._test(particle, particleSystem, this);
