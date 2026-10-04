@@ -1665,9 +1665,11 @@ generic `SpatialEffectHelper` and adds sampled force arrows.
 `ParticleOctree` stores particles in a sparse spatial octree and returns
 node-level aggregate data. Nodes also store deduplicated neighboring nodes in
 `neighbors`. It is useful when a module needs nearby-particle information
-without doing an all-pairs scan each update. The built-in `Boids` module uses
-`ParticleOctree` to aggregate local flocking direction, center of mass,
-separation data, and affector influence.
+without doing an all-pairs scan each update. In typical neighborhood-query
+workloads, that reduces particle interaction work from comparing every particle
+to every other particle (`O(n^2)`) to roughly `O(n log n)`. The built-in `Boids`
+module uses `ParticleOctree` to aggregate local flocking direction, center of
+mass, separation data, and affector influence.
 
 ```ts
 type OctreeConfig = {
