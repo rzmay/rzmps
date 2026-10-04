@@ -187,6 +187,24 @@ assert.equal(typeof SpatialEffectHelper, 'function');
 }
 
 {
+  const particle = new Particle({
+    mass: 1,
+    lifetime: 2,
+    position: new THREE.Vector3(1.9, 0, 0),
+  });
+  const field = ParticleForceField.Sphere({
+    direction: new THREE.Vector3(2, 0, 0),
+    radialFalloffEasing: (falloff) => falloff ** 2,
+  }, 2, 16, 8);
+
+  field.modify([particle], 0.5, createSystem());
+
+  assert.equal(field.radialFalloff, true);
+  assert.ok(particle.velocity.x > 0);
+  assert.ok(particle.velocity.x < 0.25);
+}
+
+{
   const inside = new Particle({
     mass: 1,
     position: new THREE.Vector3(0, 0, 0),

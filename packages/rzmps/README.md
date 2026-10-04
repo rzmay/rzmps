@@ -1434,6 +1434,7 @@ interface ForceFieldOptions {
   drag: DynamicValue<number>;
   multiplier: DynamicValue<number>;
   radialFalloff: boolean;
+  radialFalloffEasing: (falloff: number) => number;
   scale: THREE.Vector3;
   geometry: THREE.BufferGeometry;
   tags: StrictMultiple<Tag>;
@@ -1450,12 +1451,15 @@ falloff based on the field geometry's bounding radius. This preserves the older
 "strongest at the center, weakest near the edge" behavior, but it is intentionally
 opt-in because it is radial even for non-spherical geometry.
 
+Pass `radialFalloffEasing` to reshape that normalized radial falloff value; when
+it is provided, `radialFalloff` defaults to `true`.
+
 `radialFalloff` is different from `feather`. `feather` controls how a spatial
 effect blends at its boundary, extending the effect region outward and easing
 from full strength to zero. `radialFalloff` changes force magnitude inside the
 field based on distance from the field origin. Use `feather`/`featherEasing` for
-soft boundaries, and `radialFalloff` only when you specifically want the force
-itself to weaken away from the center.
+soft boundaries, and `radialFalloff`/`radialFalloffEasing` only when you
+specifically want the force itself to weaken away from the center.
 
 Helpers:
 
