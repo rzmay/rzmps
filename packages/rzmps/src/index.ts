@@ -59,6 +59,14 @@ export { default as SpeedOverLifetime } from './modules/SpeedOverLifetime';
 export { default as MassBySize } from './modules/MassBySize';
 export { default as MassByDepth } from './modules/MassByDepth';
 export { default as MassOverLifetime } from './modules/MassOverLifetime';
+export { default as Boids } from './modules/Boids';
+export type {
+  BoidParticleAffectorOptions,
+  BoidsOptions,
+} from './modules/Boids';
+export { default as BoidAffector } from './spatial/BoidAffector';
+export type { BoidAffectorOptions } from './spatial/BoidAffector';
+export { default as BoidAffectorHelper } from './spatial/BoidAffectorHelper';
 export { default as SpatialEffect } from './SpatialEffect';
 export type {
   SpatialEffectFeatherUpdate,
@@ -84,6 +92,12 @@ export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBack
 // Dynamic Value
 export type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
 export type { ValueByParameter } from './types/ValueByParameter';
+export { default as ParticleOctree } from './helpers/ParticleOctree';
+export type {
+  OctreeAggregator,
+  OctreeConfig,
+  OctreeNode,
+} from './helpers/ParticleOctree';
 
 // Texture helper
 export * as Textures from './Textures';

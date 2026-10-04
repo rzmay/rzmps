@@ -4,6 +4,7 @@ import loadHdri from './hdri';
 import shanghaiBund from '../../assets/images/shanghai_bund_1k.hdr?url';
 import ferndaleStudio from '../../assets/images/ferndale_studio_11_1k.hdr?url';
 import createCollisionTest from './collisionTest';
+import createBoidAffectors from './boidAffectors';
 import createAmmoCollisionTest from './collisionAmmo';
 import createRapierCollisionTest from './collisionRapier';
 import createJoltCollisionTest from './collisionJolt';
@@ -31,6 +32,7 @@ const scenePresets = {
   'Shanghai Bund HDRI': withMetadata(loadHdri(shanghaiBund), 'hdri.js', loadHdri.author),
   'Ferndale Studio HDRI': withMetadata(loadHdri(ferndaleStudio), 'hdri.js', loadHdri.author),
   'Color Lights': withMetadata(loadColorLights, 'colorLights.js'),
+  'Boid Affectors': withMetadata(createBoidAffectors, 'boidAffectors.js'),
   'Collision (builtin/Octree)': withMetadata(createCollisionTest, 'collisionTest.js'),
   'Collision (Ammo)': withMetadata(createAmmoCollisionTest, 'collisionAmmo.js'),
   'Collision (Rapier)': withMetadata(createRapierCollisionTest, 'collisionRapier.js'),

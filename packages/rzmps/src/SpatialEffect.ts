@@ -217,7 +217,7 @@ class SpatialEffect extends THREE.Object3D {
     return this.getFeather(this.localParticlePosition) > 0;
   }
 
-  containsWorldPosition(position: THREE.Vector3): boolean {
+  containsWorldPosition(position: THREE.Vector3, updateMatrix = true): boolean {
     if (!this.geometry) {
       this.getWorldPosition(this.worldEffectPosition);
       const contains = position.distanceToSquared(this.worldEffectPosition) <= Number.EPSILON;
@@ -225,7 +225,7 @@ class SpatialEffect extends THREE.Object3D {
     }
 
     this.localParticlePosition.copy(position);
-    this.updateWorldMatrix(true, false);
+    if (updateMatrix) this.updateWorldMatrix(true, false);
     this.worldToLocal(this.localParticlePosition);
 
     const contains = isPointInMesh(this.localParticlePosition, this._mesh);
