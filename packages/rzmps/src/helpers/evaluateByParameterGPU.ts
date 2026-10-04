@@ -19,8 +19,8 @@ export function evaluateByParameterNumberGPU(
   if (typeof value === 'number') return float(value).mul(parameter);
   if (Array.isArray(value)) {
     return mix(
-      evaluateByParameterNumberGPU(value[0], parameter, fallback),
-      evaluateByParameterNumberGPU(value[1], parameter, fallback),
+      resolveParameterNumberEndpointGPU(value[0], parameter, fallback),
+      resolveParameterNumberEndpointGPU(value[1], parameter, fallback),
       parameter.clamp(0, 1),
     );
   }
@@ -38,8 +38,8 @@ export function evaluateByParameterVectorGPU(
   if (value instanceof THREE.Vector3) return vec3(value).mul(parameter);
   if (Array.isArray(value)) {
     return mix(
-      evaluateByParameterVectorGPU(value[0], parameter, fallback),
-      evaluateByParameterVectorGPU(value[1], parameter, fallback),
+      resolveParameterVectorEndpointGPU(value[0], parameter, fallback),
+      resolveParameterVectorEndpointGPU(value[1], parameter, fallback),
       parameter.clamp(0, 1),
     );
   }
@@ -57,11 +57,50 @@ export function evaluateByParameterColorGPU(
   if (value instanceof THREE.Color) return vec3(value.r, value.g, value.b).mul(parameter);
   if (Array.isArray(value)) {
     return mix(
-      evaluateByParameterColorGPU(value[0], parameter, fallback),
-      evaluateByParameterColorGPU(value[1], parameter, fallback),
+      resolveParameterColorEndpointGPU(value[0], parameter, fallback),
+      resolveParameterColorEndpointGPU(value[1], parameter, fallback),
       parameter.clamp(0, 1),
     );
   }
+  throw new Error('GPU parameter colors must be constants or [constant, constant] ranges.');
+}
+
+function resolveParameterNumberEndpointGPU(
+  value: ValueByParameter<number> | undefined,
+  parameter: Node<'float'>,
+  fallback = 0,
+): Node<'float'> {
+  if (value === undefined) return float(fallback);
+  if (isTSLNode(value)) return value as Node<'float'>;
+  if (typeof value === 'function') return sampleParameterNumberGPU(value, parameter);
+  if (typeof value === 'number') return float(value);
+  if (Array.isArray(value)) return evaluateByParameterNumberGPU(value, parameter, fallback);
+  throw new Error('GPU parameter values must be constants or [constant, constant] ranges.');
+}
+
+function resolveParameterVectorEndpointGPU(
+  value: ValueByParameter<THREE.Vector3> | undefined,
+  parameter: Node<'float'>,
+  fallback = new THREE.Vector3(),
+): Node<'vec3'> {
+  if (value === undefined) return vec3(fallback);
+  if (isTSLNode(value)) return value as Node<'vec3'>;
+  if (typeof value === 'function') return sampleParameterVectorGPU(value, parameter);
+  if (value instanceof THREE.Vector3) return vec3(value);
+  if (Array.isArray(value)) return evaluateByParameterVectorGPU(value, parameter, fallback);
+  throw new Error('GPU parameter vectors must be constants or [constant, constant] ranges.');
+}
+
+function resolveParameterColorEndpointGPU(
+  value: ValueByParameter<THREE.Color> | undefined,
+  parameter: Node<'float'>,
+  fallback = new THREE.Color(),
+): Node<'vec3'> {
+  if (value === undefined) return vec3(fallback.r, fallback.g, fallback.b);
+  if (isTSLNode(value)) return value as Node<'vec3'>;
+  if (typeof value === 'function') return sampleParameterColorGPU(value, parameter);
+  if (value instanceof THREE.Color) return vec3(value.r, value.g, value.b);
+  if (Array.isArray(value)) return evaluateByParameterColorGPU(value, parameter, fallback);
   throw new Error('GPU parameter colors must be constants or [constant, constant] ranges.');
 }
 

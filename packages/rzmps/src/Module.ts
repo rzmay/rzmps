@@ -68,6 +68,7 @@ export default class Module {
 
   priority = Priority.Permanent;
   modifyGPU: ModuleGPUUpdate;
+  requiresFreshGPUReadback = false;
 
   constructor(
     public _modify: ModuleUpdate,

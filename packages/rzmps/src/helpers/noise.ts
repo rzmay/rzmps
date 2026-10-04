@@ -39,6 +39,13 @@ export function generateParticleNoise(
   };
 }
 
+export function generateParticleNoise4D(
+  position: THREE.Vector3,
+  settings: NoiseSettings,
+): number {
+  return generateNoise(position, settings, true);
+}
+
 export function generateGPUParticleNoise(
   position: Node<'vec3'>,
   settings: NoiseSettings,
@@ -72,6 +79,32 @@ export function generateGPUParticleNoise(
       settings.persistence,
     )),
   };
+}
+
+export function generateGPUParticleNoise4D(
+  position: Node<'vec3'>,
+  settings: NoiseSettings,
+  time?: Node<'float'>,
+): Node<'float'> {
+  const samplePosition = position.add(vec3(settings.offset).toVar()).mul(float(settings.frequency));
+  const samplePosition4d = vec4(
+    samplePosition.x,
+    samplePosition.y,
+    samplePosition.z,
+    time ?? float(settings.time),
+  );
+  const amplitudeSum = getAmplitudeSum(settings);
+
+  return mx_fractal_noise_float(
+    samplePosition4d,
+    settings.octaves,
+    settings.lacunarity,
+    settings.persistence,
+  )
+    .div(float(amplitudeSum))
+    .mul(0.5)
+    .add(0.5)
+    .clamp(0, 1);
 }
 
 function getAmplitudeSum(settings: NoiseSettings): number {

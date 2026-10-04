@@ -583,7 +583,9 @@ class ParticleSystem extends THREE.Object3D {
     this._logGPUDebug('phase: permanent pre-movement', {
       modifiers: this._describeGPUModifiers(permanentPreMovementModifiers),
     });
-    this._computeGPUModifierPhase(permanentPreMovementModifiers, context);
+    this._computeGPUModifierPhase(permanentPreMovementModifiers, context, {
+      skipReadbackSensitive: hasPendingReadback,
+    });
 
     const transientPreMovementModifiers = modifiers
       .filter((module) => module.priority >= 0 && module.priority < 1)
@@ -599,6 +601,7 @@ class ParticleSystem extends THREE.Object3D {
       this._computeGPUModifierPhase(
         transientPreMovementModifiers,
         context,
+        { skipReadbackSensitive: hasPendingReadback },
       );
     }
 
@@ -630,9 +633,7 @@ class ParticleSystem extends THREE.Object3D {
 
     const cpuInputRenderers = this.renderers.filter((renderer) => !renderer.supportsGPUInput);
     const gpuInputRenderers = this.renderers.filter((renderer) => renderer.supportsGPUInput);
-    const needsRenderBuffer = transientRenderModifiers.length > 0
-      || gpuInputRenderers.length > 0
-      || cpuInputRenderers.length > 0;
+    const needsRenderBuffer = transientRenderModifiers.length > 0;
 
     if (needsRenderBuffer) {
       this._logGPUDebug('copy permanent state -> render buffer before render-time phase', {
@@ -656,13 +657,16 @@ class ParticleSystem extends THREE.Object3D {
       });
     }
 
+    const renderBuffers = needsRenderBuffer ? this._gpuRenderBuffers : this._gpuBuffers;
+
     this._logGPUDebug('renderer handoff', {
       gpuRenderers: gpuInputRenderers.map((renderer) => renderer.constructor.name),
       cpuRenderers: cpuInputRenderers.map((renderer) => renderer.constructor.name),
+      renderBuffer: needsRenderBuffer ? 'transient render buffer' : 'main buffer',
     });
 
     gpuInputRenderers.forEach((renderer) => {
-      renderer.updateGPU(this._gpuRenderBuffers!, this, this.deltaTime);
+      renderer.updateGPU(renderBuffers!, this, this.deltaTime);
     });
 
     const renderReadbackParticles = cpuInputRenderers.length > 0 && needsRenderBuffer
@@ -903,6 +907,7 @@ class ParticleSystem extends THREE.Object3D {
   private _computeGPUModifierPhase(
     modifiers: Array<Module | SpatialEffect>,
     context: GPUParticleUpdateContext,
+    options: { skipReadbackSensitive?: boolean } = {},
   ): void {
     if (!modifiers.length || !context.buffers.count) return;
     if (!(this.sceneRenderer instanceof WebGPURenderer)) return;
@@ -912,6 +917,17 @@ class ParticleSystem extends THREE.Object3D {
     const particleCount = buffers.count;
 
     modifiers.forEach((modifier) => {
+      if (
+        options.skipReadbackSensitive
+        && modifier instanceof Module
+        && modifier.requiresFreshGPUReadback
+      ) {
+        this._logGPUDebug('skipping GPU modifier while CPU mirror is stale', {
+          modifier: modifier.constructor.name,
+        });
+        return;
+      }
+
       const computeNode = Fn(() => {
         if (modifier instanceof Module) {
           const tagMask = this._getGPUTagMask(modifier.tags);

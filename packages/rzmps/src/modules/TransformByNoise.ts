@@ -4,6 +4,7 @@ import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
+import { generateGPUParticleNoise4D, generateParticleNoise4D } from '../helpers/noise';
 import NoiseModule, { NoiseOptions } from './NoiseModule';
 import type { GPUParticle } from '../GPUParticle';
 import type { Node } from 'three/webgpu';
@@ -29,9 +30,9 @@ class TransformByNoise extends NoiseModule {
         const noiseZ = this.generateOffsetNoise(particle, time, new THREE.Vector3(0, 31.416, 0));
 
         const force = new THREE.Vector3(
-          (noiseX.noise4d * 2 - 1) * strength.x,
-          (noiseY.noise4d * 2 - 1) * strength.y,
-          (noiseZ.noise4d * 2 - 1) * strength.z,
+          (noiseX * 2 - 1) * strength.x,
+          (noiseY * 2 - 1) * strength.y,
+          (noiseZ * 2 - 1) * strength.z,
         );
 
         particle.velocity.addScaledVector(force, deltaTime);
@@ -48,9 +49,9 @@ class TransformByNoise extends NoiseModule {
           const noiseZ = this.generateOffsetNoiseGPU(particle, time, new THREE.Vector3(0, 31.416, 0));
 
           const force = vec3(
-            noiseX.noise4d.mul(2).sub(1).mul(strength.x),
-            noiseY.noise4d.mul(2).sub(1).mul(strength.y),
-            noiseZ.noise4d.mul(2).sub(1).mul(strength.z),
+            noiseX.mul(2).sub(1).mul(strength.x),
+            noiseY.mul(2).sub(1).mul(strength.y),
+            noiseZ.mul(2).sub(1).mul(strength.z),
           );
 
           particle.velocity.assign(particle.velocity.add(force.mul(float(deltaTime))));
@@ -67,7 +68,7 @@ class TransformByNoise extends NoiseModule {
       const previousOffset = this.offset;
       this.time = time;
       this.offset = offset;
-      const noise = this.generateNoise(particle);
+      const noise = generateParticleNoise4D(particle.position, this);
       this.time = previousTime;
       this.offset = previousOffset;
       return noise;
@@ -80,7 +81,7 @@ class TransformByNoise extends NoiseModule {
     ) {
       const previousOffset = this.offset;
       this.offset = offset;
-      const noise = this.generateNoiseGPU(particle, time);
+      const noise = generateGPUParticleNoise4D(particle.position, this, time);
       this.offset = previousOffset;
       return noise;
     }

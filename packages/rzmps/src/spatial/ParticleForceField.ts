@@ -275,7 +275,13 @@ class ParticleForceField extends SpatialEffect {
           1,
           particle.index,
         );
-        const falloff = this.getFalloffGPU(particle, context);
+        const falloff = this.radialFalloff
+          ? this.getFalloffGPU(particle, context)
+          : float(1);
+        const mass = particle.mass.greaterThan(float(0)).select(
+          particle.mass,
+          float(1),
+        ) as Node<'float'>;
 
         particle.velocity.assign(
           particle.velocity.add(
@@ -284,7 +290,7 @@ class ParticleForceField extends SpatialEffect {
               .mul(falloff)
               .mul(multiplier)
               .mul(deltaTime)
-              .div(particle.mass.max(float(Number.EPSILON))),
+              .div(mass),
           ),
         );
       },

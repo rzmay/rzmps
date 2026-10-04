@@ -23,6 +23,7 @@ export interface CollisionOptions extends Partial<ModuleOptions> {
   radiusScale: number;
   minKillSpeed: number;
   maxKillSpeed: number;
+  gpuCollision: boolean;
 
   onCollision?: CollisionListener;
 }
@@ -38,6 +39,7 @@ class Collision extends Module {
   radiusScale: number = 1;
   minKillSpeed: number = 0;
   maxKillSpeed: number = Number.POSITIVE_INFINITY;
+  gpuCollision = true;
 
   private collisionListeners: CollisionListener[] = [];
 
@@ -58,9 +60,11 @@ class Collision extends Module {
         const capacity = Math.max(1, context.buffers.capacity);
         const hit = storage(this.collisionHitAttribute, 'uint', capacity).element(particle.index);
         const hitPosition = storage(this.collisionPositionAttribute, 'vec3', capacity).element(particle.index);
-        const hitNormal = storage(this.collisionNormalAttribute, 'vec3', capacity).element(particle.index).normalize();
+        const sampledNormal = storage(this.collisionNormalAttribute, 'vec3', capacity).element(particle.index);
 
         If(hit.equal(uint(1)), () => {
+          const hitNormal = sampledNormal.normalize();
+
           particle.position.assign(hitPosition);
 
           const bounce = evaluateDynamicNumberGPU(this.bounce ?? 1, particle.time, 1, particle.index).clamp(0, 1);
@@ -110,8 +114,10 @@ class Collision extends Module {
     this.radiusScale = options.radiusScale ?? this.radiusScale;
     this.minKillSpeed = options.minKillSpeed ?? this.minKillSpeed;
     this.maxKillSpeed = options.maxKillSpeed ?? this.maxKillSpeed;
+    this.gpuCollision = options.gpuCollision ?? this.gpuCollision;
 
     if (options.onCollision) this.collisionListeners.push(options.onCollision);
+    this.requiresFreshGPUReadback = true;
   }
 
   public onCollision(listener: CollisionListener) {
@@ -131,11 +137,18 @@ class Collision extends Module {
 
       if (!this.backend || this.backend != cachedBackend) {
         this.backend = cachedBackend
-          ?? new ThreeCollisionBackend({ world: system.scene });
+          ?? new ThreeCollisionBackend({
+            world: system.scene,
+            gpuCollision: this.gpuCollision,
+          });
 
         system.scene.userData[ACTIVE_COLLISION_BACKEND_KEY] =
           this.backend;
       }
+    }
+
+    if (this.backend instanceof ThreeCollisionBackend) {
+      this.backend.gpuCollision = this.gpuCollision;
     }
 
     this.backend?.setGPUProcessingActive?.(system.isGPUProcessingActive);
