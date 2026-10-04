@@ -24,7 +24,7 @@ enum Weight {
 
 class BoidAffector extends SpatialEffect {
   // Decides default range for boid affectors
-  static InfluenceThreshold = 1e-6;
+  static RANGE_INFLUENCE_THRESHOLD = 1e-6;
 
   static readonly Weight = Weight;
 
@@ -261,7 +261,7 @@ class BoidAffector extends SpatialEffect {
   private getDefaultRange(): number {
     // Default range can be approximated from weight and bounding box
     const influenceRange = Math.sqrt(
-      Math.abs(this.weight) / BoidAffector.InfluenceThreshold,
+      Math.abs(this.weight) / BoidAffector.RANGE_INFLUENCE_THRESHOLD,
     );
 
     if (!this.geometry) return influenceRange;

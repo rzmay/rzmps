@@ -31,6 +31,8 @@ RZMPS is built from small composable pieces:
 - [Emitters](#emitters)
 - [Modules](#modules)
 - [Spatial Effects](#spatial-effects)
+  - [KillZone](#killzone)
+  - [BoidAffector](#boidaffector)
 - [Built-In Modules](#built-in-modules)
 - [Built-In Renderers](#built-in-renderers)
 - [Force Fields](#force-fields)
@@ -608,17 +610,19 @@ interface ModuleOptions {
 `updateLOD` controls module update frequency. It skips the module's particle
 work on lower-detail frames while preserving the module API.
 
-| Option     | Description                                                                                                                                                                                                                                                                |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `priority` | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are transient pre-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
-| `tags`     | Restricts the module to particles with matching tags.                                                                                                                                                                                                                      |
-| `condition` | Optional per-particle predicate called before modification. Return `false` to skip that particle. |
+| Option      | Description                                                                                                                                                                                                                                                                |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `priority`  | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are transient pre-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
+| `tags`      | Restricts the module to particles with matching tags.                                                                                                                                                                                                                      |
+| `condition` | Optional per-particle predicate called before modification. Return `false` to skip that particle.                                                                                                                                                                          |
 
 Modules can also discover scene-level `SpatialEffect` objects. Pass
 `requireSpatialEffects` to select the spatial effect class a module consumes,
 `spatialEffects` for an explicit list, or `spatialEffectFilter` for additional
-filtering. Module update functions receive `(particle, deltaTime,
-particleSystem)`; existing two-argument functions continue to work.
+filtering. Module update functions receive
+`(particle, deltaTime,
+particleSystem)`; existing two-argument functions
+continue to work.
 
 Common priority values are exposed on `Module.Priority`:
 
@@ -639,8 +643,8 @@ before movement.
 
 ## Spatial Effects
 
-`SpatialEffect` is a scene-space object for effects that occupy a volume or
-use a custom spatial test. By default it tests whether a particle is inside its
+`SpatialEffect` is a scene-space object for effects that occupy a volume or use
+a custom spatial test. By default it tests whether a particle is inside its
 geometry, respecting `inverted` and `tags`. You can also pass a custom `test`
 function. Use `condition` when the spatial range test should stay separate from
 the per-particle rule for whether the effect should operate.
@@ -667,12 +671,12 @@ interface SpatialEffectOptions {
 
 Spatial effects come in two flavors:
 
-- Generic spatial effects directly mutate particles in `modify(...)`. Use
-  them when the spatial object itself contains all the behavior. The particle
-  system discovers generic spatial effects in its scene automatically, or you
-  can pass them directly with `spatialEffects`.
-- Domain-specific spatial effects expose specialized APIs and are consumed by
-  a matching module. This is useful when the spatial object only describes
+- Generic spatial effects directly mutate particles in `modify(...)`. Use them
+  when the spatial object itself contains all the behavior. The particle system
+  discovers generic spatial effects in its scene automatically, or you can pass
+  them directly with `spatialEffects`.
+- Domain-specific spatial effects expose specialized APIs and are consumed by a
+  matching module. This is useful when the spatial object only describes
   queryable scene data and a module owns the particle behavior.
 
 ```ts
@@ -696,28 +700,30 @@ Use `SpatialEffectHelper` to visualize generic spatial effect geometry.
 `ParticleForceFieldHelper` extends it with sampled force arrows.
 
 To create a generic spatial effect, pass a modifier function as the first
-constructor argument. The base class handles scene placement, geometry containment,
-`inverted`, `tags`, priority, feathering, and custom tests.
-Generic spatial effects default to `Module.Priority.Transient`; effects that
-should persist into particle state can opt into `Module.Priority.Permanent`.
+constructor argument. The base class handles scene placement, geometry
+containment, `inverted`, `tags`, priority, feathering, and custom tests. Generic
+spatial effects default to `Module.Priority.Transient`; effects that should
+persist into particle state can opt into `Module.Priority.Permanent`.
 
 ```ts
 const color = new THREE.Color("#ffd166");
 
-scene.add(new SpatialEffect((particle) => {
-  particle.color.lerp(color, 0.2);
-}, {
-  geometry: new THREE.SphereGeometry(2, 32, 16),
-  priority: Module.Priority.Transient,
-  feather: 1,
-}));
+scene.add(
+  new SpatialEffect((particle) => {
+    particle.color.lerp(color, 0.2);
+  }, {
+    geometry: new THREE.SphereGeometry(2, 32, 16),
+    priority: Module.Priority.Transient,
+    feather: 1,
+  }),
+);
 ```
 
 When `feather` is greater than `0`, the effect extends beyond its geometry by
 that many world units and returns a normalized boundary strength. A particle on
-the original surface receives strength `1`, and the strength fades to `0` at
-the outer feather edge. For automatic feathering, particles in this softened
-edge are blended between their pre-effect and post-effect values using
+the original surface receives strength `1`, and the strength fades to `0` at the
+outer feather edge. For automatic feathering, particles in this softened edge
+are blended between their pre-effect and post-effect values using
 `Particle.lerp(...)`.
 
 Use `featherEasing` to reshape that normalized `0..1` feather strength. It can
@@ -750,10 +756,10 @@ new SpatialEffect((particle, deltaTime, particleSystem, feather) => {
 ```
 
 To create a domain-specific effect, extend `SpatialEffect` but expose methods
-for a matching module to consume. The module should pass
-`requireSpatialEffects` and then use `this.spatialEffects` in `prepare` or
-`modify`. See [Developing With Spatial Effects](#developing-with-spatial-effects)
-for a module extension example.
+for a matching module to consume. The module should pass `requireSpatialEffects`
+and then use `this.spatialEffects` in `prepare` or `modify`. See
+[Developing With Spatial Effects](#developing-with-spatial-effects) for a module
+extension example.
 
 ### KillZone
 
@@ -763,12 +769,72 @@ KillZone.Box(options, ...boxGeometryArgs)
 KillZone.Sphere(options, ...sphereGeometryArgs)
 KillZone.Cone(options, ...coneGeometryArgs)
 KillZone.Torus(options, ...torusGeometryArgs)
+
+type KillZoneOptions = SpatialEffectOptions;
 ```
 
 Kills particles that pass its spatial test by calling `particle.kill()`.
 `KillZone` runs at permanent priority by default so killed particles are
-compacted immediately. Geometry kill zones use the default inside-geometry
-test; plane kill zones can be created with `SpatialEffect.Plane(...)`.
+compacted immediately. Geometry kill zones use the default inside-geometry test;
+plane kill zones can be created with `SpatialEffect.Plane(...)`.
+
+```ts
+const killPlane = new KillZone({
+  tags: "debris",
+  test: SpatialEffect.Plane({
+    position: new THREE.Vector3(0, -2, 0),
+    normal: new THREE.Vector3(0, 1, 0),
+  }),
+});
+```
+
+### BoidAffector
+
+```ts
+new BoidAffector(options?: Partial<BoidAffectorOptions>)
+BoidAffector.Box(options, ...boxGeometryArgs)
+BoidAffector.Sphere(options, ...sphereGeometryArgs)
+BoidAffector.Cone(options, ...coneGeometryArgs)
+BoidAffector.Torus(options, ...torusGeometryArgs)
+
+interface BoidAffectorOptions extends Omit<SpatialEffectOptions, "test"> {
+  weight: number;
+  distance: number;
+  range: number;
+  bvhOptions: MeshBVHOptions;
+}
+```
+
+`BoidAffector` is a domain-specific spatial effect consumed by the `Boids`
+module. Positive weights pull boids toward the sampled point and negative
+weights push them away. Use `BoidAffector.Weight.Target` (`1`) and
+`BoidAffector.Weight.Obstacle` (`-1`) for the common cases.
+
+`distance` is the preferred clearance from the affector surface. `range` is a
+world-space optimization radius around the affector origin; particles outside
+that radius skip the affector before expensive surface sampling. For geometry
+affectors, choose a `range` large enough to cover the geometry radius plus the
+surface influence band you want. If `range` is omitted, the default is estimated
+from the geometry bounding box plus:
+
+```ts
+Math.sqrt(Math.abs(weight) / BoidAffector.RANGE_INFLUENCE_THRESHOLD)
+```
+
+`BoidAffector.RANGE_INFLUENCE_THRESHOLD` defaults to `1e-6`. Lower values keep
+weaker distant influence and increase query cost. Higher values shorten the
+default range, improving performance at the cost of ignoring weaker distant
+influence. Explicit `range` values bypass that default estimate.
+
+When an affector has geometry, it builds a `three-mesh-bvh` acceleration
+structure and samples the closest surface point instead of its object position.
+`Box`, `Sphere`, `Cone`, and `Torus` are provided as geometry shorthands. Set
+`inverted: true` to invert the sampled influence direction; paired with obstacle
+weights, this is useful for containment volumes. Tags and `condition` are
+supported, but custom `test` is not supported for `BoidAffector`; use
+`condition`, `tags`, or a `Boids` `affectorFilter` when you need extra
+selection logic. Feathering is ignored because boid influence already uses
+distance-based falloff.
 
 ## Built-In Modules
 
@@ -1124,16 +1190,15 @@ Steers particles using local flocking behavior sampled from a `ParticleOctree`.
 `alignmentWeight` points particles toward nearby average velocity direction,
 `cohesionWeight` points them toward nearby average position, and
 `separationWeight` points them away from nearby aggregate centers.
-`affectorWeight` controls response to `Boids.BoidAffector` objects. `speed` sets the
-target boid speed; when omitted, each particle keeps its current velocity
+`affectorWeight` controls response to `BoidAffector` objects. `speed` sets
+the target boid speed; when omitted, each particle keeps its current velocity
 magnitude. `steering` controls how quickly velocity lerps toward the boid
 target.
 
 `octreeOptions` is passed to the internal `ParticleOctree` constructor and
-should cover the boid simulation space. If the Boids module has tags, those
-tags are passed to the octree so flocking samples only include matching
-particles. If `affectors` is omitted, `Boids` scans the scene for
-`Boids.BoidAffector` objects:
+should cover the boid simulation space. If the Boids module has tags, those tags
+are passed to the octree so flocking samples only include matching particles. If
+`affectors` is omitted, `Boids` scans the scene for `BoidAffector` objects:
 
 ```ts
 const target = new Boids.BoidAffector({
@@ -1146,6 +1211,7 @@ const obstacle = Boids.BoidAffector.Sphere(
     position: new THREE.Vector3(0, 0, 0),
     weight: Boids.BoidAffector.Weight.Obstacle,
     distance: 0.25,
+    range: 4,
   },
   1,
   16,
@@ -1167,9 +1233,9 @@ new Boids({
 ```
 
 `particleAffectors` can treat particles with matching tags as temporary
-affectors during octree aggregation. Object keys select source particles by
-tag; use `|` or `,` for an OR-list. The mapped value accepts `weight`,
-`distance`, and `tags` from `BoidAffectorOptions`: `weight` defaults to
+affectors during octree aggregation. Object keys select source particles by tag;
+use `|` or `,` for an OR-list. The mapped value accepts `weight`, `distance`,
+and `tags` from `BoidAffectorOptions`: `weight` defaults to
 `Boids.BoidAffector.Weight.Obstacle`, `distance` is multiplied by the source
 particle's largest scale axis, and `tags` optionally filters which boids are
 affected.
@@ -1178,11 +1244,11 @@ affected.
 new Boids({
   particleAffectors: {
     predator: {
-      tags: ['prey'],
+      tags: ["prey"],
       distance: 1.5,
     },
-    'friend,leader': {
-      tags: ['follower'],
+    "friend,leader": {
+      tags: ["follower"],
       weight: Boids.BoidAffector.Weight.Target,
       distance: 1,
     },
@@ -1190,23 +1256,12 @@ new Boids({
 });
 ```
 
-`timeQuality` follows the same accumulator pattern as
-`ParticleOctree`: `1` rebuilds the octree every update, `0.5` rebuilds about
-every other update, and lower values trade responsiveness for less CPU work.
+`timeQuality` follows the same accumulator pattern as `ParticleOctree`: `1`
+rebuilds the octree every update, `0.5` rebuilds about every other update, and
+lower values trade responsiveness for less CPU work.
 
-`Boids.BoidAffector` is a signed target/obstacle. Positive weights pull boids toward
-the sampled point and negative weights push them away; use
-`Boids.BoidAffector.Weight.Target` (`1`) and `Boids.BoidAffector.Weight.Obstacle` (`-1`)
-for the common cases. When an affector has geometry, it builds a
-`three-mesh-bvh` acceleration structure and samples the closest surface point
-instead of its object position. `Boids.BoidAffector.Box`, `.Sphere`, `.Cone`,
-and `.Torus` are provided as geometry shorthands. Set `inverted: true` to
-invert the sampled influence direction; paired with obstacle weights, this is
-useful for containment volumes. Affector tags are optional; an
-untagged affector applies to all boids, and a tagged affector applies only to
-particles with at least one matching tag. `BoidAffector` extends `SpatialEffect`,
-so it also accepts `condition` and custom `test` options. Feathering is ignored
-by boid affectors because boid influence already uses distance-based falloff.
+See [BoidAffector](#boidaffector) for scene-level target, obstacle, container,
+range, and optimization details.
 
 ### Collision
 
@@ -1266,7 +1321,11 @@ when you want to react to particle data without changing the simulation:
 ```ts
 class LoggingEffect extends Renderer {
   setup(system: ParticleSystem) {}
-  protected _update(particles: Particle[], system: ParticleSystem, deltaTime: number) {
+  protected _update(
+    particles: Particle[],
+    system: ParticleSystem,
+    deltaTime: number,
+  ) {
     particles.forEach((particle) => console.log(particle.position));
   }
   destroy() {}
@@ -1556,8 +1615,8 @@ interface ForceFieldOptions {
 Force fields apply at full strength throughout their spatial range by default.
 Set `radialFalloff: true` to multiply the force by a distance-from-origin
 falloff based on the field geometry's bounding radius. This preserves the older
-"strongest at the center, weakest near the edge" behavior, but it is intentionally
-opt-in because it is radial even for non-spherical geometry.
+"strongest at the center, weakest near the edge" behavior, but it is
+intentionally opt-in because it is radial even for non-spherical geometry.
 
 `radialFalloff` is different from `feather`. `feather` controls how a spatial
 effect blends at its boundary, extending the effect region outward and easing
@@ -1569,15 +1628,15 @@ itself to weaken away from the center.
 Helpers:
 
 ```ts
-ParticleForceField.Box(options, ...boxGeometryArgs)
-ParticleForceField.Sphere(options, ...sphereGeometryArgs)
-ParticleForceField.Cone(options, ...coneGeometryArgs)
-ParticleForceField.Torus(options, ...torusGeometryArgs)
+ParticleForceField.Box(options, ...boxGeometryArgs);
+ParticleForceField.Sphere(options, ...sphereGeometryArgs);
+ParticleForceField.Cone(options, ...coneGeometryArgs);
+ParticleForceField.Torus(options, ...torusGeometryArgs);
 ```
 
 Set `inverted: true` to apply a field outside its shape instead of inside it.
-For example, an inverted spherical attractor can pull particles from outside
-the volume toward its center.
+For example, an inverted spherical attractor can pull particles from outside the
+volume toward its center.
 
 Example:
 
@@ -1627,11 +1686,10 @@ const neighbors = node.neighbors;
 ```
 
 `aggregator.new()` creates an empty aggregate, while
-`aggregator.new(particle, particleIndex)` creates the aggregate contribution
-for one particle. `rebuild(particles, tags)` accepts an optional tag or tag
-list; omit it or pass an empty list to include every particle. It returns
-`true` when the tree was rebuilt and `false` when `timeQuality` skipped this
-update.
+`aggregator.new(particle, particleIndex)` creates the aggregate contribution for
+one particle. `rebuild(particles, tags)` accepts an optional tag or tag list;
+omit it or pass an empty list to include every particle. It returns `true` when
+the tree was rebuilt and `false` when `timeQuality` skipped this update.
 
 Aggregates should be written as small mutable summaries that can be combined
 quickly. For example, a steering module can store a particle count plus summed
@@ -1817,7 +1875,9 @@ import {
 class HeatField extends SpatialEffect {
   temperature = 1;
 
-  constructor(options: Partial<SpatialEffectOptions> & { temperature?: number } = {}) {
+  constructor(
+    options: Partial<SpatialEffectOptions> & { temperature?: number } = {},
+  ) {
     super(null, options);
     this.temperature = options.temperature ?? this.temperature;
   }
@@ -1862,34 +1922,37 @@ _Generated by `npm run benchmark:update-report`._
 
 **RZMPS browser benchmark**
 
-Run length: 4.0s measured per case after 1.0s warmup
-Measured: 2026-10-02T23:48:28.572Z
+Run length: 4.0s measured per case after 1.0s warmup Measured:
+2026-10-02T23:48:28.572Z
 
-FPS and frame time are measured in an uncapped browser render loop by default. `1% Low FPS` is derived from p99 frame time, which is steadier than raw single-frame min/max FPS. `Update` is the measured `ParticleSystem.update()` slice inside that frame.
+FPS and frame time are measured in an uncapped browser render loop by default.
+`1% Low FPS` is derived from p99 frame time, which is steadier than raw
+single-frame min/max FPS. `Update` is the measured `ParticleSystem.update()`
+slice inside that frame.
 
-| Environment | Value |
-| --- | --- |
-| Mode | headless browser |
-| Frame Pacing | uncapped |
-| Browser | Chrome/154.0.8037.57 |
-| Viewport | 1280x720 |
-| Device Pixel Ratio | 1.00 |
-| OS | Darwin 24.1.0 arm64 |
-| CPU | Apple M4 Pro (14 logical cores) |
-| Memory | 24.0GB system, 16.0GB browser hint |
-| GPU/WebGL | ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version) (Google Inc. (Apple)) |
+| Environment        | Value                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| Mode               | headless browser                                                                             |
+| Frame Pacing       | uncapped                                                                                     |
+| Browser            | Chrome/154.0.8037.57                                                                         |
+| Viewport           | 1280x720                                                                                     |
+| Device Pixel Ratio | 1.00                                                                                         |
+| OS                 | Darwin 24.1.0 arm64                                                                          |
+| CPU                | Apple M4 Pro (14 logical cores)                                                              |
+| Memory             | 24.0GB system, 16.0GB browser hint                                                           |
+| GPU/WebGL          | ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version) (Google Inc. (Apple)) |
 
-| Case | Target Particles | Simulated Particles | Particle Cap | Rendered Frames | Avg FPS | 1% Low FPS | Avg Frame | P99 Frame | Max Frame | Avg Update | P95 Update | Max JS Heap |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Baseline 10k simulation only | 10,000 | 10,000-10,000 | 10,000 | 3,877 | 969.1 | 738.6 | 1.03ms | 1.30ms | 1.70ms | 0.95ms | 1.10ms | 81.5MB |
-| Baseline 50k simulation only | 50,000 | 50,000-50,000 | 50,000 | 536 | 134.0 | 105.4 | 7.46ms | 9.10ms | 10.60ms | 7.32ms | 8.00ms | 190.2MB |
-| Typical VFX 5k sprite | 5,000 | 5,000-5,000 | 5,000 | 519 | 129.6 | 78.6 | 7.72ms | 11.70ms | 13.80ms | 7.54ms | 9.80ms | 364.1MB |
-| Heavy modules 10k noise+forces | 10,000 | 10,000-10,000 | 10,000 | 521 | 130.2 | 66.8 | 7.68ms | 10.10ms | 28.40ms | 7.50ms | 8.80ms | 515.2MB |
-| SpriteRenderer 5k rendered | 5,000 | 5,000-5,000 | 5,000 | 1,680 | 419.9 | 211.4 | 2.38ms | 3.20ms | 9.10ms | 2.25ms | 2.60ms | 356.5MB |
-| SpriteRenderer 10k rendered | 10,000 | 10,000-10,000 | 10,000 | 800 | 199.9 | 73.7 | 5.00ms | 9.10ms | 29.20ms | 4.80ms | 6.10ms | 427.9MB |
-| SpriteRenderer 50k rendered | 50,000 | 50,000-50,000 | 50,000 | 75 | 18.5 | 18.1 | 54.05ms | 55.30ms | 55.30ms | 53.81ms | 54.80ms | 557.6MB |
-| MeshRenderer 10k rendered | 10,000 | 10,000-10,000 | 10,000 | 1,098 | 274.5 | 190.0 | 3.64ms | 5.00ms | 5.60ms | 3.49ms | 4.00ms | 581.7MB |
-| TrailRenderer 2k rendered | 2,000 | 2,000-2,000 | 2,000 | 1,597 | 398.9 | 159.2 | 2.51ms | 3.80ms | 12.90ms | 2.33ms | 3.10ms | 1114.1MB |
+| Case                           | Target Particles | Simulated Particles | Particle Cap | Rendered Frames | Avg FPS | 1% Low FPS | Avg Frame | P99 Frame | Max Frame | Avg Update | P95 Update | Max JS Heap |
+| ------------------------------ | ---------------- | ------------------- | ------------ | --------------- | ------- | ---------- | --------- | --------- | --------- | ---------- | ---------- | ----------- |
+| Baseline 10k simulation only   | 10,000           | 10,000-10,000       | 10,000       | 3,877           | 969.1   | 738.6      | 1.03ms    | 1.30ms    | 1.70ms    | 0.95ms     | 1.10ms     | 81.5MB      |
+| Baseline 50k simulation only   | 50,000           | 50,000-50,000       | 50,000       | 536             | 134.0   | 105.4      | 7.46ms    | 9.10ms    | 10.60ms   | 7.32ms     | 8.00ms     | 190.2MB     |
+| Typical VFX 5k sprite          | 5,000            | 5,000-5,000         | 5,000        | 519             | 129.6   | 78.6       | 7.72ms    | 11.70ms   | 13.80ms   | 7.54ms     | 9.80ms     | 364.1MB     |
+| Heavy modules 10k noise+forces | 10,000           | 10,000-10,000       | 10,000       | 521             | 130.2   | 66.8       | 7.68ms    | 10.10ms   | 28.40ms   | 7.50ms     | 8.80ms     | 515.2MB     |
+| SpriteRenderer 5k rendered     | 5,000            | 5,000-5,000         | 5,000        | 1,680           | 419.9   | 211.4      | 2.38ms    | 3.20ms    | 9.10ms    | 2.25ms     | 2.60ms     | 356.5MB     |
+| SpriteRenderer 10k rendered    | 10,000           | 10,000-10,000       | 10,000       | 800             | 199.9   | 73.7       | 5.00ms    | 9.10ms    | 29.20ms   | 4.80ms     | 6.10ms     | 427.9MB     |
+| SpriteRenderer 50k rendered    | 50,000           | 50,000-50,000       | 50,000       | 75              | 18.5    | 18.1       | 54.05ms   | 55.30ms   | 55.30ms   | 53.81ms    | 54.80ms    | 557.6MB     |
+| MeshRenderer 10k rendered      | 10,000           | 10,000-10,000       | 10,000       | 1,098           | 274.5   | 190.0      | 3.64ms    | 5.00ms    | 5.60ms    | 3.49ms     | 4.00ms     | 581.7MB     |
+| TrailRenderer 2k rendered      | 2,000            | 2,000-2,000         | 2,000        | 1,597           | 398.9   | 159.2      | 2.51ms    | 3.80ms    | 12.90ms   | 2.33ms     | 3.10ms     | 1114.1MB    |
 
 <!-- RZMPS_BENCHMARKS_END -->
 
