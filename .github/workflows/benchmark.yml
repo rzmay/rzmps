@@ -22,6 +22,10 @@ jobs:
     if: github.event.pull_request.draft == false
 
     runs-on: ubuntu-24.04
+    env:
+      RZMPS_BENCHMARK_DURATION_MS: 1500
+      RZMPS_BENCHMARK_WARMUP_MS: 500
+      RZMPS_BENCHMARK_TIMEOUT_MS: 180000
 
     steps:
       - name: Checkout base
