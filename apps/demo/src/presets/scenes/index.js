@@ -17,7 +17,7 @@ import createSimulationSpace from './simulationSpace';
 import loadCornellBox from './cornellBox';
 import createLightProbeScene from './lightProbes';
 
-const SOURCE_ROOT = 'https://github.com/rzmay/rzmps/blob/main/packages/demo/src/presets/scenes';
+const SOURCE_ROOT = 'https://github.com/rzmay/rzmps/blob/main/apps/demo/src/presets/scenes';
 
 function withMetadata(factory, fileName, author = factory.author) {
   factory.sourceUrl = `${SOURCE_ROOT}/${fileName}`;

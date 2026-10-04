@@ -173,7 +173,7 @@ npm run build --workspace @rzmps/ammo
 Start the demo:
 
 ```bash
-npm start --workspace packages/demo
+npm start --workspace apps/demo
 ```
 
 Vite prints the local URL, usually:
@@ -187,13 +187,13 @@ http://localhost:5173
 Build the demo from the repo root:
 
 ```bash
-npm run build --workspace packages/demo
+npm run build --workspace apps/demo
 ```
 
 The static output is written to:
 
 ```txt
-packages/demo/dist
+apps/demo/dist
 ```
 
 The demo build script currently uses:
@@ -210,7 +210,7 @@ the demo can pick up local library rebuilds during development.
 The demo imports `@rzmps/rzmps`, `@rzmps/rapier`, `@rzmps/jolt`, and
 `@rzmps/ammo` as npm packages. Local development from the repo root uses npm
 workspaces, so those packages resolve to sibling package folders. Production
-demo deployments should install from `packages/demo` so npm resolves the
+demo deployments should install from `apps/demo` so npm resolves the
 published registry packages instead.
 
 The publishable packages each have a `prepack` script, so `npm pack` and
@@ -219,7 +219,7 @@ not published to npm.
 
 ## Render Deployment
 
-Use a Render Static Site and set the root directory to `packages/demo` when
+Use a Render Static Site and set the root directory to `apps/demo` when
 possible. The build command also passes `--workspaces=false`, which keeps npm
 from linking the local monorepo packages and forces the demo to install the
 published `@rzmps/*` packages from the registry.
@@ -228,19 +228,19 @@ Recommended Render settings:
 
 ```txt
 Service type: Static Site
-Root Directory: packages/demo
+Root Directory: apps/demo
 Build Command: npm install --workspaces=false && npm run build --workspaces=false
 Publish Directory: dist
 ```
 
 
-If Render still shows paths like `/opt/render/project/src/packages/demo` in
+If Render still shows paths like `/opt/render/project/src/apps/demo` in
 build errors, its root directory is still the repo root. In that case either set
-Root Directory to `packages/demo`, or use these root-level settings instead:
+Root Directory to `apps/demo`, or use these root-level settings instead:
 
 ```txt
-Build Command: cd packages/demo && npm install --workspaces=false && npm run build --workspaces=false
-Publish Directory: packages/demo/dist
+Build Command: cd apps/demo && npm install --workspaces=false && npm run build --workspaces=false
+Publish Directory: apps/demo/dist
 ```
 
 Equivalent `render.yaml`:
@@ -250,7 +250,7 @@ services:
   - type: web
     runtime: static
     name: rzmps-demo
-    rootDir: packages/demo
+    rootDir: apps/demo
     buildCommand: npm install --workspaces=false && npm run build --workspaces=false
     staticPublishPath: dist
 ```
@@ -258,7 +258,7 @@ services:
 ## Project Structure
 
 ```txt
-packages/demo
+apps/demo
 ├── public
 ├── src
 │   ├── assets

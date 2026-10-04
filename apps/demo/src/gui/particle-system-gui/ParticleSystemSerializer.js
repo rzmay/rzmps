@@ -141,7 +141,7 @@ export class ParticleSystemSerializer {
             impulseAffectsLifetime: options.impulseAffectsLifetime,
             impulseAffectsMass: options.impulseAffectsMass,
             impulseAffectsAlignment: options.impulseAffectsAlignment,
-            impulseThreshhold: options.impulseThreshhold,
+            impulseThreshold: options.impulseThreshold,
         });
     }
 
@@ -274,7 +274,7 @@ export class ParticleSystemSerializer {
                 impulseAffectsVolume: renderer.impulseAffectsVolume,
                 impulseAffectsHighPass: renderer.impulseAffectsHighPass,
                 impulseAffectsLowPass: renderer.impulseAffectsLowPass,
-                impulseThreshhold: renderer.impulseThreshhold,
+                impulseThreshold: renderer.impulseThreshold,
                 ...this.getLODOptions(renderer, true, true),
                 tags: renderer.tags,
             };
@@ -302,6 +302,7 @@ export class ParticleSystemSerializer {
             const options = this.serializeValue({
                 fps: renderer.fps,
                 billboard: renderer.billboard,
+                sizeAttenuation: renderer.sizeAttenuation,
                 tileSize: renderer.tileSize,
                 tileMargin: renderer.tileMargin,
                 gridSize: renderer.gridSize,

@@ -34,4 +34,4 @@ new MyModule({
 ## Verification
 
 - [ ] `npm run build --workspace @rzmps/rzmps`
-- [ ] `npm run build --workspace packages/demo`, if demo changed
+- [ ] `npm run build --workspace apps/demo`, if demo changed

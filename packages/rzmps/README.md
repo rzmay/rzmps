@@ -432,7 +432,7 @@ interface SubSystemOptions {
   impulseAffectsLifetime: number;
   impulseAffectsMass: number;
   impulseAffectsAlignment: boolean;
-  impulseThreshhold: number;
+  impulseThreshold: number;
 }
 ```
 
@@ -446,7 +446,7 @@ rocketSystem.addSubSystem(sparkSystem, {
   inheritVelocity: 0.5,
   impulseAffectsScale: 0.35,
   impulseAffectsAlignment: true,
-  impulseThreshhold: 0.2,
+  impulseThreshold: 0.2,
 });
 ```
 
@@ -462,8 +462,8 @@ For collision-triggered emission runs, impulse effect values use
 `Math.pow(collision.impulse.length(), effect)`. Scale, speed, and mass use that
 result as a multiplier. Lifetime adds that result to the emission run duration.
 Alignment rotates the emission so its up axis follows the collision impulse.
-`impulseThreshhold` defaults to `0`; collision-triggered runs only start when
-`collision.impulse.length() > impulseThreshhold`.
+`impulseThreshold` defaults to `0`; collision-triggered runs only start when
+`collision.impulse.length() > impulseThreshold`.
 
 ### Textures
 
@@ -1387,7 +1387,7 @@ interface AudioRendererOptions extends Partial<RendererOptions> {
   impulseAffectsVolume: number;
   impulseAffectsHighPass: number;
   impulseAffectsLowPass: number;
-  impulseThreshhold: number;
+  impulseThreshold: number;
 }
 ```
 
@@ -1403,8 +1403,8 @@ the corresponding `...Affects...` option. `dopplerEffect` modulates pitch from
 listener-relative particle motion: `0` disables the effect, `1` is physically
 scaled, and larger or fractional values exaggerate or soften the shift. Filters
 are applied whenever their evaluated cutoff is greater than `0`.
-`impulseThreshhold` defaults to `0`; collision sounds only play when
-`collision.impulse.length() > impulseThreshhold`.
+`impulseThreshold` defaults to `0`; collision sounds only play when
+`collision.impulse.length() > impulseThreshold`.
 
 ### SpriteRenderer
 
@@ -1997,13 +1997,13 @@ npm run dev --workspace packages/rzmps
 Run the demo locally:
 
 ```bash
-npm start --workspace packages/demo
+npm start --workspace apps/demo
 ```
 
 Build the demo:
 
 ```bash
-npm run build --workspace packages/demo
+npm run build --workspace apps/demo
 ```
 
 Build the physics extensions:

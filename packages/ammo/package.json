@@ -1,7 +1,16 @@
 {
-  "name": "@rzmps/rapier",
+  "name": "@rzmps/ammo",
   "version": "1.1.0",
-  "description": "Rapier physics engine extension for rzmps.",
+  "description": "Ammo physics engine extension for rzmps.",
+  "homepage": "https://github.com/rzmay/rzmps#readme",
+  "bugs": {
+    "url": "https://github.com/rzmay/rzmps/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rzmay/rzmps.git",
+    "directory": "packages/ammo"
+  },
   "main": "build/index.cjs",
   "module": "build/index.mjs",
   "types": "build/index.d.ts",
@@ -21,13 +30,14 @@
     "particle-system",
     "physics",
     "collision",
-    "rapier",
-    "rapier3d",
+    "ammo",
+    "ammojs",
     "typescript"
   ],
   "files": [
     "build/**/*"
   ],
+  "sideEffects": false,
   "scripts": {
     "build": "tsdown && tsc --emitDeclarationOnly",
     "dev": "concurrently -k \"tsdown --watch\" \"tsc --emitDeclarationOnly --watch\"",
@@ -36,12 +46,10 @@
   "author": "Robert May",
   "license": "MIT",
   "peerDependencies": {
-    "@dimforge/rapier3d-compat": "^0.20.0",
     "@rzmps/rzmps": "^1.0.0",
     "three": "^0.186.0"
   },
   "devDependencies": {
-    "@dimforge/rapier3d-compat": "^0.20.0",
     "@rzmps/rzmps": "^1.0.0",
     "concurrently": "^6.1.0",
     "three": "^0.186.0",

@@ -70,7 +70,7 @@ export default async function createCollisionSubEmitters() {
         pitch: [0.8, 1.2],
         volume: 0.18,
         impulseAffectsVolume: 0.5,
-        impulseThreshhold: 0.5,
+        impulseThreshold: 0.5,
         lowPass: 1800,
         impulseAffectsLowPass: 1,
       }),
@@ -133,7 +133,7 @@ export default async function createCollisionSubEmitters() {
     impulseAffectsScale: 0.1,
     impulseAffectsSpeed: 0.45,
     impulseAffectsAlignment: true,
-    impulseThreshhold: 1.2,
+    impulseThreshold: 1.2,
   });
 
   collision.name = 'Metal Balls';

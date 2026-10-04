@@ -2,6 +2,15 @@
   "name": "@rzmps/rzmps",
   "version": "1.3.0",
   "description": "🧅 Modular and extendable particle system for Three.js",
+  "homepage": "https://github.com/rzmay/rzmps#readme",
+  "bugs": {
+    "url": "https://github.com/rzmay/rzmps/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rzmay/rzmps.git",
+    "directory": "packages/rzmps"
+  },
   "main": "build/index.cjs",
   "module": "build/index.mjs",
   "types": "build/index.d.ts",
@@ -10,6 +19,12 @@
       "types": "./build/index.d.ts",
       "import": "./build/index.mjs",
       "require": "./build/index.cjs"
+    },
+    "./Emitter": {
+      "types": "./build/Emitter.d.ts"
+    },
+    "./ParticleSystem": {
+      "types": "./build/ParticleSystem.d.ts"
     },
     "./package.json": "./package.json"
   },
@@ -27,6 +42,7 @@
   "files": [
     "build/**/*"
   ],
+  "sideEffects": false,
   "scripts": {
     "build": "tsdown && tsc --emitDeclarationOnly && npm run copy:static && npm run copy:declarations",
     "copy:assets": "npm run copy:static",

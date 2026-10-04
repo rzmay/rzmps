@@ -19,7 +19,7 @@ import createSuzanne from './suzanne';
 import createSuzannes from './suzanneInstances';
 import createTags from './tags';
 
-const SOURCE_ROOT = 'https://github.com/rzmay/rzmps/blob/main/packages/demo/src/presets/particles';
+const SOURCE_ROOT = 'https://github.com/rzmay/rzmps/blob/main/apps/demo/src/presets/particles';
 
 function withMetadata(factory, fileName) {
   factory.sourceUrl = `${SOURCE_ROOT}/${fileName}`;

@@ -495,7 +495,7 @@ export class ParticleSystemGUI {
         folder.add(options, 'impulseAffectsLifetime', 0, 4, 0.01).name('Impulse Affects Lifetime');
         folder.add(options, 'impulseAffectsMass', 0, 4, 0.01).name('Impulse Affects Mass');
         folder.add(options, 'impulseAffectsAlignment').name('Impulse Affects Alignment');
-        folder.add(options, 'impulseThreshhold', 0, 100, 0.01).name('Impulse Threshhold');
+        folder.add(options, 'impulseThreshold', 0, 100, 0.01).name('Impulse Threshold');
 
         const info = {
             particles: subSystem.particles.length,

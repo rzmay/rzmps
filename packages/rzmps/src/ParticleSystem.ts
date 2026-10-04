@@ -19,7 +19,7 @@ import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } fr
 import LODHelper, { type LODSettings } from './LODHelper';
 import SpatialEffect from './SpatialEffect';
 
-interface ParticleSystemOptions {
+export interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
   renderers: Multiple<Renderer>;
   modules: Multiple<Module>;
@@ -68,7 +68,7 @@ export interface SubSystemOptions {
   impulseAffectsLifetime: number;
   impulseAffectsMass: number;
   impulseAffectsAlignment: boolean;
-  impulseThreshhold: number;
+  impulseThreshold: number;
 }
 
 interface SubSystemEmissionRun {
@@ -1020,7 +1020,7 @@ class ParticleSystem extends THREE.Object3D {
       impulseAffectsLifetime: options.impulseAffectsLifetime ?? 0,
       impulseAffectsMass: options.impulseAffectsMass ?? 0,
       impulseAffectsAlignment: options.impulseAffectsAlignment ?? false,
-      impulseThreshhold: Math.max(0, options.impulseThreshhold ?? 0),
+      impulseThreshold: Math.max(0, options.impulseThreshold ?? 0),
     });
 
     subSystem._subSystemParent = this;
@@ -1084,7 +1084,7 @@ class ParticleSystem extends THREE.Object3D {
     this.subSystems.forEach((options, subSystem) => {
       if (
         options.emitOnCollision
-        && collision.impulse.length() > options.impulseThreshhold
+        && collision.impulse.length() > options.impulseThreshold
         && this._canEmitForParticle(particle, options)
       ) {
         subSystem._startEmissionRunAtParticle(particle, options, collision);

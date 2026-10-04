@@ -12,15 +12,18 @@ The library documentation lives in
 [packages/rzmps/README.md](packages/rzmps/README.md). Keeping the API reference
 there avoids maintaining two copies of the same docs.
 
+Short guides live in [docs](docs), including first-use examples and the release
+flow.
+
 ## Repository Contents
 
 | Package         | Path                                             | Description                                               |
 | --------------- | ------------------------------------------------ | --------------------------------------------------------- |
 | `@rzmps/rzmps`  | [packages/rzmps](packages/rzmps)                 | Core Three.js particle system and documentation.          |
-| `@rzmps/rapier` | [packages/@rzmps:rapier](packages/@rzmps:rapier) | Rapier collision/physics extension.                       |
-| `@rzmps/jolt`   | [packages/@rzmps:jolt](packages/@rzmps:jolt)     | Jolt collision/physics extension.                         |
-| `@rzmps/ammo`   | [packages/@rzmps:ammo](packages/@rzmps:ammo)     | Ammo collision/physics extension.                         |
-| Demo            | [packages/demo](packages/demo)                   | Interactive examples, GUI, and browser benchmark harness. |
+| `@rzmps/rapier` | [packages/rapier](packages/rapier)               | Rapier collision/physics extension.                       |
+| `@rzmps/jolt`   | [packages/jolt](packages/jolt)                   | Jolt collision/physics extension.                         |
+| `@rzmps/ammo`   | [packages/ammo](packages/ammo)                   | Ammo collision/physics extension.                         |
+| Demo            | [apps/demo](apps/demo)                           | Interactive examples, GUI, and browser benchmark harness. |
 
 ## Links
 

@@ -30,4 +30,4 @@ List assets, examples, references, and author credit.
 - [ ] Preset loads in the demo
 - [ ] Switching away from the preset cleans up resources
 - [ ] Source and author metadata are present
-- [ ] `npm run build --workspace packages/demo`
+- [ ] `npm run build --workspace apps/demo`
