@@ -73,6 +73,13 @@ function getChromeArgs() {
     '--use-angle=default',
   ];
 
+  if (process.env.CI === 'true') {
+    args.push(
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+    );
+  }
+
   if (!useVsync) {
     args.push(
       '--disable-frame-rate-limit',
