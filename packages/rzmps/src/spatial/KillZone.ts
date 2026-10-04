@@ -13,6 +13,8 @@ type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
 type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
 type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
+// Super simple implementation -- just a spatial effect whose modifier calls particle.kill()
+// Exists mainly as a shortcut rather than any sophisticated implementation
 class KillZone extends SpatialEffect {
   static Box(
     modify: SpatialEffectModifier | null,
