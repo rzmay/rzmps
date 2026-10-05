@@ -123,7 +123,7 @@ export class RendererGUI extends GUIEditorBase {
             ['normalLighting', 'Normal Lighting', 0, 1, 0.01],
             ['sphericalNormals', 'Spherical Normals', 0, 1, 0.01],
             ['transmission', 'Transmission', 0, 1, 0.01],
-            ['distortionStrength', 'Distortion Strength', -64, 64, 0.1],
+            ['distortionStrength', 'Distortion Strength', -0.25, 0.25, 0.001],
             ['envIntensity', 'Env Intensity', 0, 10, 0.01],
         ];
 

@@ -53,6 +53,7 @@ export default async function createBubbles() {
     duration: 10,
     looping: true,
     gravityModifier: 0.05,
+    useLiveCubemap: true,
 
     emitters: [
       new Emitter({
@@ -112,12 +113,13 @@ export default async function createBubbles() {
 
         materialOptions: {
           roughness: 0.15,
+          metalness: 0.5,
           sphericalNormals: 1,
           normalLighting: 0.75,
           transmissionMap: simple,
           transmission: 0.7,
           distortionMap: distortionSimple,
-          distortionStrength: -8,
+          distortionStrength: -0.05,
         },
       }),
       new AudioRenderer({

@@ -154,7 +154,7 @@ function createHeatDistortion(alphaMap, distortionMap) {
           opacity: 0.3,
           transmission: 1,
           distortionMap,
-          distortionStrength: 4,
+          distortionStrength: 0.05,
           depthWrite: false,
         },
       }),

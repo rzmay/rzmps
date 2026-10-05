@@ -8,6 +8,7 @@ varying vec4 vColor;
 varying float aspectRatio;
 varying float angle;
 varying float vDistortionStrength;
+varying vec2 vDistortionWorldToUv;
 varying vec2 vSpriteUv;
 flat out int fragFrame;
 
@@ -34,6 +35,16 @@ void main() {
         sizeAttenuation && projectionMatrix[3][3] == 0.0
             ? 1.0 / -mvPosition.z
             : 1.0;
+
+    float distortionPerspectiveScale =
+        projectionMatrix[3][3] == 0.0
+            ? 1.0 / max(-mvPosition.z, 0.0001)
+            : 1.0;
+
+    vDistortionWorldToUv =
+        vec2(projectionMatrix[0][0], projectionMatrix[1][1])
+        * 0.5
+        * distortionPerspectiveScale;
 
     gl_PointSize =
         max(spriteScale.x, spriteScale.y)

@@ -27,6 +27,7 @@ varying vec4 vColor;
 varying float aspectRatio;
 varying float angle;
 varying float vDistortionStrength;
+varying vec2 vDistortionWorldToUv;
 varying vec2 vSpriteUv;
 
 flat in int fragFrame;
@@ -289,7 +290,7 @@ void main()
             * distortionStrength
             * vDistortionStrength
             * finalAlpha
-            / colorResolution;
+            * vDistortionWorldToUv;
 
         vec3 transmittedColor =
             texture2D(

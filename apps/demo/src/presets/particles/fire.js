@@ -56,11 +56,6 @@ export default async function createFire() {
       new ForceOverLifetime({
         force: new THREE.Vector3(0, 0.5, 0),
       }),
-      // new LimitVelocityOverLifetime({
-      //   limit: new THREE.Vector3(12, 12, 12),
-      //   drag: 0.3,
-      //   multiplyDragByVelocity: true,
-      // }),
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (1.3 + (0.2 - 1.3) * time);
@@ -177,7 +172,7 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
         materialOptions: {
           transmission: 1,
           distortionMap,
-          distortionStrength: 8,
+          distortionStrength: 0.05,
           depthWrite: false,
         },
       }),

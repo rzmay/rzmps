@@ -1094,9 +1094,9 @@ new DistortionByDepth(options?: {
 })
 ```
 
-Multiplies each particle's `distortionStrength`, which multiplies the
-`SpriteRenderer` material `distortionStrength` before sampling the transmitted
-scene color.
+Multiplies each particle's `distortionStrength`, which acts as a per-particle
+multiplier for the `SpriteRenderer` material `distortionStrength` before
+sampling the transmitted scene color.
 
 ### ScaleBySpeed
 
@@ -1504,9 +1504,12 @@ intersections. Set `softParticleDistance` above `0` to enable the effect.
 `sphericalNormals` blends generated sphere-like sprite normals from `0` to `1`.
 `transmission` blends sprites with the current scene color, optionally masked by
 `transmissionMap`. `distortionMap` and `distortionStrength` offset the sampled
-scene color for heat haze, refraction, and similar screen-space distortion
-effects. A particle's `distortionStrength` multiplies the material value, so
-emitters and modules can vary distortion per particle.
+scene color for heat haze, refraction, and similar distortion effects.
+Material `distortionStrength` is measured in world units on the camera plane,
+then converted to screen UVs in the sprite shaders, so the same system should
+look similar across display resolutions. A particle's `distortionStrength`
+multiplies the material value, so emitters and modules can vary distortion per
+particle.
 
 ### MeshRenderer
 
