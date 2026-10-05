@@ -121,8 +121,7 @@ const WebGPUUnlitSprite = (
       const distortionPixels = distortion
         .mul(float(distortionStrength))
         .mul(particleDistortionStrength)
-        .mul(finalAlpha)
-        .mul(float(4)); // Balancing -- for some reason its 4x weaker
+        .mul(finalAlpha);
 
       const distortionUv = distortionPixels.div(viewportSize);
 

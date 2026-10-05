@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   ColorOverLifetime,
+  Emitter,
   ForceOverLifetime,
   MeshRenderer,
   NoiseModule,
@@ -91,18 +92,25 @@ function createParticle(index) {
   return particle;
 }
 
-function createSystem({ particleCount, modules = [], renderer = new NoopRenderer() }) {
+function createSystem({
+  particleCount,
+  initialParticleCount = particleCount,
+  maxParticles = Math.max(particleCount, 1),
+  emitters = [],
+  modules = [],
+  renderer = new NoopRenderer(),
+}) {
   const system = new ParticleSystem({
-    emitters: [],
+    emitters,
     renderers: renderer,
     modules,
     gravityModifier: 0,
     looping: false,
-    maxParticles: Math.max(particleCount, 1),
+    maxParticles,
     useUpdateLOD: false,
   });
 
-  for (let i = 0; i < particleCount; i += 1) {
+  for (let i = 0; i < initialParticleCount; i += 1) {
     system.particles.push(createParticle(i));
   }
 
@@ -210,6 +218,51 @@ function BenchmarkScene({ onComplete, onProgress }) {
           new ForceOverLifetime({ force: new THREE.Vector3(0.1, -0.15, 0.05) }),
           new NoiseModule('bench-noise'),
         ],
+      }),
+    },
+    {
+      name: 'Spawn churn 2k/sec simulation only',
+      particleCount: 10_000,
+      create: () => ({
+        initialParticleCount: 0,
+        maxParticles: 10_000,
+        emitters: new Emitter({
+          rate: 2_000,
+          radialSpeed: 1.5,
+          alignment: 1,
+          initialValues: {
+            lifetime: 5,
+            scale: new THREE.Vector3(0.05, 0.05, 0.05),
+            velocity: new THREE.Vector3(0.02, 0.04, 0),
+            color: new THREE.Color(1, 0.65, 0.25),
+          },
+        }),
+      }),
+    },
+    {
+      name: 'Renderer tag filtering 10k x4 noop',
+      particleCount: 10_000,
+      create: () => ({
+        renderer: [
+          new NoopRenderer({ tags: 'even' }),
+          new NoopRenderer({ tags: 'odd' }),
+          new NoopRenderer({ tags: 'even' }),
+          new NoopRenderer({ tags: 'odd' }),
+        ],
+      }),
+    },
+    {
+      name: 'Renderer count LOD compensate 10k noop',
+      particleCount: 10_000,
+      create: () => ({
+        renderer: new NoopRenderer({
+          countLOD: {
+            distance: 1,
+            quality: 0.5,
+            maxLevel: 1,
+          },
+          compensateSize: true,
+        }),
       }),
     },
     {

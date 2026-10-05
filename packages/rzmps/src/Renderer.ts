@@ -58,21 +58,20 @@ export default abstract class Renderer {
         }
 
         const scaleMultiplier = this.compensateSize && countScale < 1
-            ? 1 / Math.max(countScale, 0.000001)
+            ? 1 / Math.max(countScale, Number.EPSILON)
             : 1;
+
+        if (scaleMultiplier !== 1) visibleParticles.forEach(p => p.scale.multiplyScalar(scaleMultiplier));
 
         // Call update on particles in the group
         this._update(
-            scaleMultiplier == 1
-                ? visibleParticles
-                : visibleParticles
-                .map((p) => ({
-                    ...p,
-                    scale: p.scale.clone().multiplyScalar(scaleMultiplier),
-                }) as Particle),
+            visibleParticles,
             system,
             deltaTime,
         );
+
+        // Undo scale multiplication if necessary
+        if (scaleMultiplier !== 1) visibleParticles.forEach(p => p.scale.divideScalar(scaleMultiplier));
     }
     // Cleanup
     public abstract destroy(): void;

@@ -27,6 +27,7 @@
     "web-vitals": "^1.0.1"
   },
   "scripts": {
+    "prestart": "npm --prefix ../.. run build:modules",
     "start": "vite --host 0.0.0.0",
     "build": "vite build",
     "benchmark:run": "npm --prefix ../.. run build:modules && npm run build && node scripts/benchmark-rzmps.mjs",
