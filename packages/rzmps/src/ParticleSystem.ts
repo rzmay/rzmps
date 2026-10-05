@@ -27,7 +27,7 @@ import {
 import { evaluateDynamicNumberGPU } from './helpers/evaluateDynamicGPU';
 import SpatialEffect from './SpatialEffect';
 
-interface ParticleSystemOptions {
+export interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
   renderers: Multiple<Renderer>;
   modules: Multiple<Module>;
@@ -79,7 +79,7 @@ export interface SubSystemOptions {
   impulseAffectsLifetime: number;
   impulseAffectsMass: number;
   impulseAffectsAlignment: boolean;
-  impulseThreshhold: number;
+  impulseThreshold: number;
 }
 
 interface SubSystemEmissionRun {
@@ -117,6 +117,7 @@ class ParticleSystem extends THREE.Object3D {
   spatialEffects: SpatialEffect[] = [];
   renderers: Renderer[] = [];
   subSystems = new Map<ParticleSystem, SubSystemOptions>();
+  boundingBox = new THREE.Box3();
 
   gravity: THREE.Vector3;
   gravityModifier: DynamicValue<number>;
@@ -249,6 +250,9 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _particleEmissionScale = new THREE.Vector3(1, 1, 1);
   private readonly _particleEmissionColor = new THREE.Color(1, 1, 1);
   private readonly _particleEmissionVelocity = new THREE.Vector3();
+  private readonly _particleBoundsMin = new THREE.Vector3();
+  private readonly _particleBoundsMax = new THREE.Vector3();
+  private readonly _particleBoundsSize = new THREE.Vector3(1, 1, 1);
   private readonly _directionNormalMatrix = new THREE.Matrix3();
   private readonly _inverseWorldMatrix = new THREE.Matrix4();
   private _gpuBuffers?: GPUParticleBufferState;
@@ -429,6 +433,9 @@ class ParticleSystem extends THREE.Object3D {
       else this.particles.splice(0, this.particles.length - this.maxParticles)
     }
 
+    this.particles.forEach((particle) => particle.restore());
+    this.updateBoundingBox();
+
     // Module preparation
     const modules = this.modules
       .flatMap((module) => module.withDependents());
@@ -445,8 +452,6 @@ class ParticleSystem extends THREE.Object3D {
 
     modules
       .forEach((module) => module.prepare(this, this.deltaTime));
-
-    this.particles.forEach((particle) => particle.restore());
 
     const modifiers = [...modules, ...spatialEffects];
 
@@ -1411,6 +1416,35 @@ class ParticleSystem extends THREE.Object3D {
     }
   }
 
+  public updateBoundingBox(): void {
+    this.boundingBox.makeEmpty();
+
+    this.particles.forEach((particle) => {
+      const particleRadius = Math.max(
+        Math.abs(particle.scale.x),
+        Math.abs(particle.scale.y),
+        Math.abs(particle.scale.z),
+        Number.EPSILON,
+      );
+
+      this._particleBoundsMin
+        .copy(particle.position)
+        .addScalar(-particleRadius);
+      this._particleBoundsMax
+        .copy(particle.position)
+        .addScalar(particleRadius);
+      this.boundingBox.expandByPoint(this._particleBoundsMin);
+      this.boundingBox.expandByPoint(this._particleBoundsMax);
+    });
+
+    if (this.boundingBox.isEmpty()) {
+      this.boundingBox.setFromCenterAndSize(
+        this._particleBoundsMin.set(0, 0, 0),
+        this._particleBoundsSize,
+      );
+    }
+  }
+
   private _getAdvancedPermanentValues(
     particle: Particle,
     base: ParticleCachedValues,
@@ -1947,7 +1981,7 @@ class ParticleSystem extends THREE.Object3D {
       impulseAffectsLifetime: options.impulseAffectsLifetime ?? 0,
       impulseAffectsMass: options.impulseAffectsMass ?? 0,
       impulseAffectsAlignment: options.impulseAffectsAlignment ?? false,
-      impulseThreshhold: Math.max(0, options.impulseThreshhold ?? 0),
+      impulseThreshold: Math.max(0, options.impulseThreshold ?? 0),
     });
 
     subSystem._subSystemParent = this;
@@ -2011,7 +2045,7 @@ class ParticleSystem extends THREE.Object3D {
     this.subSystems.forEach((options, subSystem) => {
       if (
         options.emitOnCollision
-        && collision.impulse.length() > options.impulseThreshhold
+        && collision.impulse.length() > options.impulseThreshold
         && this._canEmitForParticle(particle, options)
       ) {
         subSystem._startEmissionRunAtParticle(particle, options, collision);

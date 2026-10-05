@@ -7,6 +7,7 @@ import {
   attribute,
   cameraFar,
   cameraNear,
+  cameraProjectionMatrix,
   cos,
   Fn,
   float,
@@ -14,7 +15,6 @@ import {
   output,
   perspectiveDepthToViewZ,
   positionView,
-  viewportSize,
   viewportUV,
   sin,
   smoothstep,
@@ -30,6 +30,12 @@ type WebGPUUnlitSpriteOptions = UnlitSpriteOptions & {
   sceneDepthTexture: THREE.DepthTexture;
   spriteDataNode: Node<'vec4'>;
   colorNode: Node<'vec3'>;
+};
+
+type TSLMatrix4Node = {
+  element: (index: number) => {
+    element: (index: number) => ReturnType<typeof float>;
+  };
 };
 
 const WebGPUUnlitSprite = (
@@ -50,6 +56,7 @@ const WebGPUUnlitSprite = (
     colorNode,
     ...materialOptions
   } = options;
+  const finalDistortionStrength = distortionStrength ?? (distortionMap ? 1 : 0);
 
   const material = new MeshBasicNodeMaterial({
     depthTest: true,
@@ -109,7 +116,7 @@ const WebGPUUnlitSprite = (
       : baseTransmission;
 
     const transmittedColor = Fn(() => {
-      if (!distortionMap || distortionStrength === 0) {
+      if (!distortionMap || finalDistortionStrength === 0) {
         return viewportSharedTexture(viewportUV).rgb;
       }
 
@@ -123,13 +130,21 @@ const WebGPUUnlitSprite = (
         distortionNormal.y.mul(cos(rotation)).sub(distortionNormal.x.mul(sin(rotation))),
       );
 
-      const distortionPixels = distortion
-        .mul(float(distortionStrength))
+      const projectionMatrix = cameraProjectionMatrix as unknown as TSLMatrix4Node;
+      const isOrthographic = projectionMatrix.element(3).element(3).equal(1.0);
+      const projectionScale = vec2(
+        projectionMatrix.element(0).element(0),
+        projectionMatrix.element(1).element(1),
+      ).mul(0.5);
+      const distortionPerspectiveScale = isOrthographic
+        .select(float(1), positionView.z.negate().max(0.0001).reciprocal());
+      const distortionWorldToUv = projectionScale.mul(distortionPerspectiveScale);
+
+      const distortionUv = distortion
+        .mul(float(finalDistortionStrength))
         .mul(particleDistortionStrength)
         .mul(finalAlpha)
-        .mul(float(4)); // Balancing -- for some reason its 4x weaker
-
-      const distortionUv = distortionPixels.div(viewportSize);
+        .mul(distortionWorldToUv);
 
       return viewportSharedTexture(
         viewportUV.add(distortionUv),
@@ -150,7 +165,7 @@ const WebGPUUnlitSprite = (
   material.userData.transmission = transmissionAmount;
   material.userData.transmissionMap = transmissionMap;
   material.userData.distortionMap = distortionMap;
-  material.userData.distortionStrength = distortionStrength;
+  material.userData.distortionStrength = finalDistortionStrength;
 
   return material;
 };

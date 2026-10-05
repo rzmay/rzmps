@@ -6,6 +6,7 @@ import {
   attribute,
   cameraFar,
   cameraNear,
+  cameraProjectionMatrix,
   clamp,
   cos,
   dot,
@@ -24,7 +25,6 @@ import {
   vec3,
   vec4,
   viewportSharedTexture,
-  viewportSize,
   viewportUV,
 } from 'three/tsl';
 import type { LitSpriteOptions } from './LitSprite';
@@ -33,6 +33,12 @@ type WebGPULitSpriteOptions = LitSpriteOptions & {
   sceneDepthTexture: THREE.DepthTexture;
   spriteDataNode: Node<'vec4'>;
   colorNode: Node<'vec3'>;
+};
+
+type TSLMatrix4Node = {
+  element: (index: number) => {
+    element: (index: number) => ReturnType<typeof float>;
+  };
 };
 
 const WebGPULitSprite = (
@@ -65,7 +71,7 @@ const WebGPULitSprite = (
   } = options;
 
   const finalDistortionMap = distortionMap ?? normalMap;
-  const finalDistortionStrength = distortionStrength ?? normalStrength ?? (finalDistortionMap ? 1 : 0);
+  const finalDistortionStrength = distortionStrength ?? (finalDistortionMap ? 1 : 0);
 
   const material = new MeshStandardNodeMaterial({
     depthTest: true,
@@ -182,11 +188,20 @@ const WebGPULitSprite = (
         distortionNormal.x.mul(cos(rotation)).add(distortionNormal.y.mul(sin(rotation))),
         distortionNormal.y.mul(cos(rotation)).sub(distortionNormal.x.mul(sin(rotation))),
       );
+      const projectionMatrix = cameraProjectionMatrix as unknown as TSLMatrix4Node;
+      const isOrthographic = projectionMatrix.element(3).element(3).equal(1.0);
+      const projectionScale = vec2(
+        projectionMatrix.element(0).element(0),
+        projectionMatrix.element(1).element(1),
+      ).mul(0.5);
+      const distortionPerspectiveScale = isOrthographic
+        .select(float(1), positionView.z.negate().max(0.0001).reciprocal());
+      const distortionWorldToUv = projectionScale.mul(distortionPerspectiveScale);
       const distortionUv = distortion
         .mul(float(finalDistortionStrength))
         .mul(particleDistortionStrength)
         .mul(finalAlpha)
-        .div(viewportSize)
+        .mul(distortionWorldToUv)
         .toVar();
       const refractedUv = viewportUV.add(distortionUv).toVar();
 

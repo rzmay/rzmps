@@ -39,7 +39,7 @@ jobs:
           const fs = require('fs');
           const path = require('path');
 
-          const demoPackagePath = path.join('packages', 'demo', 'package.json');
+          const demoPackagePath = path.join('apps', 'demo', 'package.json');
           const demoPackage = JSON.parse(fs.readFileSync(demoPackagePath, 'utf8'));
 
           const packageVersions = new Map();
@@ -81,14 +81,14 @@ jobs:
 
           npm install --package-lock-only --ignore-scripts
 
-          if git diff --quiet -- package-lock.json packages/demo/package.json; then
+          if git diff --quiet -- package-lock.json apps/demo/package.json; then
             echo "Demo package versions already match local package versions."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json packages/demo/package.json
+          git add package-lock.json apps/demo/package.json
           git commit -m "chore: sync demo package versions for release"
           git push
 

@@ -1,0 +1,58 @@
+{
+  "name": "@rzmps/ammo",
+  "version": "1.1.0",
+  "description": "Ammo physics engine extension for rzmps.",
+  "homepage": "https://github.com/rzmay/rzmps#readme",
+  "bugs": {
+    "url": "https://github.com/rzmay/rzmps/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rzmay/rzmps.git",
+    "directory": "packages/ammo"
+  },
+  "main": "build/index.cjs",
+  "module": "build/index.mjs",
+  "types": "build/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "import": "./build/index.mjs",
+      "require": "./build/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "keywords": [
+    "rzmps",
+    "three",
+    "threejs",
+    "particles",
+    "particle-system",
+    "physics",
+    "collision",
+    "ammo",
+    "ammojs",
+    "typescript"
+  ],
+  "files": [
+    "build/**/*"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsdown && tsc --emitDeclarationOnly",
+    "dev": "concurrently -k \"tsdown --watch\" \"tsc --emitDeclarationOnly --watch\"",
+    "prepack": "npm run build"
+  },
+  "author": "Robert May",
+  "license": "MIT",
+  "peerDependencies": {
+    "@rzmps/rzmps": "^1.0.0",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@rzmps/rzmps": "^1.0.0",
+    "concurrently": "^6.1.0",
+    "three": "^0.186.0",
+    "typescript": "^5.0.0"
+  }
+}

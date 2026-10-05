@@ -438,4 +438,4 @@ $RECYCLE.BIN/
 
 # RZMPS generated artifacts
 packages/*/build/
-packages/demo/dist/
+apps/*/dist/

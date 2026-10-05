@@ -47,6 +47,7 @@ varying vec4 vColor;
 varying float aspectRatio;
 varying float angle;
 varying float vDistortionStrength;
+varying vec2 vDistortionWorldToUv;
 varying vec2 vSpriteUv;
 
 varying vec3 vViewPosition;
@@ -729,7 +730,7 @@ void main()
             * distortionStrength
             * vDistortionStrength
             * finalAlpha
-            / sceneColorResolution;
+            * vDistortionWorldToUv;
 
         vec3 transmittedColor =
             texture2D(

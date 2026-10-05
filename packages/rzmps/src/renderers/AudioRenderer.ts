@@ -57,7 +57,7 @@ export interface AudioRendererOptions extends Partial<RendererOptions> {
   impulseAffectsVolume: number;
   impulseAffectsHighPass: number;
   impulseAffectsLowPass: number;
-  impulseThreshhold: number;
+  impulseThreshold: number;
 
   dopplerEffect: number;
 }
@@ -119,7 +119,7 @@ export default class AudioRenderer extends Renderer {
   impulseAffectsVolume: number;
   impulseAffectsHighPass: number;
   impulseAffectsLowPass: number;
-  impulseThreshhold: number;
+  impulseThreshold: number;
 
   private _system?: ParticleSystem;
   private _eventSystem?: ParticleSystem;
@@ -193,7 +193,7 @@ export default class AudioRenderer extends Renderer {
     this.impulseAffectsVolume = Math.max(0, options.impulseAffectsVolume ?? 0);
     this.impulseAffectsHighPass = Math.max(0, options.impulseAffectsHighPass ?? 0);
     this.impulseAffectsLowPass = Math.max(0, options.impulseAffectsLowPass ?? 0);
-    this.impulseThreshhold = Math.max(0, options.impulseThreshhold ?? 0);
+    this.impulseThreshold = Math.max(0, options.impulseThreshold ?? 0);
 
     this.dopplerEffect = Math.max(0, options.dopplerEffect ?? 0);
   }
@@ -238,7 +238,7 @@ export default class AudioRenderer extends Renderer {
     this._removeEventCallbacks();
 
     this._collisionListener = (particle, collisionHit) => {
-      if (collisionHit.impulse.length() <= this.impulseThreshhold) return;
+      if (collisionHit.impulse.length() <= this.impulseThreshold) return;
       this._handleEvent(particle, this.onCollisionSound, collisionHit, this.collisionRatio);
     };
     this._deathListener = (particle) => this._handleEvent(particle, this.onDeathSound, undefined, this.ratio);

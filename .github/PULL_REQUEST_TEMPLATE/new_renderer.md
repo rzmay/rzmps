@@ -33,6 +33,6 @@ Add a screenshot, video, or animated GIF showing the renderer in the demo.
 ## Verification
 
 - [ ] `npm run build --workspace @rzmps/rzmps`
-- [ ] `npm run build --workspace packages/demo`
+- [ ] `npm run build --workspace apps/demo`
 - [ ] Visual check in WebGL
 - [ ] Visual check in WebGPU, if supported
