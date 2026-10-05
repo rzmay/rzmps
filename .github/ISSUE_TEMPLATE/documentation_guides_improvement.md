@@ -12,10 +12,7 @@ What should be improved?
 
 - README
 - API reference
-- Getting started
-- First particle system guide
-- Module guide
-- Spatial effects guide
+- Developer guides
 - Release / contribution guide
 - Examples or code snippets
 
@@ -41,4 +38,3 @@ Who would this help?
 
 Mention any classes, modules, renderers, packages, or files this documentation
 should cover.
-
