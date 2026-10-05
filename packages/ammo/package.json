@@ -51,8 +51,8 @@
   },
   "devDependencies": {
     "@rzmps/rzmps": "^2.0.0",
-    "concurrently": "^6.1.0",
+    "concurrently": "^10.0.5",
     "three": "^0.186.0",
-    "typescript": "^5.0.0"
+    "typescript": "^7.0.2"
   }
 }
