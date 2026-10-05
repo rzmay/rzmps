@@ -4,6 +4,7 @@ varying vec4 vColor;
 varying float aspectRatio;
 varying float angle;
 varying float vDistortionStrength;
+varying vec2 vDistortionWorldToUv;
 varying vec2 vSpriteUv;
 flat out int fragFrame;
 
@@ -27,6 +28,22 @@ void main()
     #else
     mat4 particleMatrix = mat4(1.0);
     #endif
+
+    vec4 centerViewPosition =
+        viewMatrix
+        * modelMatrix
+        * particleMatrix
+        * vec4(0.0, 0.0, 0.0, 1.0);
+
+    float distortionPerspectiveScale =
+        projectionMatrix[3][3] == 0.0
+            ? 1.0 / max(-centerViewPosition.z, 0.0001)
+            : 1.0;
+
+    vDistortionWorldToUv =
+        vec2(projectionMatrix[0][0], projectionMatrix[1][1])
+        * 0.5
+        * distortionPerspectiveScale;
 
     gl_Position =
         projectionMatrix

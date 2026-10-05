@@ -6,9 +6,9 @@ particle simulation library, optional physics integrations, and a browser demo.
 ## Project Layout
 
 - `packages/rzmps`: core library.
-- `packages/demo`: interactive demo, benchmark runner, scenes, and particle
+- `apps/demo`: interactive demo, benchmark runner, scenes, and particle
   presets.
-- `packages/@rzmps:ammo`, `packages/@rzmps:jolt`, `packages/@rzmps:rapier`:
+- `packages/ammo`, `packages/jolt`, `packages/rapier`:
   optional physics backends.
 - `scripts`: workspace scripts, benchmark reporting, and repo tooling.
 
@@ -17,7 +17,7 @@ particle simulation library, optional physics integrations, and a browser demo.
 ```bash
 npm install
 npm run build:modules
-npm start --workspace packages/demo
+npm start --workspace apps/demo
 ```
 
 The demo usually runs at `http://localhost:5173`.
@@ -43,7 +43,7 @@ npm run build:modules
 Build the demo:
 
 ```bash
-npm run build --workspace packages/demo
+npm run build --workspace apps/demo
 ```
 
 Run core regression tests:
@@ -64,6 +64,12 @@ Update benchmark tables in READMEs:
 npm run benchmark:update-report
 ```
 
+Review the release process:
+
+```text
+docs/release-flow.md
+```
+
 Add missing author metadata to newly added demo presets:
 
 ```bash
@@ -77,7 +83,7 @@ to add missing author metadata to newly added demo preset files based on the PR
 author's GitHub username.
 
 The CI workflow runs `npm test`, builds the demo, and checks whitespace on pull
-requests and pushes to `main`. Benchmarks are intentionally not part of CI by
+requests and pushes to `develop`. Benchmarks are intentionally not part of CI by
 default because they are hardware- and browser-environment-sensitive; include a
 benchmark report in the pull request when changing performance-sensitive code.
 

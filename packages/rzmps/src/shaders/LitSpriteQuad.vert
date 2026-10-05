@@ -4,6 +4,7 @@ varying vec4 vColor;
 varying float aspectRatio;
 varying float angle;
 varying float vDistortionStrength;
+varying vec2 vDistortionWorldToUv;
 varying vec2 vSpriteUv;
 
 varying vec3 vViewPosition;
@@ -38,10 +39,26 @@ void main()
         viewMatrix
         * worldPosition;
 
+    vec4 centerViewPosition =
+        viewMatrix
+        * modelMatrix
+        * particleMatrix
+        * vec4(0.0, 0.0, 0.0, 1.0);
+
     vColor = vec4(particleColor, instanceSpriteData.y);
     aspectRatio = 1.0;
     angle = 0.0;
     vDistortionStrength = instanceSpriteData.w;
+    float distortionPerspectiveScale =
+        projectionMatrix[3][3] == 0.0
+            ? 1.0 / max(-centerViewPosition.z, 0.0001)
+            : 1.0;
+
+    vDistortionWorldToUv =
+        vec2(projectionMatrix[0][0], projectionMatrix[1][1])
+        * 0.5
+        * distortionPerspectiveScale;
+
     vSpriteUv = vec2(uv.x, 1.0 - uv.y);
     fragFrame = int(instanceSpriteData.x);
     vViewPosition = -mvPosition.xyz;

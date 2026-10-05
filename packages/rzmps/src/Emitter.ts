@@ -13,13 +13,13 @@ import type { Tag } from './types/Tag';
 import { TagSelectionMethod } from './enums/TagSelectionMethod';
 import LODHelper, { type LODSettings } from './LODHelper';
 
-type SpawnBurst = {
+export type SpawnBurst = {
     time: number,
     count: DynamicUntimedValue<number>,
     fired?: boolean,
 };
 
-interface EmitterOptions {
+export interface EmitterOptions {
     initialValues: Partial<InitialParticleValues>;
     source: EmissionShape;
     bursts: Multiple<SpawnBurst>;

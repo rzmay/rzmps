@@ -79,7 +79,9 @@ const LitSprite = (
         hasTransmissionMap: { value: Boolean(transmissionMap) },
         distortionMap: { value: distortionMap ?? normalMap ?? null },
         hasDistortionMap: { value: Boolean(distortionMap ?? normalMap) },
-        distortionStrength: { value: distortionStrength ?? normalStrength ?? (distortionMap ?? normalMap ? 1 : 0) },
+        distortionStrength: {
+          value: distortionStrength ?? (distortionMap ?? normalMap ? 1 : 0),
+        },
 
         softParticles: { value: Boolean(softParticleDistance) },
         softParticleDistance: { value: softParticleDistance },

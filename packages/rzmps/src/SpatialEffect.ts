@@ -25,6 +25,8 @@ export type SpatialEffectFeatherUpdate = (
 
 export type SpatialEffectModifier = SpatialEffectUpdate | SpatialEffectFeatherUpdate;
 
+export type SpatialEffectFeatherEasing = (feather: number) => number;
+
 export type SpatialEffectTest = (
   particle: Particle,
   particleSystem: ParticleSystem,
@@ -41,6 +43,7 @@ export interface SpatialEffectOptions {
   test: SpatialEffectTest;
   priority: number | Priority;
   feather: number;
+  featherEasing: SpatialEffectFeatherEasing;
   automaticFeather: boolean;
 }
 
@@ -137,6 +140,7 @@ class SpatialEffect extends THREE.Object3D {
   inverted: boolean;
   priority = Priority.Transient;
   feather: number;
+  featherEasing: SpatialEffectFeatherEasing;
 
   private readonly _modify: SpatialEffectUpdate | null = null;
   private readonly _modifyFeather?: SpatialEffectFeatherUpdate;
@@ -186,16 +190,20 @@ class SpatialEffect extends THREE.Object3D {
     this.condition = resolvedOptions.condition ?? (() => true);
     this.priority = resolvedOptions.priority ?? this.priority;
     this.feather = Math.max(resolvedOptions.feather ?? 0, 0);
+    this.featherEasing = resolvedOptions.featherEasing ?? ((feather) => feather);
     this._test = resolvedOptions.test;
     this.geometry = resolvedOptions.geometry;
   }
 
+  // If this directly modifies particles and should be picked up by particle systems
+  // This will be true for most spatial effects, but not special ones like boid affectors
   get modifiesParticles(): boolean {
     return this._modify !== null
       || this._modifyFeather !== undefined
       || this._modifyParticle !== SpatialEffect.prototype._modifyParticle;
   }
 
+  // Spatial test, whether or not this is within the effect's jurisdiction
   test(particle: Particle, particleSystem: ParticleSystem): boolean {
     if (this.tags && !tagsIntersect(this.tags, particle.tags ?? [])) return false;
     if (this._test) return this._test(particle, particleSystem, this);
@@ -209,7 +217,7 @@ class SpatialEffect extends THREE.Object3D {
     return this.getFeather(this.localParticlePosition) > 0;
   }
 
-  containsWorldPosition(position: THREE.Vector3): boolean {
+  containsWorldPosition(position: THREE.Vector3, updateMatrix = true): boolean {
     if (!this.geometry) {
       this.getWorldPosition(this.worldEffectPosition);
       const contains = position.distanceToSquared(this.worldEffectPosition) <= Number.EPSILON;
@@ -217,7 +225,7 @@ class SpatialEffect extends THREE.Object3D {
     }
 
     this.localParticlePosition.copy(position);
-    this.updateWorldMatrix(true, false);
+    if (updateMatrix) this.updateWorldMatrix(true, false);
     this.worldToLocal(this.localParticlePosition);
 
     const contains = isPointInMesh(this.localParticlePosition, this._mesh);
@@ -232,7 +240,7 @@ class SpatialEffect extends THREE.Object3D {
       if (this.inverted) return distance <= Number.EPSILON ? 0 : 1;
       if (this.feather <= 0) return distance <= Number.EPSILON ? 1 : 0;
 
-      return Math.min(Math.max(1 - distance / this.feather, 0), 1);
+      return this.easeFeather(1 - distance / this.feather);
     }
 
     this.localParticlePosition.copy(position);
@@ -260,7 +268,7 @@ class SpatialEffect extends THREE.Object3D {
     if (!hit) return 0;
 
     this.closestPointInfo = hit;
-    return Math.min(Math.max(1 - hit.distance / this.feather, 0), 1);
+    return this.easeFeather(1 - hit.distance / this.feather);
   }
 
   modify(particles: Particle[], deltaTime: number, particleSystem: ParticleSystem): void {
@@ -302,6 +310,14 @@ class SpatialEffect extends THREE.Object3D {
     particle
       .lerp(before, 1)
       .lerp(after, feather);
+  }
+
+  private easeFeather(feather: number): number {
+    const clamped = Math.min(Math.max(feather, 0), 1);
+    const eased = this.featherEasing(clamped);
+    return Number.isFinite(eased)
+      ? Math.min(Math.max(eased, 0), 1)
+      : clamped;
   }
 }
 

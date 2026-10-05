@@ -59,6 +59,14 @@ export { default as SpeedOverLifetime } from './modules/SpeedOverLifetime';
 export { default as MassBySize } from './modules/MassBySize';
 export { default as MassByDepth } from './modules/MassByDepth';
 export { default as MassOverLifetime } from './modules/MassOverLifetime';
+export { default as Boids } from './modules/Boids';
+export type {
+  BoidParticleAffectorOptions,
+  BoidsOptions,
+} from './modules/Boids';
+export { default as BoidAffector } from './spatial/BoidAffector';
+export type { BoidAffectorOptions } from './spatial/BoidAffector';
+export { default as BoidAffectorHelper } from './spatial/BoidAffectorHelper';
 export { default as SpatialEffect } from './SpatialEffect';
 export type {
   SpatialEffectFeatherUpdate,
@@ -67,15 +75,15 @@ export type {
   SpatialEffectTest,
   SpatialEffectUpdate,
 } from './SpatialEffect';
-export { default as SpatialEffectHelper } from './SpatialEffects/SpatialEffectHelper';
-export { default as KillZone } from './SpatialEffects/KillZone';
-export type { KillZoneOptions } from './SpatialEffects/KillZone';
+export { default as SpatialEffectHelper } from './spatial/SpatialEffectHelper';
+export { default as KillZone } from './spatial/KillZone';
+export type { KillZoneOptions } from './spatial/KillZone';
 export { default as Collision } from './modules/Collision';
 
 // Force Fields
-export { default as ParticleForceField } from './SpatialEffects/ParticleForceField';
-export type { ForceFieldOptions } from './SpatialEffects/ParticleForceField';
-export { default as ParticleForceFieldHelper } from './SpatialEffects/ParticleForceFieldHelper';
+export { default as ParticleForceField } from './spatial/ParticleForceField';
+export type { ForceFieldOptions } from './spatial/ParticleForceField';
+export { default as ParticleForceFieldHelper } from './spatial/ParticleForceFieldHelper';
 
 // Collision
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';
@@ -84,6 +92,12 @@ export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBack
 // Dynamic Value
 export type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
 export type { ValueByParameter } from './types/ValueByParameter';
+export { default as ParticleOctree } from './helpers/ParticleOctree';
+export type {
+  OctreeAggregator,
+  OctreeConfig,
+  OctreeNode,
+} from './helpers/ParticleOctree';
 
 // Texture helper
 export * as Textures from './Textures';
