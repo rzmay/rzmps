@@ -158,7 +158,10 @@ jobs:
             fi
 
             echo "Staging ${name}@${version} from ${directory}..."
-            npm stage publish "$directory" --access public
+            (
+              cd "$directory"
+              npm stage publish --access public
+            )
             published=$((published + 1))
           done
 
