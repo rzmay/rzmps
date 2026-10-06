@@ -46,15 +46,15 @@
   "author": "Robert May",
   "license": "MIT",
   "peerDependencies": {
-    "@dimforge/rapier3d-compat": "^0.20.0",
+    "@dimforge/rapier3d-compat": "^0.21.0",
     "@rzmps/rzmps": "^2.0.0",
-    "three": "^0.186.0"
+    "three": "^0.186.1"
   },
   "devDependencies": {
-    "@dimforge/rapier3d-compat": "^0.20.0",
+    "@dimforge/rapier3d-compat": "^0.21.0",
     "@rzmps/rzmps": "^2.0.0",
     "concurrently": "^6.1.0",
-    "three": "^0.186.0",
+    "three": "^0.186.1",
     "typescript": "^5.0.0"
   }
 }
