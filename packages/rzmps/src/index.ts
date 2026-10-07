@@ -19,6 +19,8 @@ export { default as Renderer } from './Renderer';
 export { default as LightRenderer } from './renderers/LightRenderer';
 export { default as MeshRenderer } from './renderers/MeshRenderer';
 export { default as SpriteRenderer } from './renderers/SpriteRenderer';
+export { default as VolumeRenderer } from './renderers/VolumeRenderer';
+export type { VolumeRendererOptions } from './renderers/VolumeRenderer';
 export { default as AudioRenderer } from './renderers/AudioRenderer';
 export { SpriteMaterialType } from './enums/SpriteMaterialType';
 export { default as TrailRenderer } from './renderers/TrailRenderer';
@@ -87,6 +89,7 @@ export { default as ParticleForceFieldHelper } from './spatial/ParticleForceFiel
 
 // Collision
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';
+export type { VolumeField } from './interfaces/VolumeField';
 export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBackend';
 
 // Dynamic Value
@@ -95,9 +98,17 @@ export type { ValueByParameter } from './types/ValueByParameter';
 export { default as ParticleOctree } from './helpers/ParticleOctree';
 export type {
   OctreeAggregator,
+  OctreeBrick,
   OctreeConfig,
+  OctreeGridCell,
   OctreeNode,
 } from './helpers/ParticleOctree';
+export { default as FluidSimulation } from './modules/FluidSimulation';
+export type { FluidSimulationOptions } from './modules/FluidSimulation';
+export { default as GasSimulation } from './modules/GasSimulation';
+export type { GasSimulationOptions } from './modules/GasSimulation';
+export { default as FLIPSimulation } from './modules/FLIPSimulation';
+export type { FLIPSimulationOptions } from './modules/FLIPSimulation';
 
 // Texture helper
 export * as Textures from './Textures';

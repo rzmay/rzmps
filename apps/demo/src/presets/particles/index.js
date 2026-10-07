@@ -7,6 +7,8 @@ import createCubes from './cubes';
 import createDopplerBullet from './dopplerBullet';
 import createFire from './fire';
 import createFireball from './fireball';
+import createFlipFluid from './flipFluid';
+import createGasVolume from './gasVolume';
 import createFireworks from './fireworks';
 import createStylizedDepth from './stylizedDepth';
 import createLODStress from './lodStress';
@@ -28,6 +30,8 @@ function withMetadata(factory, fileName) {
 
 const particlePresets = {
   Fire: withMetadata(createFire, 'fire.js'),
+  "Gas Volume": withMetadata(createGasVolume, 'gasVolume.js'),
+  "FLIP Fluid": withMetadata(createFlipFluid, 'flipFluid.js'),
   Fireball: withMetadata(createFireball, 'fireball.js'),
   Smoke: withMetadata(createSmoke, 'smoke.js'),
   "Additive Smoke": withMetadata(createAdditiveSmoke, 'additiveSmoke.js'),

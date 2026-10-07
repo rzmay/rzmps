@@ -5,6 +5,8 @@ import {
     Collision,
     EmissionSource,
     EndBehavior,
+    FLIPSimulation,
+    GasSimulation,
     LightRenderer,
     MeshRenderer,
     NoiseModule,
@@ -12,6 +14,7 @@ import {
     SpriteRenderer,
     Textures,
     TrailRenderer,
+    VolumeRenderer,
 } from '@rzmps/rzmps';
 import { AUDIO_BUFFER_SOURCE_KEY, RAW_CODE } from './constants';
 
@@ -231,6 +234,41 @@ export class ParticleSystemSerializer {
             })})`;
         }
 
+        if (module instanceof GasSimulation) {
+            return `new GasSimulation(${this.serializeValue({
+                bounds: module.autoBounds ? undefined : module.bounds,
+                resolution: module.resolution,
+                pressureIterations: module.pressureIterations,
+                externalForce: module.externalForce,
+                maxVelocity: module.maxVelocity,
+                colorDissipation: module.colorDissipation,
+                densityDissipation: module.densityDissipation,
+                temperatureDissipation: module.temperatureDissipation,
+                velocityDissipation: module.velocityDissipation,
+                buoyancy: module.buoyancy,
+                weight: module.weight,
+                sourceStrength: module.sourceStrength,
+                velocitySourceStrength: module.velocitySourceStrength,
+                octreeOptions: module.octreeOptions,
+                ...this.getLODOptions(module),
+                tags: module.tags,
+            })})`;
+        }
+
+        if (module instanceof FLIPSimulation) {
+            return `new FLIPSimulation(${this.serializeValue({
+                bounds: module.bounds,
+                resolution: module.resolution,
+                pressureIterations: module.pressureIterations,
+                externalForce: module.externalForce,
+                colorDissipation: module.colorDissipation,
+                picRatio: module.picRatio,
+                advectParticles: module.advectParticlesEnabled,
+                ...this.getLODOptions(module),
+                tags: module.tags,
+            })})`;
+        }
+
         const runtime = module;
         const args = runtime.options !== undefined
             ? this.serializeValue({
@@ -369,6 +407,19 @@ export class ParticleSystemSerializer {
                 `  materialOptions: ${this.serializeMaterialOptions(renderer.material)},`,
                 '})',
             ].join('\n');
+        }
+        if (renderer instanceof VolumeRenderer) {
+            return `new VolumeRenderer(${this.serializeValue({
+                baseColor: renderer.baseColor,
+                opacity: renderer.opacity,
+                threshold: renderer.threshold,
+                range: renderer.range,
+                steps: renderer.steps,
+                renderOrder: renderer.renderOrder,
+                jitter: renderer.jitter,
+                ...this.getLODOptions(renderer, true, true),
+                tags: renderer.tags,
+            })})`;
         }
         return `new ${renderer.constructor.name}(${this.serializeValue(this.getSerializableRuntimeOptions(renderer))})`;
     }
@@ -573,6 +624,14 @@ export class ParticleSystemSerializer {
             return String(value);
         if (typeof value === 'function')
             return this.serializeFunction(value);
+        if (ArrayBuffer.isView(value))
+            return 'undefined /* runtime buffer */';
+        if (value instanceof THREE.Texture)
+            return 'undefined /* runtime texture */';
+        if (value instanceof THREE.Material)
+            return 'undefined /* runtime material */';
+        if (value instanceof THREE.BufferGeometry)
+            return 'undefined /* runtime geometry */';
         if (value instanceof THREE.Vector3)
             return `new THREE.Vector3(${value.x}, ${value.y}, ${value.z})`;
         if (value instanceof THREE.Box3)
