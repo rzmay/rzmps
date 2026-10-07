@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
+import { LightProbeGrid } from 'three/addons/lighting/LightProbeGrid.js';
+import { LightProbeGridWebGL } from 'three/addons/lighting/LightProbeGridWebGL.js';
+import { LightProbeGridHelper } from 'three/addons/helpers/LightProbeGridHelper.js';
+import { LightProbeGridHelperWebGL } from 'three/addons/helpers/LightProbeGridHelperWebGL.js';
 import { LiveCubemap } from '@rzmps/rzmps';
 import {
   createSceneParticleRoot,
@@ -14,23 +18,13 @@ function initializeRectAreaLights() {
   rectAreaLightsInitialized = true;
 }
 
-async function createProbeGrid(renderer, ...args) {
+function createProbeGrid(renderer, ...args) {
   if (renderer.isWebGPURenderer) {
-    const [{ LightProbeGrid }, { LightProbeGridHelper }] = await Promise.all([
-      import('three/addons/lighting/LightProbeGrid.js'),
-      import('three/addons/helpers/LightProbeGridHelper.js'),
-    ]);
-
     return {
       probes: new LightProbeGrid(...args),
       createHelper: (probes) => new LightProbeGridHelper(probes),
     };
   }
-
-  const [{ LightProbeGridWebGL }, { LightProbeGridHelperWebGL }] = await Promise.all([
-    import('three/addons/lighting/LightProbeGridWebGL.js'),
-    import('three/addons/helpers/LightProbeGridHelperWebGL.js'),
-  ]);
 
   return {
     probes: new LightProbeGridWebGL(...args),
@@ -191,7 +185,7 @@ export default async function loadCornellBox(scene, renderer) {
     bounces: 0,
   };
 
-  const { probes, createHelper } = await createProbeGrid(
+  const { probes, createHelper } = createProbeGrid(
     renderer,
     9.6,
     9.6,
