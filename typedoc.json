@@ -1,0 +1,30 @@
+{
+  "entryPoints": [
+    "packages/rzmps/src/index.ts"
+  ],
+  "tsconfig": "packages/rzmps/tsconfig.json",
+  "plugin": [
+    "typedoc-plugin-markdown",
+    "typedoc-plugin-missing-exports",
+    "./scripts/docs/public-references.mjs"
+  ],
+  "name": "API Reference",
+  "readme": "none",
+  "entryFileName": "index.md",
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeExternals": true,
+  "excludeInternal": true,
+  "excludeNotDocumented": false,
+  "excludeReferences": true,
+  "disableSources": true,
+  "excludeCategories": [],
+  "validation": {
+    "notExported": true,
+    "invalidLink": true
+  },
+  "treatWarningsAsErrors": true,
+  "useCodeBlocks": true,
+  "useHTMLAnchors": true,
+  "internalModule": "Supporting Types"
+}

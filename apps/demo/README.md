@@ -1,4 +1,4 @@
-# RZMPS Demo
+# 🧅 RZMPS Demo
 
 Interactive browser demo for
 [RZMPS](https://www.npmjs.com/package/@rzmps/rzmps), the Robert May Particle System for
@@ -273,26 +273,20 @@ apps/demo
 
 Useful places to start:
 
-- `src/components/ParticleSystemDisplay.js`: loads the active particle preset
+- `src/components/ParticleSystemDisplay.jsx`: loads the active particle preset
   and updates the particle system each frame.
 - `src/gui/ParticleSystemGUI.js`: editor controls, preset switching, and code
   serialization.
-- `src/presets/particles`: particle system examples.
+- `../../examples`: canonical particle system examples.
 - `src/presets/scenes`: scene setup examples, including physics backends.
 
 ## Adding Presets
 
-Add a particle preset by creating a factory in `src/presets/particles`, then
-registering it in `src/presets/particles/index.js`.
-
-```js
-createMyPreset.author = 'github-user';
-
-const particlePresets = {
-  Fire: createFire,
-  "My Preset": createMyPreset,
-};
-```
+Add a particle factory in the root `examples/` directory with exported metadata and
+documentation source regions. Run `npm run docs:generate` from the repository root
+to discover it and create its Markdown guide. Complete the configuration explanations
+and run `npm run docs:check`. The registry is generated; do not edit it manually.
+Attach author metadata with `createMyPreset.author = 'github-user'`.
 
 Add a scene preset by creating a loader in `src/presets/scenes`, then
 registering it in `src/presets/scenes/index.js`.
@@ -314,3 +308,22 @@ createScene.author = 'github-user';
 ## License
 
 MIT
+
+## Shared examples and visual validation
+
+Particle factories live in the root `examples/` directory. The demo consumes its generated
+registry through the existing preset import path, preserving GUI metadata and code generation.
+Scene presets and assets remain under `src/presets/scenes` and `src/assets`.
+
+See [contributing](../../apps/docs/contributing.md) for adding metadata and source regions,
+authoring explanations, and generating documentation. From the repository root, build packages
+then run `npm run preview -- --example fire --backend webgl` (or `webgpu`). Preview output
+contains canvas PNGs, a contact sheet, and diagnostic metadata. `--scene` selects a demo scene.
+
+
+## Deploying with documentation
+
+Run `npm run site:build` from the repository root to produce one `dist` containing
+the demo at `/` and VitePress at `/docs/`. `npm run site:preview` serves both on port
+4173 and accepts `/docs` and `/docs/`. See the [Render deployment guide](../docs/guides/deployment.md)
+and root `render.yaml` for one Static Site deployment, including exact path rewrites.

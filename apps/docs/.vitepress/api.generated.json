@@ -1,0 +1,696 @@
+[
+  {
+    "text": "Particle Systems",
+    "description": "Start with ParticleSystem, which owns simulation, and Particle, which holds each particle’s state.",
+    "items": [
+      {
+        "text": "ParticleSystem",
+        "link": "/api/classes/ParticleSystem"
+      },
+      {
+        "text": "Particle",
+        "link": "/api/classes/Particle"
+      }
+    ]
+  },
+  {
+    "text": "Emitters",
+    "description": "Choose where particles are born and configure their initial values, timing, and selection.",
+    "items": [
+      {
+        "text": "Emitter",
+        "link": "/api/classes/Emitter"
+      },
+      {
+        "text": "EmissionShape",
+        "link": "/api/classes/EmissionShape"
+      }
+    ]
+  },
+  {
+    "text": "Modules",
+    "description": "Start with the Module base class, then choose modifiers for motion, appearance, or behavior.",
+    "items": [
+      {
+        "text": "Module",
+        "link": "/api/classes/Module"
+      },
+      {
+        "text": "Motion",
+        "items": [
+          {
+            "text": "ForceOverLifetime",
+            "link": "/api/classes/ForceOverLifetime"
+          },
+          {
+            "text": "LimitVelocityOverLifetime",
+            "link": "/api/classes/LimitVelocityOverLifetime"
+          },
+          {
+            "text": "MassByDepth",
+            "link": "/api/classes/MassByDepth"
+          },
+          {
+            "text": "MassBySize",
+            "link": "/api/classes/MassBySize"
+          },
+          {
+            "text": "MassOverLifetime",
+            "link": "/api/classes/MassOverLifetime"
+          },
+          {
+            "text": "NoiseModule",
+            "link": "/api/classes/NoiseModule"
+          },
+          {
+            "text": "OrientToDirection",
+            "link": "/api/classes/OrientToDirection"
+          },
+          {
+            "text": "SpeedByDepth",
+            "link": "/api/classes/SpeedByDepth"
+          },
+          {
+            "text": "SpeedBySize",
+            "link": "/api/classes/SpeedBySize"
+          },
+          {
+            "text": "SpeedOverLifetime",
+            "link": "/api/classes/SpeedOverLifetime"
+          },
+          {
+            "text": "TransformByNoise",
+            "link": "/api/classes/TransformByNoise"
+          },
+          {
+            "text": "VelocityByDepth",
+            "link": "/api/classes/VelocityByDepth"
+          },
+          {
+            "text": "VelocityBySize",
+            "link": "/api/classes/VelocityBySize"
+          },
+          {
+            "text": "VelocityOverLifetime",
+            "link": "/api/classes/VelocityOverLifetime"
+          }
+        ]
+      },
+      {
+        "text": "Appearance",
+        "items": [
+          {
+            "text": "ColorByDepth",
+            "link": "/api/classes/ColorByDepth"
+          },
+          {
+            "text": "ColorBySize",
+            "link": "/api/classes/ColorBySize"
+          },
+          {
+            "text": "ColorBySpeed",
+            "link": "/api/classes/ColorBySpeed"
+          },
+          {
+            "text": "ColorOverLifetime",
+            "link": "/api/classes/ColorOverLifetime"
+          },
+          {
+            "text": "DistortionByDepth",
+            "link": "/api/classes/DistortionByDepth"
+          },
+          {
+            "text": "DistortionBySize",
+            "link": "/api/classes/DistortionBySize"
+          },
+          {
+            "text": "DistortionBySpeed",
+            "link": "/api/classes/DistortionBySpeed"
+          },
+          {
+            "text": "DistortionOverLifetime",
+            "link": "/api/classes/DistortionOverLifetime"
+          },
+          {
+            "text": "RotationByDepth",
+            "link": "/api/classes/RotationByDepth"
+          },
+          {
+            "text": "RotationBySize",
+            "link": "/api/classes/RotationBySize"
+          },
+          {
+            "text": "RotationBySpeed",
+            "link": "/api/classes/RotationBySpeed"
+          },
+          {
+            "text": "RotationOverLifetime",
+            "link": "/api/classes/RotationOverLifetime"
+          },
+          {
+            "text": "ScaleByDepth",
+            "link": "/api/classes/ScaleByDepth"
+          },
+          {
+            "text": "ScaleBySpeed",
+            "link": "/api/classes/ScaleBySpeed"
+          },
+          {
+            "text": "ScaleOverLifetime",
+            "link": "/api/classes/ScaleOverLifetime"
+          }
+        ]
+      },
+      {
+        "text": "Behavior",
+        "items": [
+          {
+            "text": "Boids",
+            "link": "/api/classes/Boids"
+          },
+          {
+            "text": "Collision",
+            "link": "/api/classes/Collision"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "text": "Renderers",
+    "description": "Start with Renderer, then represent particles as sprites, meshes, trails, lights, or audio.",
+    "items": [
+      {
+        "text": "Renderer",
+        "link": "/api/classes/Renderer"
+      },
+      {
+        "text": "SpriteRenderer",
+        "link": "/api/classes/SpriteRenderer"
+      },
+      {
+        "text": "MeshRenderer",
+        "link": "/api/classes/MeshRenderer"
+      },
+      {
+        "text": "TrailRenderer",
+        "link": "/api/classes/TrailRenderer"
+      },
+      {
+        "text": "LightRenderer",
+        "link": "/api/classes/LightRenderer"
+      },
+      {
+        "text": "AudioRenderer",
+        "link": "/api/classes/AudioRenderer"
+      }
+    ]
+  },
+  {
+    "text": "Spatial Effects",
+    "description": "Apply shared scene influences, force fields, and spatial selection.",
+    "items": [
+      {
+        "text": "SpatialEffect",
+        "link": "/api/classes/SpatialEffect"
+      },
+      {
+        "text": "ParticleForceField",
+        "link": "/api/classes/ParticleForceField"
+      },
+      {
+        "text": "BoidAffector",
+        "link": "/api/classes/BoidAffector"
+      },
+      {
+        "text": "KillZone",
+        "link": "/api/classes/KillZone"
+      }
+    ]
+  },
+  {
+    "text": "Types",
+    "description": "Look up constructor options, dynamic values, enums, callbacks, and data contracts used by the public API. Supporting types appear here even when they are not direct package exports.",
+    "items": [
+      {
+        "text": "Options and Configuration",
+        "items": [
+          {
+            "text": "ParticleSystemOptions",
+            "link": "/api/Supporting-Types/interfaces/ParticleSystemOptions"
+          },
+          {
+            "text": "ParticleOptions",
+            "link": "/api/Supporting-Types/interfaces/ParticleOptions"
+          },
+          {
+            "text": "EmitterOptions",
+            "link": "/api/Supporting-Types/interfaces/EmitterOptions"
+          },
+          {
+            "text": "EmissionShapeOptions",
+            "link": "/api/Supporting-Types/interfaces/EmissionShapeOptions"
+          },
+          {
+            "text": "ModuleOptions",
+            "link": "/api/interfaces/ModuleOptions"
+          },
+          {
+            "text": "RendererOptions",
+            "link": "/api/Supporting-Types/interfaces/RendererOptions"
+          },
+          {
+            "text": "AudioRendererOptions",
+            "link": "/api/Supporting-Types/interfaces/AudioRendererOptions"
+          },
+          {
+            "text": "BoidAffectorOptions",
+            "link": "/api/interfaces/BoidAffectorOptions"
+          },
+          {
+            "text": "BoidParticleAffectorOptions",
+            "link": "/api/type-aliases/BoidParticleAffectorOptions"
+          },
+          {
+            "text": "BoidsOptions",
+            "link": "/api/interfaces/BoidsOptions"
+          },
+          {
+            "text": "CollisionOptions",
+            "link": "/api/Supporting-Types/interfaces/CollisionOptions"
+          },
+          {
+            "text": "ColorByDepthOptions",
+            "link": "/api/Supporting-Types/interfaces/ColorByDepthOptions"
+          },
+          {
+            "text": "ColorBySizeOptions",
+            "link": "/api/Supporting-Types/interfaces/ColorBySizeOptions"
+          },
+          {
+            "text": "ColorBySpeedOptions",
+            "link": "/api/Supporting-Types/interfaces/ColorBySpeedOptions"
+          },
+          {
+            "text": "ColorOverLifetimeOptions",
+            "link": "/api/Supporting-Types/interfaces/ColorOverLifetimeOptions"
+          },
+          {
+            "text": "DistortionByDepthOptions",
+            "link": "/api/Supporting-Types/interfaces/DistortionByDepthOptions"
+          },
+          {
+            "text": "DistortionBySizeOptions",
+            "link": "/api/Supporting-Types/interfaces/DistortionBySizeOptions"
+          },
+          {
+            "text": "DistortionBySpeedOptions",
+            "link": "/api/Supporting-Types/interfaces/DistortionBySpeedOptions"
+          },
+          {
+            "text": "DistortionOverLifetimeOptions",
+            "link": "/api/Supporting-Types/interfaces/DistortionOverLifetimeOptions"
+          },
+          {
+            "text": "EmissionShapeFactoryOptions",
+            "link": "/api/Supporting-Types/type-aliases/EmissionShapeFactoryOptions"
+          },
+          {
+            "text": "ForceFieldOptions",
+            "link": "/api/interfaces/ForceFieldOptions"
+          },
+          {
+            "text": "ForceOverLifetimeOptions",
+            "link": "/api/Supporting-Types/interfaces/ForceOverLifetimeOptions"
+          },
+          {
+            "text": "KillZoneOptions",
+            "link": "/api/type-aliases/KillZoneOptions"
+          },
+          {
+            "text": "LightRendererOptions",
+            "link": "/api/Supporting-Types/interfaces/LightRendererOptions"
+          },
+          {
+            "text": "LimitVelocityOverLifetimeOptions",
+            "link": "/api/Supporting-Types/interfaces/LimitVelocityOverLifetimeOptions"
+          },
+          {
+            "text": "LitSpriteOptions",
+            "link": "/api/Supporting-Types/interfaces/LitSpriteOptions"
+          },
+          {
+            "text": "LiveCubemapOptions",
+            "link": "/api/interfaces/LiveCubemapOptions"
+          },
+          {
+            "text": "LODSettings",
+            "link": "/api/interfaces/LODSettings"
+          },
+          {
+            "text": "LODSettingsOptions",
+            "link": "/api/type-aliases/LODSettingsOptions"
+          },
+          {
+            "text": "MassByDepthOptions",
+            "link": "/api/Supporting-Types/interfaces/MassByDepthOptions"
+          },
+          {
+            "text": "MassBySizeOptions",
+            "link": "/api/Supporting-Types/interfaces/MassBySizeOptions"
+          },
+          {
+            "text": "MassOverLifetimeOptions",
+            "link": "/api/Supporting-Types/interfaces/MassOverLifetimeOptions"
+          },
+          {
+            "text": "MeshRendererOptions",
+            "link": "/api/Supporting-Types/interfaces/MeshRendererOptions"
+          },
+          {
+            "text": "NoiseOptions",
+            "link": "/api/Supporting-Types/interfaces/NoiseOptions"
+          },
+          {
+            "text": "OctreeConfig",
+            "link": "/api/interfaces/OctreeConfig"
+          },
+          {
+            "text": "OrientToDirectionOptions",
+            "link": "/api/Supporting-Types/interfaces/OrientToDirectionOptions"
+          },
+          {
+            "text": "PointLightOptions",
+            "link": "/api/Supporting-Types/interfaces/PointLightOptions"
+          },
+          {
+            "text": "RotationByDepthOptions",
+            "link": "/api/Supporting-Types/interfaces/RotationByDepthOptions"
+          },
+          {
+            "text": "RotationBySizeOptions",
+            "link": "/api/Supporting-Types/interfaces/RotationBySizeOptions"
+          },
+          {
+            "text": "RotationBySpeedOptions",
+            "link": "/api/Supporting-Types/interfaces/RotationBySpeedOptions"
+          },
+          {
+            "text": "RotationOverLifetimeOptions",
+            "link": "/api/Supporting-Types/interfaces/RotationOverLifetimeOptions"
+          },
+          {
+            "text": "ScaleByDepthOptions",
+            "link": "/api/Supporting-Types/interfaces/ScaleByDepthOptions"
+          },
+          {
+            "text": "ScaleBySpeedOptions",
+            "link": "/api/Supporting-Types/interfaces/ScaleBySpeedOptions"
+          },
+          {
+            "text": "ScaleOverLifetimeOptions",
+            "link": "/api/Supporting-Types/interfaces/ScaleOverLifetimeOptions"
+          },
+          {
+            "text": "SpatialEffectOptions",
+            "link": "/api/interfaces/SpatialEffectOptions"
+          },
+          {
+            "text": "SpeedByDepthOptions",
+            "link": "/api/Supporting-Types/interfaces/SpeedByDepthOptions"
+          },
+          {
+            "text": "SpeedBySizeOptions",
+            "link": "/api/Supporting-Types/interfaces/SpeedBySizeOptions"
+          },
+          {
+            "text": "SpeedOverLifetimeOptions",
+            "link": "/api/Supporting-Types/interfaces/SpeedOverLifetimeOptions"
+          },
+          {
+            "text": "SpriteRendererOptions",
+            "link": "/api/Supporting-Types/interfaces/SpriteRendererOptions"
+          },
+          {
+            "text": "SubSystemOptions",
+            "link": "/api/Supporting-Types/interfaces/SubSystemOptions"
+          },
+          {
+            "text": "ThreeCollisionBackendOptions",
+            "link": "/api/Supporting-Types/interfaces/ThreeCollisionBackendOptions"
+          },
+          {
+            "text": "TrailRendererOptions",
+            "link": "/api/Supporting-Types/interfaces/TrailRendererOptions"
+          },
+          {
+            "text": "TransformByNoiseOptions",
+            "link": "/api/Supporting-Types/interfaces/TransformByNoiseOptions"
+          },
+          {
+            "text": "UnlitSpriteOptions",
+            "link": "/api/Supporting-Types/interfaces/UnlitSpriteOptions"
+          },
+          {
+            "text": "VelocityByDepthOptions",
+            "link": "/api/Supporting-Types/interfaces/VelocityByDepthOptions"
+          },
+          {
+            "text": "VelocityBySizeOptions",
+            "link": "/api/Supporting-Types/interfaces/VelocityBySizeOptions"
+          },
+          {
+            "text": "VelocityOverLifetimeOptions",
+            "link": "/api/Supporting-Types/interfaces/VelocityOverLifetimeOptions"
+          }
+        ]
+      },
+      {
+        "text": "Dynamic Values",
+        "items": [
+          {
+            "text": "DynamicValue",
+            "link": "/api/type-aliases/DynamicValue"
+          },
+          {
+            "text": "DynamicUntimedValue",
+            "link": "/api/type-aliases/DynamicUntimedValue"
+          },
+          {
+            "text": "ValueByParameter",
+            "link": "/api/type-aliases/ValueByParameter"
+          }
+        ]
+      },
+      {
+        "text": "Enums",
+        "items": [
+          {
+            "text": "EmissionSource",
+            "link": "/api/enumerations/EmissionSource"
+          },
+          {
+            "text": "EndBehavior",
+            "link": "/api/enumerations/EndBehavior"
+          },
+          {
+            "text": "MaxCulling",
+            "link": "/api/enumerations/MaxCulling"
+          },
+          {
+            "text": "Priority",
+            "link": "/api/Supporting-Types/enumerations/Priority"
+          },
+          {
+            "text": "SimulationSpace",
+            "link": "/api/enumerations/SimulationSpace"
+          },
+          {
+            "text": "SpriteMaterialType",
+            "link": "/api/enumerations/SpriteMaterialType"
+          },
+          {
+            "text": "TagSelectionMethod",
+            "link": "/api/enumerations/TagSelectionMethod"
+          },
+          {
+            "text": "TrailMode",
+            "link": "/api/enumerations/TrailMode"
+          },
+          {
+            "text": "TrailTextureMode",
+            "link": "/api/enumerations/TrailTextureMode"
+          },
+          {
+            "text": "Weight",
+            "link": "/api/Supporting-Types/enumerations/Weight"
+          }
+        ]
+      },
+      {
+        "text": "Callbacks",
+        "items": [
+          {
+            "text": "CollisionListener",
+            "link": "/api/Supporting-Types/type-aliases/CollisionListener"
+          },
+          {
+            "text": "ModuleUpdate",
+            "link": "/api/type-aliases/ModuleUpdate"
+          },
+          {
+            "text": "NoiseModuleUpdate",
+            "link": "/api/Supporting-Types/type-aliases/NoiseModuleUpdate"
+          },
+          {
+            "text": "ParticleListener",
+            "link": "/api/Supporting-Types/type-aliases/ParticleListener"
+          },
+          {
+            "text": "SpatialEffectFeatherUpdate",
+            "link": "/api/type-aliases/SpatialEffectFeatherUpdate"
+          },
+          {
+            "text": "SpatialEffectModifier",
+            "link": "/api/type-aliases/SpatialEffectModifier"
+          },
+          {
+            "text": "SpatialEffectTest",
+            "link": "/api/type-aliases/SpatialEffectTest"
+          },
+          {
+            "text": "SpatialEffectUpdate",
+            "link": "/api/type-aliases/SpatialEffectUpdate"
+          }
+        ]
+      },
+      {
+        "text": "Data and Contracts",
+        "items": [
+          {
+            "text": "BoidAggregate",
+            "link": "/api/Supporting-Types/type-aliases/BoidAggregate"
+          },
+          {
+            "text": "BoidParticleAffectorAggregate",
+            "link": "/api/Supporting-Types/type-aliases/BoidParticleAffectorAggregate"
+          },
+          {
+            "text": "CollisionHit",
+            "link": "/api/interfaces/CollisionHit"
+          },
+          {
+            "text": "CollisionQuery",
+            "link": "/api/interfaces/CollisionQuery"
+          },
+          {
+            "text": "EmissionContext",
+            "link": "/api/interfaces/EmissionContext"
+          },
+          {
+            "text": "ICollisionBackend",
+            "link": "/api/interfaces/ICollisionBackend"
+          },
+          {
+            "text": "InitialParticleValues",
+            "link": "/api/Supporting-Types/interfaces/InitialParticleValues"
+          },
+          {
+            "text": "Multiple",
+            "link": "/api/Supporting-Types/type-aliases/Multiple"
+          },
+          {
+            "text": "OctreeAggregator",
+            "link": "/api/interfaces/OctreeAggregator"
+          },
+          {
+            "text": "OctreeNode",
+            "link": "/api/interfaces/OctreeNode"
+          },
+          {
+            "text": "ParticleCachedValues",
+            "link": "/api/Supporting-Types/type-aliases/ParticleCachedValues"
+          },
+          {
+            "text": "ParticleNoiseValues",
+            "link": "/api/Supporting-Types/interfaces/ParticleNoiseValues-1"
+          },
+          {
+            "text": "ParticleNoiseValues",
+            "link": "/api/Supporting-Types/interfaces/ParticleNoiseValues"
+          },
+          {
+            "text": "ParticleStartValues",
+            "link": "/api/Supporting-Types/type-aliases/ParticleStartValues"
+          },
+          {
+            "text": "SizeRange",
+            "link": "/api/Supporting-Types/type-aliases/SizeRange"
+          },
+          {
+            "text": "SpatialEffectConstructor",
+            "link": "/api/Supporting-Types/type-aliases/SpatialEffectConstructor"
+          },
+          {
+            "text": "SpatialEffectFeatherEasing",
+            "link": "/api/Supporting-Types/type-aliases/SpatialEffectFeatherEasing"
+          },
+          {
+            "text": "SpawnBurst",
+            "link": "/api/Supporting-Types/type-aliases/SpawnBurst"
+          },
+          {
+            "text": "SpeedRange",
+            "link": "/api/Supporting-Types/type-aliases/SpeedRange"
+          },
+          {
+            "text": "StrictMultiple",
+            "link": "/api/Supporting-Types/type-aliases/StrictMultiple"
+          },
+          {
+            "text": "Tag",
+            "link": "/api/Supporting-Types/type-aliases/Tag"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "text": "Helpers",
+    "description": "Find spatial indexing, level of detail, collision backends, cubemap utilities, textures, and debug visualization.",
+    "items": [
+      {
+        "text": "ParticleOctree",
+        "link": "/api/classes/ParticleOctree"
+      },
+      {
+        "text": "LODHelper",
+        "link": "/api/classes/LODHelper"
+      },
+      {
+        "text": "LiveCubemap",
+        "link": "/api/classes/LiveCubemap"
+      },
+      {
+        "text": "Textures",
+        "link": "/api/API-Reference/namespaces/Textures/index"
+      },
+      {
+        "text": "BoidAffectorHelper",
+        "link": "/api/classes/BoidAffectorHelper"
+      },
+      {
+        "text": "ParticleForceFieldHelper",
+        "link": "/api/classes/ParticleForceFieldHelper"
+      },
+      {
+        "text": "SpatialEffectHelper",
+        "link": "/api/classes/SpatialEffectHelper"
+      },
+      {
+        "text": "ThreeCollisionBackend",
+        "link": "/api/classes/ThreeCollisionBackend"
+      }
+    ]
+  }
+]

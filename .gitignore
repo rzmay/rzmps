@@ -439,3 +439,12 @@ $RECYCLE.BIN/
 # RZMPS generated artifacts
 packages/*/build/
 apps/*/dist/
+
+# Generated local documentation build and visual validation artifacts
+apps/docs/.vitepress/dist/
+apps/docs/.vitepress/cache/
+/previews/
+.puppeteer/
+apps/docs/.vitepress/.temp/
+# The root preview workspace is ignored; public documentation previews are committed.
+/dist/

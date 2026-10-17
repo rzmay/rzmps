@@ -6,10 +6,19 @@ import type { Multiple } from '../types/Multiple';
 import type { Tag } from '../types/Tag';
 
 export interface OctreeConfig {
+  /** Particle-space bounds; particles outside the resolved volume are omitted. */
   bounds: THREE.Box3;
+  /** Maximum subdivision depth.
+   * @defaultValue 8 */
   maxDepth: number;
+  /** Target capacity before further subdivision.
+   * @defaultValue 4 */
   particlesPerLeaf: number;
+  /** Fraction of calls that rebuild after the initial build, clamped above zero through 1.
+   * @defaultValue 1 */
   timeQuality: number;
+  /** Bounds quantization increment; zero disables quantization.
+   * @defaultValue 0 */
   quantizeBounds: number;
 }
 
@@ -35,6 +44,7 @@ export interface OctreeAggregator<TAggregate> {
   combine(a: TAggregate, b: TAggregate): TAggregate;
 }
 
+/** Particle-space octree with caller-defined aggregation; rebuild replaces node identities and may be throttled. */
 class ParticleOctree<TAggregate> {
   root: OctreeNode<TAggregate>;
   bounds = new THREE.Box3();
@@ -54,6 +64,7 @@ class ParticleOctree<TAggregate> {
   private boundsCenter = new THREE.Vector3();
   private boundsSize = new THREE.Vector3();
 
+  /** Creates an empty tree and normalizes depth, leaf capacity, and rebuild-quality settings. */
   constructor(
     config: Partial<OctreeConfig>,
     private aggregator: OctreeAggregator<TAggregate>,
@@ -67,6 +78,7 @@ class ParticleOctree<TAggregate> {
     this.assignNeighbors();
   }
 
+  /** Resolves and copies particle-space bounds; call rebuild to populate the new volume. */
   setBounds(bounds?: THREE.Box3): this {
     const nextBounds = bounds ?? new THREE.Box3(
       new THREE.Vector3(-0.5, -0.5, -0.5),
@@ -82,6 +94,7 @@ class ParticleOctree<TAggregate> {
     return this;
   }
 
+  /** Replaces tree nodes and aggregates from the supplied population; returns false when throttled by timeQuality. */
   rebuild(particles: Particle[], tags?: Multiple<Tag>): boolean {
     this.updateAccumulator += this.timeQuality;
 
@@ -111,6 +124,7 @@ class ParticleOctree<TAggregate> {
     return true;
   }
 
+  /** Returns the deepest containing node up to maxDepth; positions outside the volume return the root. */
   locate(position: THREE.Vector3, maxDepth: number = this.maxDepth): OctreeNode<TAggregate> {
     if (!this.containsPosition(position)) return this.root;
 
@@ -126,6 +140,7 @@ class ParticleOctree<TAggregate> {
     return node;
   }
 
+  /** Returns a new array of current node references; node identities are replaced on rebuild. */
   getNodes(): OctreeNode<TAggregate>[] {
     return [...this.nodes];
   }

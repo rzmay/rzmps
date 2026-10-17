@@ -3,15 +3,18 @@ import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 
 export interface OrientToDirectionOptions extends Partial<ModuleOptions> {
+  /** Model-space forward axis mapped onto velocity; defaults to positive Y. */
   axis: THREE.Vector3;
 }
 
+/** Transiently aligns a model axis to nonzero particle velocity; stationary particles keep their orientation. */
 class OrientToDirection extends Module {
   private axis = new THREE.Vector3(0, 1, 0);
   private direction = new THREE.Vector3();
   private quaternion = new THREE.Quaternion();
   private euler = new THREE.Euler();
 
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<OrientToDirectionOptions> = {}) {
     super((particle: Particle) => {
       this.direction.copy(particle.velocity);

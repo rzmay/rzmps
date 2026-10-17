@@ -9,10 +9,13 @@ export interface RotationBySpeedOptions extends Partial<ModuleOptions> {
     angle: ValueByParameter<THREE.Vector3>;
     angularVelocity: ValueByParameter<THREE.Vector3>;
     angularAcceleration: ValueByParameter<THREE.Vector3>;
+    /** Velocity-magnitude interval mapped to zero through one; values outside it are clamped. */
     speedRange: SpeedRange;
 }
 
+/** Adds angular channels using velocity magnitude normalized over speedRange; two-value parameter ranges interpolate rather than randomly sample. */
 class RotationBySpeed extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<RotationBySpeedOptions> = {}) {
 
     super((particle: Particle) => {

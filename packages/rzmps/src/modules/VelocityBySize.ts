@@ -9,10 +9,13 @@ export interface VelocityBySizeOptions extends Partial<ModuleOptions> {
     position: ValueByParameter<THREE.Vector3>;
     velocity: ValueByParameter<THREE.Vector3>;
     acceleration: ValueByParameter<THREE.Vector3>;
+    /** Particle-size interval mapped to zero through one; values outside it are clamped. */
     sizeRange: SizeRange;
 }
 
+/** Adds linear motion channels using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample. */
 class VelocityBySize extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<VelocityBySizeOptions> = {}) {
 
     super((particle: Particle) => {

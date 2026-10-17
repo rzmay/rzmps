@@ -20,19 +20,34 @@ export type SpawnBurst = {
 };
 
 export interface EmitterOptions {
+    /** Dynamic values sampled at birth; mutable values are isolated per particle. */
     initialValues: Partial<InitialParticleValues>;
+    /** Geometry and sampling rule used to place particles. Defaults to a sphere. */
     source: EmissionShape;
+    /** Timed particle batches within an emission cycle. Supplying bursts changes the default continuous rate to zero. */
     bursts: Multiple<SpawnBurst>;
+    /** Continuous particles per second. Defaults to 50 without bursts, otherwise 0. */
     rate: DynamicValue<number>;
+    /** Particles per world-space distance traveled by the emission context.
+     * @defaultValue 0 */
     rateOverDistance: DynamicValue<number>;
 
+    /** Initial velocity contribution along the sampled source direction.
+     * @defaultValue 1 */
     radialSpeed: DynamicValue<number>;
+    /** Amount of initial rotation alignment to source direction.
+     * @defaultValue 0 */
     alignment: DynamicValue<number>;
 
+    /** Tags assigned at birth, selected using tagSelection. */
     tags: StrictMultiple<Tag>;
+    /** Assigns all tags, distributes them, or samples them according to the selected mode. */
     tagSelection: TagSelectionMethod | `${TagSelectionMethod}`;
+    /** Enables update skipping; defaults to whether updateLOD is provided. */
     useUpdateLOD: boolean;
+    /** Distance-based emission update quality. */
     updateLOD: Partial<LODSettings>;
+    /** Distance-based emitted particle count reduction. */
     countLOD: Partial<LODSettings>;
 }
 
@@ -62,6 +77,7 @@ export interface EmissionContext {
   tags: Tag[];
 }
 
+/** Samples particle births from a shape using time, distance, and burst emission. */
 class Emitter {
   source: EmissionShape;
   rate: DynamicValue<number>;
@@ -86,6 +102,7 @@ class Emitter {
   // Used for subsystems
   private _contextStates = new Map<string, EmitterContextState>();
 
+  /** Creates emission state; bursts default the continuous rate to zero. */
   constructor(
     options: Partial<EmitterOptions> = {},
   ) {
@@ -112,6 +129,7 @@ class Emitter {
     * CONTROLS
   */
 
+  /** Clears timed bursts, movement credit, LOD state, and per-context emission clocks. */
   public reset(): void {
     this.bursts.forEach((burst) => {
       burst.fired = false;
@@ -126,10 +144,12 @@ class Emitter {
     * SIMULATION
   */
 
+  /** Attaches the source shape to the particle system. */
   setup(particleSystem: ParticleSystem) {
     particleSystem.add(this.source);
   }
 
+  /** Emits births for the supplied simulation context and returns the newly created particles. */
   update(
     particles: Particle[],
     context: Partial<EmissionContext>,

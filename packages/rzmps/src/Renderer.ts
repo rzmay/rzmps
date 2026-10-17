@@ -7,13 +7,20 @@ import tagsIntersect from './helpers/tagsIntersect';
 import LODHelper, { type LODSettings } from './LODHelper';
 
 export interface RendererOptions {
+    /** Filters the simulated population by tag before rendering. */
     tags: StrictMultiple<Tag>;
+    /** Enables distance-based renderer update skipping. */
     useUpdateLOD: boolean;
+    /** Distance-based renderer update quality. */
     updateLOD: Partial<LODSettings>;
+    /** Reduces the number of rendered particles with distance without deleting simulated particles. */
     countLOD: Partial<LODSettings>;
+    /** Temporarily enlarges retained particles when count LOD reduces visibility.
+     * @defaultValue false */
     compensateSize: boolean;
 }
 
+/** Base renderer that filters particles and applies renderer LOD before delegating to a backend-compatible view. */
 export default abstract class Renderer {
     tags?: Tag[];
     useUpdateLOD: boolean;
@@ -23,6 +30,7 @@ export default abstract class Renderer {
     private _lodHelper: LODHelper;
     private _countLODHelper: LODHelper;
 
+    /** Configures particle filtering and distance-based update/count quality. */
     constructor(options: Partial<RendererOptions> = {}) {
         this.tags = acceptMultiple(options.tags);
         this.updateLOD = options.updateLOD;
@@ -34,6 +42,7 @@ export default abstract class Renderer {
     }
 
     // Runs once, when the renderer is added to the system
+    /** Creates rendering resources when attached to a system. */
     public abstract setup(system: ParticleSystem): void;
 
     protected abstract _update(
@@ -42,6 +51,7 @@ export default abstract class Renderer {
         deltaTime: number,
     ): void;
 
+    /** Filters particles, applies renderer LOD and temporary size compensation, then delegates to the view. */
     public update(
         particles: Particle[],
         system: ParticleSystem,
@@ -74,6 +84,8 @@ export default abstract class Renderer {
         if (scaleMultiplier !== 1) visibleParticles.forEach(p => p.scale.divideScalar(scaleMultiplier));
     }
     // Cleanup
+    /** Permanently releases owned rendering resources. */
     public abstract destroy(): void;
+    /** Removes displayed particles while retaining resources for reuse. */
     public abstract clear(): void;
 }

@@ -3,6 +3,7 @@ import Particle from '../Particle';
 import ParticleForceField from './ParticleForceField';
 import SpatialEffectHelper from './SpatialEffectHelper';
 
+/** Visualization of a force field volume and force direction; dispose it separately from the field. */
 class ParticleForceFieldHelper extends SpatialEffectHelper {
   forceField: ParticleForceField;
 

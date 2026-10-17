@@ -20,17 +20,27 @@ export type SpatialEffectConstructor<T extends SpatialEffect = SpatialEffect> = 
 
 export interface ModuleOptions {
   // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
+  /** Execution phase: negative is permanent before movement, 0–1 is transient before movement, 1 or greater is transient after movement. */
   priority: number | Priority;
 
+  /** Restricts processing to particles sharing a selected tag; omission accepts every tag. */
+
   tags: StrictMultiple<Tag>;
+  /** Additional per-particle predicate, evaluated after tag matching. */
   condition: (particle: Particle) => boolean;
+  /** Enables distance-based module update skipping. */
   useUpdateLOD: boolean;
+  /** Module update quality settings; skipped callbacks do not accumulate their own delta. */
   updateLOD: Partial<LODSettings>;
+  /** Explicit module effect collection; supplying an empty array suppresses automatic discovery. */
   spatialEffects: SpatialEffect[];
+  /** Filters effects collected by this module. */
   spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
+  /** Constructors selecting scene effects for this module during prepare. */
   requireSpatialEffects: SpatialEffectConstructor | SpatialEffectConstructor[];
 }
 
+/** Per-particle modifier with priority phases, tag filtering, and a once-per-update preparation hook. */
 export default class Module {
   public static readonly Priority = Priority;
 
@@ -50,6 +60,7 @@ export default class Module {
 
   priority = Priority.Permanent;
 
+  /** Wraps a per-particle callback; options select filtering, spatial collection, and priority. */
   constructor(
     public _modify: ModuleUpdate,
     options: Partial<ModuleOptions> = {}
@@ -65,6 +76,7 @@ export default class Module {
     this.requireSpatialEffects = acceptMultiple(options.requireSpatialEffects);
   }
 
+  /** Applies tag, condition, and LOD selection before invoking the particle callback. */
   public modify(particles: Particle[], deltaTime: number, particleSystem?: ParticleSystem): void {
     const distanceSq = particleSystem?.cameraDistanceSq ?? Number.MAX_SAFE_INTEGER;
     if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(distanceSq))) return;
@@ -77,6 +89,7 @@ export default class Module {
   }
 
   // Process into array including self and dependents
+  /** Flattens dependents before this module; priority sorting still determines execution phases. */
   public withDependents(): Module[] {
     // Run dependents before this
     return [
@@ -87,11 +100,13 @@ export default class Module {
 
   // Optional preparation hook called once-per-update rather than per particle
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  /** Prepares shared work once per system update; the base implementation collects matching spatial effects. */
   public prepare(particleSystem: ParticleSystem, deltaTime: number)  {
     this.prepareSpatialEffects(particleSystem);
   }
 
   // Optional clean up hook for modules that require it
+  /** Extension hook to release temporary resources when the owning system is cleaned up. */
   public cleanup() { }
 
   protected prepareSpatialEffects(particleSystem: ParticleSystem): void {

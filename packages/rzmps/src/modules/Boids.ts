@@ -63,6 +63,7 @@ export interface BoidsOptions extends Partial<ModuleOptions> {
   particleAffectors: Multiple<BoidParticleAffectorOptions>;
 }
 
+/** Flocking steering using spatial aggregates and tagged affectors; prepare once per system update before modifying particles. */
 class Boids extends Module {
   static readonly BoidAffector = BoidAffector;
   static readonly BoidAffectorHelper = BoidAffectorHelper;
@@ -99,6 +100,7 @@ class Boids extends Module {
   private currentParticleAffectorInfluence = new THREE.Vector3();
   private particleIndices = new WeakMap<Particle, number>();
 
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(options: Partial<BoidsOptions> = {}) {
     const affectorFilter = options.affectorFilter;
 

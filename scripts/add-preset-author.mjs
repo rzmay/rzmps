@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
-const presetPattern = /^packages\/demo\/src\/presets\/(?:particles|scenes)\/(?!index\.js|background\.js|createCollisionObjects\.js)(.+)\.js$/;
+const presetPattern = /^(?:examples\/|apps\/demo\/src\/presets\/scenes\/)(?!index\.js|background\.js|createCollisionObjects\.js)(.+)\.js$/;
 
 function parseArgs(argv) {
   const args = {};

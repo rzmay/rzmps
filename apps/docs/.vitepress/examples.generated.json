@@ -1,0 +1,282 @@
+[
+  {
+    "id": "additiveSmoke",
+    "title": "Additive Smoke",
+    "description": "Additive blending with soft particles and layered lifetime color ramps for luminous smoke.",
+    "tags": [
+      "additiveSmoke"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "additiveSmoke.js"
+  },
+  {
+    "id": "boids",
+    "title": "Boids",
+    "description": "Flocking particles using ParticleOctree aggregation, with red hazard particles acting as tagged particle affectors.",
+    "tags": [
+      "boids"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "boids.js"
+  },
+  {
+    "id": "bubbles",
+    "title": "Bubbles",
+    "description": "Refractive sprite transmission with spherical normals and size-driven distortion. Both continuous sounds and collision-triggered bubble pops.",
+    "tags": [
+      "bubbles"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "bubbles.js"
+  },
+  {
+    "id": "collision",
+    "title": "Collision",
+    "description": "Particle collision with automatic mesh detection and sorting between static and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, Rapier, and Ammo can be used as external physics backends, allowing particles to affect other physics objects in the scene.",
+    "tags": [
+      "collision"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "collision.js"
+  },
+  {
+    "id": "collisionSubEmitters",
+    "title": "Metal Balls",
+    "description": "Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces.",
+    "tags": [
+      "collisionSubEmitters"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "collisionSubEmitters.js"
+  },
+  {
+    "id": "cubes",
+    "title": "Cube Instances",
+    "description": "Instanced mesh rendering with randomized cube particles and simple lifetime rotation and fade-out.",
+    "tags": [
+      "cubes"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "cubes.js"
+  },
+  {
+    "id": "dopplerBullet",
+    "title": "Doppler Bullet",
+    "description": "Doppler effect on a fast bullet particle, with smoke, faint trails, spawn blast effects, and distortion wake subsystems.",
+    "tags": [
+      "dopplerBullet"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "dopplerBullet.js"
+  },
+  {
+    "id": "fire",
+    "title": "Fire",
+    "description": "Sprite-sheet animation, soft particles, particle lights, and a heat-distortion subsystem.",
+    "tags": [
+      "fire"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "fire.js"
+  },
+  {
+    "id": "fireball",
+    "title": "Fireball",
+    "description": "Showcases burst emission, animated sprite growth, particle lights, and inherited heat-distortion particles.",
+    "tags": [
+      "fireball"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "fireball.js"
+  },
+  {
+    "id": "fireworks",
+    "title": "Fireworks",
+    "description": "Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks.",
+    "tags": [
+      "fireworks"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "fireworks.js"
+  },
+  {
+    "id": "lodStress",
+    "title": "LOD Stress Test",
+    "description": "Emitter and renderer LOD controls under a dense particle load.",
+    "tags": [
+      "lodStress"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "lodStress.js"
+  },
+  {
+    "id": "particleTrail",
+    "title": "Particle Trail",
+    "description": "Per-particle trail rendering with inherited color and alpha over moving particles.",
+    "tags": [
+      "particleTrail"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "particleTrail.js"
+  },
+  {
+    "id": "ribbonTrail",
+    "title": "Ribbon Trail",
+    "description": "Ribbon trail rendering for continuous streaks with lifetime fading.",
+    "tags": [
+      "ribbonTrail"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "ribbonTrail.js"
+  },
+  {
+    "id": "smoke",
+    "title": "Smoke",
+    "description": "Lit smoke sprites with soft particles and lifetime scale/color shaping.",
+    "tags": [
+      "smoke"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "smoke.js"
+  },
+  {
+    "id": "snow",
+    "title": "Snow",
+    "description": "Depth-based fading, noise-driven motion, warmup, and broad low-cost emission.",
+    "tags": [
+      "snow"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "snow.js"
+  },
+  {
+    "id": "spheres",
+    "title": "Spheres",
+    "description": "Lit sprite particles with spherical normals for a 3D effect.",
+    "tags": [
+      "spheres"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "spheres.js"
+  },
+  {
+    "id": "stylizedDepth",
+    "title": "Stylized Depth",
+    "description": "Depth-based color, scale, speed, rotation, and velocity modules for stylized perspective effects.",
+    "tags": [
+      "stylizedDepth"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "stylizedDepth.js"
+  },
+  {
+    "id": "suzanne",
+    "title": "Suzanne",
+    "description": "Mesh-surface emission from a model with lit sprite rendering.",
+    "tags": [
+      "suzanne"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "suzanne.js"
+  },
+  {
+    "id": "suzanneInstances",
+    "title": "Suzanne Instances",
+    "description": "Mesh instancing with Suzanne particles and randomized transforms.",
+    "tags": [
+      "suzanneInstances"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "suzanneInstances.js"
+  },
+  {
+    "id": "tags",
+    "title": "Cubes and Spheres",
+    "description": "Tag-based module and renderer filtering by mixing cubes and spheres in one particle system.",
+    "tags": [
+      "tags"
+    ],
+    "category": "effects",
+    "author": {
+      "name": "rzmay",
+      "url": "https://github.com/rzmay"
+    },
+    "file": "tags.js"
+  }
+]

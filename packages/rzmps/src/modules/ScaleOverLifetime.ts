@@ -10,7 +10,9 @@ export interface ScaleOverLifetimeOptions extends Partial<ModuleOptions> {
     scalarAcceleration: DynamicValue<THREE.Vector3>;
 }
 
+/** Multiplies scale and adds scalar channels in the transient render phase using normalized particle age. */
 class ScaleOverLifetime extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<ScaleOverLifetimeOptions> = {}) {
 
     super((particle: Particle) => {

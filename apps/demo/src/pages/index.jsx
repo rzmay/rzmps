@@ -3,16 +3,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import * as THREE from 'three';
-import {
-  AmbientLightNode,
-  DirectionalLightNode,
-  HemisphereLightNode,
-  PointLightNode,
-  RectAreaLightNode,
-  SpotLightNode,
-  WebGPURenderer,
-} from 'three/webgpu';
-import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
+import { createWebGPURenderer } from '../rendering/createWebGPURenderer';
 import CameraControls from '../components/CameraControls';
 import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
 import particlePresets from '../presets/particles';
@@ -69,22 +60,6 @@ function setQueryParam(name, value) {
   window.history.replaceState({}, '', url);
 }
 
-async function createWebGPURenderer(defaultProps) {
-  const renderer = new WebGPURenderer(defaultProps);
-
-  RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init());
-
-  renderer.library.addLight(AmbientLightNode, THREE.AmbientLight);
-  renderer.library.addLight(DirectionalLightNode, THREE.DirectionalLight);
-  renderer.library.addLight(HemisphereLightNode, THREE.HemisphereLight);
-  renderer.library.addLight(PointLightNode, THREE.PointLight);
-  renderer.library.addLight(RectAreaLightNode, THREE.RectAreaLight);
-  renderer.library.addLight(SpotLightNode, THREE.SpotLight);
-
-  await renderer.init();
-
-  return renderer;
-}
 
 function DemoScene({
   onCodeChange,
@@ -153,6 +128,7 @@ function PresetAttribution({ metadata }) {
       </div>
 
       <div className="preset-attribution-sources">
+        <a href="/docs/">🧅 Documentation</a>
         {metadata.particle?.sourceUrl && (
           <a href={metadata.particle.sourceUrl} target="_blank" rel="noreferrer">
             Particle source

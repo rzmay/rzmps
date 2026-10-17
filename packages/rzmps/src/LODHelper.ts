@@ -8,6 +8,7 @@ export interface LODSettings {
 
 export type LODSettingsOptions = LODSettings;
 
+/** Distance-based quality selection with update credit; reuse an instance to preserve skip cadence. */
 export default class LODHelper {
   distance: number;
   quality: number;
