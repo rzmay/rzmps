@@ -12,13 +12,14 @@ const openBrowser = process.argv.includes('--open') || process.argv.includes('--
 const useVsync = process.argv.includes('--vsync');
 const pacingMode = useVsync ? 'vsync' : 'uncapped';
 const suite = process.env.RZMPS_BENCHMARK_SUITE ?? '';
+const caseFilter = process.env.RZMPS_BENCHMARK_CASE ?? '';
 const viewport = {
   width: Number(process.env.RZMPS_BENCHMARK_WIDTH ?? 1280),
   height: Number(process.env.RZMPS_BENCHMARK_HEIGHT ?? 720),
 };
 const demoRoot = fileURLToPath(new URL('..', import.meta.url));
 const viteBin = fileURLToPath(new URL('../../../node_modules/.bin/vite', import.meta.url));
-const url = `http://${host}:${port}/?benchmark=1&durationMs=${durationMs}&warmupMs=${warmupMs}${suite ? `&suite=${encodeURIComponent(suite)}` : ''}`;
+const url = `http://${host}:${port}/?benchmark=1&durationMs=${durationMs}&warmupMs=${warmupMs}${suite ? `&suite=${encodeURIComponent(suite)}` : ''}${caseFilter ? `&case=${encodeURIComponent(caseFilter)}` : ''}`;
 
 function formatNumber(value, digits = 1) {
   return Number.isFinite(value) ? value.toFixed(digits) : 'n/a';
@@ -246,6 +247,7 @@ async function runBenchmark() {
     console.log(`Device pixel ratio: ${metadata.hardware.devicePixelRatio}`);
     console.log(`Duration: ${(durationMs / 1000).toFixed(1)}s measured per case after ${(warmupMs / 1000).toFixed(1)}s warmup`);
     if (suite) console.log(`Suite: ${suite}`);
+    if (caseFilter) console.log(`Case filter: ${caseFilter}`);
     console.log('Metric notes: FPS and frame time include the real browser render loop; update ms is the measured ParticleSystem.update() slice.');
 
     results.forEach((result) => {

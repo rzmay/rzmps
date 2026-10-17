@@ -638,6 +638,11 @@ interface ModuleOptions {
   spatialEffects: SpatialEffect[];
   spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
   requireSpatialEffects: typeof SpatialEffect | Array<typeof SpatialEffect>;
+  useOctree: boolean;
+  octreeOptions: Partial<OctreeConfig>;
+  octreeAggregator: OctreeAggregator<unknown>;
+  useSpatialGrid: boolean;
+  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
 }
 ```
 
@@ -651,14 +656,20 @@ work on lower-detail frames while preserving the module API.
 | `condition` | Optional per-particle predicate called before modification. Return `false` to skip that particle.                                                                                                                                                                          |
 | `conditionGPU` | Optional GPU predicate hook for modules that support GPU processing. |
 | `modifyGPU` | Optional GPU implementation. Modules without `modifyGPU` keep the system on the CPU path. |
+| `useOctree` | Gives the CPU update callback a lifecycle-managed `ParticleOctree` using default options. |
+| `octreeOptions` | Configures and enables the managed CPU octree. It rebuilds at the configured `timeQuality` and inherits the module's tag filter. |
+| `octreeAggregator` | Defines CPU node aggregates. The default aggregate is `{ count }`. |
+| `useSpatialGrid` | Gives the GPU update callback a shared, lifecycle-managed `ParticleSpatialGrid` using default options. |
+| `spatialGrid` | Configures and enables a system-owned grid, or uses an explicit caller-owned grid instance. |
 
 Modules can also discover scene-level `SpatialEffect` objects. Pass
 `requireSpatialEffects` to select the spatial effect class a module consumes,
 `spatialEffects` for an explicit list, or `spatialEffectFilter` for additional
-filtering. Module update functions receive
-`(particle, deltaTime,
-particleSystem)`; existing two-argument functions
-continue to work.
+filtering. CPU module callbacks receive
+`(particle, deltaTime, particleSystem, octree)` and GPU callbacks receive
+`(particle, deltaTimeNode, context, spatialGrid)`. The spatial argument is
+`undefined` unless its lifecycle option is enabled. Existing callbacks with
+fewer arguments continue to work.
 
 Common priority values are exposed on `Module.Priority`:
 
@@ -1208,6 +1219,9 @@ new Boids(options?: Partial<BoidsOptions>)
 
 interface BoidsOptions extends Partial<ModuleOptions> {
   octreeOptions: OctreeConfig;
+  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  grid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>; // alias
+  neighborRadius: DynamicValue<number>;
   timeQuality: number;
   speed: DynamicValue<number>;
   alignmentWeight: DynamicValue<number>;
@@ -1222,7 +1236,10 @@ interface BoidsOptions extends Partial<ModuleOptions> {
 }
 ```
 
-Steers particles using local flocking behavior sampled from a `ParticleOctree`.
+Steers particles using local flocking behavior. CPU simulation samples aggregate
+summaries from `ParticleOctree`; GPU simulation performs direct, exact-radius
+neighbor comparisons through `ParticleSpatialGrid`. The GPU path does not use
+cell aggregation or CPU particle readback.
 `alignmentWeight` points particles toward nearby average velocity direction,
 `cohesionWeight` points them toward nearby average position, and
 `separationWeight` points them away from nearby aggregate centers.
@@ -1234,7 +1251,11 @@ target.
 `octreeOptions` is passed to the internal `ParticleOctree` constructor and
 should cover the boid simulation space. If the Boids module has tags, those tags
 are passed to the octree so flocking samples only include matching particles. If
-`affectors` is omitted, `Boids` scans the scene for `BoidAffector` objects:
+`affectors` is omitted, `Boids` scans the scene for `BoidAffector` objects.
+`spatialGrid` (or `grid`) accepts either an explicit `ParticleSpatialGrid` or
+grid options. Compatible option objects share a system-managed grid build.
+`neighborRadius` controls the exact GPU neighborhood radius; it is not limited
+to the current cell or its immediate 26 neighbors:
 
 ```ts
 const target = new Boids.BoidAffector({
@@ -1705,7 +1726,23 @@ generic `SpatialEffectHelper` and adds sampled force arrows.
 
 ## Spatial Utilities
 
-### ParticleOctree
+### Particle Spatial Acceleration
+
+`ParticleOctree` and `ParticleSpatialGrid` are complementary particle spatial
+acceleration utilities for their respective execution environments.
+
+| Operation or member | `ParticleOctree` (CPU) | `ParticleSpatialGrid` (GPU) |
+| --- | --- | --- |
+| Configured bounds | `bounds` | `bounds` |
+| Logical depth | `maxDepth` | `maxDepth` (`brickSubdivisions + cellSubdivisions`) |
+| Update cadence | `timeQuality` | `timeQuality` |
+| Rebuild | `rebuild(particles, tags?)` | `rebuild(renderer, buffers, buildToken?)` |
+| Locate a cell | `locate(position)` returns a node | `locate(position)` returns a logical coordinate |
+| Neighborhood query | Node `neighbors` and aggregates | `forEachParticleInRadius(...)` in TSL |
+| Bounds update | `setBounds(bounds)` | `setBounds(bounds)` |
+| Cleanup | Garbage collected | `dispose(renderer?)` / `destroy(renderer?)` |
+
+#### ParticleOctree
 
 `ParticleOctree` stores particles in a sparse spatial octree and returns
 node-level aggregate data. Nodes also store deduplicated neighboring nodes in
@@ -1754,10 +1791,77 @@ containing that cell. Each node stores neighboring nodes by querying the 26
 adjacent positions at that node's depth and resolving each to an existing node
 of the same size or larger.
 
+#### ParticleSpatialGrid
+
+`ParticleSpatialGrid` is preferred for GPU particle comparisons and direct
+neighborhood queries. Brick and cell subdivision depths are binary depths per
+axis: depths `3` and `4` produce `8 * 16 = 128` logical cells per axis. Occupied
+cells use a sparse chained hash table. Head metadata and generation-validated
+links scale with particle capacity, not world volume, and full coordinates
+resolve hash collisions.
+
+```ts
+const grid = new ParticleSpatialGrid({
+  bounds: new THREE.Box3(
+    new THREE.Vector3(-8, -8, -8),
+    new THREE.Vector3(8, 8, 8),
+  ),
+  brickSubdivisions: 3,
+  cellSubdivisions: 4,
+  powerOfTwoBounds: true,
+  autoExpand: true,
+});
+
+const boids = new Boids({ spatialGrid: grid, neighborRadius: 0.75 });
+```
+
+Modules may instead pass `spatialGrid: { ...options }`; the particle system
+creates, schedules, shares, and disposes compatible grids. `Boids` also accepts
+`grid` as an alias. Explicit grid instances stay caller-owned. Function-defined
+modules normally use the managed callback shown below. Custom infrastructure
+can acquire the same facility directly:
+
+```ts
+class NeighborModule extends Module {
+  getParticleSpatialGrid(system: ParticleSystem) {
+    return system.acquireParticleSpatialGrid({
+      brickSubdivisions: 3,
+      cellSubdivisions: 4,
+    });
+  }
+
+  modifyNeighbors(particle, context) {
+    this.getParticleSpatialGrid(context.system).forEachParticleInRadius(
+      particle.position,
+      float(1),
+      (neighbor, distanceSquared) => {
+        // Read GPU particle attributes here.
+      },
+      { excludeIndex: particle.index },
+    );
+  }
+}
+```
+
+Queries enumerate every intersecting cell, cross brick boundaries, perform an
+exact distance test, ignore dead slots, and validate slot generation.
+`maxQuerySteps: 0` is exact and is the default. A positive value explicitly
+truncates work and increments an overflow diagnostic.
+
+Automatic particle bounds reduction and hysteretic expansion run on GPU.
+Power-of-two mode rounds each axis independently; non-power-of-two mode keeps
+axis proportions. Logical cell count stays fixed while physical cell size grows,
+so expanding bounds loses spatial resolution instead of growing memory without
+bound. Fixed bounds skip out-of-range particles. Unlike the CPU octree, the grid
+does not expose node traversal, aggregates, or JavaScript neighbor arrays.
+
 ## Collision And Physics
 
-The base package includes `ThreeCollisionBackend`, which raycasts against a
-Three.js scene.
+The base package includes two collision backends. `ThreeCollisionBackend` is the
+CPU implementation based on Three.js octrees. `ThreeGPUCollisionBackend` uses
+`three-mesh-bvh` `BVHComputeData` for deduplicated BLAS data and an instance
+TLAS. `Collision` chooses from the actual simulation mode when no backend is
+supplied. An explicit backend is always retained.
 
 ```ts
 interface ThreeCollisionBackendOptions {
@@ -1777,14 +1881,9 @@ interface ThreeCollisionBackendOptions {
   // Defaults to 1 => once per update.
   refreshQuality?: number;
 
-  // Leave null to use Three.js defaults. When GPU collision flattening is
-  // active, null defaults become maxLevel: 8 and trianglesPerLeaf: 32.
+  // Leave null to use Three.js CPU octree defaults.
   maxLevel?: number | null;
   trianglesPerLeaf?: number | null;
-
-  // Whether to prepare GPU-friendly flattened octrees during GPU processing.
-  // Defaults to true.
-  gpuCollision?: boolean;
 
   objectFilter?: (object: THREE.Object3D) => boolean;
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
@@ -1806,6 +1905,16 @@ all but does not decide what is considered static or dynamic.
 If none of these predicates are provided, the octrees are automatically
 constructed from the scene traversal, with distinctions between static and
 dynamic objects being made based on movement in the scene.
+
+The GPU backend supports `Static`, `TransformDynamic`, `GeometryDynamic`, and
+`Auto` policies. Transform-only updates rewrite transforms and refit the TLAS
+without repacking triangle BLAS data. Position revisions and explicit
+`invalidateGeometry()` calls refit geometry before repacking current library
+buffers; topology or geometry replacement rebuilds. `setEvaluatedGeometry()`
+accepts explicitly evaluated deformation without particle-state readback. The
+capsule shapecast performs world-space narrow phase for triangle interiors,
+edges, vertices, degenerate inputs, and nonuniformly scaled instances. The
+current library API still repacks buffers after geometry refits.
 
 For external physics engines, use the extension packages:
 
@@ -1851,6 +1960,42 @@ const upwardDrift = new Module((particle, deltaTime) => {
 
 system.addModule(upwardDrift);
 ```
+
+Function-defined modules can opt into spatial acceleration without subclassing.
+The module prepares the structure once per applicable update and passes it to
+the corresponding callback:
+
+```ts
+import { float } from "three/tsl";
+
+const neighbors = new Module(
+  (particle, deltaTime, system, octree) => {
+    const cell = octree?.locate(particle.position);
+    // Read cell.aggregate or neighboring nodes here.
+  },
+  {
+    useOctree: true,
+    octreeOptions: { maxDepth: 6, timeQuality: 0.5 },
+    modifyGPU(particle, deltaTime, context, grid) {
+      grid?.forEachParticleInRadius(
+        particle.position,
+        float(1),
+        (neighbor) => {
+          // Compare shader-local particle attributes here.
+        },
+        { excludeIndex: particle.index },
+      );
+    },
+    useSpatialGrid: true,
+  },
+);
+```
+
+Passing `octreeOptions` or `spatialGrid` also enables the corresponding
+structure, so the explicit `use...` flags are only needed for defaults. CPU
+updates prepare only the octree; GPU updates build only the grid. Compatible
+grid option objects share one system-managed build. An explicit grid remains
+caller-owned, while option-created grids are disposed with the particle system.
 
 ### Class Extension
 
@@ -1986,9 +2131,9 @@ synchronous view of the current compute submission.
 | Area | GPU support |
 | --- | --- |
 | Modules | All built-in value, depth, size, speed, lifetime, force, transform-noise, limit-velocity, collision, and orientation modules have fused shader-local implementations. |
-| Boids | CPU only. `Boids` and `BoidAffector` require particle-neighbor indexing, which is not part of the current GPU architecture. |
+| Boids | CPU uses aggregate `ParticleOctree` sampling. GPU uses exact-radius individual-neighbor comparisons through `ParticleSpatialGrid`. |
 | `NoiseModule` | GPU-compatible when its custom callback supplies `modifyGPU`; the string-key CPU noise cache has no GPU equivalent. |
-| Collision | GPU-compatible with `ThreeCollisionBackend` flattened octrees. External physics backends and `applyImpulses` use the CPU path. |
+| Collision | CPU defaults to `ThreeCollisionBackend`; GPU defaults to `ThreeGPUCollisionBackend` and `three-mesh-bvh` TLAS/BLAS capsule traversal. CPU-only explicit backends and `applyImpulses` use CPU. |
 | Spatial effects | `KillZone` and static-parameter `ParticleForceField` instances use packed parameters and an ordered GPU-traversed effect BVH. Dynamic-value force fields retain the compatible per-instance shader path. |
 | Emission shapes | Box, sphere, cone, and torus support volume, surface, and vertex emission. Box/sphere volumes are analytic; other modes use a GPU sampling table. |
 | Renderers | Sprite and mesh consume GPU buffers directly. Trail, light, and attached audio use generation-validated selective readback. Audio spawn/death/collision sounds use GPU events. |

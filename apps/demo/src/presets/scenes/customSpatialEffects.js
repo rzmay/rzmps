@@ -158,20 +158,7 @@ export default async function createCustomSpatialEffects(scene) {
   };
   scene.userData[CONFIGURER_KEY] = configureSpatialEffects;
 
-  let elapsed = 0;
-  const suzanneOrigin = suzanneRegion.position.clone();
-
   return {
-    update: (deltaTime) => {
-      elapsed += deltaTime;
-      suzanneRegion.position.set(
-        suzanneOrigin.x + Math.sin(elapsed * 0.8) * 3.2,
-        suzanneOrigin.y + Math.sin(elapsed * 1.1) * 0.65,
-        suzanneOrigin.z + Math.cos(elapsed * 0.8) * 1.4,
-      );
-      suzanneRegion.rotation.y = -Math.PI * 0.2 + elapsed * 0.35;
-    },
-
     gui: (folder) => {
       const warmFolder = folder.addFolder('Warm Region');
       warmFolder.add(warmRegion.position, 'x', -12, 12, 0.1).name('X');

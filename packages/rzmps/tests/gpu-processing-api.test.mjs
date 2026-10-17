@@ -83,18 +83,11 @@ assert.equal(new OrientToDirection().supportsGPU, true);
 assert.equal(new ColorOverLifetime({ alpha: [1, 0] }).supportsGPU, true);
 assert.equal(new ScaleOverLifetime({ scale: () => new THREE.Vector3(1, 1, 1) }).supportsGPU, true);
 assert.equal(new ScaleOverLifetime({ scale: new Set([new THREE.Vector3(1, 1, 1)]) }).supportsGPU, true);
-assert.equal(new Collision().supportsGPU, false);
-assert.equal(new Collision({ gpuCollision: true }).supportsGPU, true);
-assert.equal(new Collision({ gpuCollision: true }).withDependents().every((module) => module.supportsGPU), true);
-assert.equal(new ThreeCollisionBackend().gpuCollision, false);
-assert.equal(new ThreeCollisionBackend({ maxLevel: 4, trianglesPerLeaf: 12, gpuCollision: false }).maxLevel, 4);
-
-const collisionScene = new THREE.Scene();
-collisionScene.add(new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2)));
-const flattenedCollisionBackend = new ThreeCollisionBackend({ world: collisionScene, gpuCollision: true });
-flattenedCollisionBackend.setGPUProcessingActive(true);
-assert.ok(flattenedCollisionBackend.flattenedStaticOctree.nodes.value.array.length > 0);
-assert.ok(flattenedCollisionBackend.flattenedStaticOctree.triangles.value.array.length > 0);
+assert.equal(new Collision().supportsGPU, true);
+assert.equal(new Collision().withDependents().every((module) => module.supportsGPU), true);
+assert.equal(new Collision({ backend: new ThreeCollisionBackend() }).supportsGPU, false);
+assert.equal(new ThreeCollisionBackend().supportsCPU, true);
+assert.equal(new ThreeCollisionBackend({ maxLevel: 4, trianglesPerLeaf: 12 }).maxLevel, 4);
 
 const initialCapacitySystem = new ParticleSystem({
   maxParticles: 10000,

@@ -15,6 +15,13 @@ import type { Tag } from '../types/Tag';
 import BoidAffector from '../spatial/BoidAffector';
 import BoidAffectorHelper from '../spatial/BoidAffectorHelper';
 import type { BoidAffectorOptions } from '../spatial/BoidAffector';
+import ParticleSpatialGrid, {
+  type ParticleSpatialGridOptions,
+} from '../gpu/ParticleSpatialGrid';
+import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
+import type { Node } from 'three/webgpu';
+import { acos, cos, float, If, max, mix, sin, uint, vec3 } from 'three/tsl';
+import { SimulationSpace } from '../enums/SimulationSpace';
 
 type BoidParticleAffectorAggregate = {
   count: number;
@@ -61,6 +68,9 @@ export interface BoidsOptions extends Partial<ModuleOptions> {
   affectors: BoidAffector[];
   affectorFilter: (affector: BoidAffector) => boolean;
   particleAffectors: Multiple<BoidParticleAffectorOptions>;
+  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  grid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  neighborRadius: DynamicValue<number>;
 }
 
 class Boids extends Module {
@@ -79,6 +89,9 @@ class Boids extends Module {
   steering: DynamicValue<number>;
   maintainSpeed: boolean;
   particleAffectors: BoidParticleAffectorOptions[];
+  spatialGrid?: ParticleSpatialGrid;
+  spatialGridOptions: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  neighborRadius: DynamicValue<number>;
 
   private alignment = new THREE.Vector3();
   private cohesion = new THREE.Vector3();
@@ -90,6 +103,7 @@ class Boids extends Module {
   private sampleDirection = new THREE.Vector3();
   private desiredVelocity = new THREE.Vector3();
   private currentDirection = new THREE.Vector3();
+  private steeringAxis = new THREE.Vector3();
   private particleSystem?: ParticleSystem;
   private affectorDirection = new THREE.Vector3();
   private affectorSamplePosition = new THREE.Vector3();
@@ -101,6 +115,14 @@ class Boids extends Module {
 
   constructor(options: Partial<BoidsOptions> = {}) {
     const affectorFilter = options.affectorFilter;
+    const {
+      octreeOptions: _octreeOptions,
+      spatialGrid: _spatialGrid,
+      grid: _grid,
+      useOctree: _useOctree,
+      useSpatialGrid: _useSpatialGrid,
+      ...moduleOptions
+    } = options;
 
     super((particle, deltaTime) => {
       if (!this.octree) return;
@@ -138,16 +160,33 @@ class Boids extends Module {
 
       this.currentDirection.normalize();
       this.desiredVelocity.normalize();
-      this.currentDirection.lerp(this.desiredVelocity, steeringAlpha);
-
-      if (this.currentDirection.lengthSq() === 0) {
-        this.currentDirection.copy(this.desiredVelocity);
+      const directionDot = THREE.MathUtils.clamp(
+        this.currentDirection.dot(this.desiredVelocity),
+        -1,
+        1,
+      );
+      this.steeringAxis.crossVectors(this.currentDirection, this.desiredVelocity);
+      if (this.steeringAxis.lengthSq() <= Number.EPSILON) {
+        this.steeringAxis.crossVectors(
+          this.currentDirection,
+          Math.abs(this.currentDirection.y) < 0.9
+            ? THREE.Object3D.DEFAULT_UP
+            : new THREE.Vector3(1, 0, 0),
+        );
       }
-
+      this.currentDirection.applyAxisAngle(
+        this.steeringAxis.normalize(),
+        Math.acos(directionDot) * steeringAlpha,
+      );
       particle.velocity.copy(this.currentDirection.normalize().multiplyScalar(speed));
     }, {
-      ...options,
+      ...moduleOptions,
       priority: options.priority ?? Module.Priority.Permanent,
+      modifyGPU: (particle, deltaTime, context) => this.modifyBoidGPU(
+        particle,
+        deltaTime,
+        context,
+      ),
       requireSpatialEffects: BoidAffector,
       spatialEffects: options.affectors,
       spatialEffectFilter: affectorFilter
@@ -181,6 +220,8 @@ class Boids extends Module {
     this.steering = options.steering ?? 0.5;
     this.maintainSpeed = options.maintainSpeed ?? true;
     this.particleAffectors = acceptMultiple(options.particleAffectors) ?? [];
+    this.spatialGridOptions = options.spatialGrid ?? options.grid ?? {};
+    this.neighborRadius = options.neighborRadius ?? 1;
   }
 
   public prepare(particleSystem: ParticleSystem): void {
@@ -189,6 +230,10 @@ class Boids extends Module {
 
     // BoidAffectors are sampled per particle, so keep their matrices fresh once per frame.
     this.spatialEffects.forEach((effect) => effect.updateWorldMatrix(true, false));
+
+    // GPU Boids obtains individual neighbors from ParticleSpatialGrid. The CPU octree
+    // remains the aggregate approximation used only by CPU simulation.
+    if (particleSystem.isGPUProcessingActive) return;
 
     if (particleSystem.boundingBox.isEmpty()) particleSystem.updateBoundingBox();
     this.octreeOptions.bounds = particleSystem.boundingBox.clone();
@@ -224,6 +269,195 @@ class Boids extends Module {
     });
 
     this.octree.rebuild(particleSystem.particles, Array.from(tags));
+  }
+
+  public override getParticleSpatialGrid(particleSystem: ParticleSystem): ParticleSpatialGrid {
+    this.spatialGrid ??= particleSystem.acquireParticleSpatialGrid(this.spatialGridOptions);
+    return this.spatialGrid;
+  }
+
+  private modifyBoidGPU(
+    particle: GPUParticleLike,
+    deltaTime: Node<'float'>,
+    context: GPUParticleUpdateContext,
+  ): void {
+    const grid = this.getParticleSpatialGrid(context.system);
+    const radius = this.gpuParameters.number(
+      'neighborRadius', () => this.neighborRadius, particle.time, 1, particle.index,
+    ).max(Number.EPSILON);
+    const alignment = vec3(0).toVar('boidAlignment');
+    const cohesion = vec3(0).toVar('boidCohesion');
+    const separation = vec3(0).toVar('boidSeparation');
+    const affector = vec3(0).toVar('boidParticleAffector');
+    const count = float(0).toVar('boidNeighborCount');
+    const tagMask = context.system.getGPURendererTagMask(this.tags);
+
+    grid.forEachParticleInRadius(particle.position, radius, (neighbor, distanceSquared) => {
+      alignment.addAssign(neighbor.velocity);
+      cohesion.addAssign(neighbor.position);
+      const away = vec3(particle.position.sub(neighbor.position));
+      separation.addAssign(away.div(max(distanceSquared, float(Number.EPSILON))));
+      count.addAssign(1);
+    }, {
+      excludeIndex: particle.index,
+      tagMask,
+    });
+
+    this.particleAffectors.forEach((rule, ruleIndex) => {
+      const sourceTags = acceptMultiple(rule.sourceTags);
+      const sourceMask = context.system.getGPURendererTagMask(sourceTags);
+      const targetTags = acceptMultiple(rule.tags);
+      const targetMask = context.system.getGPURendererTagMask(targetTags);
+      const collect = () => {
+        grid.forEachParticleInRadius(particle.position, radius, (source) => {
+          const delta = vec3(particle.position.sub(source.position));
+          const distance = delta.length().max(Number.EPSILON);
+          const sourceSize = max(source.scale.x.abs(), max(source.scale.y.abs(), source.scale.z.abs()));
+          const preferredDistance = sourceSize.mul(rule.distance ?? 1).add(
+            this.gpuParameters.number(
+              `affectorDistance:${ruleIndex}`,
+              () => this.affectorDistance,
+              particle.time,
+              0,
+              particle.index,
+            ),
+          );
+          const surfaceDistance = distance.sub(preferredDistance).max(Number.EPSILON);
+          affector.addAssign(
+            delta.div(distance)
+              .mul(-(rule.weight ?? BoidAffector.Weight.Obstacle))
+              .div(surfaceDistance.mul(surfaceDistance)),
+          );
+        }, {
+          excludeIndex: particle.index,
+          tagMask: sourceMask,
+        });
+      };
+      if (targetMask === undefined) collect();
+      else If(particle.tagMask.bitAnd(uint(targetMask)).notEqual(uint(0)), collect);
+    });
+
+    this.addSceneAffectorInfluenceGPU(particle, context, affector);
+
+    If(count.greaterThan(0), () => {
+      alignment.assign(alignment.div(count).normalize());
+      cohesion.assign(cohesion.div(count).sub(particle.position).normalize());
+      separation.assign(separation.div(count).normalize());
+    });
+
+    const alignmentWeight = this.gpuParameters.number(
+      'alignmentWeight', () => this.alignmentWeight, particle.time, 1, particle.index,
+    );
+    const cohesionWeight = this.gpuParameters.number(
+      'cohesionWeight', () => this.cohesionWeight, particle.time, 1, particle.index,
+    );
+    const separationWeight = this.gpuParameters.number(
+      'separationWeight', () => this.separationWeight, particle.time, 1.5, particle.index,
+    );
+    const desired = vec3(
+      alignment.mul(alignmentWeight)
+        .add(cohesion.mul(cohesionWeight))
+        .add(separation.mul(separationWeight))
+        .add(affector.mul(this.gpuParameters.number(
+          'affectorWeight', () => this.affectorWeight, particle.time, 1, particle.index,
+        ))),
+    ).toVar('boidDesiredVelocity');
+
+    If(desired.lengthSq().greaterThan(float(Number.EPSILON)), () => {
+      const currentSpeed = particle.velocity.length();
+      const targetSpeed = this.speed === undefined
+        ? max(currentSpeed, particle.speed)
+        : this.gpuParameters.number(
+          'speed', () => this.speed, particle.time, 1, particle.index,
+        ).max(0);
+      desired.assign(desired.normalize().mul(targetSpeed));
+      const steering = this.gpuParameters.number(
+        'steering', () => this.steering, particle.time, 0.5, particle.index,
+      ).max(0);
+      const alpha = deltaTime.mul(steering).clamp(0, 1);
+
+      if (this.maintainSpeed) {
+        const desiredDirection = vec3(desired.normalize());
+        const currentDirection = vec3(
+          currentSpeed.greaterThan(float(Number.EPSILON)).select(
+            particle.velocity.div(currentSpeed),
+            desiredDirection,
+          ),
+        );
+        const directionDot = currentDirection.dot(desiredDirection).clamp(-1, 1);
+        const crossAxis = vec3(currentDirection.cross(desiredDirection));
+        const fallbackAxis = vec3(
+          currentDirection.y.abs().lessThan(0.9).select(
+            currentDirection.cross(vec3(0, 1, 0)),
+            currentDirection.cross(vec3(1, 0, 0)),
+          ),
+        );
+        const axis = vec3(
+          crossAxis.lengthSq().greaterThan(float(Number.EPSILON))
+            .select(crossAxis.normalize(), fallbackAxis.normalize()),
+        );
+        const angle = acos(directionDot).mul(alpha);
+        const angleCos = cos(angle);
+        const angleSin = sin(angle);
+        const direction = vec3(
+          currentDirection.mul(angleCos)
+            .add(axis.cross(currentDirection).mul(angleSin))
+            .add(axis.mul(axis.dot(currentDirection).mul(float(1).sub(angleCos)))),
+        ).toVar('boidSteeredDirection');
+        particle.velocity.assign(direction.normalize().mul(targetSpeed));
+      } else {
+        particle.velocity.assign(mix(particle.velocity, desired, alpha));
+      }
+    });
+  }
+
+  public override cleanup(): void {
+    this.spatialGrid = undefined;
+    super.cleanup();
+  }
+
+  private addSceneAffectorInfluenceGPU(
+    particle: GPUParticleLike,
+    context: GPUParticleUpdateContext,
+    influence: Node<'vec3'>,
+  ): void {
+    const system = context.system;
+    system.updateWorldMatrix(true, false);
+    const worldPosition = system.simulationSpace === SimulationSpace.World
+      ? particle.position
+      : transformPointGPU(particle.position, system.matrixWorld);
+    const worldToSimulation = system.matrixWorld.clone().invert();
+
+    this.spatialEffects.forEach((effect) => {
+      if (!(effect instanceof BoidAffector) || !effect.geometry) return;
+      const tagMask = system.getGPURendererTagMask(effect.tags);
+      const apply = () => {
+        const center = effect.getWorldPosition(new THREE.Vector3());
+        If(worldPosition.sub(vec3(center)).lengthSq().lessThanEqual(effect.range ** 2), () => {
+          const sample = effect.samplePointGPU(worldPosition);
+          const fromSurface = vec3(
+            worldPosition.sub(sample.point),
+          ).toVar('boidAffectorDirection');
+          const distance = fromSurface.length().max(Number.EPSILON);
+          const flip = effect.inverted ? sample.inside.not() : sample.inside;
+          const oriented = vec3(
+            flip.select(fromSurface.negate(), fromSurface),
+          );
+          const surfaceDistance = distance.sub(effect.distance).max(Number.EPSILON);
+          const worldInfluence = oriented.normalize().mul(
+            float(-effect.weight).div(surfaceDistance.mul(surfaceDistance)),
+          );
+          influence.addAssign(
+            system.simulationSpace === SimulationSpace.World
+              ? worldInfluence
+              : transformDirectionGPU(worldInfluence, worldToSimulation),
+          );
+        });
+      };
+
+      if (tagMask === undefined) apply();
+      else If(particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)), apply);
+    });
   }
 
   private queryBoidInfluence(particle: Particle): BoidInfluence {
@@ -505,6 +739,24 @@ class Boids extends Module {
       return sum.addScaledVector(this.affectorDirection, -affector.weight * falloff);
     }, target);
   }
+}
+
+function transformPointGPU(point: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
+  const e = matrix.elements;
+  return vec3(
+    point.x.mul(e[0]).add(point.y.mul(e[4])).add(point.z.mul(e[8])).add(e[12]),
+    point.x.mul(e[1]).add(point.y.mul(e[5])).add(point.z.mul(e[9])).add(e[13]),
+    point.x.mul(e[2]).add(point.y.mul(e[6])).add(point.z.mul(e[10])).add(e[14]),
+  ) as Node<'vec3'>;
+}
+
+function transformDirectionGPU(vector: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
+  const e = matrix.elements;
+  return vec3(
+    vector.x.mul(e[0]).add(vector.y.mul(e[4])).add(vector.z.mul(e[8])),
+    vector.x.mul(e[1]).add(vector.y.mul(e[5])).add(vector.z.mul(e[9])),
+    vector.x.mul(e[2]).add(vector.y.mul(e[6])).add(vector.z.mul(e[10])),
+  ) as Node<'vec3'>;
 }
 
 export default Boids;

@@ -13,6 +13,7 @@ import {
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import {
+  Boids,
   ColorOverLifetime,
   ColorByDepth,
   ColorBySize,
@@ -49,6 +50,8 @@ import {
   SpeedOverLifetime,
   SpriteRenderer,
   TrailRenderer,
+  ThreeCollisionBackend,
+  ThreeGPUCollisionBackend,
   TransformByNoise,
   VelocityByDepth,
   VelocityBySize,
@@ -240,7 +243,7 @@ function createNativeBuiltInModules() {
     new ColorBySize(),
     new ColorBySpeed(),
     new ColorOverLifetime(),
-    new Collision({ gpuCollision: true }),
+    new Collision(),
     new DistortionByDepth(),
     new DistortionBySize(),
     new DistortionBySpeed(),
@@ -361,6 +364,7 @@ function summarize({
     gpuSelectiveReadbackStats: system.gpuSelectiveReadbackStats,
     simulationNodeBuilds,
     gpuConfigurationStats: system.gpuConfigurationStats,
+    spatialGridDiagnostics: system.__gridDiagnostics,
   };
 }
 
@@ -374,6 +378,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
   const durationMs = getNumberParam('durationMs', DEFAULT_DURATION_MS);
   const warmupMs = getNumberParam('warmupMs', DEFAULT_WARMUP_MS);
   const suite = getStringParam('suite');
+  const caseFilter = getStringParam('case').toLowerCase();
 
   if (
     suite === 'milestone1'
@@ -396,7 +401,212 @@ function BenchmarkScene({ onComplete, onProgress }) {
     gl.__rzmpsBenchmarkComputeWrapped = true;
   }
 
-  const cases = useMemo(() => {
+  const allCases = useMemo(() => {
+    if (suite === 'gpu-spatial-smoke') {
+      return [
+        {
+          name: 'GPU Boids behavioral smoke',
+          particleCount: 48,
+          requireGPU: true,
+          minimumDurationMs: 750,
+          create: () => ({
+            gpuProcessing: true,
+            modules: [new Boids({
+              tags: 'flock',
+              neighborRadius: 4,
+              alignmentWeight: 0,
+              cohesionWeight: 3,
+              separationWeight: 0,
+              steering: 12,
+              speed: 1,
+              spatialGrid: {
+                bounds: new THREE.Box3(
+                  new THREE.Vector3(-4, -4, -4),
+                  new THREE.Vector3(4, 4, 4),
+                ),
+                brickSubdivisions: 2,
+                cellSubdivisions: 2,
+                autoExpand: false,
+              },
+            })],
+          }),
+          configure: (system) => {
+            system.particles.forEach((particle, index) => {
+              const angle = index / system.particles.length * Math.PI * 2;
+              const direction = new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0);
+              particle.position.copy(direction).multiplyScalar(2);
+              particle.orbitCenter.copy(particle.position);
+              particle.velocity.copy(direction);
+              particle.speed = 1;
+              particle.tags = ['flock'];
+              particle.data.initialDirection = direction;
+              particle.cache();
+            });
+          },
+          beforeUpdate: (system, elapsed) => {
+            if (elapsed < 250 || system.__gridDiagnosticsPromise) return;
+            const grid = system.modules[0].getParticleSpatialGrid(system);
+            system.__gridDiagnosticsPromise = grid.readDiagnostics(system.sceneRenderer)
+              .then((diagnostics) => { system.__gridDiagnostics = diagnostics; });
+          },
+          validate: (system) => {
+            const unchanged = system.particles.filter((particle) => (
+              particle.velocity.clone().normalize().dot(particle.data.initialDirection) > 0.9
+            ));
+            if (unchanged.length > system.particles.length * 0.25) {
+              throw new Error(
+                `GPU Boids left ${unchanged.length}/${system.particles.length} particles moving outward; `
+                + `samples ${JSON.stringify(system.particles.slice(0, 3).map((particle) => ({
+                  position: particle.position.toArray(),
+                  velocity: particle.velocity.toArray(),
+                  initial: particle.data.initialDirection.toArray(),
+                  alive: particle.alive,
+                })))}; `
+                + `grid diagnostics ${JSON.stringify(system.__gridDiagnostics)}.`,
+              );
+            }
+          },
+        },
+        {
+          name: 'GPU BoidAffector geometry smoke',
+          particleCount: 24,
+          requireGPU: true,
+          minimumDurationMs: 500,
+          create: () => {
+            const target = Boids.BoidAffector.Sphere({
+              weight: Boids.BoidAffector.Weight.Target * 2,
+              distance: 0.25,
+              range: 6,
+              tags: 'flock',
+            }, 0.5, 12, 8);
+            return {
+              gpuProcessing: true,
+              modules: [new Boids({
+                tags: 'flock',
+                alignmentWeight: 0,
+                cohesionWeight: 0,
+                separationWeight: 0,
+                affectorWeight: 1,
+                steering: 8,
+                neighborRadius: 4,
+                affectors: [target],
+              })],
+            };
+          },
+          configure: (system) => {
+            system.particles.forEach((particle, index) => {
+              const angle = index / system.particles.length * Math.PI * 2;
+              const direction = new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0);
+              particle.position.copy(direction).multiplyScalar(2);
+              particle.orbitCenter.copy(particle.position);
+              particle.velocity.copy(direction);
+              particle.speed = 1;
+              particle.tags = ['flock'];
+              particle.data.initialDirection = direction;
+              particle.cache();
+            });
+          },
+          validate: (system) => {
+            const unchanged = system.particles.filter((particle) => (
+              particle.velocity.clone().normalize().dot(particle.data.initialDirection) > 0.9
+            ));
+            if (unchanged.length > system.particles.length * 0.25) {
+              throw new Error(
+                `GPU BoidAffector left ${unchanged.length}/${system.particles.length} particles moving outward.`,
+              );
+            }
+          },
+        },
+        {
+          name: 'GPU Collision behavioral smoke',
+          particleCount: 48,
+          requireGPU: true,
+          minimumDurationMs: 500,
+          create: () => {
+            return {
+              gpuProcessing: true,
+              modules: [new Collision({
+                bounce: 1,
+                dampen: 0,
+              })],
+            };
+          },
+          configureScene: (benchmarkScene) => {
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(8, 1, 8));
+            floor.position.y = -0.5;
+            benchmarkScene.add(floor);
+            return [floor];
+          },
+          configure: (system) => {
+            system.particles.forEach((particle, index) => {
+              particle.position.set(
+                (index % 8) * 0.35 - 1.225,
+                0.3 + Math.floor(index / 8) * 0.01,
+                Math.floor(index / 8) * 0.35 - 0.875,
+              );
+              particle.orbitCenter.copy(particle.position);
+              particle.velocity.set(0, -1, 0);
+              particle.speed = 1;
+              particle.cache();
+            });
+          },
+          validate: (system) => {
+            if (!(system.modules[0].backend instanceof ThreeGPUCollisionBackend)) {
+              throw new Error('Collision did not select ThreeGPUCollisionBackend automatically.');
+            }
+            const bounced = system.particles.filter((particle) => particle.velocity.y > 0.1);
+            if (bounced.length < system.particles.length * 0.75) {
+              throw new Error(
+                `GPU Collision bounced ${bounced.length}/${system.particles.length} particles.`,
+              );
+            }
+          },
+        },
+      ];
+    }
+
+    if (suite === 'spatial-grid') {
+      return pairBenchmarkCases([
+        ...[1_000, 10_000, 100_000].map((particleCount) => ({
+          name: `Spatial grid Boids ${particleCount.toLocaleString()}`,
+          particleCount,
+          create: () => ({
+            maxParticles: particleCount,
+            renderer: new NoopRenderer(),
+            modules: [new Boids({
+              neighborRadius: 0.3,
+              spatialGrid: {
+                bounds: new THREE.Box3(
+                  new THREE.Vector3(-16, -16, -16),
+                  new THREE.Vector3(16, 16, 16),
+                ),
+                brickSubdivisions: 3,
+                cellSubdivisions: 4,
+                autoExpand: true,
+              },
+            })],
+          }),
+        })),
+        {
+          name: 'Collision static mesh 10k',
+          particleCount: 10_000,
+          create: (mode) => {
+            const collisionScene = new THREE.Scene();
+            const collisionMesh = new THREE.Mesh(new THREE.TorusKnotGeometry(2, 0.5, 256, 32));
+            collisionScene.add(collisionMesh);
+            const backend = mode === 'gpu'
+              ? new ThreeGPUCollisionBackend({ world: collisionScene })
+              : new ThreeCollisionBackend({ world: collisionScene });
+            return {
+              maxParticles: 10_000,
+              renderer: new NoopRenderer(),
+              modules: [new Collision({ backend })],
+            };
+          },
+        },
+      ]);
+    }
+
     if (suite === 'milestone1') {
       const particleCounts = [1_000, 10_000, 100_000];
       const moduleCounts = [1, 5, 10, 20];
@@ -959,12 +1169,18 @@ function BenchmarkScene({ onComplete, onProgress }) {
     },
     ]);
   }, [suite]);
+  const cases = useMemo(() => (
+    caseFilter
+      ? allCases.filter(({ name }) => name.toLowerCase().includes(caseFilter))
+      : allCases
+  ), [allCases, caseFilter]);
 
   const startNextCase = async () => {
     if (starting.current) return;
     starting.current = true;
     if (active.current?.system) {
       active.current.system.destroy();
+      active.current.sceneObjects?.forEach((object) => object.removeFromParent());
       active.current = null;
     }
 
@@ -993,6 +1209,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     system.__rzmpsBenchmarkSimulationDispatches = 0;
     system.__rzmpsBenchmarkRenderOutputDispatches = 0;
     system.__rzmpsSimulationNodeBuilds = 0;
+    const sceneObjects = nextCase.configureScene?.(scene) ?? [];
 
     const originalSimulationPhase = system._computeGPUSimulationPhase.bind(system);
     system._computeGPUSimulationPhase = (...args) => {
@@ -1012,6 +1229,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     active.current = {
       ...nextCase,
       system,
+      sceneObjects,
       phase: 'warmup',
       phaseStartedAt: performance.now(),
       updateSamples: [],
@@ -1047,7 +1265,12 @@ function BenchmarkScene({ onComplete, onProgress }) {
     const simulationDispatchesBefore = active.current.system.__rzmpsBenchmarkSimulationDispatches ?? 0;
     const renderOutputDispatchesBefore = active.current.system.__rzmpsBenchmarkRenderOutputDispatches ?? 0;
     active.current.beforeUpdate?.(active.current.system, frameStart - active.current.phaseStartedAt);
-    active.current.system.update();
+      try {
+        active.current.system.update();
+      } catch (error) {
+        window.__RZMPS_BENCHMARK_DONE__ = true;
+        throw error;
+      }
     const simulationNode = active.current.system._gpuSimulationComputeCache?.node;
     if (simulationNode && !active.current.simulationNodes.has(simulationNode)) {
       active.current.simulationNodes.add(simulationNode);
@@ -1123,7 +1346,12 @@ function BenchmarkScene({ onComplete, onProgress }) {
           + ` GPU death events; expected ${active.current.expectedDeathEvents}.`,
         );
       }
-      active.current.validate?.(active.current.system);
+      try {
+        active.current.validate?.(active.current.system);
+      } catch (error) {
+        window.__RZMPS_BENCHMARK_DONE__ = true;
+        throw error;
+      }
       active.current.measuredDurationMs = elapsed;
       results.current.push(summarize(active.current));
       gl.info.reset();

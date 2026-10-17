@@ -10,11 +10,6 @@ import type {
 import ParticleSystem from '../ParticleSystem';
 import { TRAIL_RENDERER_USER_DATA_KEY } from '../renderers/TrailRenderer';
 import { SPRITE_RENDERER_USER_DATA_KEY } from '../renderers/SpriteRenderer';
-import {
-  flattenThreeOctree,
-  updateFlattenedOctree,
-  type FlattenedOctree,
-} from '../helpers/octreeFlattener';
 
 export interface ThreeCollisionBackendOptions {
   world?: THREE.Object3D;
@@ -27,7 +22,6 @@ export interface ThreeCollisionBackendOptions {
   respectMaterialSide?: boolean;
   maxLevel?: number | null;
   trianglesPerLeaf?: number | null;
-  gpuCollision?: boolean;
 
   objectFilter?: (object: THREE.Object3D) => boolean;
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
@@ -46,6 +40,11 @@ type TrackedObject = {
   dynamic: boolean;
   matrixWorld: THREE.Matrix4;
   lastMovedAt: number;
+  geometry: THREE.BufferGeometry;
+  positionVersion: number;
+  positionCount: number;
+  indexVersion: number;
+  indexCount: number;
 };
 
 type MembershipChanges = {
@@ -54,6 +53,8 @@ type MembershipChanges = {
 };
 
 class ThreeCollisionBackend implements ICollisionBackend {
+  readonly supportsCPU = true;
+  readonly supportsGPU = false;
   staticOctree = new Octree();
   dynamicOctree = new Octree();
 
@@ -72,17 +73,12 @@ class ThreeCollisionBackend implements ICollisionBackend {
   respectMaterialSide: boolean;
   maxLevel: number | null;
   trianglesPerLeaf: number | null;
-  gpuCollision: boolean;
-
-  flattenedStaticOctree?: FlattenedOctree;
-  flattenedDynamicOctree?: FlattenedOctree;
-
   private trackedObjects = new Map<string, TrackedObject>();
+  private invalidatedGeometry = new Set<string>();
 
   private elapsedTime = 0;
   private dynamicUpdateAccumulator = 0;
   private refreshAccumulator = 0;
-  private gpuProcessingActive = false;
 
   constructor(options: ThreeCollisionBackendOptions = {}) {
     this.world = options.world;
@@ -98,7 +94,6 @@ class ThreeCollisionBackend implements ICollisionBackend {
     this.respectMaterialSide = options.respectMaterialSide ?? true;
     this.maxLevel = options.maxLevel ?? null;
     this.trianglesPerLeaf = options.trianglesPerLeaf ?? null;
-    this.gpuCollision = options.gpuCollision ?? false;
 
     this.timeQuality = THREE.MathUtils.clamp(
       options.timeQuality ?? 1,
@@ -115,12 +110,14 @@ class ThreeCollisionBackend implements ICollisionBackend {
     this.initialize();
   }
 
-  setGPUProcessingActive(active: boolean): void {
-    if (this.gpuProcessingActive === active) return;
-
-    this.gpuProcessingActive = active;
-    this.rebuildStaticOctree();
-    this.rebuildDynamicOctree();
+  invalidateGeometry(object?: THREE.Object3D): void {
+    if (object) {
+      object.traverse((child) => {
+        if (child instanceof THREE.Mesh) this.invalidatedGeometry.add(child.uuid);
+      });
+    } else {
+      this.trackedObjects.forEach((_tracked, uuid) => this.invalidatedGeometry.add(uuid));
+    }
   }
 
   update(deltaTime: number): void {
@@ -142,6 +139,24 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
     for (const tracked of this.trackedObjects.values()) {
       tracked.object.updateWorldMatrix(true, false);
+
+      const position = tracked.object.geometry.getAttribute('position');
+      const index = tracked.object.geometry.index;
+      const geometryChanged = tracked.geometry !== tracked.object.geometry
+        || tracked.positionVersion !== attributeVersion(position)
+        || tracked.positionCount !== (position?.count ?? 0)
+        || tracked.indexVersion !== attributeVersion(index)
+        || tracked.indexCount !== (index?.count ?? position?.count ?? 0)
+        || this.invalidatedGeometry.has(tracked.object.uuid);
+      if (geometryChanged) {
+        tracked.geometry = tracked.object.geometry;
+        tracked.positionVersion = attributeVersion(position);
+        tracked.positionCount = position?.count ?? 0;
+        tracked.indexVersion = attributeVersion(index);
+        tracked.indexCount = index?.count ?? position?.count ?? 0;
+        if (tracked.dynamic) dynamicMembershipChanged = true;
+        else staticMembershipChanged = true;
+      }
 
       if (tracked.classification !== Classification.Auto) continue;
 
@@ -169,6 +184,7 @@ class ThreeCollisionBackend implements ICollisionBackend {
         dynamicMembershipChanged = true;
       }
     }
+    this.invalidatedGeometry.clear();
 
     if (staticMembershipChanged) {
       this.rebuildStaticOctree();
@@ -467,6 +483,11 @@ class ThreeCollisionBackend implements ICollisionBackend {
         dynamic: previousTracked.dynamic,
         matrixWorld: previousTracked.matrixWorld.clone(),
         lastMovedAt: previousTracked.lastMovedAt,
+        geometry: previousTracked.geometry,
+        positionVersion: previousTracked.positionVersion,
+        positionCount: previousTracked.positionCount,
+        indexVersion: previousTracked.indexVersion,
+        indexCount: previousTracked.indexCount,
       });
 
       return;
@@ -478,6 +499,17 @@ class ThreeCollisionBackend implements ICollisionBackend {
       dynamic: classification === Classification.Dynamic,
       matrixWorld: object.matrixWorld.clone(),
       lastMovedAt: this.elapsedTime,
+      geometry: previousTracked?.geometry ?? object.geometry,
+      positionVersion: previousTracked?.positionVersion
+        ?? attributeVersion(object.geometry.getAttribute('position')),
+      positionCount: previousTracked?.positionCount
+        ?? object.geometry.getAttribute('position')?.count
+        ?? 0,
+      indexVersion: previousTracked?.indexVersion ?? attributeVersion(object.geometry.index),
+      indexCount: previousTracked?.indexCount
+        ?? object.geometry.index?.count
+        ?? object.geometry.getAttribute('position')?.count
+        ?? 0,
     });
   }
 
@@ -489,12 +521,6 @@ class ThreeCollisionBackend implements ICollisionBackend {
       .map((tracked) => tracked.object);
 
     this.staticOctree = this.buildOctree(objects);
-    this.flattenedStaticOctree = this.shouldFlattenOctree(this.staticOctree)
-      ? updateFlattenedOctree(
-        this.flattenedStaticOctree,
-        flattenThreeOctree(this.staticOctree as Parameters<typeof flattenThreeOctree>[0]),
-      )
-      : undefined;
   }
 
   private rebuildDynamicOctree(): void {
@@ -505,12 +531,6 @@ class ThreeCollisionBackend implements ICollisionBackend {
       .map((tracked) => tracked.object);
 
     this.dynamicOctree = this.buildOctree(objects);
-    this.flattenedDynamicOctree = this.shouldFlattenOctree(this.dynamicOctree)
-      ? updateFlattenedOctree(
-        this.flattenedDynamicOctree,
-        flattenThreeOctree(this.dynamicOctree as Parameters<typeof flattenThreeOctree>[0]),
-      )
-      : undefined;
   }
 
   private buildOctree(
@@ -538,25 +558,10 @@ class ThreeCollisionBackend implements ICollisionBackend {
   }
 
   private getOctreeSettings(): { maxLevel: number | null; trianglesPerLeaf: number | null } {
-    if (this.shouldUseGPUFriendlyDefaults()) {
-      return {
-        maxLevel: this.maxLevel ?? 8,
-        trianglesPerLeaf: this.trianglesPerLeaf ?? 32,
-      };
-    }
-
     return {
       maxLevel: this.maxLevel,
       trianglesPerLeaf: this.trianglesPerLeaf,
     };
-  }
-
-  private shouldUseGPUFriendlyDefaults(): boolean {
-    return this.gpuCollision && this.gpuProcessingActive;
-  }
-
-  private shouldFlattenOctree(octree: Octree): boolean {
-    return this.shouldUseGPUFriendlyDefaults() && Boolean(octree.box);
   }
 
   private addMeshToOctree(
@@ -694,3 +699,8 @@ class ThreeCollisionBackend implements ICollisionBackend {
 }
 
 export default ThreeCollisionBackend;
+
+function attributeVersion(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined): number {
+  if (!attribute) return -1;
+  return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
+}

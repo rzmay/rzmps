@@ -93,7 +93,12 @@ export type { LiveCubemapOptions } from './renderers/LiveCubemap';
 
 // Modules
 export { default as Module } from './Module';
-export type { ModuleGPUUpdate, ModuleOptions, ModuleUpdate } from './Module';
+export type {
+  ModuleGPUUpdate,
+  ModuleOctreeAggregate,
+  ModuleOptions,
+  ModuleUpdate,
+} from './Module';
 export { default as NoiseModule } from './modules/NoiseModule';
 export { default as ForceOverLifetime } from './modules/ForceOverLifetime';
 export { default as LimitVelocityOverLifetime } from './modules/LimitVelocityOverLifetime';
@@ -152,6 +157,14 @@ export { default as ParticleForceFieldHelper } from './spatial/ParticleForceFiel
 // Collision
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';
 export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBackend';
+export { default as ThreeGPUCollisionBackend } from './collision/ThreeGPUCollisionBackend';
+export {
+  CollisionGeometryUpdatePolicy,
+} from './collision/ThreeGPUCollisionBackend';
+export type {
+  ThreeGPUCollisionBackendOptions,
+  ThreeGPUCollisionBackendStats,
+} from './collision/ThreeGPUCollisionBackend';
 
 // Dynamic Value
 export type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
@@ -162,6 +175,13 @@ export type {
   OctreeConfig,
   OctreeNode,
 } from './helpers/ParticleOctree';
+export { default as ParticleSpatialGrid } from './gpu/ParticleSpatialGrid';
+export type {
+  ParticleSpatialGridOptions,
+  ParticleSpatialGridDiagnostics,
+  ParticleSpatialGridQueryOptions,
+  ParticleSpatialGridVisitor,
+} from './gpu/ParticleSpatialGrid';
 
 // Texture helper
 export * as Textures from './Textures';

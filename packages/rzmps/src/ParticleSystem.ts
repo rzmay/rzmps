@@ -44,9 +44,9 @@ import { GPUAllocationBufferState, type GPUAllocationDiagnostics } from './gpu/A
 import { buildGPUSystemSchedule, type GPUSystemSchedule } from './gpu/SystemScheduler';
 import { GPUEmitterInstanceBufferState } from './gpu/EmitterInstanceBuffer';
 import { GPUEmissionRunBufferState } from './gpu/EmissionRunBuffer';
-import type { FlattenedOctree } from './helpers/octreeFlattener';
 import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
 import SpatialEffect from './SpatialEffect';
+import ParticleSpatialGrid, { type ParticleSpatialGridOptions } from './gpu/ParticleSpatialGrid';
 
 export interface ParticleSystemOptions {
   emitters: Multiple<Emitter>;
@@ -227,6 +227,9 @@ class ParticleSystem extends THREE.Object3D {
   gpuDebug: boolean;
   gpuDebugInterval: number;
   private _isGPUProcessingActive = false;
+  private readonly _particleSpatialGrids = new Map<string, ParticleSpatialGrid>();
+  private readonly _explicitParticleSpatialGrids = new Set<ParticleSpatialGrid>();
+  private _gpuSpatialBuildSequence = 0;
   private _processingMode?: 'cpu' | 'gpu';
   private _gpuProcessingInitialized = false;
   get isGPUProcessingActive(): boolean { return this._isGPUProcessingActive; }
@@ -317,6 +320,34 @@ class ParticleSystem extends THREE.Object3D {
 
   getGPURendererTagMask(tags: Tag[] | undefined): number | undefined {
     return this._getGPUTagMask(tags);
+  }
+
+  /** Acquires a compatible system-owned grid, or registers a caller-owned instance. */
+  acquireParticleSpatialGrid(
+    gridOrOptions: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions> = {},
+  ): ParticleSpatialGrid {
+    if (gridOrOptions instanceof ParticleSpatialGrid) {
+      this._explicitParticleSpatialGrids.add(gridOrOptions);
+      return gridOrOptions;
+    }
+
+    const bounds = gridOrOptions.bounds;
+    const key = JSON.stringify({
+      bounds: bounds ? [bounds.min.toArray(), bounds.max.toArray()] : undefined,
+      brickSubdivisions: gridOrOptions.brickSubdivisions ?? 3,
+      cellSubdivisions: gridOrOptions.cellSubdivisions ?? 4,
+      powerOfTwoBounds: gridOrOptions.powerOfTwoBounds ?? true,
+      autoExpand: gridOrOptions.autoExpand ?? true,
+      expansionHysteresis: gridOrOptions.expansionHysteresis ?? 0.125,
+      timeQuality: gridOrOptions.timeQuality ?? 1,
+      maxQuerySteps: gridOrOptions.maxQuerySteps ?? 0,
+    });
+    let grid = this._particleSpatialGrids.get(key);
+    if (!grid) {
+      grid = new ParticleSpatialGrid(gridOrOptions);
+      this._particleSpatialGrids.set(key, grid);
+    }
+    return grid;
   }
 
   get gpuAllocationStats(): GPUAllocationDiagnostics | undefined {
@@ -1754,8 +1785,13 @@ class ParticleSystem extends THREE.Object3D {
     if (!isWebGPURenderer(renderer)) return modifiers;
 
     let pending: Array<Module | SpatialEffect> = [];
+    this._gpuSpatialBuildSequence += 1;
+    const builtGrids = new Set<ParticleSpatialGrid>();
     for (const modifier of modifiers) {
-      if (!(modifier instanceof Collision)) {
+      const grid = modifier instanceof Module
+        ? modifier.getParticleSpatialGrid(this)
+        : undefined;
+      if (!(modifier instanceof Collision) && !grid) {
         pending.push(modifier);
         continue;
       }
@@ -1765,9 +1801,18 @@ class ParticleSystem extends THREE.Object3D {
         pending = [];
       }
 
-      modifier.getGPUOctrees().forEach((octree) => {
-        renderer.compute(this._getGPUCollisionNode(context, modifier, octree));
-      });
+      if (grid && !builtGrids.has(grid)) {
+        grid.rebuild(renderer, context.buffers, this._gpuSpatialBuildSequence);
+        builtGrids.add(grid);
+      }
+
+      if (modifier instanceof Collision) {
+        if (modifier.hasGPUCollisionBackend()) {
+          renderer.compute(this._getGPUCollisionNode(context, modifier));
+        }
+      } else {
+        pending.push(modifier);
+      }
     }
 
     return pending;
@@ -1799,7 +1844,6 @@ class ParticleSystem extends THREE.Object3D {
   private _getGPUCollisionNode(
     context: GPUParticleUpdateContext,
     collision: Collision,
-    octree: FlattenedOctree,
   ): ComputeNode {
     const buffers = context.buffers;
     const tagMask = this._getGPUTagMask(collision.tags);
@@ -1808,7 +1852,7 @@ class ParticleSystem extends THREE.Object3D {
       `buffer:${buffers.version}:${buffers.capacity}`,
       `events:${context.eventWriter?.version ?? 'none'}`,
       `module:${this._getObjectSignature(collision)}@${collision.version}`,
-      `octree:${this._getObjectSignature(octree)}`,
+      `backend:${collision.backend ? this._getObjectSignature(collision.backend) : 'none'}`,
       `tags:${tagMask ?? 'all'}`,
     ].join('|');
     const cached = this._gpuModifierComputeCaches.get(key);
@@ -1821,7 +1865,7 @@ class ParticleSystem extends THREE.Object3D {
         : particle.alive.notEqual(uint(0))
           .and(particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)));
       If(matches, () => {
-        collision.modifyGPUWithOctree(particle, context, octree);
+        collision.modifyGPUCollision(particle, context);
         buffers.storage.storeParticle(particle);
       });
     })().compute(buffers.count);
@@ -2276,7 +2320,12 @@ class ParticleSystem extends THREE.Object3D {
     if (modifier instanceof Module) {
       const tagMask = this._getGPUTagMask(modifier.tags);
       const modifyParticle = () => {
-        modifier.modifyGPU(particle, context.deltaTimeNode, context);
+        modifier.modifyGPU(
+          particle,
+          context.deltaTimeNode,
+          context,
+          modifier.getParticleSpatialGrid(this),
+        );
       };
 
       if (tagMask === undefined) {
@@ -3650,6 +3699,10 @@ class ParticleSystem extends THREE.Object3D {
     this.renderers.forEach((renderer) => {
       renderer.destroy();
     });
+    const gpuRenderer = isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined;
+    this._particleSpatialGrids.forEach((grid) => grid.dispose(gpuRenderer));
+    this._particleSpatialGrids.clear();
+    this._explicitParticleSpatialGrids.clear();
 
     this.removeFromParent();
     this.cleanup();

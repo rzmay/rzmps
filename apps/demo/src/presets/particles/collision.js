@@ -36,7 +36,6 @@ export default async function createCollision() {
         bounce: 0.75,
         dampen: 0.05,
         radiusScale: 1,
-        applyImpulses: true,
       }),
     ],
     renderers: [

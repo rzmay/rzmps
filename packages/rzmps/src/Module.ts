@@ -10,17 +10,28 @@ import Priority from './enums/Priority';
 import type { GPUParticleLike, GPUParticleUpdateContext } from './gpu/Particle';
 import type { Node } from 'three/webgpu';
 import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
+import ParticleSpatialGrid, { type ParticleSpatialGridOptions } from './gpu/ParticleSpatialGrid';
+import ParticleOctree, {
+  type OctreeAggregator,
+  type OctreeConfig,
+} from './helpers/ParticleOctree';
+
+export interface ModuleOctreeAggregate {
+  count: number;
+}
 
 export type ModuleUpdate = (
   particle: Particle,
   deltaTime: number,
   particleSystem?: ParticleSystem,
+  octree?: ParticleOctree<unknown>,
 ) => void;
 
 export type ModuleGPUUpdate = (
   particle: GPUParticleLike,
   deltaTime: Node<'float'>,
   context: GPUParticleUpdateContext,
+  spatialGrid?: ParticleSpatialGrid,
 ) => void;
 
 export type SpatialEffectConstructor<T extends SpatialEffect = SpatialEffect> = {
@@ -40,6 +51,11 @@ export interface ModuleOptions {
   spatialEffects: SpatialEffect[];
   spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
   requireSpatialEffects: SpatialEffectConstructor | SpatialEffectConstructor[];
+  useOctree: boolean;
+  octreeOptions: Partial<OctreeConfig>;
+  octreeAggregator: OctreeAggregator<unknown>;
+  useSpatialGrid: boolean;
+  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
 }
 
 export default class Module {
@@ -67,6 +83,13 @@ export default class Module {
   explicitSpatialEffects?: SpatialEffect[];
   spatialEffectFilter?: (spatialEffect: SpatialEffect) => boolean;
   requireSpatialEffects?: SpatialEffectConstructor[];
+  octree?: ParticleOctree<unknown>;
+  readonly useOctree: boolean;
+  readonly octreeOptions: Partial<OctreeConfig>;
+  readonly octreeAggregator: OctreeAggregator<unknown>;
+  readonly useSpatialGrid: boolean;
+  readonly spatialGridOptions?: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  protected particleSpatialGrid?: ParticleSpatialGrid;
 
   priority = Priority.Permanent;
   modifyGPU: ModuleGPUUpdate;
@@ -103,6 +126,11 @@ export default class Module {
     this.explicitSpatialEffects = options.spatialEffects;
     this.spatialEffectFilter = options.spatialEffectFilter;
     this.requireSpatialEffects = acceptMultiple(options.requireSpatialEffects);
+    this.useOctree = options.useOctree ?? options.octreeOptions !== undefined;
+    this.octreeOptions = options.octreeOptions ?? {};
+    this.octreeAggregator = options.octreeAggregator ?? createDefaultOctreeAggregator();
+    this.useSpatialGrid = options.useSpatialGrid ?? options.spatialGrid !== undefined;
+    this.spatialGridOptions = options.spatialGrid;
   }
 
   get supportsGPU(): boolean {
@@ -133,7 +161,7 @@ export default class Module {
       && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
       && this.condition(p)
     ))
-      .forEach((p) => this._modify(p, deltaTime, particleSystem));
+      .forEach((p) => this._modify(p, deltaTime, particleSystem, this.octree));
   }
 
   // Process into array including self and dependents
@@ -149,10 +177,44 @@ export default class Module {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public prepare(particleSystem: ParticleSystem, deltaTime: number) {
     this.prepareSpatialEffects(particleSystem);
+    if (!this.useOctree || particleSystem.isGPUProcessingActive) return;
+
+    let bounds = this.octreeOptions.bounds;
+    if (!bounds) {
+      if (particleSystem.boundingBox.isEmpty()) particleSystem.updateBoundingBox();
+      if (!particleSystem.boundingBox.isEmpty()) bounds = particleSystem.boundingBox;
+    }
+
+    if (!this.octree) {
+      this.octree = new ParticleOctree(
+        { ...this.octreeOptions, bounds: bounds?.clone() },
+        this.octreeAggregator,
+      );
+    } else if (!this.octreeOptions.bounds && bounds) {
+      this.octree.setBounds(bounds);
+    }
+    this.octree.rebuild(particleSystem.particles, this.tags);
+  }
+
+  /** Returns the managed CPU structure after prepare(), when enabled. */
+  public getParticleOctree(): ParticleOctree<unknown> | undefined {
+    return this.octree;
+  }
+
+  /** Dependency hook used by function-defined and class-based GPU neighbor modules. */
+  public getParticleSpatialGrid(particleSystem: ParticleSystem): ParticleSpatialGrid | undefined {
+    if (!this.useSpatialGrid) return undefined;
+    this.particleSpatialGrid ??= particleSystem.acquireParticleSpatialGrid(
+      this.spatialGridOptions ?? {},
+    );
+    return this.particleSpatialGrid;
   }
 
   // Optional clean up hook for modules that require it
-  public cleanup() { }
+  public cleanup() {
+    this.octree = undefined;
+    this.particleSpatialGrid = undefined;
+  }
 
   protected prepareSpatialEffects(particleSystem: ParticleSystem): void {
     if (Array.isArray(this.explicitSpatialEffects)) {
@@ -178,6 +240,13 @@ export default class Module {
       ) this.spatialEffects.push(object);
     });
   }
+}
+
+function createDefaultOctreeAggregator(): OctreeAggregator<ModuleOctreeAggregate> {
+  return {
+    new: (particle) => ({ count: particle ? 1 : 0 }),
+    combine: (a, b) => ({ count: a.count + b.count }),
+  };
 }
 
 function getGPUValueStructure(value: unknown): string {

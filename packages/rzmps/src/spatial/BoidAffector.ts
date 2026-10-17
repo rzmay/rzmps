@@ -8,6 +8,8 @@ import SpatialEffect, {
   type SpatialEffectModifier,
   type SpatialEffectOptions,
 } from '../SpatialEffect';
+import type { Node } from 'three/webgpu';
+import { If, texture3D, vec3 } from 'three/tsl';
 
 // No custom test allowed here
 export interface BoidAffectorOptions extends Omit<SpatialEffectOptions, 'test'> {
@@ -167,6 +169,16 @@ class BoidAffector extends SpatialEffect {
   private influenceSamplePoint = new THREE.Vector3();
   private influenceLocalPosition = new THREE.Vector3();
   private worldPosition = new THREE.Vector3();
+  private _gpuSurfaceTexture?: THREE.Data3DTexture;
+  private _gpuSurfaceGeometry?: THREE.BufferGeometry;
+  private _gpuSurfaceResolution = 0;
+  private readonly _gpuSurfaceMin = new THREE.Vector3();
+  private readonly _gpuSurfaceSize = new THREE.Vector3(1, 1, 1);
+  private readonly _gpuSample = new THREE.Vector3();
+  private readonly _gpuTriangleA = new THREE.Vector3();
+  private readonly _gpuTriangleB = new THREE.Vector3();
+  private readonly _gpuTriangleC = new THREE.Vector3();
+  private readonly _gpuTriangleNormal = new THREE.Vector3();
 
   get bvh(): MeshBVH | undefined {
     if (!this.geometry) return undefined;
@@ -183,6 +195,9 @@ class BoidAffector extends SpatialEffect {
     super(null, {
       ...options,
       feather: 0,
+      // Boids consumes this effect directly. The no-op keeps the effect GPU-compatible
+      // when ParticleSystem also encounters it in the scene spatial-effect list.
+      modifyGPU: () => {},
     });
 
     this.weight = options.weight ?? Weight.Target;
@@ -251,6 +266,154 @@ class BoidAffector extends SpatialEffect {
     return target;
   }
 
+  /** Returns the closest world-space surface point and approximate solid containment on GPU. */
+  samplePointGPU(worldPosition: Node<'vec3'>): {
+    point: Node<'vec3'>;
+    inside: Node<'bool'>;
+  } {
+    this.updateWorldMatrix(true, false);
+    const local = transformPointGPU(worldPosition, this.matrixWorld.clone().invert());
+    const bounds = this.geometry?.boundingBox;
+    if (!bounds) {
+      return { point: vec3(this.getWorldPosition(new THREE.Vector3())), inside: local.lengthSq().lessThanEqual(0) };
+    }
+
+    const center = bounds.getCenter(new THREE.Vector3());
+    const size = bounds.getSize(new THREE.Vector3());
+    let closestLocal: Node<'vec3'>;
+    let inside: Node<'bool'>;
+
+    if (this.geometry?.type === 'SphereGeometry' || this.geometry?.type === 'IcosahedronGeometry') {
+      const radius = Math.max(size.x, size.y, size.z) * 0.5;
+      const offset = vec3(local.sub(vec3(center)));
+      const distance = offset.length();
+      closestLocal = vec3(center).add(
+        distance.greaterThan(Number.EPSILON).select(
+          offset.div(distance).mul(radius),
+          vec3(radius, 0, 0),
+        ),
+      );
+      inside = distance.lessThanEqual(radius);
+    } else if (this.geometry?.type === 'BoxGeometry') {
+      const half = size.multiplyScalar(0.5);
+      const centered = vec3(local.sub(vec3(center)));
+      const q = vec3(centered.abs().sub(vec3(half)));
+      const boxPoint = vec3(local.clamp(vec3(bounds.min), vec3(bounds.max)))
+        .toVar('boidBoxSurfacePoint');
+      inside = q.x.max(q.y).max(q.z).lessThanEqual(0);
+      If(inside, () => {
+        If(q.x.greaterThanEqual(q.y).and(q.x.greaterThanEqual(q.z)), () => {
+          boxPoint.x.assign(centered.x.greaterThanEqual(0).select(bounds.max.x, bounds.min.x));
+        }).Else(() => {
+          If(q.y.greaterThanEqual(q.z), () => {
+            boxPoint.y.assign(centered.y.greaterThanEqual(0).select(bounds.max.y, bounds.min.y));
+          }).Else(() => {
+            boxPoint.z.assign(centered.z.greaterThanEqual(0).select(bounds.max.z, bounds.min.z));
+          });
+        });
+      });
+      closestLocal = boxPoint;
+    } else {
+      this.ensureGPUSurfaceField();
+      if (!this._gpuSurfaceTexture) {
+        closestLocal = vec3(center);
+        inside = local.lengthSq().lessThanEqual(0);
+      } else {
+        const uv = local.sub(vec3(this._gpuSurfaceMin))
+          .div(vec3(this._gpuSurfaceSize))
+          .clamp(0, 1);
+        const sample = texture3D(this._gpuSurfaceTexture, uv);
+        const outsideBounds = local.x.lessThan(bounds.min.x)
+          .or(local.y.lessThan(bounds.min.y))
+          .or(local.z.lessThan(bounds.min.z))
+          .or(local.x.greaterThan(bounds.max.x))
+          .or(local.y.greaterThan(bounds.max.y))
+          .or(local.z.greaterThan(bounds.max.z));
+        closestLocal = sample.xyz;
+        inside = outsideBounds.not().and(sample.w.greaterThan(0.5));
+      }
+    }
+
+    return {
+      point: transformPointGPU(closestLocal, this.matrixWorld),
+      inside,
+    };
+  }
+
+  private ensureGPUSurfaceField(): void {
+    const geometry = this.geometry;
+    const resolution = this.bakedFieldResolution;
+    if (
+      !geometry
+      || (
+        this._gpuSurfaceTexture
+        && this._gpuSurfaceGeometry === geometry
+        && this._gpuSurfaceResolution === resolution
+      )
+    ) return;
+
+    if (!geometry.boundingBox) geometry.computeBoundingBox();
+    const bounds = geometry.boundingBox;
+    const position = geometry.getAttribute('position');
+    if (!bounds || !position) return;
+
+    this._gpuSurfaceMin.copy(bounds.min);
+    bounds.getSize(this._gpuSurfaceSize)
+      .max(new THREE.Vector3(Number.EPSILON, Number.EPSILON, Number.EPSILON));
+    const data = new Float32Array(resolution ** 3 * 4);
+    const bvh = this.bvh;
+    if (!bvh) return;
+
+    let offset = 0;
+    for (let z = 0; z < resolution; z += 1) {
+      for (let y = 0; y < resolution; y += 1) {
+        for (let x = 0; x < resolution; x += 1) {
+          this._gpuSample.set(
+            bounds.min.x + this._gpuSurfaceSize.x * x / (resolution - 1),
+            bounds.min.y + this._gpuSurfaceSize.y * y / (resolution - 1),
+            bounds.min.z + this._gpuSurfaceSize.z * z / (resolution - 1),
+          );
+          const hit = bvh.closestPointToPoint(this._gpuSample);
+          const point = hit?.point ?? this._gpuSample;
+          let isInside = false;
+          if (hit && hit.faceIndex !== undefined) {
+            const triangleOffset = hit.faceIndex * 3;
+            const index = geometry.index;
+            const a = index?.getX(triangleOffset) ?? triangleOffset;
+            const b = index?.getX(triangleOffset + 1) ?? triangleOffset + 1;
+            const c = index?.getX(triangleOffset + 2) ?? triangleOffset + 2;
+            this._gpuTriangleA.fromBufferAttribute(position, a);
+            this._gpuTriangleB.fromBufferAttribute(position, b);
+            this._gpuTriangleC.fromBufferAttribute(position, c);
+            this._gpuTriangleNormal
+              .subVectors(this._gpuTriangleB, this._gpuTriangleA)
+              .cross(this._gpuTriangleC.clone().sub(this._gpuTriangleA));
+            isInside = this._gpuSample.clone().sub(point).dot(this._gpuTriangleNormal) < 0;
+          }
+          data[offset] = point.x;
+          data[offset + 1] = point.y;
+          data[offset + 2] = point.z;
+          data[offset + 3] = isInside ? 1 : 0;
+          offset += 4;
+        }
+      }
+    }
+
+    const texture = new THREE.Data3DTexture(data, resolution, resolution, resolution);
+    texture.format = THREE.RGBAFormat;
+    texture.type = THREE.FloatType;
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.wrapR = THREE.ClampToEdgeWrapping;
+    texture.needsUpdate = true;
+    this._gpuSurfaceTexture?.dispose();
+    this._gpuSurfaceTexture = texture;
+    this._gpuSurfaceGeometry = geometry;
+    this._gpuSurfaceResolution = resolution;
+  }
+
   private isWithinRange(position: THREE.Vector3): boolean {
     this.worldPosition.setFromMatrixPosition(this.matrixWorld);
 
@@ -278,6 +441,15 @@ class BoidAffector extends SpatialEffect {
 
     return geometryRadius + influenceRange;
   }
+}
+
+function transformPointGPU(point: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
+  const e = matrix.elements;
+  return vec3(
+    point.x.mul(e[0]).add(point.y.mul(e[4])).add(point.z.mul(e[8])).add(e[12]),
+    point.x.mul(e[1]).add(point.y.mul(e[5])).add(point.z.mul(e[9])).add(e[13]),
+    point.x.mul(e[2]).add(point.y.mul(e[6])).add(point.z.mul(e[10])).add(e[14]),
+  ) as Node<'vec3'>;
 }
 
 export default BoidAffector;

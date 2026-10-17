@@ -5,6 +5,7 @@ import {
   float,
   If,
   max,
+  sqrt,
   vec3,
 } from 'three/tsl';
 
@@ -14,13 +15,11 @@ import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import type { ICollisionBackend, CollisionHit } from '../interfaces/ICollisionBackend';
 import ThreeCollisionBackend from '../collision/ThreeCollisionBackend';
+import ThreeGPUCollisionBackend from '../collision/ThreeGPUCollisionBackend';
 import ParticleSystem from '../ParticleSystem';
 import { SimulationSpace } from '../enums/SimulationSpace';
-import { capsuleOctreeCollisionNode } from '../helpers/capsuleOctreeCollisionNode';
-import type { FlattenedOctree } from '../helpers/octreeFlattener';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 
-const ACTIVE_COLLISION_BACKEND_KEY = "__rzmps_activeCollisionBackend";
 export type CollisionListener = (particle: Particle, collision: CollisionHit) => void;
 
 export interface CollisionOptions extends Partial<ModuleOptions> {
@@ -32,7 +31,6 @@ export interface CollisionOptions extends Partial<ModuleOptions> {
   radiusScale: number;
   minKillSpeed: number;
   maxKillSpeed: number;
-  gpuCollision: boolean;
 
   onCollision?: CollisionListener;
 }
@@ -48,20 +46,18 @@ class Collision extends Module {
   radiusScale: number = 1;
   minKillSpeed: number = 0;
   maxKillSpeed: number = Number.POSITIVE_INFINITY;
-  gpuCollision = false;
-
   private collisionListeners: CollisionListener[] = [];
 
   private _system?: ParticleSystem;
+  private readonly explicitBackend: boolean;
+  private ownsBackend = false;
 
   constructor(options: Partial<CollisionOptions> = {}) {
     // Collisions run immediately before movement so they can predict this frame's travel segment.
     super((particle, deltaTime) => this.collide(particle, deltaTime), {
       ...options,
       priority: -0.01,
-      modifyGPU: (particle, _deltaTime, context) => {
-        this.getGPUOctrees().forEach((octree) => this.modifyGPUWithOctree(particle, context, octree));
-      },
+      modifyGPU: (particle, _deltaTime, context) => this.modifyGPUCollision(particle, context),
     });
 
     this.dampen = options.dampen ?? this.dampen;
@@ -72,16 +68,15 @@ class Collision extends Module {
     this.radiusScale = options.radiusScale ?? this.radiusScale;
     this.minKillSpeed = options.minKillSpeed ?? this.minKillSpeed;
     this.maxKillSpeed = options.maxKillSpeed ?? this.maxKillSpeed;
-    this.gpuCollision = options.gpuCollision ?? this.gpuCollision;
     this.backend = options.backend;
+    this.explicitBackend = options.backend !== undefined;
 
     if (options.onCollision) this.collisionListeners.push(options.onCollision);
   }
 
   override get supportsGPU(): boolean {
-    return this.gpuCollision
-      && !this.applyImpulses
-      && (this.backend === undefined || this.backend instanceof ThreeCollisionBackend);
+    return !this.applyImpulses
+      && (!this.explicitBackend || this.backend?.supportsGPU === true);
   }
 
   public onCollision(listener: CollisionListener) {
@@ -98,46 +93,30 @@ class Collision extends Module {
 
   public prepare(system: ParticleSystem, deltaTime: number) {
     this._system = system;
-
-    if (system.scene) {
-      // Check if backend exists or needs to be updated
-      const cachedBackend = system.scene.userData[ACTIVE_COLLISION_BACKEND_KEY];
-
-      if (cachedBackend && this.backend !== cachedBackend) {
-        this.backend = cachedBackend;
-      } else if (!this.backend) {
-        this.backend = new ThreeCollisionBackend({
-            world: system.scene,
-            gpuCollision: this.gpuCollision,
-          });
+    if (!this.explicitBackend && system.scene) {
+      const Backend = system.isGPUProcessingActive
+        ? ThreeGPUCollisionBackend
+        : ThreeCollisionBackend;
+      if (!(this.backend instanceof Backend)) {
+        if (this.ownsBackend) this.backend?.destroy?.();
+        this.backend = new Backend({ world: system.scene });
+        this.ownsBackend = true;
       }
-      system.scene.userData[ACTIVE_COLLISION_BACKEND_KEY] = this.backend;
-    }
-
-    if (this.backend instanceof ThreeCollisionBackend) {
-      this.backend.gpuCollision = this.gpuCollision;
     }
 
     this.backend?.setGPUProcessingActive?.(system.isGPUProcessingActive);
     this.backend?.update?.(deltaTime);
-
   }
 
-  public getGPUOctrees(): FlattenedOctree[] {
-    if (!this.gpuCollision) return [];
-    if (!(this.backend instanceof ThreeCollisionBackend)) return [];
-
-    return [
-      this.backend.flattenedStaticOctree,
-      this.backend.flattenedDynamicOctree,
-    ].filter((octree): octree is FlattenedOctree => octree !== undefined);
+  public hasGPUCollisionBackend(): boolean {
+    return this.backend instanceof ThreeGPUCollisionBackend && this.backend.hasGeometry;
   }
 
-  public modifyGPUWithOctree(
+  public modifyGPUCollision(
     particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
-    octree: FlattenedOctree,
   ): void {
+    if (!(this.backend instanceof ThreeGPUCollisionBackend)) return;
     const radius = max(
       abs(particle.scale.x),
       max(abs(particle.scale.y), abs(particle.scale.z)),
@@ -153,23 +132,34 @@ class Collision extends Module {
       particle.mass,
       float(1),
     ) as Node<'float'>;
-    const hit = capsuleOctreeCollisionNode(octree)({
-      start,
-      end,
-      velocity,
-      radius,
-      mass,
-    });
+    const hit = this.backend.queryCapsule(start, end, radius);
+    const found = hit.get('found') as Node<'bool'>;
+    const worldPoint = hit.get('point') as Node<'vec3'>;
+    const worldCapsulePoint = hit.get('capsulePoint') as Node<'vec3'>;
+    const worldNormal = hit.get('normal') as Node<'vec3'>;
+    const distance = sqrt(hit.get('distanceSq') as Node<'float'>);
+    const correctedWorldPosition = worldCapsulePoint.add(
+      worldNormal.mul(radius.sub(distance).max(0)),
+    );
+    const normalVelocity = float(velocity.dot(worldNormal));
+    const impulse = worldNormal.mul(normalVelocity.min(0).abs().mul(mass));
 
     this.applyGPUCollisionHit(
       particle,
       context,
-      (hit.get('hit') as Node<'int'>).equal(1),
-      this.gpuPointToSimulationSpace(hit.get('point') as Node<'vec3'>, context.system),
-      this.gpuPointToSimulationSpace(hit.get('position') as Node<'vec3'>, context.system),
-      this.gpuDirectionToSimulationSpace(hit.get('normal') as Node<'vec3'>, context.system),
-      this.gpuDirectionToSimulationSpace(hit.get('impulse') as Node<'vec3'>, context.system),
+      found,
+      this.gpuPointToSimulationSpace(worldPoint, context.system),
+      this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
+      this.gpuDirectionToSimulationSpace(worldNormal, context.system),
+      this.gpuDirectionToSimulationSpace(impulse, context.system),
     );
+  }
+
+  public override cleanup(): void {
+    if (this.ownsBackend) this.backend?.destroy?.();
+    this.backend = this.explicitBackend ? this.backend : undefined;
+    this.ownsBackend = false;
+    super.cleanup();
   }
 
   private applyGPUCollisionHit(
