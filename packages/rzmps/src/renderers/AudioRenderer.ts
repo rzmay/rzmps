@@ -10,6 +10,7 @@ import acceptMultiple from '../helpers/acceptMultiple';
 import { CollisionHit } from '../interfaces/ICollisionBackend';
 import type { CollisionListener } from '../modules/Collision';
 import type { ParticleListener } from '../ParticleSystem';
+import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
 
 const AUDIO_LISTENER_KEY = "__rzmps_audioListener";
 
@@ -213,6 +214,16 @@ export default class AudioRenderer extends Renderer {
     this._cleanParticleAudio(particles);
 
     particles.forEach((particle) => this._updateParticle(particle));
+  }
+
+  public updateGPU(
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+    system: ParticleSystem,
+    deltaTime = 0,
+  ): void {
+    const ratio = Math.max(this.ratio, 0.01);
+    const sampleLimit = Math.ceil(Math.max(this.maxClips, 1) / ratio) * 2;
+    this.updateGPUFromSelectiveReadback(buffers, system, deltaTime, sampleLimit);
   }
 
   private _updateCameraState(system: ParticleSystem): void {
@@ -615,6 +626,7 @@ export default class AudioRenderer extends Renderer {
   }
 
   public destroy(): void {
+    this.cancelGPUSelectiveReadback();
     this._removeEventCallbacks();
 
     this._particleAudio.forEach((_state, id) => {
@@ -635,6 +647,15 @@ export default class AudioRenderer extends Renderer {
   }
 
   public clear(): void {
-    this.destroy();
+    this.cancelGPUSelectiveReadback();
+    this._particleAudio.forEach((_state, id) => {
+      this._removeParticleAudio(id);
+    });
+    this._eventAudio.forEach((audio) => {
+      if (audio.isPlaying) audio.stop();
+      audio.removeFromParent();
+    });
+    this._eventAudio.clear();
+    this._relativePositions.clear();
   }
 }

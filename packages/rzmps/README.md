@@ -38,6 +38,7 @@ RZMPS is built from small composable pieces:
 - [Force Fields](#force-fields)
 - [Collision And Physics](#collision-and-physics)
 - [Custom Modules](#custom-modules)
+- [GPU Processing](#gpu-processing)
 - [Benchmarks](#benchmarks)
 - [Developer Guide](#developer-guide)
 
@@ -376,9 +377,10 @@ Subsystems inherit the parent system's simulation space.
 | Method                                  | Description                                                  |
 | --------------------------------------- | ------------------------------------------------------------ |
 | `update()`                              | Advances the particle system. Call once per animation frame. |
-| `start(children = true)`                | Starts or restarts emission.                                 |
+| `start(children = true)`                | Starts emission and resets emitter timing.                   |
 | `pause(children = true)`                | Pauses emission and simulation.                              |
 | `stop(clearParticles, children = true)` | Stops emission; optionally clears existing particles.        |
+| `reset(children = true)`                | Clears CPU/GPU state and timing, then starts a fresh run.     |
 | `destroy(children = true)`              | Stops, clears, destroys renderers, and removes the system.   |
 | `clearParticles(children = true)`       | Removes all live particles.                                  |
 | `addEmitter(emitter)`                   | Adds and sets up an emitter.                                 |
@@ -1967,6 +1969,131 @@ If you pass an explicit `spatialEffects` list to the module, only that list is
 used. Otherwise the module discovers matching effects from the particle system's
 scene. Add `spatialEffectFilter` when a module should consume only a subset of
 matching effects.
+
+## GPU Processing
+
+`gpuProcessing: true` selects the WebGPU path only when the active renderer and
+every required module support it. WebGL always uses the maintained CPU path.
+`isGPUProcessingActive` reports the path selected for the current frame.
+
+The GPU path keeps simulation, allocation, built-in emission, death
+reclamation, and compatible subsystem routing in GPU storage. JavaScript event
+listeners and CPU renderers receive asynchronous snapshots; they are not a
+synchronous view of the current compute submission.
+
+### Built-In Support
+
+| Area | GPU support |
+| --- | --- |
+| Modules | All built-in value, depth, size, speed, lifetime, force, transform-noise, limit-velocity, collision, and orientation modules have fused shader-local implementations. |
+| Boids | CPU only. `Boids` and `BoidAffector` require particle-neighbor indexing, which is not part of the current GPU architecture. |
+| `NoiseModule` | GPU-compatible when its custom callback supplies `modifyGPU`; the string-key CPU noise cache has no GPU equivalent. |
+| Collision | GPU-compatible with `ThreeCollisionBackend` flattened octrees. External physics backends and `applyImpulses` use the CPU path. |
+| Spatial effects | `KillZone` and static-parameter `ParticleForceField` instances use packed parameters and an ordered GPU-traversed effect BVH. Dynamic-value force fields retain the compatible per-instance shader path. |
+| Emission shapes | Box, sphere, cone, and torus support volume, surface, and vertex emission. Box/sphere volumes are analytic; other modes use a GPU sampling table. |
+| Renderers | Sprite and mesh consume GPU buffers directly. Trail, light, and attached audio use generation-validated selective readback. Audio spawn/death/collision sounds use GPU events. |
+| Subsystems | Continuous, spawn, death, and compatible collision triggers are GPU-native, including inheritance, impulse modifiers, multiple children, and nested systems. |
+
+Built-in GPU emission supports rates, distance rates, timed bursts, initial
+values (including emitter-local spawn-position offsets), animated shape
+transforms, tags, update LOD, count LOD, standalone systems, and subsystem
+contexts. Round-robin (`distribute`) tag assignment and arbitrary custom
+geometries require a custom `emitGPU` implementation or the CPU path. A
+function-valued subsystem `shouldEmit` also remains CPU-only; boolean predicates
+are GPU-native.
+
+Custom emission shapes use `EmitterOptions.emitGPU`. The callback contributes
+TSL statements to the emission kernel through `GPUEmitterUpdateContext`; it
+must claim slots with `allocationWriter`, initialize the shader-local particle
+from `output.storage`, and store it after initialization. The exported
+`GPUEmitterUpdate` and `GPUEmitterUpdateContext` types describe that contract.
+Use `emitter.getGPUEmissionSupport()` before enabling a custom configuration;
+unsupported built-in shape or option combinations are reported explicitly.
+
+### GPU Modules
+
+`modifyGPU` receives one shader-local particle context. Mutate its node fields;
+do not load or store the particle storage buffer yourself. Module priority,
+tags, dependents, and transient/render-time isolation are applied by the fused
+pipeline.
+
+```ts
+const lift = new Module(
+  (particle, dt) => { particle.velocity.y += dt; },
+  {
+    priority: Module.Priority.Permanent,
+    modifyGPU(particle, dt) {
+      particle.velocity.y.addAssign(dt);
+    },
+  },
+);
+```
+
+GPU dynamic values may be constants, ranges, sets, functions sampled into a
+lookup table, or TSL nodes. `ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION`
+controls function sampling resolution.
+
+### Runtime GPU Configuration
+
+Built-in emitters, modules, particle-system parameters, and renderers synchronize
+direct property changes automatically. Numeric values, mutable vectors/colors,
+and sampled dynamic values update their existing GPU parameters; changing a
+shader-defining structure rebuilds only the dependent TSL graph. Existing
+emission timing and fractional credits are preserved during parameter updates.
+
+Custom `Module` and `SpatialEffect` implementations must set
+`needsUpdate = true` after changing a property that changes generated shader
+structure. The assignment increments the component version immediately; it
+does not need to be reset to `false`. Ordinary values already represented by
+uniforms or parameter buffers do not require `needsUpdate`.
+
+`particleSystem.gpuConfigurationStats` exposes cumulative `pipelineBuilds`,
+`resourceBuilds`, and `parameterUploads` counters for profiling invalidation.
+
+### Batchable Spatial Effects
+
+A GPU-compatible spatial effect has `modifyGPU`. A GPU-batchable effect also
+provides a `gpuSpatialType` with a stable parameter schema, parameterized
+`testGPU` and `modifyGPU` functions, plus `writeGPUParameters`. Function
+identity, schema, and `compilationKey` determine whether instances share one
+implementation. Include resource-binding and compilation-relevant differences
+in `compilationKey`. Instance parameters, transforms, bounds, tags, and enabled
+state are uploaded without recompiling while reserved storage capacity is
+unchanged.
+
+The effect-instance BVH is distinct from `three-mesh-bvh`: the latter remains
+the CPU triangle-query implementation, while the GPU BVH indexes conservative
+effect AABBs. Its stackless, ordered traversal preserves priority and stable
+registration order, including interleaving with ordinary modules.
+
+### Events And Capacity
+
+GPU callback delivery is asynchronous and ordered by frame sequence. Death
+records are captured before slot reuse and identified by slot plus generation,
+so periodic full-state readback is not needed for callbacks.
+
+- The reusable event buffer is sized for up to three events per particle and
+  capped by `ParticleSystem.GPU_EVENT_BUFFER_CAPACITY`, default `4096` records.
+- Counter and payload snapshots are submitted together, so the same storage
+  buffer can be reused on the following frame without compiling another fused
+  kernel or dropping a delayed CPU callback batch.
+- `gpuEventStats.pending` reports CPU callback batches still in flight, while
+  `gpuEventStats.overflowCount` reports records that exceeded actual capacity.
+- Selective consumers use at most
+  `ParticleSystem.GPU_SELECTIVE_READBACK_POOL_SIZE` concurrent buffers,
+  default `8`; saturation is reported by
+  `gpuSelectiveReadbackStats.overflowCount`.
+- GPU particle storage starts at the smallest configured power-of-two capacity
+  that fits current particles, grows by powers of two through GPU-to-GPU copies,
+  and treats `maxParticles` as the upper bound. Failures and old-particle
+  replacement are reported by `gpuAllocationStats`.
+
+Sprite and mesh renderer tag/count filtering stays on the GPU. CPU selective
+consumers may observe results one or more frames later. GPU count LOD uses a
+stable slot/generation sample rather than truncating the CPU particle list.
+Direct GPU sprite/mesh renderers always observe current storage values, so CPU
+renderer `updateLOD` frame-freezing semantics do not apply to them; selective
+CPU renderers retain ordinary `updateLOD` behavior.
 
 ## Benchmarks
 

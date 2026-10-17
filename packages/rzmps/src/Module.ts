@@ -7,7 +7,9 @@ import tagsIntersect from './helpers/tagsIntersect';
 import LODHelper, { type LODSettings } from './LODHelper';
 import SpatialEffect from './SpatialEffect';
 import Priority from './enums/Priority';
-import type { GPUParticle, GPUParticleUpdateContext } from './GPUParticle';
+import type { GPUParticleLike, GPUParticleUpdateContext } from './gpu/Particle';
+import type { Node } from 'three/webgpu';
+import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
 
 export type ModuleUpdate = (
   particle: Particle,
@@ -16,8 +18,8 @@ export type ModuleUpdate = (
 ) => void;
 
 export type ModuleGPUUpdate = (
-  particle: GPUParticle,
-  deltaTime: number,
+  particle: GPUParticleLike,
+  deltaTime: Node<'float'>,
   context: GPUParticleUpdateContext,
 ) => void;
 
@@ -69,6 +71,22 @@ export default class Module {
   priority = Priority.Permanent;
   modifyGPU: ModuleGPUUpdate;
   requiresFreshGPUReadback = false;
+  protected readonly gpuParameters = new GPUDynamicParameterStore();
+  private _gpuParameterVersion = 0;
+  private _version = 0;
+  private _gpuStructureSignature = '';
+
+  get version(): number {
+    return this._version;
+  }
+
+  get gpuParameterUploadCount(): number {
+    return this.gpuParameters.uploadCount;
+  }
+
+  set needsUpdate(value: boolean) {
+    if (value) this._version += 1;
+  }
 
   constructor(
     public _modify: ModuleUpdate,
@@ -89,6 +107,21 @@ export default class Module {
 
   get supportsGPU(): boolean {
     return this.modifyGPU !== Module.GPU_UNSUPPORTED;
+  }
+
+  public syncGPUConfiguration(): void {
+    this.gpuParameters.sync();
+    if (this.gpuParameters.version !== this._gpuParameterVersion) {
+      this._gpuParameterVersion = this.gpuParameters.version;
+      this._version += 1;
+    }
+
+    const options = (this as Module & { options?: unknown }).options;
+    const structureSignature = getGPUValueStructure(options);
+    if (this._gpuStructureSignature && structureSignature !== this._gpuStructureSignature) {
+      this._version += 1;
+    }
+    this._gpuStructureSignature = structureSignature;
   }
 
   public modify(particles: Particle[], deltaTime: number, particleSystem?: ParticleSystem): void {
@@ -145,4 +178,20 @@ export default class Module {
       ) this.spatialEffects.push(object);
     });
   }
+}
+
+function getGPUValueStructure(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  if (value === null) return 'null';
+  if (typeof value === 'boolean' || typeof value === 'string') return `${typeof value}:${value}`;
+  if (typeof value === 'number' || typeof value === 'function') return typeof value;
+  if (Array.isArray(value)) return `array:${value.map(getGPUValueStructure).join(',')}`;
+  if (value instanceof Set) return `set:${Array.from(value).map(getGPUValueStructure).join(',')}`;
+  if (typeof value !== 'object') return typeof value;
+
+  const record = value as Record<string, unknown>;
+  if ('isNode' in record) return 'node';
+  const constructorName = value.constructor?.name ?? 'Object';
+  if (constructorName !== 'Object') return constructorName;
+  return `object:${Object.keys(record).sort().map((key) => `${key}=${getGPUValueStructure(record[key])}`).join(',')}`;
 }

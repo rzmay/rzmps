@@ -73,7 +73,9 @@ export class ParticleSystemGUI {
             container: options.container,
         });
         this.injectStyles();
-        this.gui.onChange(() => this.emitCode());
+        this.gui.onChange(() => {
+            this.emitCode();
+        });
         this.addResourceLinks();
         if (this.onRendererChange) {
             this.gui
@@ -429,6 +431,7 @@ export class ParticleSystemGUI {
         };
         const actions = {
             start: () => system.start(controlOptions.children),
+            reset: () => system.reset(controlOptions.children),
             pause: () => system.pause(controlOptions.children),
             stop: () => system.stop(false, controlOptions.children),
             stopAndClear: () => system.stop(true, controlOptions.children),
@@ -436,7 +439,8 @@ export class ParticleSystemGUI {
             respawn: () => void this.respawnSystem(),
         };
         folder.add(controlOptions, 'children').name('Propagate Children');
-        folder.add(actions, 'start').name('Start / Restart');
+        folder.add(actions, 'start').name('Start');
+        folder.add(actions, 'reset').name('Reset');
         folder.add(actions, 'pause').name('Pause');
         folder.add(actions, 'stop').name('Stop');
         folder.add(actions, 'stopAndClear').name('Stop + Clear');

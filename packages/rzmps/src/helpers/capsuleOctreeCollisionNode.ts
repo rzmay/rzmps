@@ -1,4 +1,4 @@
-import { Fn, int, vec3, float, Loop, struct } from 'three/tsl';
+import { Break, Continue, Fn, If, int, vec3, float, Loop, struct } from 'three/tsl';
 import type { Node } from 'three/webgpu';
 import { FlattenedOctree } from './octreeFlattener';
 
@@ -30,7 +30,8 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
     const mass = query.mass;
 
     // Local Traversal Allocations
-    const stack = int(-1).toArray(24);
+    const stackValue = int(-1).toArray(24);
+    const stack = stackValue.toVar('collisionTraversalStack') as unknown as typeof stackValue;
     const stackPtr = int(0).toVar();
     stack.element(stackPtr).assign(int(0)); // Start at root node index 0
 
@@ -45,7 +46,9 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
     // Tracking the minimum distance to locate the absolute closest collision instance
     const minDistance = float(radius).toVar();
     Loop(() => {
-      if (stackPtr.lessThan(int(0))) return;
+      If(stackPtr.lessThan(int(0)), () => {
+        Break();
+      });
 
       const currentNodeIdx = int(stack.element(stackPtr)).toVar();
       stackPtr.subAssign(int(1));
@@ -67,16 +70,16 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
         segmentCenter.z.clamp(center.z.sub(expandedExtent), center.z.add(expandedExtent))
       );
 
-      if (float(segmentCenter.distance(clampedPos)).greaterThan(segmentReach)) {
-        return; // Early prune path branch
-      }
+      If(float(segmentCenter.distance(clampedPos)).greaterThan(segmentReach), () => {
+        Continue();
+      });
 
       // Read Vec4 1: Geometry Leaf Meta
       const metaData = nodes.element(baseOffset.add(int(1)));
       const triStart = int(metaData.x);
       const triCount = int(metaData.y);
 
-      if (triStart.greaterThanEqual(int(0))) {
+      If(triStart.greaterThanEqual(int(0)), () => {
         Loop({ start: int(0), end: triCount }, ({ i }) => {
           const triIdx = int(triStart.add(i).mul(int(3)));
 
@@ -94,7 +97,11 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
 
           const num = float(vA.sub(capsuleStart).dot(triNormal));
           const denom = float(segVector.dot(triNormal));
-          const tPlane = float(num.div(denom).clamp(0.0, 1.0));
+          const tPlane = float(
+            denom.abs().lessThan(1e-6)
+              .select(float(0), num.div(denom))
+              .clamp(0.0, 1.0),
+          );
           const planeProjPoint = vec3(capsuleStart.add(segVector.mul(tPlane)));
 
           // Barycentric Triangle Surface Projections
@@ -113,19 +120,23 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
           const v = float(dot00.mul(dot12).sub(dot01.mul(dot02)).mul(invDenom));
 
           const closestTriPoint = vec3(vA).toVar(); // Fallback allocation
-          if (u.greaterThanEqual(0.0).and(v.greaterThanEqual(0.0)).and(u.add(v).lessThanEqual(1.0))) {
+          If(u.greaterThanEqual(0.0).and(v.greaterThanEqual(0.0)).and(u.add(v).lessThanEqual(1.0)), () => {
             closestTriPoint.assign(planeProjPoint);
-          }
+          });
 
           // Compute matching capsule line segment node parameters
-          const tSeg = float(closestTriPoint.sub(capsuleStart).dot(segVector).div(segLengthSq).clamp(0.0, 1.0));
+          const tSeg = float(
+            closestTriPoint.sub(capsuleStart).dot(segVector)
+              .div(segLengthSq.max(1e-8))
+              .clamp(0.0, 1.0),
+          );
           const closestCapsulePoint = vec3(capsuleStart.add(segVector.mul(tSeg)));
 
           const separationVector = vec3(closestCapsulePoint.sub(closestTriPoint));
           const distance = float(separationVector.length());
 
           // Track the closest point of intersection across leaf geometry
-          if (distance.lessThan(minDistance)) {
+          If(distance.lessThan(minDistance), () => {
             minDistance.assign(distance);
             hit.get('hit').assign(int(1));
 
@@ -141,19 +152,19 @@ export function capsuleOctreeCollisionNode({ nodes, triangles }: FlattenedOctree
             const normalVelocity = float(velocity.dot(finalNormal));
             const normalImpactSpeed = float(normalVelocity.min(0.0).abs()); // Apply only on structural approach vectors
             hit.get('impulse').assign(finalNormal.mul(normalImpactSpeed.mul(mass)));
-          }
+          });
         });
-      }
+      });
 
       // Read Vec4 2 & 3: Evaluate Child Nodes
       const children1 = nodes.element(baseOffset.add(int(2)));
       const children2 = nodes.element(baseOffset.add(int(3)));
 
       const pushChild = (nextChildIdx: Node<'int'>) => {
-        if (nextChildIdx.greaterThanEqual(int(0)).and(stackPtr.lessThan(int(23)))) {
+        If(nextChildIdx.greaterThanEqual(int(0)).and(stackPtr.lessThan(int(23))), () => {
           stackPtr.addAssign(int(1));
           stack.element(stackPtr).assign(nextChildIdx);
-        }
+        });
       }
 
       pushChild(int(children1.x));

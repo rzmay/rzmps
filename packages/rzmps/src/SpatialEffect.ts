@@ -4,9 +4,13 @@ import type { Node } from 'three/webgpu';
 import {
   abs,
   float,
+  length,
   max,
+  min,
   texture3D,
+  vec2,
   vec3,
+  vec4,
 } from 'three/tsl';
 import Particle from './Particle';
 import type ParticleSystem from './ParticleSystem';
@@ -17,8 +21,20 @@ import tagsIntersect from './helpers/tagsIntersect';
 import type { StrictMultiple } from './types/Multiple';
 import type { Tag } from './types/Tag';
 import Priority from './enums/Priority';
-import type { GPUParticle, GPUParticleUpdateContext } from './GPUParticle';
+import type { GPUParticleLike, GPUParticleUpdateContext } from './gpu/Particle';
 import { SimulationSpace } from './enums/SimulationSpace';
+import type {
+  GPUSpatialEffectType,
+  GPUSpatialParameterAccessor,
+  GPUSpatialParameterField,
+} from './gpu/SpatialEffectRegistry';
+
+enum SpatialInfluenceShape {
+  Box = 1,
+  Sphere,
+  Cone,
+  Torus,
+}
 
 export type SpatialEffectUpdate = (
   particle: Particle,
@@ -36,20 +52,20 @@ export type SpatialEffectFeatherUpdate = (
 export type SpatialEffectModifier = SpatialEffectUpdate | SpatialEffectFeatherUpdate;
 
 export type SpatialEffectGPUUpdate = (
-  particle: GPUParticle,
-  deltaTime: number,
+  particle: GPUParticleLike,
+  deltaTime: Node<'float'>,
   context: GPUParticleUpdateContext,
   strength: Node<'float'>,
 ) => void;
 
 export type SpatialEffectGPUCondition = (
-  particle: GPUParticle,
+  particle: GPUParticleLike,
   context: GPUParticleUpdateContext,
   effect: SpatialEffect,
 ) => Node<'bool'>;
 
 export type SpatialEffectGPUTest = (
-  particle: GPUParticle,
+  particle: GPUParticleLike,
   context: GPUParticleUpdateContext,
   effect: SpatialEffect,
 ) => Node<'float'>;
@@ -89,6 +105,67 @@ class SpatialEffect extends THREE.Object3D {
   private static readonly _doubleSidedMaterial = new THREE.MeshBasicMaterial(
     { side: THREE.DoubleSide },
   );
+
+  static readonly GPU_INFLUENCE_FIELDS: GPUSpatialParameterField[] = [
+    { name: 'inverseRow0', type: 'vec4' },
+    { name: 'inverseRow1', type: 'vec4' },
+    { name: 'inverseRow2', type: 'vec4' },
+    { name: 'shape', type: 'float' },
+    { name: 'shapeSize', type: 'vec3' },
+    { name: 'feather', type: 'float' },
+    { name: 'inverted', type: 'float' },
+  ];
+
+  static readonly GPU_INFLUENCE_ALIGNED_SIZE = 24;
+
+  static testGPUInfluence(
+    particle: GPUParticleLike,
+    params: GPUSpatialParameterAccessor,
+  ): Node<'float'> {
+    const position = vec4(particle.position, 1);
+    const local = vec3(
+      params.vec4('inverseRow0').dot(position),
+      params.vec4('inverseRow1').dot(position),
+      params.vec4('inverseRow2').dot(position),
+    );
+    const shape = params.float('shape');
+    const size = params.vec3('shapeSize');
+
+    const boxDelta = abs(local).sub(size.mul(0.5));
+    const boxOutside = length(max(boxDelta, vec3(0)));
+    const boxInside = min(max(boxDelta.x, max(boxDelta.y, boxDelta.z)), float(0));
+    const boxDistance = boxOutside.add(boxInside);
+    const sphereDistance = local.length().sub(size.x);
+    const coneHalfHeight = size.y.mul(0.5).max(float(Number.EPSILON));
+    const coneRadius = size.x.mul(float(0.5).sub(local.y.div(size.y.max(float(Number.EPSILON)))));
+    const coneDistance = max(
+      local.y.abs().sub(coneHalfHeight),
+      length(local.xz).sub(coneRadius),
+    );
+    const torusDistance = length(vec2(length(local.xz).sub(size.x), local.y)).sub(size.y);
+
+    const distance = shape.equal(float(SpatialInfluenceShape.Box)).select(
+      boxDistance,
+      shape.equal(float(SpatialInfluenceShape.Sphere)).select(
+        sphereDistance,
+        shape.equal(float(SpatialInfluenceShape.Cone)).select(coneDistance, torusDistance),
+      ),
+    ) as Node<'float'>;
+    const inside = distance.lessThanEqual(float(0));
+    const feather = params.float('feather');
+    const featheredStrength = inside.select(
+      float(1),
+      float(1).sub(distance.div(feather.max(float(Number.EPSILON)))).clamp(0, 1),
+    );
+    const strength = feather.greaterThan(float(0)).select(
+      featheredStrength,
+      inside.select(float(1), float(0)),
+    );
+    return params.float('inverted').greaterThan(float(0.5)).select(
+      inside.select(float(0), float(1)),
+      strength,
+    ) as Node<'float'>;
+  }
 
   static Box(
     modify: SpatialEffectModifier | null,
@@ -175,6 +252,8 @@ class SpatialEffect extends THREE.Object3D {
   priority = Priority.Transient;
   feather: number;
   modifyGPU: SpatialEffectGPUUpdate;
+  gpuSpatialType?: GPUSpatialEffectType;
+  writeGPUParameters?: (target: Float32Array, offset: number, system: ParticleSystem) => void;
   featherEasing: SpatialEffectFeatherEasing;
 
   private readonly _modify: SpatialEffectUpdate | null = null;
@@ -182,6 +261,7 @@ class SpatialEffect extends THREE.Object3D {
   private _testGPU?: SpatialEffectGPUTest;
   private readonly _test?: SpatialEffectTest;
   private readonly _hasCustomCondition: boolean;
+  private readonly _hasCustomFeatherEasing: boolean;
   private _geometry?: THREE.BufferGeometry;
   private _bvh?: MeshBVH;
   private _bvhGeometry?: THREE.BufferGeometry;
@@ -195,8 +275,17 @@ class SpatialEffect extends THREE.Object3D {
   private _bakedFieldGeometry?: THREE.BufferGeometry;
   private _bakedFieldFeather = -1;
   private _bakedFieldResolution = 0;
+  private _version = 0;
   private readonly _bakedFieldMin = new THREE.Vector3();
   private readonly _bakedFieldSize = new THREE.Vector3(1, 1, 1);
+
+  get version(): number {
+    return this._version;
+  }
+
+  set needsUpdate(value: boolean) {
+    if (value) this._version += 1;
+  }
 
   static GPU_UNSUPPORTED: SpatialEffectGPUUpdate = () => {
     throw new Error('This spatial effect does not support GPU processing.');
@@ -239,6 +328,7 @@ class SpatialEffect extends THREE.Object3D {
     this.inverted = resolvedOptions.inverted ?? false;
     this.tags = acceptMultiple(resolvedOptions.tags);
     this._hasCustomCondition = resolvedOptions.condition !== undefined;
+    this._hasCustomFeatherEasing = resolvedOptions.featherEasing !== undefined;
     this.condition = resolvedOptions.condition ?? (() => true);
     this.conditionGPU = resolvedOptions.conditionGPU ?? undefined;
     this.priority = resolvedOptions.priority ?? this.priority;
@@ -266,6 +356,81 @@ class SpatialEffect extends THREE.Object3D {
     return this.modifyGPU !== SpatialEffect.GPU_UNSUPPORTED
       && (!this._hasCustomCondition || this.conditionGPU !== undefined)
       && (this._testGPU !== undefined || this.geometry !== undefined);
+  }
+
+  get supportsParameterizedGPUInfluence(): boolean {
+    return this.supportsGPU && !this._hasCustomCondition && !this._hasCustomFeatherEasing;
+  }
+
+  protected canBatchGPUInfluence(): boolean {
+    if (this.inverted) return false;
+    switch (this.geometry?.type) {
+      case 'BoxGeometry':
+      case 'SphereGeometry':
+      case 'TorusGeometry':
+        return true;
+      case 'ConeGeometry':
+        return this.feather <= 0;
+      default:
+        return false;
+    }
+  }
+
+  protected writeGPUInfluenceParameters(
+    target: Float32Array,
+    offset: number,
+    system: ParticleSystem,
+  ): void {
+    this.updateWorldMatrix(true, false);
+    const simulationToWorld = new THREE.Matrix4();
+    if (system.simulationSpace === SimulationSpace.Local) {
+      system.updateWorldMatrix(true, false);
+      simulationToWorld.copy(system.matrixWorld);
+    }
+    const matrix = this.matrixWorld.clone().invert().multiply(simulationToWorld);
+    const elements = matrix.elements;
+    target.set([elements[0], elements[4], elements[8], elements[12]], offset);
+    target.set([elements[1], elements[5], elements[9], elements[13]], offset + 4);
+    target.set([elements[2], elements[6], elements[10], elements[14]], offset + 8);
+
+    const geometry = this.geometry!;
+    const parameters = (geometry as THREE.BufferGeometry & {
+      parameters?: Record<string, number>;
+    }).parameters ?? {};
+    let shape = 0;
+    let sizeX = 0;
+    let sizeY = 0;
+    let sizeZ = 0;
+    switch (geometry.type) {
+      case 'BoxGeometry':
+        shape = SpatialInfluenceShape.Box;
+        sizeX = parameters.width ?? 1;
+        sizeY = parameters.height ?? 1;
+        sizeZ = parameters.depth ?? 1;
+        break;
+      case 'SphereGeometry':
+        shape = SpatialInfluenceShape.Sphere;
+        sizeX = parameters.radius ?? 1;
+        break;
+      case 'ConeGeometry':
+        shape = SpatialInfluenceShape.Cone;
+        sizeX = parameters.radius ?? 1;
+        sizeY = parameters.height ?? 1;
+        break;
+      case 'TorusGeometry':
+        shape = SpatialInfluenceShape.Torus;
+        sizeX = parameters.radius ?? 1;
+        sizeY = parameters.tube ?? 0.4;
+        break;
+      default:
+        break;
+    }
+    target[offset + 12] = shape;
+    target[offset + 16] = sizeX;
+    target[offset + 17] = sizeY;
+    target[offset + 18] = sizeZ;
+    target[offset + 20] = this.feather;
+    target[offset + 21] = this.inverted ? 1 : 0;
   }
 
   // Spatial test, whether or not this is within the effect's jurisdiction
@@ -337,7 +502,7 @@ class SpatialEffect extends THREE.Object3D {
   }
 
   testGPU(
-    particle: GPUParticle,
+    particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
   ): Node<'float'> {
     const strength = this._testGPU
@@ -353,7 +518,7 @@ class SpatialEffect extends THREE.Object3D {
   }
 
   bakedFieldGPU(
-    particle: GPUParticle,
+    particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
   ): Node<'float'> {
     this.ensureBakedField();
@@ -385,7 +550,7 @@ class SpatialEffect extends THREE.Object3D {
   }
 
   private sphereTestGPU(
-    particle: GPUParticle,
+    particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
   ): Node<'float'> {
     const bounds = this.getLocalBounds();
@@ -411,7 +576,7 @@ class SpatialEffect extends THREE.Object3D {
   }
 
   private boxTestGPU(
-    particle: GPUParticle,
+    particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
   ): Node<'float'> {
     const bounds = this.getLocalBounds();
@@ -456,7 +621,7 @@ class SpatialEffect extends THREE.Object3D {
   }
 
   protected getGPUParticleWorldPosition(
-    particle: GPUParticle,
+    particle: GPUParticleLike,
     particleSystem: ParticleSystem,
   ): Node<'vec3'> {
     if (particleSystem.simulationSpace !== SimulationSpace.Local) {
@@ -468,7 +633,7 @@ class SpatialEffect extends THREE.Object3D {
   }
 
   protected getGPUParticleLocalPosition(
-    particle: GPUParticle,
+    particle: GPUParticleLike,
     particleSystem: ParticleSystem,
   ): Node<'vec3'> {
     this.updateWorldMatrix(true, false);

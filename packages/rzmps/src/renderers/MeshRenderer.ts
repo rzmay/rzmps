@@ -5,7 +5,7 @@ import { cos, positionLocal, sin, vec3 } from 'three/tsl';
 import Renderer, { type RendererOptions } from '../Renderer';
 import ParticleSystem from '../ParticleSystem';
 import Particle from '../Particle';
-import type { GPUParticleBufferState } from '../GPUParticle';
+import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
 
 /*
   * A mesh can be passed, including geometry and a material.
@@ -39,6 +39,9 @@ class MeshRenderer extends Renderer {
 
     private dummy: THREE.Object3D;
     private identityMatrixCapacity = 0;
+    private gpuMaterialBuffer?: GPUParticleBufferState | GPUParticleRenderBufferState;
+    private gpuMaterialBufferVersion = -1;
+    private gpuMaterialRendererVersion = -1;
 
     private materialEnvironmentState = new Map<THREE.Material, {
       envMap?: THREE.Texture | null;
@@ -105,16 +108,17 @@ class MeshRenderer extends Renderer {
     }
 
     updateGPU(
-      buffers: GPUParticleBufferState,
+      buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
       system: ParticleSystem,
     ): void {
+      this.prepareGPUVisibility(system);
       this.instances.count = buffers.count;
 
       this.instances.castShadow = this.castShadow;
       this.instances.receiveShadow = this.receiveShadow;
       this.updateMaterialEnvironment(system);
       this.syncIdentityInstanceMatrices(buffers.count);
-      this.applyGPUNodes(buffers);
+      this.applyGPUNodes(buffers, system);
     }
 
     destroy(): void {
@@ -124,6 +128,9 @@ class MeshRenderer extends Renderer {
 
     clear(): void {
       this.instances.count = 0;
+      this.gpuMaterialBuffer = undefined;
+      this.gpuMaterialBufferVersion = -1;
+      this.gpuMaterialRendererVersion = -1;
     }
 
     private preprocessMaterial(
@@ -161,10 +168,23 @@ gl_FragColor.a *= vInstanceAlpha;`
       material.needsUpdate = true;
     }
 
-    private applyGPUNodes(buffers: GPUParticleBufferState): void {
+    private applyGPUNodes(
+      buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+      system: ParticleSystem,
+    ): void {
+      if (
+        this.gpuMaterialBuffer === buffers
+        && this.gpuMaterialBufferVersion === buffers.version
+        && this.gpuMaterialRendererVersion === this.version
+      ) return;
+
       const particle = buffers.particle;
-      const alive = buffers.alive.notEqual(uint(0)).select(float(1), float(0));
-      const localPosition = rotateXYZ(positionLocal.mul(particle.scale).mul(alive), particle.rotation)
+      const visible = this.getGPUVisibilityNode(particle, system);
+      const scaleMultiplier = this.getGPUScaleMultiplierNode();
+      const localPosition = rotateXYZ(
+        positionLocal.mul(particle.scale).mul(visible).mul(scaleMultiplier),
+        particle.rotation,
+      )
         .add(particle.position);
       const materials = Array.isArray(this.instances.material)
         ? this.instances.material
@@ -173,15 +193,34 @@ gl_FragColor.a *= vInstanceAlpha;`
       materials.forEach((material) => {
         const nodeMaterial = material as THREE.Material & {
           colorNode?: Node;
+          maskShadowNode?: Node;
           opacityNode?: Node;
           positionNode?: Node;
         };
 
         nodeMaterial.positionNode = localPosition;
         nodeMaterial.colorNode = particle.color;
-        nodeMaterial.opacityNode = particle.alpha.mul(alive);
+        nodeMaterial.opacityNode = particle.alpha.mul(visible);
+        nodeMaterial.maskShadowNode = visible.greaterThan(0);
         material.needsUpdate = true;
       });
+
+      this.gpuMaterialBuffer = buffers;
+      this.gpuMaterialBufferVersion = buffers.version;
+      this.gpuMaterialRendererVersion = this.version;
+    }
+
+    protected getGPUConfigurationSignature(): string {
+      const materials = Array.isArray(this.mesh.material) ? this.mesh.material : [this.mesh.material];
+      return `${this.mesh.geometry.uuid}:${materials.map((material) => material.uuid).join(',')}`;
+    }
+
+    protected onGPUConfigurationChange(): void {
+      this.instances.geometry = this.mesh.geometry;
+      this.instances.material = this.mesh.material;
+      this.gpuMaterialBuffer = undefined;
+      this.gpuMaterialBufferVersion = -1;
+      this.gpuMaterialRendererVersion = -1;
     }
 
     private syncIdentityInstanceMatrices(count: number): void {

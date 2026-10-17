@@ -4,10 +4,8 @@ import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { ValueByParameter } from '../types/ValueByParameter';
 import type { Node } from 'three/webgpu';
-import { vec3 } from 'three/tsl';
+import { uniform } from 'three/tsl';
 import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
-import {
-  evaluateByParameterNumberGPU,} from '../helpers/evaluateByParameterGPU';
 
 export interface DistortionByDepthOptions extends Partial<ModuleOptions> {
   distortionStrength: ValueByParameter<number>;
@@ -16,6 +14,8 @@ export interface DistortionByDepthOptions extends Partial<ModuleOptions> {
 
 class DistortionByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
+  private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');
+  private readonly _gpuDepthRange = uniform(new THREE.Vector2(), 'vec2');
   depthRange?: [number, number];
 
   private _cameraDepthRange: [number, number] = [0, 100];
@@ -44,8 +44,9 @@ class DistortionByDepth extends Module {
       priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           particle.distortionStrength.assign(
-            particle.distortionStrength.mul(evaluateByParameterNumberGPU(
-              this.options.distortionStrength ?? 1,
+            particle.distortionStrength.mul(this.gpuParameters.parameterNumber(
+              'distortionStrength',
+              () => this.options.distortionStrength,
               this.getDepthTimeGPU(particle.position),
               1,
             )),
@@ -70,13 +71,15 @@ class DistortionByDepth extends Module {
         this._cameraDepthRange = [camera.near, camera.far];
       }
     }
+    this._gpuDepthRange.value.set(
+      this.depthRange?.[0] ?? this._cameraDepthRange[0],
+      this.depthRange?.[1] ?? this._cameraDepthRange[1],
+    );
   }
 
   private getDepthTimeGPU(position: Node<'vec3'>) {
-    const min = this.depthRange?.[0] ?? this._cameraDepthRange[0];
-    const max = this.depthRange?.[1] ?? this._cameraDepthRange[1];
-
-    return position.sub(vec3(this.cameraPosition)).length().sub(min).div(max - min || 1).clamp(0, 1);
+    return position.sub(this._gpuCameraPosition).length().sub(this._gpuDepthRange.x)
+      .div(this._gpuDepthRange.y.sub(this._gpuDepthRange.x).max(Number.EPSILON)).clamp(0, 1);
   }
 }
 

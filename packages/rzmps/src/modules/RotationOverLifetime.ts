@@ -3,8 +3,6 @@ import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
-import {
-  evaluateDynamicVectorGPU,} from '../helpers/evaluateDynamicGPU';
 
 export interface RotationOverLifetimeOptions extends Partial<ModuleOptions> {
     angle: DynamicValue<THREE.Vector3>;
@@ -33,24 +31,27 @@ class RotationOverLifetime extends Module {
       priority: Module.Priority.PreMovementTransient,
       modifyGPU: (particle) => {
           particle.rotation.assign(
-            particle.rotation.add(evaluateDynamicVectorGPU(
-              this.options.angle ?? new THREE.Vector3(0, 0, 0),
+            particle.rotation.add(this.gpuParameters.vector(
+              'angle',
+              () => this.options.angle,
               particle.time,
               new THREE.Vector3(0, 0, 0),
               particle.index,
             )),
           );
           particle.angularVelocity.assign(
-            particle.angularVelocity.add(evaluateDynamicVectorGPU(
-              this.options.angularVelocity ?? new THREE.Vector3(0, 0, 0),
+            particle.angularVelocity.add(this.gpuParameters.vector(
+              'angularVelocity',
+              () => this.options.angularVelocity,
               particle.time,
               new THREE.Vector3(0, 0, 0),
               particle.index,
             )),
           );
           particle.angularAcceleration.assign(
-            particle.angularAcceleration.add(evaluateDynamicVectorGPU(
-              this.options.angularAcceleration ?? new THREE.Vector3(0, 0, 0),
+            particle.angularAcceleration.add(this.gpuParameters.vector(
+              'angularAcceleration',
+              () => this.options.angularAcceleration,
               particle.time,
               new THREE.Vector3(0, 0, 0),
               particle.index,

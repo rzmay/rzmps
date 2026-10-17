@@ -3,8 +3,6 @@ import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
-import {
-  evaluateDynamicVectorGPU,} from '../helpers/evaluateDynamicGPU';
 
 export interface ForceOverLifetimeOptions extends Partial<ModuleOptions> {
   force: DynamicValue<THREE.Vector3>;
@@ -32,8 +30,9 @@ class ForceOverLifetime extends Module {
       priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           particle.acceleration.assign(
-            particle.acceleration.add(evaluateDynamicVectorGPU(
-              this.options.force ?? new THREE.Vector3(0, 0, 0),
+            particle.acceleration.add(this.gpuParameters.vector(
+              'force',
+              () => this.options.force,
               particle.time,
               new THREE.Vector3(0, 0, 0),
               particle.index,

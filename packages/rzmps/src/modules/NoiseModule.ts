@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import Module, { type ModuleGPUUpdate, type ModuleOptions, type ModuleUpdate } from '../Module';
 import Particle from '../Particle';
-import type { GPUParticle } from '../GPUParticle';
+import type { GPUParticleLike } from '../gpu/Particle';
 import {
   generateGPUParticleNoise,
   generateParticleNoise,
@@ -26,8 +26,8 @@ export type NoiseModuleUpdate = (
 ) => void;
 
 export type NoiseModuleGPUUpdate = (
-  particle: GPUParticle,
-  deltaTime: number,
+  particle: GPUParticleLike,
+  deltaTime: Node<'float'>,
   noise: GPUParticleNoiseValues,
 ) => void;
 
@@ -45,6 +45,7 @@ class NoiseModule extends Module {
     public offset = new THREE.Vector3();
 
     public key: string;
+    private _gpuNoiseSignature = '';
 
     constructor(
       key: string,
@@ -93,8 +94,24 @@ class NoiseModule extends Module {
       return generateParticleNoise(particle.position, this);
     }
 
-    public generateNoiseGPU(particle: GPUParticle, time?: Node<'float'>): GPUParticleNoiseValues {
+    public generateNoiseGPU(particle: GPUParticleLike, time?: Node<'float'>): GPUParticleNoiseValues {
       return generateGPUParticleNoise(particle.position, this, time);
+    }
+
+    public override syncGPUConfiguration(): void {
+      super.syncGPUConfiguration();
+      const signature = [
+        this.octaves,
+        this.frequency,
+        this.lacunarity,
+        this.persistence,
+        this.time,
+        this.offset.x,
+        this.offset.y,
+        this.offset.z,
+      ].join(':');
+      if (this._gpuNoiseSignature && signature !== this._gpuNoiseSignature) this.needsUpdate = true;
+      this._gpuNoiseSignature = signature;
     }
 }
 

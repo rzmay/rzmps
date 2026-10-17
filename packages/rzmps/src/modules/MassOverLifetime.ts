@@ -2,8 +2,6 @@ import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
-import {
-  evaluateDynamicNumberGPU,} from '../helpers/evaluateDynamicGPU';
 
 export interface MassOverLifetimeOptions extends Partial<ModuleOptions> {
     mass: DynamicValue<number>;
@@ -19,8 +17,9 @@ class MassOverLifetime extends Module {
     }, {
       ...options,
       modifyGPU: (particle) => {
-          const massFactor = evaluateDynamicNumberGPU(
-            this.options.mass ?? 1,
+          const massFactor = this.gpuParameters.number(
+            'mass',
+            () => this.options.mass,
             particle.time,
             1,
             particle.index,

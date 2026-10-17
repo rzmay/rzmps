@@ -124,6 +124,12 @@ const particle = new Particle({
   assert.equal(listeners.death.length, 1);
   assert.equal(listeners.spawn.length, 1);
 
+  audio.clear();
+
+  assert.equal(listeners.collision.length, 1);
+  assert.equal(listeners.death.length, 1);
+  assert.equal(listeners.spawn.length, 1);
+
   audio.destroy();
 
   assert.equal(listeners.collision.length, 0);

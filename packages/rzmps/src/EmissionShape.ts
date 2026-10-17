@@ -3,6 +3,7 @@ import { BufferAttribute } from 'three';
 import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.js';
 import { EmissionSource } from './enums/EmissionSource';
 import isPointInMesh from './helpers/isPointInMesh';
+import { getGPUEmissionShapeSupport, type GPUEmissionSupportReport } from './gpu/Emission';
 
 export interface EmissionShapeOptions {
     geometry: THREE.BufferGeometry;
@@ -103,6 +104,10 @@ class EmissionShape extends THREE.Object3D {
     }
 
     get geometry() { return this._geometry; }
+
+    getGPUEmissionSupport(): GPUEmissionSupportReport {
+      return getGPUEmissionShapeSupport(this);
+    }
 
     get vertices() {
       const vertices: BufferAttribute = this._geometry.getAttribute('position') as BufferAttribute;

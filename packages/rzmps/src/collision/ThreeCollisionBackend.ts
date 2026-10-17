@@ -12,6 +12,7 @@ import { TRAIL_RENDERER_USER_DATA_KEY } from '../renderers/TrailRenderer';
 import { SPRITE_RENDERER_USER_DATA_KEY } from '../renderers/SpriteRenderer';
 import {
   flattenThreeOctree,
+  updateFlattenedOctree,
   type FlattenedOctree,
 } from '../helpers/octreeFlattener';
 
@@ -97,7 +98,7 @@ class ThreeCollisionBackend implements ICollisionBackend {
     this.respectMaterialSide = options.respectMaterialSide ?? true;
     this.maxLevel = options.maxLevel ?? null;
     this.trianglesPerLeaf = options.trianglesPerLeaf ?? null;
-    this.gpuCollision = options.gpuCollision ?? true;
+    this.gpuCollision = options.gpuCollision ?? false;
 
     this.timeQuality = THREE.MathUtils.clamp(
       options.timeQuality ?? 1,
@@ -489,7 +490,10 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
     this.staticOctree = this.buildOctree(objects);
     this.flattenedStaticOctree = this.shouldFlattenOctree(this.staticOctree)
-      ? flattenThreeOctree(this.staticOctree as Parameters<typeof flattenThreeOctree>[0])
+      ? updateFlattenedOctree(
+        this.flattenedStaticOctree,
+        flattenThreeOctree(this.staticOctree as Parameters<typeof flattenThreeOctree>[0]),
+      )
       : undefined;
   }
 
@@ -502,7 +506,10 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
     this.dynamicOctree = this.buildOctree(objects);
     this.flattenedDynamicOctree = this.shouldFlattenOctree(this.dynamicOctree)
-      ? flattenThreeOctree(this.dynamicOctree as Parameters<typeof flattenThreeOctree>[0])
+      ? updateFlattenedOctree(
+        this.flattenedDynamicOctree,
+        flattenThreeOctree(this.dynamicOctree as Parameters<typeof flattenThreeOctree>[0]),
+      )
       : undefined;
   }
 

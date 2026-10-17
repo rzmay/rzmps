@@ -10,6 +10,7 @@ import { TrailMode } from '../enums/TrailMode';
 import { TrailTextureMode } from '../enums/TrailTextureMode';
 import defaultTex from '../assets/textures/default.png';
 import { WebGPURenderer } from 'three/webgpu';
+import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
 
 export const TRAIL_RENDERER_USER_DATA_KEY = "__rzmps_trailRenderer";
 
@@ -192,6 +193,14 @@ class TrailRenderer extends Renderer {
     };
   }
 
+  updateGPU(
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+    system: ParticleSystem,
+    deltaTime = 0,
+  ): void {
+    this.updateGPUFromSelectiveReadback(buffers, system, deltaTime);
+  }
+
   _update(particles: Particle[], system: ParticleSystem, deltaTime: number): void {
     this.particles = particles;
     this.elapsedTime += Math.max(0, deltaTime);
@@ -212,6 +221,7 @@ class TrailRenderer extends Renderer {
   }
 
   destroy(): void {
+    this.cancelGPUSelectiveReadback();
     this.restoreMaterialEnvironment();
     this.geometry.dispose();
 
@@ -221,6 +231,7 @@ class TrailRenderer extends Renderer {
   }
 
   clear(): void {
+    this.cancelGPUSelectiveReadback();
     this.trails.clear();
     this.particles.length = 0;
   }

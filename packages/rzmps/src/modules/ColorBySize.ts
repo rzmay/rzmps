@@ -5,9 +5,6 @@ import type { ValueByParameter } from '../types/ValueByParameter';
 import type { Node } from 'three/webgpu';
 import evaluateByParameterColor from '../helpers/evaluateByParameterColor';
 import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
-import {
-  evaluateByParameterColorGPU,
-  evaluateByParameterNumberGPU,} from '../helpers/evaluateByParameterGPU';
 
 export type SizeRange = [number, number] | { min: number; max: number };
 
@@ -37,12 +34,16 @@ class ColorBySize extends Module {
 
           if (this.options.color !== undefined) {
             particle.color.assign(
-              particle.color.mul(evaluateByParameterColorGPU(this.options.color, t)),
+              particle.color.mul(this.gpuParameters.parameterColor(
+                'color', () => this.options.color, t,
+              )),
             );
           }
           if (this.options.alpha !== undefined) {
             particle.alpha.assign(
-              particle.alpha.mul(evaluateByParameterNumberGPU(this.options.alpha, t, 1)),
+              particle.alpha.mul(this.gpuParameters.parameterNumber(
+                'alpha', () => this.options.alpha, t, 1,
+              )),
             );
           }
         }
@@ -58,10 +59,13 @@ class ColorBySize extends Module {
   }
 
   private getSizeTimeGPU(size: Node<'float'>) {
-    const min = Array.isArray(this.options.sizeRange) ? this.options.sizeRange[0] : this.options.sizeRange?.min ?? 0;
-    const max = Array.isArray(this.options.sizeRange) ? this.options.sizeRange[1] : this.options.sizeRange?.max ?? 1;
-
-    return size.sub(min).div(max - min || 1).clamp(0, 1);
+    const min = this.gpuParameters.number('sizeRange.min', () => (
+      Array.isArray(this.options.sizeRange) ? this.options.sizeRange[0] : this.options.sizeRange?.min
+    ), size, 0);
+    const max = this.gpuParameters.number('sizeRange.max', () => (
+      Array.isArray(this.options.sizeRange) ? this.options.sizeRange[1] : this.options.sizeRange?.max
+    ), size, 1);
+    return size.sub(min).div(max.sub(min).max(Number.EPSILON)).clamp(0, 1);
   }
 }
 

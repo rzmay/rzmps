@@ -81,8 +81,6 @@ export default async function createDopplerBullet() {
       new MeshRenderer({
         mesh: bulletMesh,
         maxParticles: 8,
-        castShadow: true,
-        receiveShadow: true,
       }),
       new TrailRenderer({
         mode: TrailMode.Particle,

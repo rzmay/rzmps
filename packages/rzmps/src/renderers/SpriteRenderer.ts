@@ -17,9 +17,20 @@ import { SpriteMaterialType } from '../enums/SpriteMaterialType';
 import { TRAIL_RENDERER_USER_DATA_KEY } from './TrailRenderer';
 import LiveCubemap from './LiveCubemap';
 import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
-import { cameraWorldMatrix, cos, float, positionLocal, sin, uint, vec3, vec4 } from 'three/tsl';
-import type { GPUParticleBufferState } from '../GPUParticle';
-import { evaluateDynamicNumberGPU } from '../helpers/evaluateDynamicGPU';
+import {
+  cameraPosition,
+  cameraWorldMatrix,
+  cos,
+  float,
+  modelWorldMatrix,
+  positionLocal,
+  sin,
+  uint,
+  uniform,
+  vec3,
+  vec4,
+} from 'three/tsl';
+import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
 
 export const SCENE_COLOR_DATA_USER_DATA_KEY = "__rzmps_sceneColorData";
 
@@ -102,8 +113,9 @@ class SpriteRenderer extends Renderer {
   private quadMaterial: THREE.ShaderMaterial;
   private webgpuMaterial: THREE.Material;
   private webgpuGPUMaterial?: THREE.Material;
-  private webgpuGPUMaterialBuffer?: GPUParticleBufferState;
+  private webgpuGPUMaterialBuffer?: GPUParticleBufferState | GPUParticleRenderBufferState;
   private webgpuGPUMaterialBufferVersion = -1;
+  private webgpuGPUMaterialRendererVersion = -1;
   private readonly hiddenMaterial = new THREE.MeshBasicMaterial({
     colorWrite: false,
     depthWrite: false,
@@ -141,6 +153,7 @@ class SpriteRenderer extends Renderer {
   private webglQuadSpriteDataAttribute: THREE.InstancedBufferAttribute;
   private readonly webgpuGeometry: THREE.PlaneGeometry;
   private readonly webgpuMesh: THREE.InstancedMesh;
+  private readonly gpuCameraZoom = uniform(1, 'float');
   private webgpuSpriteDataAttribute: THREE.InstancedBufferAttribute;
   private webgpuCapacity = 10000;
   private webgpuIdentityMatrixCapacity = 0;
@@ -363,9 +376,13 @@ class SpriteRenderer extends Renderer {
   }
 
   updateGPU(
-    buffers: GPUParticleBufferState,
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
   ): void {
+    this.prepareGPUVisibility(system);
+    this.gpuCameraZoom.value = system.sceneCamera instanceof THREE.PerspectiveCamera
+      ? system.sceneCamera.zoom
+      : 1;
     this.setActiveRenderer(system.sceneRenderer);
     this.webgpuMesh.count = Math.min(buffers.count, this.webgpuCapacity);
     this.webgpuMesh.castShadow = this.castShadow;
@@ -461,6 +478,12 @@ class SpriteRenderer extends Renderer {
     this.webglQuadMesh.count = 0;
     this.webgpuMesh.count = 0;
     this.webgpuIdentityMatrixCapacity = 0;
+    this.webgpuMesh.material = this.webgpuMaterial;
+    this.webgpuGPUMaterial?.dispose();
+    this.webgpuGPUMaterial = undefined;
+    this.webgpuGPUMaterialBuffer = undefined;
+    this.webgpuGPUMaterialBufferVersion = -1;
+    this.webgpuGPUMaterialRendererVersion = -1;
   }
 
   private loadMaterial(
@@ -663,37 +686,73 @@ class SpriteRenderer extends Renderer {
   }
 
   private applyGPUWebGPUNodes(
-    buffers: GPUParticleBufferState,
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
   ): void {
     if (
       this.webgpuGPUMaterialBuffer !== buffers
       || this.webgpuGPUMaterialBufferVersion !== buffers.version
+      || this.webgpuGPUMaterialRendererVersion !== this.version
       || !this.webgpuGPUMaterial
     ) {
       this.webgpuGPUMaterial?.dispose();
       this.webgpuGPUMaterial = this.loadWebGPUMaterial(this._materialOptions, {
-        spriteDataNode: this.getGPUSpriteDataNode(buffers),
+        spriteDataNode: this.getGPUSpriteDataNode(buffers, system),
         colorNode: buffers.particle.color,
       });
       (this.webgpuGPUMaterial as THREE.Material & { positionNode?: Node }).positionNode =
         this.getGPUPositionNode(buffers, system);
       this.webgpuGPUMaterialBuffer = buffers;
       this.webgpuGPUMaterialBufferVersion = buffers.version;
+      this.webgpuGPUMaterialRendererVersion = this.version;
     }
 
     this.webgpuMesh.material = this.webgpuGPUMaterial;
   }
 
+  protected getGPUConfigurationSignature(): string {
+    return [
+      this.texture.uuid,
+      this.alphaMap?.uuid ?? '',
+      this.materialType,
+      this.frames,
+      this.gridSize.x,
+      this.gridSize.y,
+      this.billboard ? 1 : 0,
+      this.sizeAttenuation ? 1 : 0,
+      this.randomStartFrame ? 1 : 0,
+      this.softParticleDistance > 0 ? 1 : 0,
+      this._materialOptions?.transmissionMap?.uuid ?? '',
+      (this._materialOptions as { normalMap?: THREE.Texture } | undefined)?.normalMap?.uuid ?? '',
+      getGPUOptionSignature(this._materialOptions),
+    ].join(':');
+  }
+
+  protected onGPUConfigurationChange(): void {
+    this.webgpuGPUMaterial?.dispose();
+    this.webgpuGPUMaterial = undefined;
+    this.webgpuGPUMaterialBuffer = undefined;
+    this.webgpuGPUMaterialBufferVersion = -1;
+    this.webgpuGPUMaterialRendererVersion = -1;
+  }
+
   private getGPUPositionNode(
-    buffers: GPUParticleBufferState,
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
   ): Node<'vec3'> {
     const particle = buffers.particle;
-    const alive = buffers.alive.notEqual(uint(0)).select(float(1), float(0));
+    const visible = this.getGPUVisibilityNode(particle, system);
+    const scaleMultiplier = this.getGPUScaleMultiplierNode();
+    const attenuationScale = !this.sizeAttenuation
+      && system.sceneCamera instanceof THREE.PerspectiveCamera
+      ? modelWorldMatrix.mul(vec4(particle.position, 1)).xyz
+        .distance(cameraPosition)
+        .max(system.sceneCamera.near)
+        .div(this.gpuCameraZoom.max(0.000001))
+      : float(1);
     const localQuad = vec3(
-      positionLocal.x.mul(particle.scale.x).mul(alive),
-      positionLocal.y.mul(particle.scale.y).mul(alive),
+      positionLocal.x.mul(particle.scale.x).mul(visible).mul(scaleMultiplier).mul(attenuationScale),
+      positionLocal.y.mul(particle.scale.y).mul(visible).mul(scaleMultiplier).mul(attenuationScale),
       float(0),
     );
     const rolledQuad = rotateZ(localQuad, particle.rotation.x);
@@ -707,20 +766,23 @@ class SpriteRenderer extends Renderer {
     return orientedQuad.add(particle.position) as Node<'vec3'>;
   }
 
-  private getGPUSpriteDataNode(buffers: GPUParticleBufferState): Node<'vec4'> {
+  private getGPUSpriteDataNode(
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+    system: ParticleSystem,
+  ): Node<'vec4'> {
     const particle = buffers.particle;
-    const alive = buffers.alive.notEqual(uint(0)).select(float(1), float(0));
+    const visible = this.getGPUVisibilityNode(particle, system);
     const frame = particle.realtime
       .div(1000)
-      .mul(evaluateDynamicNumberGPU(this.fps, particle.time, 1, particle.index))
+      .mul(this.gpuParameters.number('fps', () => this.fps, particle.time, 1, particle.index))
       .floor()
       .mod(Math.max(this.frames, 1));
 
     return vec4(
       frame,
-      particle.alpha.mul(alive),
+      particle.alpha.mul(visible),
       this.billboard ? particle.rotation.x : float(0),
-      particle.distortionStrength.mul(alive),
+      particle.distortionStrength.mul(visible),
     ) as Node<'vec4'>;
   }
 
@@ -1269,6 +1331,31 @@ function getWorldToSystemRotationMatrix(system: ParticleSystem): THREE.Matrix4 {
   }
 
   return matrix;
+}
+
+function getGPUOptionSignature(value: unknown, depth = 0): string {
+  if (value === undefined || value === null) return String(value);
+  if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
+    return `${typeof value}:${value}`;
+  }
+  if (typeof value === 'function') return 'function';
+  if (value instanceof THREE.Texture) return `texture:${value.uuid}`;
+  if (value instanceof THREE.Color) return `color:${value.getHexString()}`;
+  if (value instanceof THREE.Vector2 || value instanceof THREE.Vector3 || value instanceof THREE.Vector4) {
+    return `${value.constructor.name}:${value.toArray().join(',')}`;
+  }
+  if (Array.isArray(value)) {
+    return `array:${value.map((entry) => getGPUOptionSignature(entry, depth + 1)).join(',')}`;
+  }
+  if (typeof value !== 'object' || depth >= 2) {
+    return (value as { constructor?: { name?: string } }).constructor?.name ?? typeof value;
+  }
+
+  const record = value as Record<string, unknown>;
+  return Object.keys(record)
+    .sort()
+    .map((key) => `${key}=${getGPUOptionSignature(record[key], depth + 1)}`)
+    .join(';');
 }
 
 export default SpriteRenderer;

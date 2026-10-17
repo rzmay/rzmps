@@ -39,6 +39,13 @@ export function flattenThreeOctree(rootOctree: OctreeNode): FlattenedOctree {
     if (node.triangles && node.triangles.length > 0) {
       flatNodes[offset + 4] = flatTriangles.length / 9;
       flatNodes[offset + 5] = node.triangles.length;
+      node.triangles.forEach((triangle) => {
+        flatTriangles.push(
+          triangle.a.x, triangle.a.y, triangle.a.z,
+          triangle.b.x, triangle.b.y, triangle.b.z,
+          triangle.c.x, triangle.c.y, triangle.c.z,
+        );
+      });
     } else {
       flatNodes[offset + 4] = -1;
       flatNodes[offset + 5] = 0;
@@ -82,4 +89,26 @@ export function flattenThreeOctree(rootOctree: OctreeNode): FlattenedOctree {
     nodes,
     triangles,
   };
+}
+
+export function updateFlattenedOctree(
+  current: FlattenedOctree | undefined,
+  next: FlattenedOctree,
+): FlattenedOctree {
+  if (!current) return next;
+
+  const currentNodes = current.nodes.value as StorageBufferAttribute;
+  const currentTriangles = current.triangles.value as StorageBufferAttribute;
+  const nextNodes = next.nodes.value as StorageBufferAttribute;
+  const nextTriangles = next.triangles.value as StorageBufferAttribute;
+  if (
+    currentNodes.array.length !== nextNodes.array.length
+    || currentTriangles.array.length !== nextTriangles.array.length
+  ) return next;
+
+  currentNodes.array.set(nextNodes.array);
+  currentTriangles.array.set(nextTriangles.array);
+  currentNodes.needsUpdate = true;
+  currentTriangles.needsUpdate = true;
+  return current;
 }

@@ -6,9 +6,6 @@ import type { Node } from 'three/webgpu';
 import { abs, float, max, sign, vec3 } from 'three/tsl';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
-import {
-  evaluateDynamicNumberGPU,
-  evaluateDynamicVectorGPU,} from '../helpers/evaluateDynamicGPU';
 
 export interface LimitVelocityOverLifetimeOptions extends Partial<ModuleOptions> {
     limit: DynamicValue<THREE.Vector3>;
@@ -19,6 +16,8 @@ export interface LimitVelocityOverLifetimeOptions extends Partial<ModuleOptions>
 }
 
 class LimitVelocityOverLifetime extends Module {
+  private _gpuLimitStructureSignature = '';
+
   constructor(public options: Partial<LimitVelocityOverLifetimeOptions> = {}) {
 
     super((particle: Particle, deltaTime: number) => {
@@ -47,8 +46,9 @@ class LimitVelocityOverLifetime extends Module {
     }, {
       ...options,
       modifyGPU: (particle, deltaTime) => {
-          const limit = evaluateDynamicVectorGPU(
-            this.options.limit ?? new THREE.Vector3(1, 1, 1),
+          const limit = this.gpuParameters.vector(
+            'limit',
+            () => this.options.limit,
             particle.time,
             new THREE.Vector3(1, 1, 1),
             particle.index,
@@ -62,7 +62,9 @@ class LimitVelocityOverLifetime extends Module {
           ));
 
           if (this.options.drag !== undefined) {
-            let drag = evaluateDynamicNumberGPU(this.options.drag, particle.time, 0, particle.index);
+            let drag = this.gpuParameters.number(
+              'drag', () => this.options.drag, particle.time, 0, particle.index,
+            );
             if (this.options.multiplyDragBySize) {
               drag = drag.mul(particle.scale.x.add(particle.scale.y).add(particle.scale.z).div(3));
             }
@@ -76,6 +78,19 @@ class LimitVelocityOverLifetime extends Module {
           }
         }
     });
+  }
+
+  public override syncGPUConfiguration(): void {
+    super.syncGPUConfiguration();
+    const signature = [
+      this.options.dampen ?? 1,
+      this.options.multiplyDragBySize ? 1 : 0,
+      this.options.multiplyDragByVelocity ? 1 : 0,
+    ].join(':');
+    if (this._gpuLimitStructureSignature && signature !== this._gpuLimitStructureSignature) {
+      this.needsUpdate = true;
+    }
+    this._gpuLimitStructureSignature = signature;
   }
 
   // eslint-disable-next-line class-methods-use-this

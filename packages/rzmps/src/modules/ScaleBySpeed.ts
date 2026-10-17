@@ -4,8 +4,6 @@ import Particle from '../Particle';
 import type { ValueByParameter } from '../types/ValueByParameter';
 import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 import type { Node } from 'three/webgpu';
-import {
-  evaluateByParameterVectorGPU,} from '../helpers/evaluateByParameterGPU';
 import { SpeedRange } from './ColorBySpeed';
 
 export interface ScaleBySpeedOptions extends Partial<ModuleOptions> {
@@ -46,21 +44,21 @@ class ScaleBySpeed extends Module {
           const time = this.getSpeedTimeGPU(particle.velocity.length());
 
           particle.scale.assign(
-            particle.scale.mul(evaluateByParameterVectorGPU(
-              this.options.scale ?? new THREE.Vector3(1, 1, 1),
+            particle.scale.mul(this.gpuParameters.parameterVector(
+              'scale', () => this.options.scale,
               time,
               new THREE.Vector3(1, 1, 1),
             )),
           );
           particle.scalarVelocity.assign(
-            particle.scalarVelocity.add(evaluateByParameterVectorGPU(
-              this.options.scalarVelocity ?? new THREE.Vector3(),
+            particle.scalarVelocity.add(this.gpuParameters.parameterVector(
+              'scalarVelocity', () => this.options.scalarVelocity,
               time,
             )),
           );
           particle.scalarAcceleration.assign(
-            particle.scalarAcceleration.add(evaluateByParameterVectorGPU(
-              this.options.scalarAcceleration ?? new THREE.Vector3(),
+            particle.scalarAcceleration.add(this.gpuParameters.parameterVector(
+              'scalarAcceleration', () => this.options.scalarAcceleration,
               time,
             )),
           );
@@ -77,10 +75,13 @@ class ScaleBySpeed extends Module {
   }
 
   private getSpeedTimeGPU(speed: Node<'float'>) {
-    const min = Array.isArray(this.options.speedRange) ? this.options.speedRange[0] : this.options.speedRange?.min ?? 0;
-    const max = Array.isArray(this.options.speedRange) ? this.options.speedRange[1] : this.options.speedRange?.max ?? 1;
-
-    return speed.sub(min).div(max - min || 1).clamp(0, 1);
+    const min = this.gpuParameters.number('speedRange.min', () => (
+      Array.isArray(this.options.speedRange) ? this.options.speedRange[0] : this.options.speedRange?.min
+    ), speed, 0);
+    const max = this.gpuParameters.number('speedRange.max', () => (
+      Array.isArray(this.options.speedRange) ? this.options.speedRange[1] : this.options.speedRange?.max
+    ), speed, 1);
+    return speed.sub(min).div(max.sub(min).max(Number.EPSILON)).clamp(0, 1);
   }
 }
 

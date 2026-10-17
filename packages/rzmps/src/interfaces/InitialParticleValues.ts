@@ -6,6 +6,7 @@ export interface InitialParticleValues {
     lifetime: DynamicValue<number>;
     speed: DynamicValue<number>;
 
+    /** Offset from the emission shape's sampled position, in emitter-local space. */
     position: DynamicValue<THREE.Vector3>;
     rotation: DynamicValue<THREE.Vector3>;
     scale: DynamicValue<THREE.Vector3>;
@@ -18,7 +19,7 @@ export interface InitialParticleValues {
     angularAcceleration: DynamicValue<THREE.Vector3>;
     scalarAcceleration: DynamicValue<THREE.Vector3>;
 
-    color: DynamicValue<THREE.Color>
+    color: DynamicValue<THREE.Color>;
     alpha: DynamicValue<number>;
     mass: DynamicValue<number>;
     distortionStrength: DynamicValue<number>;

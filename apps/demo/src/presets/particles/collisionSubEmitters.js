@@ -54,16 +54,6 @@ export default async function createCollisionSubEmitters() {
       }),
     ],
     renderers: [
-      new AudioRenderer({
-        onCollisionSound: ballHit,
-        collisionRatio: 1,
-        pitch: [0.8, 1.2],
-        volume: 0.18,
-        impulseAffectsVolume: 0.5,
-        impulseThreshhold: 0.5,
-        lowPass: 1800,
-        impulseAffectsLowPass: 1,
-      }),
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
         castShadow: true,
@@ -88,6 +78,7 @@ export default async function createCollisionSubEmitters() {
   });
 
   const sparks = new ParticleSystem({
+    maxParticles: 128,
     duration: 0.08,
     looping: false,
     gravityModifier: 1,

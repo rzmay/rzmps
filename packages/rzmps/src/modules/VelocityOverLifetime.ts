@@ -4,9 +4,6 @@ import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
-import {
-  evaluateDynamicNumberGPU,
-  evaluateDynamicVectorGPU,} from '../helpers/evaluateDynamicGPU';
 import { vec3 } from 'three/tsl';
 
 export interface VelocityOverLifetimeOptions extends Partial<ModuleOptions> {
@@ -63,8 +60,9 @@ class VelocityOverLifetime extends Module {
       modifyGPU: (particle) => {
           if (this.options.position !== undefined) {
             particle.position.assign(
-              particle.position.add(evaluateDynamicVectorGPU(
-                this.options.position,
+              particle.position.add(this.gpuParameters.vector(
+                'position',
+                () => this.options.position,
                 particle.time,
                 new THREE.Vector3(0, 0, 0),
                 particle.index,
@@ -74,8 +72,9 @@ class VelocityOverLifetime extends Module {
 
           if (this.options.linear !== undefined) {
             particle.velocity.assign(
-              particle.velocity.add(evaluateDynamicVectorGPU(
-                this.options.linear,
+              particle.velocity.add(this.gpuParameters.vector(
+                'linear',
+                () => this.options.linear,
                 particle.time,
                 new THREE.Vector3(0, 0, 0),
                 particle.index,
@@ -85,8 +84,9 @@ class VelocityOverLifetime extends Module {
 
           if (this.options.acceleration !== undefined) {
             particle.acceleration.assign(
-              particle.acceleration.add(evaluateDynamicVectorGPU(
-                this.options.acceleration,
+              particle.acceleration.add(this.gpuParameters.vector(
+                'acceleration',
+                () => this.options.acceleration,
                 particle.time,
                 new THREE.Vector3(0, 0, 0),
                 particle.index,
@@ -94,8 +94,9 @@ class VelocityOverLifetime extends Module {
             );
           }
 
-          const offset = evaluateDynamicVectorGPU(
-            this.options.orbitOffset ?? new THREE.Vector3(),
+          const offset = this.gpuParameters.vector(
+            'orbitOffset',
+            () => this.options.orbitOffset,
             particle.time,
             new THREE.Vector3(),
             particle.index,
@@ -106,8 +107,9 @@ class VelocityOverLifetime extends Module {
           const fromCenterDirection = fromCenter.div(fromCenterLength.max(Number.EPSILON));
 
           if (this.options.orbital !== undefined) {
-            const angularVelocity = evaluateDynamicVectorGPU(
-              this.options.orbital,
+            const angularVelocity = this.gpuParameters.vector(
+              'orbital',
+              () => this.options.orbital,
               particle.time,
               new THREE.Vector3(0, 0, 0),
               particle.index,
@@ -128,7 +130,9 @@ class VelocityOverLifetime extends Module {
               particle.velocity.add(
                 fromCenterLength.greaterThan(Number.EPSILON).select(
                   fromCenterDirection.mul(
-                    evaluateDynamicNumberGPU(this.options.radial, particle.time, 0, particle.index),
+                    this.gpuParameters.number(
+                      'radial', () => this.options.radial, particle.time, 0, particle.index,
+                    ),
                   ),
                   vec3(0, 0, 0),
                 )
@@ -139,7 +143,9 @@ class VelocityOverLifetime extends Module {
           if (this.options.speedModifier !== undefined) {
             particle.speed.assign(
               particle.speed.mul(
-                evaluateDynamicNumberGPU(this.options.speedModifier, particle.time, 1, particle.index)
+                this.gpuParameters.number(
+                  'speedModifier', () => this.options.speedModifier, particle.time, 1, particle.index,
+                )
               ),
             );
           }

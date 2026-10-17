@@ -12,14 +12,13 @@ import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
-import { evaluateDynamicNumberGPU } from '../helpers/evaluateDynamicGPU';
 import type { ICollisionBackend, CollisionHit } from '../interfaces/ICollisionBackend';
 import ThreeCollisionBackend from '../collision/ThreeCollisionBackend';
 import ParticleSystem from '../ParticleSystem';
 import { SimulationSpace } from '../enums/SimulationSpace';
 import { capsuleOctreeCollisionNode } from '../helpers/capsuleOctreeCollisionNode';
 import type { FlattenedOctree } from '../helpers/octreeFlattener';
-import type { GPUParticle, GPUParticleUpdateContext } from '../GPUParticle';
+import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 
 const ACTIVE_COLLISION_BACKEND_KEY = "__rzmps_activeCollisionBackend";
 export type CollisionListener = (particle: Particle, collision: CollisionHit) => void;
@@ -49,7 +48,7 @@ class Collision extends Module {
   radiusScale: number = 1;
   minKillSpeed: number = 0;
   maxKillSpeed: number = Number.POSITIVE_INFINITY;
-  gpuCollision = true;
+  gpuCollision = false;
 
   private collisionListeners: CollisionListener[] = [];
 
@@ -74,12 +73,15 @@ class Collision extends Module {
     this.minKillSpeed = options.minKillSpeed ?? this.minKillSpeed;
     this.maxKillSpeed = options.maxKillSpeed ?? this.maxKillSpeed;
     this.gpuCollision = options.gpuCollision ?? this.gpuCollision;
+    this.backend = options.backend;
 
     if (options.onCollision) this.collisionListeners.push(options.onCollision);
   }
 
   override get supportsGPU(): boolean {
-    return this.gpuCollision;
+    return this.gpuCollision
+      && !this.applyImpulses
+      && (this.backend === undefined || this.backend instanceof ThreeCollisionBackend);
   }
 
   public onCollision(listener: CollisionListener) {
@@ -90,6 +92,10 @@ class Collision extends Module {
     this.collisionListeners = this.collisionListeners.filter(l => l !== listener);
   }
 
+  public notifyGPUCollision(particle: Particle, collision: CollisionHit): void {
+    this.collisionListeners.forEach((listener) => listener(particle, collision));
+  }
+
   public prepare(system: ParticleSystem, deltaTime: number) {
     this._system = system;
 
@@ -97,16 +103,15 @@ class Collision extends Module {
       // Check if backend exists or needs to be updated
       const cachedBackend = system.scene.userData[ACTIVE_COLLISION_BACKEND_KEY];
 
-      if (!this.backend || this.backend != cachedBackend) {
-        this.backend = cachedBackend
-          ?? new ThreeCollisionBackend({
+      if (cachedBackend && this.backend !== cachedBackend) {
+        this.backend = cachedBackend;
+      } else if (!this.backend) {
+        this.backend = new ThreeCollisionBackend({
             world: system.scene,
             gpuCollision: this.gpuCollision,
           });
-
-        system.scene.userData[ACTIVE_COLLISION_BACKEND_KEY] =
-          this.backend;
       }
+      system.scene.userData[ACTIVE_COLLISION_BACKEND_KEY] = this.backend;
     }
 
     if (this.backend instanceof ThreeCollisionBackend) {
@@ -118,7 +123,7 @@ class Collision extends Module {
 
   }
 
-  private getGPUOctrees(): FlattenedOctree[] {
+  public getGPUOctrees(): FlattenedOctree[] {
     if (!this.gpuCollision) return [];
     if (!(this.backend instanceof ThreeCollisionBackend)) return [];
 
@@ -128,8 +133,8 @@ class Collision extends Module {
     ].filter((octree): octree is FlattenedOctree => octree !== undefined);
   }
 
-  private modifyGPUWithOctree(
-    particle: GPUParticle,
+  public modifyGPUWithOctree(
+    particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
     octree: FlattenedOctree,
   ): void {
@@ -137,7 +142,7 @@ class Collision extends Module {
       abs(particle.scale.x),
       max(abs(particle.scale.y), abs(particle.scale.z)),
     ).mul(float(0.5 * (this.radiusScale ?? 1)));
-    const step = float(context.deltaTime).mul(particle.speed);
+    const step = context.deltaTimeNode.mul(particle.speed);
     const localStart = particle.position;
     const localVelocity = particle.velocity;
     const localEnd = localStart.add(localVelocity.mul(step));
@@ -158,25 +163,36 @@ class Collision extends Module {
 
     this.applyGPUCollisionHit(
       particle,
+      context,
       (hit.get('hit') as Node<'int'>).equal(1),
+      this.gpuPointToSimulationSpace(hit.get('point') as Node<'vec3'>, context.system),
       this.gpuPointToSimulationSpace(hit.get('position') as Node<'vec3'>, context.system),
       this.gpuDirectionToSimulationSpace(hit.get('normal') as Node<'vec3'>, context.system),
+      this.gpuDirectionToSimulationSpace(hit.get('impulse') as Node<'vec3'>, context.system),
     );
   }
 
   private applyGPUCollisionHit(
-    particle: GPUParticle,
+    particle: GPUParticleLike,
+    context: GPUParticleUpdateContext,
     hit: Node<'bool'>,
+    hitPoint: Node<'vec3'>,
     hitPosition: Node<'vec3'>,
     sampledNormal: Node<'vec3'>,
+    impulse: Node<'vec3'>,
   ): void {
     If(hit, () => {
       const hitNormal = sampledNormal.normalize();
 
       particle.position.assign(hitPosition);
+      context.eventWriter?.emitCollision(particle, hitPoint, hitNormal, impulse);
 
-      const bounce = evaluateDynamicNumberGPU(this.bounce ?? 1, particle.time, 1, particle.index).clamp(0, 1);
-      const dampen = evaluateDynamicNumberGPU(this.dampen ?? 0, particle.time, 0, particle.index).clamp(0, 1);
+      const bounce = this.gpuParameters.number(
+        'bounce', () => this.bounce, particle.time, 1, particle.index,
+      ).clamp(0, 1);
+      const dampen = this.gpuParameters.number(
+        'dampen', () => this.dampen, particle.time, 0, particle.index,
+      ).clamp(0, 1);
       const normalSpeed = particle.velocity.dot(hitNormal);
       const normalVelocity = hitNormal.mul(normalSpeed);
       const tangentVelocity = particle.velocity.sub(normalVelocity);
@@ -188,8 +204,9 @@ class Collision extends Module {
         normalSpeed.lessThan(float(0)).select(resolvedVelocity, particle.velocity),
       );
 
-      const lifetimeLoss = evaluateDynamicNumberGPU(
-        this.lifetimeLoss ?? 0,
+      const lifetimeLoss = this.gpuParameters.number(
+        'lifetimeLoss',
+        () => this.lifetimeLoss,
         particle.time,
         0,
         particle.index,

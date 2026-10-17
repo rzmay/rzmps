@@ -6,9 +6,9 @@ import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
 import { generateGPUParticleNoise4D, generateParticleNoise4D } from '../helpers/noise';
 import NoiseModule, { NoiseOptions } from './NoiseModule';
-import type { GPUParticle } from '../GPUParticle';
+import type { GPUParticleLike } from '../gpu/Particle';
 import type { Node } from 'three/webgpu';
-import { float, vec3 } from 'three/tsl';
+import { vec3 } from 'three/tsl';
 
 export interface TransformByNoiseOptions extends Partial<ModuleOptions>, NoiseOptions {
     strength: DynamicValue<THREE.Vector3>;
@@ -38,11 +38,24 @@ class TransformByNoise extends NoiseModule {
         particle.velocity.addScaledVector(force, deltaTime);
       }, {
         ...options,
-        modifyGPU: (particle: GPUParticle, deltaTime: number) => {
-          const strength = this.getGPUStrength();
-          const scrollSpeed = typeof this.options.scrollSpeed === 'number'
-            ? this.options.scrollSpeed
-            : 0;
+        modifyGPU: (particle: GPUParticleLike, deltaTime) => {
+          let strength = this.gpuParameters.vector(
+            'strength',
+            () => this.options.strength,
+            particle.time,
+            new THREE.Vector3(),
+            particle.index,
+          );
+          if (this.options.damping) {
+            strength = strength.div(Math.max(this.options.frequency ?? 1, 1));
+          }
+          const scrollSpeed = this.gpuParameters.number(
+            'scrollSpeed',
+            () => this.options.scrollSpeed,
+            particle.time,
+            0,
+            particle.index,
+          );
           const time = particle.realtime.div(1000).mul(scrollSpeed);
           const noiseX = this.generateOffsetNoiseGPU(particle, time, new THREE.Vector3(0, 0, 0));
           const noiseY = this.generateOffsetNoiseGPU(particle, time, new THREE.Vector3(31.416, 0, 0));
@@ -54,7 +67,7 @@ class TransformByNoise extends NoiseModule {
             noiseZ.mul(2).sub(1).mul(strength.z),
           );
 
-          particle.velocity.assign(particle.velocity.add(force.mul(float(deltaTime))));
+          particle.velocity.assign(particle.velocity.add(force.mul(deltaTime)));
         },
       });
     }
@@ -75,7 +88,7 @@ class TransformByNoise extends NoiseModule {
     }
 
     private generateOffsetNoiseGPU(
-      particle: GPUParticle,
+      particle: GPUParticleLike,
       time: Node<'float'>,
       offset: THREE.Vector3,
     ) {
@@ -86,17 +99,6 @@ class TransformByNoise extends NoiseModule {
       return noise;
     }
 
-    private getGPUStrength(): THREE.Vector3 {
-      const strength = this.options.strength instanceof THREE.Vector3
-        ? this.options.strength.clone()
-        : new THREE.Vector3();
-
-      if (this.options.damping) {
-        strength.multiplyScalar(1 / Math.max(this.options.frequency ?? 1, 1));
-      }
-
-      return strength;
-    }
 }
 
 export default TransformByNoise;

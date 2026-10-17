@@ -79,13 +79,12 @@ const WebGPULitSprite = (
     metalness,
     roughness: roughness ?? 0.5,
     transparent: true,
-    vertexColors: true,
     side: THREE.DoubleSide,
     ...materialOptions,
+    vertexColors: colorNode === undefined,
   } as THREE.MeshStandardMaterialParameters);
 
   const spriteData = spriteDataNode ?? attribute('instanceSpriteData', 'vec4');
-  const particleColor = colorNode ?? attribute('instanceColor', 'vec3');
   const spriteUv = spritesheetUV(
     vec2(gridSize?.x ?? 1, gridSize?.y ?? 1),
     uv(),
@@ -156,7 +155,7 @@ const WebGPULitSprite = (
   const finalAlpha = opacity.clamp(0, 1).toVar();
 
   material.name = 'RZMPS WebGPU Lit Sprite';
-  material.colorNode = spriteColor.rgb.mul(particleColor);
+  material.colorNode = colorNode ? spriteColor.rgb.mul(colorNode) : spriteColor.rgb;
   material.opacityNode = finalAlpha;
   material.alphaTest = 0.001;
   material.envMap = envMap ?? null;

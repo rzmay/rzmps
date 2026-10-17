@@ -14,6 +14,7 @@ export default async function createParticleTrail() {
   const simpleSpriteTexture = new THREE.TextureLoader().load(Textures.Simple);
 
   const particleTrail = new ParticleSystem({
+    maxParticles: 64,
     duration: 2,
     looping: true,
     gravity: new THREE.Vector3(0, -1.5, 0),

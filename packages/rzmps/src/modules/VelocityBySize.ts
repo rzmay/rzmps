@@ -4,8 +4,6 @@ import Particle from '../Particle';
 import type { ValueByParameter } from '../types/ValueByParameter';
 import type { Node } from 'three/webgpu';
 import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
-import {
-  evaluateByParameterVectorGPU,} from '../helpers/evaluateByParameterGPU';
 import { SizeRange } from './ColorBySize';
 
 export interface VelocityBySizeOptions extends Partial<ModuleOptions> {
@@ -44,20 +42,20 @@ class VelocityBySize extends Module {
           const time = this.getSizeTimeGPU(particle.scale.length());
 
           particle.position.assign(
-            particle.position.add(evaluateByParameterVectorGPU(
-              this.options.position ?? new THREE.Vector3(0, 0, 0),
+            particle.position.add(this.gpuParameters.parameterVector(
+              'position', () => this.options.position,
               time,
             )),
           );
           particle.velocity.assign(
-            particle.velocity.add(evaluateByParameterVectorGPU(
-              this.options.velocity ?? new THREE.Vector3(0, 0, 0),
+            particle.velocity.add(this.gpuParameters.parameterVector(
+              'velocity', () => this.options.velocity,
               time,
             )),
           );
           particle.acceleration.assign(
-            particle.acceleration.add(evaluateByParameterVectorGPU(
-              this.options.acceleration ?? new THREE.Vector3(0, 0, 0),
+            particle.acceleration.add(this.gpuParameters.parameterVector(
+              'acceleration', () => this.options.acceleration,
               time,
             )),
           );
@@ -74,10 +72,13 @@ class VelocityBySize extends Module {
   }
 
   private getSizeTimeGPU(size: Node<'float'>) {
-    const min = Array.isArray(this.options.sizeRange) ? this.options.sizeRange[0] : this.options.sizeRange?.min ?? 0;
-    const max = Array.isArray(this.options.sizeRange) ? this.options.sizeRange[1] : this.options.sizeRange?.max ?? 1;
-
-    return size.sub(min).div(max - min || 1).clamp(0, 1);
+    const min = this.gpuParameters.number('sizeRange.min', () => (
+      Array.isArray(this.options.sizeRange) ? this.options.sizeRange[0] : this.options.sizeRange?.min
+    ), size, 0);
+    const max = this.gpuParameters.number('sizeRange.max', () => (
+      Array.isArray(this.options.sizeRange) ? this.options.sizeRange[1] : this.options.sizeRange?.max
+    ), size, 1);
+    return size.sub(min).div(max.sub(min).max(Number.EPSILON)).clamp(0, 1);
   }
 }
 

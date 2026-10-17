@@ -34,6 +34,7 @@ export default async function createSuzannes() {
   ]);
 
   const system = new ParticleSystem({
+    maxParticles: 256,
     duration: 10,
     looping: true,
     gravity: new THREE.Vector3(0, 0, 0),
