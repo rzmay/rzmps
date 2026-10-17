@@ -1,0 +1,8 @@
+{
+  "[markdown]": {
+    "editor.formatOnSave": false,
+    "editor.wordWrap": "on"
+  },
+  "markdown-preview-enhanced.breakOnSingleNewLine": false,
+  "prettier.proseWrap": "preserve"
+}
