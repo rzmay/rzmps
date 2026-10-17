@@ -17,6 +17,13 @@ const origin = docsUrl.replace(/\/$/, '');
 const outputs = new Map();
 const emit = (file, content) => outputs.set(file, content);
 function files(dir) { return fs.readdirSync(dir, {withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name,'en')).flatMap(e => e.isDirectory() ? files(path.join(dir,e.name)) : [path.join(dir,e.name)]); }
+function removeEmptySubdirectories(directory) {
+  for (const entry of fs.readdirSync(directory, {withFileTypes:true})) if (entry.isDirectory()) {
+    const child = path.join(directory, entry.name);
+    removeEmptySubdirectories(child);
+    if (!fs.readdirSync(child).length) fs.rmdirSync(child);
+  }
+}
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rzmps-docs-'));
 try {
   execFileSync(process.execPath, [path.join(root,'node_modules/typedoc/bin/typedoc'), '--options', path.join(root,'typedoc.json'), '--out', temp], { cwd:root, stdio:'inherit' });
@@ -81,7 +88,9 @@ for (const [file,content] of pages) {
   if(relative.startsWith('api/'))emit(`.agents/skills/rzmps/references/${relative}`,content);
   if(relative.startsWith('examples/')&&!relative.endsWith('/index.md'))emit(`.agents/skills/rzmps/references/${relative}`,banner+portable(content,file));
 }
-emit('apps/docs/public/llms-full.txt',banner+consolidate(normalized));
+// Keep generated code blocks stable when editors trim trailing whitespace on save.
+const fullDocumentation=(banner+consolidate(normalized)).replace(/^```[^\n]*\n[\s\S]*?^```[ \t]*$/gm,block=>block.replace(/[ \t]+$/gm,''));
+emit('apps/docs/public/llms-full.txt',fullDocumentation);
 const discoveryPages=['guides/first-particle-system.md','guides/index.md','guides/concepts.md','api/index.md','examples/index.md','guides/compatibility.md','guides/ai-coding-assistants.md','contributing.md'];
 emit('apps/docs/public/llms.txt',banner+'# 🧅 RZMPS\n\nModular Three.js particles. Documentation for the develop branch.\n\n'+discoveryPages.map(relative=>{
   const content=pages.get(path.join(docs,relative));
@@ -138,6 +147,8 @@ for(const [file,content]of outputs){
 }
 if(differences.length)throw new Error(`Generated documentation is out of date:\n${differences.join('\n')}\nRun npm run docs:generate.`);
 if (!check) {
+  // Renamed API sections must not leave empty folders in editors or prompt status caches.
+  for (const directory of generatedDirs) removeEmptySubdirectories(path.join(root, directory));
   // Write the registry first so newly discovered factories are available to the capture harness.
   await generatePreviews();
   validatePreviews(examples);
