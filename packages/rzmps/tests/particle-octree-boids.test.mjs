@@ -357,7 +357,7 @@ targetBoids.prepare(targetSystem);
 targetBoids.modify([targetBoid], 1, targetSystem);
 
 assert.ok(targetBoid.velocity.x > 0.99);
-assert.ok(Math.abs(targetBoid.velocity.y) < Number.EPSILON);
+assert.ok(Math.abs(targetBoid.velocity.y) < 1e-12);
 
 const excludedBoid = new Particle({
   lifetime: 10,

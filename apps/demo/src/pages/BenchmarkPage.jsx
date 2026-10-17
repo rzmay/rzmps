@@ -418,7 +418,6 @@ function BenchmarkScene({ onComplete, onProgress }) {
               cohesionWeight: 3,
               separationWeight: 0,
               steering: 12,
-              speed: 1,
               spatialGrid: {
                 bounds: new THREE.Box3(
                   new THREE.Vector3(-4, -4, -4),
@@ -437,7 +436,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
               particle.position.copy(direction).multiplyScalar(2);
               particle.orbitCenter.copy(particle.position);
               particle.velocity.copy(direction);
-              particle.speed = 1;
+              // Integration applies particle.speed separately; Boids should preserve
+              // velocity magnitude rather than multiplying by this value twice.
+              particle.speed = 4;
               particle.tags = ['flock'];
               particle.data.initialDirection = direction;
               particle.cache();
@@ -463,6 +464,14 @@ function BenchmarkScene({ onComplete, onProgress }) {
                   alive: particle.alive,
                 })))}; `
                 + `grid diagnostics ${JSON.stringify(system.__gridDiagnostics)}.`,
+              );
+            }
+            const accelerated = system.particles.filter((particle) => (
+              Math.abs(particle.velocity.length() - 1) > 0.05
+            ));
+            if (accelerated.length > 0) {
+              throw new Error(
+                `GPU Boids changed base velocity magnitude for ${accelerated.length}/${system.particles.length} particles.`,
               );
             }
           },
@@ -525,6 +534,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           create: () => {
             return {
               gpuProcessing: true,
+              renderer: new SpriteRenderer(),
               modules: [new Collision({
                 bounce: 1,
                 dampen: 0,

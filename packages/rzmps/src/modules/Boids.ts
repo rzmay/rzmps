@@ -365,8 +365,10 @@ class Boids extends Module {
 
     If(desired.lengthSq().greaterThan(float(Number.EPSILON)), () => {
       const currentSpeed = particle.velocity.length();
+      // particle.speed is applied again by integration, so preserve the velocity's
+      // own magnitude here instead of multiplying the simulation speed twice.
       const targetSpeed = this.speed === undefined
-        ? max(currentSpeed, particle.speed)
+        ? currentSpeed.greaterThan(float(Number.EPSILON)).select(currentSpeed, float(1))
         : this.gpuParameters.number(
           'speed', () => this.speed, particle.time, 1, particle.index,
         ).max(0);
@@ -611,7 +613,7 @@ class Boids extends Module {
     }
 
     const velocitySpeed = particle.velocity.length();
-    return velocitySpeed > 0 ? velocitySpeed : particle.speed;
+    return velocitySpeed > 0 ? velocitySpeed : 1;
   }
 
   private createAggregator(): OctreeAggregator<BoidAggregate> {

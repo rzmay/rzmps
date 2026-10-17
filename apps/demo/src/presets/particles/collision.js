@@ -41,7 +41,6 @@ export default async function createCollision() {
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
-        castShadow: true,
 
         materialOptions: {
           roughness: 0.5,

@@ -21,8 +21,8 @@ function collectSystemStats(system, visited = new Set()) {
 
   const stats = {
     particles: system.liveParticleCount ?? system.particles?.filter((particle) => particle.alive).length ?? 0,
-    allocated: system.gpuBufferStats?.allocated ?? 0,
-    activeSlots: system.gpuBufferStats?.activeSlots ?? 0,
+    allocated: system.isGPUProcessingActive ? (system.gpuBufferStats?.allocated ?? 0) : 0,
+    activeSlots: system.isGPUProcessingActive ? (system.gpuBufferStats?.activeSlots ?? 0) : 0,
   };
 
   system.subSystems?.forEach((_options, subSystem) => {

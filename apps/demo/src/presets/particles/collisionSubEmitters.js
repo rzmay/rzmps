@@ -55,7 +55,6 @@ export default async function createCollisionSubEmitters() {
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
-        castShadow: true,
         materialOptions: {
           roughness: 0.2,
           metalness: 0.6,
