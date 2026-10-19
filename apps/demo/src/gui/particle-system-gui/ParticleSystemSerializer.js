@@ -237,7 +237,8 @@ export class ParticleSystemSerializer {
         if (module instanceof GasSimulation) {
             return `new GasSimulation(${this.serializeValue({
                 bounds: module.autoBounds ? undefined : module.bounds,
-                resolution: module.resolution,
+                boundsPadding: module.boundsPadding,
+                spatialGrid: module.spatialGridConfiguration,
                 pressureIterations: module.pressureIterations,
                 externalForce: module.externalForce,
                 maxVelocity: module.maxVelocity,
@@ -249,7 +250,8 @@ export class ParticleSystemSerializer {
                 weight: module.weight,
                 sourceStrength: module.sourceStrength,
                 velocitySourceStrength: module.velocitySourceStrength,
-                octreeOptions: module.octreeOptions,
+                sourceTemperature: module.sourceTemperature,
+                maxSplatRadius: module.maxSplatRadius,
                 ...this.getLODOptions(module),
                 tags: module.tags,
             })})`;
@@ -257,11 +259,12 @@ export class ParticleSystemSerializer {
 
         if (module instanceof FLIPSimulation) {
             return `new FLIPSimulation(${this.serializeValue({
-                bounds: module.bounds,
-                resolution: module.resolution,
+                bounds: module.autoBounds ? undefined : module.bounds,
+                boundsPadding: module.boundsPadding,
+                spatialGrid: module.spatialGridConfiguration,
                 pressureIterations: module.pressureIterations,
                 externalForce: module.externalForce,
-                colorDissipation: module.colorDissipation,
+                maxVelocity: module.maxVelocity,
                 picRatio: module.picRatio,
                 advectParticles: module.advectParticlesEnabled,
                 ...this.getLODOptions(module),

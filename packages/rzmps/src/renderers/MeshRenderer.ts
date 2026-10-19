@@ -1,8 +1,11 @@
 import * as THREE from 'three';
-import { attribute } from 'three/tsl';
+import { attribute, float, uint } from 'three/tsl';
+import type { Node } from 'three/webgpu';
+import { cos, positionLocal, sin, vec3 } from 'three/tsl';
 import Renderer, { type RendererOptions } from '../Renderer';
 import ParticleSystem from '../ParticleSystem';
 import Particle from '../Particle';
+import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
 
 /*
   * A mesh can be passed, including geometry and a material.
@@ -35,6 +38,11 @@ class MeshRenderer extends Renderer {
     private _alphaAttr: THREE.InstancedBufferAttribute;
 
     private dummy: THREE.Object3D;
+    private identityMatrixCapacity = 0;
+    private instancesUseCPUTransforms = false;
+    private gpuMaterialBuffer?: GPUParticleBufferState | GPUParticleRenderBufferState;
+    private gpuMaterialBufferVersion = -1;
+    private gpuMaterialRendererVersion = -1;
 
     private materialEnvironmentState = new Map<THREE.Material, {
       envMap?: THREE.Texture | null;
@@ -76,6 +84,10 @@ class MeshRenderer extends Renderer {
     }
 
     _update(particles: Particle[], system: ParticleSystem): void {
+      // CPU rendering owns the instance transforms until GPU mode restores
+      // identity matrices and applies particle storage in the node material.
+      this.identityMatrixCapacity = 0;
+      this.instancesUseCPUTransforms = true;
       this.instances.count = particles.length;
 
       this.instances.castShadow = this.castShadow;
@@ -100,6 +112,25 @@ class MeshRenderer extends Renderer {
       this._alphaAttr.needsUpdate = true;
     }
 
+    updateGPU(
+      buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+      system: ParticleSystem,
+    ): void {
+      this.prepareGPUVisibility(system);
+      this.instances.count = buffers.count;
+
+      this.instances.castShadow = this.castShadow;
+      this.instances.receiveShadow = this.receiveShadow;
+      this.updateMaterialEnvironment(system);
+      if (this.gpuMaterialBuffer !== buffers) this.identityMatrixCapacity = 0;
+      this.syncIdentityInstanceMatrices(buffers.count);
+      if (this.instancesUseCPUTransforms) {
+        this.instances.instanceMatrix.needsUpdate = true;
+        this.instancesUseCPUTransforms = false;
+      }
+      this.applyGPUNodes(buffers, system);
+    }
+
     destroy(): void {
         this.restoreMaterialEnvironment();
         this.instances.removeFromParent();
@@ -107,6 +138,10 @@ class MeshRenderer extends Renderer {
 
     clear(): void {
       this.instances.count = 0;
+      this.identityMatrixCapacity = 0;
+      this.gpuMaterialBuffer = undefined;
+      this.gpuMaterialBufferVersion = -1;
+      this.gpuMaterialRendererVersion = -1;
     }
 
     private preprocessMaterial(
@@ -142,6 +177,79 @@ gl_FragColor.a *= vInstanceAlpha;`
       };
 
       material.needsUpdate = true;
+    }
+
+    private applyGPUNodes(
+      buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+      system: ParticleSystem,
+    ): void {
+      if (
+        this.gpuMaterialBuffer === buffers
+        && this.gpuMaterialBufferVersion === buffers.version
+        && this.gpuMaterialRendererVersion === this.version
+      ) return;
+
+      const particle = buffers.particle;
+      const visible = this.getGPUVisibilityNode(particle, system);
+      const scaleMultiplier = this.getGPUScaleMultiplierNode();
+      const localPosition = rotateXYZ(
+        positionLocal.mul(particle.scale).mul(visible).mul(scaleMultiplier),
+        particle.rotation,
+      )
+        .add(particle.position);
+      const materials = Array.isArray(this.instances.material)
+        ? this.instances.material
+        : [this.instances.material];
+
+      materials.forEach((material) => {
+        const nodeMaterial = material as THREE.Material & {
+          colorNode?: Node;
+          maskShadowNode?: Node;
+          opacityNode?: Node;
+          positionNode?: Node;
+        };
+
+        nodeMaterial.positionNode = localPosition;
+        nodeMaterial.colorNode = particle.color;
+        nodeMaterial.opacityNode = particle.alpha.mul(visible);
+        nodeMaterial.maskShadowNode = visible.greaterThan(0);
+        material.needsUpdate = true;
+      });
+
+      this.gpuMaterialBuffer = buffers;
+      this.gpuMaterialBufferVersion = buffers.version;
+      this.gpuMaterialRendererVersion = this.version;
+    }
+
+    protected getGPUConfigurationSignature(): string {
+      const materials = Array.isArray(this.mesh.material) ? this.mesh.material : [this.mesh.material];
+      return `${this.mesh.geometry.uuid}:${materials.map((material) => material.uuid).join(',')}`;
+    }
+
+    protected onGPUConfigurationChange(): void {
+      this.instances.geometry = this.mesh.geometry;
+      this.instances.material = this.mesh.material;
+      this.gpuMaterialBuffer = undefined;
+      this.gpuMaterialBufferVersion = -1;
+      this.gpuMaterialRendererVersion = -1;
+    }
+
+    private syncIdentityInstanceMatrices(count: number): void {
+      if (this.identityMatrixCapacity >= count) return;
+
+      this.dummy.position.set(0, 0, 0);
+      this.dummy.rotation.set(0, 0, 0);
+      this.dummy.scale.set(1, 1, 1);
+      this.dummy.updateMatrix();
+
+      for (let index = this.identityMatrixCapacity; index < count; index += 1) {
+        this.instances.setMatrixAt(index, this.dummy.matrix);
+        this._alphaAttr.setX(index, 1);
+      }
+
+      this.identityMatrixCapacity = count;
+      this.instances.instanceMatrix.needsUpdate = true;
+      this._alphaAttr.needsUpdate = true;
     }
 
     private updateMaterialEnvironment(system: ParticleSystem): void {
@@ -213,6 +321,32 @@ gl_FragColor.a *= vInstanceAlpha;`
         material.needsUpdate = true;
       }
     }
+}
+
+function rotateXYZ(position: Node<'vec3'>, rotation: Node<'vec3'>): Node<'vec3'> {
+  const cx = cos(rotation.x);
+  const sx = sin(rotation.x);
+  const cy = cos(rotation.y);
+  const sy = sin(rotation.y);
+  const cz = cos(rotation.z);
+  const sz = sin(rotation.z);
+
+  const xRotated = vec3(
+    position.x,
+    position.y.mul(cx).sub(position.z.mul(sx)),
+    position.y.mul(sx).add(position.z.mul(cx)),
+  );
+  const yRotated = vec3(
+    xRotated.x.mul(cy).add(xRotated.z.mul(sy)),
+    xRotated.y,
+    xRotated.z.mul(cy).sub(xRotated.x.mul(sy)),
+  );
+
+  return vec3(
+    yRotated.x.mul(cz).sub(yRotated.y.mul(sz)),
+    yRotated.x.mul(sz).add(yRotated.y.mul(cz)),
+    yRotated.z,
+  );
 }
 
 export default MeshRenderer;

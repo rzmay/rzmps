@@ -38,6 +38,7 @@ RZMPS is built from small composable pieces:
 - [Force Fields](#force-fields)
 - [Collision And Physics](#collision-and-physics)
 - [Custom Modules](#custom-modules)
+- [GPU Processing](#gpu-processing)
 - [Benchmarks](#benchmarks)
 - [Developer Guide](#developer-guide)
 
@@ -172,6 +173,11 @@ enum TagSelectionMethod {
 | `Random`     | Each particle receives one random tag.                   |
 | `Distribute` | Tags are assigned round-robin.                           |
 
+GPU processing encodes GPU-visible tag filters as a per-`ParticleSystem`
+32-bit mask. CPU processing and CPU-only effects still support any number of
+string tags, but GPU processing falls back to CPU when more than 32 distinct
+tags are referenced by GPU module filters and renderer filters.
+
 ## Particle Systems
 
 `ParticleSystem` extends `THREE.Object3D`, so it can be added, moved, rotated,
@@ -206,6 +212,7 @@ interface ParticleSystemOptions {
   simulationSpace: SimulationSpace;
   useLiveCubemap: boolean;
   cubemapSettings: Partial<LiveCubemapOptions>;
+  gpuProcessing: boolean;
 }
 ```
 
@@ -219,6 +226,13 @@ first renders. `prewarmFPS` controls the fixed warmup step rate and defaults to
 Set `simulationDistance` above `0` to pause simulation while the particle system
 is farther than that distance from the active camera. The default is `0`, which
 disables distance limiting.
+
+Set `gpuProcessing: true` to allow WebGPU particle updates when every
+non-effect module in the system can use GPU particle buffers. Renderers that
+support GPU input can consume those buffers directly; CPU-only renderers use
+the CPU particle mirror after GPU readback.
+`particleSystem.isGPUProcessingActive` reports whether the current update is
+actually using the GPU path after fallback checks.
 
 Set `inheritVelocity` above `0` to add the particle system's parent-transform
 velocity to newly emitted top-level particles. `1` applies the full transform
@@ -363,9 +377,10 @@ Subsystems inherit the parent system's simulation space.
 | Method                                  | Description                                                  |
 | --------------------------------------- | ------------------------------------------------------------ |
 | `update()`                              | Advances the particle system. Call once per animation frame. |
-| `start(children = true)`                | Starts or restarts emission.                                 |
+| `start(children = true)`                | Starts emission and resets emitter timing.                   |
 | `pause(children = true)`                | Pauses emission and simulation.                              |
 | `stop(clearParticles, children = true)` | Stops emission; optionally clears existing particles.        |
+| `reset(children = true)`                | Clears CPU/GPU state and timing, then starts a fresh run.     |
 | `destroy(children = true)`              | Stops, clears, destroys renderers, and removes the system.   |
 | `clearParticles(children = true)`       | Removes all live particles.                                  |
 | `addEmitter(emitter)`                   | Adds and sets up an emitter.                                 |
@@ -559,7 +574,11 @@ Common `initialValues` fields include:
 | `alpha`               | `number`        | Initial opacity.                                                   |
 | `mass`                | `number`        | Particle mass for collision impulses. Defaults to `0`.             |
 
-Most initial values can be dynamic.
+Most initial values can be dynamic. On the GPU path, TSL nodes can be supplied
+directly. JavaScript functions are sampled into a uniform lookup table and
+interpolated; adjust `ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION` to trade
+curve fidelity for uniform data size. TSL nodes are GPU-only and throw if a CPU
+evaluator receives them.
 
 ### Emission Shapes
 
@@ -612,11 +631,18 @@ interface ModuleOptions {
   priority: number | Module.Priority;
   tags: StrictMultiple<Tag>;
   condition: (particle: Particle) => boolean;
+  conditionGPU: ModuleGPUUpdate | null;
   useUpdateLOD: boolean;
   updateLOD: Partial<LODSettings>;
+  modifyGPU: ModuleGPUUpdate | null;
   spatialEffects: SpatialEffect[];
   spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
   requireSpatialEffects: typeof SpatialEffect | Array<typeof SpatialEffect>;
+  useOctree: boolean;
+  octreeOptions: Partial<OctreeConfig>;
+  octreeAggregator: OctreeAggregator<unknown>;
+  useSpatialGrid: boolean;
+  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
 }
 ```
 
@@ -628,14 +654,22 @@ work on lower-detail frames while preserving the module API.
 | `priority`  | Controls the module phase. Priorities below `0` are permanent pre-movement updates, priorities from `0` to below `1` are transient pre-movement updates, and priorities `1` or higher are transient render-time updates. Modules are sorted by priority inside each phase. |
 | `tags`      | Restricts the module to particles with matching tags.                                                                                                                                                                                                                      |
 | `condition` | Optional per-particle predicate called before modification. Return `false` to skip that particle.                                                                                                                                                                          |
+| `conditionGPU` | Optional GPU predicate hook for modules that support GPU processing. |
+| `modifyGPU` | Optional GPU implementation. Modules without `modifyGPU` keep the system on the CPU path. |
+| `useOctree` | Gives the CPU update callback a lifecycle-managed `ParticleOctree` using default options. |
+| `octreeOptions` | Configures and enables the managed CPU octree. It rebuilds at the configured `timeQuality` and inherits the module's tag filter. |
+| `octreeAggregator` | Defines CPU node aggregates. The default aggregate is `{ count }`. |
+| `useSpatialGrid` | Gives the GPU update callback a shared, lifecycle-managed `ParticleSpatialGrid` using default options. |
+| `spatialGrid` | Configures and enables a system-owned grid, or uses an explicit caller-owned grid instance. |
 
 Modules can also discover scene-level `SpatialEffect` objects. Pass
 `requireSpatialEffects` to select the spatial effect class a module consumes,
 `spatialEffects` for an explicit list, or `spatialEffectFilter` for additional
-filtering. Module update functions receive
-`(particle, deltaTime,
-particleSystem)`; existing two-argument functions
-continue to work.
+filtering. CPU module callbacks receive
+`(particle, deltaTime, particleSystem, octree)` and GPU callbacks receive
+`(particle, deltaTimeNode, context, spatialGrid)`. The spatial argument is
+`undefined` unless its lifecycle option is enabled. Existing callbacks with
+fewer arguments continue to work.
 
 Common priority values are exposed on `Module.Priority`:
 
@@ -679,6 +713,14 @@ interface SpatialEffectOptions {
   feather: number;
   featherEasing: (feather: number) => number;
   automaticFeather: boolean;
+  updatePolicy: SpatialEffectUpdatePolicy;
+}
+
+enum SpatialEffectUpdatePolicy {
+  Static = "static",
+  TransformDynamic = "transform-dynamic",
+  GeometryDynamic = "geometry-dynamic",
+  Auto = "auto",
 }
 ```
 
@@ -737,10 +779,16 @@ that many world units and returns a normalized boundary strength. A particle on
 the original surface receives strength `1`, and the strength fades to `0` at the
 outer feather edge. For automatic feathering, particles in this softened edge
 are blended between their pre-effect and post-effect values using
-`Particle.lerp(...)`.
+`Particle.lerp(...)`. GPU processing performs the equivalent operation in the
+compute graph: it snapshots the interpolable particle fields, runs `modifyGPU`
+at full strength, then mixes those fields by the eased feather strength. A
+custom `modifyGPU` should not multiply its changes by `strength` unless
+`automaticFeather` is `false`.
 
 Use `featherEasing` to reshape that normalized `0..1` feather strength. It can
 be any function receiving the linear feather value and returning a new strength.
+GPU processing approximates custom JavaScript easing functions with a sampled
+lookup expression so CPU and GPU feathering follow the same curve.
 For example, with [eaz](https://www.npmjs.com/package/eaz):
 
 ```ts
@@ -773,6 +821,15 @@ for a matching module to consume. The module should pass `requireSpatialEffects`
 and then use `this.spatialEffects` in `prepare` or `modify`. See
 [Developing With Spatial Effects](#developing-with-spatial-effects) for a module
 extension example.
+
+GPU-compatible effects keep runtime transforms in uniforms or packed parameter
+records. Rigid movement, including movement inherited from a parent or from a
+local-space particle system, updates only dirty parameter records and affected
+BVH leaf/ancestor bounds; it does not rebuild the effect registry or simulation
+pipeline. Non-analytic influence fields are baked in effect-local space, so a
+rigid transform retains the existing 3D texture. Geometry revisions rebake the
+field. `updatePolicy` lets custom effects declare static, transform-dynamic, or
+geometry-dynamic intent; `Auto` tracks supported geometry revisions.
 
 ### KillZone
 
@@ -1185,6 +1242,9 @@ new Boids(options?: Partial<BoidsOptions>)
 
 interface BoidsOptions extends Partial<ModuleOptions> {
   octreeOptions: OctreeConfig;
+  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  grid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>; // alias
+  neighborRadius: DynamicValue<number>;
   timeQuality: number;
   speed: DynamicValue<number>;
   alignmentWeight: DynamicValue<number>;
@@ -1199,7 +1259,10 @@ interface BoidsOptions extends Partial<ModuleOptions> {
 }
 ```
 
-Steers particles using local flocking behavior sampled from a `ParticleOctree`.
+Steers particles using local flocking behavior. CPU simulation samples aggregate
+summaries from `ParticleOctree`; GPU simulation performs direct, exact-radius
+neighbor comparisons through `ParticleSpatialGrid`. The GPU path does not use
+cell aggregation or CPU particle readback.
 `alignmentWeight` points particles toward nearby average velocity direction,
 `cohesionWeight` points them toward nearby average position, and
 `separationWeight` points them away from nearby aggregate centers.
@@ -1211,7 +1274,11 @@ target.
 `octreeOptions` is passed to the internal `ParticleOctree` constructor and
 should cover the boid simulation space. If the Boids module has tags, those tags
 are passed to the octree so flocking samples only include matching particles. If
-`affectors` is omitted, `Boids` scans the scene for `BoidAffector` objects:
+`affectors` is omitted, `Boids` scans the scene for `BoidAffector` objects.
+`spatialGrid` (or `grid`) accepts either an explicit `ParticleSpatialGrid` or
+grid options. Compatible option objects share a system-managed grid build.
+`neighborRadius` controls the exact GPU neighborhood radius; it is not limited
+to the current cell or its immediate 26 neighbors:
 
 ```ts
 const target = new Boids.BoidAffector({
@@ -1309,6 +1376,12 @@ particle's current-frame travel segment from position and velocity, resolves
 position/velocity before movement, then lets the normal movement step carry the
 particle away from the surface.
 
+In GPU processing, collision queries are approximated on the CPU during
+`prepare()` using the same current position and projected velocity. The sampled
+hit position and normal are uploaded to GPU buffers and applied during the GPU
+update. This keeps CPU collision backends available to GPU systems without
+mixing CPU processing into the middle of the GPU pipeline.
+
 ## Built-In Renderers
 
 All renderers accept shared renderer options:
@@ -1383,6 +1456,7 @@ interface AudioRendererOptions extends Partial<RendererOptions> {
   depthAffectsHighPass: number;
   depthAffectsLowPass: number;
   dopplerEffect: number;
+  gpuInterpolationRate: number;
   impulseAffectsPitch: number;
   impulseAffectsVolume: number;
   impulseAffectsHighPass: number;
@@ -1405,6 +1479,9 @@ scaled, and larger or fractional values exaggerate or soften the shift. Filters
 are applied whenever their evaluated cutoff is greater than `0`.
 `impulseThreshold` defaults to `0`; collision sounds only play when
 `collision.impulse.length() > impulseThreshold`.
+Attached GPU audio extrapolates sampled velocity between selective readbacks and
+smoothly corrects toward each new sample. `gpuInterpolationRate` controls that
+correction rate and defaults to `20`; set it to `0` to disable correction.
 
 ### SpriteRenderer
 
@@ -1676,7 +1753,23 @@ generic `SpatialEffectHelper` and adds sampled force arrows.
 
 ## Spatial Utilities
 
-### ParticleOctree
+### Particle Spatial Acceleration
+
+`ParticleOctree` and `ParticleSpatialGrid` are complementary particle spatial
+acceleration utilities for their respective execution environments.
+
+| Operation or member | `ParticleOctree` (CPU) | `ParticleSpatialGrid` (GPU) |
+| --- | --- | --- |
+| Configured bounds | `bounds` | `bounds` |
+| Logical depth | `maxDepth` | `maxDepth` (`brickSubdivisions + cellSubdivisions`) |
+| Update cadence | `timeQuality` | `timeQuality` |
+| Rebuild | `rebuild(particles, tags?)` | `rebuild(renderer, buffers, buildToken?)` |
+| Locate a cell | `locate(position)` returns a node | `locate(position)` returns a logical coordinate |
+| Neighborhood query | Node `neighbors` and aggregates | `forEachParticleInRadius(...)` in TSL |
+| Bounds update | `setBounds(bounds)` | `setBounds(bounds)` |
+| Cleanup | Garbage collected | `dispose(renderer?)` / `destroy(renderer?)` |
+
+#### ParticleOctree
 
 `ParticleOctree` stores particles in a sparse spatial octree and returns
 node-level aggregate data. Nodes also store deduplicated neighboring nodes in
@@ -1725,10 +1818,110 @@ containing that cell. Each node stores neighboring nodes by querying the 26
 adjacent positions at that node's depth and resolving each to an existing node
 of the same size or larger.
 
+#### ParticleSpatialGrid
+
+`ParticleSpatialGrid` is preferred for GPU particle comparisons and direct
+neighborhood queries. Brick and cell subdivision depths are binary depths per
+axis: depths `3` and `4` produce `8 * 16 = 128` logical cells per axis. Occupied
+cells use a sparse chained hash table. Head metadata and generation-validated
+links scale with particle capacity, not world volume, and full coordinates
+resolve hash collisions.
+
+```ts
+const grid = new ParticleSpatialGrid({
+  bounds: new THREE.Box3(
+    new THREE.Vector3(-8, -8, -8),
+    new THREE.Vector3(8, 8, 8),
+  ),
+  brickSubdivisions: 3,
+  cellSubdivisions: 4,
+  powerOfTwoBounds: true,
+  autoExpand: true,
+});
+
+const boids = new Boids({ spatialGrid: grid, neighborRadius: 0.75 });
+```
+
+Modules may instead pass `spatialGrid: { ...options }`; the particle system
+creates, schedules, shares, and disposes compatible grids. `Boids` also accepts
+`grid` as an alias. Explicit grid instances stay caller-owned. Function-defined
+modules normally use the managed callback shown below. Custom infrastructure
+can acquire the same facility directly:
+
+```ts
+class NeighborModule extends Module {
+  getParticleSpatialGrid(system: ParticleSystem) {
+    return system.acquireParticleSpatialGrid({
+      brickSubdivisions: 3,
+      cellSubdivisions: 4,
+    });
+  }
+
+  modifyNeighbors(particle, context) {
+    this.getParticleSpatialGrid(context.system).forEachParticleInRadius(
+      particle.position,
+      float(1),
+      (neighbor, distanceSquared) => {
+        // Read GPU particle attributes here.
+      },
+      { excludeIndex: particle.index },
+    );
+  }
+}
+```
+
+Queries enumerate every intersecting cell, cross brick boundaries, perform an
+exact distance test, ignore dead slots, and validate slot generation.
+`maxQuerySteps: 0` is exact and is the default. A positive value explicitly
+truncates work and increments an overflow diagnostic.
+
+Automatic particle bounds reduction and hysteretic expansion run on GPU.
+Power-of-two mode rounds each axis independently unless `cubicBounds` is set.
+Optional `autoShrink` contracts the grid after `shrinkDelay` compact frames.
+Logical cell count stays fixed while physical cell size grows,
+so expanding bounds loses spatial resolution instead of growing memory without
+bound. Fixed bounds skip out-of-range particles. Unlike the CPU octree, the grid
+does not expose node traversal, aggregates, or JavaScript neighbor arrays.
+
+## GPU Fluid Modules
+
+`GasSimulation` and `FLIPSimulation` are GPU-only modules. They require GPU
+particle processing and `WebGPURenderer`. Their dense field resolution is
+`2 ** (brickSubdivisions + cellSubdivisions)` from the managed
+`ParticleSpatialGrid`; the CPU octree remains independent. Both modules use
+padded cubic power-of-two bounds, grow when particles leave the domain, and
+shrink only after a long compact interval. Gas remaps its persistent field
+when the domain changes.
+
+```ts
+const gas = new GasSimulation({
+  spatialGrid: { brickSubdivisions: 2, cellSubdivisions: 3 },
+  boundsPadding: 0.25,
+  maxSplatRadius: 1.5,
+});
+
+const system = new ParticleSystem({
+  modules: [gas],
+  renderers: [new VolumeRenderer()],
+});
+```
+
+Gas density and color remain on GPU; `VolumeRenderer` uses their storage
+textures directly and discovers them from the system when fields are omitted.
+Particle scale controls the splat radius, color contributes wherever density is
+added, and alpha scales both contributions. Set `maxSplatRadius` at least as
+large as half the largest expected particle scale so GPU neighbor queries cover
+every splat. `sourceTemperature` supplies a uniform temperature for GPU gas
+sources. FLIP updates particle velocity on GPU and leaves collision and gravity
+modules available in the same system.
+
 ## Collision And Physics
 
-The base package includes `ThreeCollisionBackend`, which raycasts against a
-Three.js scene.
+The base package includes two collision backends. `ThreeCollisionBackend` is the
+CPU implementation based on Three.js octrees. `ThreeGPUCollisionBackend` uses
+`three-mesh-bvh` `BVHComputeData` for deduplicated BLAS data and an instance
+TLAS. `Collision` chooses from the actual simulation mode when no backend is
+supplied. An explicit backend is always retained.
 
 ```ts
 interface ThreeCollisionBackendOptions {
@@ -1748,7 +1941,7 @@ interface ThreeCollisionBackendOptions {
   // Defaults to 1 => once per update.
   refreshQuality?: number;
 
-  // Leave null to use Three.js defaults.
+  // Leave null to use Three.js CPU octree defaults.
   maxLevel?: number | null;
   trianglesPerLeaf?: number | null;
 
@@ -1772,6 +1965,20 @@ all but does not decide what is considered static or dynamic.
 If none of these predicates are provided, the octrees are automatically
 constructed from the scene traversal, with distinctions between static and
 dynamic objects being made based on movement in the scene.
+
+The GPU backend supports `Static`, `TransformDynamic`, `GeometryDynamic`, and
+`Auto` policies. Transform-only updates rewrite transforms and refit the TLAS
+without repacking triangle BLAS data. Position revisions and explicit
+`invalidateGeometry()` calls refit geometry before repacking current library
+buffers; topology or geometry replacement rebuilds. `setEvaluatedGeometry()`
+accepts explicitly evaluated deformation without particle-state readback. The
+capsule shapecast performs world-space narrow phase for triangle interiors,
+edges, vertices, degenerate inputs, and nonuniformly scaled instances. The
+current library API still repacks buffers after geometry refits. Repacks reuse
+the same `BVHComputeData` owner and proxy-backed capsule query, so buffer changes
+do not require a simulation shader rebuild. `backend.stats` separates transform
+updates, geometry refits, topology rebuilds, full packed-data builds, and actual
+source-buffer bytes marked for upload.
 
 For external physics engines, use the extension packages:
 
@@ -1817,6 +2024,42 @@ const upwardDrift = new Module((particle, deltaTime) => {
 
 system.addModule(upwardDrift);
 ```
+
+Function-defined modules can opt into spatial acceleration without subclassing.
+The module prepares the structure once per applicable update and passes it to
+the corresponding callback:
+
+```ts
+import { float } from "three/tsl";
+
+const neighbors = new Module(
+  (particle, deltaTime, system, octree) => {
+    const cell = octree?.locate(particle.position);
+    // Read cell.aggregate or neighboring nodes here.
+  },
+  {
+    useOctree: true,
+    octreeOptions: { maxDepth: 6, timeQuality: 0.5 },
+    modifyGPU(particle, deltaTime, context, grid) {
+      grid?.forEachParticleInRadius(
+        particle.position,
+        float(1),
+        (neighbor) => {
+          // Compare shader-local particle attributes here.
+        },
+        { excludeIndex: particle.index },
+      );
+    },
+    useSpatialGrid: true,
+  },
+);
+```
+
+Passing `octreeOptions` or `spatialGrid` also enables the corresponding
+structure, so the explicit `use...` flags are only needed for defaults. CPU
+updates prepare only the octree; GPU updates build only the grid. Compatible
+grid option objects share one system-managed build. An explicit grid remains
+caller-owned, while option-created grids are disposed with the particle system.
 
 ### Class Extension
 
@@ -1935,6 +2178,131 @@ If you pass an explicit `spatialEffects` list to the module, only that list is
 used. Otherwise the module discovers matching effects from the particle system's
 scene. Add `spatialEffectFilter` when a module should consume only a subset of
 matching effects.
+
+## GPU Processing
+
+`gpuProcessing: true` selects the WebGPU path only when the active renderer and
+every required module support it. WebGL always uses the maintained CPU path.
+`isGPUProcessingActive` reports the path selected for the current frame.
+
+The GPU path keeps simulation, allocation, built-in emission, death
+reclamation, and compatible subsystem routing in GPU storage. JavaScript event
+listeners and CPU renderers receive asynchronous snapshots; they are not a
+synchronous view of the current compute submission.
+
+### Built-In Support
+
+| Area | GPU support |
+| --- | --- |
+| Modules | All built-in value, depth, size, speed, lifetime, force, transform-noise, limit-velocity, collision, and orientation modules have fused shader-local implementations. |
+| Boids | CPU uses aggregate `ParticleOctree` sampling. GPU uses exact-radius individual-neighbor comparisons through `ParticleSpatialGrid`. |
+| `NoiseModule` | GPU-compatible when its custom callback supplies `modifyGPU`; the string-key CPU noise cache has no GPU equivalent. |
+| Collision | CPU defaults to `ThreeCollisionBackend`; GPU defaults to `ThreeGPUCollisionBackend` and `three-mesh-bvh` TLAS/BLAS capsule traversal. CPU-only explicit backends and `applyImpulses` use CPU. |
+| Spatial effects | `KillZone` and static-parameter `ParticleForceField` instances use packed parameters and an ordered GPU-traversed effect BVH. Dynamic-value force fields retain the compatible per-instance shader path. |
+| Emission shapes | Box, sphere, cone, and torus support volume, surface, and vertex emission. Box/sphere volumes are analytic; other modes use a GPU sampling table. |
+| Renderers | Sprite and mesh consume GPU buffers directly. Trail, light, and attached audio use generation-validated selective readback. Audio spawn/death/collision sounds use GPU events. |
+| Subsystems | Continuous, spawn, death, and compatible collision triggers are GPU-native, including inheritance, impulse modifiers, multiple children, and nested systems. |
+
+Built-in GPU emission supports rates, distance rates, timed bursts, initial
+values (including emitter-local spawn-position offsets), animated shape
+transforms, tags, update LOD, count LOD, standalone systems, and subsystem
+contexts. Round-robin (`distribute`) tag assignment and arbitrary custom
+geometries require a custom `emitGPU` implementation or the CPU path. A
+function-valued subsystem `shouldEmit` also remains CPU-only; boolean predicates
+are GPU-native.
+
+Custom emission shapes use `EmitterOptions.emitGPU`. The callback contributes
+TSL statements to the emission kernel through `GPUEmitterUpdateContext`; it
+must claim slots with `allocationWriter`, initialize the shader-local particle
+from `output.storage`, and store it after initialization. The exported
+`GPUEmitterUpdate` and `GPUEmitterUpdateContext` types describe that contract.
+Use `emitter.getGPUEmissionSupport()` before enabling a custom configuration;
+unsupported built-in shape or option combinations are reported explicitly.
+
+### GPU Modules
+
+`modifyGPU` receives one shader-local particle context. Mutate its node fields;
+do not load or store the particle storage buffer yourself. Module priority,
+tags, dependents, and transient/render-time isolation are applied by the fused
+pipeline.
+
+```ts
+const lift = new Module(
+  (particle, dt) => { particle.velocity.y += dt; },
+  {
+    priority: Module.Priority.Permanent,
+    modifyGPU(particle, dt) {
+      particle.velocity.y.addAssign(dt);
+    },
+  },
+);
+```
+
+GPU dynamic values may be constants, ranges, sets, functions sampled into a
+lookup table, or TSL nodes. `ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION`
+controls function sampling resolution.
+
+### Runtime GPU Configuration
+
+Built-in emitters, modules, particle-system parameters, and renderers synchronize
+direct property changes automatically. Numeric values, mutable vectors/colors,
+and sampled dynamic values update their existing GPU parameters; changing a
+shader-defining structure rebuilds only the dependent TSL graph. Existing
+emission timing and fractional credits are preserved during parameter updates.
+
+Custom `Module` and `SpatialEffect` implementations must set
+`needsUpdate = true` after changing a property that changes generated shader
+structure. The assignment increments the component version immediately; it
+does not need to be reset to `false`. Ordinary values already represented by
+uniforms or parameter buffers do not require `needsUpdate`.
+
+`particleSystem.gpuConfigurationStats` exposes cumulative `pipelineBuilds`,
+`resourceBuilds`, and `parameterUploads` counters for profiling invalidation.
+
+### Batchable Spatial Effects
+
+A GPU-compatible spatial effect has `modifyGPU`. A GPU-batchable effect also
+provides a `gpuSpatialType` with a stable parameter schema, parameterized
+`testGPU` and `modifyGPU` functions, plus `writeGPUParameters`. Function
+identity, schema, and `compilationKey` determine whether instances share one
+implementation. Include resource-binding and compilation-relevant differences
+in `compilationKey`. Instance parameters, transforms, bounds, tags, and enabled
+state are uploaded without recompiling while reserved storage capacity is
+unchanged.
+
+The effect-instance BVH is distinct from `three-mesh-bvh`: the latter remains
+the CPU triangle-query implementation, while the GPU BVH indexes conservative
+effect AABBs. Its stackless, ordered traversal preserves priority and stable
+registration order, including interleaving with ordinary modules.
+
+### Events And Capacity
+
+GPU callback delivery is asynchronous and ordered by frame sequence. Death
+records are captured before slot reuse and identified by slot plus generation,
+so periodic full-state readback is not needed for callbacks.
+
+- The reusable event buffer is sized for up to three events per particle and
+  capped by `ParticleSystem.GPU_EVENT_BUFFER_CAPACITY`, default `4096` records.
+- Counter and payload snapshots are submitted together, so the same storage
+  buffer can be reused on the following frame without compiling another fused
+  kernel or dropping a delayed CPU callback batch.
+- `gpuEventStats.pending` reports CPU callback batches still in flight, while
+  `gpuEventStats.overflowCount` reports records that exceeded actual capacity.
+- Selective consumers use at most
+  `ParticleSystem.GPU_SELECTIVE_READBACK_POOL_SIZE` concurrent buffers,
+  default `8`; saturation is reported by
+  `gpuSelectiveReadbackStats.overflowCount`.
+- GPU particle storage starts at the smallest configured power-of-two capacity
+  that fits current particles, grows by powers of two through GPU-to-GPU copies,
+  and treats `maxParticles` as the upper bound. Failures and old-particle
+  replacement are reported by `gpuAllocationStats`.
+
+Sprite and mesh renderer tag/count filtering stays on the GPU. CPU selective
+consumers may observe results one or more frames later. GPU count LOD uses a
+stable slot/generation sample rather than truncating the CPU particle list.
+Direct GPU sprite/mesh renderers always observe current storage values, so CPU
+renderer `updateLOD` frame-freezing semantics do not apply to them; selective
+CPU renderers retain ordinary `updateLOD` behavior.
 
 ## Benchmarks
 

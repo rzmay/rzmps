@@ -36,13 +36,11 @@ export default async function createCollision() {
         bounce: 0.75,
         dampen: 0.05,
         radiusScale: 1,
-        applyImpulses: true,
       }),
     ],
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
-        castShadow: true,
 
         materialOptions: {
           roughness: 0.5,

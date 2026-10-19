@@ -85,6 +85,24 @@ const particle = new Particle({
 }
 
 {
+  const audio = new AudioRenderer({ gpuInterpolationRate: 10 });
+  const position = new THREE.Vector3();
+  const targetPosition = new THREE.Vector3(10, 0, 0);
+  audio._particleAudio.set('gpu-particle', {
+    audio: { position },
+    targetPosition,
+    velocity: new THREE.Vector3(2, 0, 0),
+    speed: 3,
+    filters: {},
+  });
+
+  audio._advanceGPUAudio(0.1);
+
+  assert.equal(Number(targetPosition.x.toFixed(4)), 10.6);
+  assert.ok(position.x > 0 && position.x < targetPosition.x);
+}
+
+{
   const listeners = {
     collision: [],
     death: [],
@@ -119,6 +137,12 @@ const particle = new Particle({
   const audio = new AudioRenderer();
 
   audio.setup(system);
+
+  assert.equal(listeners.collision.length, 1);
+  assert.equal(listeners.death.length, 1);
+  assert.equal(listeners.spawn.length, 1);
+
+  audio.clear();
 
   assert.equal(listeners.collision.length, 1);
   assert.equal(listeners.death.length, 1);

@@ -1,6 +1,70 @@
 // ParticleSystem
 export { default as ParticleSystem } from './ParticleSystem';
+export type { ParticleSystemGPUEmissionSupportReport } from './ParticleSystem';
 export { default as Particle } from './Particle';
+export {
+  GPUParticleContext,
+  GPUParticleRenderContext,
+  GPUParticleRenderStorage,
+  GPUParticleStorage,
+  createEmptyGPUParticleBufferState,
+  createGPUParticleBufferState,
+  createGPUParticleRenderBufferState,
+} from './gpu/Particle';
+export type {
+  GPUParticleAttributes,
+  GPUParticleBufferState,
+  GPUParticleLike,
+  GPUParticleRenderBufferState,
+  GPUParticleUpdateContext,
+} from './gpu/Particle';
+export {
+  GPUEventBufferState,
+  GPUEventType,
+  GPU_EVENT_FLOAT_SLOT_COUNT,
+} from './gpu/EventBuffer';
+export type {
+  GPUEventReadbackBatch,
+  GPUEventRecord,
+} from './gpu/EventBuffer';
+export {
+  GPUAllocationBufferState,
+  GPUAllocationWriter,
+} from './gpu/AllocationBuffer';
+export type {
+  GPUAllocationDiagnostics,
+} from './gpu/AllocationBuffer';
+export { GPUEmitterInstanceBufferState } from './gpu/EmitterInstanceBuffer';
+export type { GPUEmitterInstanceRecord } from './gpu/EmitterInstanceBuffer';
+export { GPUEmissionRunBufferState } from './gpu/EmissionRunBuffer';
+export type { GPUEmissionRunNode } from './gpu/EmissionRunBuffer';
+export { buildGPUSystemSchedule } from './gpu/SystemScheduler';
+export type {
+  GPUSystemSchedule,
+  GPUSystemScheduleNode,
+} from './gpu/SystemScheduler';
+export { GPUSelectiveReadbackState } from './gpu/SelectiveReadback';
+export type {
+  GPUSelectiveReadbackRequest,
+  GPUSelectiveReadbackResult,
+} from './gpu/SelectiveReadback';
+export { GPUSpatialEffectRegistry, isBatchableEffect } from './gpu/SpatialEffectRegistry';
+export type {
+  GPUSpatialBatchableEffect,
+  GPUSpatialEffectRecord,
+  GPUSpatialEffectType,
+  GPUSpatialParameterAccessor,
+  GPUSpatialParameterField,
+  GPUSpatialParameterLayout,
+} from './gpu/SpatialEffectRegistry';
+export {
+  getGPUEmitterSupport,
+  getGPUEmissionShapeSupport,
+} from './gpu/Emission';
+export type {
+  GPUEmissionSupportLevel,
+  GPUEmissionSupportReport,
+} from './gpu/Emission';
 export { default as LODHelper } from './LODHelper';
 export type { LODSettings, LODSettingsOptions } from './LODHelper';
 export { EndBehavior } from './enums/EndBehavior';
@@ -10,7 +74,7 @@ export { MaxCulling } from './enums/MaxCulling';
 // Emitter
 export { default as EmissionShape } from './EmissionShape';
 export { default as Emitter } from './Emitter';
-export type { EmissionContext } from './Emitter';
+export type { EmissionContext, GPUEmitterUpdate, GPUEmitterUpdateContext } from './Emitter';
 export { EmissionSource } from './enums/EmissionSource';
 export { TagSelectionMethod } from './enums/TagSelectionMethod';
 
@@ -31,7 +95,12 @@ export type { LiveCubemapOptions } from './renderers/LiveCubemap';
 
 // Modules
 export { default as Module } from './Module';
-export type { ModuleOptions, ModuleUpdate } from './Module';
+export type {
+  ModuleGPUUpdate,
+  ModuleOctreeAggregate,
+  ModuleOptions,
+  ModuleUpdate,
+} from './Module';
 export { default as NoiseModule } from './modules/NoiseModule';
 export { default as ForceOverLifetime } from './modules/ForceOverLifetime';
 export { default as LimitVelocityOverLifetime } from './modules/LimitVelocityOverLifetime';
@@ -69,7 +138,7 @@ export type {
 export { default as BoidAffector } from './spatial/BoidAffector';
 export type { BoidAffectorOptions } from './spatial/BoidAffector';
 export { default as BoidAffectorHelper } from './spatial/BoidAffectorHelper';
-export { default as SpatialEffect } from './SpatialEffect';
+export { default as SpatialEffect, SpatialEffectUpdatePolicy } from './SpatialEffect';
 export type {
   SpatialEffectFeatherUpdate,
   SpatialEffectModifier,
@@ -91,6 +160,14 @@ export { default as ParticleForceFieldHelper } from './spatial/ParticleForceFiel
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';
 export type { VolumeField } from './interfaces/VolumeField';
 export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBackend';
+export { default as ThreeGPUCollisionBackend } from './collision/ThreeGPUCollisionBackend';
+export {
+  CollisionGeometryUpdatePolicy,
+} from './collision/ThreeGPUCollisionBackend';
+export type {
+  ThreeGPUCollisionBackendOptions,
+  ThreeGPUCollisionBackendStats,
+} from './collision/ThreeGPUCollisionBackend';
 
 // Dynamic Value
 export type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
@@ -98,9 +175,7 @@ export type { ValueByParameter } from './types/ValueByParameter';
 export { default as ParticleOctree } from './helpers/ParticleOctree';
 export type {
   OctreeAggregator,
-  OctreeBrick,
   OctreeConfig,
-  OctreeGridCell,
   OctreeNode,
 } from './helpers/ParticleOctree';
 export { default as FluidSimulation } from './modules/FluidSimulation';
@@ -109,6 +184,13 @@ export { default as GasSimulation } from './modules/GasSimulation';
 export type { GasSimulationOptions } from './modules/GasSimulation';
 export { default as FLIPSimulation } from './modules/FLIPSimulation';
 export type { FLIPSimulationOptions } from './modules/FLIPSimulation';
+export { default as ParticleSpatialGrid } from './gpu/ParticleSpatialGrid';
+export type {
+  ParticleSpatialGridOptions,
+  ParticleSpatialGridDiagnostics,
+  ParticleSpatialGridQueryOptions,
+  ParticleSpatialGridVisitor,
+} from './gpu/ParticleSpatialGrid';
 
 // Texture helper
 export * as Textures from './Textures';

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { float } from 'three/tsl';
 import {
   KillZone,
   SpatialEffect,
@@ -54,6 +55,7 @@ export default function createKillZoneScene(scene) {
       position: planePosition,
       normal: new THREE.Vector3(0, -1, 0),
     }),
+    testGPU: (particle) => particle.position.y.lessThanEqual(float(planePosition.y)).select(float(1), float(0)),
   });
   planeKillZone.name = 'Plane KillZone';
 
@@ -109,6 +111,7 @@ export default function createKillZoneScene(scene) {
   const configureSpatialEffects = (particleSystem) => {
     previousConfigurer?.(particleSystem);
     particleSystem.useSpatialEffects = true;
+    particleSystem.gpuProcessing = true;
   };
   scene.userData[CONFIGURER_KEY] = configureSpatialEffects;
 

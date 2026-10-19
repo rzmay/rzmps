@@ -5,6 +5,8 @@ import SpatialEffect, {
 } from '../SpatialEffect';
 import * as THREE from 'three';
 import Priority from '../enums/Priority';
+import { float, If } from 'three/tsl';
+import type { GPUSpatialEffectType } from '../gpu/SpatialEffectRegistry';
 
 export type KillZoneOptions = SpatialEffectOptions;
 type BoxGeometryArgs = ConstructorParameters<typeof THREE.BoxGeometry>;
@@ -15,6 +17,20 @@ type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 // Super simple implementation -- just a spatial effect whose modifier calls particle.kill()
 // Exists mainly as a shortcut rather than any sophisticated implementation
 class KillZone extends SpatialEffect {
+  static readonly GPU_SPATIAL_TYPE: GPUSpatialEffectType = {
+    key: 'rzmps.kill-zone.v1',
+    parameterLayout: {
+      id: 'rzmps.kill-zone.params.v1',
+      fields: SpatialEffect.GPU_INFLUENCE_FIELDS,
+    },
+    testGPU: (particle, _context, params) => SpatialEffect.testGPUInfluence(particle, params),
+    modifyGPU(particle, _deltaTime, _context, _params, strength) {
+      If(strength.greaterThan(float(0)), () => {
+        particle.realtime.assign(particle.lifetime.mul(1000).add(1));
+      });
+    },
+  };
+
   static Box(
     modify: SpatialEffectModifier | null,
     options: Partial<KillZoneOptions> | null,
@@ -147,7 +163,21 @@ class KillZone extends SpatialEffect {
     }, {
       priority: Priority.Permanent,
       ...options,
+      // Kill state is discrete; any positive spatial strength is a hit.
+      automaticFeather: false,
+      modifyGPU: (particle, _deltaTime, _context, strength) => {
+        If(strength.greaterThan(float(0)), () => {
+          particle.realtime.assign(particle.lifetime.mul(1000).add(1));
+        });
+      },
     });
+
+    if (this.supportsParameterizedGPUInfluence && this.canBatchGPUInfluence()) {
+      this.gpuSpatialType = KillZone.GPU_SPATIAL_TYPE;
+      this.writeGPUParameters = (target, offset, system) => {
+        this.writeGPUInfluenceParameters(target, offset, system);
+      };
+    }
   }
 }
 

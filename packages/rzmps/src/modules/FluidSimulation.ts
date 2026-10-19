@@ -1,16 +1,24 @@
 import * as THREE from 'three';
-import Module, { type ModuleOptions, type ModuleUpdate } from '../Module';
-import ParticleSystem from '../ParticleSystem';
-import Particle from '../Particle';
-import type { VolumeField } from '../interfaces/VolumeField';
+import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
+import { Fn, clamp, float, floor, instanceIndex, int, ivec3, max, storage, uint, uniform, vec3, vec4 } from 'three/tsl';
+import Module, { type ModuleOptions } from '../Module';
+import type ParticleSystem from '../ParticleSystem';
+import type { GPUParticleUpdateContext } from '../gpu/Particle';
+import ParticleSpatialGrid, { type ParticleSpatialGridOptions, type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
+
+type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
+type FloatStorage = { element(index: Node | number): Node<'float'> };
+type UniformNode<T, TNode extends string> = Node<TNode> & { value: T };
 
 export interface FluidSimulationOptions extends Partial<ModuleOptions> {
   bounds: THREE.Box3;
-  resolution: number;
+  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
   pressureIterations: number;
   externalForce: THREE.Vector3;
-  colorDissipation: number;
   maxVelocity: number;
+  boundsPadding: number;
+  /** Kept for older presets. The spatial grid depth takes precedence when supplied. */
+  resolution: number;
 }
 
 abstract class FluidSimulation extends Module {
@@ -19,391 +27,251 @@ abstract class FluidSimulation extends Module {
   cellSize: number;
   pressureIterations: number;
   externalForce: THREE.Vector3;
-  velocity: Float32Array;
-  pressure: Float32Array;
-  divergence: Float32Array;
-  color: Float32Array;
-  colorField: VolumeField;
-  colorDissipation: number;
   maxVelocity: number;
+  boundsPadding: number;
+  readonly autoBounds: boolean;
+  readonly spatialGridConfiguration: Partial<ParticleSpatialGridOptions>;
 
-  protected cellCount: number;
-  protected min = new THREE.Vector3();
-  protected size = new THREE.Vector3();
-  protected samplePosition = new THREE.Vector3();
-  protected tempVelocity = new THREE.Vector3();
-  protected pressureScratch: Float32Array;
-  protected velocityScratch: Float32Array;
+  protected readonly cellCount: number;
+  protected readonly boundsMinNode: UniformNode<THREE.Vector3, 'vec3'>;
+  protected readonly cellSizeNode: UniformNode<number, 'float'>;
+  protected readonly forceNode: UniformNode<THREE.Vector3, 'vec3'>;
+  protected readonly maxVelocityNode: UniformNode<number, 'float'>;
+  protected readonly velocityCurrentAttribute: StorageBufferAttribute;
+  protected readonly velocityNextAttribute: StorageBufferAttribute;
+  protected readonly pressureCurrentAttribute: StorageBufferAttribute;
+  protected readonly pressureNextAttribute: StorageBufferAttribute;
+  protected readonly divergenceAttribute: StorageBufferAttribute;
+  protected readonly velocityCurrent: Vec4Storage;
+  protected readonly velocityNext: Vec4Storage;
+  protected readonly pressureCurrent: FloatStorage;
+  protected readonly pressureNext: FloatStorage;
+  protected readonly divergence: FloatStorage;
+  private lastBoundsRead = 0;
+  private boundsReadPending = false;
+  private readonly pressureNodes: ComputeNode[] = [];
+  private divergenceNode?: ComputeNode;
+  private projectionNodes = new WeakMap<object, ComputeNode>();
 
-  constructor(
-    options: Partial<FluidSimulationOptions> = {},
-    modify: ModuleUpdate = () => {},
-  ) {
-    super(modify, {
+  constructor(options: Partial<FluidSimulationOptions> = {}) {
+    const gridOptions = options.spatialGrid instanceof ParticleSpatialGrid
+      ? options.spatialGrid
+      : options.spatialGrid ?? {};
+    const requestedDepth = Math.max(1, Math.ceil(Math.log2(options.resolution ?? 32)));
+    const brickSubdivisions = gridOptions.brickSubdivisions ?? 2;
+    const cellSubdivisions = gridOptions.cellSubdivisions
+      ?? Math.max(0, requestedDepth - brickSubdivisions);
+    const resolution = 2 ** (brickSubdivisions + cellSubdivisions);
+    const bounds = options.bounds?.clone() ?? new THREE.Box3(
+      new THREE.Vector3(-1, -1, -1),
+      new THREE.Vector3(1, 1, 1),
+    );
+    const paddedBounds = FluidSimulation.padBounds(bounds, options.boundsPadding ?? 0.25);
+    const spatialGrid = options.spatialGrid instanceof ParticleSpatialGrid
+      ? options.spatialGrid
+      : {
+        ...gridOptions,
+        bounds: paddedBounds,
+        brickSubdivisions,
+        cellSubdivisions,
+        powerOfTwoBounds: true,
+        cubicBounds: true,
+        autoExpand: true,
+        autoShrink: true,
+        shrinkDelay: 600,
+        expansionHysteresis: gridOptions.expansionHysteresis ?? 0.25,
+      };
+    super(Module.CPU_UNSUPPORTED, {
       ...options,
       priority: options.priority ?? Module.Priority.Permanent,
+      modifyGPU: () => {},
+      useSpatialGrid: true,
+      spatialGrid,
     });
 
-    this.bounds = options.bounds?.clone() ?? new THREE.Box3(
-      new THREE.Vector3(-0.5, -0.5, -0.5),
-      new THREE.Vector3(0.5, 0.5, 0.5),
-    );
-    this.resolution = Math.max(1, Math.floor(options.resolution ?? 16));
+    this.bounds = options.spatialGrid instanceof ParticleSpatialGrid
+      ? options.spatialGrid.bounds.clone()
+      : ParticleSpatialGrid.normalizeBounds(paddedBounds, true, true);
+    this.autoBounds = !options.bounds;
+    this.spatialGridConfiguration = {
+      brickSubdivisions,
+      cellSubdivisions,
+      powerOfTwoBounds: true,
+      cubicBounds: true,
+      autoExpand: true,
+      autoShrink: true,
+      shrinkDelay: 600,
+      expansionHysteresis: gridOptions.expansionHysteresis ?? 0.25,
+    };
+    this.resolution = resolution;
+    this.cellCount = resolution ** 3;
     this.pressureIterations = Math.max(0, Math.floor(options.pressureIterations ?? 12));
     this.externalForce = options.externalForce?.clone() ?? new THREE.Vector3(0, -9.81, 0);
-    this.colorDissipation = options.colorDissipation ?? 0.99;
     this.maxVelocity = Math.max(0, options.maxVelocity ?? 20);
-    this.bounds.getSize(this.size);
-    this.min.copy(this.bounds.min);
-    this.cellSize = Math.max(
-      this.size.x,
-      this.size.y,
-      this.size.z,
-      Number.EPSILON,
-    ) / this.resolution;
-    this.cellCount = this.resolution ** 3;
-    this.velocity = new Float32Array(this.cellCount * 3);
-    this.pressure = new Float32Array(this.cellCount);
-    this.pressureScratch = new Float32Array(this.cellCount);
-    this.divergence = new Float32Array(this.cellCount);
-    this.color = new Float32Array(this.cellCount * 3);
-    this.velocityScratch = new Float32Array(this.cellCount * 3);
-    this.colorField = {
-      data: this.color,
-      resolution: new THREE.Vector3(this.resolution, this.resolution, this.resolution),
-      bounds: this.bounds.clone(),
-      version: 0,
-      channels: 3,
-    };
-
-    this.dependents.push(new FluidVisualRefreshModule(this));
+    this.boundsPadding = Math.max(0, options.boundsPadding ?? 0.25);
+    this.cellSize = this.bounds.getSize(new THREE.Vector3()).x / resolution;
+    this.boundsMinNode = uniform(this.bounds.min.clone()) as UniformNode<THREE.Vector3, 'vec3'>;
+    this.cellSizeNode = uniform(this.cellSize) as UniformNode<number, 'float'>;
+    this.forceNode = uniform(this.externalForce) as UniformNode<THREE.Vector3, 'vec3'>;
+    this.maxVelocityNode = uniform(this.maxVelocity) as UniformNode<number, 'float'>;
+    this.velocityCurrentAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
+    this.velocityNextAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
+    this.pressureCurrentAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount), 1);
+    this.pressureNextAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount), 1);
+    this.divergenceAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount), 1);
+    this.velocityCurrent = storage(this.velocityCurrentAttribute, 'vec4', this.cellCount) as Vec4Storage;
+    this.velocityNext = storage(this.velocityNextAttribute, 'vec4', this.cellCount) as Vec4Storage;
+    this.pressureCurrent = storage(this.pressureCurrentAttribute, 'float', this.cellCount) as FloatStorage;
+    this.pressureNext = storage(this.pressureNextAttribute, 'float', this.cellCount) as FloatStorage;
+    this.divergence = storage(this.divergenceAttribute, 'float', this.cellCount) as FloatStorage;
   }
 
-  abstract update(dt: number, particleSystem?: ParticleSystem): void;
-
-  public prepare(particleSystem: ParticleSystem, deltaTime: number): void {
-    super.prepare(particleSystem, deltaTime);
-    this.update(deltaTime, particleSystem);
+  public override prepare(particleSystem: ParticleSystem, dt: number): void {
+    if (!particleSystem.isGPUProcessingActive) {
+      throw new Error('Fluid simulations require GPU particle processing with a WebGPU renderer.');
+    }
+    super.prepare(particleSystem, dt);
+    this.forceNode.value.copy(this.externalForce);
+    this.maxVelocityNode.value = this.maxVelocity;
   }
 
-  index(x: number, y: number, z: number): number {
-    const cx = this.clampCoordinate(x);
-    const cy = this.clampCoordinate(y);
-    const cz = this.clampCoordinate(z);
-
-    return cx + cy * this.resolution + cz * this.resolution * this.resolution;
+  protected cellIndex(coordinate: Node<'ivec3'>): Node<'uint'> {
+    return uint(coordinate.x.add(coordinate.y.mul(this.resolution))
+      .add(coordinate.z.mul(this.resolution * this.resolution)));
   }
 
-  velocityIndex(x: number, y: number, z: number): number {
-    return this.index(x, y, z) * 3;
-  }
-
-  sampleVelocity(position: THREE.Vector3, target = new THREE.Vector3()): THREE.Vector3 {
-    return this.sampleVectorField(this.velocity, position, target);
-  }
-
-  sampleColor(position: THREE.Vector3, target = new THREE.Color()): THREE.Color {
-    const coordinate = this.worldToCell(position);
-
-    return this.getCellColor(coordinate.x, coordinate.y, coordinate.z, target);
-  }
-
-  getCellColor(x: number, y: number, z: number, target = new THREE.Color()): THREE.Color {
-    const index = this.index(x, y, z);
-    const colorIndex = index * 3;
-    const density = this.getColorDensity(index);
-
-    if (density <= 0) return target.setRGB(0, 0, 0);
-
-    return target.setRGB(
-      this.color[colorIndex] / density,
-      this.color[colorIndex + 1] / density,
-      this.color[colorIndex + 2] / density,
+  protected cellCoordinate(index: Node<'uint'>): Node<'ivec3'> {
+    return ivec3(
+      int(index.mod(this.resolution)),
+      int(index.div(this.resolution).mod(this.resolution)),
+      int(index.div(this.resolution * this.resolution)),
     );
   }
 
-  protected getColorDensity(_index: number): number {
-    return 1;
+  protected cellCenter(coordinate: Node<'ivec3'>): Node<'vec3'> {
+    return vec3(coordinate).add(0.5).mul(this.cellSizeNode).add(this.boundsMinNode);
   }
 
-  protected updateColorField(data: Float32Array | Uint8Array = this.color): void {
-    this.colorField.data = data;
-    this.colorField.bounds.copy(this.bounds);
-    this.colorField.version += 1;
+  protected worldToCell(position: Node<'vec3'>): Node<'ivec3'> {
+    return ivec3(clamp(
+      floor(position.sub(this.boundsMinNode).div(this.cellSizeNode)),
+      vec3(0),
+      vec3(this.resolution - 1),
+    ));
   }
 
-  public refreshRenderFields(_particleSystem: ParticleSystem): void {}
-
-  protected setSimulationBounds(bounds: THREE.Box3): void {
-    this.bounds.copy(bounds);
-    this.bounds.getSize(this.size);
-    this.min.copy(this.bounds.min);
-    this.cellSize = Math.max(
-      this.size.x,
-      this.size.y,
-      this.size.z,
-      Number.EPSILON,
-    ) / this.resolution;
-    this.colorField.bounds.copy(this.bounds);
-    this.colorField.version += 1;
+  protected sampleVelocity(position: Node<'vec3'>, field: Vec4Storage = this.velocityCurrent): Node<'vec3'> {
+    return field.element(this.cellIndex(this.worldToCell(position))).xyz as Node<'vec3'>;
   }
 
-  protected clearSimulationState(): void {
-    this.velocity.fill(0);
-    this.velocityScratch.fill(0);
-    this.pressure.fill(0);
-    this.pressureScratch.fill(0);
-    this.divergence.fill(0);
-    this.color.fill(0);
-    this.updateColorField();
+  protected clampVelocity(velocity: Node<'vec3'>): Node<'vec3'> {
+    const magnitude = max(velocity.length(), float(1e-6));
+    return velocity.mul(clamp(this.maxVelocityNode.div(magnitude), 0, 1)) as Node<'vec3'>;
   }
 
-  protected applyExternalForces(dt: number): void {
-    for (let index = 0; index < this.cellCount; index += 1) {
-      const velocityIndex = index * 3;
-
-      this.velocity[velocityIndex] += this.externalForce.x * dt;
-      this.velocity[velocityIndex + 1] += this.externalForce.y * dt;
-      this.velocity[velocityIndex + 2] += this.externalForce.z * dt;
-    }
-
-    this.clampVelocity();
-  }
-
-  protected calculateDivergence(): void {
-    const scale = 0.5 / this.cellSize;
-
-    for (let z = 0; z < this.resolution; z += 1) {
-      for (let y = 0; y < this.resolution; y += 1) {
-        for (let x = 0; x < this.resolution; x += 1) {
-          const left = this.velocity[this.velocityIndex(x - 1, y, z)];
-          const right = this.velocity[this.velocityIndex(x + 1, y, z)];
-          const down = this.velocity[this.velocityIndex(x, y - 1, z) + 1];
-          const up = this.velocity[this.velocityIndex(x, y + 1, z) + 1];
-          const back = this.velocity[this.velocityIndex(x, y, z - 1) + 2];
-          const front = this.velocity[this.velocityIndex(x, y, z + 1) + 2];
-
-          this.divergence[this.index(x, y, z)] = (
-            (right - left)
-            + (up - down)
-            + (front - back)
-          ) * scale;
-        }
-      }
-    }
-  }
-
-  protected solvePressure(): void {
-    this.pressure.fill(0);
+  protected solveProjection(renderer: ParticleSpatialGridRenderer, input: Vec4Storage, output: Vec4Storage): void {
+    const divergence = this.divergenceNode ?? Fn(() => {
+      const coordinate = this.cellCoordinate(instanceIndex);
+      const left = this.velocityAt(input, coordinate, -1, 0, 0).x;
+      const right = this.velocityAt(input, coordinate, 1, 0, 0).x;
+      const down = this.velocityAt(input, coordinate, 0, -1, 0).y;
+      const up = this.velocityAt(input, coordinate, 0, 1, 0).y;
+      const back = this.velocityAt(input, coordinate, 0, 0, -1).z;
+      const front = this.velocityAt(input, coordinate, 0, 0, 1).z;
+      this.divergence.element(instanceIndex).assign(
+        right.sub(left).add(up.sub(down)).add(front.sub(back)).mul(0.5).div(this.cellSizeNode),
+      );
+      this.pressureCurrent.element(instanceIndex).assign(0);
+    })().compute(this.cellCount);
+    this.divergenceNode = divergence;
+    renderer.compute(divergence);
 
     for (let iteration = 0; iteration < this.pressureIterations; iteration += 1) {
-      this.pressureScratch.fill(0);
-
-      for (let z = 0; z < this.resolution; z += 1) {
-        for (let y = 0; y < this.resolution; y += 1) {
-          for (let x = 0; x < this.resolution; x += 1) {
-            const index = this.index(x, y, z);
-            const sum = this.pressure[this.index(x - 1, y, z)]
-              + this.pressure[this.index(x + 1, y, z)]
-              + this.pressure[this.index(x, y - 1, z)]
-              + this.pressure[this.index(x, y + 1, z)]
-              + this.pressure[this.index(x, y, z - 1)]
-              + this.pressure[this.index(x, y, z + 1)];
-
-            this.pressureScratch[index] = (sum - this.divergence[index] * this.cellSize * this.cellSize) / 6;
-          }
-        }
-      }
-
-      [this.pressure, this.pressureScratch] = [this.pressureScratch, this.pressure];
+      const source = iteration % 2 === 0 ? this.pressureCurrent : this.pressureNext;
+      const target = iteration % 2 === 0 ? this.pressureNext : this.pressureCurrent;
+      const node = this.pressureNodes[iteration] ?? Fn(() => {
+        const coordinate = this.cellCoordinate(instanceIndex);
+        const sum = this.pressureAt(source, coordinate, -1, 0, 0)
+          .add(this.pressureAt(source, coordinate, 1, 0, 0))
+          .add(this.pressureAt(source, coordinate, 0, -1, 0))
+          .add(this.pressureAt(source, coordinate, 0, 1, 0))
+          .add(this.pressureAt(source, coordinate, 0, 0, -1))
+          .add(this.pressureAt(source, coordinate, 0, 0, 1));
+        target.element(instanceIndex).assign(
+          sum.sub(this.divergence.element(instanceIndex).mul(this.cellSizeNode.mul(this.cellSizeNode))).div(6),
+        );
+      })().compute(this.cellCount);
+      this.pressureNodes[iteration] = node;
+      renderer.compute(node);
     }
+
+    const pressure = this.pressureIterations % 2 === 0 ? this.pressureCurrent : this.pressureNext;
+    const project = this.projectionNodes.get(input) ?? Fn(() => {
+      const coordinate = this.cellCoordinate(instanceIndex);
+      const source = vec3(input.element(instanceIndex).xyz);
+      const gradient = vec3(
+        this.pressureAt(pressure, coordinate, 1, 0, 0).sub(this.pressureAt(pressure, coordinate, -1, 0, 0)),
+        this.pressureAt(pressure, coordinate, 0, 1, 0).sub(this.pressureAt(pressure, coordinate, 0, -1, 0)),
+        this.pressureAt(pressure, coordinate, 0, 0, 1).sub(this.pressureAt(pressure, coordinate, 0, 0, -1)),
+      ).mul(0.5).div(this.cellSizeNode);
+      output.element(instanceIndex).assign(vec4(this.clampVelocity(source.sub(gradient)), 0));
+    })().compute(this.cellCount);
+    this.projectionNodes.set(input, project);
+    renderer.compute(project);
   }
 
-  protected projectVelocity(): void {
-    const scale = 0.5 / this.cellSize;
-
-    for (let z = 0; z < this.resolution; z += 1) {
-      for (let y = 0; y < this.resolution; y += 1) {
-        for (let x = 0; x < this.resolution; x += 1) {
-          const velocityIndex = this.velocityIndex(x, y, z);
-
-          this.velocity[velocityIndex] -= (
-            this.pressure[this.index(x + 1, y, z)]
-            - this.pressure[this.index(x - 1, y, z)]
-          ) * scale;
-          this.velocity[velocityIndex + 1] -= (
-            this.pressure[this.index(x, y + 1, z)]
-            - this.pressure[this.index(x, y - 1, z)]
-          ) * scale;
-          this.velocity[velocityIndex + 2] -= (
-            this.pressure[this.index(x, y, z + 1)]
-            - this.pressure[this.index(x, y, z - 1)]
-          ) * scale;
-        }
-      }
-    }
-
-    this.clampVelocity();
+  private velocityAt(field: Vec4Storage, coordinate: Node<'ivec3'>, x: number, y: number, z: number): Node<'vec3'> {
+    const neighbor = coordinate.add(ivec3(x, y, z));
+    const inside = vec3(neighbor).greaterThanEqual(vec3(0)).all()
+      .and(vec3(neighbor).lessThan(vec3(this.resolution)).all());
+    return inside.select(field.element(this.cellIndex(ivec3(clamp(
+      vec3(neighbor), vec3(0), vec3(this.resolution - 1),
+    )))).xyz, vec3(0)) as Node<'vec3'>;
   }
 
-  protected advectScalar(
-    source: Float32Array,
-    target: Float32Array,
-    dt: number,
-    dissipation = 1,
-  ): void {
-    for (let z = 0; z < this.resolution; z += 1) {
-      for (let y = 0; y < this.resolution; y += 1) {
-        for (let x = 0; x < this.resolution; x += 1) {
-          this.getCellCenter(x, y, z, this.samplePosition);
-          this.tempVelocity.copy(this.sampleVelocityAtCell(x, y, z)).multiplyScalar(dt);
-          this.samplePosition.sub(this.tempVelocity);
-          target[this.index(x, y, z)] = this.sampleScalarField(source, this.samplePosition) * dissipation;
-        }
-      }
-    }
+  private pressureAt(field: FloatStorage, coordinate: Node<'ivec3'>, x: number, y: number, z: number): Node<'float'> {
+    const neighbor = coordinate.add(ivec3(x, y, z));
+    const inside = vec3(neighbor).greaterThanEqual(vec3(0)).all()
+      .and(vec3(neighbor).lessThan(vec3(this.resolution)).all());
+    const clamped = ivec3(clamp(vec3(neighbor), vec3(0), vec3(this.resolution - 1)));
+    return inside.select(field.element(this.cellIndex(clamped)), float(0)) as Node<'float'>;
   }
 
-  protected advectVelocity(dt: number, dissipation = 1): void {
-    this.velocityScratch.set(this.velocity);
-
-    for (let z = 0; z < this.resolution; z += 1) {
-      for (let y = 0; y < this.resolution; y += 1) {
-        for (let x = 0; x < this.resolution; x += 1) {
-          this.getCellCenter(x, y, z, this.samplePosition);
-          this.sampleVectorField(this.velocityScratch, this.samplePosition, this.tempVelocity).multiplyScalar(dt);
-          this.samplePosition.sub(this.tempVelocity);
-
-          const velocityIndex = this.velocityIndex(x, y, z);
-          this.sampleVectorField(this.velocityScratch, this.samplePosition, this.tempVelocity).multiplyScalar(dissipation);
-          this.velocity[velocityIndex] = this.tempVelocity.x;
-          this.velocity[velocityIndex + 1] = this.tempVelocity.y;
-          this.velocity[velocityIndex + 2] = this.tempVelocity.z;
-        }
-      }
-    }
-
-    this.clampVelocity();
+  protected refreshBounds(grid: ParticleSpatialGrid, renderer: ParticleSpatialGridRenderer): void {
+    if (this.boundsReadPending || performance.now() - this.lastBoundsRead < 500) return;
+    this.boundsReadPending = true;
+    this.lastBoundsRead = performance.now();
+    void grid.readBounds(renderer).then((bounds) => {
+      if (this.bounds.equals(bounds)) return;
+      const previous = this.bounds.clone();
+      this.bounds.copy(bounds);
+      this.cellSize = this.bounds.getSize(new THREE.Vector3()).x / this.resolution;
+      this.boundsMinNode.value.copy(this.bounds.min);
+      this.cellSizeNode.value = this.cellSize;
+      this.onBoundsChanged(previous);
+    }).catch(() => {}).finally(() => { this.boundsReadPending = false; });
   }
 
-  protected advectColor(target: Float32Array, dt: number, dissipation = this.colorDissipation): void {
-    const red = new Float32Array(this.cellCount);
-    const green = new Float32Array(this.cellCount);
-    const blue = new Float32Array(this.cellCount);
-    const nextRed = new Float32Array(this.cellCount);
-    const nextGreen = new Float32Array(this.cellCount);
-    const nextBlue = new Float32Array(this.cellCount);
+  protected onBoundsChanged(_previous: THREE.Box3): void {}
 
-    for (let index = 0; index < this.cellCount; index += 1) {
-      const colorIndex = index * 3;
-
-      red[index] = this.color[colorIndex];
-      green[index] = this.color[colorIndex + 1];
-      blue[index] = this.color[colorIndex + 2];
-    }
-
-    this.advectScalar(red, nextRed, dt, dissipation);
-    this.advectScalar(green, nextGreen, dt, dissipation);
-    this.advectScalar(blue, nextBlue, dt, dissipation);
-
-    for (let index = 0; index < this.cellCount; index += 1) {
-      const colorIndex = index * 3;
-
-      target[colorIndex] = nextRed[index];
-      target[colorIndex + 1] = nextGreen[index];
-      target[colorIndex + 2] = nextBlue[index];
-    }
+  public override cleanup(): void {
+    super.cleanup();
+    [
+      this.velocityCurrentAttribute,
+      this.velocityNextAttribute,
+      this.pressureCurrentAttribute,
+      this.pressureNextAttribute,
+      this.divergenceAttribute,
+    ].forEach((attribute) => attribute.dispose());
   }
 
-  protected getCellCenter(x: number, y: number, z: number, target = new THREE.Vector3()): THREE.Vector3 {
-    return target.set(
-      this.min.x + (this.clampCoordinate(x) + 0.5) * this.cellSize,
-      this.min.y + (this.clampCoordinate(y) + 0.5) * this.cellSize,
-      this.min.z + (this.clampCoordinate(z) + 0.5) * this.cellSize,
+  static padBounds(bounds: THREE.Box3, ratio: number): THREE.Box3 {
+    const size = bounds.getSize(new THREE.Vector3());
+    const side = Math.max(size.x, size.y, size.z, 1);
+    return new THREE.Box3().setFromCenterAndSize(
+      bounds.getCenter(new THREE.Vector3()),
+      new THREE.Vector3(1, 1, 1).multiplyScalar(side * (1 + 2 * ratio)),
     );
-  }
-
-  protected worldToCell(position: THREE.Vector3, target = new THREE.Vector3()): THREE.Vector3 {
-    return target.set(
-      this.clampCoordinate(Math.floor((position.x - this.min.x) / this.cellSize)),
-      this.clampCoordinate(Math.floor((position.y - this.min.y) / this.cellSize)),
-      this.clampCoordinate(Math.floor((position.z - this.min.z) / this.cellSize)),
-    );
-  }
-
-  protected sampleVectorField(
-    field: Float32Array,
-    position: THREE.Vector3,
-    target = new THREE.Vector3(),
-  ): THREE.Vector3 {
-    const coordinate = this.worldToCell(position);
-    const velocityIndex = this.velocityIndex(coordinate.x, coordinate.y, coordinate.z);
-
-    return target.set(
-      field[velocityIndex],
-      field[velocityIndex + 1],
-      field[velocityIndex + 2],
-    );
-  }
-
-  protected sampleScalarField(field: Float32Array, position: THREE.Vector3): number {
-    const coordinate = this.worldToCell(position);
-
-    return field[this.index(coordinate.x, coordinate.y, coordinate.z)];
-  }
-
-  protected sampleVelocityAtCell(x: number, y: number, z: number): THREE.Vector3 {
-    const velocityIndex = this.velocityIndex(x, y, z);
-
-    return this.tempVelocity.set(
-      this.velocity[velocityIndex],
-      this.velocity[velocityIndex + 1],
-      this.velocity[velocityIndex + 2],
-    );
-  }
-
-  protected clampCoordinate(value: number): number {
-    return THREE.MathUtils.clamp(Math.floor(value), 0, this.resolution - 1);
-  }
-
-  protected isCellInBounds(x: number, y: number, z: number): boolean {
-    return x >= 0 && x < this.resolution
-      && y >= 0 && y < this.resolution
-      && z >= 0 && z < this.resolution;
-  }
-
-  protected clampVelocity(): void {
-    if (this.maxVelocity <= 0) return;
-
-    const maxVelocitySq = this.maxVelocity * this.maxVelocity;
-
-    for (let index = 0; index < this.cellCount; index += 1) {
-      const velocityIndex = index * 3;
-      const x = this.velocity[velocityIndex];
-      const y = this.velocity[velocityIndex + 1];
-      const z = this.velocity[velocityIndex + 2];
-      const lengthSq = x * x + y * y + z * z;
-
-      if (lengthSq <= maxVelocitySq || lengthSq <= Number.EPSILON) continue;
-
-      const scale = this.maxVelocity / Math.sqrt(lengthSq);
-
-      this.velocity[velocityIndex] = x * scale;
-      this.velocity[velocityIndex + 1] = y * scale;
-      this.velocity[velocityIndex + 2] = z * scale;
-    }
-  }
-}
-
-class FluidVisualRefreshModule extends Module {
-  constructor(private simulation: FluidSimulation) {
-    super(() => {}, {
-      priority: Number.MAX_SAFE_INTEGER,
-    });
-  }
-
-  public modify(_particles: Particle[], _deltaTime: number, particleSystem?: ParticleSystem): void {
-    if (particleSystem) this.simulation.refreshRenderFields(particleSystem);
   }
 }
 

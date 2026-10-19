@@ -17,7 +17,12 @@ export default async function createFlipFluid() {
       new THREE.Vector3(-4, -1.25, -4),
       new THREE.Vector3(4, 6.25, 4),
     ),
-    resolution: 24,
+    spatialGrid: {
+      brickSubdivisions: 2,
+      cellSubdivisions: 3,
+      powerOfTwoBounds: true,
+      autoExpand: true,
+    },
     pressureIterations: 14,
     externalForce: new THREE.Vector3(0, 0, 0),
     picRatio: 0.12,

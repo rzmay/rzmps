@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 import { createDefaultSceneBackground } from '../presets/scenes/background';
 import { getSceneParticleRoot } from '../presets/scenes/particleRoot';
-import { EndBehavior, MaxCulling } from '@rzmps/rzmps';
+import { EndBehavior, FluidSimulation, MaxCulling } from '@rzmps/rzmps';
 
 import { EmitterGUI } from './particle-system-gui/EmitterGUI';
 import { ModuleGUI } from './particle-system-gui/ModuleGUI';
@@ -55,6 +55,7 @@ export class ParticleSystemGUI {
             renderer: options.rendererMode ?? 'webgl',
             showCode: false,
         };
+        this.configureSystemForRenderer(this.system);
 
         // Focused collaborators keep this class responsible for orchestration only.
         this.valueEditor = new GUIValueEditor(this);
@@ -73,13 +74,22 @@ export class ParticleSystemGUI {
             container: options.container,
         });
         this.injectStyles();
-        this.gui.onChange(() => this.emitCode());
+        this.gui.onChange(() => {
+            this.emitCode();
+        });
         this.addResourceLinks();
         if (this.onRendererChange) {
-            this.gui
+            const rendererController = this.gui
                 .add(this.viewState, 'renderer', RENDERER_MODE_OPTIONS)
                 .name('Renderer')
-                .onChange(this.onRendererChange);
+                .onChange((mode) => {
+                    if (mode === 'webgl' && this.system.modules.some((module) => module instanceof FluidSimulation)) {
+                        this.viewState.renderer = 'webgpu';
+                        rendererController.updateDisplay();
+                        return;
+                    }
+                    this.onRendererChange(mode);
+                });
         }
         if (this.onShowCodeChange) {
             this.gui
@@ -100,6 +110,7 @@ export class ParticleSystemGUI {
     setSystem(next, presetName) {
         if (next === this.system)
             return;
+        this.configureSystemForRenderer(next);
         this.currentPresetName = presetName;
         const previous = this.system;
         previous.removeEventListener?.('destroyed', this.handleSystemDestroyed);
@@ -365,6 +376,10 @@ export class ParticleSystemGUI {
         this.scene?.userData?.[SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY]?.(system);
     }
 
+    configureSystemForRenderer(system = this.system) {
+        if (this.viewState.renderer === 'webgl') system.gpuProcessing = false;
+    }
+
     getPresetFactory(entry) {
         return typeof entry === 'function' ? entry : entry?.create;
     }
@@ -408,6 +423,18 @@ export class ParticleSystemGUI {
         folder.add(system, 'maxParticles', 0, 100000, 1).name('Max Particles');
         folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling');
         folder.add(system, 'simulationDistance', 0, 1000, 0.1).name('Simulation Distance');
+        const gpuProcessing = folder.add(system, 'gpuProcessing').name('GPU Processing');
+        if (this.viewState.renderer === 'webgl') gpuProcessing.disable();
+        folder.add(system, 'gpuDebug').name('GPU Debug Logs');
+        folder.add(system, 'gpuDebugInterval', 1, 120, 1).name('GPU Debug Every');
+        const rendererMode = this.viewState.renderer;
+        const gpuStatus = {
+            get active() {
+                if (rendererMode === 'webgl') return 'CPU';
+                return system.isGPUProcessingActive ? 'Active' : 'CPU fallback';
+            },
+        };
+        folder.add(gpuStatus, 'active').name('GPU Status').disable().listen();
         const updateLODFolder = folder.addFolder('Update LOD');
         updateLODFolder.close();
         this.buildUpdateLOD(updateLODFolder, system);
@@ -420,6 +447,7 @@ export class ParticleSystemGUI {
         };
         const actions = {
             start: () => system.start(controlOptions.children),
+            reset: () => system.reset(controlOptions.children),
             pause: () => system.pause(controlOptions.children),
             stop: () => system.stop(false, controlOptions.children),
             stopAndClear: () => system.stop(true, controlOptions.children),
@@ -427,7 +455,8 @@ export class ParticleSystemGUI {
             respawn: () => void this.respawnSystem(),
         };
         folder.add(controlOptions, 'children').name('Propagate Children');
-        folder.add(actions, 'start').name('Start / Restart');
+        folder.add(actions, 'start').name('Start');
+        folder.add(actions, 'reset').name('Reset');
         folder.add(actions, 'pause').name('Pause');
         folder.add(actions, 'stop').name('Stop');
         folder.add(actions, 'stopAndClear').name('Stop + Clear');

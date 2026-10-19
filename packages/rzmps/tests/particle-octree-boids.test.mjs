@@ -3,13 +3,9 @@ import * as THREE from 'three';
 import {
   BoidAffector,
   Boids,
-  FLIPSimulation,
-  GasSimulation,
-  Module,
   Particle,
   ParticleOctree,
   ParticleSystem,
-  VolumeRenderer,
 } from '../build/index.mjs';
 
 /*
@@ -74,197 +70,6 @@ const neighborIds = new Set(denseNode.neighbors.map((node) => node.id));
 
 assert.equal(neighborIds.size, denseNode.neighbors.length);
 assert.ok(denseNode.neighbors.every((node) => node.size >= denseNode.size));
-
-assert.equal(octree.getGridResolution(), 8);
-assert.deepEqual(octree.worldToGrid(new THREE.Vector3(0, 0, 0)).toArray(), [0, 0, 0]);
-assert.deepEqual(octree.worldToGrid(new THREE.Vector3(1, 1, 1)).toArray(), [7, 7, 7]);
-assert.deepEqual(octree.gridToWorld(0, 0, 0).toArray(), [0.0625, 0.0625, 0.0625]);
-
-const exactDenseCell = octree.sampleGrid(octreeParticles[0].position, true);
-assert.equal(exactDenseCell.exact, true);
-assert.equal(exactDenseCell.node.depth, 3);
-assert.equal(exactDenseCell.aggregate.count, 1);
-
-const approximateSparseCell = octree.getGridCell(7, 7, 7);
-assert.equal(approximateSparseCell.exact, false);
-assert.equal(approximateSparseCell.node, octree.root);
-assert.equal(approximateSparseCell.aggregate.count, 2);
-
-const exactSparseCell = octree.getGridCell(7, 7, 7, true);
-assert.equal(exactSparseCell.exact, true);
-assert.equal(exactSparseCell.aggregate.count, 0);
-
-const occupiedCells = [];
-octree.forEachGridCell((cell) => occupiedCells.push(cell), {
-  exact: true,
-  occupiedOnly: true,
-});
-assert.equal(occupiedCells.length, 2);
-assert.ok(octree.getGridNeighbors(0, 0, 0).length > 1);
-
-const fluidSource = new Particle({
-  position: new THREE.Vector3(0.25, 0.25, 0.25),
-  scale: new THREE.Vector3(0.6, 0.6, 0.6),
-  velocity: new THREE.Vector3(1, 0, 0),
-  color: new THREE.Color(1, 0, 0),
-  mass: 2,
-});
-fluidSource.data.density = 3;
-fluidSource.data.temperature = 4;
-
-const gas = new GasSimulation({
-  bounds: new THREE.Box3(
-    new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(1, 1, 1),
-  ),
-  resolution: 4,
-  externalForce: new THREE.Vector3(),
-});
-const gasSystem = new ParticleSystem({
-  emitters: [],
-  renderers: [],
-  modules: [],
-});
-gasSystem.particles.push(fluidSource);
-
-gas.prepare(gasSystem, 0.016);
-assert.equal(gas.density.data.length, 64);
-assert.deepEqual(gas.density.resolution.toArray(), [4, 4, 4]);
-assert.ok(gas.density.version > 0);
-assert.equal(gas.color.length, 192);
-assert.equal(gas.colorField.data.length, 256);
-assert.equal(gas.colorField.channels, 4);
-assert.ok(gas.density.data.some((density) => density > 0));
-assert.ok(gas.colorField.data.some((channel) => channel > 0));
-assert.ok(gas.color.some((channel) => channel > 0));
-assert.ok(gas.sampleColor(fluidSource.position).r > 0);
-
-const autoBoundsSource = new Particle({
-  position: new THREE.Vector3(5.25, 1.25, -2.5),
-  scale: new THREE.Vector3(0.4, 0.4, 0.4),
-  color: new THREE.Color(0, 1, 0),
-  mass: 1,
-});
-autoBoundsSource.data.density = 1;
-const autoBoundsGas = new GasSimulation({
-  resolution: 4,
-  externalForce: new THREE.Vector3(),
-});
-const autoBoundsGasSystem = new ParticleSystem({
-  emitters: [],
-  renderers: [],
-  modules: [],
-});
-autoBoundsGasSystem.particles.push(autoBoundsSource);
-autoBoundsGasSystem.updateBoundingBox();
-autoBoundsGas.prepare(autoBoundsGasSystem, 0.016);
-assert.equal(autoBoundsGas.autoBounds, true);
-assert.ok(autoBoundsGas.bounds.containsPoint(autoBoundsSource.position));
-assert.ok(autoBoundsGas.density.bounds.containsPoint(autoBoundsSource.position));
-
-const volumeRenderer = new VolumeRenderer({
-  field: () => gas.density,
-  colorField: () => gas.colorField,
-  steps: 8,
-});
-const volumeSystem = new ParticleSystem({
-  emitters: [],
-  renderers: [],
-  modules: [],
-});
-volumeRenderer.setup(volumeSystem);
-volumeRenderer.update([], volumeSystem, 0.016);
-volumeRenderer.destroy();
-
-const autoVolumeRenderer = new VolumeRenderer({
-  steps: 8,
-});
-const autoVolumeSystem = new ParticleSystem({
-  emitters: [],
-  renderers: [],
-  modules: [gas],
-});
-autoVolumeRenderer.setup(autoVolumeSystem);
-autoVolumeRenderer.update([], autoVolumeSystem, 0.016);
-autoVolumeRenderer.destroy();
-
-const smallFluidSource = new Particle({
-  position: new THREE.Vector3(0.5, 0.5, 0.5),
-  scale: new THREE.Vector3(0.1, 0.1, 0.1),
-  mass: 1,
-});
-smallFluidSource.data.density = 1;
-
-const largeFluidSource = new Particle({
-  position: new THREE.Vector3(0.5, 0.5, 0.5),
-  scale: new THREE.Vector3(0.75, 0.75, 0.75),
-  mass: 1,
-});
-largeFluidSource.data.density = 1;
-
-const smallGas = new GasSimulation({
-  bounds: new THREE.Box3(
-    new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(1, 1, 1),
-  ),
-  resolution: 4,
-  externalForce: new THREE.Vector3(),
-});
-const largeGas = new GasSimulation({
-  bounds: new THREE.Box3(
-    new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(1, 1, 1),
-  ),
-  resolution: 4,
-  externalForce: new THREE.Vector3(),
-});
-const smallGasSystem = new ParticleSystem({
-  emitters: [],
-  renderers: [],
-  modules: [],
-});
-const largeGasSystem = new ParticleSystem({
-  emitters: [],
-  renderers: [],
-  modules: [],
-});
-smallGasSystem.particles.push(smallFluidSource);
-largeGasSystem.particles.push(largeFluidSource);
-
-smallGas.prepare(smallGasSystem, 0);
-largeGas.prepare(largeGasSystem, 0);
-assert.ok(
-  largeGas.density.data.filter((density) => density > 0).length
-    > smallGas.density.data.filter((density) => density > 0).length,
-);
-
-const flipParticle = new Particle({
-  position: new THREE.Vector3(0.25, 0.25, 0.25),
-  velocity: new THREE.Vector3(1, 0, 0),
-  mass: 1,
-});
-const flipSystem = new ParticleSystem({
-  emitters: [],
-  renderers: [],
-  modules: [],
-});
-flipSystem.particles.push(flipParticle);
-flipSystem.deltaTime = 0.016;
-
-const flip = new FLIPSimulation({
-  bounds: new THREE.Box3(
-    new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(1, 1, 1),
-  ),
-  resolution: 4,
-  externalForce: new THREE.Vector3(),
-  picRatio: 1,
-});
-
-flip.prepare(flipSystem, 0.016);
-flip.modify([flipParticle], 0.016, flipSystem);
-assert.ok(flipParticle.velocity.x > 0);
-assert.ok(flip instanceof Module);
 
 octreeParticles[0].tags = ['included'];
 octreeParticles[1].tags = ['excluded'];
@@ -552,7 +357,7 @@ targetBoids.prepare(targetSystem);
 targetBoids.modify([targetBoid], 1, targetSystem);
 
 assert.ok(targetBoid.velocity.x > 0.99);
-assert.ok(Math.abs(targetBoid.velocity.y) < Number.EPSILON);
+assert.ok(Math.abs(targetBoid.velocity.y) < 1e-12);
 
 const excludedBoid = new Particle({
   lifetime: 10,

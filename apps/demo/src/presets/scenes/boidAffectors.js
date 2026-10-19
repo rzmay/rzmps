@@ -182,13 +182,11 @@ export default async function createBoidAffectors(scene) {
     suzanneHelper.update();
     containerHelper.update();
   };
-
   let elapsed = 0;
 
   return {
     update: (deltaTime) => {
       elapsed += deltaTime;
-
       target.position.set(
         Math.cos(elapsed * 0.21) * 15,
         4 + Math.sin(elapsed * 0.43) * 1.4,
@@ -215,7 +213,6 @@ export default async function createBoidAffectors(scene) {
         elapsed * 0.42,
         Math.cos(elapsed * 0.29) * 0.18,
       );
-
       updateMeshes();
     },
 

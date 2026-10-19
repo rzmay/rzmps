@@ -19,6 +19,19 @@ class DistortionOverLifetime extends Module {
     }, {
       ...options,
       priority: Module.Priority.Transient,
+      modifyGPU: (particle) => {
+          particle.distortionStrength.assign(
+            particle.distortionStrength.mul(
+              this.gpuParameters.number(
+                'distortionStrength',
+                () => this.options.distortionStrength,
+                particle.time,
+                1,
+                particle.index,
+              ),
+            ),
+          );
+        }
     });
   }
 }

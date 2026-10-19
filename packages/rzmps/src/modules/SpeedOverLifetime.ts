@@ -19,6 +19,13 @@ class SpeedOverLifetime extends Module {
     }, {
       ...options,
       priority: Module.Priority.PreMovementTransient,
+      modifyGPU: (particle) => {
+          particle.speed.assign(
+            particle.speed.mul(this.gpuParameters.number(
+              'speed', () => this.options.speed, particle.time, 1, particle.index,
+            )),
+          );
+        }
     });
   }
 }

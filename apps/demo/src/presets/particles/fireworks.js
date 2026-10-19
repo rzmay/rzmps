@@ -50,6 +50,7 @@ export default async function createFireworks() {
   withAudioSource(blastSound2, blastSound2Url);
 
   const fireworks = new ParticleSystem({
+    maxParticles: 32,
     duration: 2.6,
     looping: true,
     emitters: [
@@ -89,6 +90,7 @@ export default async function createFireworks() {
   });
 
   const smoke = new ParticleSystem({
+    maxParticles: 2048,
     duration: 10,
     looping: true,
     gravityModifier: -0.015,
@@ -147,6 +149,7 @@ export default async function createFireworks() {
   smoke.name = 'Rocket Smoke';
 
   const sparkles = new ParticleSystem({
+    maxParticles: 512,
     duration: 5,
     looping: false,
     gravityModifier: 0.18,

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
+  Boids,
   KillZone,
   Module,
   Particle,
@@ -205,6 +206,47 @@ assert.equal(typeof SpatialEffectHelper, 'function');
 }
 
 {
+  const parent = new THREE.Group();
+  const field = ParticleForceField.Sphere({
+    direction: new THREE.Vector3(2, 0, 0),
+  }, 1, 16, 8);
+  parent.add(field);
+  const system = createSystem();
+
+  const original = new Particle({ mass: 1, position: new THREE.Vector3() });
+  field.modify([original], 0.5, system);
+  assert.ok(original.velocity.x > 0);
+
+  parent.position.x = 5;
+  const oldPosition = new Particle({ mass: 1, position: new THREE.Vector3() });
+  const movedPosition = new Particle({
+    mass: 1,
+    position: new THREE.Vector3(5, 0, 0),
+  });
+  field.modify([oldPosition, movedPosition], 0.5, system);
+  assert.equal(oldPosition.velocity.x, 0, 'a parent transform must move CPU influence');
+  assert.ok(movedPosition.velocity.x > 0);
+}
+
+{
+  const system = new ParticleSystem({ emitters: [], renderers: [], modules: [] });
+  const effect = SpatialEffect.Torus(() => {}, {
+    modifyGPU() {},
+    bakedFieldResolution: 3,
+  }, 1, 0.25, 4, 4);
+  effect.syncGPUTransform(system);
+  const texture = effect._bakedFieldTexture;
+  assert.ok(texture, 'non-analytic geometry should create a baked GPU influence field');
+  effect.position.x = 4;
+  effect.syncGPUTransform(system);
+  assert.equal(
+    effect._bakedFieldTexture,
+    texture,
+    'rigid movement must retain the local-space baked influence texture',
+  );
+}
+
+{
   const inside = new Particle({
     mass: 1,
     position: new THREE.Vector3(0, 0, 0),
@@ -344,6 +386,25 @@ assert.equal(typeof SpatialEffectHelper, 'function');
   assert.equal(effect.getFeather(new THREE.Vector3(2, 0, 0)), 1);
   assert.equal(effect.getFeather(new THREE.Vector3(3, 0, 0)), 0.5);
   assert.equal(effect.getFeather(new THREE.Vector3(5, 0, 0)), 0);
+}
+
+{
+  const scene = new THREE.Scene();
+  const system = new ParticleSystem({ emitters: [], renderers: [], modules: [] });
+  system.position.set(0, 10, 0);
+  scene.add(system);
+  const affector = Boids.BoidAffector.Sphere({
+    position: new THREE.Vector3(0, 10, 0),
+    range: 1,
+  }, 0.5, 8, 4);
+  scene.add(affector);
+  scene.updateMatrixWorld(true);
+
+  assert.equal(
+    affector.test(new Particle({ position: new THREE.Vector3() }), system),
+    true,
+    'BoidAffector range tests should compare world-space positions for local systems',
+  );
 }
 
 {

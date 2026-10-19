@@ -1,8 +1,16 @@
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
 import {
+  Break,
+  Discard,
+  Fn,
+  If,
+  Loop,
+  cameraPosition,
   float,
   max,
+  min,
+  modelWorldMatrixInverse,
   positionGeometry,
   smoothstep,
   texture3D,
@@ -13,6 +21,7 @@ import {
 import Renderer, { type RendererOptions } from '../Renderer';
 import Particle from '../Particle';
 import ParticleSystem from '../ParticleSystem';
+import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
 import GasSimulation from '../modules/GasSimulation';
 import type { VolumeField } from '../interfaces/VolumeField';
 
@@ -39,8 +48,8 @@ class VolumeRenderer extends Renderer {
   renderOrder: number;
   jitter: boolean;
 
-  private texture?: THREE.Data3DTexture;
-  private colorTexture?: THREE.Data3DTexture;
+  private texture?: THREE.Texture;
+  private colorTexture?: THREE.Texture;
   private fieldVersion = -1;
   private colorFieldVersion = -1;
   private fieldResolution = new THREE.Vector3(-1, -1, -1);
@@ -53,6 +62,13 @@ class VolumeRenderer extends Renderer {
   private bounds = new THREE.Box3();
   private boundsCenter = new THREE.Vector3();
   private boundsSize = new THREE.Vector3();
+  private readonly gpuThreshold = uniform(0.25);
+  private readonly gpuRange = uniform(0.1);
+  private readonly gpuOpacity = uniform(0.25);
+  private readonly gpuBaseR = uniform(0.5);
+  private readonly gpuBaseG = uniform(0.5);
+  private readonly gpuBaseB = uniform(0.5);
+  private gpuMaterialSteps = 0;
 
   constructor(options: Partial<VolumeRendererOptions> = {}) {
     super(options);
@@ -66,6 +82,7 @@ class VolumeRenderer extends Renderer {
     this.steps = options.steps ?? 100;
     this.renderOrder = options.renderOrder ?? 2;
     this.jitter = options.jitter ?? false;
+    this.syncGPUUniforms();
 
     this.webglMaterial = this.createWebGLMaterial();
     this.webgpuMaterial = this.createWebGPUMaterial();
@@ -90,11 +107,11 @@ class VolumeRenderer extends Renderer {
       return;
     }
 
-    this.texture = this.createTexture(field, 1);
+    this.texture = field.texture ?? this.createTexture(field, 1);
     this.fieldVersion = field.version;
     this.fieldResolution.copy(field.resolution);
     if (colorField) {
-      this.colorTexture = this.createTexture(colorField, colorField.channels ?? 4);
+      this.colorTexture = colorField.texture ?? this.createTexture(colorField, colorField.channels ?? 4);
       this.colorFieldVersion = colorField.version;
       this.colorFieldResolution.copy(colorField.resolution);
     }
@@ -116,32 +133,34 @@ class VolumeRenderer extends Renderer {
       return;
     }
 
-    if (!this.texture || !this.fieldResolution.equals(field.resolution)) {
-      this.texture?.dispose();
-      this.texture = this.createTexture(field, 1);
+    if (!this.texture || !this.fieldResolution.equals(field.resolution) || (field.texture && field.texture !== this.texture)) {
+      if (this.texture instanceof THREE.Data3DTexture && this.texture !== field.texture) this.texture.dispose();
+      this.texture = field.texture ?? this.createTexture(field, 1);
       this.fieldResolution.copy(field.resolution);
       this.fieldVersion = field.version;
       this.updateMaterialTexture();
-    } else if (field.version !== this.fieldVersion) {
+    } else if (!field.texture && field.version !== this.fieldVersion && this.texture instanceof THREE.Data3DTexture) {
+      if (!field.data) throw new Error('VolumeField.data is required for CPU volume textures.');
       this.texture.image.data = field.data;
       this.texture.needsUpdate = true;
       this.fieldVersion = field.version;
     }
 
     if (colorField) {
-      if (!this.colorTexture || !this.colorFieldResolution.equals(colorField.resolution)) {
-        this.colorTexture?.dispose();
-        this.colorTexture = this.createTexture(colorField, colorField.channels ?? 4);
+      if (!this.colorTexture || !this.colorFieldResolution.equals(colorField.resolution) || (colorField.texture && colorField.texture !== this.colorTexture)) {
+        if (this.colorTexture instanceof THREE.Data3DTexture && this.colorTexture !== colorField.texture) this.colorTexture.dispose();
+        this.colorTexture = colorField.texture ?? this.createTexture(colorField, colorField.channels ?? 4);
         this.colorFieldResolution.copy(colorField.resolution);
         this.colorFieldVersion = colorField.version;
         this.updateMaterialTexture();
-      } else if (colorField.version !== this.colorFieldVersion) {
+      } else if (!colorField.texture && colorField.version !== this.colorFieldVersion && this.colorTexture instanceof THREE.Data3DTexture) {
+        if (!colorField.data) throw new Error('VolumeField.data is required for CPU color textures.');
         this.colorTexture.image.data = colorField.data;
         this.colorTexture.needsUpdate = true;
         this.colorFieldVersion = colorField.version;
       }
     } else if (this.colorTexture) {
-      this.colorTexture.dispose();
+      if (this.colorTexture instanceof THREE.Data3DTexture) this.colorTexture.dispose();
       this.colorTexture = undefined;
       this.colorFieldVersion = -1;
       this.colorFieldResolution.set(-1, -1, -1);
@@ -156,12 +175,30 @@ class VolumeRenderer extends Renderer {
     this.webglMaterial.uniforms.range.value = this.range;
     this.webglMaterial.uniforms.steps.value = this.steps;
     this.webglMaterial.uniforms.jitter.value = this.jitter;
+    this.syncGPUUniforms();
+    if (this.steps !== this.gpuMaterialSteps) this.updateMaterialTexture();
     this.mesh.renderOrder = this.renderOrder;
   }
 
+  private syncGPUUniforms(): void {
+    this.gpuThreshold.value = this.threshold;
+    this.gpuRange.value = this.range;
+    this.gpuOpacity.value = this.opacity;
+    this.gpuBaseR.value = this.baseColor.r;
+    this.gpuBaseG.value = this.baseColor.g;
+    this.gpuBaseB.value = this.baseColor.b;
+  }
+
+  public override updateGPU(
+    _buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+    system: ParticleSystem,
+  ): void {
+    this._update([], system);
+  }
+
   destroy(): void {
-    this.texture?.dispose();
-    this.colorTexture?.dispose();
+    if (this.texture instanceof THREE.Data3DTexture) this.texture.dispose();
+    if (this.colorTexture instanceof THREE.Data3DTexture) this.colorTexture.dispose();
     this.geometry.dispose();
     this.webglMaterial.dispose();
     this.webgpuMaterial.dispose();
@@ -199,6 +236,7 @@ class VolumeRenderer extends Renderer {
   }
 
   private createTexture(field: VolumeField, channels: 1 | 3 | 4): THREE.Data3DTexture {
+    if (!field.data) throw new Error('VolumeField.data is required when no GPU texture is supplied.');
     const texture = new THREE.Data3DTexture(
       field.data,
       field.resolution.x,
@@ -381,6 +419,7 @@ class VolumeRenderer extends Renderer {
   }
 
   private createWebGPUMaterial(): THREE.Material {
+    this.gpuMaterialSteps = this.steps;
     const material = new MeshBasicNodeMaterial({
       color: this.baseColor,
       opacity: this.opacity,
@@ -391,26 +430,49 @@ class VolumeRenderer extends Renderer {
     });
 
     if (this.texture) {
-      const density = texture3D(this.texture).sample(positionGeometry.add(0.5)).r;
-      const threshold = uniform(this.threshold);
-      const range = uniform(this.range);
-      const opacity = uniform(this.opacity);
-      const alpha = smoothstep(
-        max(threshold.sub(range), float(0.000001)),
-        threshold.add(range),
-        density,
-      ).mul(opacity);
-      const base = vec3(
-        uniform(this.baseColor.r),
-        uniform(this.baseColor.g),
-        uniform(this.baseColor.b),
-      );
-      const colorSample = this.colorTexture
-        ? texture3D(this.colorTexture).sample(positionGeometry.add(0.5))
-        : vec4(base, float(1));
-      const sampleColor = base.mul(float(1).sub(colorSample.a)).add(colorSample.rgb.mul(colorSample.a));
-
-      material.colorNode = vec4(sampleColor.mul(float(0.85).add(density.mul(0.15))), alpha);
+      material.colorNode = Fn(() => {
+        const origin = modelWorldMatrixInverse.mul(vec4(cameraPosition, 1)).xyz;
+        const direction = positionGeometry.sub(origin).normalize();
+        const inverseDirection = vec3(1).div(direction);
+        const entry = vec3(-0.5).sub(origin).mul(inverseDirection);
+        const exit = vec3(0.5).sub(origin).mul(inverseDirection);
+        const minimum = min(entry, exit);
+        const maximum = max(entry, exit);
+        const near = max(max(minimum.x, minimum.y), minimum.z);
+        const far = min(min(maximum.x, maximum.y), maximum.z);
+        const start = max(near, float(0));
+        const position = origin.add(direction.mul(start)).toVar('volumePosition');
+        const step = direction.mul(far.sub(start).div(Math.max(1, this.steps)));
+        const accumulated = vec4(0).toVar('volumeAccumulated');
+        const base = vec3(
+          this.gpuBaseR,
+          this.gpuBaseG,
+          this.gpuBaseB,
+        );
+        If(near.greaterThan(far), () => Discard());
+        Loop({ start: 0, end: Math.max(1, Math.min(512, this.steps)), type: 'int' }, () => {
+          const uv = position.add(0.5);
+          const density = texture3D(this.texture!).sample(uv).r;
+          const alpha = density.greaterThan(0).select(
+            smoothstep(
+              max(this.gpuThreshold.sub(this.gpuRange), float(0.000001)),
+              this.gpuThreshold.add(this.gpuRange),
+              density,
+            ).mul(this.gpuOpacity),
+            float(0),
+          );
+          const color = this.colorTexture
+            ? texture3D(this.colorTexture).sample(uv).rgb
+            : base;
+          const contribution = float(1).sub(accumulated.a).mul(alpha);
+          accumulated.rgb.addAssign(color.mul(contribution));
+          accumulated.a.addAssign(contribution);
+          If(accumulated.a.greaterThanEqual(0.98), () => Break());
+          position.addAssign(step);
+        });
+        If(accumulated.a.lessThanEqual(0), () => Discard());
+        return accumulated;
+      })();
     }
 
     return material;

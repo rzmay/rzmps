@@ -50,13 +50,11 @@ export default async function createCollisionSubEmitters() {
         bounce: 0.75,
         dampen: 0.05,
         radiusScale: 1,
-        applyImpulses: true,
       }),
     ],
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
-        castShadow: true,
         materialOptions: {
           roughness: 0.2,
           metalness: 0.6,
@@ -78,6 +76,7 @@ export default async function createCollisionSubEmitters() {
   });
 
   const sparks = new ParticleSystem({
+    maxParticles: 128,
     duration: 0.08,
     looping: false,
     gravityModifier: 1,

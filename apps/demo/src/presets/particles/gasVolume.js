@@ -13,7 +13,7 @@ import {
 
 export default async function createGasVolume() {
   const gas = new GasSimulation({
-    pressureIterations: 12,
+    pressureIterations: 16,
     externalForce: new THREE.Vector3(0, 0.05, 0),
     densityDissipation: 0.985,
     temperatureDissipation: 0.98,
@@ -23,11 +23,13 @@ export default async function createGasVolume() {
     weight: 0.015,
     sourceStrength: 0.9,
     velocitySourceStrength: 0.08,
-    octreeOptions: {
-      maxDepth: 5,
-      particlesPerLeaf: 3,
-      brickLevel: -3
+    spatialGrid: {
+      brickSubdivisions: 2,
+      cellSubdivisions: 4,
+      powerOfTwoBounds: true,
+      autoExpand: true,
     },
+    maxSplatRadius: 0.65,
   });
 
   const system = new ParticleSystem({
@@ -82,7 +84,7 @@ export default async function createGasVolume() {
         opacity: 0.18,
         threshold: 0.055,
         range: 0.035,
-        steps: 64,
+        steps: 80,
       }),
     ],
   });

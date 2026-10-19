@@ -20,8 +20,8 @@ export interface ThreeCollisionBackendOptions {
   timeQuality?: number;
   refreshQuality?: number;
   respectMaterialSide?: boolean;
-  maxLevel?: number;
-  trianglesPerLeaf?: number;
+  maxLevel?: number | null;
+  trianglesPerLeaf?: number | null;
 
   objectFilter?: (object: THREE.Object3D) => boolean;
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
@@ -40,6 +40,11 @@ type TrackedObject = {
   dynamic: boolean;
   matrixWorld: THREE.Matrix4;
   lastMovedAt: number;
+  geometry: THREE.BufferGeometry;
+  positionVersion: number;
+  positionCount: number;
+  indexVersion: number;
+  indexCount: number;
 };
 
 type MembershipChanges = {
@@ -48,6 +53,8 @@ type MembershipChanges = {
 };
 
 class ThreeCollisionBackend implements ICollisionBackend {
+  readonly supportsCPU = true;
+  readonly supportsGPU = false;
   staticOctree = new Octree();
   dynamicOctree = new Octree();
 
@@ -64,11 +71,10 @@ class ThreeCollisionBackend implements ICollisionBackend {
   timeQuality: number;
   refreshQuality: number;
   respectMaterialSide: boolean;
-
-  maxLevel?: number;
-  trianglesPerLeaf?: number;
-
+  maxLevel: number | null;
+  trianglesPerLeaf: number | null;
   private trackedObjects = new Map<string, TrackedObject>();
+  private invalidatedGeometry = new Set<string>();
 
   private elapsedTime = 0;
   private dynamicUpdateAccumulator = 0;
@@ -86,8 +92,8 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
     this.staticAfter = options.staticAfter ?? 2;
     this.respectMaterialSide = options.respectMaterialSide ?? true;
-    this.maxLevel = options.maxLevel;
-    this.trianglesPerLeaf = options.trianglesPerLeaf;
+    this.maxLevel = options.maxLevel ?? null;
+    this.trianglesPerLeaf = options.trianglesPerLeaf ?? null;
 
     this.timeQuality = THREE.MathUtils.clamp(
       options.timeQuality ?? 1,
@@ -102,6 +108,16 @@ class ThreeCollisionBackend implements ICollisionBackend {
     );
 
     this.initialize();
+  }
+
+  invalidateGeometry(object?: THREE.Object3D): void {
+    if (object) {
+      object.traverse((child) => {
+        if (child instanceof THREE.Mesh) this.invalidatedGeometry.add(child.uuid);
+      });
+    } else {
+      this.trackedObjects.forEach((_tracked, uuid) => this.invalidatedGeometry.add(uuid));
+    }
   }
 
   update(deltaTime: number): void {
@@ -123,6 +139,24 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
     for (const tracked of this.trackedObjects.values()) {
       tracked.object.updateWorldMatrix(true, false);
+
+      const position = tracked.object.geometry.getAttribute('position');
+      const index = tracked.object.geometry.index;
+      const geometryChanged = tracked.geometry !== tracked.object.geometry
+        || tracked.positionVersion !== attributeVersion(position)
+        || tracked.positionCount !== (position?.count ?? 0)
+        || tracked.indexVersion !== attributeVersion(index)
+        || tracked.indexCount !== (index?.count ?? position?.count ?? 0)
+        || this.invalidatedGeometry.has(tracked.object.uuid);
+      if (geometryChanged) {
+        tracked.geometry = tracked.object.geometry;
+        tracked.positionVersion = attributeVersion(position);
+        tracked.positionCount = position?.count ?? 0;
+        tracked.indexVersion = attributeVersion(index);
+        tracked.indexCount = index?.count ?? position?.count ?? 0;
+        if (tracked.dynamic) dynamicMembershipChanged = true;
+        else staticMembershipChanged = true;
+      }
 
       if (tracked.classification !== Classification.Auto) continue;
 
@@ -150,6 +184,7 @@ class ThreeCollisionBackend implements ICollisionBackend {
         dynamicMembershipChanged = true;
       }
     }
+    this.invalidatedGeometry.clear();
 
     if (staticMembershipChanged) {
       this.rebuildStaticOctree();
@@ -448,6 +483,11 @@ class ThreeCollisionBackend implements ICollisionBackend {
         dynamic: previousTracked.dynamic,
         matrixWorld: previousTracked.matrixWorld.clone(),
         lastMovedAt: previousTracked.lastMovedAt,
+        geometry: previousTracked.geometry,
+        positionVersion: previousTracked.positionVersion,
+        positionCount: previousTracked.positionCount,
+        indexVersion: previousTracked.indexVersion,
+        indexCount: previousTracked.indexCount,
       });
 
       return;
@@ -459,6 +499,17 @@ class ThreeCollisionBackend implements ICollisionBackend {
       dynamic: classification === Classification.Dynamic,
       matrixWorld: object.matrixWorld.clone(),
       lastMovedAt: this.elapsedTime,
+      geometry: previousTracked?.geometry ?? object.geometry,
+      positionVersion: previousTracked?.positionVersion
+        ?? attributeVersion(object.geometry.getAttribute('position')),
+      positionCount: previousTracked?.positionCount
+        ?? object.geometry.getAttribute('position')?.count
+        ?? 0,
+      indexVersion: previousTracked?.indexVersion ?? attributeVersion(object.geometry.index),
+      indexCount: previousTracked?.indexCount
+        ?? object.geometry.index?.count
+        ?? object.geometry.getAttribute('position')?.count
+        ?? 0,
     });
   }
 
@@ -486,8 +537,9 @@ class ThreeCollisionBackend implements ICollisionBackend {
     objects: THREE.Mesh[],
   ): Octree {
     const octree = new Octree();
-    if (this.maxLevel) octree.maxLevel = this.maxLevel;
-    if (this.trianglesPerLeaf) octree.trianglesPerLeaf = this.trianglesPerLeaf;
+    const settings = this.getOctreeSettings();
+    if (settings.maxLevel !== null) octree.maxLevel = settings.maxLevel;
+    if (settings.trianglesPerLeaf !== null) octree.trianglesPerLeaf = settings.trianglesPerLeaf;
 
     let triangleCount = 0;
 
@@ -503,6 +555,13 @@ class ThreeCollisionBackend implements ICollisionBackend {
     }
 
     return octree;
+  }
+
+  private getOctreeSettings(): { maxLevel: number | null; trianglesPerLeaf: number | null } {
+    return {
+      maxLevel: this.maxLevel,
+      trianglesPerLeaf: this.trianglesPerLeaf,
+    };
   }
 
   private addMeshToOctree(
@@ -640,3 +699,8 @@ class ThreeCollisionBackend implements ICollisionBackend {
 }
 
 export default ThreeCollisionBackend;
+
+function attributeVersion(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined): number {
+  if (!attribute) return -1;
+  return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
+}

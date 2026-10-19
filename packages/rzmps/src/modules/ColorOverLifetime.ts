@@ -23,6 +23,22 @@ class ColorOverLifetime extends Module {
     }, {
       ...options,
       priority: Module.Priority.Transient,
+      modifyGPU: (particle) => {
+          if (this.options.color !== undefined) {
+            particle.color.assign(
+              particle.color.mul(this.gpuParameters.color(
+                'color', () => this.options.color, particle.time, new THREE.Color(), particle.index,
+              )),
+            );
+          }
+          if (this.options.alpha !== undefined) {
+            particle.alpha.assign(
+              particle.alpha.mul(this.gpuParameters.number(
+                'alpha', () => this.options.alpha, particle.time, 1, particle.index,
+              )),
+            );
+          }
+        }
     });
   }
 }

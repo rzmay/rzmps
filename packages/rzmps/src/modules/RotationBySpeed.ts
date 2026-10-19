@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { ValueByParameter } from '../types/ValueByParameter';
+import type { Node } from 'three/webgpu';
 import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 import { SpeedRange } from './ColorBySpeed';
 
@@ -37,6 +38,28 @@ class RotationBySpeed extends Module {
     }, {
       ...options,
       priority: Module.Priority.PreMovementTransient,
+      modifyGPU: (particle) => {
+          const time = this.getSpeedTimeGPU(particle.velocity.length());
+
+          particle.rotation.assign(
+            particle.rotation.add(this.gpuParameters.parameterVector(
+              'angle', () => this.options.angle,
+              time,
+            )),
+          );
+          particle.angularVelocity.assign(
+            particle.angularVelocity.add(this.gpuParameters.parameterVector(
+              'angularVelocity', () => this.options.angularVelocity,
+              time,
+            )),
+          );
+          particle.angularAcceleration.assign(
+            particle.angularAcceleration.add(this.gpuParameters.parameterVector(
+              'angularAcceleration', () => this.options.angularAcceleration,
+              time,
+            )),
+          );
+        }
     });
   }
 
@@ -48,6 +71,15 @@ class RotationBySpeed extends Module {
     return THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(speed, min, max, 0, 1), 0, 1);
   }
 
+  private getSpeedTimeGPU(speed: Node<'float'>) {
+    const min = this.gpuParameters.number('speedRange.min', () => (
+      Array.isArray(this.options.speedRange) ? this.options.speedRange[0] : this.options.speedRange?.min
+    ), speed, 0);
+    const max = this.gpuParameters.number('speedRange.max', () => (
+      Array.isArray(this.options.speedRange) ? this.options.speedRange[1] : this.options.speedRange?.max
+    ), speed, 1);
+    return speed.sub(min).div(max.sub(min).max(Number.EPSILON)).clamp(0, 1);
+  }
 }
 
 export default RotationBySpeed;

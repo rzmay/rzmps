@@ -20,6 +20,7 @@ import scenePresets from '../presets/scenes';
 import BenchmarkPage from './BenchmarkPage';
 
 const RENDERER_MODES = ['webgl', 'webgpu'];
+const GPU_FLUID_PRESETS = new Set(['Gas Volume', 'FLIP Fluid']);
 const PARTICLE_PRESET_NAMES = Object.keys(particlePresets);
 const SCENE_PRESET_NAMES = Object.keys(scenePresets);
 
@@ -173,7 +174,9 @@ function DemoPage() {
   const particleCountRef = useRef(null);
   const [showCode, setShowCode] = useState(false);
   const [rendererMode, setRendererMode] = useState(() => (
-    getQueryParam('renderer', RENDERER_MODES, 'webgl')
+    GPU_FLUID_PRESETS.has(getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire'))
+      ? 'webgpu'
+      : getQueryParam('renderer', RENDERER_MODES, 'webgl')
   ));
   const [particlePreset, setParticlePreset] = useState(() => (
     getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire')
@@ -193,6 +196,10 @@ function DemoPage() {
 
   const handlePresetChange = useCallback((name) => {
     setQueryParam('preset', name);
+    if (GPU_FLUID_PRESETS.has(name)) {
+      setQueryParam('renderer', 'webgpu');
+      setRendererMode('webgpu');
+    }
     setParticlePreset(name);
   }, []);
 
@@ -201,9 +208,21 @@ function DemoPage() {
     setScenePreset(name);
   }, []);
 
-  const handleParticleCountChange = useCallback((count) => {
+  const handleParticleCountChange = useCallback((stats) => {
     if (particleCountRef.current) {
-      particleCountRef.current.textContent = `${count.toLocaleString()} particles`;
+      const count = typeof stats === 'number' ? stats : stats.particles;
+      const allocated = typeof stats === 'number' ? 0 : stats.allocated;
+      const activeSlots = typeof stats === 'number' ? 0 : stats.activeSlots;
+      const usage = allocated > 0 ? (count / allocated) * 100 : 0;
+      const lines = [`${count.toLocaleString()} particles`];
+
+      if (allocated > 0) {
+        lines.push(`${allocated.toLocaleString()} GPU slots, ${usage.toFixed(1)}% live`);
+      } else if (activeSlots > 0) {
+        lines.push(`${activeSlots.toLocaleString()} active slots`);
+      }
+
+      particleCountRef.current.textContent = lines.join('\n');
     }
   }, []);
 

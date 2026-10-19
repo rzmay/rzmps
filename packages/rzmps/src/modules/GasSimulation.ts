@@ -1,133 +1,69 @@
 import * as THREE from 'three';
-import FluidSimulation, { type FluidSimulationOptions } from './FluidSimulation';
-import ParticleOctree, { type OctreeConfig } from '../helpers/ParticleOctree';
-import ParticleSystem from '../ParticleSystem';
-import tagsIntersect from '../helpers/tagsIntersect';
-import Particle from '../Particle';
-import type { OctreeAggregator, OctreeNode } from '../helpers/ParticleOctree';
+import { Storage3DTexture, StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
+import { Fn, clamp, float, instanceIndex, ivec3, max, mix, storage, textureStore, vec3, vec4 } from 'three/tsl';
+import type { GPUParticleRenderBufferState, GPUParticleUpdateContext } from '../gpu/Particle';
+import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
 import type { VolumeField } from '../interfaces/VolumeField';
+import FluidSimulation, { type FluidSimulationOptions } from './FluidSimulation';
 
-interface FluidSourceAggregate {
-  count: number;
-  mass: number;
-  momentum: THREE.Vector3;
-  density: number;
-  temperatureMass: number;
-  color: THREE.Vector3;
-  radius: number;
-}
-
-const FluidSourceAggregator: OctreeAggregator<FluidSourceAggregate> = {
-  new: (
-    particle?: Particle,
-    _particleIndex?: number,
-    _node?: OctreeNode<FluidSourceAggregate>,
-  ) => {
-    const alpha = particle?.alpha ?? 1;
-    const mass = (particle?.mass ?? 0) * alpha;
-    const density = typeof particle?.data?.density === 'number'
-      ? particle.data.density * alpha
-      : mass;
-    const temperature = typeof particle?.data?.temperature === 'number'
-      ? particle.data.temperature
-      : 0;
-    const radius = typeof particle?.data?.fluidRadius === 'number'
-      ? particle.data.fluidRadius
-      : Math.max(
-        particle?.scale.x ?? 0,
-        particle?.scale.y ?? 0,
-        particle?.scale.z ?? 0,
-      ) * 0.5;
-
-    return {
-      count: particle ? 1 : 0,
-      mass,
-      momentum: particle ? particle.velocity.clone().multiplyScalar(mass) : new THREE.Vector3(),
-      density,
-      temperatureMass: temperature * mass,
-      color: particle
-        ? new THREE.Vector3(particle.color.r, particle.color.g, particle.color.b)
-        : new THREE.Vector3(),
-      radius: particle ? Math.max(radius, 0) : 0,
-    };
-  },
-  combine: (a, b) => {
-    const currentWeight = Math.max(a.density, a.mass, 0);
-    const nextWeight = Math.max(b.density, b.mass, 0);
-    const totalWeight = currentWeight + nextWeight;
-
-    if (totalWeight > 0) {
-      a.color.multiplyScalar(currentWeight)
-        .add(b.color.clone().multiplyScalar(nextWeight))
-        .divideScalar(totalWeight);
-      a.radius = (a.radius * currentWeight + b.radius * nextWeight) / totalWeight;
-    }
-
-    a.count += b.count;
-    a.mass += b.mass;
-    a.momentum.add(b.momentum);
-    a.density += b.density;
-    a.temperatureMass += b.temperatureMass;
-
-    return a;
-  },
-};
+type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
 
 export interface GasSimulationOptions extends FluidSimulationOptions {
   densityDissipation: number;
   temperatureDissipation: number;
+  colorDissipation: number;
   velocityDissipation: number;
   buoyancy: number;
   weight: number;
   sourceStrength: number;
   velocitySourceStrength: number;
-  octreeOptions: Partial<OctreeConfig>;
+  sourceTemperature: number;
+  maxSplatRadius: number;
 }
 
 class GasSimulation extends FluidSimulation {
   density: VolumeField;
-  temperature: Float32Array;
+  colorField: VolumeField;
   densityDissipation: number;
   temperatureDissipation: number;
+  colorDissipation: number;
   velocityDissipation: number;
   buoyancy: number;
   weight: number;
   sourceStrength: number;
   velocitySourceStrength: number;
-  octreeOptions: Partial<OctreeConfig>;
+  sourceTemperature: number;
+  maxSplatRadius: number;
 
-  private sourceOctree: ParticleOctree<FluidSourceAggregate>;
-  private cellCoordinate = new THREE.Vector3();
-  private splatCenter = new THREE.Vector3();
-  private densityData: Float32Array;
-  private renderDensityData: Float32Array;
-  private colorFieldData: Float32Array;
-  autoBounds: boolean;
-  private visualRefreshParticles: Particle[] = [];
-  private visualBounds = new THREE.Box3();
-  private visualBoundsMin = new THREE.Vector3();
-  private visualBoundsMax = new THREE.Vector3();
+  private readonly densityAttributeA: StorageBufferAttribute;
+  private readonly densityAttributeB: StorageBufferAttribute;
+  private readonly colorAttributeA: StorageBufferAttribute;
+  private readonly colorAttributeB: StorageBufferAttribute;
+  private readonly visualDensityAttribute: StorageBufferAttribute;
+  private readonly visualColorAttribute: StorageBufferAttribute;
+  private densityCurrent: Vec4Storage;
+  private densityNext: Vec4Storage;
+  private colorCurrent: Vec4Storage;
+  private colorNext: Vec4Storage;
+  private readonly visualDensity: Vec4Storage;
+  private readonly visualColor: Vec4Storage;
+  private readonly densityTexture: Storage3DTexture;
+  private readonly colorTexture: Storage3DTexture;
+  private gpuCacheKey = '';
+  private velocityNodes = new WeakMap<object, ComputeNode>();
+  private velocitySourceNode?: ComputeNode;
+  private sourceNodes = new WeakMap<object, ComputeNode>();
+  private densitySourceNodes = new WeakMap<object, ComputeNode>();
+  private colorSourceNodes = new WeakMap<object, ComputeNode>();
+  private outputNodes = new WeakMap<object, ComputeNode>();
+  private pendingPreviousBounds?: THREE.Box3;
+  private visualCacheKey = '';
+  private visualDensityNode?: ComputeNode;
+  private visualColorNode?: ComputeNode;
+  private visualOutputNodes = new WeakMap<object, ComputeNode>();
 
   constructor(options: Partial<GasSimulationOptions> = {}) {
-    const maxDepth = GasSimulation.getOctreeMaxDepth(options);
-
-    super({
-      ...options,
-      resolution: 2 ** maxDepth,
-    });
-    this.autoBounds = !options.bounds;
-    this.densityData = new Float32Array(this.cellCount);
-    this.renderDensityData = new Float32Array(this.cellCount);
-    this.colorFieldData = new Float32Array(this.cellCount * 4);
-    this.colorField.channels = 4;
-    this.density = {
-      data: this.renderDensityData,
-      resolution: new THREE.Vector3(this.resolution, this.resolution, this.resolution),
-      bounds: this.bounds.clone(),
-      version: 0,
-      channels: 1,
-    };
-    this.temperature = new Float32Array(this.cellCount);
+    super(options);
     this.densityDissipation = options.densityDissipation ?? 0.99;
     this.temperatureDissipation = options.temperatureDissipation ?? 0.98;
     this.colorDissipation = options.colorDissipation ?? this.densityDissipation;
@@ -136,324 +72,303 @@ class GasSimulation extends FluidSimulation {
     this.weight = options.weight ?? 0;
     this.sourceStrength = options.sourceStrength ?? 1;
     this.velocitySourceStrength = options.velocitySourceStrength ?? 0.12;
-    this.octreeOptions = {
-      bounds: options.bounds?.clone() ?? this.bounds.clone(),
-      maxDepth,
-      particlesPerLeaf: options.octreeOptions?.particlesPerLeaf ?? 4,
-      quantizeBounds: options.octreeOptions?.quantizeBounds ?? (this.autoBounds ? 2 : 0),
-      timeQuality: options.octreeOptions?.timeQuality ?? 1,
-      brickLevel: options.octreeOptions?.brickLevel,
+    this.sourceTemperature = options.sourceTemperature ?? 0;
+    this.maxSplatRadius = options.maxSplatRadius ?? 1.5;
+
+    this.densityAttributeA = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
+    this.densityAttributeB = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
+    this.colorAttributeA = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
+    this.colorAttributeB = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
+    this.visualDensityAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
+    this.visualColorAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
+    this.densityCurrent = storage(this.densityAttributeA, 'vec4', this.cellCount) as Vec4Storage;
+    this.densityNext = storage(this.densityAttributeB, 'vec4', this.cellCount) as Vec4Storage;
+    this.colorCurrent = storage(this.colorAttributeA, 'vec4', this.cellCount) as Vec4Storage;
+    this.colorNext = storage(this.colorAttributeB, 'vec4', this.cellCount) as Vec4Storage;
+    this.visualDensity = storage(this.visualDensityAttribute, 'vec4', this.cellCount) as Vec4Storage;
+    this.visualColor = storage(this.visualColorAttribute, 'vec4', this.cellCount) as Vec4Storage;
+
+    this.densityTexture = this.makeTexture();
+    this.colorTexture = this.makeTexture();
+    this.density = {
+      texture: this.densityTexture,
+      bounds: this.bounds.clone(),
+      resolution: new THREE.Vector3(this.resolution, this.resolution, this.resolution),
+      channels: 4,
+      version: 0,
     };
-    this.sourceOctree = new ParticleOctree(this.octreeOptions, FluidSourceAggregator);
+    this.colorField = {
+      texture: this.colorTexture,
+      bounds: this.bounds.clone(),
+      resolution: this.density.resolution.clone(),
+      channels: 4,
+      version: 0,
+    };
   }
 
-  private static getOctreeMaxDepth(options: Partial<GasSimulationOptions>): number {
-    if (options.octreeOptions?.maxDepth !== undefined) {
-      return Math.max(1, Math.floor(options.octreeOptions.maxDepth));
-    }
-
-    const requestedResolution = Math.max(1, Math.floor(options.resolution ?? 16));
-
-    return Math.max(1, Math.ceil(Math.log2(requestedResolution)));
-  }
-
-  update(dt: number, particleSystem?: ParticleSystem): void {
-    if (particleSystem) {
-      const sourceParticles = particleSystem.particles.filter((particle) => (
-        (!this.tags || tagsIntersect(this.tags, particle.tags ?? []))
-        && this.condition(particle)
-      ));
-
-      this.sourceOctree.setBounds(particleSystem.boundingBox.isEmpty()
-        ? this.bounds
-        : particleSystem.boundingBox);
-      this.sourceOctree.rebuild(sourceParticles);
-      this.syncBoundsFromSourceOctree();
-    }
-
-    this.injectParticleSources();
-    this.advectVelocity(dt, this.velocityDissipation);
-    this.applyBuoyancy(dt);
-    this.applyExternalForces(dt);
-    this.calculateDivergence();
-    this.solvePressure();
-    this.projectVelocity();
-
-    const nextDensity = new Float32Array(this.cellCount);
-    const nextTemperature = new Float32Array(this.cellCount);
-    const nextColor = new Float32Array(this.cellCount * 3);
-
-    this.advectScalar(this.densityData, nextDensity, dt, this.densityDissipation);
-    this.advectScalar(this.temperature, nextTemperature, dt, this.temperatureDissipation);
-    this.advectColor(nextColor, dt);
-    this.densityData = nextDensity;
-    this.temperature = nextTemperature;
-    this.color = nextColor;
-    this.publishBaseRenderFields();
-  }
-
-  public refreshRenderFields(particleSystem?: ParticleSystem): void {
-    this.renderDensityData.set(this.densityData);
-    this.rebuildNormalizedColorField(this.densityData, this.color);
-
-    if (particleSystem) {
-      this.visualRefreshParticles = particleSystem.particles.filter((particle) => (
-        (!this.tags || tagsIntersect(this.tags, particle.tags ?? []))
-        && this.condition(particle)
-      ));
-      this.sourceOctree.setBounds(this.getParticleBounds(this.visualRefreshParticles));
-      this.sourceOctree.rebuild(this.visualRefreshParticles);
-      this.applyVisualParticleSources();
-    }
-
-    this.density.data = this.renderDensityData;
-    this.density.bounds.copy(this.bounds);
-    this.density.version += 1;
-    this.updateColorField(this.colorFieldData);
-  }
-
-  private getParticleBounds(particles: Particle[]): THREE.Box3 {
-    this.visualBounds.makeEmpty();
-
-    particles.forEach((particle) => {
-      const radius = Math.max(
-        Math.abs(particle.scale.x),
-        Math.abs(particle.scale.y),
-        Math.abs(particle.scale.z),
-        Number.EPSILON,
-      );
-
-      this.visualBounds.expandByPoint(this.visualBoundsMin.copy(particle.position).addScalar(-radius));
-      this.visualBounds.expandByPoint(this.visualBoundsMax.copy(particle.position).addScalar(radius));
-    });
-
-    return this.visualBounds.isEmpty() ? this.bounds : this.visualBounds;
-  }
-
-  private publishBaseRenderFields(): void {
-    this.renderDensityData.set(this.densityData);
-    this.rebuildNormalizedColorField(this.densityData, this.color);
-    this.density.data = this.renderDensityData;
-    this.density.bounds.copy(this.bounds);
-    this.density.version += 1;
-    this.updateColorField(this.colorFieldData);
-  }
-
-  protected getColorDensity(index: number): number {
-    return this.densityData[index];
-  }
-
-  private injectParticleSources(): void {
-    this.sourceOctree.forEachGridCell((cell) => {
-      const source = cell.aggregate;
-
-      if (source.count === 0) return;
-
-      this.splatSource(cell.center, source);
-    }, {
-      exact: true,
-      occupiedOnly: true,
-    });
-  }
-
-  private splatSource(position: THREE.Vector3, source: FluidSourceAggregate): void {
-    this.worldToCell(position, this.cellCoordinate);
-
-    const radius = Math.max(source.radius, this.cellSize * 0.5);
-    const cellRadius = Math.max(0, Math.ceil(radius / this.cellSize));
-    const strength = this.sourceStrength;
-    let totalWeight = 0;
-
-    for (let z = this.cellCoordinate.z - cellRadius; z <= this.cellCoordinate.z + cellRadius; z += 1) {
-      for (let y = this.cellCoordinate.y - cellRadius; y <= this.cellCoordinate.y + cellRadius; y += 1) {
-        for (let x = this.cellCoordinate.x - cellRadius; x <= this.cellCoordinate.x + cellRadius; x += 1) {
-          if (!this.isCellInBounds(x, y, z)) continue;
-
-          this.getCellCenter(x, y, z, this.splatCenter);
-          const distance = this.splatCenter.distanceTo(position);
-
-          if (distance > radius) continue;
-          totalWeight += Math.max(0, 1 - distance / radius);
-        }
-      }
-    }
-
-    if (totalWeight <= 0) totalWeight = 1;
-
-    for (let z = this.cellCoordinate.z - cellRadius; z <= this.cellCoordinate.z + cellRadius; z += 1) {
-      for (let y = this.cellCoordinate.y - cellRadius; y <= this.cellCoordinate.y + cellRadius; y += 1) {
-        for (let x = this.cellCoordinate.x - cellRadius; x <= this.cellCoordinate.x + cellRadius; x += 1) {
-          if (!this.isCellInBounds(x, y, z)) continue;
-
-          this.getCellCenter(x, y, z, this.splatCenter);
-          const distance = this.splatCenter.distanceTo(position);
-
-          if (distance > radius) continue;
-
-          const weight = Math.max(0, 1 - distance / radius) / totalWeight;
-          const index = this.index(x, y, z);
-          const velocityIndex = index * 3;
-          const colorIndex = index * 3;
-          const density = source.density * strength * weight;
-
-          this.densityData[index] += density;
-          this.color[colorIndex] += source.color.x * density;
-          this.color[colorIndex + 1] += source.color.y * density;
-          this.color[colorIndex + 2] += source.color.z * density;
-
-          if (source.mass > 0) {
-            this.temperature[index] += (source.temperatureMass / source.mass) * strength * weight;
-            const blend = THREE.MathUtils.clamp(
-              density * this.velocitySourceStrength,
-              0,
-              1,
-            );
-            this.velocity[velocityIndex] = THREE.MathUtils.lerp(
-              this.velocity[velocityIndex],
-              source.momentum.x / source.mass,
-              blend,
-            );
-            this.velocity[velocityIndex + 1] = THREE.MathUtils.lerp(
-              this.velocity[velocityIndex + 1],
-              source.momentum.y / source.mass,
-              blend,
-            );
-            this.velocity[velocityIndex + 2] = THREE.MathUtils.lerp(
-              this.velocity[velocityIndex + 2],
-              source.momentum.z / source.mass,
-              blend,
-            );
-          }
-        }
-      }
-    }
-
-    this.clampVelocity();
-  }
-
-  private applyBuoyancy(dt: number): void {
-    for (let index = 0; index < this.cellCount; index += 1) {
-      const lift = this.temperature[index] * this.buoyancy - this.densityData[index] * this.weight;
-
-      this.velocity[index * 3 + 1] += lift * dt;
-    }
-
-    this.clampVelocity();
-  }
-
-  private rebuildNormalizedColorField(
-    densityData: Float32Array,
-    colorData: Float32Array,
+  public override computeGPU(
+    context: GPUParticleUpdateContext,
+    renderer: ParticleSpatialGridRenderer,
+    grid?: ParticleSpatialGrid,
   ): void {
-    for (let index = 0; index < this.cellCount; index += 1) {
-      const sourceColorIndex = index * 3;
-      const colorIndex = index * 4;
-      const density = densityData[index];
+    if (!grid) throw new Error('GasSimulation requires a GPU spatial grid.');
+    this.refreshBounds(grid, renderer);
+    this.remapFields(renderer);
+    const dt = context.deltaTimeNode;
+    const tagMask = context.system.getGPUFilterTagMask(this.tags);
 
-      const red = colorData[sourceColorIndex] / Math.max(density, Number.EPSILON);
-      const green = colorData[sourceColorIndex + 1] / Math.max(density, Number.EPSILON);
-      const blue = colorData[sourceColorIndex + 2] / Math.max(density, Number.EPSILON);
-      if (density <= 0) {
-        this.colorFieldData[colorIndex] = 0;
-        this.colorFieldData[colorIndex + 1] = 0;
-        this.colorFieldData[colorIndex + 2] = 0;
-        this.colorFieldData[colorIndex + 3] = 0;
-        continue;
-      }
-
-      this.colorFieldData[colorIndex] = THREE.MathUtils.clamp(red, 0, 1);
-      this.colorFieldData[colorIndex + 1] = THREE.MathUtils.clamp(green, 0, 1);
-      this.colorFieldData[colorIndex + 2] = THREE.MathUtils.clamp(blue, 0, 1);
-      this.colorFieldData[colorIndex + 3] = 1;
-    }
-  }
-
-  private applyVisualParticleSources(): void {
-    this.sourceOctree.forEachGridCell((cell) => {
-      const source = cell.aggregate;
-
-      if (source.count === 0) return;
-
-      this.splatVisualSource(cell.center, source);
-    }, {
-      exact: true,
-      occupiedOnly: true,
-    });
-  }
-
-  private splatVisualSource(position: THREE.Vector3, source: FluidSourceAggregate): void {
-    this.worldToCell(position, this.cellCoordinate);
-
-    const radius = Math.max(source.radius, this.cellSize * 0.5);
-    const cellRadius = Math.max(0, Math.ceil(radius / this.cellSize));
-    let totalWeight = 0;
-
-    for (let z = this.cellCoordinate.z - cellRadius; z <= this.cellCoordinate.z + cellRadius; z += 1) {
-      for (let y = this.cellCoordinate.y - cellRadius; y <= this.cellCoordinate.y + cellRadius; y += 1) {
-        for (let x = this.cellCoordinate.x - cellRadius; x <= this.cellCoordinate.x + cellRadius; x += 1) {
-          if (!this.isCellInBounds(x, y, z)) continue;
-
-          this.getCellCenter(x, y, z, this.splatCenter);
-          const distance = this.splatCenter.distanceTo(position);
-
-          if (distance > radius) continue;
-          totalWeight += Math.max(0, 1 - distance / radius);
-        }
-      }
+    const cacheKey = [grid.resourceVersion, context.buffers.version, tagMask, this.velocityDissipation,
+      this.buoyancy, this.weight, this.velocitySourceStrength, this.densityDissipation,
+      this.temperatureDissipation, this.colorDissipation, this.sourceStrength,
+      this.sourceTemperature, this.maxSplatRadius].join('|');
+    if (cacheKey !== this.gpuCacheKey) {
+      this.gpuCacheKey = cacheKey;
+      this.velocityNodes = new WeakMap();
+      this.velocitySourceNode = undefined;
+      this.sourceNodes = new WeakMap();
+      this.densitySourceNodes = new WeakMap();
+      this.colorSourceNodes = new WeakMap();
+      this.outputNodes = new WeakMap();
     }
 
-    if (totalWeight <= 0) totalWeight = 1;
+    const velocity = this.velocityNodes.get(this.densityCurrent) ?? Fn(() => {
+      const coordinate = this.cellCoordinate(instanceIndex);
+      const center = this.cellCenter(coordinate);
+      const previous = this.sampleVelocity(center.sub(
+        this.sampleVelocity(center).mul(dt),
+      ));
+      const density = this.densityCurrent.element(instanceIndex);
+      const lift = density.y.mul(this.buoyancy).sub(density.x.mul(this.weight));
+      const advected = vec3(previous)
+        .mul(this.velocityDissipation)
+        .add(this.forceNode.mul(dt))
+        .add(vec3(0, 1, 0).mul(lift.mul(dt)));
+      this.velocityNext.element(instanceIndex).assign(vec4(this.clampVelocity(advected), 0));
+    })().compute(this.cellCount);
+    this.velocityNodes.set(this.densityCurrent, velocity);
+    renderer.compute(velocity);
 
-    for (let z = this.cellCoordinate.z - cellRadius; z <= this.cellCoordinate.z + cellRadius; z += 1) {
-      for (let y = this.cellCoordinate.y - cellRadius; y <= this.cellCoordinate.y + cellRadius; y += 1) {
-        for (let x = this.cellCoordinate.x - cellRadius; x <= this.cellCoordinate.x + cellRadius; x += 1) {
-          if (!this.isCellInBounds(x, y, z)) continue;
+    const velocitySources = this.velocitySourceNode ?? Fn(() => {
+      const coordinate = this.cellCoordinate(instanceIndex);
+      const center = this.cellCenter(coordinate);
+      const momentum = vec3(0).toVar('gasSourceMomentum');
+      const sourceMass = float(0).toVar('gasSourceMass');
+      const radius = max(this.cellSizeNode.mul(1.5), float(this.maxSplatRadius));
+      grid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
+        const particleRadius = max(
+          max(particle.scale.x, max(particle.scale.y, particle.scale.z)).mul(0.5),
+          this.cellSizeNode.mul(0.75),
+        );
+        const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(particleRadius)));
+        const mass = max(particle.mass, float(0)).mul(particle.alpha).mul(weight);
+        sourceMass.addAssign(mass);
+        momentum.addAssign(particle.velocity.mul(mass));
+      }, { tagMask });
+      const blend = clamp(sourceMass.mul(this.velocitySourceStrength), 0, 1);
+      const previous = vec3(this.velocityNext.element(instanceIndex).xyz);
+      const updated = mix(previous, momentum.div(max(sourceMass, float(1e-6))), blend);
+      this.velocityNext.element(instanceIndex).assign(vec4(this.clampVelocity(updated), 0));
+    })().compute(this.cellCount);
+    this.velocitySourceNode = velocitySources;
+    renderer.compute(velocitySources);
 
-          this.getCellCenter(x, y, z, this.splatCenter);
-          const distance = this.splatCenter.distanceTo(position);
+    this.solveProjection(renderer, this.velocityNext, this.velocityCurrent);
 
-          if (distance > radius) continue;
+    const densityCurrent = this.densityCurrent;
+    const colorCurrent = this.colorCurrent;
+    const densityNext = this.densityNext;
+    const colorNext = this.colorNext;
+    const sources = this.sourceNodes.get(densityCurrent) ?? Fn(() => {
+      const coordinate = this.cellCoordinate(instanceIndex);
+      const center = this.cellCenter(coordinate);
+      const backtrace = center.sub(this.sampleVelocity(center).mul(dt));
+      const previousIndex = this.cellIndex(this.worldToCell(backtrace));
+      const previousDensity = densityCurrent.element(previousIndex);
+      const previousColor = colorCurrent.element(previousIndex);
+      const density = max(float(0), previousDensity.x.mul(this.densityDissipation));
+      const temperature = max(float(0), previousDensity.y.mul(this.temperatureDissipation));
+      const color = vec3(previousColor.xyz).mul(this.colorDissipation);
+      densityNext.element(instanceIndex).assign(vec4(density, temperature, 0, 0));
+      colorNext.element(instanceIndex).assign(vec4(color, 0));
+    })().compute(this.cellCount);
+    this.sourceNodes.set(densityCurrent, sources);
+    renderer.compute(sources);
 
-          const weight = Math.max(0, 1 - distance / radius) / totalWeight;
-          const index = this.index(x, y, z);
-          const colorIndex = index * 4;
-          const density = source.density * this.sourceStrength * weight;
-          const previousDensity = this.renderDensityData[index];
-          const nextDensity = previousDensity + density;
+    const densitySources = this.densitySourceNodes.get(densityNext) ?? Fn(() => {
+      const center = this.cellCenter(this.cellCoordinate(instanceIndex));
+      const sourceDensity = float(0).toVar('gasSourceDensity');
+      const radius = max(this.cellSizeNode.mul(1.5), float(this.maxSplatRadius));
+      grid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
+        const particleRadius = max(max(particle.scale.x, max(particle.scale.y, particle.scale.z)).mul(0.5), this.cellSizeNode.mul(0.75));
+        const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(particleRadius)));
+        sourceDensity.addAssign(max(particle.mass, float(0)).mul(particle.alpha).mul(weight).mul(this.sourceStrength));
+      }, { tagMask });
+      const previous = densityNext.element(instanceIndex);
+      densityNext.element(instanceIndex).assign(vec4(
+        previous.x.add(sourceDensity), previous.y.add(sourceDensity.mul(this.sourceTemperature)), 0, 0,
+      ));
+    })().compute(this.cellCount);
+    this.densitySourceNodes.set(densityNext, densitySources);
+    renderer.compute(densitySources);
 
-          if (nextDensity <= 0) continue;
+    const colorSources = this.colorSourceNodes.get(colorNext) ?? Fn(() => {
+      const center = this.cellCenter(this.cellCoordinate(instanceIndex));
+      const sourceColor = vec3(0).toVar('gasSourceColor');
+      const radius = max(this.cellSizeNode.mul(1.5), float(this.maxSplatRadius));
+      grid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
+        const particleRadius = max(max(particle.scale.x, max(particle.scale.y, particle.scale.z)).mul(0.5), this.cellSizeNode.mul(0.75));
+        const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(particleRadius)));
+        const contribution = max(particle.mass, float(0)).mul(particle.alpha).mul(weight).mul(this.sourceStrength);
+        sourceColor.addAssign(particle.color.mul(contribution));
+      }, { tagMask });
+      colorNext.element(instanceIndex).assign(vec4(colorNext.element(instanceIndex).xyz.add(sourceColor), 0));
+    })().compute(this.cellCount);
+    this.colorSourceNodes.set(colorNext, colorSources);
+    renderer.compute(colorSources);
+    [this.densityCurrent, this.densityNext] = [this.densityNext, this.densityCurrent];
+    [this.colorCurrent, this.colorNext] = [this.colorNext, this.colorCurrent];
 
-          this.colorFieldData[colorIndex] = (
-            this.colorFieldData[colorIndex] * previousDensity + source.color.x * density
-          ) / nextDensity;
-          this.colorFieldData[colorIndex + 1] = (
-            this.colorFieldData[colorIndex + 1] * previousDensity + source.color.y * density
-          ) / nextDensity;
-          this.colorFieldData[colorIndex + 2] = (
-            this.colorFieldData[colorIndex + 2] * previousDensity + source.color.z * density
-          ) / nextDensity;
-          this.colorFieldData[colorIndex + 3] = Math.max(this.colorFieldData[colorIndex + 3], source.mass > 0 ? 1 : 0);
-          this.renderDensityData[index] = nextDensity;
-        }
-      }
-    }
-  }
-
-  private syncBoundsFromSourceOctree(): void {
-    if (!this.autoBounds || this.sourceOctree.bounds.isEmpty()) return;
-    if (
-      this.bounds.containsPoint(this.sourceOctree.bounds.min)
-      && this.bounds.containsPoint(this.sourceOctree.bounds.max)
-    ) return;
-
-    this.setSimulationBounds(this.sourceOctree.bounds);
-    this.clearSimulationState();
-    this.densityData.fill(0);
-    this.renderDensityData.fill(0);
-    this.temperature.fill(0);
-    this.colorFieldData.fill(0);
-    this.density.bounds.copy(this.bounds);
+    const outputDensity = this.densityCurrent;
+    const outputColor = this.colorCurrent;
+    const output = this.outputNodes.get(outputDensity) ?? Fn(() => {
+      const coordinate = this.cellCoordinate(instanceIndex);
+      const density = outputDensity.element(instanceIndex).x;
+      const color = outputColor.element(instanceIndex).xyz;
+      const normalized = vec3(color).div(max(density, float(1e-6)));
+      textureStore(this.densityTexture, vec3(coordinate), vec4(density, 0, 0, 1)).toWriteOnly();
+      textureStore(this.colorTexture, vec3(coordinate), vec4(normalized, density.greaterThan(0).select(1, 0))).toWriteOnly();
+    })().compute(this.cellCount);
+    this.outputNodes.set(outputDensity, output);
+    renderer.compute(output);
     this.density.version += 1;
+    this.colorField.version += 1;
+  }
+
+  public override renderGPU(
+    context: GPUParticleUpdateContext,
+    renderBuffers: GPUParticleRenderBufferState,
+    renderer: ParticleSpatialGridRenderer,
+    grid?: ParticleSpatialGrid,
+  ): void {
+    if (!grid) return;
+    const tagMask = context.system.getGPUFilterTagMask(this.tags);
+    const cacheKey = [grid.resourceVersion, context.buffers.version, renderBuffers.version,
+      tagMask, this.sourceStrength, this.maxSplatRadius].join('|');
+    if (cacheKey !== this.visualCacheKey) {
+      this.visualCacheKey = cacheKey;
+      this.visualDensityNode = undefined;
+      this.visualColorNode = undefined;
+    }
+
+    const densityNode = this.visualDensityNode ?? Fn(() => {
+      const center = this.cellCenter(this.cellCoordinate(instanceIndex));
+      const total = float(0).toVar('visualGasDensity');
+      const radius = max(this.cellSizeNode.mul(1.5), float(this.maxSplatRadius));
+      grid.forEachParticleInRadius(center, radius, (particle) => {
+        const vectors = renderBuffers.storage.createVectorNodes(particle.index);
+        const scalars = renderBuffers.storage.createScalarNodes(particle.index);
+        const particleRadius = max(max(vectors.scale.x, max(vectors.scale.y, vectors.scale.z)).mul(0.5), this.cellSizeNode.mul(0.75));
+        const weight = max(float(0), float(1).sub(vectors.position.distance(center).div(particleRadius)));
+        total.addAssign(max(particle.mass, float(0)).mul(scalars.alpha).mul(weight).mul(this.sourceStrength));
+      }, { tagMask });
+      this.visualDensity.element(instanceIndex).assign(vec4(total, 0, 0, 0));
+    })().compute(this.cellCount);
+    this.visualDensityNode = densityNode;
+    renderer.compute(densityNode);
+
+    const colorNode = this.visualColorNode ?? Fn(() => {
+      const center = this.cellCenter(this.cellCoordinate(instanceIndex));
+      const total = vec3(0).toVar('visualGasColor');
+      const radius = max(this.cellSizeNode.mul(1.5), float(this.maxSplatRadius));
+      grid.forEachParticleInRadius(center, radius, (particle) => {
+        const vectors = renderBuffers.storage.createVectorNodes(particle.index);
+        const scalars = renderBuffers.storage.createScalarNodes(particle.index);
+        const particleRadius = max(max(vectors.scale.x, max(vectors.scale.y, vectors.scale.z)).mul(0.5), this.cellSizeNode.mul(0.75));
+        const weight = max(float(0), float(1).sub(vectors.position.distance(center).div(particleRadius)));
+        const contribution = max(particle.mass, float(0)).mul(scalars.alpha).mul(weight).mul(this.sourceStrength);
+        total.addAssign(vectors.color.mul(contribution));
+      }, { tagMask });
+      this.visualColor.element(instanceIndex).assign(vec4(total, 0));
+    })().compute(this.cellCount);
+    this.visualColorNode = colorNode;
+    renderer.compute(colorNode);
+
+    const density = this.densityCurrent;
+    const color = this.colorCurrent;
+    const output = this.visualOutputNodes.get(density) ?? Fn(() => {
+      const coordinate = this.cellCoordinate(instanceIndex);
+      const totalDensity = density.element(instanceIndex).x.add(this.visualDensity.element(instanceIndex).x);
+      const totalColor = vec3(color.element(instanceIndex).xyz).add(this.visualColor.element(instanceIndex).xyz);
+      textureStore(this.densityTexture, vec3(coordinate), vec4(totalDensity, 0, 0, 1)).toWriteOnly();
+      textureStore(this.colorTexture, vec3(coordinate), vec4(
+        totalColor.div(max(totalDensity, float(1e-6))), totalDensity.greaterThan(0).select(1, 0),
+      )).toWriteOnly();
+    })().compute(this.cellCount);
+    this.visualOutputNodes.set(density, output);
+    renderer.compute(output);
+    this.density.version += 1;
+    this.colorField.version += 1;
+  }
+
+  protected override onBoundsChanged(previous: THREE.Box3): void {
+    this.pendingPreviousBounds ??= previous;
+    this.density.bounds.copy(this.bounds);
+    this.colorField.bounds.copy(this.bounds);
+    this.density.version += 1;
+    this.colorField.version += 1;
+  }
+
+  private remapFields(renderer: ParticleSpatialGridRenderer): void {
+    const previous = this.pendingPreviousBounds;
+    if (!previous) return;
+    this.pendingPreviousBounds = undefined;
+    const oldMin = vec3(previous.min);
+    const oldSize = previous.getSize(new THREE.Vector3()).x / this.resolution;
+    const oldDensity = this.densityCurrent;
+    const oldColor = this.colorCurrent;
+    const newDensity = this.densityNext;
+    const newColor = this.colorNext;
+    const remap = Fn(() => {
+      const center = this.cellCenter(this.cellCoordinate(instanceIndex));
+      const oldCoordinate = center.sub(oldMin).div(oldSize).floor();
+      const inside = oldCoordinate.greaterThanEqual(vec3(0)).all()
+        .and(oldCoordinate.lessThan(vec3(this.resolution)).all());
+      const clamped = this.cellIndex(ivec3(clamp(oldCoordinate, vec3(0), vec3(this.resolution - 1))));
+      newDensity.element(instanceIndex).assign(inside.select(oldDensity.element(clamped), vec4(0)));
+      newColor.element(instanceIndex).assign(inside.select(oldColor.element(clamped), vec4(0)));
+      this.velocityNext.element(instanceIndex).assign(inside.select(this.velocityCurrent.element(clamped), vec4(0)));
+    })().compute(this.cellCount);
+    renderer.compute(remap);
+    [this.densityCurrent, this.densityNext] = [this.densityNext, this.densityCurrent];
+    [this.colorCurrent, this.colorNext] = [this.colorNext, this.colorCurrent];
+    const copyVelocity = Fn(() => {
+      this.velocityCurrent.element(instanceIndex).assign(this.velocityNext.element(instanceIndex));
+    })().compute(this.cellCount);
+    renderer.compute(copyVelocity);
+  }
+
+  public override cleanup(): void {
+    super.cleanup();
+    this.densityTexture.dispose();
+    this.colorTexture.dispose();
+    [
+      this.densityAttributeA,
+      this.densityAttributeB,
+      this.colorAttributeA,
+      this.colorAttributeB,
+      this.visualDensityAttribute,
+      this.visualColorAttribute,
+    ].forEach((attribute) => attribute.dispose());
+  }
+
+  private makeTexture(): Storage3DTexture {
+    const texture = new Storage3DTexture(this.resolution, this.resolution, this.resolution);
+    texture.format = THREE.RGBAFormat;
+    texture.type = THREE.HalfFloatType;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    (texture as Storage3DTexture & { mipmapsAutoUpdate: boolean }).mipmapsAutoUpdate = false;
+    return texture;
   }
 }
 

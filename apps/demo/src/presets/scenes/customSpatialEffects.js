@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { float, vec3 } from 'three/tsl';
 import { Easing } from 'eaz';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import {
@@ -55,6 +56,12 @@ export default async function createCustomSpatialEffects(scene) {
     feather: 1.35,
     featherEasing: Easing.cubic.inOut,
     priority: Module.Priority.PreMovementTransient,
+    modifyGPU: (particle) => {
+      particle.color.assign(vec3(warmColor.r, warmColor.g, warmColor.b));
+      particle.scale.assign(vec3(warmScale));
+      particle.speed.assign(particle.speed.mul(warmSettings.speedMultiplier));
+      particle.velocity.assign(particle.velocity.mul(warmSettings.speedMultiplier));
+    },
   }, 2.7, 32, 16);
   warmRegion.name = 'Warm Glow Size Region';
 
@@ -71,6 +78,13 @@ export default async function createCustomSpatialEffects(scene) {
   }, {
     position: new THREE.Vector3(5, 2.4, 0),
     priority: Module.Priority.Permanent,
+    modifyGPU: (particle) => {
+      const blend = float(0.08);
+      particle.color.assign(particle.color.mul(float(1).sub(blend)).add(vec3(coolColor.r, coolColor.g, coolColor.b).mul(blend)));
+      particle.scale.assign(particle.scale.mul(float(1).sub(blend)).add(vec3(coolScale).mul(blend)));
+      particle.speed.assign(particle.speed.mul(coolSettings.speedMultiplier));
+      particle.velocity.assign(particle.velocity.mul(coolSettings.speedMultiplier));
+    },
   }, 4, 4, 4);
   coolRegion.name = 'Cool Shrink Region';
   coolRegion.rotation.y = Math.PI * 0.18;
@@ -91,6 +105,12 @@ export default async function createCustomSpatialEffects(scene) {
     scale: new THREE.Vector3(1.45, 1.45, 1.45),
     feather: 0.85,
     priority: Module.Priority.PreMovementTransient,
+    modifyGPU: (particle) => {
+      particle.color.assign(vec3(suzanneColor.r, suzanneColor.g, suzanneColor.b));
+      particle.scale.assign(vec3(suzanneScale));
+      particle.speed.assign(particle.speed.mul(suzanneSettings.speedMultiplier));
+      particle.velocity.assign(particle.velocity.mul(suzanneSettings.speedMultiplier));
+    },
   });
   suzanneRegion.name = 'Suzanne Feather Region';
   suzanneRegion.rotation.y = -Math.PI * 0.2;
@@ -135,13 +155,29 @@ export default async function createCustomSpatialEffects(scene) {
   };
   scene.userData[CONFIGURER_KEY] = configureSpatialEffects;
 
+  let elapsed = 0;
+  const motion = { enabled: true };
+
   return {
+    update: (deltaTime) => {
+      if (!motion.enabled) return;
+      elapsed += deltaTime;
+      warmRegion.position.set(
+        -5 + Math.sin(elapsed * 0.65) * 1.8,
+        2.4 + Math.sin(elapsed * 0.9) * 0.45,
+        Math.cos(elapsed * 0.48) * 1.25,
+      );
+
+      warmHelper.update();
+    },
+
     gui: (folder) => {
       const warmFolder = folder.addFolder('Warm Region');
       warmFolder.add(warmRegion.position, 'x', -12, 12, 0.1).name('X');
       warmFolder.add(warmRegion.position, 'y', -2, 10, 0.1).name('Y');
       warmFolder.add(warmRegion.position, 'z', -12, 12, 0.1).name('Z');
       warmFolder.add(warmSettings, 'speedMultiplier', 0.1, 3, 0.01).name('Speed');
+      warmFolder.add(motion, 'enabled').name('Move');
       warmFolder.add(warmRegion, 'feather', 0, 4, 0.05).name('Feather').onChange(() => warmHelper.update());
       warmFolder.add(warmHelper, 'visible').name('Show Helper');
 
