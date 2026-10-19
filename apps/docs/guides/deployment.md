@@ -33,8 +33,9 @@ its root directory, branch `develop`, these build settings, and your existing cu
 | `PUPPETEER_SKIP_DOWNLOAD` | `true` (committed previews need no browser during deployment) |
 
 The root `render.yaml` provides the equivalent Blueprint configuration. For an existing Render
-site, apply these settings to that site; no second service or domain is needed. The build checks
-generated documentation and preview freshness, builds both applications, and assembles:
+site, apply these settings to that site; no second service or domain is needed. The build
+regenerates ignored API pages, indexes, navigation data, and `llms` files from canonical sources,
+checks committed skill/README outputs and preview freshness, builds both applications, and assembles:
 
 ```text
 dist/
@@ -44,8 +45,7 @@ dist/
 ├── docs/
 │   ├── index.html      # VitePress homepage
 │   ├── assets/         # Documentation assets
-│   ├── previews/       # Generated example images
-│   └── agent-skill/    # Generated portable skill and references
+│   └── previews/       # Generated example images
 ├── llms.txt
 └── llms-full.txt
 ```

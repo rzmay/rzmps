@@ -24,9 +24,33 @@ from actual TypeDoc pages and public export sources by `scripts/docs/api-structu
 core classes first and place new API classes in a suitable feature group. Supporting signature
 types belong under Types, while Modules contains actual particle modifiers.
 
-`npm run docs:generate` regenerates TypeDoc Markdown, registry/index data, linked agent reference pages, and `llms.txt`/`llms-full.txt`. Those files are generated and must not be edited manually. Example guides, conceptual guides, and `.agents/skills/rzmps/SKILL.md` are authored. Commit regenerated artifacts alongside source changes. TypeDoc validates comment syntax and links; generation fails on warnings.
+`npm run docs:generate` regenerates TypeDoc Markdown, registry/index data, the complete agent skill,
+and `llms.txt`/`llms-full.txt`. Edit canonical guides, source comments, and templates; never edit
+their generated outputs. The skill's metadata and workflow come from the marked regions in
+[AI Coding Assistants](guides/ai-coding-assistants.md#canonical-skill-definition).
 
-Run `npm run docs:check` to validate source regions, metadata, complete explanations, local links, generated artifact consistency, and the VitePress build. Check mode compares outputs without rewriting them. Use `npm run docs:dev` to read the site locally. Static output is `apps/docs/.vitepress/dist`; `npm run site:build` combines it with the demo in root `dist`, with documentation under `/docs/`. The [deployment guide](guides/deployment.md) explains the Render build settings and rewrites for `/docs` and `/docs/`.
+| Artifact | Git policy | Source |
+| --- | --- | --- |
+| `.agents/skills/rzmps/SKILL.md` and `references/` | Generated and committed for GitHub installation | Canonical guides, examples, and API declarations |
+| Root and npm README guidance blocks | Generated and committed for direct GitHub/npm readers | AI Coding Assistants guide |
+| `apps/docs/public/previews/` and manifest | Generated and committed for visual review and browser-free deployment | Example factories and capture settings |
+| `apps/docs/api/`, guide/example index pages, navigation JSON | Generated and ignored | Source declarations, guides, and examples |
+| `apps/docs/public/llms.txt` and `llms-full.txt` | Generated and ignored | Canonical docs and skill installation guidance |
+| `examples/index.js` | Generated and ignored | Example factory metadata |
+| `packages/rzmps/AGENTS.md` | Generated and ignored, included in npm | `scripts/docs/templates/npm-agents.md` |
+
+Commit updated `.agents` files, README guidance, and reviewed preview assets alongside their
+source changes. Other artifacts are rebuilt before documentation/demo builds; package builds
+also regenerate npm `AGENTS.md`. No consumer installation hook runs any of this generation.
+TypeDoc validates comment syntax and links; generation fails on warnings.
+
+Run `npm run docs:check` to validate source regions, metadata, complete explanations, local links,
+generated artifact consistency, and the VitePress build. Check mode rebuilds ignored artifacts
+and verifies committed skill/README outputs without rewriting them; stale committed outputs
+fail CI and require `npm run docs:generate`. Use `npm run docs:dev` to read the site locally.
+Static output is `apps/docs/.vitepress/dist`; `npm run site:build` combines it with the demo in
+root `dist`, with documentation under `/docs/`. The [deployment guide](guides/deployment.md)
+explains the Render build settings and rewrites for `/docs` and `/docs/`.
 
 ## Visual inspection
 

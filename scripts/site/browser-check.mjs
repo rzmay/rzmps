@@ -35,8 +35,12 @@ try {
     const text=await page.$eval('.vp-doc',element=>element.textContent);
     assert.ok(text.includes(`Preset by ${example.author.name}`),`${example.id}: credit`);
   }
-  const skill=await fetch(origin+'/docs/agent-skill/SKILL.md');assert.equal(skill.status,200);assert.match(await skill.text(),/^---\nname: rzmps/);
+  assert.equal((await fetch(origin+'/docs/agent-skill/SKILL.md')).status,404,'the documentation must not host a duplicate skill');
+  const discovery=await fetch(origin+'/llms.txt');assert.equal(discovery.status,200);
+  const discoveryText=await discovery.text();
+  assert.ok(discoveryText.includes('npx skills add rzmay/rzmps --skill rzmps'));
+  assert.ok(discoveryText.includes('https://github.com/rzmay/rzmps/tree/HEAD/.agents/skills/rzmps'));
   for(const url of ['/llms.txt','/llms-full.txt'])assert.equal((await fetch(origin+url)).status,200,url);
   assert.deepEqual(errors,[]);
-  console.log('All 20 example posters, author credits, hosted skill, and discovery files passed browser checks.');
+  console.log('All 20 example posters, author credits, GitHub skill discovery guidance, and discovery files passed browser checks.');
 } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}

@@ -8,7 +8,7 @@ The RZMPS skill helps coding assistants create and debug Three.js particle syste
 compose emitters, modules, spatial effects, and renderers, and validate WebGL and WebGPU
 output using actual canvas previews. The complete skill lives in the public GitHub repository
 at [.agents/skills/rzmps](https://github.com/rzmay/rzmps/tree/HEAD/.agents/skills/rzmps).
-Its references are generated from these canonical human guides and API declarations.
+Its entry point and references are generated from these canonical human guides and API declarations.
 
 ## Installation
 
@@ -59,19 +59,55 @@ installed version's API, inspect `build/index.d.ts` and the package version; see
 
 ## Discovery and Maintenance
 
-The repository, this documentation site, the npm README, and generated `llms.txt` and
-`llms-full.txt` all point to the same canonical skill. The site also exposes a generated
-portable copy at [agent-skill/SKILL.md](https://rzmps.rzmay.com/docs/agent-skill/SKILL.md), with its relative references
-alongside it. That hosted copy is generated, never independently maintained.
+The repository, this documentation site, the npm README, and generated `llms.txt` all point
+to the same canonical skill in GitHub. `llms.txt` includes explicit installation guidance;
+the website does not host another copy of the skill or its bundled references.
 
-`npm run docs:generate` refreshes agent references, hosted skill files, npm `AGENTS.md`,
+`llms-full.txt` is an optional generated Markdown bundle of the guides, examples, and API
+reference for tools that need a complete documentation snapshot. It is a convenience format,
+not a requirement for skill discovery, installation, or automatic agent access. Prefer the
+index and relevant pages when the full bundle is unnecessary.
+
+`npm run docs:generate` refreshes agent references, documentation discovery files, npm `AGENTS.md`,
 and README guidance blocks. `npm run agents:check` validates frontmatter and reference links,
 discovers and installs the checkout skill in a temporary project, and audits `npm pack --dry-run`.
 It leaves consumer projects and the user's agent configuration untouched.
 
+The entire `.agents/skills/rzmps` folder remains committed so GitHub installers can fetch it
+without running a build. Its `SKILL.md` is generated from the definition below, and its reference
+pages come from the guides, examples, and API declarations. Website indexes and `llms` files
+are ignored build artifacts, regenerated for local builds and deployment. CI checks that the
+committed skill matches its canonical sources; it does not automatically commit changes.
+
 Run `npm run agents:check -- --github` to test the exact public shorthand discovery command.
 CI checks GitHub commit URLs after pushes and the shorthand after publishing to the default
 branch; pull requests validate their checkout without assuming the proposed skill is already public.
+
+## Canonical Skill Definition
+
+The following metadata and workflow generate `.agents/skills/rzmps/SKILL.md`. Edit them here;
+the generated skill rewrites documentation links to bundled references so it remains portable.
+
+<!-- skill:metadata:start -->
+```yaml
+name: rzmps
+description: Build and debug Three.js particle systems and VFX in RZMPS using emitters, modules, renderers, and WebGL/WebGPU canvas previews.
+```
+<!-- skill:metadata:end -->
+
+<!-- skill:instructions:start -->
+Inspect the installed package version and public exports before using a feature. In this repository, use the current branch's TypeScript source. Prefer existing emitters, modules, renderers, and spatial effects before adding custom behavior.
+
+Read [getting started](https://rzmps.rzmay.com/docs/guides/first-particle-system.html) for scene ownership and updates, [concepts](https://rzmps.rzmay.com/docs/guides/concepts.html) for lifecycle, priority, tags, spatial collections, and subsystem composition, or search the [generated API](https://rzmps.rzmay.com/docs/api/index.html) for signatures.
+
+Reuse a canonical factory from `examples/`; inspect [example explanations](https://rzmps.rzmay.com/docs/examples/index.html) for its configuration rationale. Preserve the default factory and author metadata contracts. Add balanced documentation source regions and update the authored Markdown explanation, then run `npm run docs:generate` and `npm run docs:check`.
+
+Check the selected renderer and custom material compatibility using [compatibility](https://rzmps.rzmay.com/docs/guides/compatibility.html). Build packages, run `npm run preview -- --example <id> --backend webgl`, and inspect the contact sheet and metadata. Repeat with webgpu when relevant; report unavailable backends explicitly. Adjust warmup, interval, or scene to capture the actual event. Technical success alone does not establish visual quality.
+
+Update root systems once; parents own subsystem timing. Follow Module, Renderer, and SpatialEffect extension hooks and priority semantics. Use features present in the installed version and current branch. Reference files are generated from human documentation; edit their canonical source instead.
+
+Repository preview scripts and `examples/` are checkout tools. In a consumer project, adapt an example to its existing rendering loop or use a repository checkout for previews; do not assume consumers have repository npm scripts. Read the [installation guidance](https://rzmps.rzmay.com/docs/guides/ai-coding-assistants.html#installation) before installing the skill or changing agent configuration.
+<!-- skill:instructions:end -->
 
 
 ---
@@ -185,8 +221,9 @@ its root directory, branch `develop`, these build settings, and your existing cu
 | `PUPPETEER_SKIP_DOWNLOAD` | `true` (committed previews need no browser during deployment) |
 
 The root `render.yaml` provides the equivalent Blueprint configuration. For an existing Render
-site, apply these settings to that site; no second service or domain is needed. The build checks
-generated documentation and preview freshness, builds both applications, and assembles:
+site, apply these settings to that site; no second service or domain is needed. The build
+regenerates ignored API pages, indexes, navigation data, and `llms` files from canonical sources,
+checks committed skill/README outputs and preview freshness, builds both applications, and assembles:
 
 ```text
 dist/
@@ -196,8 +233,7 @@ dist/
 ├── docs/
 │   ├── index.html      # VitePress homepage
 │   ├── assets/         # Documentation assets
-│   ├── previews/       # Generated example images
-│   └── agent-skill/    # Generated portable skill and references
+│   └── previews/       # Generated example images
 ├── llms.txt
 └── llms-full.txt
 ```

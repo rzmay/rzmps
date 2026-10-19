@@ -3,6 +3,8 @@ name: rzmps
 description: Build and debug Three.js particle systems and VFX in RZMPS using emitters, modules, renderers, and WebGL/WebGPU canvas previews.
 ---
 
+<!-- Generated from apps/docs/guides/ai-coding-assistants.md. Do not edit. -->
+
 Inspect the installed package version and public exports before using a feature. In this repository, use the current branch's TypeScript source. Prefer existing emitters, modules, renderers, and spatial effects before adding custom behavior.
 
 Read [getting started](references/getting-started.md) for scene ownership and updates, [concepts](references/concepts.md) for lifecycle, priority, tags, spatial collections, and subsystem composition, or search the [generated API](references/api.md) for signatures.
@@ -13,4 +15,4 @@ Check the selected renderer and custom material compatibility using [compatibili
 
 Update root systems once; parents own subsystem timing. Follow Module, Renderer, and SpatialEffect extension hooks and priority semantics. Use features present in the installed version and current branch. Reference files are generated from human documentation; edit their canonical source instead.
 
-Repository preview scripts and `examples/` are checkout tools. In a consumer project, adapt an example to its existing rendering loop or use a repository checkout for previews; do not assume consumers have repository npm scripts. Read the [AI assistant guide](references/concepts.md) for explicit skill installation and version-specific API guidance.
+Repository preview scripts and `examples/` are checkout tools. In a consumer project, adapt an example to its existing rendering loop or use a repository checkout for previews; do not assume consumers have repository npm scripts. Read the [installation guidance](references/concepts.md#installation) before installing the skill or changing agent configuration.

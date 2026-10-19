@@ -448,3 +448,15 @@ apps/docs/.vitepress/cache/
 apps/docs/.vitepress/.temp/
 # The root preview workspace is ignored; public documentation previews are committed.
 /dist/
+
+# Documentation and runtime artifacts rebuilt from canonical docs and source.
+# Keep .agents/ and reviewed public/previews/ assets committed.
+/apps/docs/api/
+/apps/docs/guides/index.md
+/apps/docs/examples/index.md
+/apps/docs/.vitepress/api.generated.json
+/apps/docs/.vitepress/examples.generated.json
+/apps/docs/public/llms.txt
+/apps/docs/public/llms-full.txt
+/examples/index.js
+/packages/rzmps/AGENTS.md

@@ -19,7 +19,6 @@ if(github||source) {
   console.log(`GitHub discovery found rzmps in ${target}`);
 } else {
   validateSkill(path.join(root,'.agents/skills/rzmps/SKILL.md'));
-  validateSkill(path.join(root,'apps/docs/public/agent-skill/SKILL.md'));
   const temporary=await fsp.mkdtemp(path.join(os.tmpdir(),'rzmps-agent-check-'));
   try {
     const project=path.join(temporary,'project'),globalProject=path.join(temporary,'global-project'),testHome=path.join(temporary,'user');
