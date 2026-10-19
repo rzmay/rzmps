@@ -2,6 +2,18 @@ import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
 import { createSiteServer } from './serve.mjs';
 import { discoverExamples } from '../docs/examples.mjs';
+
+async function checkAttributionAlignment(page) {
+  assert.ok(await page.evaluate(() => {
+    const viewport = document.querySelector('.demo-shell').getBoundingClientRect();
+    const center = viewport.left + viewport.width / 2;
+    return [...document.querySelectorAll('.preset-attribution > div')].every(element => {
+      const bounds = element.getBoundingClientRect();
+      return Math.abs(bounds.left + bounds.width / 2 - center) < 1;
+    });
+  }), 'description, credits, and links share the example viewport center');
+}
+
 const server=createSiteServer();
 await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
 const origin=`http://127.0.0.1:${server.address().port}`;
@@ -17,6 +29,47 @@ try {
   assert.equal(new URL(page.url()).pathname,'/','root must remain the demo after hydration');
   await page.waitForSelector('canvas');
   assert.ok(await page.$('a[href="/docs/"]'),'demo links to documentation');
+  const sidebar = '#landing-sidebar';
+  const toggle = '.sidebar-toggle';
+  await page.waitForSelector(sidebar, { visible: true });
+  assert.equal(await page.$eval(toggle, element => element.getAttribute('aria-expanded')), 'true');
+  assert.match(await page.$eval('.landing-version', element => element.textContent), /^v\d+\.\d+\.\d+/);
+  await page.evaluate(() => document.fonts.ready);
+  assert.ok(await page.$eval('.landing-heading', element => {
+    const brand = element.querySelector('.landing-brand').getBoundingClientRect();
+    const version = element.querySelector('.landing-version').getBoundingClientRect();
+    return version.left >= brand.right && version.top < brand.bottom;
+  }), 'version is inline with the header');
+  await page.setViewport({ width: 1366, height: 720 });
+  assert.ok(await page.$eval(sidebar, element => element.scrollHeight <= element.clientHeight), 'sidebar fits a standard laptop screen without scrolling');
+  await checkAttributionAlignment(page);
+  const initialCanvas = await page.$('.demo-shell canvas');
+  const initialWidth = await initialCanvas.evaluate(element => element.getBoundingClientRect().width);
+  await page.focus(toggle);
+  await page.keyboard.press('Enter');
+  await page.waitForSelector(sidebar, { hidden: true });
+  await page.waitForFunction(width => document.querySelector('.demo-shell canvas').getBoundingClientRect().width > width, {}, initialWidth);
+  assert.ok(await initialCanvas.evaluate(element => element === document.querySelector('.demo-shell canvas')), 'toggling preserves the canvas');
+  await checkAttributionAlignment(page);
+  await page.evaluate(() => localStorage.setItem('rzmps:landing-sidebar', 'closed'));
+  await page.reload({ waitUntil: 'networkidle0' });
+  await page.waitForSelector(sidebar, { visible: true });
+  assert.equal(await page.$eval(toggle, element => element.getAttribute('aria-expanded')), 'true', 'each load opens the sidebar, including with a previously saved closed preference');
+  await page.focus(`${sidebar} a`);
+  await page.keyboard.press('Escape');
+  await page.waitForSelector(sidebar, { hidden: true });
+  assert.ok(await page.$eval(toggle, element => element === document.activeElement), 'Escape restores focus');
+  await page.setViewport({ width: 390, height: 844 });
+  await page.reload({ waitUntil: 'networkidle0' });
+  await page.waitForSelector(sidebar, { visible: true });
+  assert.ok(await page.$eval(sidebar, element => element.getBoundingClientRect().right <= innerWidth), 'mobile sidebar fits viewport');
+  await page.waitForFunction(() => document.elementFromPoint(40, 40)?.closest('#landing-sidebar'), { timeout: 5000 });
+  await page.setViewport({ width: 390, height: 480 });
+  assert.ok(await page.$eval(sidebar, element => element.scrollHeight > element.clientHeight), 'short viewports can scroll through resources');
+  await page.keyboard.press('Escape');
+  await checkAttributionAlignment(page);
+  await page.setViewport({ width: 1200, height: 1000 });
+  console.log('Landing sidebar: default visibility, compact layout, inline version, keyboard controls, and mobile layout passed');
   console.log('/: interactive demo rendered without redirecting to docs');
   for(const entry of ['/docs','/docs/']){
     const response=await page.goto(origin+entry,{waitUntil:'networkidle0'});

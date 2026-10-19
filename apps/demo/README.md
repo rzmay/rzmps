@@ -1,7 +1,7 @@
 # 🧅 RZMPS Demo
 
 Interactive browser demo for
-[RZMPS](https://www.npmjs.com/package/@rzmps/rzmps), the Robert May Particle System for
+[RZMPS](https://www.npmjs.com/package/@rzmps/rzmps), a modular particle system for
 [Three.js](https://threejs.org/).
 
 | Resource | Link |
@@ -64,6 +64,16 @@ It also includes scene presets for testing environment behavior:
 - Light probe room based on the Three.js light probe example
 
 ## Demo UI
+
+The landing sidebar introduces RZMPS, displays the library version, and links to
+getting started, guides, API documentation, GitHub, npm, and contributors. Visitors
+can share projects through the GitHub project submission form. The contributor avatars are
+curated in `src/components/LandingLayout.jsx` and link to GitHub profiles.
+
+Use the sidebar toggle to give the demo the full window, or press Escape to close
+the sidebar. The sidebar starts open on each page load. Below 960px wide it opens
+over the demo; on larger screens it appears alongside the canvas. Its Roboto Mono
+fonts are served locally, and its colors follow the system light or dark theme.
 
 The right-side editor is powered by `lil-gui`.
 
