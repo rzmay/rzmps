@@ -14,7 +14,7 @@ test('guide order separates tutorials, concepts, features, and project work; lab
   try {
     fs.cpSync(path.join(root, 'apps/docs/guides'), directory, { recursive: true });
     const sections = guideNavigation(directory);
-    assert.deepEqual(sections.map(section => section.text), ['Getting Started', 'Core Concepts', 'Feature Guides', 'Project & Deployment']);
+    assert.deepEqual(sections.map(section => section.text), ['Getting Started', 'Core Concepts', 'Feature Guides', 'Project Guides']);
     assert.deepEqual(sections[0].items.map(item => item.link), ['/guides/first-particle-system', '/guides/first-module', '/guides/first-spatial-effect']);
     assert.ok(sections[2].items.some(item => item.text === 'Using Tags'));
     const tags = path.join(directory, 'tags.md');

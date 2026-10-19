@@ -8,4 +8,4 @@ Start with `npm install`, `npm run build:modules`, and `npm test`.
 Run `npm run docs:generate` after documentation or example changes and `npm run docs:check`
 before submitting a pull request. Generated files carry a notice; authored guides are preserved.
 
-See the [code of conduct](.github/CODE_OF_CONDUCT.md) and [deployment guide](apps/docs/guides/deployment.md).
+See the [code of conduct](.github/CODE_OF_CONDUCT.md).

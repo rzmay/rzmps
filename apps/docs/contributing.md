@@ -18,7 +18,7 @@ Write conceptual guides in `apps/docs/guides`. Write concise TSDoc on public sou
 
 Use a properly capitalized H1 as each article's title. Add new guides to the appropriate reading
 order in `scripts/docs/navigation.mjs`: Getting Started, Core Concepts, Feature Guides, or
-Project & Deployment. The sidebar and guide overview read titles directly from the articles;
+Project Guides. The sidebar and guide overview read titles directly from the articles;
 generation rejects guides missing from this structure. The API overview and sidebar are generated
 from actual TypeDoc pages and public export sources by `scripts/docs/api-structure.mjs`. Keep
 core classes first and place new API classes in a suitable feature group. Supporting signature
@@ -49,8 +49,7 @@ generated artifact consistency, and the VitePress build. Check mode rebuilds ign
 and verifies committed skill/README outputs without rewriting them; stale committed outputs
 fail CI and require `npm run docs:generate`. Use `npm run docs:dev` to read the site locally.
 Static output is `apps/docs/.vitepress/dist`; `npm run site:build` combines it with the demo in
-root `dist`, with documentation under `/docs/`. The [deployment guide](guides/deployment.md)
-explains the Render build settings and rewrites for `/docs` and `/docs/`.
+root `dist`, with documentation under `/docs/`.
 
 ## Visual inspection
 
@@ -66,7 +65,7 @@ Inspect the contact sheet after changing effect configuration. Try longer warmup
 
 ## Review
 
-Include the example checklist in pull requests adding or substantially changing presets. Describe relevant test and preview results. Report benchmark impact for performance changes. Package publishing and documentation deployment have separate workflows. See the [deployment guide](guides/deployment.md) for Render configuration.
+Include the example checklist in pull requests adding or substantially changing presets. Describe relevant test and preview results. Report benchmark impact for performance changes.
 
 
 ## Author credits and generated posters
