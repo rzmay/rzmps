@@ -17,7 +17,7 @@
     "presets:add-author": "node scripts/add-preset-author.mjs"
   },
   "devDependencies": {
-    "tsdown": "^0.23.0"
+    "tsdown": "^0.23.1"
   },
   "overrides": {
     "three": "0.186.0"
