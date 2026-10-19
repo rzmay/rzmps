@@ -3,6 +3,7 @@ import { float, Fn, If, instanceIndex, storage, uint, vec3 } from 'three/tsl';
 import Particle from '../Particle';
 import {
   createGPUParticleBufferState,
+  destroyGPUStorageAttribute,
   type GPUParticleBufferState,
   type GPUParticleLike,
   type GPUReadbackRenderer,
@@ -103,6 +104,13 @@ export class GPUSelectiveReadbackState {
         particle,
       };
     });
+  }
+
+  dispose(renderer?: GPUStorageBufferRenderer): void {
+    this.computeNode?.dispose?.();
+    this.computeNode = undefined;
+    this.output.dispose(renderer);
+    destroyGPUStorageAttribute(renderer, this.requestAttribute);
   }
 
   private getComputeNode(source: GPUParticleBufferState): ComputeNode {

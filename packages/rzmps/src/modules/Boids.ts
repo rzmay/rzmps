@@ -20,8 +20,10 @@ import ParticleSpatialGrid, {
 } from '../gpu/ParticleSpatialGrid';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import type { Node } from 'three/webgpu';
-import { acos, cos, float, If, max, mix, sin, uint, vec3 } from 'three/tsl';
+import { acos, cos, float, If, max, mix, sin, uint, vec3, vec4 } from 'three/tsl';
 import { SimulationSpace } from '../enums/SimulationSpace';
+
+const GPU_FALLOFF_MIN_DISTANCE = 1e-3;
 
 type BoidParticleAffectorAggregate = {
   count: number;
@@ -220,7 +222,10 @@ class Boids extends Module {
     this.steering = options.steering ?? 0.5;
     this.maintainSpeed = options.maintainSpeed ?? true;
     this.particleAffectors = acceptMultiple(options.particleAffectors) ?? [];
-    this.spatialGridOptions = options.spatialGrid ?? options.grid ?? {};
+    this.spatialGridOptions = options.spatialGrid ?? options.grid ?? {
+      brickSubdivisions: 2,
+      cellSubdivisions: 2,
+    };
     this.neighborRadius = options.neighborRadius ?? 1;
   }
 
@@ -229,7 +234,10 @@ class Boids extends Module {
     this.particleSystem = particleSystem;
 
     // BoidAffectors are sampled per particle, so keep their matrices fresh once per frame.
-    this.spatialEffects.forEach((effect) => effect.updateWorldMatrix(true, false));
+    this.spatialEffects.forEach((effect) => {
+      effect.updateWorldMatrix(true, false);
+      if (particleSystem.isGPUProcessingActive) effect.syncGPUTransform(particleSystem);
+    });
 
     // GPU Boids obtains individual neighbors from ParticleSpatialGrid. The CPU octree
     // remains the aggregate approximation used only by CPU simulation.
@@ -303,13 +311,30 @@ class Boids extends Module {
       tagMask,
     });
 
+    // ParticleOctree can use coarser aggregate nodes when a boid has no nearby
+    // leaf samples. Preserve that behavior on GPU so sparse cohorts do not keep
+    // their shared emission direction until they happen to enter a populated cell.
+    If(count.equal(0), () => {
+      grid.forEachParticle((neighbor) => {
+        alignment.addAssign(neighbor.velocity);
+        cohesion.addAssign(neighbor.position);
+        const away = vec3(particle.position.sub(neighbor.position));
+        separation.addAssign(away.div(max(away.lengthSq(), float(Number.EPSILON))));
+        count.addAssign(1);
+      }, {
+        excludeIndex: particle.index,
+        tagMask,
+      });
+    });
+
     this.particleAffectors.forEach((rule, ruleIndex) => {
       const sourceTags = acceptMultiple(rule.sourceTags);
       const sourceMask = context.system.getGPURendererTagMask(sourceTags);
       const targetTags = acceptMultiple(rule.tags);
       const targetMask = context.system.getGPURendererTagMask(targetTags);
       const collect = () => {
-        grid.forEachParticleInRadius(particle.position, radius, (source) => {
+        const sourceCount = float(0).toVar(`boidAffectorSourceCount${ruleIndex}`);
+        const addSource = (source: GPUParticleLike) => {
           const delta = vec3(particle.position.sub(source.position));
           const distance = delta.length().max(Number.EPSILON);
           const sourceSize = max(source.scale.x.abs(), max(source.scale.y.abs(), source.scale.z.abs()));
@@ -322,15 +347,28 @@ class Boids extends Module {
               particle.index,
             ),
           );
-          const surfaceDistance = distance.sub(preferredDistance).max(Number.EPSILON);
+          // Number.EPSILON produces a ~2e31 force here. Squaring that vector
+          // overflows float32 during normalize(), erasing the influence exactly
+          // while the particle is inside its preferred-distance band.
+          const surfaceDistance = distance.sub(preferredDistance).max(GPU_FALLOFF_MIN_DISTANCE);
           affector.addAssign(
             delta.div(distance)
               .mul(-(rule.weight ?? BoidAffector.Weight.Obstacle))
               .div(surfaceDistance.mul(surfaceDistance)),
           );
+          sourceCount.addAssign(1);
+        };
+        grid.forEachParticleInRadius(particle.position, radius, (source) => {
+          addSource(source);
         }, {
           excludeIndex: particle.index,
           tagMask: sourceMask,
+        });
+        If(sourceCount.equal(0), () => {
+          grid.forEachParticle(addSource, {
+            excludeIndex: particle.index,
+            tagMask: sourceMask,
+          });
         });
       };
       if (targetMask === undefined) collect();
@@ -424,18 +462,13 @@ class Boids extends Module {
     influence: Node<'vec3'>,
   ): void {
     const system = context.system;
-    system.updateWorldMatrix(true, false);
-    const worldPosition = system.simulationSpace === SimulationSpace.World
-      ? particle.position
-      : transformPointGPU(particle.position, system.matrixWorld);
-    const worldToSimulation = system.matrixWorld.clone().invert();
+    const worldPosition = transformPointGPU(particle.position, context.simulationToWorldNode);
 
     this.spatialEffects.forEach((effect) => {
       if (!(effect instanceof BoidAffector) || !effect.geometry) return;
       const tagMask = system.getGPURendererTagMask(effect.tags);
       const apply = () => {
-        const center = effect.getWorldPosition(new THREE.Vector3());
-        If(worldPosition.sub(vec3(center)).lengthSq().lessThanEqual(effect.range ** 2), () => {
+        If(worldPosition.sub(effect.getGPUWorldPosition()).lengthSq().lessThanEqual(effect.range ** 2), () => {
           const sample = effect.samplePointGPU(worldPosition);
           const fromSurface = vec3(
             worldPosition.sub(sample.point),
@@ -445,14 +478,12 @@ class Boids extends Module {
           const oriented = vec3(
             flip.select(fromSurface.negate(), fromSurface),
           );
-          const surfaceDistance = distance.sub(effect.distance).max(Number.EPSILON);
+          const surfaceDistance = distance.sub(effect.distance).max(GPU_FALLOFF_MIN_DISTANCE);
           const worldInfluence = oriented.normalize().mul(
             float(-effect.weight).div(surfaceDistance.mul(surfaceDistance)),
           );
           influence.addAssign(
-            system.simulationSpace === SimulationSpace.World
-              ? worldInfluence
-              : transformDirectionGPU(worldInfluence, worldToSimulation),
+            transformDirectionGPU(worldInfluence, context.worldToSimulationNode),
           );
         });
       };
@@ -743,22 +774,12 @@ class Boids extends Module {
   }
 }
 
-function transformPointGPU(point: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const e = matrix.elements;
-  return vec3(
-    point.x.mul(e[0]).add(point.y.mul(e[4])).add(point.z.mul(e[8])).add(e[12]),
-    point.x.mul(e[1]).add(point.y.mul(e[5])).add(point.z.mul(e[9])).add(e[13]),
-    point.x.mul(e[2]).add(point.y.mul(e[6])).add(point.z.mul(e[10])).add(e[14]),
-  ) as Node<'vec3'>;
+function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
+  return matrix.mul(vec4(point, 1)).xyz as Node<'vec3'>;
 }
 
-function transformDirectionGPU(vector: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const e = matrix.elements;
-  return vec3(
-    vector.x.mul(e[0]).add(vector.y.mul(e[4])).add(vector.z.mul(e[8])),
-    vector.x.mul(e[1]).add(vector.y.mul(e[5])).add(vector.z.mul(e[9])),
-    vector.x.mul(e[2]).add(vector.y.mul(e[6])).add(vector.z.mul(e[10])),
-  ) as Node<'vec3'>;
+function transformDirectionGPU(vector: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
+  return matrix.mul(vec4(vector, 0)).xyz as Node<'vec3'>;
 }
 
 export default Boids;

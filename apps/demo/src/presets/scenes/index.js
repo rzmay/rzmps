@@ -10,7 +10,6 @@ import createRapierCollisionTest from './collisionRapier';
 import createJoltCollisionTest from './collisionJolt';
 import createKillZoneScene from './killZones';
 import createCustomSpatialEffects from './customSpatialEffects';
-import createGPUSpatialScaleProbe from './gpuSpatialScaleProbe';
 import createWind from './wind';
 import createVortex from './vortex';
 import createRepulsorAttractor from './repulsor';
@@ -40,7 +39,6 @@ const scenePresets = {
   'Collision (Jolt)': withMetadata(createJoltCollisionTest, 'collisionJolt.js'),
   'Kill Zones': withMetadata(createKillZoneScene, 'killZones.js'),
   'Custom Spatial Effects': withMetadata(createCustomSpatialEffects, 'customSpatialEffects.js'),
-  'GPU Spatial Scale Probe': withMetadata(createGPUSpatialScaleProbe, 'gpuSpatialScaleProbe.js'),
   'Wind': withMetadata(createWind, 'wind.js'),
   'Repulsor / Attractor': withMetadata(createRepulsorAttractor, 'repulsor.js'),
   'Vortex': withMetadata(createVortex, 'vortex.js'),

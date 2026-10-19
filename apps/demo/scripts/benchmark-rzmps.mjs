@@ -280,6 +280,16 @@ async function runBenchmark() {
         `GPU buffer ${formatNumber(result.estimatedPersistentGPUBufferMB, 2)}MB`,
         `max heap ${result.maxHeapMB > 0 ? `${formatNumber(result.maxHeapMB, 1)}MB` : 'n/a'}`,
       ].join(' | '));
+      if (result.dynamicSpatialDiagnostics) {
+        const diagnostics = result.dynamicSpatialDiagnostics;
+        console.log([
+          '  dynamic spatial',
+          `registry avg ${formatNumber(diagnostics.averageRegistryUpdateMs, 3)}ms`,
+          `collision avg ${formatNumber(diagnostics.averageBackendUpdateMs, 3)}ms`,
+          `updates ${diagnostics.updates}`,
+          `stats ${JSON.stringify(diagnostics.registryStats ?? diagnostics.collisionStats ?? {})}`,
+        ].join(' | '));
+      }
     });
 
     console.log('RZMPS_BENCHMARK_JSON_START');

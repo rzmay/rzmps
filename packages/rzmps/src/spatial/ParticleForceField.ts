@@ -258,37 +258,23 @@ class ParticleForceField extends SpatialEffect {
       ...options,
       geometry: options.geometry ?? new THREE.SphereGeometry(),
       priority: options.priority ?? Priority.Permanent,
+      // Force fields apply spatial strength directly to force accumulation.
+      automaticFeather: false,
       modifyGPU: (particle, deltaTime, context, strength) => {
-        this.updateWorldMatrix(true, false);
-        const directionMatrix = new THREE.Matrix4().makeRotationFromQuaternion(
-          this.getWorldQuaternion(new THREE.Quaternion()),
-        );
-        if (context.system.simulationSpace === 'local') {
-          context.system.updateWorldMatrix(true, false);
-          directionMatrix.premultiply(new THREE.Matrix4().makeRotationFromQuaternion(
-            context.system.getWorldQuaternion(new THREE.Quaternion()).invert(),
-          ));
-        }
-        const centerPosition = this.getWorldPosition(new THREE.Vector3());
-        if (context.system.simulationSpace === 'local') {
-          context.system.updateWorldMatrix(true, false);
-          context.system.worldToLocal(centerPosition);
-        }
-        const center = vec3(centerPosition);
+        const center = this.getGPUEffectPosition();
         const toCenter = center.sub(particle.position);
         const distance = toCenter.length();
         const safeToCenter = toCenter.div(distance.max(float(Number.EPSILON)));
         let force: Node<'vec3'> = vec3(0, 0, 0);
 
         if (this.direction !== undefined) {
-          force = force.add(transformDirectionGPU(
+          force = force.add(this.getGPULocalDirection(
             evaluateDynamicVectorGPU(
               this.direction,
               particle.time,
               new THREE.Vector3(),
               particle.index,
             ),
-            directionMatrix,
           ));
         }
 
@@ -308,7 +294,7 @@ class ParticleForceField extends SpatialEffect {
         if (this.rotationSpeed !== undefined) {
           const fromCenter = particle.position.sub(center);
           const tangent = cross(
-            transformDirectionGPU(vec3(0, 1, 0), directionMatrix),
+            this.getGPULocalDirection(vec3(0, 1, 0)),
             fromCenter,
           );
           const tangentLength = tangent.length();
@@ -581,12 +567,3 @@ class ParticleForceField extends SpatialEffect {
 }
 
 export default ParticleForceField;
-
-function transformDirectionGPU(vector: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const elements = matrix.elements;
-  return vec3(
-    vector.x.mul(elements[0]).add(vector.y.mul(elements[4])).add(vector.z.mul(elements[8])),
-    vector.x.mul(elements[1]).add(vector.y.mul(elements[5])).add(vector.z.mul(elements[9])),
-    vector.x.mul(elements[2]).add(vector.y.mul(elements[6])).add(vector.z.mul(elements[10])),
-  ) as Node<'vec3'>;
-}

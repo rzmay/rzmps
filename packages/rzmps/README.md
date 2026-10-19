@@ -713,6 +713,14 @@ interface SpatialEffectOptions {
   feather: number;
   featherEasing: (feather: number) => number;
   automaticFeather: boolean;
+  updatePolicy: SpatialEffectUpdatePolicy;
+}
+
+enum SpatialEffectUpdatePolicy {
+  Static = "static",
+  TransformDynamic = "transform-dynamic",
+  GeometryDynamic = "geometry-dynamic",
+  Auto = "auto",
 }
 ```
 
@@ -771,10 +779,16 @@ that many world units and returns a normalized boundary strength. A particle on
 the original surface receives strength `1`, and the strength fades to `0` at the
 outer feather edge. For automatic feathering, particles in this softened edge
 are blended between their pre-effect and post-effect values using
-`Particle.lerp(...)`.
+`Particle.lerp(...)`. GPU processing performs the equivalent operation in the
+compute graph: it snapshots the interpolable particle fields, runs `modifyGPU`
+at full strength, then mixes those fields by the eased feather strength. A
+custom `modifyGPU` should not multiply its changes by `strength` unless
+`automaticFeather` is `false`.
 
 Use `featherEasing` to reshape that normalized `0..1` feather strength. It can
 be any function receiving the linear feather value and returning a new strength.
+GPU processing approximates custom JavaScript easing functions with a sampled
+lookup expression so CPU and GPU feathering follow the same curve.
 For example, with [eaz](https://www.npmjs.com/package/eaz):
 
 ```ts
@@ -807,6 +821,15 @@ for a matching module to consume. The module should pass `requireSpatialEffects`
 and then use `this.spatialEffects` in `prepare` or `modify`. See
 [Developing With Spatial Effects](#developing-with-spatial-effects) for a module
 extension example.
+
+GPU-compatible effects keep runtime transforms in uniforms or packed parameter
+records. Rigid movement, including movement inherited from a parent or from a
+local-space particle system, updates only dirty parameter records and affected
+BVH leaf/ancestor bounds; it does not rebuild the effect registry or simulation
+pipeline. Non-analytic influence fields are baked in effect-local space, so a
+rigid transform retains the existing 3D texture. Geometry revisions rebake the
+field. `updatePolicy` lets custom effects declare static, transform-dynamic, or
+geometry-dynamic intent; `Auto` tracks supported geometry revisions.
 
 ### KillZone
 
@@ -1433,6 +1456,7 @@ interface AudioRendererOptions extends Partial<RendererOptions> {
   depthAffectsHighPass: number;
   depthAffectsLowPass: number;
   dopplerEffect: number;
+  gpuInterpolationRate: number;
   impulseAffectsPitch: number;
   impulseAffectsVolume: number;
   impulseAffectsHighPass: number;
@@ -1455,6 +1479,9 @@ scaled, and larger or fractional values exaggerate or soften the shift. Filters
 are applied whenever their evaluated cutoff is greater than `0`.
 `impulseThreshold` defaults to `0`; collision sounds only play when
 `collision.impulse.length() > impulseThreshold`.
+Attached GPU audio extrapolates sampled velocity between selective readbacks and
+smoothly corrects toward each new sample. `gpuInterpolationRate` controls that
+correction rate and defaults to `20`; set it to `0` to disable correction.
 
 ### SpriteRenderer
 
@@ -1914,7 +1941,11 @@ buffers; topology or geometry replacement rebuilds. `setEvaluatedGeometry()`
 accepts explicitly evaluated deformation without particle-state readback. The
 capsule shapecast performs world-space narrow phase for triangle interiors,
 edges, vertices, degenerate inputs, and nonuniformly scaled instances. The
-current library API still repacks buffers after geometry refits.
+current library API still repacks buffers after geometry refits. Repacks reuse
+the same `BVHComputeData` owner and proxy-backed capsule query, so buffer changes
+do not require a simulation shader rebuild. `backend.stats` separates transform
+updates, geometry refits, topology rebuilds, full packed-data builds, and actual
+source-buffer bytes marked for upload.
 
 For external physics engines, use the extension packages:
 

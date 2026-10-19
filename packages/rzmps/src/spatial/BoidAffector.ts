@@ -4,12 +4,13 @@ import tagsIntersect from '../helpers/tagsIntersect';
 import type { Tag } from '../types/Tag';
 import type Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
+import getParticleWorldPosition from '../helpers/getParticleWorldPosition';
 import SpatialEffect, {
   type SpatialEffectModifier,
   type SpatialEffectOptions,
 } from '../SpatialEffect';
 import type { Node } from 'three/webgpu';
-import { If, texture3D, vec3 } from 'three/tsl';
+import { If, texture3D, vec3, vec4 } from 'three/tsl';
 
 // No custom test allowed here
 export interface BoidAffectorOptions extends Omit<SpatialEffectOptions, 'test'> {
@@ -168,7 +169,8 @@ class BoidAffector extends SpatialEffect {
   private worldSamplePoint = new THREE.Vector3();
   private influenceSamplePoint = new THREE.Vector3();
   private influenceLocalPosition = new THREE.Vector3();
-  private worldPosition = new THREE.Vector3();
+  private particleWorldPosition = new THREE.Vector3();
+  private affectorWorldPosition = new THREE.Vector3();
   private _gpuSurfaceTexture?: THREE.Data3DTexture;
   private _gpuSurfaceGeometry?: THREE.BufferGeometry;
   private _gpuSurfaceResolution = 0;
@@ -213,7 +215,8 @@ class BoidAffector extends SpatialEffect {
   override test(particle: Particle, particleSystem: ParticleSystem): boolean {
     if (!this.matchesTags(particle.tags)) return false;
     if (!this.condition(particle)) return false;
-    if (!this.isWithinRange(particle.position)) return false;
+    getParticleWorldPosition(particle, particleSystem, this.particleWorldPosition);
+    if (!this.isWithinRange(this.particleWorldPosition)) return false;
 
     return true;
   }
@@ -267,15 +270,21 @@ class BoidAffector extends SpatialEffect {
   }
 
   /** Returns the closest world-space surface point and approximate solid containment on GPU. */
+  getGPUWorldPosition(): Node<'vec3'> {
+    return transformPointGPU(vec3(0), this.getGPULocalToWorldMatrix());
+  }
+
   samplePointGPU(worldPosition: Node<'vec3'>): {
     point: Node<'vec3'>;
     inside: Node<'bool'>;
   } {
-    this.updateWorldMatrix(true, false);
-    const local = transformPointGPU(worldPosition, this.matrixWorld.clone().invert());
+    const local = transformPointGPU(worldPosition, this.getGPUWorldToLocalMatrix());
     const bounds = this.geometry?.boundingBox;
     if (!bounds) {
-      return { point: vec3(this.getWorldPosition(new THREE.Vector3())), inside: local.lengthSq().lessThanEqual(0) };
+      return {
+        point: transformPointGPU(vec3(0), this.getGPULocalToWorldMatrix()),
+        inside: local.lengthSq().lessThanEqual(0),
+      };
     }
 
     const center = bounds.getCenter(new THREE.Vector3());
@@ -335,7 +344,7 @@ class BoidAffector extends SpatialEffect {
     }
 
     return {
-      point: transformPointGPU(closestLocal, this.matrixWorld),
+      point: transformPointGPU(closestLocal, this.getGPULocalToWorldMatrix()),
       inside,
     };
   }
@@ -415,9 +424,9 @@ class BoidAffector extends SpatialEffect {
   }
 
   private isWithinRange(position: THREE.Vector3): boolean {
-    this.worldPosition.setFromMatrixPosition(this.matrixWorld);
+    this.affectorWorldPosition.setFromMatrixPosition(this.matrixWorld);
 
-    return position.distanceToSquared(this.worldPosition)
+    return position.distanceToSquared(this.affectorWorldPosition)
       <= this.range * this.range;
   }
 
@@ -443,13 +452,8 @@ class BoidAffector extends SpatialEffect {
   }
 }
 
-function transformPointGPU(point: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const e = matrix.elements;
-  return vec3(
-    point.x.mul(e[0]).add(point.y.mul(e[4])).add(point.z.mul(e[8])).add(e[12]),
-    point.x.mul(e[1]).add(point.y.mul(e[5])).add(point.z.mul(e[9])).add(e[13]),
-    point.x.mul(e[2]).add(point.y.mul(e[6])).add(point.z.mul(e[10])).add(e[14]),
-  ) as Node<'vec3'>;
+function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
+  return matrix.mul(vec4(point, 1)).xyz as Node<'vec3'>;
 }
 
 export default BoidAffector;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MeshBVH } from 'three-mesh-bvh';
 import type { Node } from 'three/webgpu';
 // Use the focused entry point so unrelated WebGPU helper exports cannot collide.
 // @ts-expect-error three-mesh-bvh does not publish declarations for deep imports.
@@ -37,7 +38,7 @@ export interface ThreeGPUCollisionBackendStats {
   transformUpdates: number;
   geometryRefits: number;
   topologyRebuilds: number;
-  estimatedUploadBytes: number;
+  uploadBytes: number;
 }
 
 type TrackedMesh = {
@@ -45,13 +46,19 @@ type TrackedMesh = {
   policy: CollisionGeometryUpdatePolicy;
   matrixWorld: THREE.Matrix4;
   geometry: THREE.BufferGeometry;
+  positionAttribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
   positionVersion: number;
   positionCount: number;
+  indexAttribute: THREE.BufferAttribute | null;
   indexVersion: number;
   indexCount: number;
+  drawRangeStart: number;
+  drawRangeCount: number;
 };
 
 type BVHComputeDataRuntime = BVHComputeData & {
+  objects: THREE.Object3D[];
+  storage: Record<string, { proxyNode?: { value?: { array?: ArrayBufferView } } }>;
   updateTransforms(): void;
   dispose(): void;
 };
@@ -78,11 +85,12 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     transformUpdates: 0,
     geometryRefits: 0,
     topologyRebuilds: 0,
-    estimatedUploadBytes: 0,
+    uploadBytes: 0,
   };
 
   private tracked = new Map<string, TrackedMesh>();
   private invalidatedGeometry = new Set<string>();
+  private ownedGeometryBVHs = new Map<THREE.BufferGeometry, MeshBVH>();
   private data?: BVHComputeDataRuntime;
   private capsuleQuery?: ReturnType<typeof capsuleBVHCollisionNode>;
   private initialized = false;
@@ -121,36 +129,40 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   update(): void {
     const next = this.collectMeshes();
     let topologyChanged = !this.initialized || next.size !== this.tracked.size;
-    let geometryChanged = false;
+    const addedGeometries = new Set<THREE.BufferGeometry>();
+    const topologyGeometries = new Set<THREE.BufferGeometry>();
+    const changedGeometries = new Set<THREE.BufferGeometry>();
     let transformChanged = false;
 
     next.forEach((entry, uuid) => {
       const previous = this.tracked.get(uuid);
       if (!previous || previous.geometry !== entry.geometry) {
         topologyChanged = true;
+        addedGeometries.add(entry.geometry);
         return;
       }
 
-      const indexChanged = entry.indexCount !== previous.indexCount;
+      const indexChanged = entry.indexAttribute !== previous.indexAttribute
+        || entry.indexCount !== previous.indexCount;
       const vertexCountChanged = entry.positionCount !== previous.positionCount;
       const topologyRevisionChanged = entry.indexVersion !== previous.indexVersion;
-      if (indexChanged || vertexCountChanged || topologyRevisionChanged) {
+      const drawRangeChanged = entry.drawRangeStart !== previous.drawRangeStart
+        || entry.drawRangeCount !== previous.drawRangeCount;
+      if (indexChanged || vertexCountChanged || topologyRevisionChanged || drawRangeChanged) {
         topologyChanged = true;
+        topologyGeometries.add(entry.geometry);
       } else if (
         (this.invalidatedGeometry.has(uuid) || (
           entry.policy === CollisionGeometryUpdatePolicy.GeometryDynamic
           || entry.policy === CollisionGeometryUpdatePolicy.Auto
         ))
         && (
-          entry.positionVersion !== previous.positionVersion
+          entry.positionAttribute !== previous.positionAttribute
+          || entry.positionVersion !== previous.positionVersion
           || this.invalidatedGeometry.has(uuid)
         )
       ) {
-        geometryChanged = true;
-        const boundsTree = (entry.geometry as THREE.BufferGeometry & {
-          boundsTree?: { refit(): void };
-        }).boundsTree;
-        boundsTree?.refit();
+        changedGeometries.add(entry.geometry);
       }
 
       if (
@@ -159,6 +171,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
       ) transformChanged = true;
     });
 
+    this.releaseUnusedGeometryBVHs(next);
     this.tracked = next;
     this.invalidatedGeometry.clear();
     this.stats.objects = next.size;
@@ -166,18 +179,22 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
       Array.from(next.values(), ({ geometry }) => geometry.uuid),
     ).size;
 
+    addedGeometries.forEach((geometry) => this.ensureGeometryBVH(geometry));
+    topologyGeometries.forEach((geometry) => this.rebuildGeometryBVH(geometry));
+    changedGeometries.forEach((geometry) => this.ensureGeometryBVH(geometry).refit());
+
     if (next.size === 0) {
       this.disposeData();
       this.initialized = true;
       return;
     }
 
-    if (topologyChanged || geometryChanged || !this.data) {
-      this.rebuildData(topologyChanged, geometryChanged);
+    if (topologyChanged || changedGeometries.size > 0 || !this.data) {
+      this.rebuildData(topologyChanged, topologyGeometries.size, changedGeometries.size);
     } else if (transformChanged) {
       this.data.updateTransforms();
       this.stats.transformUpdates += 1;
-      this.stats.estimatedUploadBytes += next.size * 36 * 4;
+      this.stats.uploadBytes += getStorageByteLength(this.data, ['nodes', 'transforms']);
     }
     this.initialized = true;
   }
@@ -206,25 +223,71 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.disposeData();
     this.tracked.clear();
     this.invalidatedGeometry.clear();
+    this.releaseOwnedGeometryBVHs();
+    this.ownedGeometryBVHs.clear();
   }
 
-  private rebuildData(topologyChanged: boolean, geometryChanged: boolean): void {
-    this.disposeData();
+  private rebuildData(
+    topologyChanged: boolean,
+    topologyGeometryCount: number,
+    changedGeometryCount: number,
+  ): void {
     const meshes = Array.from(this.tracked.values(), ({ mesh }) => mesh);
-    this.data = new BVHComputeData(meshes) as BVHComputeDataRuntime;
+    new Set(meshes.map((mesh) => mesh.geometry)).forEach((geometry) => {
+      this.ensureGeometryBVH(geometry);
+    });
+    if (this.data) {
+      this.data.objects = meshes;
+    } else {
+      this.data = new BVHComputeData(meshes) as BVHComputeDataRuntime;
+    }
     this.data.update();
-    this.capsuleQuery = capsuleBVHCollisionNode(this.data as unknown as Parameters<
-      typeof capsuleBVHCollisionNode
-    >[0]);
+    if (!this.capsuleQuery) {
+      this.capsuleQuery = capsuleBVHCollisionNode(this.data as unknown as Parameters<
+        typeof capsuleBVHCollisionNode
+      >[0]);
+    }
     this.stats.fullBuilds += 1;
-    if (topologyChanged && this.initialized) this.stats.topologyRebuilds += 1;
-    if (geometryChanged) this.stats.geometryRefits += 1;
-    this.stats.estimatedUploadBytes += meshes.reduce((bytes, mesh) => {
-      const geometry = mesh.geometry;
-      const positions = geometry.getAttribute('position');
-      const index = geometry.index;
-      return bytes + (positions?.array.byteLength ?? 0) + (index?.array.byteLength ?? 0);
-    }, 0);
+    if (topologyChanged && this.initialized) {
+      this.stats.topologyRebuilds += Math.max(topologyGeometryCount, 1);
+    }
+    this.stats.geometryRefits += changedGeometryCount;
+    this.stats.uploadBytes += getStorageByteLength(
+      this.data,
+      ['nodes', 'index', 'attributes', 'transforms'],
+    );
+  }
+
+  private ensureGeometryBVH(geometry: THREE.BufferGeometry): MeshBVH {
+    const withBVH = geometry as THREE.BufferGeometry & { boundsTree?: MeshBVH };
+    if (!withBVH.boundsTree) {
+      withBVH.boundsTree = new MeshBVH(geometry);
+      this.ownedGeometryBVHs.set(geometry, withBVH.boundsTree);
+    }
+    return withBVH.boundsTree;
+  }
+
+  private rebuildGeometryBVH(geometry: THREE.BufferGeometry): void {
+    const withBVH = geometry as THREE.BufferGeometry & { boundsTree?: MeshBVH };
+    withBVH.boundsTree = new MeshBVH(geometry);
+    this.ownedGeometryBVHs.set(geometry, withBVH.boundsTree);
+  }
+
+  private releaseUnusedGeometryBVHs(next: Map<string, TrackedMesh>): void {
+    const retained = new Set(Array.from(next.values(), ({ geometry }) => geometry));
+    this.ownedGeometryBVHs.forEach((owned, geometry) => {
+      if (retained.has(geometry)) return;
+      const withBVH = geometry as THREE.BufferGeometry & { boundsTree?: MeshBVH };
+      if (withBVH.boundsTree === owned) delete withBVH.boundsTree;
+      this.ownedGeometryBVHs.delete(geometry);
+    });
+  }
+
+  private releaseOwnedGeometryBVHs(): void {
+    this.ownedGeometryBVHs.forEach((owned, geometry) => {
+      const withBVH = geometry as THREE.BufferGeometry & { boundsTree?: MeshBVH };
+      if (withBVH.boundsTree === owned) delete withBVH.boundsTree;
+    });
   }
 
   private collectMeshes(): Map<string, TrackedMesh> {
@@ -241,10 +304,14 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
         policy,
         matrixWorld: mesh.matrixWorld.clone(),
         geometry,
+        positionAttribute: position,
         positionVersion: attributeVersion(position),
         positionCount: position.count,
+        indexAttribute: index,
         indexVersion: attributeVersion(index),
         indexCount: index?.count ?? position.count,
+        drawRangeStart: geometry.drawRange.start,
+        drawRangeCount: geometry.drawRange.count,
       });
     };
     const addRoot = (root: THREE.Object3D, policy: CollisionGeometryUpdatePolicy) => {
@@ -276,6 +343,18 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.data = undefined;
     this.capsuleQuery = undefined;
   }
+}
+
+function getStorageByteLength(
+  data: BVHComputeDataRuntime,
+  keys: string[],
+): number {
+  const arrays = new Set<ArrayBufferView>();
+  keys.forEach((key) => {
+    const array = data.storage[key]?.proxyNode?.value?.array;
+    if (array) arrays.add(array);
+  });
+  return Array.from(arrays).reduce((bytes, array) => bytes + array.byteLength, 0);
 }
 
 function isIgnoredObject(object: THREE.Object3D): boolean {

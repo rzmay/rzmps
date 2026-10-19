@@ -3,7 +3,12 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
 import { Break, float, If, int, Loop, storage, uint, uniform } from 'three/tsl';
 import SpatialEffect from '../SpatialEffect';
-import type { GPUParticleLike, GPUParticleUpdateContext } from './Particle';
+import {
+  destroyGPUStorageAttribute,
+  type GPUParticleLike,
+  type GPUParticleUpdateContext,
+  type GPUStorageBufferRenderer,
+} from './Particle';
 import type ParticleSystem from '../ParticleSystem';
 
 export type GPUSpatialParameterType = 'float' | 'vec3' | 'vec4';
@@ -80,6 +85,18 @@ export interface GPUSpatialEffectRegistryBuild {
   bvhNodeData: Int32Array;
 }
 
+export interface GPUSpatialEffectRegistryStats {
+  structuralBuilds: number;
+  parameterUploads: number;
+  parameterUploadBytes: number;
+  metadataUploads: number;
+  metadataUploadBytes: number;
+  leafUpdates: number;
+  bvhRefits: number;
+  bvhBoundsUploads: number;
+  bvhBoundsUploadBytes: number;
+}
+
 type PackedFloatStorage = { element(index: Node | number): Node<'vec4'> };
 type PackedUintStorage = { element(index: Node | number): Node<'uvec4'> };
 type PackedIntStorage = { element(index: Node | number): Node<'ivec4'> };
@@ -100,10 +117,24 @@ export class GPUSpatialEffectRegistry {
   readonly leafEffectIds: number[];
   readonly signature: string;
   readonly version: number;
+  readonly stats: GPUSpatialEffectRegistryStats = {
+    structuralBuilds: 1,
+    parameterUploads: 0,
+    parameterUploadBytes: 0,
+    metadataUploads: 0,
+    metadataUploadBytes: 0,
+    leafUpdates: 0,
+    bvhRefits: 0,
+    bvhBoundsUploads: 0,
+    bvhBoundsUploadBytes: 0,
+  };
 
   private readonly bvhNodeCountNode = uniform(0, 'uint');
 
   private readonly recordByEffect = new WeakMap<SpatialEffect, GPUSpatialEffectRecord>();
+  private readonly leafNodeByEffectId: Int32Array;
+  private readonly parentNodeByNode: Int32Array;
+  private readonly parameterScratchByTypeId: Float32Array[];
 
   constructor(build: GPUSpatialEffectRegistryBuild) {
     this.records = build.records;
@@ -134,6 +165,18 @@ export class GPUSpatialEffectRegistry {
       1,
     );
     this.bvhNodeCountNode.value = build.bvhNodes.length;
+    this.parameterScratchByTypeId = build.types.map((type) => (
+      new Float32Array(getLayoutFloatSize(type.parameterLayout))
+    ));
+    this.leafNodeByEffectId = new Int32Array(build.records.length).fill(-1);
+    this.parentNodeByNode = new Int32Array(build.bvhNodes.length).fill(-1);
+    build.bvhNodes.forEach((node, nodeIndex) => {
+      if (node.left >= 0) this.parentNodeByNode[node.left] = nodeIndex;
+      if (node.right >= 0) this.parentNodeByNode[node.right] = nodeIndex;
+      for (let leaf = 0; leaf < node.count; leaf += 1) {
+        this.leafNodeByEffectId[build.leafEffectIds[node.start + leaf]] = nodeIndex;
+      }
+    });
     this.records.forEach((record) => {
       this.recordByEffect.set(record.effect, record);
     });
@@ -154,33 +197,63 @@ export class GPUSpatialEffectRegistry {
     system: ParticleSystem,
     tagMaskForEffect: (effect: SpatialEffect) => number,
   ): boolean {
-    const build = GPUSpatialEffectRegistry.createBuild(effects, system, tagMaskForEffect);
-    if (
-      createSignature(build.types) !== this.signature
-      || build.parameterData.length > this.parameterAttribute.array.length
-      || build.metadataData.length > this.metadataAttribute.array.length
-      || build.bvhBoundsData.length > this.bvhBoundsAttribute.array.length
-      || build.bvhNodeData.length > this.bvhNodeAttribute.array.length
-      || build.leafEffectIds.length > this.leafAttribute.array.length
-    ) return false;
+    const sortedEffects = getSortedEffects(effects);
+    if (sortedEffects.length !== this.records.length) return false;
 
-    replaceArrayContents(this.parameterAttribute.array as Float32Array, build.parameterData);
-    replaceArrayContents(this.metadataAttribute.array as Uint32Array, build.metadataData);
-    replaceArrayContents(this.bvhBoundsAttribute.array as Float32Array, build.bvhBoundsData);
-    replaceArrayContents(this.bvhNodeAttribute.array as Int32Array, build.bvhNodeData);
-    replaceArrayContents(this.leafAttribute.array as Uint32Array, new Uint32Array(build.leafEffectIds));
-    this.parameterAttribute.needsUpdate = true;
-    this.metadataAttribute.needsUpdate = true;
-    this.bvhBoundsAttribute.needsUpdate = true;
-    this.bvhNodeAttribute.needsUpdate = true;
-    this.leafAttribute.needsUpdate = true;
+    const parameterData = this.parameterAttribute.array as Float32Array;
+    const dirtyParameterRanges: Array<{ start: number; count: number }> = [];
+    const dirtyEffectIds: number[] = [];
+    let metadataChanged = false;
+    let boundsChanged = false;
 
-    this.records.splice(0, this.records.length, ...build.records);
-    this.types.splice(0, this.types.length, ...build.types);
-    this.bvhNodes.splice(0, this.bvhNodes.length, ...build.bvhNodes);
-    this.leafEffectIds.splice(0, this.leafEffectIds.length, ...build.leafEffectIds);
-    this.bvhNodeCountNode.value = build.bvhNodes.length;
-    this.records.forEach((record) => this.recordByEffect.set(record.effect, record));
+    for (let index = 0; index < sortedEffects.length; index += 1) {
+      const { effect, order } = sortedEffects[index];
+      const record = this.records[index];
+      const batchable = effect as SpatialEffect & GPUSpatialBatchableEffect;
+      const type = batchable.gpuSpatialType!;
+      if (
+        record.effect !== effect
+        || getTypeKey(this.types[record.typeId]) !== getTypeKey(type)
+        || record.priority !== effect.priority
+        || record.order !== order
+      ) return false;
+
+      const parameterSize = getLayoutFloatSize(type.parameterLayout);
+      const nextParameters = this.parameterScratchByTypeId[record.typeId];
+      nextParameters.fill(0);
+      batchable.writeGPUParameters?.(nextParameters, 0, system);
+      if (copyChangedRange(parameterData, record.parameterOffset, nextParameters)) {
+        dirtyParameterRanges.push({ start: record.parameterOffset, count: parameterSize });
+      }
+
+      const nextTagMask = tagMaskForEffect(effect);
+      const nextEnabled = effect.visible;
+      if (record.tagMask !== nextTagMask || record.enabled !== nextEnabled) {
+        record.tagMask = nextTagMask;
+        record.enabled = nextEnabled;
+        metadataChanged = true;
+      }
+
+      const nextBounds = getEffectWorldBounds(effect, system);
+      if (!record.bounds.equals(nextBounds)) {
+        record.bounds.copy(nextBounds);
+        boundsChanged = true;
+        dirtyEffectIds.push(record.id);
+        this.stats.leafUpdates += 1;
+      }
+    }
+
+    if (dirtyParameterRanges.length > 0) {
+      markUpdateRanges(this.parameterAttribute, dirtyParameterRanges);
+      this.stats.parameterUploads += 1;
+      this.stats.parameterUploadBytes += dirtyParameterRanges.reduce(
+        (bytes, range) => bytes + range.count * Float32Array.BYTES_PER_ELEMENT,
+        0,
+      );
+    }
+
+    if (metadataChanged) this.uploadMetadata();
+    if (boundsChanged) this.refitBVHBounds(dirtyEffectIds);
     return true;
   }
 
@@ -189,10 +262,7 @@ export class GPUSpatialEffectRegistry {
     system: ParticleSystem,
     tagMaskForEffect: (effect: SpatialEffect) => number,
   ): GPUSpatialEffectRegistryBuild {
-    const sortedEffects = effects
-      .map((effect, order) => ({ effect, order }))
-      .filter(({ effect }) => isBatchableEffect(effect))
-      .sort((a, b) => (a.effect.priority - b.effect.priority) || (a.order - b.order));
+    const sortedEffects = getSortedEffects(effects);
     const types: GPUSpatialEffectType[] = [];
     const typeIds = new Map<string, number>();
     const records: GPUSpatialEffectRecord[] = [];
@@ -251,6 +321,7 @@ export class GPUSpatialEffectRegistry {
   }
 
   configureSegments(modifierLists: Array<Array<SpatialEffect | { priority: number }>>): void {
+    const previousSegments = this.records.map((record) => record.segmentId);
     this.records.forEach((record) => { record.segmentId = -1; });
     let segmentId = 0;
 
@@ -272,9 +343,68 @@ export class GPUSpatialEffectRegistry {
       });
     });
 
+    if (this.records.some((record, index) => record.segmentId !== previousSegments[index])) {
+      this.uploadMetadata();
+    }
+  }
+
+  private uploadMetadata(): void {
     const packed = packMetadata(this.records);
-    replaceArrayContents(this.metadataAttribute.array as Uint32Array, packed);
-    this.metadataAttribute.needsUpdate = true;
+    const target = this.metadataAttribute.array as Uint32Array;
+    const changed = changedRanges(target, packed);
+    if (changed.length === 0) return;
+    copyRanges(target, packed, changed);
+    markUpdateRanges(this.metadataAttribute, changed);
+    this.stats.metadataUploads += 1;
+    this.stats.metadataUploadBytes += changed.reduce(
+      (bytes, range) => bytes + range.count * Uint32Array.BYTES_PER_ELEMENT,
+      0,
+    );
+  }
+
+  private refitBVHBounds(dirtyEffectIds: number[]): void {
+    const dirtyNodes = new Set<number>();
+    dirtyEffectIds.forEach((effectId) => {
+      let nodeIndex = this.leafNodeByEffectId[effectId];
+      while (nodeIndex >= 0) {
+        dirtyNodes.add(nodeIndex);
+        nodeIndex = this.parentNodeByNode[nodeIndex];
+      }
+    });
+
+    const changedNodes = new Set<number>();
+    Array.from(dirtyNodes).sort((a, b) => b - a).forEach((index) => {
+      const node = this.bvhNodes[index];
+      const next = new THREE.Box3();
+      if (node.count > 0) {
+        for (let leaf = 0; leaf < node.count; leaf += 1) {
+          next.union(this.records[this.leafEffectIds[node.start + leaf]].bounds);
+        }
+      } else {
+        next.union(this.bvhNodes[node.left].bounds);
+        next.union(this.bvhNodes[node.right].bounds);
+      }
+      if (!node.bounds.equals(next)) {
+        node.bounds.copy(next);
+        changedNodes.add(index);
+      }
+    });
+
+    if (changedNodes.size === 0) return;
+    const target = this.bvhBoundsAttribute.array as Float32Array;
+    const packed = packBVHBounds(this.bvhNodes);
+    const ranges = mergeRanges(Array.from(changedNodes, (index) => ({
+      start: index * 8,
+      count: 8,
+    })));
+    copyRanges(target, packed, ranges);
+    markUpdateRanges(this.bvhBoundsAttribute, ranges);
+    this.stats.bvhRefits += 1;
+    this.stats.bvhBoundsUploads += 1;
+    this.stats.bvhBoundsUploadBytes += ranges.reduce(
+      (bytes, range) => bytes + range.count * Float32Array.BYTES_PER_ELEMENT,
+      0,
+    );
   }
 
   createParameterAccessor(type: GPUSpatialEffectType, parameterOffset: Node<'uint'>): GPUSpatialParameterAccessor {
@@ -382,6 +512,19 @@ export class GPUSpatialEffectRegistry {
       });
     });
   }
+
+  dispose(renderer?: unknown): void {
+    [
+      this.parameterAttribute,
+      this.metadataAttribute,
+      this.bvhBoundsAttribute,
+      this.bvhNodeAttribute,
+      this.leafAttribute,
+    ].forEach((attribute) => destroyGPUStorageAttribute(
+      renderer as GPUStorageBufferRenderer | undefined,
+      attribute,
+    ));
+  }
 }
 
 export function isBatchableEffect(effect: SpatialEffect): effect is SpatialEffect & GPUSpatialBatchableEffect {
@@ -390,6 +533,13 @@ export function isBatchableEffect(effect: SpatialEffect): effect is SpatialEffec
     candidate.gpuSpatialType?.testGPU
     && candidate.writeGPUParameters,
   );
+}
+
+function getSortedEffects(effects: SpatialEffect[]): Array<{ effect: SpatialEffect; order: number }> {
+  return effects
+    .map((effect, order) => ({ effect, order }))
+    .filter(({ effect }) => isBatchableEffect(effect))
+    .sort((a, b) => (a.effect.priority - b.effect.priority) || (a.order - b.order));
 }
 
 function getTypeKey(type: GPUSpatialEffectType): string {
@@ -524,7 +674,10 @@ function buildBVH(records: GPUSpatialEffectRecord[]): {
 
     const size = bounds.getSize(new THREE.Vector3());
     const axis = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
-    void axis;
+    ids.sort((a, b) => (
+      records[a].bounds.getCenter(new THREE.Vector3())[axis]
+      - records[b].bounds.getCenter(new THREE.Vector3())[axis]
+    ));
     const middle = Math.ceil(ids.length / 2);
 
     nodes[index].left = buildNode(ids.slice(0, middle));
@@ -616,10 +769,61 @@ function reserveInt32(source: Int32Array, minimum: number): Int32Array {
   return target;
 }
 
-function replaceArrayContents<T extends Float32Array | Uint32Array | Int32Array>(
-  target: T,
-  source: T,
+type TypedArray = Float32Array | Uint32Array | Int32Array;
+type UpdateRange = { start: number; count: number };
+
+function copyChangedRange(target: TypedArray, offset: number, source: TypedArray): boolean {
+  let changed = false;
+  for (let index = 0; index < source.length; index += 1) {
+    if (target[offset + index] !== source[index]) {
+      changed = true;
+      break;
+    }
+  }
+  if (changed) target.set(source, offset);
+  return changed;
+}
+
+function changedRanges(target: TypedArray, source: TypedArray): UpdateRange[] {
+  const ranges: UpdateRange[] = [];
+  let start = -1;
+  for (let index = 0; index < source.length; index += 1) {
+    const changed = target[index] !== source[index];
+    if (changed && start < 0) start = index;
+    if (!changed && start >= 0) {
+      ranges.push({ start, count: index - start });
+      start = -1;
+    }
+  }
+  if (start >= 0) ranges.push({ start, count: source.length - start });
+  return ranges;
+}
+
+function mergeRanges(ranges: UpdateRange[]): UpdateRange[] {
+  const sorted = ranges.slice().sort((a, b) => a.start - b.start);
+  const merged: UpdateRange[] = [];
+  sorted.forEach((range) => {
+    const previous = merged[merged.length - 1];
+    if (previous && range.start <= previous.start + previous.count) {
+      previous.count = Math.max(previous.start + previous.count, range.start + range.count)
+        - previous.start;
+    } else {
+      merged.push({ ...range });
+    }
+  });
+  return merged;
+}
+
+function copyRanges(target: TypedArray, source: TypedArray, ranges: UpdateRange[]): void {
+  ranges.forEach(({ start, count }) => {
+    target.set(source.subarray(start, start + count), start);
+  });
+}
+
+function markUpdateRanges(
+  attribute: StorageBufferAttribute,
+  ranges: UpdateRange[],
 ): void {
-  target.fill(0);
-  target.set(source);
+  mergeRanges(ranges).forEach(({ start, count }) => attribute.addUpdateRange(start, count));
+  attribute.needsUpdate = true;
 }

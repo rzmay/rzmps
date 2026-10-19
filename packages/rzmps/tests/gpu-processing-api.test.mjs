@@ -25,6 +25,7 @@ import {
   GPUEmitterInstanceBufferState,
   GPUEmissionRunBufferState,
   GPUEventBufferState,
+  GPU_EVENT_FLOAT_SLOT_COUNT,
   GPUEventType,
   GPUSpatialEffectRegistry,
   GPUSelectiveReadbackState,
@@ -805,7 +806,6 @@ const eventBuffer = new GPUEventBufferState(1);
 eventBuffer.reset(7);
 eventBuffer.counterAttribute.array[0] = 2;
 eventBuffer.counterAttribute.array[1] = 1;
-eventBuffer.uintAttribute.array.set([1, 0, 3, 7], 0);
 eventBuffer.floatAttribute.array.set([
   9, 8, 7, 1.5,
   6, 5, 4, 0.25,
@@ -819,6 +819,10 @@ eventBuffer.floatAttribute.array.set([
   0, 0, 1, 0,
   0.25, 0.5, 0.75, 0,
 ], 0);
+new Uint32Array(eventBuffer.floatAttribute.array.buffer).set(
+  [GPUEventType.Death, 0, 3, 7],
+  14 * 4,
+);
 const eventBatch = await eventBuffer.readback({
   getArrayBufferAsync(attribute) {
     return Promise.resolve(attribute.array.buffer);
@@ -852,10 +856,6 @@ assert.equal(secondReadbackBuffer, firstReadbackBuffer);
 const spawnCollisionBuffer = new GPUEventBufferState(2);
 spawnCollisionBuffer.reset(8);
 spawnCollisionBuffer.counterAttribute.array[0] = 2;
-spawnCollisionBuffer.uintAttribute.array.set([
-  GPUEventType.Spawn, 0, 1, 8,
-  GPUEventType.Collision, 1, 2, 8,
-], 0);
 spawnCollisionBuffer.floatAttribute.array.set([
   1, 0, 0, 1,
   0, 0, 0, 1,
@@ -880,6 +880,12 @@ spawnCollisionBuffer.floatAttribute.array.set([
   0, 0, 0, 0,
   1, 1, 1, 0,
 ], 0);
+const spawnCollisionBits = new Uint32Array(spawnCollisionBuffer.floatAttribute.array.buffer);
+spawnCollisionBits.set([GPUEventType.Spawn, 0, 1, 8], 14 * 4);
+spawnCollisionBits.set(
+  [GPUEventType.Collision, 1, 2, 8],
+  (GPU_EVENT_FLOAT_SLOT_COUNT + 14) * 4,
+);
 const spawnCollisionBatch = await spawnCollisionBuffer.readback({
   getArrayBufferAsync(attribute) {
     return Promise.resolve(attribute.array.buffer);
@@ -1188,6 +1194,8 @@ assert.equal(builtInSpatialRegistry.parameterAttribute.array[132], 4);
 const builtInSpatialVersion = builtInSpatialRegistry.version;
 const builtInSpatialParameterAttribute = builtInSpatialRegistry.parameterAttribute;
 const builtInSpatialMetadataAttribute = builtInSpatialRegistry.metadataAttribute;
+const builtInSpatialBoundsAttribute = builtInSpatialRegistry.bvhBoundsAttribute;
+const builtInSpatialLeafAttribute = builtInSpatialRegistry.leafAttribute;
 assert.equal(builtInSpatialRegistry.update(
   builtInSpatialRegistry.records.map((record) => record.effect),
   spatialRegistrySystem,
@@ -1195,6 +1203,67 @@ assert.equal(builtInSpatialRegistry.update(
 ), true);
 assert.equal(builtInSpatialRegistry.version, builtInSpatialVersion);
 assert.equal(builtInSpatialRegistry.parameterAttribute, builtInSpatialParameterAttribute);
+
+const movingForceField = builtInSpatialRegistry.records[2].effect;
+const oldMovingBounds = movingForceField.position.clone();
+movingForceField.position.x += 12;
+assert.equal(builtInSpatialRegistry.update(
+  builtInSpatialRegistry.records.map((record) => record.effect),
+  spatialRegistrySystem,
+  () => 0,
+), true);
+assert.equal(builtInSpatialRegistry.version, builtInSpatialVersion);
+assert.equal(builtInSpatialRegistry.bvhBoundsAttribute, builtInSpatialBoundsAttribute);
+assert.equal(builtInSpatialRegistry.leafAttribute, builtInSpatialLeafAttribute);
+assert.equal(builtInSpatialRegistry.stats.structuralBuilds, 1);
+assert.equal(builtInSpatialRegistry.stats.parameterUploads, 1);
+assert.equal(builtInSpatialRegistry.stats.leafUpdates, 1);
+assert.equal(builtInSpatialRegistry.stats.bvhRefits, 1);
+assert.ok(!builtInSpatialRegistry.records[2].bounds.containsPoint(oldMovingBounds));
+assert.ok(builtInSpatialRegistry.records[2].bounds.containsPoint(movingForceField.position));
+
+const unchangedSpatialStats = { ...builtInSpatialRegistry.stats };
+assert.equal(builtInSpatialRegistry.update(
+  builtInSpatialRegistry.records.map((record) => record.effect),
+  spatialRegistrySystem,
+  () => 0,
+), true);
+assert.deepEqual(builtInSpatialRegistry.stats, unchangedSpatialStats);
+
+const localSpatialSystem = new ParticleSystem({
+  emitters: [],
+  renderers: [],
+  modules: [],
+  simulationSpace: 'local',
+});
+localSpatialSystem.position.x = 2;
+const movingParent = new THREE.Group();
+movingParent.position.x = 5;
+const parentedForceField = ParticleForceField.Sphere({
+  direction: new THREE.Vector3(1, 0, 0),
+}, 1, 16, 8);
+parentedForceField.position.x = 1;
+movingParent.add(parentedForceField);
+const parentedRegistry = GPUSpatialEffectRegistry.build(
+  [parentedForceField],
+  localSpatialSystem,
+  () => 0,
+);
+const localBoundsCenter = parentedRegistry.records[0].bounds.getCenter(new THREE.Vector3());
+assert.equal(localBoundsCenter.x, 4);
+movingParent.position.x += 3;
+assert.equal(parentedRegistry.update(
+  [parentedForceField],
+  localSpatialSystem,
+  () => 0,
+), true);
+assert.equal(
+  parentedRegistry.records[0].bounds.getCenter(new THREE.Vector3()).x,
+  7,
+  'parent movement must update local-simulation bounds without rebuilding the registry',
+);
+assert.equal(parentedRegistry.stats.structuralBuilds, 1);
+assert.equal(parentedRegistry.stats.bvhRefits, 1);
 
 const addedForceField = ParticleForceField.Sphere({
   direction: new THREE.Vector3(0, 0, 1),
@@ -1204,15 +1273,11 @@ assert.equal(builtInSpatialRegistry.update(
   [...builtInSpatialRegistry.records.map((record) => record.effect), addedForceField],
   spatialRegistrySystem,
   () => 0,
-), true);
-builtInSpatialRegistry.configureSegments([
-  builtInSpatialRegistry.records.map((record) => record.effect),
-]);
-assert.equal(builtInSpatialRegistry.records.length, 5);
+), false);
+assert.equal(builtInSpatialRegistry.records.length, 4);
 assert.equal(builtInSpatialRegistry.version, builtInSpatialVersion);
 assert.equal(builtInSpatialRegistry.parameterAttribute, builtInSpatialParameterAttribute);
 assert.equal(builtInSpatialRegistry.metadataAttribute, builtInSpatialMetadataAttribute);
-assert.ok(builtInSpatialRegistry.records.every((record) => record.segmentId === 1));
 
 const incompatibleType = {
   ...batchableType,

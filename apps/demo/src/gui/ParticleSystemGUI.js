@@ -55,6 +55,7 @@ export class ParticleSystemGUI {
             renderer: options.rendererMode ?? 'webgl',
             showCode: false,
         };
+        this.configureSystemForRenderer(this.system);
 
         // Focused collaborators keep this class responsible for orchestration only.
         this.valueEditor = new GUIValueEditor(this);
@@ -102,6 +103,7 @@ export class ParticleSystemGUI {
     setSystem(next, presetName) {
         if (next === this.system)
             return;
+        this.configureSystemForRenderer(next);
         this.currentPresetName = presetName;
         const previous = this.system;
         previous.removeEventListener?.('destroyed', this.handleSystemDestroyed);
@@ -367,6 +369,10 @@ export class ParticleSystemGUI {
         this.scene?.userData?.[SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY]?.(system);
     }
 
+    configureSystemForRenderer(system = this.system) {
+        if (this.viewState.renderer === 'webgl') system.gpuProcessing = false;
+    }
+
     getPresetFactory(entry) {
         return typeof entry === 'function' ? entry : entry?.create;
     }
@@ -410,11 +416,14 @@ export class ParticleSystemGUI {
         folder.add(system, 'maxParticles', 0, 100000, 1).name('Max Particles');
         folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling');
         folder.add(system, 'simulationDistance', 0, 1000, 0.1).name('Simulation Distance');
-        folder.add(system, 'gpuProcessing').name('GPU Processing');
+        const gpuProcessing = folder.add(system, 'gpuProcessing').name('GPU Processing');
+        if (this.viewState.renderer === 'webgl') gpuProcessing.disable();
         folder.add(system, 'gpuDebug').name('GPU Debug Logs');
         folder.add(system, 'gpuDebugInterval', 1, 120, 1).name('GPU Debug Every');
+        const rendererMode = this.viewState.renderer;
         const gpuStatus = {
             get active() {
+                if (rendererMode === 'webgl') return 'CPU';
                 return system.isGPUProcessingActive ? 'Active' : 'CPU fallback';
             },
         };

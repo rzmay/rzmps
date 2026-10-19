@@ -5,7 +5,7 @@ import { instanceIndex, storage } from 'three/tsl';
 import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { GPUAllocationWriter } from './AllocationBuffer';
-import type { GPUEventWriter } from './EventBuffer';
+import type { GPUCollisionEventWriter, GPUEventWriter } from './EventBuffer';
 
 type VectorField =
   | 'position'
@@ -99,6 +99,7 @@ export interface GPUParticleBufferState {
     generationForParticle?: (particle: Particle, index: number) => number,
   ): void;
   readback(renderer: GPUReadbackRenderer, particles: Particle[]): Promise<void>;
+  dispose(renderer?: GPUStorageBufferRenderer): void;
 }
 
 export interface GPUParticleRenderBufferState {
@@ -111,6 +112,7 @@ export interface GPUParticleRenderBufferState {
   alive: Node<'uint'>;
   initialize(renderer: GPUStorageBufferRenderer): GPUParticleBufferInitialization;
   ensureCount(count: number): void;
+  dispose(renderer?: GPUStorageBufferRenderer): void;
 }
 
 export interface GPUParticleBufferInitialization {
@@ -139,8 +141,11 @@ export interface GPUParticleUpdateContext {
   elapsedTimeNode: Node<'float'>;
   emitterPositionNode?: Node<'vec3'>;
   gravityNode: Node<'vec3'>;
+  simulationToWorldNode: Node<'mat4'>;
+  worldToSimulationNode: Node<'mat4'>;
   allocationWriter?: GPUAllocationWriter;
   eventWriter?: GPUEventWriter;
+  collisionEventWriter?: GPUCollisionEventWriter;
 }
 
 export interface GPUParticleLike {
@@ -593,8 +598,8 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     encoder.copyBufferToBuffer(previousFloatBuffer, 0, nextFloatBuffer, 0, previousFloatData.byteLength);
     encoder.copyBufferToBuffer(previousUintBuffer, 0, nextUintBuffer, 0, previousUintData.byteLength);
     device.queue.submit([encoder.finish()]);
-    backend.destroyAttribute?.(previousFloatAttribute);
-    backend.destroyAttribute?.(previousUintAttribute);
+    destroyGPUStorageAttribute(renderer, previousFloatAttribute);
+    destroyGPUStorageAttribute(renderer, previousUintAttribute);
     return true;
   }
 
@@ -640,6 +645,11 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
       particle.alive = readState(this.uintData, index) !== 0;
       particle.cache();
     }
+  }
+
+  dispose(renderer?: GPUStorageBufferRenderer): void {
+    destroyGPUStorageAttribute(renderer, this.attributes.floatData);
+    destroyGPUStorageAttribute(renderer, this.attributes.uintData);
   }
 
   private ensureCapacity(nextCount: number): void {
@@ -731,6 +741,11 @@ class GPUParticleRenderBufferStateImpl implements GPUParticleRenderBufferState {
     this.particle = this.storage.createParticle();
     this.alive = this.storage.createStateNode().x;
     this.version += 1;
+  }
+
+  dispose(renderer?: GPUStorageBufferRenderer): void {
+    destroyGPUStorageAttribute(renderer, this.attributes.floatData);
+    destroyGPUStorageAttribute(renderer, this.attributes.uintData);
   }
 }
 
@@ -853,4 +868,18 @@ function readScalar(array: Float32Array, index: number, slot: number): number {
 
 function readState(array: Uint32Array, index: number): number {
   return array[stateOffset(index)];
+}
+
+export function destroyGPUStorageAttribute(
+  renderer: GPUStorageBufferRenderer | undefined,
+  attribute: StorageBufferAttribute,
+): void {
+  const backend = renderer?.backend as {
+    has?(target: StorageBufferAttribute): boolean;
+    get?(target: StorageBufferAttribute): { buffer?: unknown };
+    destroyAttribute?(target: StorageBufferAttribute): void;
+  } | undefined;
+  if (backend?.has && !backend.has(attribute)) return;
+  if (backend?.get && !backend.get(attribute).buffer) return;
+  backend?.destroyAttribute?.(attribute);
 }

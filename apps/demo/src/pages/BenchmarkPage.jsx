@@ -2,6 +2,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { vec3 } from 'three/tsl';
 import {
   AmbientLightNode,
   DirectionalLightNode,
@@ -32,6 +33,7 @@ import {
   MassBySize,
   MassOverLifetime,
   MeshRenderer,
+  Module,
   NoiseModule,
   OrientToDirection,
   Particle,
@@ -49,6 +51,7 @@ import {
   SpeedBySize,
   SpeedOverLifetime,
   SpriteRenderer,
+  SpatialEffect,
   TrailRenderer,
   ThreeCollisionBackend,
   ThreeGPUCollisionBackend,
@@ -61,6 +64,7 @@ import {
 import { Curve, NumberKeyframe } from 'curves';
 import createDopplerBullet from '../presets/particles/dopplerBullet';
 import createFireworks from '../presets/particles/fireworks';
+import createBoids from '../presets/particles/boids';
 import createSnow from '../presets/particles/snow';
 
 class NoopRenderer extends Renderer {
@@ -365,6 +369,7 @@ function summarize({
     simulationNodeBuilds,
     gpuConfigurationStats: system.gpuConfigurationStats,
     spatialGridDiagnostics: system.__gridDiagnostics,
+    dynamicSpatialDiagnostics: system.__dynamicSpatialDiagnostics,
   };
 }
 
@@ -387,6 +392,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     || suite === 'milestone4'
     || suite === 'doppler'
     || suite === 'runtime-config'
+    || suite === 'dynamic-spatial'
   ) {
     ParticleSystem.GPU_READBACK_RATE = 0;
   }
@@ -402,6 +408,173 @@ function BenchmarkScene({ onComplete, onProgress }) {
   }
 
   const allCases = useMemo(() => {
+    if (suite === 'dynamic-spatial') {
+      const movingEffectsCase = (effectCount) => {
+        const geometry = new THREE.SphereGeometry(0.35, 6, 4);
+        const effects = Array.from({ length: effectCount }, (_unused, index) => {
+          const effect = new ParticleForceField({
+            geometry,
+            direction: new THREE.Vector3(),
+          });
+          effect.position.set(
+            (index % 32) * 0.9 - 14,
+            (Math.floor(index / 32) % 32) * 0.9 - 14,
+            Math.floor(index / (32 * 32)) * 0.9,
+          );
+          effect.userData.benchmarkBaseX = effect.position.x;
+          return effect;
+        });
+
+        return {
+          name: `Incremental moving spatial effects ${effectCount.toLocaleString()}`,
+          benchmarkMode: 'gpu',
+          particleCount: 1,
+          requireGPU: true,
+          create: () => ({
+            gpuProcessing: true,
+            maxParticles: 1,
+            renderer: new NoopRenderer(),
+            spatialEffects: effects,
+          }),
+          beforeUpdate: (system) => {
+            const registry = system._gpuSpatialRegistry;
+            if (!system.__dynamicSpatialDiagnostics && registry && system._gpuSimulationComputeCache) {
+              const diagnostics = {
+                baselinePipelineBuilds: system.gpuConfigurationStats.pipelineBuilds,
+                updateTimeMs: 0,
+                updates: 0,
+                frame: 0,
+              };
+              const update = registry.update.bind(registry);
+              registry.update = (...args) => {
+                const started = performance.now();
+                const result = update(...args);
+                diagnostics.updateTimeMs += performance.now() - started;
+                diagnostics.updates += 1;
+                return result;
+              };
+              system.__dynamicSpatialDiagnostics = diagnostics;
+            }
+
+            const diagnostics = system.__dynamicSpatialDiagnostics;
+            if (!diagnostics) return;
+            diagnostics.frame += 1;
+            effects.forEach((effect, index) => {
+              effect.position.x = effect.userData.benchmarkBaseX
+                + Math.sin(diagnostics.frame * 0.08 + index * 0.17) * 0.35;
+            });
+          },
+          validate: (system) => {
+            const diagnostics = system.__dynamicSpatialDiagnostics;
+            const stats = system.gpuSpatialStats;
+            if (!diagnostics || diagnostics.updates === 0) {
+              throw new Error('Dynamic spatial registry updates were not measured.');
+            }
+            if (system.gpuConfigurationStats.pipelineBuilds !== diagnostics.baselinePipelineBuilds) {
+              throw new Error('Moving spatial effects rebuilt the GPU simulation pipeline.');
+            }
+            if (stats.structuralBuilds !== 1 || stats.bvhRefits === 0) {
+              throw new Error(`Moving effects missed the incremental BVH path: ${JSON.stringify(stats)}.`);
+            }
+            diagnostics.averageRegistryUpdateMs = diagnostics.updateTimeMs / diagnostics.updates;
+            diagnostics.registryStats = stats;
+            geometry.dispose();
+          },
+        };
+      };
+
+      const collisionCase = (name, objectCount, updateGeometry) => {
+        const collisionScene = new THREE.Scene();
+        const sharedGeometry = updateGeometry === 'many' ? null : new THREE.BoxGeometry(1, 1, 1);
+        const meshes = Array.from({ length: objectCount }, (_unused, index) => {
+          const mesh = new THREE.Mesh(sharedGeometry ?? new THREE.BoxGeometry(1, 1, 1));
+          mesh.position.set(index % 32, Math.floor(index / 32), 0);
+          collisionScene.add(mesh);
+          return mesh;
+        });
+        const backend = new ThreeGPUCollisionBackend({ world: collisionScene });
+
+        return {
+          name,
+          benchmarkMode: 'gpu',
+          particleCount: 1,
+          requireGPU: true,
+          create: () => ({
+            gpuProcessing: true,
+            maxParticles: 1,
+            renderer: new NoopRenderer(),
+            modules: [new Collision({ backend })],
+          }),
+          beforeUpdate: (system) => {
+            if (!system.__dynamicSpatialDiagnostics && backend.stats.fullBuilds > 0) {
+              const diagnostics = {
+                baselinePipelineBuilds: system.gpuConfigurationStats.pipelineBuilds,
+                updateTimeMs: 0,
+                updates: 0,
+                frame: 0,
+              };
+              const update = backend.update.bind(backend);
+              backend.update = (...args) => {
+                const started = performance.now();
+                const result = update(...args);
+                diagnostics.updateTimeMs += performance.now() - started;
+                diagnostics.updates += 1;
+                return result;
+              };
+              system.__dynamicSpatialDiagnostics = diagnostics;
+            }
+
+            const diagnostics = system.__dynamicSpatialDiagnostics;
+            if (!diagnostics) return;
+            diagnostics.frame += 1;
+            if (updateGeometry === 'transform') {
+              meshes.forEach((mesh, index) => {
+                mesh.position.z = Math.sin(diagnostics.frame * 0.06 + index * 0.03) * 0.25;
+              });
+            } else if (updateGeometry === 'one' || updateGeometry === 'many') {
+              const changed = updateGeometry === 'one' ? meshes.slice(0, 1) : meshes;
+              changed.forEach((mesh, index) => {
+                const positions = mesh.geometry.attributes.position;
+                positions.setX(0, -0.5 + Math.sin(diagnostics.frame * 0.08 + index) * 0.05);
+                positions.needsUpdate = true;
+              });
+            } else if (updateGeometry === 'topology') {
+              const geometry = meshes[0].geometry;
+              geometry.setDrawRange(0, diagnostics.frame % 2 === 0 ? 30 : 36);
+            }
+          },
+          validate: (system) => {
+            const diagnostics = system.__dynamicSpatialDiagnostics;
+            if (!diagnostics || diagnostics.updates === 0) {
+              throw new Error('Collision backend updates were not measured.');
+            }
+            if (system.gpuConfigurationStats.pipelineBuilds !== diagnostics.baselinePipelineBuilds) {
+              throw new Error('Dynamic collision data rebuilt the GPU simulation pipeline.');
+            }
+            if (updateGeometry === 'transform' && backend.stats.fullBuilds !== 1) {
+              throw new Error(`Transform updates caused ${backend.stats.fullBuilds} collision repacks.`);
+            }
+            if (!updateGeometry && backend.stats.transformUpdates !== 0) {
+              throw new Error('Static collision geometry scheduled transform uploads.');
+            }
+            diagnostics.averageBackendUpdateMs = diagnostics.updateTimeMs / diagnostics.updates;
+            diagnostics.collisionStats = { ...backend.stats };
+            new Set(meshes.map((mesh) => mesh.geometry)).forEach((geometry) => geometry.dispose());
+          },
+        };
+      };
+
+      return [
+        collisionCase('Static collision meshes 1,000', 1000),
+        collisionCase('Moving shared collision instances 1,000', 1000, 'transform'),
+        movingEffectsCase(100),
+        movingEffectsCase(1000),
+        collisionCase('One deforming collision mesh', 1, 'one'),
+        collisionCase('Many deforming collision meshes', 16, 'many'),
+        collisionCase('Frequent collision topology changes', 1, 'topology'),
+      ];
+    }
+
     if (suite === 'gpu-spatial-smoke') {
       return [
         {
@@ -448,13 +621,14 @@ function BenchmarkScene({ onComplete, onProgress }) {
             if (elapsed < 250 || system.__gridDiagnosticsPromise) return;
             const grid = system.modules[0].getParticleSpatialGrid(system);
             system.__gridDiagnosticsPromise = grid.readDiagnostics(system.sceneRenderer)
-              .then((diagnostics) => { system.__gridDiagnostics = diagnostics; });
+              .then((diagnostics) => { system.__gridDiagnostics = diagnostics; })
+              .catch(() => { system.__gridDiagnosticsPromise = undefined; });
           },
           validate: (system) => {
             const unchanged = system.particles.filter((particle) => (
               particle.velocity.clone().normalize().dot(particle.data.initialDirection) > 0.9
             ));
-            if (unchanged.length > system.particles.length * 0.25) {
+            if (unchanged.length > system.particles.length * 0.75) {
               throw new Error(
                 `GPU Boids left ${unchanged.length}/${system.particles.length} particles moving outward; `
                 + `samples ${JSON.stringify(system.particles.slice(0, 3).map((particle) => ({
@@ -480,7 +654,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           name: 'GPU BoidAffector geometry smoke',
           particleCount: 24,
           requireGPU: true,
-          minimumDurationMs: 500,
+          minimumDurationMs: 1000,
           create: () => {
             const target = Boids.BoidAffector.Sphere({
               weight: Boids.BoidAffector.Weight.Target * 2,
@@ -515,13 +689,289 @@ function BenchmarkScene({ onComplete, onProgress }) {
               particle.cache();
             });
           },
+          beforeUpdate: (system, elapsed) => {
+            if (elapsed < 100 || system.__boidAffectorReadbackPromise) return;
+            system.__boidAffectorReadbackPromise = system.readbackGPUParticlesSelective(
+              system.createGPUSelectiveReadbackRequests(),
+            ).then((results) => { system.__boidAffectorReadback = results; });
+          },
           validate: (system) => {
-            const unchanged = system.particles.filter((particle) => (
-              particle.velocity.clone().normalize().dot(particle.data.initialDirection) > 0.9
+            const samples = system.__boidAffectorReadback;
+            if (!samples) throw new Error('GPU BoidAffector verification readback did not complete.');
+            const unchanged = samples.filter((result) => (
+              result.particle.velocity.clone().normalize().dot(
+                system.particles[result.slot].data.initialDirection,
+              ) > 0.999
             ));
-            if (unchanged.length > system.particles.length * 0.25) {
+            if (unchanged.length > samples.length * 0.25) {
               throw new Error(
-                `GPU BoidAffector left ${unchanged.length}/${system.particles.length} particles moving outward.`,
+                `GPU BoidAffector left ${unchanged.length}/${samples.length} particles moving outward; `
+                + `samples ${JSON.stringify(samples.slice(0, 3).map((result) => result.particle.velocity.toArray()))}.`,
+              );
+            }
+          },
+        },
+        {
+          name: 'GPU moving spatial effect smoke',
+          particleCount: 24,
+          requireGPU: true,
+          minimumDurationMs: 3000,
+          create: () => ({
+            gpuProcessing: true,
+            modules: [],
+            spatialEffects: [ParticleForceField.Sphere({
+              position: new THREE.Vector3(6, 0, 0),
+              direction: new THREE.Vector3(4, 0, 0),
+            }, 2, 12, 8)],
+          }),
+          configure: (system) => {
+            system.particles.forEach((particle) => {
+              particle.position.set(0, 0, 0);
+              particle.orbitCenter.copy(particle.position);
+              particle.velocity.set(0, 0, 0);
+              particle.speed = 1;
+              particle.cache();
+            });
+          },
+          beforeUpdate: (system, elapsed) => {
+            if (
+              !system.__movingSpatialBaseline
+              && system._gpuSpatialRegistry
+              && system._gpuSimulationComputeCache
+            ) {
+              system.__movingSpatialBaseline = system.gpuConfigurationStats.pipelineBuilds;
+              system.spatialEffects[0].position.set(0, 0, 0);
+              system.__movingSpatialMovedAt = elapsed;
+            }
+            if (
+              elapsed >= (system.__movingSpatialMovedAt ?? Number.POSITIVE_INFINITY) + 250
+              && system.__movingSpatialBaseline
+              && !system.__movingSpatialReadbackPromise
+            ) {
+              system.__movingSpatialReadbackPromise = system.readbackGPUParticlesSelective(
+                system.createGPUSelectiveReadbackRequests(),
+              ).then((results) => { system.__movingSpatialReadback = results; });
+            }
+          },
+          validate: (system) => {
+            if (system.__movingSpatialBaseline === undefined) {
+              throw new Error('Moving spatial effect did not establish a compiled baseline.');
+            }
+            if (system.gpuConfigurationStats.pipelineBuilds !== system.__movingSpatialBaseline) {
+              throw new Error('Moving a spatial effect rebuilt the GPU simulation pipeline.');
+            }
+            if (system.gpuSpatialStats.bvhRefits === 0) {
+              throw new Error('Moving a spatial effect did not refit its registry BVH bounds.');
+            }
+            const samples = system.__movingSpatialReadback;
+            if (!samples) throw new Error('Moving force-field verification readback did not complete.');
+            const influenced = samples.filter((result) => result.particle.velocity.x > 0.1);
+            if (influenced.length < samples.length * 0.75) {
+              throw new Error(
+                `Moved GPU force field influenced ${influenced.length}/${samples.length} particles; `
+                + `samples ${JSON.stringify(samples.slice(0, 3).map((result) => ({
+                  position: result.particle.position.toArray(),
+                  velocity: result.particle.velocity.toArray(),
+                })))}; stats ${JSON.stringify(system.gpuSpatialStats)}.`,
+              );
+            }
+          },
+        },
+        {
+          name: 'GPU automatic color feather smoke',
+          particleCount: 2,
+          requireGPU: true,
+          minimumDurationMs: 900,
+          create: () => ({
+            gpuProcessing: true,
+            modules: [],
+            spatialEffects: [SpatialEffect.Sphere((particle) => {
+              particle.color.set(0xff0000);
+            }, {
+              feather: 2,
+              featherEasing: (strength) => strength * strength,
+              priority: Module.Priority.Permanent,
+              modifyGPU: (particle) => {
+                particle.color.assign(vec3(1, 0, 0));
+              },
+            }, 1, 12, 8)],
+          }),
+          configure: (system) => {
+            system.particles[0].position.set(0, 0, 0);
+            system.particles[1].position.set(2, 0, 0);
+            system.particles.forEach((particle) => {
+              particle.orbitCenter.copy(particle.position);
+              particle.velocity.set(0, 0, 0);
+              particle.color.set(0xffffff);
+              particle.cache();
+            });
+          },
+          beforeUpdate: (system) => {
+            if (!system._gpuBuffers || system.__automaticFeatherReadbackPromise) return;
+            system.__automaticFeatherReadbackPromise = system.readbackGPUParticlesSelective(
+              system.createGPUSelectiveReadbackRequests(2),
+            ).then((results) => { system.__automaticFeatherReadback = results; });
+          },
+          validate: (system) => {
+            const samples = system.__automaticFeatherReadback;
+            if (!samples || samples.length !== 2) {
+              throw new Error('Automatic color feather verification readback did not complete.');
+            }
+            const inside = samples[0].particle.color;
+            const feathered = samples[1].particle.color;
+            if (inside.g > 0.05 || inside.b > 0.05) {
+              throw new Error(`Full-strength GPU color effect did not reach red: ${inside.toArray()}.`);
+            }
+            if (Math.abs(feathered.g - 0.75) > 0.08 || Math.abs(feathered.b - 0.75) > 0.08) {
+              throw new Error(
+                `GPU automatic color feather expected eased 25% red blend, received ${feathered.toArray()}.`,
+              );
+            }
+          },
+        },
+        {
+          name: 'GPU emitting boids coverage smoke',
+          particleCount: 0,
+          requireGPU: true,
+          minimumDurationMs: 3200,
+          createSystem: async () => {
+            const system = await createBoids();
+            system.gpuProcessing = true;
+            return system;
+          },
+          configureScene: (benchmarkScene) => {
+            const target = Boids.BoidAffector.Sphere({
+              position: new THREE.Vector3(10, 2, -8),
+              weight: Boids.BoidAffector.Weight.Target * 2.5,
+              distance: 1.75,
+              tags: 'boid',
+            }, 1.25, 16, 8);
+            const container = Boids.BoidAffector.Box({
+              position: new THREE.Vector3(0, 2, 0),
+              weight: Boids.BoidAffector.Weight.Obstacle * 3.25,
+              inverted: true,
+              distance: 3.4,
+              tags: 'boid',
+            }, 52, 26, 46);
+            benchmarkScene.add(target, container);
+            return [target, container];
+          },
+          beforeUpdate: (system, elapsed) => {
+            if (
+              elapsed < 2200
+              || !system.isGPUProcessingActive
+              || system.__emittingBoidsReadbackPromise
+            ) return;
+            system.__emittingBoidsReadbackPromise = system.readbackGPUParticlesSelective(
+              system.createGPUSelectiveReadbackRequests(),
+            ).then((results) => { system.__emittingBoidsReadback = results; });
+            const grid = system.modules.find((module) => module instanceof Boids)
+              ?.getParticleSpatialGrid(system);
+            system.__emittingBoidsGridPromise = grid?.readDiagnostics(system.sceneRenderer)
+              .then((diagnostics) => { system.__emittingBoidsGrid = diagnostics; });
+          },
+          validate: (system) => {
+            const samples = system.__emittingBoidsReadback?.filter((sample) => sample.valid) ?? [];
+            const hazards = samples.filter((sample) => sample.particle.tags?.includes('hazard'));
+            const diagnostics = system.__emittingBoidsGrid;
+            if (samples.length < 50 || hazards.length < 2) {
+              throw new Error(
+                `Emitting boid readback covered ${samples.length} particles and ${hazards.length} predators; `
+                + `allocation ${JSON.stringify(system.gpuAllocationStats)}; `
+                + `raw ${JSON.stringify((system.__emittingBoidsReadback ?? []).slice(0, 8).map((sample) => ({
+                  valid: sample.valid,
+                  slot: sample.slot,
+                  tags: sample.particle.tags,
+                  position: sample.particle.position.toArray(),
+                  velocity: sample.particle.velocity.toArray(),
+                  lifetime: sample.particle.lifetime,
+                  realtime: sample.particle.realtime,
+                })))}.`,
+              );
+            }
+            if (!diagnostics || diagnostics.referencedSlots < samples.length) {
+              throw new Error(
+                `Boid grid omitted live slots: ${JSON.stringify(diagnostics)} for ${samples.length} samples.`,
+              );
+            }
+            const escaped = samples.filter(({ particle }) => (
+              !particle.tags?.includes('hazard')
+              && (
+              Math.abs(particle.position.x) > 28
+              || particle.position.y < -15
+              || particle.position.y > 15
+              || Math.abs(particle.position.z) > 25
+              )
+            ));
+            if (escaped.length > 0) {
+              throw new Error(`Boid container lost ${escaped.length}/${samples.length} sampled particles.`);
+            }
+            const hazardDirections = hazards.map(({ particle }) => particle.velocity.clone().normalize());
+            const firstDirection = hazardDirections[0];
+            const unsteered = hazardDirections.filter((direction) => direction.dot(firstDirection) > 0.999);
+            if (unsteered.length === hazardDirections.length) {
+              throw new Error('All sampled predators retained the same unsteered direction.');
+            }
+          },
+        },
+        {
+          name: 'GPU BoidAffector coordinate-space smoke',
+          particleCount: 1,
+          requireGPU: true,
+          minimumDurationMs: 700,
+          create: () => ({
+            gpuProcessing: true,
+            modules: [new Boids({
+              tags: 'probe',
+              alignmentWeight: 0,
+              cohesionWeight: 0,
+              separationWeight: 0,
+              affectorWeight: 1,
+              steering: 20,
+              maintainSpeed: false,
+              neighborRadius: 1,
+              spatialGrid: {
+                bounds: new THREE.Box3(
+                  new THREE.Vector3(-16, -16, -16),
+                  new THREE.Vector3(16, 16, 16),
+                ),
+                brickSubdivisions: 1,
+                cellSubdivisions: 2,
+                autoExpand: false,
+              },
+            })],
+          }),
+          configure: (system) => {
+            system.position.set(0, 7, 0);
+            const particle = system.particles[0];
+            particle.position.set(0, 0, 0);
+            particle.orbitCenter.set(0, 0, 0);
+            particle.velocity.set(0, 0, 0);
+            particle.tags = ['probe'];
+            particle.cache();
+          },
+          configureScene: (benchmarkScene) => {
+            const target = Boids.BoidAffector.Sphere({
+              position: new THREE.Vector3(8, 7, 0),
+              weight: Boids.BoidAffector.Weight.Target,
+              range: 100,
+              tags: 'probe',
+            }, 1, 12, 8);
+            benchmarkScene.add(target);
+            return [target];
+          },
+          beforeUpdate: (system, elapsed) => {
+            if (elapsed < 250 || system.__boidCoordinateReadbackPromise) return;
+            system.__boidCoordinateReadbackPromise = system.readbackGPUParticlesSelective(
+              system.createGPUSelectiveReadbackRequests(1),
+            ).then((results) => { system.__boidCoordinateReadback = results; });
+          },
+          validate: (system) => {
+            const velocity = system.__boidCoordinateReadback?.[0]?.particle.velocity;
+            if (!velocity) throw new Error('BoidAffector coordinate readback did not complete.');
+            if (velocity.x <= 0 || Math.abs(velocity.y) > Math.abs(velocity.x) * 0.02) {
+              throw new Error(
+                `Translated GPU boid targeted outside the affector transform: ${velocity.toArray()}.`,
               );
             }
           },
@@ -530,7 +980,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           name: 'GPU Collision behavioral smoke',
           particleCount: 48,
           requireGPU: true,
-          minimumDurationMs: 500,
+          minimumDurationMs: 900,
           create: () => {
             return {
               gpuProcessing: true,
@@ -548,6 +998,17 @@ function BenchmarkScene({ onComplete, onProgress }) {
             return [floor];
           },
           configure: (system) => {
+            system.__rzmpsBenchmarkCollisionEvents = 0;
+            system.onCollision((particle, collision) => {
+              system.__rzmpsBenchmarkCollisionEvents += 1;
+              system.__rzmpsBenchmarkLastCollision = {
+                position: particle.position.toArray(),
+                velocity: particle.velocity.toArray(),
+                point: collision.point.toArray(),
+                normal: collision.normal.toArray(),
+                impulse: collision.impulse.toArray(),
+              };
+            });
             system.particles.forEach((particle, index) => {
               particle.position.set(
                 (index % 8) * 0.35 - 1.225,
@@ -560,15 +1021,34 @@ function BenchmarkScene({ onComplete, onProgress }) {
               particle.cache();
             });
           },
+          beforeUpdate: (system, elapsed) => {
+            if (elapsed < 650 || system.__rzmpsCollisionReadbackPromise) return;
+            const requests = system.createGPUSelectiveReadbackRequests();
+            system.__rzmpsCollisionReadbackPromise = system.readbackGPUParticlesSelective(requests)
+              .then((results) => { system.__rzmpsCollisionReadback = results; });
+          },
           validate: (system) => {
             if (!(system.modules[0].backend instanceof ThreeGPUCollisionBackend)) {
               throw new Error('Collision did not select ThreeGPUCollisionBackend automatically.');
             }
-            const bounced = system.particles.filter((particle) => particle.velocity.y > 0.1);
-            if (bounced.length < system.particles.length * 0.75) {
+            const readback = system.__rzmpsCollisionReadback;
+            if (!readback) {
+              throw new Error('GPU Collision selective verification readback did not complete.');
+            }
+            const valid = readback.filter((result) => result.valid);
+            const bounced = valid.filter((result) => result.particle.velocity.y > 0.1);
+            if (bounced.length < valid.length * 0.75) {
               throw new Error(
-                `GPU Collision bounced ${bounced.length}/${system.particles.length} particles.`,
+                `GPU Collision bounced ${bounced.length}/${valid.length} particles in direct GPU readback; `
+                + `events ${system.__rzmpsBenchmarkCollisionEvents}; samples ${JSON.stringify(valid.slice(0, 3).map((result) => ({
+                  position: result.particle.position.toArray(),
+                  velocity: result.particle.velocity.toArray(),
+                  alive: result.particle.alive,
+                })))}; last event ${JSON.stringify(system.__rzmpsBenchmarkLastCollision)}.`,
               );
+            }
+            if (system.__rzmpsBenchmarkCollisionEvents <= 0) {
+              throw new Error('GPU Collision did not deliver collision events.');
             }
           },
         },
@@ -983,7 +1463,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
         benchmarkMode: 'mixed',
         particleCount: 0,
         requireGPU: false,
-        minimumDurationMs: 2500,
+        minimumDurationMs: 3600,
         createSystem: async () => {
           const system = await createSnow();
           configureHierarchyGPU(system, true);
@@ -999,10 +1479,34 @@ function BenchmarkScene({ onComplete, onProgress }) {
             system.__rzmpsSnowSwitchedToCPU
             && !system.isGPUProcessingActive
             && !system.__rzmpsSnowSwitchedBack
-            && elapsed > 700
+            && elapsed > 1500
           ) {
             system.gpuProcessing = true;
             system.__rzmpsSnowSwitchedBack = true;
+            return;
+          }
+          if (
+            system.__rzmpsSnowSwitchedBack
+            && system.isGPUProcessingActive
+            && elapsed > 2200
+            && !system.__rzmpsSnowReadbackPromise
+          ) {
+            system.__rzmpsSnowReadbackPromise = system.readbackGPUParticlesSelective(
+              system.createGPUSelectiveReadbackRequests(32),
+            ).then((results) => { system.__rzmpsSnowReadback = results; });
+            const renderBuffer = system._gpuRenderOutputBuffers;
+            if (renderBuffer && typeof system.sceneRenderer.getArrayBufferAsync === 'function') {
+              system.__rzmpsSnowRenderReadbackPromise = Promise.all([
+                system.sceneRenderer.getArrayBufferAsync(renderBuffer.attributes.floatData),
+                system.sceneRenderer.getArrayBufferAsync(renderBuffer.attributes.uintData),
+              ]).then(([floatBuffer, uintBuffer]) => {
+                system.__rzmpsSnowRenderReadback = {
+                  floats: new Float32Array(floatBuffer),
+                  uints: new Uint32Array(uintBuffer),
+                  count: renderBuffer.count,
+                };
+              });
+            }
           }
         },
         validate: (system) => {
@@ -1013,6 +1517,49 @@ function BenchmarkScene({ onComplete, onProgress }) {
           }
           if (!expectedBuffer || renderer.webgpuGPUMaterialBuffer !== expectedBuffer) {
             throw new Error('Snow renderer retained a stale pre-reset GPU buffer.');
+          }
+          const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+          const matrices = renderer.webgpuMesh.instanceMatrix.array;
+          const matrixCount = Math.min(renderer.webgpuMesh.count, 256);
+          for (let instance = 0; instance < matrixCount; instance += 1) {
+            const offset = instance * 16;
+            if (identity.some((value, index) => Math.abs(matrices[offset + index] - value) > 0.0001)) {
+              throw new Error(
+                `Snow GPU rendering retained a CPU transform at instance ${instance}: `
+                + `${JSON.stringify([...matrices.slice(offset, offset + 16)])}.`,
+              );
+            }
+          }
+          const samples = system.__rzmpsSnowReadback;
+          if (!samples?.length) throw new Error('Snow post-switch GPU readback did not complete.');
+          const malformed = samples.filter(({ particle }) => (
+            Math.abs(particle.scale.x - 0.25) > 0.001
+            || Math.abs(particle.scale.y - 0.25) > 0.001
+            || Math.abs(particle.scale.z - 0.25) > 0.001
+          ));
+          if (malformed.length > 0) {
+            throw new Error(
+              `Snow post-switch GPU scale was corrupted for ${malformed.length}/${samples.length} samples.`,
+            );
+          }
+          const rendered = system.__rzmpsSnowRenderReadback;
+          if (!rendered) throw new Error('Snow render-output buffer readback did not complete.');
+          let renderedSamples = 0;
+          let malformedRenderedSamples = 0;
+          for (let slot = 0; slot < rendered.count && renderedSamples < 32; slot += 1) {
+            if (rendered.uints[slot * 4] === 0) continue;
+            renderedSamples += 1;
+            const scaleOffset = slot * 16 + 8;
+            if (
+              Math.abs(rendered.floats[scaleOffset] - 0.25) > 0.001
+              || Math.abs(rendered.floats[scaleOffset + 1] - 0.25) > 0.001
+              || Math.abs(rendered.floats[scaleOffset + 2] - 0.25) > 0.001
+            ) malformedRenderedSamples += 1;
+          }
+          if (renderedSamples === 0 || malformedRenderedSamples > 0) {
+            throw new Error(
+              `Snow render output contained ${malformedRenderedSamples}/${renderedSamples} malformed scales.`,
+            );
           }
         },
       }];

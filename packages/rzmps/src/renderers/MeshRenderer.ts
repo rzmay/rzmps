@@ -39,6 +39,7 @@ class MeshRenderer extends Renderer {
 
     private dummy: THREE.Object3D;
     private identityMatrixCapacity = 0;
+    private instancesUseCPUTransforms = false;
     private gpuMaterialBuffer?: GPUParticleBufferState | GPUParticleRenderBufferState;
     private gpuMaterialBufferVersion = -1;
     private gpuMaterialRendererVersion = -1;
@@ -83,6 +84,10 @@ class MeshRenderer extends Renderer {
     }
 
     _update(particles: Particle[], system: ParticleSystem): void {
+      // CPU rendering owns the instance transforms until GPU mode restores
+      // identity matrices and applies particle storage in the node material.
+      this.identityMatrixCapacity = 0;
+      this.instancesUseCPUTransforms = true;
       this.instances.count = particles.length;
 
       this.instances.castShadow = this.castShadow;
@@ -117,7 +122,12 @@ class MeshRenderer extends Renderer {
       this.instances.castShadow = this.castShadow;
       this.instances.receiveShadow = this.receiveShadow;
       this.updateMaterialEnvironment(system);
+      if (this.gpuMaterialBuffer !== buffers) this.identityMatrixCapacity = 0;
       this.syncIdentityInstanceMatrices(buffers.count);
+      if (this.instancesUseCPUTransforms) {
+        this.instances.instanceMatrix.needsUpdate = true;
+        this.instancesUseCPUTransforms = false;
+      }
       this.applyGPUNodes(buffers, system);
     }
 
@@ -128,6 +138,7 @@ class MeshRenderer extends Renderer {
 
     clear(): void {
       this.instances.count = 0;
+      this.identityMatrixCapacity = 0;
       this.gpuMaterialBuffer = undefined;
       this.gpuMaterialBufferVersion = -1;
       this.gpuMaterialRendererVersion = -1;

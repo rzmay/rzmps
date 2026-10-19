@@ -32,11 +32,12 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
-import type {
-  GPUParticleBufferState,
-  GPUParticleLike,
-  GPUReadbackRenderer,
-  GPUStorageBufferRenderer,
+import {
+  destroyGPUStorageAttribute,
+  type GPUParticleBufferState,
+  type GPUParticleLike,
+  type GPUReadbackRenderer,
+  type GPUStorageBufferRenderer,
 } from './Particle';
 
 type AtomicUintStorage = { element(index: Node | number): Node<'uint'> };
@@ -72,6 +73,8 @@ export type ParticleSpatialGridVisitor = (
   particle: GPUParticleLike,
   distanceSquared: Node<'float'>,
 ) => void;
+
+export type ParticleSpatialGridParticleVisitor = (particle: GPUParticleLike) => void;
 
 export interface ParticleSpatialGridRenderer extends GPUStorageBufferRenderer {
   compute(node: ComputeNode): void;
@@ -265,6 +268,30 @@ export default class ParticleSpatialGrid {
     );
   }
 
+  /**
+   * Visits every live particle in the current GPU buffer. This is primarily an
+   * aggregate fallback for algorithms whose CPU counterparts can sample parent
+   * octree nodes when a fine-grained neighborhood is empty.
+   */
+  forEachParticle(
+    callback: ParticleSpatialGridParticleVisitor,
+    options: ParticleSpatialGridQueryOptions = {},
+  ): void {
+    this.assertReady();
+    Loop({ start: 0, end: this.capacity, type: 'uint' }, ({ i }) => {
+      const particle = this.currentBuffers!.storage.loadParticle(i);
+      const acceptedTag = options.tagMask === undefined
+        ? particle.alive.notEqual(uint(0))
+        : particle.alive.notEqual(uint(0))
+          .and(particle.tagMask.bitAnd(uint(options.tagMask)).notEqual(uint(0)));
+      const accepted = options.excludeIndex === undefined
+        ? acceptedTag
+        : acceptedTag.and(particle.index.notEqual(options.excludeIndex));
+
+      If(accepted, () => callback(particle));
+    });
+  }
+
   /** Releases GPU attributes owned by this grid. Explicitly shared grids remain caller-owned. */
   dispose(renderer?: GPUStorageBufferRenderer): void {
     [
@@ -275,7 +302,7 @@ export default class ParticleSpatialGrid {
       this.reductionAttribute,
       this.diagnosticAttribute,
     ].forEach((attribute) => {
-      if (attribute) destroyStorageAttribute(renderer, attribute);
+      if (attribute) destroyGPUStorageAttribute(renderer, attribute);
     });
     this.capacity = 0;
     this.hashCapacity = 0;
@@ -551,14 +578,4 @@ function unorderedFloat(value: Node<'uint'>): Node<'float'> {
   const bits = bitAnd(value, uint(0x80000000)).notEqual(uint(0))
     .select(bitXor(value, uint(0x80000000)), bitXor(value, uint(0xffffffff)));
   return uintBitsToFloat(bits) as unknown as Node<'float'>;
-}
-
-function destroyStorageAttribute(
-  renderer: GPUStorageBufferRenderer | undefined,
-  attribute: StorageBufferAttribute,
-): void {
-  const backend = renderer?.backend as {
-    destroyAttribute?(attribute: StorageBufferAttribute): void;
-  } | undefined;
-  backend?.destroyAttribute?.(attribute);
 }

@@ -157,6 +157,7 @@ class SpriteRenderer extends Renderer {
   private webgpuSpriteDataAttribute: THREE.InstancedBufferAttribute;
   private webgpuCapacity = 10000;
   private webgpuIdentityMatrixCapacity = 0;
+  private webgpuInstancesUseCPUTransforms = false;
 
   private readonly matrix = new THREE.Matrix4();
   private readonly quaternion = new THREE.Quaternion();
@@ -240,6 +241,9 @@ class SpriteRenderer extends Renderer {
       this.webgpuMaterial,
       this.webgpuCapacity,
     );
+    // Three wraps large instance matrices in a cached interleaved buffer. Dynamic
+    // usage makes that wrapper upload CPU/GPU transition edits every frame.
+    this.webgpuMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.webgpuMesh.frustumCulled = false;
     this.webgpuMesh.castShadow = this.castShadow;
     this.webgpuMesh.count = 0;
@@ -387,7 +391,14 @@ class SpriteRenderer extends Renderer {
     this.webgpuMesh.count = Math.min(buffers.count, this.webgpuCapacity);
     this.webgpuMesh.castShadow = this.castShadow;
 
+    if (this.webgpuGPUMaterialBuffer !== buffers) {
+      this.webgpuIdentityMatrixCapacity = 0;
+    }
     this.syncIdentityWebGPUInstances(this.webgpuMesh.count);
+    if (this.webgpuInstancesUseCPUTransforms) {
+      this.webgpuMesh.instanceMatrix.needsUpdate = true;
+      this.webgpuInstancesUseCPUTransforms = false;
+    }
     this.applyGPUWebGPUNodes(buffers, system);
 
     let environment: THREE.Texture | undefined;
@@ -612,6 +623,10 @@ class SpriteRenderer extends Renderer {
   ): void {
     const count = Math.min(particles.length, this.webgpuCapacity);
 
+    // CPU rendering writes complete transforms into these matrices. GPU node
+    // materials require identity matrices before applying storage-buffer state.
+    this.webgpuIdentityMatrixCapacity = 0;
+    this.webgpuInstancesUseCPUTransforms = true;
     this.webgpuMesh.count = count;
 
     if (cameraQuaternion) {

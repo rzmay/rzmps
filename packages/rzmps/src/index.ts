@@ -136,7 +136,7 @@ export type {
 export { default as BoidAffector } from './spatial/BoidAffector';
 export type { BoidAffectorOptions } from './spatial/BoidAffector';
 export { default as BoidAffectorHelper } from './spatial/BoidAffectorHelper';
-export { default as SpatialEffect } from './SpatialEffect';
+export { default as SpatialEffect, SpatialEffectUpdatePolicy } from './SpatialEffect';
 export type {
   SpatialEffectFeatherUpdate,
   SpatialEffectModifier,

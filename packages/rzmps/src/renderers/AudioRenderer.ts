@@ -61,12 +61,16 @@ export interface AudioRendererOptions extends Partial<RendererOptions> {
   impulseThreshold: number;
 
   dopplerEffect: number;
+  gpuInterpolationRate: number;
 }
 
 interface ParticleAudio {
   audio: THREE.PositionalAudio;
   buffer: AudioBuffer;
   filters: AudioFilters;
+  targetPosition?: THREE.Vector3;
+  velocity?: THREE.Vector3;
+  speed?: number;
 }
 
 interface AudioFilters {
@@ -115,6 +119,7 @@ export default class AudioRenderer extends Renderer {
   depthAffectsLowPass: number;
 
   dopplerEffect: number;
+  gpuInterpolationRate: number;
 
   impulseAffectsPitch: number;
   impulseAffectsVolume: number;
@@ -197,6 +202,7 @@ export default class AudioRenderer extends Renderer {
     this.impulseThreshold = Math.max(0, options.impulseThreshold ?? 0);
 
     this.dopplerEffect = Math.max(0, options.dopplerEffect ?? 0);
+    this.gpuInterpolationRate = Math.max(0, options.gpuInterpolationRate ?? 20);
   }
 
   public setup(system: ParticleSystem): void {
@@ -221,6 +227,9 @@ export default class AudioRenderer extends Renderer {
     system: ParticleSystem,
     deltaTime = 0,
   ): void {
+    this._system = system;
+    this._deltaTime = deltaTime;
+    this._advanceGPUAudio(deltaTime);
     const ratio = Math.max(this.ratio, 0.01);
     const sampleLimit = Math.ceil(Math.max(this.maxClips, 1) / ratio) * 2;
     this.updateGPUFromSelectiveReadback(buffers, system, deltaTime, sampleLimit);
@@ -297,6 +306,7 @@ export default class AudioRenderer extends Renderer {
 
     let state = this._particleAudio.get(particle.id);
 
+    const created = !state;
     if (!state) {
       const audio = new THREE.PositionalAudio(this.listener);
       const sound = this.sound[Math.floor(Math.random() * this.sound.length)];
@@ -317,10 +327,32 @@ export default class AudioRenderer extends Renderer {
       audio.play();
     }
 
-    state.audio.position.copy(particle.position);
+    if (this._system.isGPUProcessingActive) {
+      state.targetPosition ??= particle.position.clone();
+      state.targetPosition.copy(particle.position);
+      state.velocity ??= new THREE.Vector3();
+      state.velocity.copy(particle.velocity);
+      state.speed = particle.speed;
+      if (created) state.audio.position.copy(particle.position);
+    } else {
+      state.audio.position.copy(particle.position);
+      state.targetPosition = undefined;
+      state.velocity = undefined;
+      state.speed = undefined;
+    }
     state.audio.setPlaybackRate(this._getPitch(particle));
     state.audio.setVolume(this._getVolume(particle));
     this._applyFilters(state.audio, particle, undefined, state.filters);
+  }
+
+  private _advanceGPUAudio(deltaTime: number): void {
+    if (deltaTime <= 0) return;
+    const correction = 1 - Math.exp(-this.gpuInterpolationRate * deltaTime);
+    this._particleAudio.forEach((state) => {
+      if (!state.targetPosition || !state.velocity) return;
+      state.targetPosition.addScaledVector(state.velocity, deltaTime * (state.speed ?? 1));
+      state.audio.position.lerp(state.targetPosition, correction);
+    });
   }
 
   private _handleEvent(
@@ -529,6 +561,14 @@ export default class AudioRenderer extends Renderer {
       .copy(particle.position)
       .sub(this._cameraPosition);
 
+    if (this._system?.isGPUProcessingActive) {
+      const distance = this._relativePosition.length();
+      const velocityAwayFromListener = distance > Number.EPSILON
+        ? particle.velocity.dot(this._relativePosition) * particle.speed / distance
+        : 0;
+      return this._getDopplerFactor(velocityAwayFromListener);
+    }
+
     const previous = this._relativePositions.get(particle.id);
     if (!previous) {
       this._relativePositions.set(particle.id, this._relativePosition.clone());
@@ -540,10 +580,13 @@ export default class AudioRenderer extends Renderer {
     previous.copy(this._relativePosition);
 
     const velocityAwayFromListener = (currentDistance - previousDistance) / this._deltaTime;
+    return this._getDopplerFactor(velocityAwayFromListener);
+  }
+
+  private _getDopplerFactor(velocityAwayFromListener: number): number {
     const speedOfSound = 343;
     const denominator = Math.max(1, speedOfSound + velocityAwayFromListener);
     const physicalFactor = THREE.MathUtils.clamp(speedOfSound / denominator, 0.25, 4);
-
     return Math.max(0, 1 + (physicalFactor - 1) * this.dopplerEffect);
   }
 

@@ -127,6 +127,40 @@ class Collision extends Module {
     const localEnd = localStart.add(localVelocity.mul(step));
     const start = this.gpuPointToWorld(localStart, context.system);
     const end = this.gpuPointToWorld(localEnd, context.system);
+    const hit = this.backend.queryCapsule(start, end, radius);
+    const found = hit.get('found') as Node<'bool'>;
+    const worldCapsulePoint = hit.get('capsulePoint') as Node<'vec3'>;
+    const worldNormal = hit.get('normal') as Node<'vec3'>;
+    const distance = sqrt(hit.get('distanceSq') as Node<'float'>);
+    const correctedWorldPosition = worldCapsulePoint.add(
+      worldNormal.mul(radius.sub(distance).max(0)),
+    );
+    this.applyGPUCollisionHit(
+      particle,
+      context,
+      found,
+      this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
+      this.gpuDirectionToSimulationSpace(worldNormal, context.system),
+    );
+  }
+
+  public detectGPUCollision(
+    particle: GPUParticleLike,
+    context: GPUParticleUpdateContext,
+  ): void {
+    if (!(this.backend instanceof ThreeGPUCollisionBackend) || !context.collisionEventWriter) return;
+    const radius = max(
+      abs(particle.scale.x),
+      max(abs(particle.scale.y), abs(particle.scale.z)),
+    ).mul(float(0.5 * (this.radiusScale ?? 1)));
+    const step = context.deltaTimeNode.mul(particle.speed);
+    const localStart = particle.position;
+    const localVelocity = particle.velocity;
+    const start = this.gpuPointToWorld(localStart, context.system);
+    const end = this.gpuPointToWorld(
+      localStart.add(localVelocity.mul(step)),
+      context.system,
+    );
     const velocity = this.gpuDirectionToWorld(localVelocity, context.system);
     const mass = particle.mass.greaterThan(float(0)).select(
       particle.mass,
@@ -144,15 +178,66 @@ class Collision extends Module {
     const normalVelocity = float(velocity.dot(worldNormal));
     const impulse = worldNormal.mul(normalVelocity.min(0).abs().mul(mass));
 
-    this.applyGPUCollisionHit(
-      particle,
-      context,
-      found,
-      this.gpuPointToSimulationSpace(worldPoint, context.system),
-      this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
-      this.gpuDirectionToSimulationSpace(worldNormal, context.system),
-      this.gpuDirectionToSimulationSpace(impulse, context.system),
+    If(found, () => {
+      context.collisionEventWriter!.emit(
+        particle,
+        this.gpuPointToSimulationSpace(worldPoint, context.system),
+        this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
+        this.gpuDirectionToSimulationSpace(worldNormal, context.system).normalize(),
+        this.gpuDirectionToSimulationSpace(impulse, context.system),
+      );
+    });
+  }
+
+  public resolveGPUCollision(
+    particle: GPUParticleLike,
+    context: GPUParticleUpdateContext,
+    hitPosition: Node<'vec3'>,
+    sampledNormal: Node<'vec3'>,
+  ): void {
+    const hitNormal = sampledNormal.normalize();
+
+    particle.position.assign(hitPosition);
+
+    const bounce = this.gpuParameters.number(
+      'bounce', () => this.bounce, particle.time, 1, particle.index,
+    ).clamp(0, 1);
+    const dampen = this.gpuParameters.number(
+      'dampen', () => this.dampen, particle.time, 0, particle.index,
+    ).clamp(0, 1);
+    const normalSpeed = particle.velocity.dot(hitNormal);
+    const normalVelocity = hitNormal.mul(normalSpeed);
+    const tangentVelocity = particle.velocity.sub(normalVelocity);
+    const resolvedVelocity = tangentVelocity
+      .add(normalVelocity.mul(bounce.negate()))
+      .mul(float(1).sub(dampen));
+
+    particle.velocity.assign(
+      normalSpeed.lessThan(float(0)).select(resolvedVelocity, particle.velocity),
     );
+
+    const lifetimeLoss = this.gpuParameters.number(
+      'lifetimeLoss',
+      () => this.lifetimeLoss,
+      particle.time,
+      0,
+      particle.index,
+    ).clamp(0, 1);
+    particle.realtime.assign(
+      particle.realtime.add(particle.lifetime.mul(lifetimeLoss).mul(1000)),
+    );
+
+    const speed = particle.velocity.length();
+    if (this.minKillSpeed > 0) {
+      If(speed.lessThan(this.minKillSpeed), () => {
+        particle.realtime.assign(particle.lifetime.mul(1000).add(1));
+      });
+    }
+    if (Number.isFinite(this.maxKillSpeed)) {
+      If(speed.greaterThan(this.maxKillSpeed), () => {
+        particle.realtime.assign(particle.lifetime.mul(1000).add(1));
+      });
+    }
   }
 
   public override cleanup(): void {
@@ -166,57 +251,11 @@ class Collision extends Module {
     particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
     hit: Node<'bool'>,
-    hitPoint: Node<'vec3'>,
     hitPosition: Node<'vec3'>,
     sampledNormal: Node<'vec3'>,
-    impulse: Node<'vec3'>,
   ): void {
     If(hit, () => {
-      const hitNormal = sampledNormal.normalize();
-
-      particle.position.assign(hitPosition);
-      context.eventWriter?.emitCollision(particle, hitPoint, hitNormal, impulse);
-
-      const bounce = this.gpuParameters.number(
-        'bounce', () => this.bounce, particle.time, 1, particle.index,
-      ).clamp(0, 1);
-      const dampen = this.gpuParameters.number(
-        'dampen', () => this.dampen, particle.time, 0, particle.index,
-      ).clamp(0, 1);
-      const normalSpeed = particle.velocity.dot(hitNormal);
-      const normalVelocity = hitNormal.mul(normalSpeed);
-      const tangentVelocity = particle.velocity.sub(normalVelocity);
-      const resolvedVelocity = tangentVelocity
-        .add(normalVelocity.mul(bounce.negate()))
-        .mul(float(1).sub(dampen));
-
-      particle.velocity.assign(
-        normalSpeed.lessThan(float(0)).select(resolvedVelocity, particle.velocity),
-      );
-
-      const lifetimeLoss = this.gpuParameters.number(
-        'lifetimeLoss',
-        () => this.lifetimeLoss,
-        particle.time,
-        0,
-        particle.index,
-      ).clamp(0, 1);
-
-      particle.realtime.assign(
-        particle.realtime.add(particle.lifetime.mul(lifetimeLoss).mul(1000)),
-      );
-
-      const speed = particle.velocity.length();
-      if (this.minKillSpeed > 0) {
-        If(speed.lessThan(this.minKillSpeed), () => {
-          particle.realtime.assign(particle.lifetime.mul(1000).add(1));
-        });
-      }
-      if (Number.isFinite(this.maxKillSpeed)) {
-        If(speed.greaterThan(this.maxKillSpeed), () => {
-          particle.realtime.assign(particle.lifetime.mul(1000).add(1));
-        });
-      }
+      this.resolveGPUCollision(particle, context, hitPosition, sampledNormal);
     });
   }
 

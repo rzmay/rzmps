@@ -3,11 +3,15 @@ import { MeshBVH, type HitPointInfo } from 'three-mesh-bvh';
 import type { Node } from 'three/webgpu';
 import {
   abs,
+  array,
   float,
+  int,
   length,
   max,
   min,
+  mix,
   texture3D,
+  uniform,
   vec2,
   vec3,
   vec4,
@@ -72,6 +76,13 @@ export type SpatialEffectGPUTest = (
 
 export type SpatialEffectFeatherEasing = (feather: number) => number;
 
+export enum SpatialEffectUpdatePolicy {
+  Static = 'static',
+  TransformDynamic = 'transform-dynamic',
+  GeometryDynamic = 'geometry-dynamic',
+  Auto = 'auto',
+}
+
 export type SpatialEffectTest = (
   particle: Particle,
   particleSystem: ParticleSystem,
@@ -94,6 +105,7 @@ export interface SpatialEffectOptions {
   conditionGPU: SpatialEffectGPUCondition | null;
   testGPU: SpatialEffectGPUTest | null;
   bakedFieldResolution: number;
+  updatePolicy: SpatialEffectUpdatePolicy;
 }
 
 type BoxGeometryArgs = ConstructorParameters<typeof THREE.BoxGeometry>;
@@ -251,6 +263,7 @@ class SpatialEffect extends THREE.Object3D {
   inverted: boolean;
   priority = Priority.Transient;
   feather: number;
+  automaticFeather: boolean;
   modifyGPU: SpatialEffectGPUUpdate;
   gpuSpatialType?: GPUSpatialEffectType;
   writeGPUParameters?: (target: Float32Array, offset: number, system: ParticleSystem) => void;
@@ -265,19 +278,43 @@ class SpatialEffect extends THREE.Object3D {
   private _geometry?: THREE.BufferGeometry;
   private _bvh?: MeshBVH;
   private _bvhGeometry?: THREE.BufferGeometry;
+  private _bvhTopologyKey = '';
+  private _bvhPositionVersion = -1;
   private _mesh: THREE.Mesh;
   private localParticlePosition = new THREE.Vector3();
   private worldEffectPosition = new THREE.Vector3();
   private closestPointInfo?: HitPointInfo;
   bakedFieldResolution: number;
+  updatePolicy: SpatialEffectUpdatePolicy;
   private _bakedFieldTexture?: THREE.Data3DTexture;
-  private _bakedFieldMatrixKey = '';
   private _bakedFieldGeometry?: THREE.BufferGeometry;
+  private _bakedFieldGeometryKey = '';
   private _bakedFieldFeather = -1;
   private _bakedFieldResolution = 0;
   private _version = 0;
   private readonly _bakedFieldMin = new THREE.Vector3();
   private readonly _bakedFieldSize = new THREE.Vector3(1, 1, 1);
+  private readonly _gpuBakedFieldMinNode = uniform(new THREE.Vector3(), 'vec3') as Node<'vec3'> & {
+    value: THREE.Vector3;
+  };
+  private readonly _gpuBakedFieldSizeNode = uniform(new THREE.Vector3(1, 1, 1), 'vec3') as Node<'vec3'> & {
+    value: THREE.Vector3;
+  };
+  private readonly _gpuWorldToLocalNode = uniform(new THREE.Matrix4(), 'mat4') as Node<'mat4'> & {
+    value: THREE.Matrix4;
+  };
+  private readonly _gpuLocalToWorldNode = uniform(new THREE.Matrix4(), 'mat4') as Node<'mat4'> & {
+    value: THREE.Matrix4;
+  };
+  private readonly _gpuSimulationToWorldNode = uniform(new THREE.Matrix4(), 'mat4') as Node<'mat4'> & {
+    value: THREE.Matrix4;
+  };
+  private readonly _gpuLocalToSimulationNode = uniform(new THREE.Matrix4(), 'mat4') as Node<'mat4'> & {
+    value: THREE.Matrix4;
+  };
+  private readonly _gpuLocalDirectionNode = uniform(new THREE.Matrix4(), 'mat4') as Node<'mat4'> & {
+    value: THREE.Matrix4;
+  };
 
   get version(): number {
     return this._version;
@@ -292,10 +329,13 @@ class SpatialEffect extends THREE.Object3D {
   };
 
   set geometry(value: THREE.BufferGeometry | undefined) {
+    this._bakedFieldTexture?.dispose();
     this._geometry = value;
     if (value) value.computeBoundingBox();
     this._bvh = undefined;
     this._bvhGeometry = undefined;
+    this._bvhTopologyKey = '';
+    this._bvhPositionVersion = -1;
     this._bakedFieldTexture = undefined;
     this._bakedFieldGeometry = undefined;
     this._mesh.geometry = value ?? new THREE.BufferGeometry();
@@ -334,14 +374,53 @@ class SpatialEffect extends THREE.Object3D {
     this.priority = resolvedOptions.priority ?? this.priority;
     this.feather = Math.max(resolvedOptions.feather ?? 0, 0);
     this.featherEasing = resolvedOptions.featherEasing ?? ((feather) => feather);
+    this.automaticFeather = resolvedOptions.automaticFeather !== false;
     this.modifyGPU = resolvedOptions.modifyGPU ?? SpatialEffect.GPU_UNSUPPORTED;
     this.bakedFieldResolution = Math.max(
       2,
       Math.floor(resolvedOptions.bakedFieldResolution ?? 16),
     );
+    this.updatePolicy = resolvedOptions.updatePolicy ?? SpatialEffectUpdatePolicy.Auto;
     this._test = resolvedOptions.test;
     this.geometry = resolvedOptions.geometry;
     this._testGPU = resolvedOptions.testGPU ?? this.createAnalyticTestGPU() ?? undefined;
+  }
+
+  /** Refreshes transform uniforms used by non-batched and baked GPU influence paths. */
+  syncGPUTransform(system: ParticleSystem): void {
+    this.updateWorldMatrix(true, false);
+    this._gpuWorldToLocalNode.value.copy(this.matrixWorld).invert();
+    this._gpuLocalToWorldNode.value.copy(this.matrixWorld);
+    this._gpuLocalToSimulationNode.value.copy(this.matrixWorld);
+    const effectRotation = this.getWorldQuaternion(new THREE.Quaternion());
+    if (system.simulationSpace === SimulationSpace.Local) {
+      system.updateWorldMatrix(true, false);
+      this._gpuSimulationToWorldNode.value.copy(system.matrixWorld);
+      this._gpuLocalToSimulationNode.value.premultiply(
+        new THREE.Matrix4().copy(system.matrixWorld).invert(),
+      );
+      effectRotation.premultiply(system.getWorldQuaternion(new THREE.Quaternion()).invert());
+    } else {
+      this._gpuSimulationToWorldNode.value.identity();
+    }
+    this._gpuLocalDirectionNode.value.makeRotationFromQuaternion(effectRotation);
+    if (!this._testGPU) this.ensureBakedField();
+  }
+
+  protected getGPUWorldToLocalMatrix(): Node<'mat4'> {
+    return this._gpuWorldToLocalNode;
+  }
+
+  protected getGPULocalToWorldMatrix(): Node<'mat4'> {
+    return this._gpuLocalToWorldNode;
+  }
+
+  protected getGPUEffectPosition(): Node<'vec3'> {
+    return transformPointGPU(vec3(0), this._gpuLocalToSimulationNode);
+  }
+
+  protected getGPULocalDirection(direction: Node<'vec3'>): Node<'vec3'> {
+    return this._gpuLocalDirectionNode.mul(vec4(direction, 0)).xyz as Node<'vec3'>;
   }
 
   // If this directly modifies particles and should be picked up by particle systems
@@ -477,19 +556,42 @@ class SpatialEffect extends THREE.Object3D {
     this.updateWorldMatrix(true, false);
     this.worldToLocal(this.localParticlePosition);
 
-    const contains = isPointInMesh(this.localParticlePosition, this._mesh);
+    return this.getLocalFeather(this.localParticlePosition);
+  }
+
+  private getLocalFeather(position: THREE.Vector3): number {
+    if (!this.geometry) {
+      const distance = position.length();
+      if (this.inverted) return distance <= Number.EPSILON ? 0 : 1;
+      if (this.feather <= 0) return distance <= Number.EPSILON ? 1 : 0;
+      return this.easeFeather(1 - distance / this.feather);
+    }
+
+    const contains = isPointInMesh(position, this._mesh);
 
     if (contains) return this.inverted ? 0 : 1;
     if (this.inverted) return 1;
     if (this.feather <= 0) return 0;
 
-    if (!this._bvh || this._bvhGeometry !== this.geometry) {
+    const positionAttribute = this.geometry.getAttribute('position');
+    const topologyKey = `${positionAttribute?.count ?? 0}:${this.geometry.index?.count ?? 0}:${attributeVersion(this.geometry.index)}`;
+    const positionVersion = attributeVersion(positionAttribute);
+    if (!this._bvh || this._bvhGeometry !== this.geometry || this._bvhTopologyKey !== topologyKey) {
       this._bvh = new MeshBVH(this.geometry);
       this._bvhGeometry = this.geometry;
+      this._bvhTopologyKey = topologyKey;
+      this._bvhPositionVersion = positionVersion;
+    } else if (
+      this.updatePolicy !== SpatialEffectUpdatePolicy.Static
+      && this.updatePolicy !== SpatialEffectUpdatePolicy.TransformDynamic
+      && this._bvhPositionVersion !== positionVersion
+    ) {
+      this._bvh.refit();
+      this._bvhPositionVersion = positionVersion;
     }
 
     const hit = this._bvh.closestPointToPoint(
-      this.localParticlePosition,
+      position,
       this.closestPointInfo,
       0,
       this.feather,
@@ -505,9 +607,12 @@ class SpatialEffect extends THREE.Object3D {
     particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
   ): Node<'float'> {
-    const strength = this._testGPU
+    const rawStrength = this._testGPU
       ? this._testGPU(particle, context, this)
       : this.bakedFieldGPU(particle, context);
+    const strength = this._hasCustomFeatherEasing
+      ? this.easeFeatherGPU(rawStrength)
+      : rawStrength;
 
     if (!this.conditionGPU) return strength;
 
@@ -525,10 +630,10 @@ class SpatialEffect extends THREE.Object3D {
 
     if (!this._bakedFieldTexture) return float(0);
 
-    const worldPosition = this.getGPUParticleWorldPosition(particle, context.system);
-    const uv = worldPosition
-      .sub(vec3(this._bakedFieldMin))
-      .div(vec3(this._bakedFieldSize))
+    const localPosition = this.getGPUParticleLocalPosition(particle, context.system);
+    const uv = localPosition
+      .sub(this._gpuBakedFieldMinNode)
+      .div(this._gpuBakedFieldSizeNode)
       .clamp(0, 1);
 
     return texture3D(this._bakedFieldTexture, uv).x as Node<'float'>;
@@ -622,25 +727,18 @@ class SpatialEffect extends THREE.Object3D {
 
   protected getGPUParticleWorldPosition(
     particle: GPUParticleLike,
-    particleSystem: ParticleSystem,
+    _particleSystem: ParticleSystem,
   ): Node<'vec3'> {
-    if (particleSystem.simulationSpace !== SimulationSpace.Local) {
-      return particle.position;
-    }
-
-    particleSystem.updateWorldMatrix(true, false);
-    return transformPointGPU(particle.position, particleSystem.matrixWorld);
+    return transformPointGPU(particle.position, this._gpuSimulationToWorldNode);
   }
 
   protected getGPUParticleLocalPosition(
     particle: GPUParticleLike,
     particleSystem: ParticleSystem,
   ): Node<'vec3'> {
-    this.updateWorldMatrix(true, false);
-    const inverseWorld = this.matrixWorld.clone().invert();
     return transformPointGPU(
       this.getGPUParticleWorldPosition(particle, particleSystem),
-      inverseWorld,
+      this._gpuWorldToLocalNode,
     );
   }
 
@@ -650,21 +748,17 @@ class SpatialEffect extends THREE.Object3D {
       return;
     }
 
-    this.updateWorldMatrix(true, false);
-
-    const matrixKey = this.matrixWorld.elements
-      .map((value) => value.toFixed(6))
-      .join(',');
+    const geometryKey = this.getGeometryRevisionKey();
 
     if (
       this._bakedFieldTexture
       && this._bakedFieldGeometry === this.geometry
       && this._bakedFieldFeather === this.feather
       && this._bakedFieldResolution === this.bakedFieldResolution
-      && this._bakedFieldMatrixKey === matrixKey
+      && this._bakedFieldGeometryKey === geometryKey
     ) return;
 
-    const bounds = this.getBakedFieldWorldBounds();
+    const bounds = this.getBakedFieldLocalBounds();
     const resolution = this.bakedFieldResolution;
     const data = new Uint8Array(resolution * resolution * resolution);
     const point = new THREE.Vector3();
@@ -677,6 +771,8 @@ class SpatialEffect extends THREE.Object3D {
     this._bakedFieldMin.copy(bounds.min);
     bounds.getSize(this._bakedFieldSize);
     this._bakedFieldSize.max(new THREE.Vector3(Number.EPSILON, Number.EPSILON, Number.EPSILON));
+    this._gpuBakedFieldMinNode.value.copy(this._bakedFieldMin);
+    this._gpuBakedFieldSizeNode.value.copy(this._bakedFieldSize);
 
     let index = 0;
     for (let z = 0; z < resolution; z += 1) {
@@ -687,61 +783,57 @@ class SpatialEffect extends THREE.Object3D {
             bounds.min.y + step.y * y,
             bounds.min.z + step.z * z,
           );
-          data[index] = Math.round(THREE.MathUtils.clamp(this.getFeather(point), 0, 1) * 255);
+          data[index] = Math.round(THREE.MathUtils.clamp(this.getLocalFeather(point), 0, 1) * 255);
           index += 1;
         }
       }
     }
 
-    const texture = new THREE.Data3DTexture(data, resolution, resolution, resolution);
-    texture.format = THREE.RedFormat;
-    texture.type = THREE.UnsignedByteType;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.wrapR = THREE.ClampToEdgeWrapping;
-    texture.generateMipmaps = false;
-    texture.needsUpdate = true;
-
-    this._bakedFieldTexture = texture;
+    if (this._bakedFieldTexture && this._bakedFieldResolution === resolution) {
+      this._bakedFieldTexture.image.data = data;
+      this._bakedFieldTexture.needsUpdate = true;
+    } else {
+      this._bakedFieldTexture?.dispose();
+      const texture = new THREE.Data3DTexture(data, resolution, resolution, resolution);
+      texture.format = THREE.RedFormat;
+      texture.type = THREE.UnsignedByteType;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.wrapR = THREE.ClampToEdgeWrapping;
+      texture.generateMipmaps = false;
+      texture.needsUpdate = true;
+      this._bakedFieldTexture = texture;
+    }
     this._bakedFieldGeometry = this.geometry;
     this._bakedFieldFeather = this.feather;
     this._bakedFieldResolution = resolution;
-    this._bakedFieldMatrixKey = matrixKey;
+    this._bakedFieldGeometryKey = geometryKey;
   }
 
-  private getBakedFieldWorldBounds(): THREE.Box3 {
-    this.updateWorldMatrix(true, false);
-
+  private getBakedFieldLocalBounds(): THREE.Box3 {
     if (!this.geometry) {
-      this.getWorldPosition(this.worldEffectPosition);
       const radius = Math.max(this.feather, Number.EPSILON);
       return new THREE.Box3(
-        this.worldEffectPosition.clone().subScalar(radius),
-        this.worldEffectPosition.clone().addScalar(radius),
+        new THREE.Vector3(-radius, -radius, -radius),
+        new THREE.Vector3(radius, radius, radius),
       );
     }
 
-    const bounds = this.getLocalBounds();
-    const worldBounds = new THREE.Box3();
-    const corner = new THREE.Vector3();
+    return this.getLocalBounds().clone().expandByScalar(Math.max(this.feather, Number.EPSILON));
+  }
 
-    for (let x = 0; x <= 1; x += 1) {
-      for (let y = 0; y <= 1; y += 1) {
-        for (let z = 0; z <= 1; z += 1) {
-          corner.set(
-            x === 0 ? bounds.min.x : bounds.max.x,
-            y === 0 ? bounds.min.y : bounds.max.y,
-            z === 0 ? bounds.min.z : bounds.max.z,
-          );
-          worldBounds.expandByPoint(corner.applyMatrix4(this.matrixWorld));
-        }
-      }
-    }
-
-    worldBounds.expandByScalar(Math.max(this.feather, Number.EPSILON));
-    return worldBounds;
+  private getGeometryRevisionKey(): string {
+    const position = this.geometry?.getAttribute('position');
+    const index = this.geometry?.index;
+    return [
+      this.geometry?.uuid ?? 'point',
+      position?.count ?? 0,
+      attributeVersion(position),
+      index?.count ?? 0,
+      attributeVersion(index),
+    ].join(':');
   }
 
   modify(particles: Particle[], deltaTime: number, particleSystem: ParticleSystem): void {
@@ -793,16 +885,31 @@ class SpatialEffect extends THREE.Object3D {
       ? Math.min(Math.max(eased, 0), 1)
       : clamped;
   }
+
+  private easeFeatherGPU(feather: Node<'float'>): Node<'float'> {
+    const resolution = 17;
+    const values = Array.from({ length: resolution }, (_, index) => (
+      float(this.easeFeather(index / (resolution - 1)))
+    ));
+    const samples = array(values);
+    const position = feather.clamp(0, 1).mul(resolution - 1);
+    const lowerPosition = position.floor();
+    const lower = samples.element(int(lowerPosition)) as Node<'float'>;
+    const upper = samples.element(int(lowerPosition.add(1).min(resolution - 1))) as Node<'float'>;
+
+    return mix(lower, upper, position.sub(lowerPosition)) as Node<'float'>;
+  }
 }
 
-function transformPointGPU(point: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const e = matrix.elements;
+function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
+  return matrix.mul(vec4(point, 1)).xyz as Node<'vec3'>;
+}
 
-  return vec3(
-    point.x.mul(e[0]).add(point.y.mul(e[4])).add(point.z.mul(e[8])).add(e[12]),
-    point.x.mul(e[1]).add(point.y.mul(e[5])).add(point.z.mul(e[9])).add(e[13]),
-    point.x.mul(e[2]).add(point.y.mul(e[6])).add(point.z.mul(e[10])).add(e[14]),
-  ) as Node<'vec3'>;
+function attributeVersion(
+  attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined,
+): number {
+  if (!attribute) return -1;
+  return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
 }
 
 export default SpatialEffect;

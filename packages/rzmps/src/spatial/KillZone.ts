@@ -163,6 +163,8 @@ class KillZone extends SpatialEffect {
     }, {
       priority: Priority.Permanent,
       ...options,
+      // Kill state is discrete; any positive spatial strength is a hit.
+      automaticFeather: false,
       modifyGPU: (particle, _deltaTime, _context, strength) => {
         If(strength.greaterThan(float(0)), () => {
           particle.realtime.assign(particle.lifetime.mul(1000).add(1));

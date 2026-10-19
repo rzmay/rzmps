@@ -182,11 +182,39 @@ export default async function createBoidAffectors(scene) {
     suzanneHelper.update();
     containerHelper.update();
   };
+  let elapsed = 0;
 
   return {
-    // Moving geometry affectors are intentionally deferred until their acceleration
-    // structures can be updated reliably on both processing paths.
-    update: updateMeshes,
+    update: (deltaTime) => {
+      elapsed += deltaTime;
+      target.position.set(
+        Math.cos(elapsed * 0.21) * 15,
+        4 + Math.sin(elapsed * 0.43) * 1.4,
+        Math.sin(elapsed * 0.18) * 11,
+      );
+      obstacle.position.set(
+        Math.cos(elapsed * 0.16 + 2.1) * 14,
+        3.5 + Math.sin(elapsed * 0.31) * 1.1,
+        Math.sin(elapsed * 0.2 + 1.2) * 12,
+      );
+      gate.position.set(
+        Math.cos(elapsed * 0.13 + 4.2) * 8,
+        4.2,
+        Math.sin(elapsed * 0.17 + 3) * 15,
+      );
+      gate.rotation.y = Math.PI * 0.18 + Math.sin(elapsed * 0.22) * 0.65;
+      suzanne.position.set(
+        Math.cos(elapsed * 0.19 + 5.5) * 16,
+        4.5 + Math.sin(elapsed * 0.27 + 1.5) * 1.6,
+        Math.sin(elapsed * 0.14 + 4.5) * 13,
+      );
+      suzanne.rotation.set(
+        Math.sin(elapsed * 0.37) * 0.25,
+        elapsed * 0.42,
+        Math.cos(elapsed * 0.29) * 0.18,
+      );
+      updateMeshes();
+    },
 
     gui: (folder) => {
       const targetFolder = folder.addFolder('Target');
