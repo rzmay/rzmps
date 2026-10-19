@@ -93,7 +93,6 @@ export default class Module {
 
   priority = Priority.Permanent;
   modifyGPU: ModuleGPUUpdate;
-  requiresFreshGPUReadback = false;
   protected readonly gpuParameters = new GPUDynamicParameterStore();
   private _gpuParameterVersion = 0;
   private _version = 0;

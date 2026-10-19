@@ -36,7 +36,7 @@ export interface CollisionOptions extends Partial<ModuleOptions> {
 }
 
 class Collision extends Module {
-  backend?: ICollisionBackend;
+  private _backend?: ICollisionBackend;
 
   dampen: DynamicValue<number> = 0;
   bounce: DynamicValue<number> = 1;
@@ -49,8 +49,16 @@ class Collision extends Module {
   private collisionListeners: CollisionListener[] = [];
 
   private _system?: ParticleSystem;
-  private readonly explicitBackend: boolean;
-  private ownsBackend = false;
+  private _explicitBackend = false;
+  private _ownsBackend = false;
+
+  get backend(): ICollisionBackend | undefined {
+    return this._backend;
+  }
+
+  set backend(backend: ICollisionBackend | undefined) {
+    this.setBackend(backend);
+  }
 
   constructor(options: Partial<CollisionOptions> = {}) {
     // Collisions run immediately before movement so they can predict this frame's travel segment.
@@ -68,15 +76,25 @@ class Collision extends Module {
     this.radiusScale = options.radiusScale ?? this.radiusScale;
     this.minKillSpeed = options.minKillSpeed ?? this.minKillSpeed;
     this.maxKillSpeed = options.maxKillSpeed ?? this.maxKillSpeed;
-    this.backend = options.backend;
-    this.explicitBackend = options.backend !== undefined;
+    this._backend = options.backend;
+    this._explicitBackend = options.backend !== undefined;
 
     if (options.onCollision) this.collisionListeners.push(options.onCollision);
   }
 
   override get supportsGPU(): boolean {
     return !this.applyImpulses
-      && (!this.explicitBackend || this.backend?.supportsGPU === true);
+      && (!this._explicitBackend || this._backend?.supportsGPU === true);
+  }
+
+  /** Select an explicit backend, or pass undefined to restore automatic selection. */
+  public setBackend(backend?: ICollisionBackend): void {
+    if (this._backend === backend && this._explicitBackend === (backend !== undefined)) return;
+
+    if (this._ownsBackend) this._backend?.destroy?.();
+    this._backend = backend;
+    this._explicitBackend = backend !== undefined;
+    this._ownsBackend = false;
   }
 
   public onCollision(listener: CollisionListener) {
@@ -93,19 +111,19 @@ class Collision extends Module {
 
   public prepare(system: ParticleSystem, deltaTime: number) {
     this._system = system;
-    if (!this.explicitBackend && system.scene) {
+    if (!this._explicitBackend && system.scene) {
       const Backend = system.isGPUProcessingActive
         ? ThreeGPUCollisionBackend
         : ThreeCollisionBackend;
-      if (!(this.backend instanceof Backend)) {
-        if (this.ownsBackend) this.backend?.destroy?.();
-        this.backend = new Backend({ world: system.scene });
-        this.ownsBackend = true;
+      if (!(this._backend instanceof Backend)) {
+        if (this._ownsBackend) this._backend?.destroy?.();
+        this._backend = new Backend({ world: system.scene });
+        this._ownsBackend = true;
       }
     }
 
-    this.backend?.setGPUProcessingActive?.(system.isGPUProcessingActive);
-    this.backend?.update?.(deltaTime);
+    this._backend?.setGPUProcessingActive?.(system.isGPUProcessingActive);
+    this._backend?.update?.(deltaTime);
   }
 
   public hasGPUCollisionBackend(): boolean {
@@ -241,9 +259,9 @@ class Collision extends Module {
   }
 
   public override cleanup(): void {
-    if (this.ownsBackend) this.backend?.destroy?.();
-    this.backend = this.explicitBackend ? this.backend : undefined;
-    this.ownsBackend = false;
+    if (this._ownsBackend) this._backend?.destroy?.();
+    if (!this._explicitBackend) this._backend = undefined;
+    this._ownsBackend = false;
     super.cleanup();
   }
 

@@ -841,15 +841,7 @@ class ParticleSystem extends THREE.Object3D {
       && isWebGPURenderer(this.sceneRenderer)
       && !this._gpuTagOverflow
       && !(hasCPUInputRenderer && hasRenderTimeModifier)
-      && modules.every((module) => this._canModuleProcessOnGPU(module));
-  }
-
-  private _canModuleProcessOnGPU(module: Module): boolean {
-    if (!module.supportsGPU) return false;
-
-    const readbackSensitiveModule = module as Module & { canRunWithoutFreshGPUReadback?: () => boolean };
-    return !readbackSensitiveModule.requiresFreshGPUReadback
-      || Boolean(readbackSensitiveModule.canRunWithoutFreshGPUReadback?.());
+      && modules.every((module) => module.supportsGPU);
   }
 
   private _shouldExecuteEmittersOnGPU(): boolean {
