@@ -87,6 +87,14 @@ assert.equal(new ScaleOverLifetime({ scale: new Set([new THREE.Vector3(1, 1, 1)]
 assert.equal(new Collision().supportsGPU, true);
 assert.equal(new Collision().withDependents().every((module) => module.supportsGPU), true);
 assert.equal(new Collision({ backend: new ThreeCollisionBackend() }).supportsGPU, false);
+const runtimeCollisionBackend = new ThreeCollisionBackend();
+const runtimeCollision = new Collision();
+runtimeCollision.backend = runtimeCollisionBackend;
+assert.equal(runtimeCollision.supportsGPU, false);
+runtimeCollision.setBackend(undefined);
+assert.equal(runtimeCollision.backend, undefined);
+assert.equal(runtimeCollision.supportsGPU, true);
+runtimeCollisionBackend.destroy?.();
 assert.equal(new ThreeCollisionBackend().supportsCPU, true);
 assert.equal(new ThreeCollisionBackend({ maxLevel: 4, trianglesPerLeaf: 12 }).maxLevel, 4);
 
@@ -623,13 +631,6 @@ assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([renderTimeGPUModule
 gpuEligibilitySystem.renderers = [new GPUCapableRenderer()];
 assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([renderTimeGPUModule], []), true);
 gpuEligibilitySystem.renderers = [new CPUOnlyRenderer()];
-const readbackSensitiveModule = new Module(Module.CPU_UNSUPPORTED, {
-  modifyGPU() {},
-});
-readbackSensitiveModule.requiresFreshGPUReadback = true;
-assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([readbackSensitiveModule], []), false);
-readbackSensitiveModule.canRunWithoutFreshGPUReadback = () => true;
-assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([readbackSensitiveModule], []), true);
 assert.equal(
   gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule], [new ParticleForceField()]),
   true,

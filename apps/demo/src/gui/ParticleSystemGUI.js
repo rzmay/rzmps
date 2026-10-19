@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 import { createDefaultSceneBackground } from '../presets/scenes/background';
 import { getSceneParticleRoot } from '../presets/scenes/particleRoot';
-import { EndBehavior, MaxCulling } from '@rzmps/rzmps';
+import { Collision, EndBehavior, MaxCulling } from '@rzmps/rzmps';
 
 import { EmitterGUI } from './particle-system-gui/EmitterGUI';
 import { ModuleGUI } from './particle-system-gui/ModuleGUI';
@@ -16,6 +16,7 @@ import { ParticleSystemSerializer } from './particle-system-gui/ParticleSystemSe
 import { DEFAULT_MODULE_FACTORIES, DEFAULT_RENDERER_FACTORIES } from './particle-system-gui/constants';
 
 const SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY = '__rzmps_configureParticleSystem';
+const SCENE_COLLISION_BACKEND_KEY = '__rzmps_activeCollisionBackend';
 
 const RESOURCE_LINKS = [
     { label: 'GitHub', href: 'https://github.com/rzmay/rzmps', Icon: GitFork },
@@ -281,6 +282,7 @@ export class ParticleSystemGUI {
         this.sceneCleanup?.();
         this.sceneCleanup = undefined;
         this.sceneUpdate = undefined;
+        this.configureCollisionBackend(this.system);
         this.currentSceneName = name;
         this.onSceneChange?.(name);
         this.applyDefaultSceneState();
@@ -367,6 +369,24 @@ export class ParticleSystemGUI {
 
     configureSystemForScene(system = this.system) {
         this.scene?.userData?.[SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY]?.(system);
+        this.configureCollisionBackend(system);
+    }
+
+    configureCollisionBackend(system = this.system) {
+        const backend = this.scene?.userData?.[SCENE_COLLISION_BACKEND_KEY];
+        const pending = [system];
+        const visited = new Set();
+
+        while (pending.length > 0) {
+            const current = pending.pop();
+            if (!current || visited.has(current)) continue;
+            visited.add(current);
+
+            current.modules?.forEach((module) => {
+                if (module instanceof Collision) module.setBackend(backend);
+            });
+            current.subSystems?.forEach((_options, subSystem) => pending.push(subSystem));
+        }
     }
 
     configureSystemForRenderer(system = this.system) {
