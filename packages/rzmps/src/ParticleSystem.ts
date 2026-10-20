@@ -356,8 +356,9 @@ class ParticleSystem extends THREE.Object3D {
       cellSubdivisions: gridOrOptions.cellSubdivisions ?? 4,
       powerOfTwoBounds: gridOrOptions.powerOfTwoBounds ?? true,
       cubicBounds: gridOrOptions.cubicBounds ?? false,
+      centeredAtOrigin: gridOrOptions.centeredAtOrigin ?? true,
       autoExpand: gridOrOptions.autoExpand ?? true,
-      autoShrink: gridOrOptions.autoShrink ?? false,
+      autoShrink: gridOrOptions.autoShrink ?? true,
       shrinkDelay: gridOrOptions.shrinkDelay ?? 600,
       expansionHysteresis: gridOrOptions.expansionHysteresis ?? 0.125,
       timeQuality: gridOrOptions.timeQuality ?? 1,
@@ -4027,6 +4028,11 @@ class ParticleSystem extends THREE.Object3D {
     object.userData[PARTICLE_RENDERER_OBJECT_KEY] = true;
     this._rendererObjects.add(object);
     this.getRendererParent().add(object);
+  }
+
+  public removeRendererObject(object: THREE.Object3D): void {
+    this._rendererObjects.delete(object);
+    object.removeFromParent();
   }
 
   public addSubSystem(subSystem: ParticleSystem, options: Partial<SubSystemOptions>): this {

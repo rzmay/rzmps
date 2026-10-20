@@ -6,10 +6,15 @@ import {
   Fn,
   If,
   Loop,
+  cameraFar,
+  cameraNear,
   cameraPosition,
+  cameraViewMatrix,
   float,
+  linearDepth,
   max,
   min,
+  modelWorldMatrix,
   modelWorldMatrixInverse,
   positionGeometry,
   smoothstep,
@@ -17,6 +22,8 @@ import {
   uniform,
   vec3,
   vec4,
+  viewZToOrthographicDepth,
+  viewportDepthTexture,
 } from 'three/tsl';
 import Renderer, { type RendererOptions } from '../Renderer';
 import Particle from '../Particle';
@@ -34,6 +41,7 @@ export interface VolumeRendererOptions extends RendererOptions {
   range: number;
   steps: number;
   renderOrder: number;
+  depthTest: boolean;
   jitter: boolean;
 }
 
@@ -46,6 +54,7 @@ class VolumeRenderer extends Renderer {
   range: number;
   steps: number;
   renderOrder: number;
+  depthTest: boolean;
   jitter: boolean;
 
   private texture?: THREE.Texture;
@@ -62,6 +71,8 @@ class VolumeRenderer extends Renderer {
   private bounds = new THREE.Box3();
   private boundsCenter = new THREE.Vector3();
   private boundsSize = new THREE.Vector3();
+  private cameraWorldPosition = new THREE.Vector3();
+  private cameraLocalPosition = new THREE.Vector3();
   private readonly gpuThreshold = uniform(0.25);
   private readonly gpuRange = uniform(0.1);
   private readonly gpuOpacity = uniform(0.25);
@@ -69,6 +80,7 @@ class VolumeRenderer extends Renderer {
   private readonly gpuBaseG = uniform(0.5);
   private readonly gpuBaseB = uniform(0.5);
   private gpuMaterialSteps = 0;
+  private gpuMaterialDepthTest = true;
 
   constructor(options: Partial<VolumeRendererOptions> = {}) {
     super(options);
@@ -80,7 +92,8 @@ class VolumeRenderer extends Renderer {
     this.threshold = options.threshold ?? 0.25;
     this.range = options.range ?? 0.1;
     this.steps = options.steps ?? 100;
-    this.renderOrder = options.renderOrder ?? 2;
+    this.renderOrder = options.renderOrder ?? 100;
+    this.depthTest = options.depthTest ?? true;
     this.jitter = options.jitter ?? false;
     this.syncGPUUniforms();
 
@@ -92,8 +105,9 @@ class VolumeRenderer extends Renderer {
   }
 
   setup(system: ParticleSystem): void {
-    this.mesh.onBeforeRender = (renderer) => {
+    this.mesh.onBeforeRender = (renderer, _scene, camera) => {
       this.setActiveMaterial(renderer);
+      this.updateMaterialSide(camera);
       this.frame += 1;
       this.webglMaterial.uniforms.frame.value = this.frame;
     };
@@ -176,8 +190,12 @@ class VolumeRenderer extends Renderer {
     this.webglMaterial.uniforms.steps.value = this.steps;
     this.webglMaterial.uniforms.jitter.value = this.jitter;
     this.syncGPUUniforms();
-    if (this.steps !== this.gpuMaterialSteps) this.updateMaterialTexture();
+    if (this.steps !== this.gpuMaterialSteps || this.depthTest !== this.gpuMaterialDepthTest) {
+      this.updateMaterialTexture();
+    }
     this.mesh.renderOrder = this.renderOrder;
+    this.webglMaterial.depthTest = this.depthTest;
+    this.webgpuMaterial.depthTest = this.depthTest;
   }
 
   private syncGPUUniforms(): void {
@@ -284,12 +302,27 @@ class VolumeRenderer extends Renderer {
       : this.webglMaterial;
   }
 
+  private updateMaterialSide(camera: THREE.Camera): void {
+    camera.getWorldPosition(this.cameraWorldPosition);
+    this.cameraLocalPosition.copy(this.cameraWorldPosition);
+    this.mesh.worldToLocal(this.cameraLocalPosition);
+    const inside = Math.abs(this.cameraLocalPosition.x) <= 0.5
+      && Math.abs(this.cameraLocalPosition.y) <= 0.5
+      && Math.abs(this.cameraLocalPosition.z) <= 0.5;
+    const side = inside ? THREE.BackSide : THREE.FrontSide;
+    [this.webglMaterial, this.webgpuMaterial].forEach((material) => {
+      if (material.side === side) return;
+      material.side = side;
+      material.needsUpdate = true;
+    });
+  }
+
   private createWebGLMaterial(): THREE.RawShaderMaterial {
     return new THREE.RawShaderMaterial({
       glslVersion: THREE.GLSL3,
-      side: THREE.BackSide,
+      side: THREE.FrontSide,
       transparent: true,
-      depthTest: true,
+      depthTest: this.depthTest,
       depthWrite: false,
       uniforms: {
         map: { value: null },
@@ -420,12 +453,13 @@ class VolumeRenderer extends Renderer {
 
   private createWebGPUMaterial(): THREE.Material {
     this.gpuMaterialSteps = this.steps;
+    this.gpuMaterialDepthTest = this.depthTest;
     const material = new MeshBasicNodeMaterial({
       color: this.baseColor,
       opacity: this.opacity,
-      side: THREE.BackSide,
+      side: THREE.FrontSide,
       transparent: true,
-      depthTest: true,
+      depthTest: this.depthTest,
       depthWrite: false,
     });
 
@@ -444,6 +478,9 @@ class VolumeRenderer extends Renderer {
         const position = origin.add(direction.mul(start)).toVar('volumePosition');
         const step = direction.mul(far.sub(start).div(Math.max(1, this.steps)));
         const accumulated = vec4(0).toVar('volumeAccumulated');
+        const sceneDepth = this.depthTest
+          ? linearDepth(viewportDepthTexture())
+          : float(1);
         const base = vec3(
           this.gpuBaseR,
           this.gpuBaseG,
@@ -451,6 +488,12 @@ class VolumeRenderer extends Renderer {
         );
         If(near.greaterThan(far), () => Discard());
         Loop({ start: 0, end: Math.max(1, Math.min(512, this.steps)), type: 'int' }, () => {
+          if (this.depthTest) {
+            const worldPosition = modelWorldMatrix.mul(vec4(position, 1));
+            const viewPosition = cameraViewMatrix.mul(worldPosition);
+            const sampleDepth = viewZToOrthographicDepth(viewPosition.z, cameraNear, cameraFar);
+            If(sampleDepth.greaterThanEqual(sceneDepth), () => Break());
+          }
           const uv = position.add(0.5);
           const density = texture3D(this.texture!).sample(uv).r;
           const alpha = density.greaterThan(0).select(

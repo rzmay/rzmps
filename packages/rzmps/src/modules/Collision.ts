@@ -139,27 +139,44 @@ class Collision extends Module {
       abs(particle.scale.x),
       max(abs(particle.scale.y), abs(particle.scale.z)),
     ).mul(float(0.5 * (this.radiusScale ?? 1)));
+    const gravityModifier = this.gpuParameters.number(
+      'gravityModifier.collision',
+      () => context.system.gravityModifier,
+      particle.time,
+      0,
+      particle.index,
+    );
+    const gravityStep = context.gravityNode.mul(context.deltaTimeNode.mul(gravityModifier));
     const step = context.deltaTimeNode.mul(particle.speed);
     const localStart = particle.position;
-    const localVelocity = particle.velocity;
+    const localVelocity = particle.velocity.add(gravityStep);
     const localEnd = localStart.add(localVelocity.mul(step));
     const start = this.gpuPointToWorld(localStart, context.system);
     const end = this.gpuPointToWorld(localEnd, context.system);
     const hit = this.backend.queryCapsule(start, end, radius);
     const found = hit.get('found') as Node<'bool'>;
     const worldCapsulePoint = hit.get('capsulePoint') as Node<'vec3'>;
-    const worldNormal = hit.get('normal') as Node<'vec3'>;
+    const sampledWorldNormal = (hit.get('normal') as Node<'vec3'>).normalize();
+    const worldTravel = end.sub(start);
+    const worldNormal = sampledWorldNormal.dot(worldTravel).greaterThan(0).select(
+      sampledWorldNormal.negate(),
+      sampledWorldNormal,
+    ) as Node<'vec3'>;
     const distance = sqrt(hit.get('distanceSq') as Node<'float'>);
     const correctedWorldPosition = worldCapsulePoint.add(
       worldNormal.mul(radius.sub(distance).max(0)),
     );
-    this.applyGPUCollisionHit(
-      particle,
-      context,
-      found,
-      this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
-      this.gpuDirectionToSimulationSpace(worldNormal, context.system),
-    );
+    If(found, () => {
+      particle.velocity.assign(localVelocity);
+      this.resolveGPUCollision(
+        particle,
+        context,
+        this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
+        this.gpuDirectionToSimulationSpace(worldNormal, context.system),
+      );
+      // The main integrator applies this gravity step immediately after collision.
+      particle.velocity.subAssign(gravityStep);
+    });
   }
 
   public detectGPUCollision(

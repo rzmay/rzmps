@@ -642,7 +642,7 @@ interface ModuleOptions {
   octreeOptions: Partial<OctreeConfig>;
   octreeAggregator: OctreeAggregator<unknown>;
   useSpatialGrid: boolean;
-  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  spatialGridOptions: Partial<ParticleSpatialGridOptions>;
 }
 ```
 
@@ -660,7 +660,7 @@ work on lower-detail frames while preserving the module API.
 | `octreeOptions` | Configures and enables the managed CPU octree. It rebuilds at the configured `timeQuality` and inherits the module's tag filter. |
 | `octreeAggregator` | Defines CPU node aggregates. The default aggregate is `{ count }`. |
 | `useSpatialGrid` | Gives the GPU update callback a shared, lifecycle-managed `ParticleSpatialGrid` using default options. |
-| `spatialGrid` | Configures and enables a system-owned grid, or uses an explicit caller-owned grid instance. |
+| `spatialGridOptions` | Configures and enables a system-owned GPU spatial grid. Like `octreeOptions`, it accepts constructor options rather than a grid instance. |
 
 Modules can also discover scene-level `SpatialEffect` objects. Pass
 `requireSpatialEffects` to select the spatial effect class a module consumes,
@@ -1242,8 +1242,7 @@ new Boids(options?: Partial<BoidsOptions>)
 
 interface BoidsOptions extends Partial<ModuleOptions> {
   octreeOptions: OctreeConfig;
-  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
-  grid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>; // alias
+  spatialGridOptions: Partial<ParticleSpatialGridOptions>;
   neighborRadius: DynamicValue<number>;
   timeQuality: number;
   speed: DynamicValue<number>;
@@ -1275,8 +1274,8 @@ target.
 should cover the boid simulation space. If the Boids module has tags, those tags
 are passed to the octree so flocking samples only include matching particles. If
 `affectors` is omitted, `Boids` scans the scene for `BoidAffector` objects.
-`spatialGrid` (or `grid`) accepts either an explicit `ParticleSpatialGrid` or
-grid options. Compatible option objects share a system-managed grid build.
+`spatialGridOptions` accepts options for the system-managed GPU grid. Compatible
+option objects share a system-managed grid build.
 `neighborRadius` controls the exact GPU neighborhood radius; it is not limited
 to the current cell or its immediate 26 neighbors:
 
@@ -1828,25 +1827,27 @@ links scale with particle capacity, not world volume, and full coordinates
 resolve hash collisions.
 
 ```ts
-const grid = new ParticleSpatialGrid({
-  bounds: new THREE.Box3(
-    new THREE.Vector3(-8, -8, -8),
-    new THREE.Vector3(8, 8, 8),
-  ),
-  brickSubdivisions: 3,
-  cellSubdivisions: 4,
-  powerOfTwoBounds: true,
-  autoExpand: true,
+const boids = new Boids({
+  spatialGridOptions: {
+    bounds: new THREE.Box3(
+      new THREE.Vector3(-8, -8, -8),
+      new THREE.Vector3(8, 8, 8),
+    ),
+    brickSubdivisions: 3,
+    cellSubdivisions: 4,
+    powerOfTwoBounds: true,
+    centeredAtOrigin: true,
+    autoExpand: true,
+    autoShrink: true,
+  },
+  neighborRadius: 0.75,
 });
-
-const boids = new Boids({ spatialGrid: grid, neighborRadius: 0.75 });
 ```
 
-Modules may instead pass `spatialGrid: { ...options }`; the particle system
-creates, schedules, shares, and disposes compatible grids. `Boids` also accepts
-`grid` as an alias. Explicit grid instances stay caller-owned. Function-defined
-modules normally use the managed callback shown below. Custom infrastructure
-can acquire the same facility directly:
+`spatialGridOptions` mirrors `octreeOptions`: it accepts configuration only. The
+particle system creates, schedules, shares, and disposes compatible grids.
+Function-defined modules normally use the managed callback shown below. Custom
+infrastructure can acquire the same facility directly:
 
 ```ts
 class NeighborModule extends Module {
@@ -1876,8 +1877,16 @@ exact distance test, ignore dead slots, and validate slot generation.
 truncates work and increments an overflow diagnostic.
 
 Automatic particle bounds reduction and hysteretic expansion run on GPU.
-Power-of-two mode rounds each axis independently unless `cubicBounds` is set.
-Optional `autoShrink` contracts the grid after `shrinkDelay` compact frames.
+`centeredAtOrigin` defaults to true, keeping cell boundaries fixed around the
+particle-system origin while power-of-two size changes occur. Power-of-two mode
+rounds each axis independently unless `cubicBounds` is set. `autoShrink` also
+defaults to true and contracts the grid after `shrinkDelay` compact frames.
+Options can be changed with `grid.setOptions(...)`. The subdivision depths are
+also live properties, so `grid.cellSubdivisions = 5` or
+`grid.brickSubdivisions = 2` invalidates the grid and rebuilds it on the next
+update. Fluid modules observe the resulting `cellsPerAxis` change and recreate
+their dense buffers and 3D textures; subdivision edits are therefore much more
+expensive than uniform-like quality settings.
 Logical cell count stays fixed while physical cell size grows,
 so expanding bounds loses spatial resolution instead of growing memory without
 bound. Fixed bounds skip out-of-range particles. Unlike the CPU octree, the grid
@@ -1895,10 +1904,23 @@ when the domain changes.
 
 ```ts
 const gas = new GasSimulation({
-  spatialGrid: { brickSubdivisions: 2, cellSubdivisions: 3 },
+  spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 3 },
   boundsPadding: 0.25,
-  maxSplatRadius: 1.5,
+  automaticPadding: true,
+  scalarDiffusion: 0.35,
+  sourceTemperature: 1,
+  temperatureOverLifetime: (time) => 1 - time,
+  temperatureColor: [new THREE.Color('#72a9d6'), new THREE.Color('#ff9a4d')],
+  temperatureRange: [0, 1],
+  vorticityStrength: 1,
+  noiseFrequency: 0.75,
+  noiseSpeed: 0.2,
 });
+
+const obstacle = FluidCollider.Box({
+  position: new THREE.Vector3(0, 2, 0),
+}, 2, 0.5, 2);
+scene.add(obstacle);
 
 const system = new ParticleSystem({
   modules: [gas],
@@ -1909,11 +1931,51 @@ const system = new ParticleSystem({
 Gas density and color remain on GPU; `VolumeRenderer` uses their storage
 textures directly and discovers them from the system when fields are omitted.
 Particle scale controls the splat radius, color contributes wherever density is
-added, and alpha scales both contributions. Set `maxSplatRadius` at least as
-large as half the largest expected particle scale so GPU neighbor queries cover
-every splat. `sourceTemperature` supplies a uniform temperature for GPU gas
-sources. FLIP updates particle velocity on GPU and leaves collision and gravity
-modules available in the same system.
+added, and alpha scales density, temperature, and color contributions. The GPU
+spatial grid reduces the largest live particle radius each frame, so users bound
+splat work by bounding particle scale rather than configuring a separate radius.
+Source strengths are rates per second. Dissipation values are nonnegative decay
+rates per second: zero preserves the field, and larger values make it approach
+zero faster. Temperature dissipation applies to specific temperature rather
+than its density-weighted storage, so density loss cannot increase heat.
+Fluid simulations discover `FluidCollider` spatial effects in the scene and
+sample them at Eulerian cell centers. Occupied cells reject velocity, while the
+pressure solve enforces a no-flow boundary. Gas additionally clears density,
+temperature, and color from occupied cells.
+For FLIP liquids, colliders also participate in a separate swept-particle stage:
+the particle radius is swept against collider triangles, penetration is removed,
+and only inward normal velocity is discarded so tangential flow is preserved.
+Use `surfaceThickness` for a small contact margin. `gridOccupancy` and
+`particleCollision` can disable either role when a simplified occupancy proxy
+and a detailed surface mesh are used together. Fluid collision intentionally
+has no bounce or dampening controls; use the general `Collision` module when
+particle-impact behavior is desired instead of a fluid boundary.
+`densityCutoff` clears negligible density and its associated color
+and temperature. Optional `scalarDiffusion` mixes density, temperature, and
+color into the six neighboring cells; it is separate from the pressure solve,
+which makes the velocity field incompressible. `vorticityStrength` adds animated projected
+noise to the velocity field; frequency, speed, and octave controls tune its character.
+Temperature contributes upward force through `temperature * buoyancy`, while
+gas density contributes downward force through `density * weight`.
+`temperatureColor` is a `ValueByParameter<Color>` evaluated over
+`temperatureRange`; omit it to retain particle-carried color.
+`sourceTemperature` supplies the base temperature for GPU gas sources, and
+`temperatureOverLifetime` multiplies it using each source particle's normalized
+age. With `automaticPadding`, the gas module reads GPU-reduced maximum density
+and temperature values and estimates the diffusion and buoyancy travel before
+that density dissipates. It expands the quantized domain immediately and uses
+the spatial grid's `shrinkDelay` before contracting it again; `boundsPadding`
+remains a minimum safety margin.
+The bounds-management loop lives on `FluidSimulation`, but its predictive
+distance is a subclass hook. Gas supplies the gas-specific estimate above.
+FLIP also enables automatic padding by default and reserves
+`maximumParticleSpeed * velocityPaddingLookahead` around the current particle
+bounds. Both measurements come from one GPU spatial-grid reduction/readback,
+and the liquid predictor remains independent from gas lifetime rules.
+`showGridHelper` draws the live particle bounds in orange and the padded,
+power-of-two grid domain in cyan.
+FLIP updates particle velocity on GPU and leaves collision and gravity modules
+available in the same system.
 
 ## Collision And Physics
 
@@ -2055,11 +2117,11 @@ const neighbors = new Module(
 );
 ```
 
-Passing `octreeOptions` or `spatialGrid` also enables the corresponding
+Passing `octreeOptions` or `spatialGridOptions` also enables the corresponding
 structure, so the explicit `use...` flags are only needed for defaults. CPU
 updates prepare only the octree; GPU updates build only the grid. Compatible
-grid option objects share one system-managed build. An explicit grid remains
-caller-owned, while option-created grids are disposed with the particle system.
+grid option objects share one system-managed build and are disposed with the
+particle system.
 
 ### Class Extension
 

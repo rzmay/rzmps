@@ -15,21 +15,33 @@ export default async function createGasVolume() {
   const gas = new GasSimulation({
     pressureIterations: 16,
     externalForce: new THREE.Vector3(0, 0.05, 0),
-    densityDissipation: 0.985,
-    temperatureDissipation: 0.98,
-    colorDissipation: 0.985,
-    velocityDissipation: 0.995,
-    buoyancy: 0.18,
-    weight: 0.015,
-    sourceStrength: 0.9,
-    velocitySourceStrength: 0.08,
-    spatialGrid: {
+    densityDissipation: 0.9,
+    temperatureDissipation: 1.2,
+    colorDissipation: 0.9,
+    velocityDissipation: 0.3,
+    buoyancy: 0.55,
+    weight: 0.03,
+    sourceStrength: 10,
+    velocitySourceStrength: 2.2,
+    sourceTemperature: 1,
+    temperatureOverLifetime: (time) => 1 - time,
+    scalarDiffusion: 0.35,
+    temperatureColor: [
+      new THREE.Color('#72a9d6'),
+      new THREE.Color('#ff9a4d'),
+    ],
+    temperatureRange: [0, 1],
+    vorticityStrength: 0.75,
+    noiseFrequency: 1.4,
+    noiseSpeed: 0.45,
+    noiseOctaves: 2,
+    spatialGridOptions: {
       brickSubdivisions: 2,
       cellSubdivisions: 4,
       powerOfTwoBounds: true,
       autoExpand: true,
+      shrinkDelay: 180,
     },
-    maxSplatRadius: 0.65,
   });
 
   const system = new ParticleSystem({
@@ -38,13 +50,13 @@ export default async function createGasVolume() {
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.45, 18, 10),
-        rate: 52,
-        radialSpeed: 0.25,
+        rate: 55,
+        radialSpeed: 0.75,
         initialValues: {
-          lifetime: 2.6,
+          lifetime: 1.2,
           mass: 1,
           speed: 0.8,
-          scale: new THREE.Vector3(0.75, 0.75, 0.75),
+          scale: new THREE.Vector3(0.32, 0.32, 0.32),
           color: [
             new THREE.Color('#ff9d57'),
             new THREE.Color('#8ec5ff'),
@@ -66,7 +78,7 @@ export default async function createGasVolume() {
       }),
       new ScaleOverLifetime({
         scale: (time) => {
-          const size = 0.25 + (1.1 - 0.25) * time;
+          const size = 0.38 + (0.08 - 0.38) * time;
           return new THREE.Vector3(size, size, size);
         },
       }),
@@ -81,9 +93,9 @@ export default async function createGasVolume() {
     ],
     renderers: [
       new VolumeRenderer({
-        opacity: 0.18,
-        threshold: 0.055,
-        range: 0.035,
+        opacity: 0.16,
+        threshold: 0.025,
+        range: 0.02,
         steps: 80,
       }),
     ],

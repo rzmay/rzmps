@@ -55,7 +55,7 @@ export interface ModuleOptions {
   octreeOptions: Partial<OctreeConfig>;
   octreeAggregator: OctreeAggregator<unknown>;
   useSpatialGrid: boolean;
-  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  spatialGridOptions: Partial<ParticleSpatialGridOptions>;
 }
 
 export default class Module {
@@ -88,8 +88,8 @@ export default class Module {
   readonly octreeOptions: Partial<OctreeConfig>;
   readonly octreeAggregator: OctreeAggregator<unknown>;
   readonly useSpatialGrid: boolean;
-  readonly spatialGridOptions?: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
-  protected particleSpatialGrid?: ParticleSpatialGrid;
+  spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
+  protected spatialGrid?: ParticleSpatialGrid;
 
   priority = Priority.Permanent;
   modifyGPU: ModuleGPUUpdate;
@@ -128,8 +128,8 @@ export default class Module {
     this.useOctree = options.useOctree ?? options.octreeOptions !== undefined;
     this.octreeOptions = options.octreeOptions ?? {};
     this.octreeAggregator = options.octreeAggregator ?? createDefaultOctreeAggregator();
-    this.useSpatialGrid = options.useSpatialGrid ?? options.spatialGrid !== undefined;
-    this.spatialGridOptions = options.spatialGrid;
+    this.useSpatialGrid = options.useSpatialGrid ?? options.spatialGridOptions !== undefined;
+    this.spatialGridOptions = options.spatialGridOptions;
   }
 
   get supportsGPU(): boolean {
@@ -203,10 +203,22 @@ export default class Module {
   /** Dependency hook used by function-defined and class-based GPU neighbor modules. */
   public getParticleSpatialGrid(particleSystem: ParticleSystem): ParticleSpatialGrid | undefined {
     if (!this.useSpatialGrid) return undefined;
-    this.particleSpatialGrid ??= particleSystem.acquireParticleSpatialGrid(
+    this.spatialGrid ??= particleSystem.acquireParticleSpatialGrid(
       this.spatialGridOptions ?? {},
     );
-    return this.particleSpatialGrid;
+    return this.spatialGrid;
+  }
+
+  /** Updates managed-grid configuration. Subdivision changes acquire a newly sized grid. */
+  public setSpatialGridOptions(options: Partial<ParticleSpatialGridOptions>): this {
+    this.spatialGridOptions ??= {};
+    const structural = options.brickSubdivisions !== undefined
+      || options.cellSubdivisions !== undefined;
+    Object.assign(this.spatialGridOptions, options);
+    if (structural) this.spatialGrid = undefined;
+    else this.spatialGrid?.setOptions(options);
+    this.needsUpdate = true;
+    return this;
   }
 
   /** Optional GPU compute pass, scheduled after the spatial grid is built and before this module modifies particles. */
@@ -227,7 +239,7 @@ export default class Module {
   // Optional clean up hook for modules that require it
   public cleanup() {
     this.octree = undefined;
-    this.particleSpatialGrid = undefined;
+    this.spatialGrid = undefined;
   }
 
   protected prepareSpatialEffects(particleSystem: ParticleSystem): void {

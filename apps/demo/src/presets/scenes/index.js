@@ -16,6 +16,8 @@ import createRepulsorAttractor from './repulsor';
 import createSimulationSpace from './simulationSpace';
 import loadCornellBox from './cornellBox';
 import createLightProbeScene from './lightProbes';
+import createFluidTeapot from './fluidTeapot';
+import createGasFlow from './gasFlow';
 
 const SOURCE_ROOT = 'https://github.com/rzmay/rzmps/blob/main/apps/demo/src/presets/scenes';
 
@@ -43,6 +45,8 @@ const scenePresets = {
   'Repulsor / Attractor': withMetadata(createRepulsorAttractor, 'repulsor.js'),
   'Vortex': withMetadata(createVortex, 'vortex.js'),
   'World Simulation Space': withMetadata(createSimulationSpace, 'simulationSpace.js'),
+  'Fluid Teapot': withMetadata(createFluidTeapot, 'fluidTeapot.js'),
+  'Gas Flow': withMetadata(createGasFlow, 'gasFlow.js'),
 };
 
 export default scenePresets;

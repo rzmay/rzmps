@@ -1,12 +1,9 @@
 import * as THREE from 'three';
 import {
-  Collision,
   Emitter,
   EmissionShape,
   FLIPSimulation,
-  ForceOverLifetime,
   ParticleSystem,
-  ScaleOverLifetime,
   SpriteRenderer,
   Textures,
 } from '@rzmps/rzmps';
@@ -14,54 +11,47 @@ import {
 export default async function createFlipFluid() {
   const flip = new FLIPSimulation({
     bounds: new THREE.Box3(
-      new THREE.Vector3(-4, -1.25, -4),
-      new THREE.Vector3(4, 6.25, 4),
+      new THREE.Vector3(-3, -1, -3),
+      new THREE.Vector3(3, 4, 3),
     ),
-    spatialGrid: {
+    boundsPadding: 0,
+    automaticPadding: true,
+    velocityPaddingLookahead: 0.15,
+    spatialGridOptions: {
       brickSubdivisions: 2,
-      cellSubdivisions: 3,
+      cellSubdivisions: 4,
       powerOfTwoBounds: true,
-      autoExpand: true,
+      autoExpand: false,
+      expansionHysteresis: 0.35,
     },
-    pressureIterations: 14,
+    pressureIterations: 28,
     externalForce: new THREE.Vector3(0, 0, 0),
-    picRatio: 0.12,
+    picRatio: 0.01,
   });
 
   const system = new ParticleSystem({
     duration: 10,
     looping: true,
-    gravity: new THREE.Vector3(0, -2.2, 0),
+    gravity: new THREE.Vector3(0, -5.2, 0),
     gravityModifier: 1,
     emitters: [
       new Emitter({
-        source: EmissionShape.Sphere(0.45, 16, 10),
-        rate: 155,
-        radialSpeed: 0.5,
+        source: EmissionShape.Sphere(0.18, 12, 8),
+        rate: 450,
+        radialSpeed: 0.04,
         initialValues: {
-          lifetime: 4.6,
+          lifetime: 20,
           mass: 1,
-          speed: 1.25,
-          scale: new THREE.Vector3(0.2, 0.2, 0.2),
+          speed: 1,
+          scale: new THREE.Vector3(0.07, 0.07, 0.07),
           color: new THREE.Color('#7cc7ff'),
-          alpha: 0.7,
-          velocity: new THREE.Vector3(1.75, 3.05, 0.2),
+          alpha: 0.8,
+          velocity: new THREE.Vector3(0.04, -0.3, 0.01),
         },
       }),
     ],
     modules: [
       flip,
-      new Collision({
-        bounce: 0.35,
-        dampen: 0.15,
-        radiusScale: 0.65,
-      }),
-      new ScaleOverLifetime({
-        scale: (time) => {
-          const size = 0.22 * (1 - time * 0.35);
-          return new THREE.Vector3(size, size, size);
-        },
-      }),
     ],
     renderers: [
       new SpriteRenderer(Textures.Circle, {

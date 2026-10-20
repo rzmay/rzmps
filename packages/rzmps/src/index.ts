@@ -147,6 +147,8 @@ export type {
   SpatialEffectUpdate,
 } from './SpatialEffect';
 export { default as SpatialEffectHelper } from './spatial/SpatialEffectHelper';
+export { default as FluidCollider } from './spatial/FluidCollider';
+export type { FluidColliderOptions } from './spatial/FluidCollider';
 export { default as KillZone } from './spatial/KillZone';
 export type { KillZoneOptions } from './spatial/KillZone';
 export { default as Collision } from './modules/Collision';
@@ -188,6 +190,7 @@ export { default as ParticleSpatialGrid } from './gpu/ParticleSpatialGrid';
 export type {
   ParticleSpatialGridOptions,
   ParticleSpatialGridDiagnostics,
+  ParticleSpatialGridMetrics,
   ParticleSpatialGridQueryOptions,
   ParticleSpatialGridVisitor,
 } from './gpu/ParticleSpatialGrid';

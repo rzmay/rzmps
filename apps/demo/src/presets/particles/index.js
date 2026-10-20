@@ -30,8 +30,6 @@ function withMetadata(factory, fileName) {
 
 const particlePresets = {
   Fire: withMetadata(createFire, 'fire.js'),
-  "Gas Volume": withMetadata(createGasVolume, 'gasVolume.js'),
-  "FLIP Fluid": withMetadata(createFlipFluid, 'flipFluid.js'),
   Fireball: withMetadata(createFireball, 'fireball.js'),
   Smoke: withMetadata(createSmoke, 'smoke.js'),
   "Additive Smoke": withMetadata(createAdditiveSmoke, 'additiveSmoke.js'),
@@ -51,6 +49,8 @@ const particlePresets = {
   "Fireworks": withMetadata(createFireworks, 'fireworks.js'),
   "Cubes and Spheres": withMetadata(createTags, 'tags.js'),
   "Boids": withMetadata(createBoids, 'boids.js'),
+  "FLIP Fluid": withMetadata(createFlipFluid, 'flipFluid.js'),
+  "Gas Volume": withMetadata(createGasVolume, 'gasVolume.js'),
 };
 
 export default particlePresets;

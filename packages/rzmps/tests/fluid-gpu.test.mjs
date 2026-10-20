@@ -2,27 +2,69 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
   FLIPSimulation,
+  FluidCollider,
   GasSimulation,
   ParticleOctree,
   ParticleSpatialGrid,
   ParticleSystem,
+  VolumeRenderer,
 } from '../build/index.mjs';
 
 const gas = new GasSimulation({
-  spatialGrid: { brickSubdivisions: 2, cellSubdivisions: 3 },
+  spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 3 },
 });
 const flip = new FLIPSimulation({
-  spatialGrid: { brickSubdivisions: 2, cellSubdivisions: 4 },
+  spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 4 },
+});
+const shrinkingGas = new GasSimulation({
+  spatialGridOptions: { shrinkDelay: 180 },
 });
 assert.equal(gas.supportsGPU, true);
 assert.equal(flip.supportsGPU, true);
 assert.equal(gas.resolution, 32);
 assert.equal(flip.resolution, 64);
 assert.equal(gas.autoBounds, true);
+assert.equal(gas.automaticPadding, true);
+assert.equal(flip.automaticPadding, true);
+assert.equal(flip.velocityPaddingLookahead, 0.5);
+assert.equal(gas.showGridHelper, false);
 assert.ok(gas.bounds.getSize(new THREE.Vector3()).x > 2);
 assert.ok(gas.density.texture.isStorageTexture);
 assert.ok(gas.colorField.texture.isStorageTexture);
 assert.equal(gas.density.data, undefined);
+assert.equal(gas.scalarDiffusion, 0);
+assert.equal(gas.densityDissipation, 0.6);
+assert.equal(gas.densityCutoff, 0.01);
+assert.deepEqual(gas.temperatureRange, [0, 1]);
+assert.equal(gas.temperatureOverLifetime, 1);
+assert.equal('maxSplatRadius' in gas, false);
+assert.deepEqual(gas.requireSpatialEffects, [FluidCollider]);
+assert.deepEqual(flip.requireSpatialEffects, [FluidCollider]);
+const fluidCollider = FluidCollider.Box({}, 2, 3, 4);
+assert.ok(fluidCollider.geometry instanceof THREE.BoxGeometry);
+assert.equal(fluidCollider.feather, 0);
+assert.equal(fluidCollider.automaticFeather, false);
+assert.equal(fluidCollider.gridOccupancy, true);
+assert.equal(fluidCollider.particleCollision, true);
+assert.equal(fluidCollider.surfaceThickness, 0);
+assert.ok(fluidCollider.getCollisionObject() instanceof THREE.Mesh);
+const occupancyOnlyCollider = FluidCollider.Box({ particleCollision: false }, 1, 1, 1);
+assert.equal(occupancyOnlyCollider.gridOccupancy, true);
+assert.equal(occupancyOnlyCollider.particleCollision, false);
+occupancyOnlyCollider.surfaceThickness = 0.125;
+assert.equal(occupancyOnlyCollider.surfaceThickness, 0.125);
+const clampedGas = new GasSimulation({
+  densityDissipation: -1,
+  temperatureDissipation: -1,
+  colorDissipation: -1,
+  velocityDissipation: -1,
+  scalarDiffusion: -1,
+});
+assert.equal(clampedGas.densityDissipation, 0);
+assert.equal(clampedGas.temperatureDissipation, 0);
+assert.equal(clampedGas.colorDissipation, 0);
+assert.equal(clampedGas.velocityDissipation, 0);
+assert.equal(clampedGas.scalarDiffusion, 0);
 
 const system = new ParticleSystem({ modules: [gas], renderers: [] });
 assert.throws(() => gas.prepare(system, 0), /require GPU particle processing/);
@@ -30,8 +72,20 @@ const grid = gas.getParticleSpatialGrid(system);
 assert.equal(grid.cellsPerAxis, gas.resolution);
 assert.equal(grid.powerOfTwoBounds, true);
 assert.equal(grid.cubicBounds, true);
-assert.equal(grid.autoExpand, true);
+assert.equal(grid.autoExpand, false);
+assert.equal(shrinkingGas.getParticleSpatialGrid(system).shrinkDelay, 180);
 assert.ok(grid.bounds.equals(gas.bounds));
+
+const volumeRenderer = new VolumeRenderer();
+volumeRenderer.setup(system);
+assert.equal(volumeRenderer.webglMaterial.side, THREE.FrontSide);
+assert.equal(volumeRenderer.webgpuMaterial.side, THREE.FrontSide);
+assert.equal(volumeRenderer.renderOrder, 100);
+assert.equal(volumeRenderer.webglMaterial.depthTest, true);
+assert.equal(volumeRenderer.webgpuMaterial.depthTest, true);
+volumeRenderer.destroy();
+fluidCollider.geometry.dispose();
+occupancyOnlyCollider.geometry.dispose();
 
 assert.equal(typeof ParticleOctree.prototype.getGridCell, 'undefined');
 const cubic = ParticleSpatialGrid.normalizeBounds(new THREE.Box3(
@@ -42,5 +96,7 @@ assert.equal(size.x, size.y);
 assert.equal(size.y, size.z);
 
 gas.cleanup();
+clampedGas.cleanup();
+shrinkingGas.cleanup();
 flip.cleanup();
 console.log('fluid-gpu tests passed');

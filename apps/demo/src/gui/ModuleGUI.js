@@ -61,6 +61,7 @@ export class ModuleGUI extends GUIEditorBase {
                 'sourceOctree',
                 'useOctree',
                 'useSpatialGrid',
+                'spatialGrid',
                 'octreeOptions',
                 'spatialGridOptions',
                 'explicitAffectors',
@@ -94,8 +95,8 @@ export class ModuleGUI extends GUIEditorBase {
             ]);
             if (candidate instanceof FluidSimulation) {
                 [
-                    'bounds', 'resolution', 'cellSize', 'cellCount', 'autoBounds',
-                    'spatialGridConfiguration', 'spatialGridOptions', 'particleSpatialGrid',
+                    'bounds', 'particleBounds', 'automaticPaddingDistance', 'resolution', 'cellSize', 'cellCount', 'autoBounds',
+                    'spatialGridOptions', 'spatialGrid',
                     'boundsMinNode', 'cellSizeNode', 'forceNode', 'maxVelocityNode',
                     'velocityCurrentAttribute', 'velocityNextAttribute',
                     'pressureCurrentAttribute', 'pressureNextAttribute', 'divergenceAttribute',
@@ -103,21 +104,27 @@ export class ModuleGUI extends GUIEditorBase {
                     'divergence', 'density', 'colorField', 'densityAttributeA',
                     'densityAttributeB', 'colorAttributeA', 'colorAttributeB',
                     'visualDensityAttribute', 'visualColorAttribute', 'visualDensity', 'visualColor',
+                    'solid', 'solidAttribute', 'solidNode',
                     'densityCurrent', 'densityNext', 'colorCurrent', 'colorNext',
                     'densityTexture', 'colorTexture', 'pressureNodes', 'divergenceNode',
                     'projectionNodes', 'velocityNodes', 'sourceNodes', 'outputNodes',
                     'gatherNode', 'forceNodeCompute', 'gpuCacheKey', 'gatherCacheKey',
                     'visualCacheKey', 'visualDensityNode', 'visualColorNode', 'visualOutputNodes',
+                    'maxima', 'maximaAttribute', 'maximaNodes', 'maximaResetNode',
                     'pendingPreviousBounds',
                     'lastBoundsRead', 'boundsReadPending',
                 ].forEach((key) => hidden.add(key));
             }
             Object.keys(candidate)
-                .filter((key) => !key.startsWith('_') && !hidden.has(key))
+                .filter((key) => (
+                    !key.startsWith('_')
+                    && !hidden.has(key)
+                    && !(candidate instanceof FluidSimulation && /(Node|Nodes|Attribute|Attributes|Texture|Textures)$/.test(key))
+                ))
                 .forEach((key) => this.addValue(folder, candidate, key, this.prettyName(key)));
         }
         if (candidate.useOctree) {
-            const quality = folder.addFolder('Octree Quality');
+            const quality = folder.addFolder('Octree Options');
             quality.close();
             const settings = {
                 maxDepth: candidate.octreeOptions.maxDepth ?? 8,
@@ -133,18 +140,36 @@ export class ModuleGUI extends GUIEditorBase {
                 }));
         }
         if (candidate.useSpatialGrid) {
-            const quality = folder.addFolder('Spatial Grid Quality');
+            const quality = folder.addFolder('Spatial Grid Options');
             quality.close();
-            const grid = candidate.particleSpatialGrid;
+            const grid = candidate.spatialGrid;
             const options = candidate.spatialGridOptions ?? {};
+            if (!candidate.spatialGridOptions) candidate.spatialGridOptions = options;
             const settings = {
                 brickSubdivisions: grid?.brickSubdivisions ?? options.brickSubdivisions ?? 3,
                 cellSubdivisions: grid?.cellSubdivisions ?? options.cellSubdivisions ?? 4,
+                powerOfTwoBounds: grid?.powerOfTwoBounds ?? options.powerOfTwoBounds ?? true,
+                cubicBounds: grid?.cubicBounds ?? options.cubicBounds ?? false,
+                centeredAtOrigin: grid?.centeredAtOrigin ?? options.centeredAtOrigin ?? true,
+                autoExpand: grid?.autoExpand ?? options.autoExpand ?? true,
+                autoShrink: grid?.autoShrink ?? options.autoShrink ?? true,
+                shrinkDelay: grid?.shrinkDelay ?? options.shrinkDelay ?? 600,
+                expansionHysteresis: grid?.expansionHysteresis ?? options.expansionHysteresis ?? 0.125,
                 timeQuality: grid?.timeQuality ?? options.timeQuality ?? 1,
                 maxQuerySteps: grid?.maxQuerySteps ?? options.maxQuerySteps ?? 0,
             };
-            ['brickSubdivisions', 'cellSubdivisions', 'timeQuality', 'maxQuerySteps']
-                .forEach((key) => quality.add(settings, key).name(this.prettyName(key)).disable().listen());
+            ['brickSubdivisions', 'cellSubdivisions']
+                .forEach((key) => quality.add(settings, key, 0, 8, 1).name(this.prettyName(key)).onChange((value) => {
+                    candidate.setSpatialGridOptions({ [key]: value });
+                    this.emitCode();
+                }));
+            ['powerOfTwoBounds', 'cubicBounds', 'centeredAtOrigin',
+                'autoExpand', 'autoShrink', 'shrinkDelay', 'expansionHysteresis',
+                'timeQuality', 'maxQuerySteps']
+                .forEach((key) => quality.add(settings, key).name(this.prettyName(key)).onChange((value) => {
+                    candidate.setSpatialGridOptions({ [key]: value });
+                    this.emitCode();
+                }));
         }
         const actions = {
             remove: () => {

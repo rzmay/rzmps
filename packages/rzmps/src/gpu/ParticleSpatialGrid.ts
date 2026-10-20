@@ -46,7 +46,7 @@ type Int4Storage = { element(index: Node | number): Node<'ivec4'> };
 type Float4Storage = { element(index: Node | number): Node<'vec4'> };
 
 const EMPTY = 0;
-const REDUCTION_WORDS = 8;
+const REDUCTION_WORDS = 10;
 const DEFAULT_BOUNDS = new THREE.Box3(
   new THREE.Vector3(-0.5, -0.5, -0.5),
   new THREE.Vector3(0.5, 0.5, 0.5),
@@ -58,6 +58,7 @@ export interface ParticleSpatialGridOptions {
   cellSubdivisions: number;
   powerOfTwoBounds: boolean;
   cubicBounds: boolean;
+  centeredAtOrigin: boolean;
   autoExpand: boolean;
   autoShrink: boolean;
   shrinkDelay: number;
@@ -91,27 +92,50 @@ export interface ParticleSpatialGridDiagnostics {
   sampleCoordinates: number[][];
 }
 
+export interface ParticleSpatialGridMetrics {
+  bounds: THREE.Box3;
+  maxParticleSpeed: number;
+}
+
 /**
  * Sparse GPU particle spatial hash. The logical brick/cell resolution is fixed;
  * storage scales with particle capacity rather than world volume.
  */
 export default class ParticleSpatialGrid {
   readonly bounds: THREE.Box3;
-  readonly brickSubdivisions: number;
-  readonly cellSubdivisions: number;
-  readonly powerOfTwoBounds: boolean;
-  readonly cubicBounds: boolean;
-  readonly autoExpand: boolean;
-  readonly autoShrink: boolean;
-  readonly shrinkDelay: number;
-  readonly expansionHysteresis: number;
-  readonly timeQuality: number;
-  readonly maxQuerySteps: number;
+  powerOfTwoBounds: boolean;
+  cubicBounds: boolean;
+  centeredAtOrigin: boolean;
+  autoExpand: boolean;
+  autoShrink: boolean;
+  shrinkDelay: number;
+  expansionHysteresis: number;
+  timeQuality: number;
+  maxQuerySteps: number;
 
   get resourceVersion(): number { return this.version; }
 
-  readonly cellsPerAxis: number;
-  readonly maxDepth: number;
+  private _brickSubdivisions = 3;
+  private _cellSubdivisions = 4;
+
+  get brickSubdivisions(): number { return this._brickSubdivisions; }
+  set brickSubdivisions(value: number) {
+    const next = clampDepth(value);
+    if (next === this._brickSubdivisions) return;
+    this._brickSubdivisions = next;
+    this.invalidateStructure();
+  }
+
+  get cellSubdivisions(): number { return this._cellSubdivisions; }
+  set cellSubdivisions(value: number) {
+    const next = clampDepth(value);
+    if (next === this._cellSubdivisions) return;
+    this._cellSubdivisions = next;
+    this.invalidateStructure();
+  }
+
+  get maxDepth(): number { return this.brickSubdivisions + this.cellSubdivisions; }
+  get cellsPerAxis(): number { return 2 ** this.maxDepth; }
 
   private capacity = 0;
   private hashCapacity = 0;
@@ -135,19 +159,19 @@ export default class ParticleSpatialGrid {
   private diagnostics?: AtomicUintStorage;
 
   constructor(options: Partial<ParticleSpatialGridOptions> = {}) {
-    this.brickSubdivisions = clampDepth(options.brickSubdivisions ?? 3);
-    this.cellSubdivisions = clampDepth(options.cellSubdivisions ?? 4);
-    this.maxDepth = this.brickSubdivisions + this.cellSubdivisions;
-    this.cellsPerAxis = 2 ** this.maxDepth;
+    this._brickSubdivisions = clampDepth(options.brickSubdivisions ?? 3);
+    this._cellSubdivisions = clampDepth(options.cellSubdivisions ?? 4);
     this.powerOfTwoBounds = options.powerOfTwoBounds ?? true;
     this.cubicBounds = options.cubicBounds ?? false;
+    this.centeredAtOrigin = options.centeredAtOrigin ?? true;
     this.bounds = ParticleSpatialGrid.normalizeBounds(
       options.bounds ?? DEFAULT_BOUNDS,
       this.powerOfTwoBounds,
       this.cubicBounds,
+      this.centeredAtOrigin,
     );
     this.autoExpand = options.autoExpand ?? true;
-    this.autoShrink = options.autoShrink ?? false;
+    this.autoShrink = options.autoShrink ?? true;
     this.shrinkDelay = Math.max(1, Math.floor(options.shrinkDelay ?? 600));
     this.expansionHysteresis = Math.max(0, options.expansionHysteresis ?? 0.125);
     this.timeQuality = THREE.MathUtils.clamp(
@@ -164,6 +188,44 @@ export default class ParticleSpatialGrid {
     this.lastBufferVersion = -1;
     if (this.boundsAttribute) this.writeInitialBounds();
     return this;
+  }
+
+  /** Applies grid options and rebuilds structural GPU work on the next update. */
+  setOptions(options: Partial<Omit<ParticleSpatialGridOptions, 'bounds'>>): this {
+    if (options.brickSubdivisions !== undefined) {
+      this.brickSubdivisions = options.brickSubdivisions;
+    }
+    if (options.cellSubdivisions !== undefined) {
+      this.cellSubdivisions = options.cellSubdivisions;
+    }
+    if (options.powerOfTwoBounds !== undefined) this.powerOfTwoBounds = options.powerOfTwoBounds;
+    if (options.cubicBounds !== undefined) this.cubicBounds = options.cubicBounds;
+    if (options.centeredAtOrigin !== undefined) this.centeredAtOrigin = options.centeredAtOrigin;
+    if (options.autoExpand !== undefined) this.autoExpand = options.autoExpand;
+    if (options.autoShrink !== undefined) this.autoShrink = options.autoShrink;
+    if (options.shrinkDelay !== undefined) {
+      this.shrinkDelay = Math.max(1, Math.floor(options.shrinkDelay));
+    }
+    if (options.expansionHysteresis !== undefined) {
+      this.expansionHysteresis = Math.max(0, options.expansionHysteresis);
+    }
+    if (options.timeQuality !== undefined) {
+      this.timeQuality = THREE.MathUtils.clamp(options.timeQuality, Number.EPSILON, 1);
+    }
+    if (options.maxQuerySteps !== undefined) {
+      this.maxQuerySteps = Math.max(0, Math.floor(options.maxQuerySteps));
+    }
+    this.bounds.copy(this.resolveBounds(this.bounds));
+    this.lastBufferVersion = -1;
+    this.version += 1;
+    if (this.boundsAttribute) this.writeInitialBounds();
+    return this;
+  }
+
+  private invalidateStructure(): void {
+    this.lastBufferVersion = -1;
+    this.lastBuildToken = undefined;
+    this.version += 1;
   }
 
   /** Returns the logical cell coordinate using the currently configured CPU-side bounds. */
@@ -401,6 +463,45 @@ export default class ParticleSpatialGrid {
     );
   }
 
+  /** Reads the live GPU particle bounds, expanded by the largest particle radius. */
+  async readParticleBounds(renderer: GPUReadbackRenderer): Promise<THREE.Box3> {
+    return (await this.readParticleMetrics(renderer)).bounds;
+  }
+
+  /** Reads live particle bounds and motion metrics with one GPU transfer. */
+  async readParticleMetrics(renderer: GPUReadbackRenderer): Promise<ParticleSpatialGridMetrics> {
+    if (!this.reductionAttribute) throw new Error('ParticleSpatialGrid must be rebuilt before reading particle bounds.');
+    const values = new Uint32Array(await renderer.getArrayBufferAsync(this.reductionAttribute));
+    if (values[6] === 0) return { bounds: new THREE.Box3(), maxParticleSpeed: 0 };
+    const radius = decodeOrderedFloat(values[8]);
+    return {
+      bounds: new THREE.Box3(
+        new THREE.Vector3(
+          decodeOrderedFloat(values[0]) - radius,
+          decodeOrderedFloat(values[1]) - radius,
+          decodeOrderedFloat(values[2]) - radius,
+        ),
+        new THREE.Vector3(
+          decodeOrderedFloat(values[3]) + radius,
+          decodeOrderedFloat(values[4]) + radius,
+          decodeOrderedFloat(values[5]) + radius,
+        ),
+      ),
+      maxParticleSpeed: Math.max(0, decodeOrderedFloat(values[9])),
+    };
+  }
+
+  /** Largest speed among live particles from the current GPU reduction. */
+  async readMaxParticleSpeed(renderer: GPUReadbackRenderer): Promise<number> {
+    return (await this.readParticleMetrics(renderer)).maxParticleSpeed;
+  }
+
+  /** Largest live particle radius from the current GPU reduction. */
+  getMaxParticleRadiusNode(): Node<'float'> {
+    this.assertReady();
+    return this.gpuBounds!.element(0).w as Node<'float'>;
+  }
+
   static locate(position: THREE.Vector3, bounds: THREE.Box3, cellsPerAxis: number): THREE.Vector3 {
     const size = bounds.getSize(new THREE.Vector3());
     return new THREE.Vector3(
@@ -418,17 +519,30 @@ export default class ParticleSpatialGrid {
       & (hashCapacity - 1);
   }
 
-  static normalizeBounds(bounds: THREE.Box3, powerOfTwo: boolean, cubic = false): THREE.Box3 {
+  static normalizeBounds(
+    bounds: THREE.Box3,
+    powerOfTwo: boolean,
+    cubic = false,
+    centeredAtOrigin = false,
+  ): THREE.Box3 {
     const result = bounds.clone();
-    if (!powerOfTwo && !cubic) return result;
-    const center = result.getCenter(new THREE.Vector3());
-    const size = result.getSize(new THREE.Vector3());
+    if (!powerOfTwo && !cubic && !centeredAtOrigin) return result;
+    const center = centeredAtOrigin
+      ? new THREE.Vector3()
+      : result.getCenter(new THREE.Vector3());
+    const size = centeredAtOrigin
+      ? new THREE.Vector3(
+        2 * Math.max(Math.abs(result.min.x), Math.abs(result.max.x)),
+        2 * Math.max(Math.abs(result.min.y), Math.abs(result.max.y)),
+        2 * Math.max(Math.abs(result.min.z), Math.abs(result.max.z)),
+      )
+      : result.getSize(new THREE.Vector3());
     if (cubic) size.setScalar(Math.max(size.x, size.y, size.z));
     if (!powerOfTwo) return result.setFromCenterAndSize(center, size);
     size.set(
-      nextPowerOfTwo(size.x),
-      nextPowerOfTwo(size.y),
-      nextPowerOfTwo(size.z),
+      nextBoundsPowerOfTwo(size.x),
+      nextBoundsPowerOfTwo(size.y),
+      nextBoundsPowerOfTwo(size.z),
     );
     return result.setFromCenterAndSize(center, size);
   }
@@ -469,6 +583,12 @@ export default class ParticleSpatialGrid {
           const initial = instanceIndex.lessThan(uint(3)).select(uint(0xffffffff), uint(0));
           atomicStore(this.reductions!.element(instanceIndex), initial);
         });
+        If(instanceIndex.equal(uint(8)), () => {
+          atomicStore(this.reductions!.element(8), uint(0));
+        });
+        If(instanceIndex.equal(uint(9)), () => {
+          atomicStore(this.reductions!.element(9), uint(0));
+        });
       });
       If(instanceIndex.equal(uint(0)), () => {
         atomicStore(this.diagnostics!.element(0), uint(0));
@@ -485,10 +605,17 @@ export default class ParticleSpatialGrid {
         atomicMax(this.reductions!.element(4), orderedFloat(particle.position.y));
         atomicMax(this.reductions!.element(5), orderedFloat(particle.position.z));
         atomicStore(this.reductions!.element(6), uint(1));
+        const radius = max(
+          particle.scale.x.abs(),
+          max(particle.scale.y.abs(), particle.scale.z.abs()),
+        ).mul(0.5);
+        atomicMax(this.reductions!.element(8), orderedFloat(radius));
+        atomicMax(this.reductions!.element(9), orderedFloat(particle.velocity.length()));
       });
     })().compute(buffers.count);
 
     const finalize = Fn(() => {
+      const maxParticleRadius = unorderedFloat(atomicLoad(this.reductions!.element(8)));
       if (!this.autoExpand) return;
       If(atomicLoad(this.reductions!.element(6)).notEqual(uint(0)), () => {
         const previousMin = vec3(this.gpuBounds!.element(0).xyz);
@@ -503,36 +630,64 @@ export default class ParticleSpatialGrid {
           unorderedFloat(atomicLoad(this.reductions!.element(4))),
           unorderedFloat(atomicLoad(this.reductions!.element(5))),
         );
-        const outside = reducedMin.lessThan(previousMin).any()
-          .or(reducedMax.greaterThan(previousMax).any());
+        const expansionMargin = previousMax.sub(previousMin).mul(this.expansionHysteresis);
+        const outside = reducedMin.lessThan(previousMin.add(expansionMargin)).any()
+          .or(reducedMax.greaterThan(previousMax.sub(expansionMargin)).any());
         If(outside, () => {
           if (this.autoShrink) atomicStore(this.reductions!.element(7), uint(0));
-          const wantedMin = vec3(min(previousMin, reducedMin));
-          const wantedMax = vec3(max(previousMax, reducedMax));
-          const padding = vec3(wantedMax.sub(wantedMin).mul(this.expansionHysteresis));
-          const expandedMin = vec3(wantedMin.sub(padding)).toVar('spatialGridExpandedMin');
-          const expandedMax = vec3(wantedMax.add(padding)).toVar('spatialGridExpandedMax');
+          const currentSize = previousMax.sub(previousMin);
+          const particleSize = reducedMax.sub(reducedMin).max(vec3(Number.EPSILON));
+          const padding = vec3(particleSize.mul(this.expansionHysteresis).add(maxParticleRadius));
+          const expandedMin = vec3(reducedMin.sub(padding)).toVar('spatialGridExpandedMin');
+          const expandedMax = vec3(reducedMax.add(padding)).toVar('spatialGridExpandedMax');
+          const center = this.centeredAtOrigin
+            ? vec3(0)
+            : vec3(expandedMin.add(expandedMax).mul(0.5));
           if (this.powerOfTwoBounds) {
-            const center = vec3(expandedMin.add(expandedMax).mul(0.5));
-            const requestedSize = expandedMax.sub(expandedMin).max(vec3(Number.EPSILON));
-            const size = this.cubicBounds
-              ? vec3(exp2(ceil(log2(max(max(requestedSize.x, requestedSize.y), requestedSize.z)))))
-              : vec3(exp2(ceil(log2(requestedSize))));
-            expandedMin.assign(center.sub(size.mul(0.5)));
-            expandedMax.assign(center.add(size.mul(0.5)));
+            const requestedSize = this.centeredAtOrigin
+              ? max(expandedMin.abs(), expandedMax.abs()).mul(2).max(vec3(Number.EPSILON))
+              : expandedMax.sub(expandedMin).max(vec3(Number.EPSILON));
+            if (this.cubicBounds) {
+              const requestedSide = max(max(requestedSize.x, requestedSize.y), requestedSize.z);
+              const currentSide = max(max(currentSize.x, currentSize.y), currentSize.z);
+              const side = max(exp2(ceil(log2(requestedSide).sub(1e-6))), currentSide);
+              const half = side.mul(0.5);
+              const halfSize = vec3(half, half, half);
+              expandedMin.assign(center.sub(halfSize));
+              expandedMax.assign(center.add(halfSize));
+            } else {
+              const requestedPowerOfTwo = vec3(exp2(ceil(log2(requestedSize).sub(1e-6))));
+              const size = max(requestedPowerOfTwo, currentSize);
+              expandedMin.assign(center.sub(size.mul(0.5)));
+              expandedMax.assign(center.add(size.mul(0.5)));
+            }
           } else if (this.cubicBounds) {
-            const center = vec3(expandedMin.add(expandedMax).mul(0.5));
-            const side = max(max(expandedMax.x.sub(expandedMin.x), expandedMax.y.sub(expandedMin.y)), expandedMax.z.sub(expandedMin.z));
+            const requestedSize = this.centeredAtOrigin
+              ? max(expandedMin.abs(), expandedMax.abs()).mul(2)
+              : expandedMax.sub(expandedMin);
+            const side = max(
+              max(max(requestedSize.x, requestedSize.y), requestedSize.z),
+              max(max(currentSize.x, currentSize.y), currentSize.z),
+            );
             expandedMin.assign(center.sub(vec3(side.mul(0.5))));
             expandedMax.assign(center.add(vec3(side.mul(0.5))));
+          } else {
+            const requestedSize = this.centeredAtOrigin
+              ? max(expandedMin.abs(), expandedMax.abs()).mul(2)
+              : expandedMax.sub(expandedMin);
+            const size = max(requestedSize, currentSize);
+            expandedMin.assign(center.sub(size.mul(0.5)));
+            expandedMax.assign(center.add(size.mul(0.5)));
           }
-          this.gpuBounds!.element(0).assign(vec4(expandedMin, 0));
+          this.gpuBounds!.element(0).assign(vec4(expandedMin, maxParticleRadius));
           this.gpuBounds!.element(1).assign(vec4(expandedMax, 0));
         });
         if (this.autoShrink) {
           If(outside.not(), () => {
             const currentSize = previousMax.sub(previousMin);
-            const targetSize = reducedMax.sub(reducedMin).max(vec3(Number.EPSILON));
+            const targetSize = this.centeredAtOrigin
+              ? max(reducedMin.abs(), reducedMax.abs()).mul(2).max(vec3(Number.EPSILON))
+              : reducedMax.sub(reducedMin).max(vec3(Number.EPSILON));
             const currentSide = max(max(currentSize.x, currentSize.y), currentSize.z);
             const targetSide = max(max(targetSize.x, targetSize.y), targetSize.z);
             const compact = targetSide.mul(1 + 2 * this.expansionHysteresis)
@@ -540,13 +695,16 @@ export default class ParticleSpatialGrid {
             If(compact, () => {
               const frames = atomicFunc('atomicAdd', this.reductions!.element(7), uint(1));
               If(frames.greaterThanEqual(uint(this.shrinkDelay - 1)), () => {
-                const center = reducedMin.add(reducedMax).mul(0.5);
+                const center = this.centeredAtOrigin
+                  ? vec3(0)
+                  : reducedMin.add(reducedMax).mul(0.5);
                 const paddedSide = targetSide.mul(1 + 2 * this.expansionHysteresis);
                 const side = this.powerOfTwoBounds
-                  ? exp2(ceil(log2(paddedSide)))
+                  ? exp2(ceil(log2(paddedSide).sub(1e-6)))
                   : paddedSide;
-                const halfSize = vec3(side.mul(0.5));
-                this.gpuBounds!.element(0).assign(vec4(center.sub(halfSize), 0));
+                const half = side.mul(0.5);
+                const halfSize = vec3(half, half, half);
+                this.gpuBounds!.element(0).assign(vec4(center.sub(halfSize), maxParticleRadius));
                 this.gpuBounds!.element(1).assign(vec4(center.add(halfSize), 0));
                 atomicStore(this.reductions!.element(7), uint(0));
               });
@@ -556,6 +714,14 @@ export default class ParticleSpatialGrid {
           });
         }
       });
+    })().compute(1);
+
+    const finalizeRadius = Fn(() => {
+      const boundsMin = this.gpuBounds!.element(0);
+      this.gpuBounds!.element(0).assign(vec4(
+        boundsMin.xyz,
+        unorderedFloat(atomicLoad(this.reductions!.element(8))),
+      ));
     })().compute(1);
 
     const insert = Fn(() => {
@@ -590,7 +756,7 @@ export default class ParticleSpatialGrid {
       });
     })().compute(buffers.count);
 
-    return [reset, reduce, finalize, insert];
+    return [reset, reduce, finalize, finalizeRadius, insert];
   }
 
   private hashCoordinateNode(coordinate: Node<'ivec3'>): Node<'uint'> {
@@ -602,12 +768,22 @@ export default class ParticleSpatialGrid {
 
   private resolveBounds(bounds: THREE.Box3): THREE.Box3 {
     const resolved = bounds.isEmpty() ? DEFAULT_BOUNDS : bounds;
-    return ParticleSpatialGrid.normalizeBounds(resolved, this?.powerOfTwoBounds ?? false, this?.cubicBounds ?? false);
+    return ParticleSpatialGrid.normalizeBounds(
+      resolved,
+      this?.powerOfTwoBounds ?? false,
+      this?.cubicBounds ?? false,
+      this?.centeredAtOrigin ?? false,
+    );
   }
 
   private writeInitialBounds(): void {
     if (!this.boundsAttribute) return;
-    const resolved = ParticleSpatialGrid.normalizeBounds(this.bounds, this.powerOfTwoBounds, this.cubicBounds);
+    const resolved = ParticleSpatialGrid.normalizeBounds(
+      this.bounds,
+      this.powerOfTwoBounds,
+      this.cubicBounds,
+      this.centeredAtOrigin,
+    );
     const array = this.boundsAttribute.array as Float32Array;
     array.set([resolved.min.x, resolved.min.y, resolved.min.z, 0], 0);
     array.set([resolved.max.x, resolved.max.y, resolved.max.z, 0], 4);
@@ -629,6 +805,10 @@ function nextPowerOfTwo(value: number): number {
   return 2 ** Math.ceil(Math.log2(Math.max(value, Number.EPSILON)));
 }
 
+function nextBoundsPowerOfTwo(value: number): number {
+  return 2 ** Math.ceil(Math.log2(Math.max(value, Number.EPSILON)) - 1e-6);
+}
+
 function orderedFloat(value: Node<'float'>): Node<'uint'> {
   const bits = floatBitsToUint(value) as unknown as Node<'uint'>;
   return bitAnd(bits, uint(0x80000000)).notEqual(uint(0))
@@ -639,4 +819,14 @@ function unorderedFloat(value: Node<'uint'>): Node<'float'> {
   const bits = bitAnd(value, uint(0x80000000)).notEqual(uint(0))
     .select(bitXor(value, uint(0x80000000)), bitXor(value, uint(0xffffffff)));
   return uintBitsToFloat(bits) as unknown as Node<'float'>;
+}
+
+function decodeOrderedFloat(value: number): number {
+  const bits = (value & 0x80000000) !== 0
+    ? (value ^ 0x80000000) >>> 0
+    : (value ^ 0xffffffff) >>> 0;
+  const buffer = new ArrayBuffer(4);
+  const view = new DataView(buffer);
+  view.setUint32(0, bits, true);
+  return view.getFloat32(0, true);
 }

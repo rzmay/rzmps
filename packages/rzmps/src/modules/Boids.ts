@@ -70,8 +70,7 @@ export interface BoidsOptions extends Partial<ModuleOptions> {
   affectors: BoidAffector[];
   affectorFilter: (affector: BoidAffector) => boolean;
   particleAffectors: Multiple<BoidParticleAffectorOptions>;
-  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
-  grid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  spatialGridOptions: Partial<ParticleSpatialGridOptions>;
   neighborRadius: DynamicValue<number>;
 }
 
@@ -91,8 +90,6 @@ class Boids extends Module {
   steering: DynamicValue<number>;
   maintainSpeed: boolean;
   particleAffectors: BoidParticleAffectorOptions[];
-  spatialGrid?: ParticleSpatialGrid;
-  spatialGridOptions: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
   neighborRadius: DynamicValue<number>;
 
   private alignment = new THREE.Vector3();
@@ -117,10 +114,13 @@ class Boids extends Module {
 
   constructor(options: Partial<BoidsOptions> = {}) {
     const affectorFilter = options.affectorFilter;
+    const spatialGridOptions = options.spatialGridOptions ?? {
+      brickSubdivisions: 2,
+      cellSubdivisions: 2,
+    };
     const {
       octreeOptions: _octreeOptions,
-      spatialGrid: _spatialGrid,
-      grid: _grid,
+      spatialGridOptions: _spatialGridOptions,
       useOctree: _useOctree,
       useSpatialGrid: _useSpatialGrid,
       ...moduleOptions
@@ -190,6 +190,8 @@ class Boids extends Module {
         context,
       ),
       requireSpatialEffects: BoidAffector,
+      useSpatialGrid: true,
+      spatialGridOptions,
       spatialEffects: options.affectors,
       spatialEffectFilter: affectorFilter
         ? (spatialEffect) => (
@@ -222,10 +224,6 @@ class Boids extends Module {
     this.steering = options.steering ?? 0.5;
     this.maintainSpeed = options.maintainSpeed ?? true;
     this.particleAffectors = acceptMultiple(options.particleAffectors) ?? [];
-    this.spatialGridOptions = options.spatialGrid ?? options.grid ?? {
-      brickSubdivisions: 2,
-      cellSubdivisions: 2,
-    };
     this.neighborRadius = options.neighborRadius ?? 1;
   }
 

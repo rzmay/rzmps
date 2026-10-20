@@ -182,7 +182,15 @@ function DemoPage() {
     getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire')
   ));
   const [scenePreset, setScenePreset] = useState(() => (
-    getQueryParam('scene', SCENE_PRESET_NAMES, 'Checkerboard')
+    getQueryParam(
+      'scene',
+      SCENE_PRESET_NAMES,
+      getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire') === 'FLIP Fluid'
+        ? 'Fluid Teapot'
+        : getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire') === 'Gas Volume'
+          ? 'Gas Flow'
+          : 'Checkerboard',
+    )
   ));
   const [metadata, setMetadata] = useState(() => ({
     particle: getPresetMetadata(particlePresets, particlePreset),
@@ -201,6 +209,13 @@ function DemoPage() {
       setRendererMode('webgpu');
     }
     setParticlePreset(name);
+    if (name === 'FLIP Fluid') {
+      setQueryParam('scene', 'Fluid Teapot');
+      setScenePreset('Fluid Teapot');
+    } else if (name === 'Gas Volume') {
+      setQueryParam('scene', 'Gas Flow');
+      setScenePreset('Gas Flow');
+    }
   }, []);
 
   const handleSceneChange = useCallback((name) => {
@@ -220,6 +235,14 @@ function DemoPage() {
         lines.push(`${allocated.toLocaleString()} GPU slots, ${usage.toFixed(1)}% live`);
       } else if (activeSlots > 0) {
         lines.push(`${activeSlots.toLocaleString()} active slots`);
+      }
+
+      if (typeof stats !== 'number') {
+        stats.fluidBounds?.forEach((fluid) => {
+          lines.push(`${fluid.name} particle bounds: ${fluid.particles}`);
+          lines.push(`${fluid.name} grid bounds: ${fluid.grid}`);
+          lines.push(`Padding: ${fluid.padding}`);
+        });
       }
 
       particleCountRef.current.textContent = lines.join('\n');

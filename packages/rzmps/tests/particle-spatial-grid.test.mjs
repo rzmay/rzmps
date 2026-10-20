@@ -14,6 +14,13 @@ const configuredBounds = new THREE.Box3(
 );
 const normalized = ParticleSpatialGrid.normalizeBounds(configuredBounds, true);
 assert.deepEqual(normalized.getSize(new THREE.Vector3()).toArray(), [8, 8, 16]);
+const nearlyQuantized = ParticleSpatialGrid.normalizeBounds(new THREE.Box3(
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(8.000001, 8.000001, 8.000001),
+), true, true);
+assert.ok(nearlyQuantized.getSize(new THREE.Vector3()).distanceTo(
+  new THREE.Vector3(8, 8, 8),
+) < 1e-12);
 assert.deepEqual(
   ParticleSpatialGrid.normalizeBounds(configuredBounds, false).min.toArray(),
   configuredBounds.min.toArray(),
@@ -24,12 +31,33 @@ const grid = new ParticleSpatialGrid({
   brickSubdivisions: 2,
   cellSubdivisions: 3,
   powerOfTwoBounds: false,
+  centeredAtOrigin: false,
   autoExpand: false,
 });
 assert.equal(grid.cellsPerAxis, 32);
 assert.equal(grid.maxDepth, 5);
 assert.deepEqual(grid.locate(configuredBounds.min), new THREE.Vector3(0, 0, 0));
 assert.deepEqual(grid.locate(configuredBounds.max), new THREE.Vector3(31, 31, 31));
+const structuralVersion = grid.resourceVersion;
+grid.cellSubdivisions = 4;
+assert.equal(grid.cellSubdivisions, 4);
+assert.equal(grid.maxDepth, 6);
+assert.equal(grid.cellsPerAxis, 64);
+assert.ok(grid.resourceVersion > structuralVersion);
+grid.setOptions({ brickSubdivisions: 1, cellSubdivisions: 3 });
+assert.equal(grid.maxDepth, 4);
+assert.equal(grid.cellsPerAxis, 16);
+grid.setOptions({ brickSubdivisions: 2, cellSubdivisions: 3 });
+
+const centeredGrid = new ParticleSpatialGrid({ bounds: configuredBounds });
+assert.deepEqual(centeredGrid.bounds.getCenter(new THREE.Vector3()).toArray(), [0, 0, 0]);
+assert.equal(centeredGrid.autoShrink, true);
+const centeredVersion = centeredGrid.resourceVersion;
+centeredGrid.setOptions({ autoShrink: false, shrinkDelay: 42, timeQuality: 0.5 });
+assert.equal(centeredGrid.autoShrink, false);
+assert.equal(centeredGrid.shrinkDelay, 42);
+assert.equal(centeredGrid.timeQuality, 0.5);
+assert.ok(centeredGrid.resourceVersion > centeredVersion);
 
 // Equivalent CPU/GPU operations use the same min-inclusive, max-inclusive bounds convention.
 const octree = new ParticleOctree({ bounds: configuredBounds, maxDepth: 5 }, {
@@ -90,7 +118,7 @@ assert.equal(callbackOctree.root.aggregate.count, 1);
 let callbackGrid;
 const gridOptions = { brickSubdivisions: 1, cellSubdivisions: 2 };
 const managedGridModule = new Module(Module.CPU_UNSUPPORTED, {
-  spatialGrid: gridOptions,
+  spatialGridOptions: gridOptions,
   modifyGPU(_particle, _deltaTime, _context, gridValue) {
     callbackGrid = gridValue;
   },
@@ -99,15 +127,6 @@ const managedGrid = managedGridModule.getParticleSpatialGrid(system);
 assert.equal(managedGrid, system.acquireParticleSpatialGrid(gridOptions));
 managedGridModule.modifyGPU({}, {}, { system }, managedGrid);
 assert.equal(callbackGrid, managedGrid);
-
-// Explicit grids remain caller-owned and survive module cleanup.
-const explicitGridModule = new Module(Module.CPU_UNSUPPORTED, {
-  spatialGrid: explicit,
-  modifyGPU() {},
-});
-assert.equal(explicitGridModule.getParticleSpatialGrid(system), explicit);
-explicitGridModule.cleanup();
-assert.equal(explicitGridModule.getParticleSpatialGrid(system), explicit);
 
 system.destroy();
 
