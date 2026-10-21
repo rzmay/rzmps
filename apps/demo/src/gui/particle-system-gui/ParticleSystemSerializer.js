@@ -197,6 +197,7 @@ export class ParticleSystemSerializer {
                 lifetimeLoss: module.lifetimeLoss,
                 applyImpulses: module.applyImpulses,
                 radiusScale: module.radiusScale,
+                radiusOffset: module.radiusOffset,
                 minKillSpeed: module.minKillSpeed,
                 maxKillSpeed: module.maxKillSpeed,
                 ...this.getLODOptions(module),
@@ -280,6 +281,9 @@ export class ParticleSystemSerializer {
                 picRatio: module.picRatio,
                 advectParticles: module.advectParticlesEnabled,
                 velocityPaddingLookahead: module.velocityPaddingLookahead,
+                collisionIterations: module.collisionIterations,
+                particleSeparation: module.particleSeparation,
+                particleSpacing: module.particleSpacing,
                 ...this.getLODOptions(module),
                 tags: module.tags,
             })})`;

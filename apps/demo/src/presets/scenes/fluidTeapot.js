@@ -8,11 +8,11 @@ import {
 } from './particleRoot';
 
 function addTeapotColliders(root) {
-  const wallCount = 14;
+  const wallCount = 32;
   const radius = 1.2;
   for (let index = 0; index < wallCount; index += 1) {
     const angle = index / wallCount * Math.PI * 2;
-    const collider = FluidCollider.Box({ surfaceThickness: 0.015 }, 0.62, 2, 0.26);
+    const collider = FluidCollider.Box({ surfaceThickness: 0.015 }, 0.3, 2, 0.2);
     collider.name = `Teapot Wall Collider ${index + 1}`;
     collider.position.set(Math.sin(angle) * radius, 0.5, Math.cos(angle) * radius);
     collider.rotation.y = angle;
@@ -31,9 +31,12 @@ export default async function createFluidTeapot(scene) {
   const particleRoot = createSceneParticleRoot(scene, [0, 2.55, 0]);
   const material = new THREE.MeshPhysicalMaterial({
     color: '#cbd5dc',
-    roughness: 0.18,
-    metalness: 0.72,
+    roughness: 0.22,
+    metalness: 0.15,
     clearcoat: 0.45,
+    transparent: true,
+    opacity: 0.42,
+    depthWrite: false,
     side: THREE.DoubleSide,
   });
   const floorMaterial = new THREE.MeshStandardMaterial({
@@ -74,9 +77,9 @@ export default async function createFluidTeapot(scene) {
   floor.position.y = -0.62;
   floor.receiveShadow = true;
   root.add(floor);
-  const floorCollider = FluidCollider.Box({ surfaceThickness: 0.015 }, 18, 0.2, 14);
+  const floorCollider = FluidCollider.Box({ surfaceThickness: 0.015 }, 18, 2, 14);
   floorCollider.name = 'Fluid Studio Floor Collider';
-  floorCollider.position.copy(floor.position);
+  floorCollider.position.set(floor.position.x, floor.position.y - 0.9, floor.position.z);
   root.add(floorCollider);
 
   const hemisphere = new THREE.HemisphereLight('#edf7ff', '#75504a', 1.3);

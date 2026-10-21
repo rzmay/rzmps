@@ -27,11 +27,14 @@ export default async function createFlipFluid() {
     pressureIterations: 28,
     externalForce: new THREE.Vector3(0, 0, 0),
     picRatio: 0.01,
+    particleSeparation: 0.65,
+    particleSpacing: 1.6,
   });
 
   const system = new ParticleSystem({
-    duration: 10,
-    looping: true,
+    maxParticles: 16000,
+    duration: 34,
+    looping: false,
     gravity: new THREE.Vector3(0, -5.2, 0),
     gravityModifier: 1,
     emitters: [
@@ -40,10 +43,10 @@ export default async function createFlipFluid() {
         rate: 450,
         radialSpeed: 0.04,
         initialValues: {
-          lifetime: 20,
+          lifetime: 60,
           mass: 1,
           speed: 1,
-          scale: new THREE.Vector3(0.07, 0.07, 0.07),
+          scale: new THREE.Vector3(0.085, 0.085, 0.085),
           color: new THREE.Color('#7cc7ff'),
           alpha: 0.8,
           velocity: new THREE.Vector3(0.04, -0.3, 0.01),

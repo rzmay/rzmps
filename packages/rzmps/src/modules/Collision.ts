@@ -29,6 +29,7 @@ export interface CollisionOptions extends Partial<ModuleOptions> {
   lifetimeLoss: DynamicValue<number>;
   applyImpulses: boolean;
   radiusScale: number;
+  radiusOffset: number;
   minKillSpeed: number;
   maxKillSpeed: number;
 
@@ -44,6 +45,7 @@ class Collision extends Module {
 
   applyImpulses: boolean = false;
   radiusScale: number = 1;
+  private _radiusOffset = 0;
   minKillSpeed: number = 0;
   maxKillSpeed: number = Number.POSITIVE_INFINITY;
   private collisionListeners: CollisionListener[] = [];
@@ -74,12 +76,24 @@ class Collision extends Module {
 
     this.applyImpulses = options.applyImpulses ?? this.applyImpulses;
     this.radiusScale = options.radiusScale ?? this.radiusScale;
+    this.radiusOffset = options.radiusOffset ?? 0;
     this.minKillSpeed = options.minKillSpeed ?? this.minKillSpeed;
     this.maxKillSpeed = options.maxKillSpeed ?? this.maxKillSpeed;
     this._backend = options.backend;
     this._explicitBackend = options.backend !== undefined;
 
     if (options.onCollision) this.collisionListeners.push(options.onCollision);
+  }
+
+  get radiusOffset(): number {
+    return this._radiusOffset;
+  }
+
+  set radiusOffset(value: number) {
+    const next = Math.max(0, value);
+    if (next === this._radiusOffset) return;
+    this._radiusOffset = next;
+    this.needsUpdate = true;
   }
 
   override get supportsGPU(): boolean {
@@ -138,15 +152,8 @@ class Collision extends Module {
     const radius = max(
       abs(particle.scale.x),
       max(abs(particle.scale.y), abs(particle.scale.z)),
-    ).mul(float(0.5 * (this.radiusScale ?? 1)));
-    const gravityModifier = this.gpuParameters.number(
-      'gravityModifier.collision',
-      () => context.system.gravityModifier,
-      particle.time,
-      0,
-      particle.index,
-    );
-    const gravityStep = context.gravityNode.mul(context.deltaTimeNode.mul(gravityModifier));
+    ).mul(float(0.5 * (this.radiusScale ?? 1))).add(this.radiusOffset);
+    const gravityStep = this.gpuGravityStep(particle, context);
     const step = context.deltaTimeNode.mul(particle.speed);
     const localStart = particle.position;
     const localVelocity = particle.velocity.add(gravityStep);
@@ -167,15 +174,12 @@ class Collision extends Module {
       worldNormal.mul(radius.sub(distance).max(0)),
     );
     If(found, () => {
-      particle.velocity.assign(localVelocity);
       this.resolveGPUCollision(
         particle,
         context,
         this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
         this.gpuDirectionToSimulationSpace(worldNormal, context.system),
       );
-      // The main integrator applies this gravity step immediately after collision.
-      particle.velocity.subAssign(gravityStep);
     });
   }
 
@@ -187,10 +191,10 @@ class Collision extends Module {
     const radius = max(
       abs(particle.scale.x),
       max(abs(particle.scale.y), abs(particle.scale.z)),
-    ).mul(float(0.5 * (this.radiusScale ?? 1)));
+    ).mul(float(0.5 * (this.radiusScale ?? 1))).add(this.radiusOffset);
     const step = context.deltaTimeNode.mul(particle.speed);
     const localStart = particle.position;
-    const localVelocity = particle.velocity;
+    const localVelocity = particle.velocity.add(this.gpuGravityStep(particle, context));
     const start = this.gpuPointToWorld(localStart, context.system);
     const end = this.gpuPointToWorld(
       localStart.add(localVelocity.mul(step)),
@@ -205,7 +209,12 @@ class Collision extends Module {
     const found = hit.get('found') as Node<'bool'>;
     const worldPoint = hit.get('point') as Node<'vec3'>;
     const worldCapsulePoint = hit.get('capsulePoint') as Node<'vec3'>;
-    const worldNormal = hit.get('normal') as Node<'vec3'>;
+    const sampledWorldNormal = (hit.get('normal') as Node<'vec3'>).normalize();
+    const worldTravel = end.sub(start);
+    const worldNormal = sampledWorldNormal.dot(worldTravel).greaterThan(0).select(
+      sampledWorldNormal.negate(),
+      sampledWorldNormal,
+    ) as Node<'vec3'>;
     const distance = sqrt(hit.get('distanceSq') as Node<'float'>);
     const correctedWorldPosition = worldCapsulePoint.add(
       worldNormal.mul(radius.sub(distance).max(0)),
@@ -240,15 +249,20 @@ class Collision extends Module {
     const dampen = this.gpuParameters.number(
       'dampen', () => this.dampen, particle.time, 0, particle.index,
     ).clamp(0, 1);
-    const normalSpeed = particle.velocity.dot(hitNormal);
+    const gravityStep = this.gpuGravityStep(particle, context);
+    const collisionVelocity = particle.velocity.add(gravityStep);
+    const normalSpeed = collisionVelocity.dot(hitNormal);
     const normalVelocity = hitNormal.mul(normalSpeed);
-    const tangentVelocity = particle.velocity.sub(normalVelocity);
+    const tangentVelocity = collisionVelocity.sub(normalVelocity);
     const resolvedVelocity = tangentVelocity
       .add(normalVelocity.mul(bounce.negate()))
       .mul(float(1).sub(dampen));
 
     particle.velocity.assign(
-      normalSpeed.lessThan(float(0)).select(resolvedVelocity, particle.velocity),
+      normalSpeed.lessThan(float(0)).select(
+        resolvedVelocity.sub(gravityStep),
+        particle.velocity,
+      ),
     );
 
     const lifetimeLoss = this.gpuParameters.number(
@@ -282,16 +296,18 @@ class Collision extends Module {
     super.cleanup();
   }
 
-  private applyGPUCollisionHit(
+  private gpuGravityStep(
     particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
-    hit: Node<'bool'>,
-    hitPosition: Node<'vec3'>,
-    sampledNormal: Node<'vec3'>,
-  ): void {
-    If(hit, () => {
-      this.resolveGPUCollision(particle, context, hitPosition, sampledNormal);
-    });
+  ): Node<'vec3'> {
+    const gravityModifier = this.gpuParameters.number(
+      'gravityModifier.collision',
+      () => context.system.gravityModifier,
+      particle.time,
+      0,
+      particle.index,
+    );
+    return context.gravityNode.mul(context.deltaTimeNode.mul(gravityModifier)) as Node<'vec3'>;
   }
 
   private gpuPointToWorld(

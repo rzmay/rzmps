@@ -70,6 +70,7 @@ abstract class FluidSimulation extends Module {
   private _boundsHelperSystem?: ParticleSystem;
   protected readonly particleCollisionBackend = new ThreeGPUCollisionBackend();
   private readonly particleCollisionThicknessNode = uniform(0) as UniformNode<number, 'float'>;
+  protected particleCollisionThicknessValue = 0;
   private particleCollisionState = false;
   private particleCollisionCacheKey = '';
   protected usesParticleColliderSweeps = false;
@@ -534,10 +535,11 @@ abstract class FluidSimulation extends Module {
       && effect.particleCollision
       && Boolean(effect.geometry)
     ));
-    this.particleCollisionThicknessNode.value = colliders.reduce(
+    this.particleCollisionThicknessValue = colliders.reduce(
       (maximum, collider) => Math.max(maximum, collider.surfaceThickness),
       0,
     );
+    this.particleCollisionThicknessNode.value = this.particleCollisionThicknessValue;
     const cacheKey = colliders
       .map((collider) => `${collider.uuid}:${collider.version}`)
       .join('|');

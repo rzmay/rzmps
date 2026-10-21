@@ -1950,6 +1950,14 @@ Use `surfaceThickness` for a small contact margin. `gridOccupancy` and
 and a detailed surface mesh are used together. Fluid collision intentionally
 has no bounce or dampening controls; use the general `Collision` module when
 particle-impact behavior is desired instead of a fluid boundary.
+FLIP runs `collisionIterations` swept boundary passes per frame (two by
+default); increase it when particles can contact several container surfaces in
+one step.
+`particleSeparation` controls a GPU overlap-restoring force after grid transfer
+so the particle representation preserves visible liquid volume instead of
+clustering. The correction is integrated as acceleration to keep dense fluid
+stable against collider boundaries.
+`particleSpacing` scales the rest distance derived from particle scale.
 `densityCutoff` clears negligible density and its associated color
 and temperature. Optional `scalarDiffusion` mixes density, temperature, and
 color into the six neighboring cells; it is separate from the pressure solve,
