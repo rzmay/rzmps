@@ -44,12 +44,33 @@ try {
   assert.ok(await page.$eval(sidebar, element => element.scrollHeight <= element.clientHeight), 'sidebar fits a standard laptop screen without scrolling');
   await checkAttributionAlignment(page);
   const initialCanvas = await page.$('.demo-shell canvas');
-  const initialWidth = await initialCanvas.evaluate(element => element.getBoundingClientRect().width);
-  await page.focus(toggle);
-  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelector('.demo-shell canvas').getBoundingClientRect().width === innerWidth);
+  const motion = await page.evaluate(async () => {
+    const panel = document.querySelector('#landing-sidebar');
+    const canvas = document.querySelector('.demo-shell canvas');
+    const panelWidth = panel.getBoundingClientRect().width;
+    const initialWidth = canvas.width;
+    const frames = [];
+    document.querySelector('.sidebar-toggle').click();
+    const start = performance.now();
+    do {
+      await new Promise(requestAnimationFrame);
+      const bounds = canvas.getBoundingClientRect();
+      frames.push({
+        edge: panel.getBoundingClientRect().right,
+        fps: document.querySelector('.demo-stats').getBoundingClientRect().left,
+        count: document.querySelector('.particle-count-monitor').getBoundingClientRect().left,
+        canvasCentered: bounds.left === 0 && bounds.width === innerWidth && canvas.width === initialWidth,
+      });
+    } while (performance.now() - start < 300);
+    return { panelWidth, frames };
+  });
+  assert.ok(motion.frames.some(frame => frame.edge > 1 && frame.edge < motion.panelWidth - 1), 'sidebar slides through intermediate positions');
+  assert.ok(motion.frames.every(frame => frame.canvasCentered), 'canvas position and resolution stay fixed throughout the slide');
+  assert.ok(motion.frames.every(frame => Math.abs(frame.fps - frame.edge) < 1 && Math.abs(frame.count - frame.edge) < 1), 'both monitors follow the sidebar edge throughout the slide');
   await page.waitForSelector(sidebar, { hidden: true });
-  await page.waitForFunction(width => document.querySelector('.demo-shell canvas').getBoundingClientRect().width > width, {}, initialWidth);
   assert.ok(await initialCanvas.evaluate(element => element === document.querySelector('.demo-shell canvas')), 'toggling preserves the canvas');
+  assert.ok(await page.$eval(sidebar, element => element.inert), 'collapsed sidebar cannot receive focus');
   await checkAttributionAlignment(page);
   await page.evaluate(() => localStorage.setItem('rzmps:landing-sidebar', 'closed'));
   await page.reload({ waitUntil: 'networkidle0' });
@@ -63,11 +84,20 @@ try {
   await page.reload({ waitUntil: 'networkidle0' });
   await page.waitForSelector(sidebar, { visible: true });
   assert.ok(await page.$eval(sidebar, element => element.getBoundingClientRect().right <= innerWidth), 'mobile sidebar fits viewport');
+  assert.ok(await page.$eval('.demo-stats', element => element.getBoundingClientRect().right <= innerWidth), 'mobile FPS monitor remains within the viewport');
+  assert.ok(await page.$eval('.particle-count-monitor', element => element.getBoundingClientRect().right <= innerWidth), 'mobile particle monitor remains within the viewport');
   await page.waitForFunction(() => document.elementFromPoint(40, 40)?.closest('#landing-sidebar'), { timeout: 5000 });
   await page.setViewport({ width: 390, height: 480 });
   assert.ok(await page.$eval(sidebar, element => element.scrollHeight > element.clientHeight), 'short viewports can scroll through resources');
   await page.keyboard.press('Escape');
+  await page.waitForSelector(sidebar, { hidden: true });
   await checkAttributionAlignment(page);
+  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  await page.focus(toggle);
+  await page.keyboard.press('Enter');
+  await page.waitForSelector(sidebar, { visible: true });
+  assert.ok(await page.$eval(sidebar, element => getComputedStyle(element).transitionDuration.split(',').every(duration => parseFloat(duration) === 0)), 'reduced motion disables the slide');
+  await page.emulateMediaFeatures([]);
   await page.setViewport({ width: 1200, height: 1000 });
   console.log('Landing sidebar: default visibility, compact layout, inline version, keyboard controls, and mobile layout passed');
   console.log('/: interactive demo rendered without redirecting to docs');

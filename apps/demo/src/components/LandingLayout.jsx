@@ -35,7 +35,7 @@ export default function LandingLayout({ children }) {
         {open ? <ChevronLeft size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
       </button>
 
-      <aside id="landing-sidebar" className="landing-sidebar" aria-label="About RZMPS" hidden={!open}>
+      <aside id="landing-sidebar" className="landing-sidebar" aria-label="About RZMPS" aria-hidden={!open} inert={!open}>
         <header>
           <h1 className="landing-heading">
             <a className="landing-brand" href="/" aria-label="RZMPS home">

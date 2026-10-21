@@ -36,12 +36,14 @@ code {
 
 .landing-layout {
   --sidebar-width: 320px;
+  --sidebar-offset: 0px;
+  --sidebar-duration: 200ms;
+  --sidebar-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
   --sidebar-background: #fff;
   --sidebar-text: #444;
   --sidebar-muted: #767676;
   --sidebar-border: #e8e8e8;
   --sidebar-blue: #007ebf;
-  display: flex;
   position: relative;
   width: 100%;
   height: 100%;
@@ -49,9 +51,14 @@ code {
   background: #202020;
 }
 
+.landing-layout.sidebar-open { --sidebar-offset: var(--sidebar-width); }
+
 .landing-sidebar {
   box-sizing: border-box;
-  flex: 0 0 var(--sidebar-width);
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 2000;
+  width: var(--sidebar-width);
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -63,9 +70,16 @@ code {
   font-family: 'Roboto Mono', monospace;
   font-size: 14px;
   line-height: 24px;
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform var(--sidebar-duration) var(--sidebar-easing), visibility 0s var(--sidebar-duration);
 }
 
-.landing-sidebar[hidden] { display: none; }
+.sidebar-open .landing-sidebar {
+  transform: translateX(0);
+  visibility: visible;
+  transition-delay: 0s;
+}
 
 .landing-sidebar a {
   color: var(--sidebar-blue);
@@ -155,6 +169,7 @@ code {
   background: var(--sidebar-background);
   border: 0;
   cursor: pointer;
+  transition: left var(--sidebar-duration) var(--sidebar-easing), top var(--sidebar-duration) var(--sidebar-easing);
 }
 
 .sidebar-open .sidebar-toggle {
@@ -167,6 +182,17 @@ code {
 .landing-sidebar a:focus-visible { outline: 2px solid var(--sidebar-blue); outline-offset: 3px; }
 .demo-shell .demo-stats { position: absolute !important; }
 
+.landing-layout .demo-stats,
+.landing-layout .particle-count-monitor {
+  z-index: 2000 !important;
+  transform: translateX(var(--sidebar-offset));
+  transition: transform var(--sidebar-duration) var(--sidebar-easing);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-layout { --sidebar-duration: 0ms; }
+}
+
 @media (prefers-color-scheme: dark) {
   .landing-layout {
     --sidebar-background: #222;
@@ -178,20 +204,12 @@ code {
 }
 
 @media (max-width: 959px) {
-  .landing-sidebar {
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: var(--sidebar-width);
-    max-width: 100%;
-    z-index: 2000;
-  }
-  .landing-layout { --sidebar-width: min(320px, 100vw); }
+  .landing-layout { --sidebar-width: min(320px, calc(100vw - 80px)); }
 }
 
 .demo-shell {
   flex: 1;
   min-width: 0;
-  isolation: isolate;
   width: 100%;
   height: 100%;
   position: relative;
