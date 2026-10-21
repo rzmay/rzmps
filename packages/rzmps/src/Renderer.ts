@@ -181,6 +181,7 @@ export default abstract class Renderer {
         return float(1).div(this._gpuCountScale.max(float(Number.EPSILON))) as Node<'float'>;
     }
 
+    // TODO: I'm having trouble figuring out how this is used -- how are certain attributes actually selected? Where is an example of that?
     protected updateGPUFromSelectiveReadback(
         buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
         system: ParticleSystem,

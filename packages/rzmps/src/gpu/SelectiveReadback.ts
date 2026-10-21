@@ -10,6 +10,7 @@ import {
   type GPUStorageBufferRenderer,
 } from './Particle';
 
+// TODO: Concerns about the "slot" interface. It makes sense internally but externally requests should be made with string field names, specifically members of VectorField and ScalarField. Like a user should be able to make a request with a list of fields they need. I'm not sure how requests are currently made externally because the code is hard to trace in renderers, but the API should be more explicit and accessible so that devs can easily use it.
 export interface GPUSelectiveReadbackRequest {
   slot: number;
   generation: number;
@@ -143,6 +144,7 @@ export class GPUSelectiveReadbackState {
   }
 }
 
+// TODO: Could this be shared between other code that has to deal with dead particles? Again, standalone functions should likely be external helpers unless they pertain explicitly to one class, in which case they can be static methods
 function deadParticle(index: Node<'uint'>, generation: Node<'uint'>): GPUParticleLike {
   const zero = vec3(0, 0, 0);
 
@@ -199,6 +201,7 @@ function withIndex(particle: GPUParticleLike, index: Node<'uint'>): GPUParticleL
   };
 }
 
+// TODO: Cant this be an external helper that could be shared with gpu/Particle
 function initializeStorageAttribute(
   renderer: GPUStorageBufferRenderer,
   attribute: StorageBufferAttribute,

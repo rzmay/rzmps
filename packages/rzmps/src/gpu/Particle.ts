@@ -34,10 +34,7 @@ type GPUParticleScalarNodes = Record<ScalarField, Node<'float'>>;
 type PackedFloatStorage = { element(index: Node | number): Node<'vec4'> };
 type PackedUintStorage = { element(index: Node | number): Node<'uvec4'> };
 
-const FLOAT_SLOT_COUNT = 11;
-const RENDER_FLOAT_SLOT_COUNT = 4;
-const UINT_SLOT_COUNT = 1;
-
+// Values are packed into vec4s
 enum ParticleFloatSlot {
   PositionSpeed,
   OrbitCenterAlpha,
@@ -58,6 +55,10 @@ enum ParticleRenderFloatSlot {
   ScaleRealtime,
   ColorTime,
 }
+
+const FLOAT_SLOT_COUNT = Object.keys(ParticleFloatSlot).filter(key => isNaN(Number(key))).length;
+const RENDER_FLOAT_SLOT_COUNT = Object.keys(ParticleRenderFloatSlot).filter(key => isNaN(Number(key))).length;
+const UINT_SLOT_COUNT = 1; // Dead/alive flag
 
 export interface GPUParticleAttributes {
   floatData: StorageBufferAttribute;
@@ -102,6 +103,7 @@ export interface GPUParticleBufferState {
   dispose(renderer?: GPUStorageBufferRenderer): void;
 }
 
+// TODO: Why does this need to be separate from GPUParticleBufferState? Why no TagMask?
 export interface GPUParticleRenderBufferState {
   count: number;
   capacity: number;
@@ -115,6 +117,7 @@ export interface GPUParticleRenderBufferState {
   dispose(renderer?: GPUStorageBufferRenderer): void;
 }
 
+// TODO: Can/should these (next 2) be inlines? Do they need to be exported?
 export interface GPUParticleBufferInitialization {
   floatCreated: boolean;
   uintCreated: boolean;
@@ -124,6 +127,7 @@ export interface GPUStorageBufferRenderer {
   backend?: unknown;
 }
 
+// TODO: Does this need to be distinct from GPUStorageBufferRenderer?
 export interface GPUReadbackRenderer extends GPUStorageBufferRenderer {
   getArrayBufferAsync(
     attribute: StorageBufferAttribute,
@@ -174,6 +178,7 @@ export interface GPUParticleLike {
   readonly generation: Node<'uint'>;
 }
 
+// TODO: If this implements GPUParticleLike, perhaps it should be named GPUParticle?
 export class GPUParticleContext implements GPUParticleLike {
   readonly index: Node<'uint'>;
 
@@ -200,6 +205,7 @@ export class GPUParticleContext implements GPUParticleLike {
   readonly tagMask: Node<'uint'>;
   readonly generation: Node<'uint'>;
 
+  // TODO: What's the difference between local true/false? What toVar() actually does in this context?
   constructor(
     index: Node<'uint'>,
     vectors: GPUParticleVectorNodes,
@@ -249,10 +255,12 @@ export class GPUParticleStorage {
     this.uintStorage = storage(attributes.uintData, 'uvec4', capacity * UINT_SLOT_COUNT) as PackedUintStorage;
   }
 
+  // TODO: the actual createVectorNodes function is only referred to here, the rest is member accesses. Its a short simple function, perhaps it can just be done inline here to avoid confusion since they're named the same?
   createVectorNodes(index: Node<'uint'> = instanceIndex): GPUParticleVectorNodes {
     return createVectorNodes(this.floatStorage, index);
   }
 
+  // TODO: Same as above
   createScalarNodes(index: Node<'uint'> = instanceIndex): GPUParticleScalarNodes {
     return createScalarNodes(this.floatStorage, index);
   }
@@ -261,6 +269,7 @@ export class GPUParticleStorage {
     return this.uintStorage.element(index.mul(UINT_SLOT_COUNT));
   }
 
+  // TODO: The only difference between createParticle and loadParticle is one boolean argument. Surely this can be passed in?
   createParticle(index: Node<'uint'> = instanceIndex): GPUParticleContext {
     const state = this.createStateNode(index);
     return new GPUParticleContext(
@@ -351,6 +360,7 @@ export class GPUParticleRenderContext {
   }
 }
 
+// TODO: At this point in reading the file it gets confusing what each of these classes are used for. Can we add some descriptive comments?
 export class GPUParticleRenderStorage {
   private readonly floatStorage: PackedFloatStorage;
   private readonly uintStorage: PackedUintStorage;
@@ -414,6 +424,7 @@ export class GPUParticleRenderStorage {
   }
 }
 
+// TODO: Not a huge fan of usage before definition here and in other places -- is this ordering necessary? In this case its GPUParticleBufferStateImpl being used before definition
 export function createGPUParticleBufferState(
   particles: Particle[],
   capacity = particles.length,
@@ -428,6 +439,7 @@ export function createGPUParticleBufferState(
   );
 }
 
+// TODO: Why do we need both of these next 2 functions
 export function createEmptyGPUParticleBufferState(capacity: number): GPUParticleBufferState {
   return createGPUParticleBufferState([], capacity);
 }
@@ -436,6 +448,7 @@ export function createGPUParticleRenderBufferState(capacity = 1): GPUParticleRen
   return new GPUParticleRenderBufferStateImpl(Math.max(1, capacity));
 }
 
+// TODO: This class name isn't quite clear -- what does Impl mean here? Is it just "implementation"? Thats not a great pattern -- it would be better to just name this GPUParticleBufferState and prefix an I for the interface, but only if we actually need the interface to be separate from the class. Is there a reason we can't just have the class without the interface?
 class GPUParticleBufferStateImpl implements GPUParticleBufferState {
   count = 0;
   capacity: number;
@@ -467,6 +480,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.upload(particles, tagMaskForParticle, generationForParticle);
   }
 
+  // TODO: The initializeStorageAttribute seems to exist mostly to safeguard a simple function execution -- is that safeguarding necessary? When does `backend` actually vary in threejs?
   initialize(renderer: GPUStorageBufferRenderer): GPUParticleBufferInitialization {
     return {
       floatCreated: initializeStorageAttribute(renderer, this.attributes.floatData),
@@ -495,6 +509,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.attributes.uintData.needsUpdate = true;
   }
 
+  // TODO: uploadRange is never actually used. Is this meant to be a utility for hybrid behavior? Do we need it?
   uploadRange(
     particles: Particle[],
     startIndex: number,
@@ -521,6 +536,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.count = particles.length;
   }
 
+  // TODO: This is used in uploadDirtyGPUSlots in the particle system -- I'm guessing this is hybrid behavior? If some data changes on the particle on the CPU its marked as dirty and gets uploaded individually here?
   uploadIndex(
     index: number,
     particle: Particle,
@@ -611,6 +627,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.upload(particles, tagMaskForParticle, generationForParticle);
   }
 
+  // TODO: Structure-wise, why is readback here and SelectiveReadback is a class elsewhere? Would it not make more sense for selective readback to be implemented as a method on the buffer state?
   async readback(renderer: GPUReadbackRenderer, particles: Particle[]): Promise<void> {
     const [floatBuffer, uintBuffer] = await Promise.all([
       renderer.getArrayBufferAsync(this.attributes.floatData),
@@ -672,6 +689,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.version += 1;
   }
 
+  // TODO: What is the difference in usage between this and writeIndex? Don't both write particle data at the specified index?
   private writeParticle(
     index: number,
     particle: Particle,
@@ -700,6 +718,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
   }
 }
 
+// TODO: Same naming question as with GPUParticleBufferStateImpl
 class GPUParticleRenderBufferStateImpl implements GPUParticleRenderBufferState {
   count = 0;
   capacity: number;
@@ -747,8 +766,11 @@ class GPUParticleRenderBufferStateImpl implements GPUParticleRenderBufferState {
     destroyGPUStorageAttribute(renderer, this.attributes.floatData);
     destroyGPUStorageAttribute(renderer, this.attributes.uintData);
   }
+
+  // TODO: Why does this not need readback logic like the previous buffer state class? If readback and selective readback can be implemented in some sort of shared manner, then both the buffer state and render buffer state could expose similar selective readbility. Is that why SelectiveReadback is separate? Would it make more sense for them to inherit from the same abstract?
 }
 
+// TODO: Standalone functions should be exported as helpers from a different folder, or if they pertain strictly to one class they should be static methods.
 function createAttributes(floatData: Float32Array, uintData: Uint32Array): GPUParticleAttributes {
   return {
     floatData: new StorageBufferAttribute(floatData, 4),
@@ -756,6 +778,7 @@ function createAttributes(floatData: Float32Array, uintData: Uint32Array): GPUPa
   };
 }
 
+// TODO: nextPowerOfTwo has got to be generic enough to be an inline or a helper elsewhere.
 function nextPowerOfTwo(value: number): number {
   return 2 ** Math.ceil(Math.log2(Math.max(1, value)));
 }
