@@ -422,6 +422,7 @@ export class ParticleSystemGUI {
         const destroyed = this.isSystemDestroyed(system);
         folder.add(system, 'simulationSpace', ['local', 'world']).name('Simulation Space');
         folder.add(system, 'useSpatialEffects').name('Spatial Effects');
+        folder.add(system, 'spatialEffectBoundsFiltering').name('Spatial Bounds Filter');
         const gravityFolder = folder.addFolder('Gravity');
         gravityFolder.close();
         this.addVector3(gravityFolder, system.gravity, 'Gravity');

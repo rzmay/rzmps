@@ -7,9 +7,7 @@ import type {
   CollisionHit,
   CollisionQuery,
 } from '../interfaces/ICollisionBackend';
-import ParticleSystem from '../ParticleSystem';
-import { TRAIL_RENDERER_USER_DATA_KEY } from '../renderers/TrailRenderer';
-import { SPRITE_RENDERER_USER_DATA_KEY } from '../renderers/SpriteRenderer';
+import { isIgnoredCollisionObject } from './CollisionSceneUtils';
 
 export interface ThreeCollisionBackendOptions {
   world?: THREE.Object3D;
@@ -364,27 +362,7 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
     this.world.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
-      if (object instanceof ParticleSystem) return;
-
-      // Ideally, we ignore all helpers here.
-      // Good god, what a mess
-      if (object instanceof THREE.BoxHelper) return;
-      if (object instanceof THREE.Box3Helper) return;
-      if (object instanceof THREE.AxesHelper) return;
-      if (object instanceof THREE.GridHelper) return;
-      if (object instanceof THREE.ArrowHelper) return;
-      if (object instanceof THREE.PlaneHelper) return;
-      if (object instanceof THREE.CameraHelper) return;
-      if (object instanceof THREE.SkeletonHelper) return;
-      if (object instanceof THREE.PolarGridHelper) return;
-      if (object instanceof THREE.DirectionalLightHelper) return;
-      if (object instanceof THREE.HemisphereLightHelper) return;
-      if (object instanceof THREE.SpotLightHelper) return;
-      if (object instanceof THREE.PointLightHelper) return;
-
-      // Check for renderer object
-      if (object.userData[TRAIL_RENDERER_USER_DATA_KEY]) return;
-      if (object.userData[SPRITE_RENDERER_USER_DATA_KEY]) return;
+      if (isIgnoredCollisionObject(object)) return;
 
       if (
         this.objectFilter

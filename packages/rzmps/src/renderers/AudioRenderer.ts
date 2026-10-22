@@ -11,6 +11,7 @@ import { CollisionHit } from '../interfaces/ICollisionBackend';
 import type { CollisionListener } from '../modules/Collision';
 import type { ParticleListener } from '../ParticleSystem';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
+import type { GPUParticleReadbackField } from '../gpu/SelectiveReadback';
 
 const AUDIO_LISTENER_KEY = "__rzmps_audioListener";
 
@@ -138,6 +139,7 @@ export default class AudioRenderer extends Renderer {
   private _cameraDepthRange: [number, number] = [0, 100];
   private _relativePositions = new Map<string, THREE.Vector3>();
   private _relativePosition = new THREE.Vector3();
+  private readonly _hasCustomShouldPlay: boolean;
 
   // Deltatime stored for doppler effect calculation
   private _deltaTime = 0;
@@ -163,6 +165,7 @@ export default class AudioRenderer extends Renderer {
       ? acceptMultiple(options.onDeathSound)
       : undefined;
 
+    this._hasCustomShouldPlay = options.shouldPlay !== undefined;
     this.shouldPlay = options.shouldPlay ?? this.shouldPlay;
 
     this.loop = options.loop ?? this.loop;
@@ -232,7 +235,23 @@ export default class AudioRenderer extends Renderer {
     this._advanceGPUAudio(deltaTime);
     const ratio = Math.max(this.ratio, 0.01);
     const sampleLimit = Math.ceil(Math.max(this.maxClips, 1) / ratio) * 2;
-    this.updateGPUFromSelectiveReadback(buffers, system, deltaTime, sampleLimit);
+    let fields: GPUParticleReadbackField[] | undefined;
+    if (!this._hasCustomShouldPlay) {
+      fields = ['position', 'velocity', 'speed', 'time'];
+      if (
+        this.sizeAffectsPitch > 0
+        || this.sizeAffectsVolume > 0
+        || this.sizeAffectsHighPass > 0
+        || this.sizeAffectsLowPass > 0
+      ) fields.push('scale');
+      if (
+        this.alphaAffectsPitch > 0
+        || this.alphaAffectsVolume > 0
+        || this.alphaAffectsHighPass > 0
+        || this.alphaAffectsLowPass > 0
+      ) fields.push('alpha');
+    }
+    this.updateGPUFromSelectiveReadback(buffers, system, deltaTime, sampleLimit, fields);
   }
 
   private _updateCameraState(system: ParticleSystem): void {

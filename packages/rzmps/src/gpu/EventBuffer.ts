@@ -17,12 +17,22 @@ import type { CollisionHit } from '../interfaces/ICollisionBackend';
 import {
   destroyGPUStorageAttribute,
   type GPUParticleLike,
+} from './Particle';
+import {
+  enumValueCount,
+  initializeStorageAttribute,
+  nextPowerOfTwo,
+  type AtomicUintStorage,
   type GPUReadbackRenderer,
   type GPUStorageBufferRenderer,
-} from './Particle';
+  type PackedFloatStorage,
+} from './Storage';
 
-type PackedFloatStorage = { element(index: Node | number): Node<'vec4'> };
-type PackedAtomicUintStorage = { element(index: Node | number): Node<'uint'> };
+export enum GPUEventType {
+  Death = 1,
+  Spawn = 2,
+  Collision = 3,
+}
 
 export interface GPUCollisionEventNodeRecord {
   active: Node<'bool'>;
@@ -32,12 +42,14 @@ export interface GPUCollisionEventNodeRecord {
   impulse: Node<'vec3'>;
 }
 
+// This per-slot collision cache intentionally differs from the append-only event
+// stream below: kernels can load the latest collision for a known particle in O(1).
 export class GPUCollisionEventWriter {
   readonly version: number;
   private readonly storage: PackedFloatStorage;
 
   constructor(
-    private readonly state: GPUCollisionEventBufferState,
+    state: GPUCollisionEventBufferState,
     private readonly frameSequence: Node<'uint'>,
   ) {
     this.version = state.version;
@@ -101,13 +113,12 @@ export class GPUCollisionEventBufferState {
   }
 }
 
-export enum GPUEventType {
-  Death = 1,
-  Spawn = 2,
-  Collision = 3,
+enum EventCounter {
+  Count,
+  OverflowCount,
 }
-export const GPU_EVENT_FLOAT_SLOT_COUNT = 15;
-const GPU_EVENT_COUNTER_COUNT = 4;
+
+const GPU_EVENT_COUNTER_COUNT = enumValueCount(EventCounter);
 
 enum EventFloatSlot {
   PositionSpeed,
@@ -127,10 +138,14 @@ enum EventFloatSlot {
   Metadata,
 }
 
+export const GPU_EVENT_FLOAT_SLOT_COUNT = Object.keys(EventFloatSlot).filter(key => isNaN(Number(key))).length;
+
 export interface GPUEventRecord {
   type: GPUEventType;
   slot: number;
+  /** Slot incarnation, incremented whenever a slot is recycled. */
   generation: number;
+  /** Simulation frame that emitted the event, used to order async readbacks. */
   sequence: number;
   tagMask?: number;
   particle: Particle;
@@ -156,17 +171,18 @@ export interface GPUEventNodeRecord {
   collisionImpulse: Node<'vec3'>;
 }
 
+/** Shader-side random-access reader used to consume an already populated stream. */
 export class GPUEventReader {
-  private readonly counterStorage: PackedAtomicUintStorage;
+  private readonly counterStorage: AtomicUintStorage;
   private readonly eventFloatStorage: PackedFloatStorage;
 
   constructor(private readonly state: GPUEventBufferState) {
-    this.counterStorage = storage(state.counterAttribute, 'uint', GPU_EVENT_COUNTER_COUNT).toAtomic() as PackedAtomicUintStorage;
+    this.counterStorage = storage(state.counterAttribute, 'uint', GPU_EVENT_COUNTER_COUNT).toAtomic() as AtomicUintStorage;
     this.eventFloatStorage = storage(state.floatAttribute, 'vec4', state.capacity * GPU_EVENT_FLOAT_SLOT_COUNT) as PackedFloatStorage;
   }
 
   count(): Node<'uint'> {
-    const count = atomicLoad(this.counterStorage.element(uint(0)));
+    const count = atomicLoad(this.counterStorage.element(uint(EventCounter.Count)));
     return count.lessThan(uint(this.state.capacity)).select(count, uint(this.state.capacity)) as Node<'uint'>;
   }
 
@@ -221,16 +237,13 @@ export class GPUEventWriter {
   readonly version: number;
   readonly capacity: number;
 
-  private readonly counterStorage: PackedAtomicUintStorage;
+  private readonly counterStorage: AtomicUintStorage;
   private readonly eventFloatStorage: PackedFloatStorage;
 
-  constructor(
-    private readonly state: GPUEventBufferState,
-    _frameSequenceNode: Node<'uint'>,
-  ) {
+  constructor(state: GPUEventBufferState) {
     this.version = state.version;
     this.capacity = state.capacity;
-    this.counterStorage = storage(state.counterAttribute, 'uint', GPU_EVENT_COUNTER_COUNT).toAtomic() as PackedAtomicUintStorage;
+    this.counterStorage = storage(state.counterAttribute, 'uint', GPU_EVENT_COUNTER_COUNT).toAtomic() as AtomicUintStorage;
     this.eventFloatStorage = storage(state.floatAttribute, 'vec4', state.capacity * GPU_EVENT_FLOAT_SLOT_COUNT) as PackedFloatStorage;
   }
 
@@ -259,7 +272,7 @@ export class GPUEventWriter {
     collisionImpulse?: Node<'vec3'>,
   ): void {
     const eventIndex = atomicAdd(
-      this.counterStorage.element(uint(0)),
+      this.counterStorage.element(uint(EventCounter.Count)),
       uint(1),
     ).toVar('particleEventIndex');
 
@@ -278,7 +291,7 @@ export class GPUEventWriter {
         this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionImpulse)).assign(vec4(collisionImpulse, 0));
       }
     }).Else(() => {
-      atomicAdd(this.counterStorage.element(uint(1)), uint(1));
+      atomicAdd(this.counterStorage.element(uint(EventCounter.OverflowCount)), uint(1));
     });
   }
 
@@ -311,7 +324,7 @@ export class GPUEventBufferState {
   private static nextVersion = 1;
 
   constructor(capacity: number) {
-    this.capacity = 2 ** Math.ceil(Math.log2(Math.max(1, capacity)));
+    this.capacity = nextPowerOfTwo(capacity);
     this.version = GPUEventBufferState.nextVersion;
     GPUEventBufferState.nextVersion += 1;
     this.floatData = new Float32Array(this.capacity * GPU_EVENT_FLOAT_SLOT_COUNT * 4);
@@ -326,15 +339,13 @@ export class GPUEventBufferState {
 
   reset(sequence: number): void {
     this.sequence = sequence;
-    this.counterData[0] = 0;
-    this.counterData[1] = 0;
-    this.counterData[2] = sequence >>> 0;
-    this.counterData[3] = this.capacity >>> 0;
+    this.counterData[EventCounter.Count] = 0;
+    this.counterData[EventCounter.OverflowCount] = 0;
     this.counterAttribute.needsUpdate = true;
   }
 
-  createWriter(frameSequenceNode: Node<'uint'>): GPUEventWriter {
-    return new GPUEventWriter(this, frameSequenceNode);
+  createWriter(): GPUEventWriter {
+    return new GPUEventWriter(this);
   }
 
   createReader(): GPUEventReader {
@@ -356,8 +367,8 @@ export class GPUEventBufferState {
       renderer.getArrayBufferAsync(this.floatAttribute),
     ]);
     const counters = new Uint32Array(counterBuffer);
-    const rawEventCount = counters[0] ?? 0;
-    const overflowCount = counters[1] ?? 0;
+    const rawEventCount = counters[EventCounter.Count] ?? 0;
+    const overflowCount = counters[EventCounter.OverflowCount] ?? 0;
     const count = Math.min(rawEventCount, this.capacity);
     const events: GPUEventRecord[] = [];
 
@@ -419,19 +430,8 @@ export class GPUEventBufferState {
   }
 }
 
-function initializeStorageAttribute(
-  renderer: GPUStorageBufferRenderer,
-  attribute: StorageBufferAttribute,
-): void {
-  const backend = renderer.backend as {
-    get?(attribute: StorageBufferAttribute): { buffer?: unknown };
-    createStorageAttribute?(attribute: StorageBufferAttribute): void;
-  } | undefined;
-  const data = backend?.get?.(attribute);
-
-  if (!data?.buffer) backend?.createStorageAttribute?.(attribute);
-}
-
+// TSL's bitcast helpers preserve bits rather than numerically converting, but their
+// current declarations lose the concrete node generic, so the narrow cast is needed.
 function bitcastFloatToUint(value: Node<'float'>): Node<'uint'> {
   return floatBitsToUint(value) as unknown as Node<'uint'>;
 }
@@ -440,6 +440,8 @@ function bitcastUintToFloat(value: Node<'uint'>): Node<'float'> {
   return uintBitsToFloat(value) as unknown as Node<'float'>;
 }
 
+// Event snapshots have their own packed ABI. Selective readback uses the canonical
+// particle buffer layout, so sharing slot readers would incorrectly couple the two.
 function readParticleSnapshot(array: Float32Array, index: number, particle: Particle): void {
   readVector(array, index, EventFloatSlot.PositionSpeed, particle.position);
   readVector(array, index, EventFloatSlot.OrbitCenterAlpha, particle.orbitCenter);

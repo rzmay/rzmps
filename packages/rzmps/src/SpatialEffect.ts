@@ -114,10 +114,6 @@ type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
 type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
 class SpatialEffect extends THREE.Object3D {
-  private static readonly _doubleSidedMaterial = new THREE.MeshBasicMaterial(
-    { side: THREE.DoubleSide },
-  );
-
   static readonly GPU_INFLUENCE_FIELDS: GPUSpatialParameterField[] = [
     { name: 'inverseRow0', type: 'vec4' },
     { name: 'inverseRow1', type: 'vec4' },
@@ -275,14 +271,15 @@ class SpatialEffect extends THREE.Object3D {
   private readonly _test?: SpatialEffectTest;
   private readonly _hasCustomCondition: boolean;
   private readonly _hasCustomFeatherEasing: boolean;
+  private readonly _hasCustomTest: boolean;
   private _geometry?: THREE.BufferGeometry;
   private _bvh?: MeshBVH;
   private _bvhGeometry?: THREE.BufferGeometry;
   private _bvhTopologyKey = '';
   private _bvhPositionVersion = -1;
-  private _mesh: THREE.Mesh;
   private localParticlePosition = new THREE.Vector3();
   private worldEffectPosition = new THREE.Vector3();
+  private geometryBoundsSize = new THREE.Vector3();
   private closestPointInfo?: HitPointInfo;
   bakedFieldResolution: number;
   updatePolicy: SpatialEffectUpdatePolicy;
@@ -338,7 +335,6 @@ class SpatialEffect extends THREE.Object3D {
     this._bvhPositionVersion = -1;
     this._bakedFieldTexture = undefined;
     this._bakedFieldGeometry = undefined;
-    this._mesh.geometry = value ?? new THREE.BufferGeometry();
   }
 
   get geometry(): THREE.BufferGeometry | undefined {
@@ -352,10 +348,6 @@ class SpatialEffect extends THREE.Object3D {
     super();
     const resolvedOptions = options ?? {};
 
-    this._mesh = new THREE.Mesh(
-      new THREE.BufferGeometry(),
-      SpatialEffect._doubleSidedMaterial,
-    );
     if (modify && resolvedOptions.automaticFeather === false) {
       this._modifyFeather = modify as SpatialEffectFeatherUpdate;
     } else {
@@ -369,6 +361,7 @@ class SpatialEffect extends THREE.Object3D {
     this.tags = acceptMultiple(resolvedOptions.tags);
     this._hasCustomCondition = resolvedOptions.condition !== undefined;
     this._hasCustomFeatherEasing = resolvedOptions.featherEasing !== undefined;
+    this._hasCustomTest = resolvedOptions.test !== undefined || resolvedOptions.testGPU !== undefined;
     this.condition = resolvedOptions.condition ?? (() => true);
     this.conditionGPU = resolvedOptions.conditionGPU ?? undefined;
     this.priority = resolvedOptions.priority ?? this.priority;
@@ -439,6 +432,11 @@ class SpatialEffect extends THREE.Object3D {
 
   get supportsParameterizedGPUInfluence(): boolean {
     return this.supportsGPU && !this._hasCustomCondition && !this._hasCustomFeatherEasing;
+  }
+
+  /** Whether the effect uses the geometry-backed built-in containment test. */
+  get usesBuiltInTest(): boolean {
+    return !this._hasCustomTest;
   }
 
   protected canBatchGPUInfluence(): boolean {
@@ -537,7 +535,7 @@ class SpatialEffect extends THREE.Object3D {
     if (updateMatrix) this.updateWorldMatrix(true, false);
     this.worldToLocal(this.localParticlePosition);
 
-    const contains = isPointInMesh(this.localParticlePosition, this._mesh);
+    const contains = this.containsLocalPosition(this.localParticlePosition);
     return this.inverted ? !contains : contains;
   }
 
@@ -567,30 +565,13 @@ class SpatialEffect extends THREE.Object3D {
       return this.easeFeather(1 - distance / this.feather);
     }
 
-    const contains = isPointInMesh(position, this._mesh);
+    const contains = this.containsLocalPosition(position);
 
     if (contains) return this.inverted ? 0 : 1;
     if (this.inverted) return 1;
     if (this.feather <= 0) return 0;
 
-    const positionAttribute = this.geometry.getAttribute('position');
-    const topologyKey = `${positionAttribute?.count ?? 0}:${this.geometry.index?.count ?? 0}:${attributeVersion(this.geometry.index)}`;
-    const positionVersion = attributeVersion(positionAttribute);
-    if (!this._bvh || this._bvhGeometry !== this.geometry || this._bvhTopologyKey !== topologyKey) {
-      this._bvh = new MeshBVH(this.geometry);
-      this._bvhGeometry = this.geometry;
-      this._bvhTopologyKey = topologyKey;
-      this._bvhPositionVersion = positionVersion;
-    } else if (
-      this.updatePolicy !== SpatialEffectUpdatePolicy.Static
-      && this.updatePolicy !== SpatialEffectUpdatePolicy.TransformDynamic
-      && this._bvhPositionVersion !== positionVersion
-    ) {
-      this._bvh.refit();
-      this._bvhPositionVersion = positionVersion;
-    }
-
-    const hit = this._bvh.closestPointToPoint(
+    const hit = this.getCurrentBVH().closestPointToPoint(
       position,
       this.closestPointInfo,
       0,
@@ -601,6 +582,35 @@ class SpatialEffect extends THREE.Object3D {
 
     this.closestPointInfo = hit;
     return this.easeFeather(1 - hit.distance / this.feather);
+  }
+
+  private containsLocalPosition(position: THREE.Vector3): boolean {
+    if (!this.geometry) return false;
+    if (!this.geometry.boundingBox) this.geometry.computeBoundingBox();
+    const diagonal = this.geometry.boundingBox?.getSize(this.geometryBoundsSize).length() ?? 0;
+    return isPointInMesh(position, this.getCurrentBVH(), diagonal);
+  }
+
+  private getCurrentBVH(): MeshBVH {
+    const geometry = this.geometry;
+    if (!geometry) throw new Error('A spatial effect without geometry has no BVH.');
+    const positionAttribute = geometry.getAttribute('position');
+    const topologyKey = `${positionAttribute?.count ?? 0}:${geometry.index?.count ?? 0}:${attributeVersion(geometry.index)}`;
+    const positionVersion = attributeVersion(positionAttribute);
+    if (!this._bvh || this._bvhGeometry !== geometry || this._bvhTopologyKey !== topologyKey) {
+      this._bvh = new MeshBVH(geometry);
+      this._bvhGeometry = geometry;
+      this._bvhTopologyKey = topologyKey;
+      this._bvhPositionVersion = positionVersion;
+    } else if (
+      this.updatePolicy !== SpatialEffectUpdatePolicy.Static
+      && this.updatePolicy !== SpatialEffectUpdatePolicy.TransformDynamic
+      && this._bvhPositionVersion !== positionVersion
+    ) {
+      this._bvh.refit();
+      this._bvhPositionVersion = positionVersion;
+    }
+    return this._bvh;
   }
 
   testGPU(
@@ -723,6 +733,14 @@ class SpatialEffect extends THREE.Object3D {
     if (!this.geometry.boundingBox) this.geometry.computeBoundingBox();
     return this.geometry.boundingBox
       ?? new THREE.Box3(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5));
+  }
+
+  /** World-space influence bounds, including the feather region. */
+  getWorldBounds(target = new THREE.Box3()): THREE.Box3 {
+    this.updateWorldMatrix(true, false);
+    target.copy(this.getLocalBounds()).applyMatrix4(this.matrixWorld);
+    target.expandByScalar(Math.max(this.feather, Number.EPSILON));
+    return target;
   }
 
   protected getGPUParticleWorldPosition(

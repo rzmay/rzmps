@@ -6,6 +6,7 @@ import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import particleRatio from '../helpers/particleRatio';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
+import type { GPUParticleReadbackField } from '../gpu/SelectiveReadback';
 
 export interface PointLightOptions {
     color?: THREE.Color | string | number;
@@ -98,7 +99,11 @@ class LightRenderer extends Renderer {
   ): void {
       const ratio = Math.max(this.ratio, 0.01);
       const sampleLimit = Math.ceil(Math.max(this.count, 1) / ratio) * 2;
-      this.updateGPUFromSelectiveReadback(buffers, system, deltaTime, sampleLimit);
+      const fields: GPUParticleReadbackField[] = ['position', 'time'];
+      if (this.inheritParticleColor) fields.push('color');
+      if (this.alphaAffectsIntensity) fields.push('alpha');
+      if (this.sizeAffectsRange) fields.push('scale');
+      this.updateGPUFromSelectiveReadback(buffers, system, deltaTime, sampleLimit, fields);
     }
 
     _update(particles: Particle[]): void {

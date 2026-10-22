@@ -83,6 +83,7 @@ export class ParticleSystemSerializer {
             `  inheritVelocity: ${this.serializeValue(system.inheritVelocity)},`,
             `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
             `  useSpatialEffects: ${this.serializeValue(system.useSpatialEffects)},`,
+            `  spatialEffectBoundsFiltering: ${this.serializeValue(system.spatialEffectBoundsFiltering)},`,
             `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
             `  duration: ${this.serializeValue(system.duration)},`,
             `  prewarm: ${this.serializeValue(system.prewarm)},`,
@@ -168,6 +169,7 @@ export class ParticleSystemSerializer {
     serializeEmissionShape(shape) {
         const geometry = shape.geometry;
         const params = geometry.parameters ?? {};
+        const volumeSamples = shape.volumeSamples === 'auto' ? "'auto'" : shape.volumeSamples;
         let expression;
         if (geometry.type.includes('Box')) {
             expression = `EmissionShape.Box(${params.width ?? 1}, ${params.height ?? 1}, ${params.depth ?? 1})`;
@@ -178,12 +180,18 @@ export class ParticleSystemSerializer {
         else if (geometry.type.includes('Torus')) {
             expression = `EmissionShape.Torus(${params.radius ?? 1}, ${params.tube ?? 0.4}, ${params.radialSegments ?? 16}, ${params.tubularSegments ?? 32}, ${params.arc ?? Math.PI * 2})`;
         }
-        else {
+        else if (geometry.type.includes('Sphere')) {
             expression = `EmissionShape.Sphere(${params.radius ?? 1}, ${params.widthSegments ?? params.radialSegments ?? 16}, ${params.heightSegments ?? 8})`;
         }
-        if (shape.source === EmissionSource.Volume)
-            return expression;
-        return `Object.assign(${expression}, { source: EmissionSource.${this.emissionSourceName(shape.source)} })`;
+        else {
+            return `new EmissionShape({ geometry: new THREE.BufferGeometry() /* replace with ${geometry.type} */, source: EmissionSource.${this.emissionSourceName(shape.source)}, volumeSamples: ${volumeSamples} })`;
+        }
+        const overrides = [];
+        if (shape.source !== EmissionSource.Volume)
+            overrides.push(`source: EmissionSource.${this.emissionSourceName(shape.source)}`);
+        if (shape.volumeSamples !== 'auto')
+            overrides.push(`volumeSamples: ${volumeSamples}`);
+        return overrides.length > 0 ? `Object.assign(${expression}, { ${overrides.join(', ')} })` : expression;
     }
 
     serializeModule(module) {

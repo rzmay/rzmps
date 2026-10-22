@@ -26,6 +26,7 @@ import {
   DistortionOverLifetime,
   Emitter,
   EmissionShape,
+  EmissionSource,
   ForceOverLifetime,
   KillZone,
   LimitVelocityOverLifetime,
@@ -692,7 +693,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 100 || system.__boidAffectorReadbackPromise) return;
             system.__boidAffectorReadbackPromise = system.readbackGPUParticlesSelective(
-              system.createGPUSelectiveReadbackRequests(),
+              system.requestReadback(),
             ).then((results) => { system.__boidAffectorReadback = results; });
           },
           validate: (system) => {
@@ -749,7 +750,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
               && !system.__movingSpatialReadbackPromise
             ) {
               system.__movingSpatialReadbackPromise = system.readbackGPUParticlesSelective(
-                system.createGPUSelectiveReadbackRequests(),
+                system.requestReadback(),
               ).then((results) => { system.__movingSpatialReadback = results; });
             }
           },
@@ -809,7 +810,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           beforeUpdate: (system) => {
             if (!system._gpuBuffers || system.__automaticFeatherReadbackPromise) return;
             system.__automaticFeatherReadbackPromise = system.readbackGPUParticlesSelective(
-              system.createGPUSelectiveReadbackRequests(2),
+              system.requestReadback(2),
             ).then((results) => { system.__automaticFeatherReadback = results; });
           },
           validate: (system) => {
@@ -863,7 +864,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
               || system.__emittingBoidsReadbackPromise
             ) return;
             system.__emittingBoidsReadbackPromise = system.readbackGPUParticlesSelective(
-              system.createGPUSelectiveReadbackRequests(),
+              system.requestReadback(),
             ).then((results) => { system.__emittingBoidsReadback = results; });
             const grid = system.modules.find((module) => module instanceof Boids)
               ?.getParticleSpatialGrid(system);
@@ -963,7 +964,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 250 || system.__boidCoordinateReadbackPromise) return;
             system.__boidCoordinateReadbackPromise = system.readbackGPUParticlesSelective(
-              system.createGPUSelectiveReadbackRequests(1),
+              system.requestReadback(1),
             ).then((results) => { system.__boidCoordinateReadback = results; });
           },
           validate: (system) => {
@@ -1023,7 +1024,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 650 || system.__rzmpsCollisionReadbackPromise) return;
-            const requests = system.createGPUSelectiveReadbackRequests();
+            const requests = system.requestReadback();
             system.__rzmpsCollisionReadbackPromise = system.readbackGPUParticlesSelective(requests)
               .then((results) => { system.__rzmpsCollisionReadback = results; });
           },
@@ -1492,7 +1493,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
             && !system.__rzmpsSnowReadbackPromise
           ) {
             system.__rzmpsSnowReadbackPromise = system.readbackGPUParticlesSelective(
-              system.createGPUSelectiveReadbackRequests(32),
+              system.requestReadback(32),
             ).then((results) => { system.__rzmpsSnowReadback = results; });
             const renderBuffer = system._gpuRenderOutputBuffers;
             if (renderBuffer && typeof system.sceneRenderer.getArrayBufferAsync === 'function') {
@@ -1669,6 +1670,53 @@ function BenchmarkScene({ onComplete, onProgress }) {
             scale: new THREE.Vector3(0.05, 0.05, 0.05),
             velocity: new THREE.Vector3(0.02, 0.04, 0),
             color: new THREE.Color(1, 0.65, 0.25),
+          },
+        }),
+      }),
+    },
+    {
+      name: 'Custom volume spawn churn 2k/sec',
+      particleCount: 10_000,
+      create: () => ({
+        initialParticleCount: 0,
+        maxParticles: 10_000,
+        emitters: new Emitter({
+          source: new EmissionShape({
+            geometry: new THREE.TorusGeometry(1, 0.3, 16, 32),
+            source: EmissionSource.Volume,
+            volumeSamples: 'auto',
+          }),
+          rate: 2_000,
+          radialSpeed: 1.5,
+          alignment: 1,
+          initialValues: {
+            lifetime: 5,
+            scale: new THREE.Vector3(0.05, 0.05, 0.05),
+            velocity: new THREE.Vector3(0.02, 0.04, 0),
+            color: new THREE.Color(1, 0.65, 0.25),
+          },
+        }),
+      }),
+      validate: (system) => {
+        const shape = system.emitters[0].source;
+        if (shape.resolvedVolumeSamples <= EmissionShape.MIN_AUTO_VOLUME_SAMPLES) {
+          throw new Error('Automatic custom-volume sampling did not scale above its minimum.');
+        }
+      },
+    },
+    {
+      name: 'Surface spawn churn 2k/sec',
+      particleCount: 10_000,
+      create: () => ({
+        initialParticleCount: 0,
+        maxParticles: 10_000,
+        emitters: new Emitter({
+          source: EmissionShape.Torus({ source: EmissionSource.Surface }, 1, 0.3, 16, 32),
+          rate: 2_000,
+          radialSpeed: 1.5,
+          initialValues: {
+            lifetime: 5,
+            scale: new THREE.Vector3(0.05, 0.05, 0.05),
           },
         }),
       }),

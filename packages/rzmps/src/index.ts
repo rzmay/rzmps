@@ -36,8 +36,8 @@ export type {
 } from './gpu/AllocationBuffer';
 export { GPUEmitterInstanceBufferState } from './gpu/EmitterInstanceBuffer';
 export type { GPUEmitterInstanceRecord } from './gpu/EmitterInstanceBuffer';
-export { GPUEmissionRunBufferState } from './gpu/EmissionRunBuffer';
-export type { GPUEmissionRunNode } from './gpu/EmissionRunBuffer';
+export { GPUEmissionRunBufferState } from './gpu/Emission';
+export type { GPUEmissionRunNode } from './gpu/Emission';
 export { buildGPUSystemSchedule } from './gpu/SystemScheduler';
 export type {
   GPUSystemSchedule,
@@ -45,6 +45,7 @@ export type {
 } from './gpu/SystemScheduler';
 export { GPUSelectiveReadbackState } from './gpu/SelectiveReadback';
 export type {
+  GPUParticleReadbackField,
   GPUSelectiveReadbackRequest,
   GPUSelectiveReadbackResult,
 } from './gpu/SelectiveReadback';
@@ -73,6 +74,7 @@ export { MaxCulling } from './enums/MaxCulling';
 
 // Emitter
 export { default as EmissionShape } from './EmissionShape';
+export type { EmissionShapeOptions, VolumeSample, VolumeSampleCount } from './EmissionShape';
 export { default as Emitter } from './Emitter';
 export type { EmissionContext, GPUEmitterUpdate, GPUEmitterUpdateContext } from './Emitter';
 export { EmissionSource } from './enums/EmissionSource';

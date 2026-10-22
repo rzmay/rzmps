@@ -195,6 +195,7 @@ interface ParticleSystemOptions {
   spatialEffects: Multiple<SpatialEffect>;
   spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
   useSpatialEffects: boolean;
+  spatialEffectBoundsFiltering: boolean;
   simulationSpeed: number;
   duration: number;
   prewarm: boolean;
@@ -243,6 +244,11 @@ Generic spatial effects are enabled by default. The particle system discovers
 generic `SpatialEffect` instances in its scene and also accepts an explicit
 `spatialEffects` list. Use `spatialEffectFilter` to restrict which generic
 effects a system responds to, or set `useSpatialEffects: false` to opt out.
+Set `spatialEffectBoundsFiltering: true` to exclude built-in, non-inverted
+effects whose world bounds do not overlap the particle bounds plus the maximum
+predicted particle displacement. It defaults to `false`. Effects with custom
+CPU or GPU tests bypass this optimization because their influence is not
+guaranteed to follow their geometry bounds.
 
 Set `updateLOD` to reduce simulation frequency as systems move farther from the
 active camera. `useUpdateLOD` defaults to `true` when `updateLOD` is provided
@@ -590,6 +596,7 @@ new EmissionShape(options?: Partial<EmissionShapeOptions>)
 interface EmissionShapeOptions {
   geometry: THREE.BufferGeometry;
   source: EmissionSource;
+  volumeSamples: number | "auto";
 }
 
 enum EmissionSource {
@@ -616,10 +623,28 @@ Factory `options` use `Partial<Omit<EmissionShapeOptions, "geometry">>`, so
 the helper factories can set fields like `source` while still constructing the
 underlying geometry from the remaining arguments.
 
-When `source` is `EmissionSource.Volume`, the shape samples random points in
-the geometry's bounding box and tests whether each point is inside the geometry.
-`EmissionShape.MAX_VOLUME_ITERATIONS` controls how many points one call will try
-before falling back to surface emission. It defaults to `5`.
+When `source` is `EmissionSource.Volume`, every geometry uses one shared CPU/GPU
+sample table. Baking uses BVH-accelerated point-in-mesh and nearest-surface
+queries. Each entry stores an interior point, its nearest face normal, and a
+safe radius; emission adds a random normalized direction multiplied by a value
+chosen linearly between zero and that radius. This gives both processing modes
+the same sampling behavior without relying on geometry type or factory metadata.
+
+`volumeSamples` defaults to `"auto"`, which runs a deterministic
+32-ray probe and chooses a bounded sample count from the geometry's observed
+intersection layering and safe-radius scale. Automatic counts grow
+logarithmically, are rounded in increments of 128, and remain between `256` and
+`4096`. Geometry replacement,
+position/index buffer updates, and sample-count changes rebuild the table. Shape
+transforms do not, because samples remain in geometry-local space.
+
+`EmissionShape.MAX_VOLUME_ITERATIONS` controls the rejection attempts made while
+baking each interior point and defaults to `32`. A failed entry falls back to a
+surface point with zero jitter radius. Surface and vertex emission read geometry
+vertices, normals, and triangle indices directly from GPU storage; surface
+triangles use an area-weighted alias table, then points use random barycentric
+coordinates within the selected triangle. This matches the CPU
+`MeshSurfaceSampler` distribution while keeping GPU selection constant-time.
 
 ## Modules
 
@@ -2166,25 +2191,37 @@ synchronous view of the current compute submission.
 | `NoiseModule` | GPU-compatible when its custom callback supplies `modifyGPU`; the string-key CPU noise cache has no GPU equivalent. |
 | Collision | CPU defaults to `ThreeCollisionBackend`; GPU defaults to `ThreeGPUCollisionBackend` and `three-mesh-bvh` TLAS/BLAS capsule traversal. CPU-only explicit backends and `applyImpulses` use CPU. |
 | Spatial effects | `KillZone` and static-parameter `ParticleForceField` instances use packed parameters and an ordered GPU-traversed effect BVH. Dynamic-value force fields retain the compatible per-instance shader path. |
-| Emission shapes | Box, sphere, cone, and torus support volume, surface, and vertex emission. Box/sphere volumes are analytic; other modes use a GPU sampling table. |
-| Renderers | Sprite and mesh consume GPU buffers directly. Trail, light, and attached audio use generation-validated selective readback. Audio spawn/death/collision sounds use GPU events. |
+| Emission shapes | Buffer geometries with positions support volume, surface, and vertex emission. Every volume uses the shared configurable sample table; surface/vertex modes sample raw geometry storage. |
+| Renderers | Sprite and mesh consume GPU buffers directly. Trail, light, and attached audio use compact, field-selected, generation-validated readback. Audio spawn/death/collision sounds use GPU events. |
 | Subsystems | Continuous, spawn, death, and compatible collision triggers are GPU-native, including inheritance, impulse modifiers, multiple children, and nested systems. |
 
 Built-in GPU emission supports rates, distance rates, timed bursts, initial
 values (including emitter-local spawn-position offsets), animated shape
 transforms, tags, update LOD, count LOD, standalone systems, and subsystem
-contexts. Round-robin (`distribute`) tag assignment and arbitrary custom
-geometries require a custom `emitGPU` implementation or the CPU path. A
-function-valued subsystem `shouldEmit` also remains CPU-only; boolean predicates
-are GPU-native.
+contexts. Round-robin (`distribute`) tag assignment is GPU-native. A
+function-valued subsystem `shouldEmit` remains CPU-only; boolean predicates are
+GPU-native.
 
-Custom emission shapes use `EmitterOptions.emitGPU`. The callback contributes
-TSL statements to the emission kernel through `GPUEmitterUpdateContext`; it
-must claim slots with `allocationWriter`, initialize the shader-local particle
-from `output.storage`, and store it after initialization. The exported
-`GPUEmitterUpdate` and `GPUEmitterUpdateContext` types describe that contract.
-Use `emitter.getGPUEmissionSupport()` before enabling a custom configuration;
-unsupported built-in shape or option combinations are reported explicitly.
+Arbitrary `BufferGeometry` emission shapes do not require a custom GPU callback:
+the built-in path uploads the shape's shared volume table or raw surface/vertex
+data. `EmitterOptions.emitGPU` is instead for custom emission algorithms. Its
+callback contributes TSL statements to the emission kernel through
+`GPUEmitterUpdateContext`; it must claim slots with `allocationWriter`,
+initialize the shader-local particle from `output.storage`, and store it after
+initialization. The exported `GPUEmitterUpdate` and `GPUEmitterUpdateContext`
+types describe that contract. Use `emitter.getGPUEmissionSupport()` to inspect
+whether a configuration can use the built-in path.
+
+CPU integrations can request compact snapshots of selected GPU particles and
+fields. Omit `fields` to request complete `Particle` values:
+
+```ts
+const requests = system.requestReadback(64, ['position', 'velocity', 'time']);
+const samples = await system.readbackGPUParticlesSelective(renderer, requests);
+```
+
+The gather pass copies the union of requested fields into a contiguous buffer,
+then transfers only that prefix plus particle identity metadata to the CPU.
 
 ### GPU Modules
 

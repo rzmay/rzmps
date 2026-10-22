@@ -11,6 +11,7 @@ import { TrailTextureMode } from '../enums/TrailTextureMode';
 import defaultTex from '../assets/textures/default.png';
 import { WebGPURenderer } from 'three/webgpu';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
+import type { GPUParticleReadbackField } from '../gpu/SelectiveReadback';
 
 export const TRAIL_RENDERER_USER_DATA_KEY = "__rzmps_trailRenderer";
 
@@ -198,7 +199,17 @@ class TrailRenderer extends Renderer {
     system: ParticleSystem,
     deltaTime = 0,
   ): void {
-    this.updateGPUFromSelectiveReadback(buffers, system, deltaTime);
+    const fields: GPUParticleReadbackField[] = ['position', 'time', 'realtime'];
+    if (this.mode === TrailMode.Particle) fields.push('lifetime');
+    if (this.sizeAffectsWidth || this.sizeAffectsLifetime) fields.push('scale');
+    if (this.inheritParticleColor) fields.push('color', 'alpha');
+    this.updateGPUFromSelectiveReadback(
+      buffers,
+      system,
+      deltaTime,
+      buffers.count,
+      fields,
+    );
   }
 
   _update(particles: Particle[], system: ParticleSystem, deltaTime: number): void {

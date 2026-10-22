@@ -9,6 +9,7 @@ import type { GPUParticleBufferState, GPUParticleRenderBufferState } from './gpu
 import type { Node } from 'three/webgpu';
 import { bitAnd, float, hash, uint, uniform } from 'three/tsl';
 import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
+import type { GPUParticleReadbackField } from './gpu/SelectiveReadback';
 
 export interface RendererOptions {
     tags: StrictMultiple<Tag>;
@@ -181,15 +182,18 @@ export default abstract class Renderer {
         return float(1).div(this._gpuCountScale.max(float(Number.EPSILON))) as Node<'float'>;
     }
 
-    // TODO: I'm having trouble figuring out how this is used -- how are certain attributes actually selected? Where is an example of that?
+    // CPU-only renderers use this bridge in their updateGPU implementations.
+    // Subclasses pass named fields through requestReadback;
+    // the default requests all fields because Renderer.update consumes Particle.
     protected updateGPUFromSelectiveReadback(
         buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
         system: ParticleSystem,
         deltaTime: number,
         limit = buffers.count,
+        fields?: readonly GPUParticleReadbackField[],
     ): void {
         if (this._gpuReadbackPending) return;
-        const requests = system.createGPUSelectiveReadbackRequests(Math.min(buffers.count, limit));
+        const requests = system.requestReadback(Math.min(buffers.count, limit), fields);
         if (requests.length <= 0) {
             this.update([], system, deltaTime);
             return;

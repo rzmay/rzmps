@@ -2,6 +2,18 @@ import type EmissionShape from '../EmissionShape';
 import type Emitter from '../Emitter';
 import { EmissionSource } from '../enums/EmissionSource';
 import { TagSelectionMethod } from '../enums/TagSelectionMethod';
+import type { Node } from 'three/webgpu';
+import { uint } from 'three/tsl';
+import {
+  createEmptyGPUParticleBufferState,
+  type GPUParticleBufferState,
+  type GPUParticleLike,
+  type GPUStorageBufferRenderer,
+} from './Particle';
+
+// Support auditing and the small emission-run snapshot live together here.
+// EmitterInstanceBuffer remains separate because it owns the larger mutable,
+// atomic runtime ABI rather than emission-shape behavior.
 
 export type GPUEmissionSupportLevel = 'native' | 'cpu-only' | 'unsupported';
 
@@ -16,24 +28,15 @@ export function getGPUEmissionShapeSupport(shape: EmissionShape): GPUEmissionSup
   const reasons: string[] = [];
   const features: string[] = [];
   const geometryType = shape.geometry.type;
+  const hasPositions = Boolean(shape.geometry.getAttribute('position'));
 
-  switch (geometryType) {
-    case 'BoxGeometry':
-    case 'SphereGeometry':
-    case 'ConeGeometry':
-    case 'TorusGeometry':
-      features.push(`${geometryType}:${shape.source}`);
-      break;
-    default:
-      reasons.push(`Emission shape geometry '${geometryType}' requires a GPU sampling table before it can emit natively.`);
-  }
-
-  if (
-    shape.source !== EmissionSource.Volume
-    && shape.source !== EmissionSource.Surface
-    && shape.source !== EmissionSource.Vertices
-  ) {
-    reasons.push(`Emission source '${shape.source}' is not recognized by the GPU emission audit.`);
+  if (!hasPositions) {
+    reasons.push(`Emission shape geometry '${geometryType}' has no position attribute.`);
+  } else {
+    const sampling = shape.source === EmissionSource.Volume
+      ? 'sampling:shared-volume-table'
+      : 'sampling:geometry-buffer';
+    features.push(`${geometryType}:${shape.source}`, sampling);
   }
 
   return {
@@ -68,19 +71,15 @@ export function getGPUEmitterSupport(emitter: Emitter): GPUEmissionSupportReport
     } else if (emitter.tagSelection === TagSelectionMethod.Random) {
       features.push('tags:random');
     } else if (emitter.tagSelection === TagSelectionMethod.Distribute) {
-      reasons.push('Distributed tag selection requires persistent per-emitter GPU context state.');
-    } else {
-      reasons.push(`Tag selection '${emitter.tagSelection}' is not recognized by the GPU emission audit.`);
+      features.push('tags:distribute');
     }
   }
 
   if (emitter.useUpdateLOD) features.push('updateLOD');
   if (emitter.countLOD) features.push('countLOD');
 
-  if (emitter.supportsBuiltInGPUEmission()) {
+  if (shapeReport.supported) {
     features.push(`builtIn:${emitter.source.geometry.type}:${emitter.source.source}`);
-  } else {
-    reasons.push('Built-in emitter configuration is audited but does not match an implemented native GPU emission path; provide emitGPU for GPU-native execution.');
   }
 
   return {
@@ -89,4 +88,57 @@ export function getGPUEmitterSupport(emitter: Emitter): GPUEmissionSupportReport
     reasons,
     features,
   };
+}
+
+export interface GPUEmissionRunNode {
+  active: Node<'uint'>;
+  eventType: Node<'uint'>;
+  elapsed: Node<'float'>;
+  duration: Node<'float'>;
+  collisionPoint: Node<'vec3'>;
+  collisionNormal: Node<'vec3'>;
+  collisionImpulse: Node<'vec3'>;
+  particle: GPUParticleLike;
+}
+
+/** Packed snapshots for concurrent subsystem emission runs. */
+export class GPUEmissionRunBufferState {
+  readonly capacity: number;
+  readonly snapshots: GPUParticleBufferState;
+
+  constructor(capacity: number) {
+    this.capacity = Math.max(1, Math.floor(capacity));
+    this.snapshots = createEmptyGPUParticleBufferState(this.capacity);
+    this.snapshots.ensureCount(this.capacity);
+  }
+
+  initialize(renderer: GPUStorageBufferRenderer): void {
+    this.snapshots.initialize(renderer);
+  }
+
+  reset(): void {
+    this.snapshots.upload([]);
+    this.snapshots.ensureCount(this.capacity);
+  }
+
+  load(index: Node<'uint'> | number): GPUEmissionRunNode {
+    const particle = this.snapshots.storage.createParticle(
+      typeof index === 'number' ? uint(index) : index,
+      true,
+    );
+    return {
+      active: particle.alive,
+      eventType: particle.tagMask,
+      elapsed: particle.realtime,
+      duration: particle.lifetime,
+      collisionPoint: particle.acceleration,
+      collisionNormal: particle.angularAcceleration,
+      collisionImpulse: particle.scalarAcceleration,
+      particle,
+    };
+  }
+
+  storeParticle(index: Node<'uint'>, particle: GPUParticleLike): void {
+    this.snapshots.storage.storeParticle({ ...particle, index });
+  }
 }

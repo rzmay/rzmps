@@ -6,8 +6,20 @@ import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { GPUAllocationWriter } from './AllocationBuffer';
 import type { GPUCollisionEventWriter, GPUEventWriter } from './EventBuffer';
+import {
+  destroyStorageAttribute,
+  enumValueCount,
+  initializeStorageAttribute,
+  nextPowerOfTwo,
+  type GPUReadbackRenderer,
+  type GPUStorageBufferRenderer,
+  type PackedFloatStorage,
+  type PackedUintStorage,
+} from './Storage';
 
-type VectorField =
+export type { GPUReadbackRenderer, GPUStorageBufferRenderer } from './Storage';
+
+export type GPUParticleVectorField =
   | 'position'
   | 'orbitCenter'
   | 'rotation'
@@ -20,7 +32,7 @@ type VectorField =
   | 'scalarAcceleration'
   | 'color';
 
-type ScalarField =
+export type GPUParticleScalarField =
   | 'speed'
   | 'alpha'
   | 'mass'
@@ -29,10 +41,8 @@ type ScalarField =
   | 'time'
   | 'realtime';
 
-type GPUParticleVectorNodes = Record<VectorField, Node<'vec3'>>;
-type GPUParticleScalarNodes = Record<ScalarField, Node<'float'>>;
-type PackedFloatStorage = { element(index: Node | number): Node<'vec4'> };
-type PackedUintStorage = { element(index: Node | number): Node<'uvec4'> };
+type GPUParticleVectorNodes = Record<GPUParticleVectorField, Node<'vec3'>>;
+type GPUParticleScalarNodes = Record<GPUParticleScalarField, Node<'float'>>;
 
 // Values are packed into vec4s
 enum ParticleFloatSlot {
@@ -56,8 +66,8 @@ enum ParticleRenderFloatSlot {
   ColorTime,
 }
 
-const FLOAT_SLOT_COUNT = Object.keys(ParticleFloatSlot).filter(key => isNaN(Number(key))).length;
-const RENDER_FLOAT_SLOT_COUNT = Object.keys(ParticleRenderFloatSlot).filter(key => isNaN(Number(key))).length;
+const FLOAT_SLOT_COUNT = enumValueCount(ParticleFloatSlot);
+const RENDER_FLOAT_SLOT_COUNT = enumValueCount(ParticleRenderFloatSlot);
 const UINT_SLOT_COUNT = 1; // Dead/alive flag
 
 export interface GPUParticleAttributes {
@@ -65,76 +75,10 @@ export interface GPUParticleAttributes {
   uintData: StorageBufferAttribute;
 }
 
-export interface GPUParticleBufferState {
-  count: number;
-  capacity: number;
-  version: number;
-  attributes: GPUParticleAttributes;
-  storage: GPUParticleStorage;
-  particle: GPUParticleContext;
-  alive: Node<'uint'>;
-  tagMask: Node<'uint'>;
-  initialize(renderer: GPUStorageBufferRenderer): GPUParticleBufferInitialization;
-  upload(
-    particles: Particle[],
-    tagMaskForParticle?: (particle: Particle) => number,
-    generationForParticle?: (particle: Particle, index: number) => number,
-  ): void;
-  uploadRange(
-    particles: Particle[],
-    startIndex: number,
-    tagMaskForParticle?: (particle: Particle) => number,
-    generationForParticle?: (particle: Particle, index: number) => number,
-  ): void;
-  uploadIndex(
-    index: number,
-    particle: Particle,
-    tagMaskForParticle?: (particle: Particle) => number,
-    generationForParticle?: (particle: Particle, index: number) => number,
-  ): void;
-  ensureCount(count: number): void;
-  grow(renderer: GPUStorageBufferRenderer, capacity: number): boolean;
-  sync(
-    particles: Particle[],
-    tagMaskForParticle?: (particle: Particle) => number,
-    generationForParticle?: (particle: Particle, index: number) => number,
-  ): void;
-  readback(renderer: GPUReadbackRenderer, particles: Particle[]): Promise<void>;
-  dispose(renderer?: GPUStorageBufferRenderer): void;
-}
-
-// TODO: Why does this need to be separate from GPUParticleBufferState? Why no TagMask?
-export interface GPUParticleRenderBufferState {
-  count: number;
-  capacity: number;
-  version: number;
-  attributes: GPUParticleAttributes;
-  storage: GPUParticleRenderStorage;
-  particle: GPUParticleRenderContext;
-  alive: Node<'uint'>;
-  initialize(renderer: GPUStorageBufferRenderer): GPUParticleBufferInitialization;
-  ensureCount(count: number): void;
-  dispose(renderer?: GPUStorageBufferRenderer): void;
-}
-
-// TODO: Can/should these (next 2) be inlines? Do they need to be exported?
+/** Reports which backend resources were newly created during initialization. */
 export interface GPUParticleBufferInitialization {
   floatCreated: boolean;
   uintCreated: boolean;
-}
-
-export interface GPUStorageBufferRenderer {
-  backend?: unknown;
-}
-
-// TODO: Does this need to be distinct from GPUStorageBufferRenderer?
-export interface GPUReadbackRenderer extends GPUStorageBufferRenderer {
-  getArrayBufferAsync(
-    attribute: StorageBufferAttribute,
-    target?: ArrayBuffer | null,
-    offset?: number,
-    count?: number,
-  ): Promise<ArrayBuffer>;
 }
 
 export interface GPUParticleUpdateContext {
@@ -178,7 +122,7 @@ export interface GPUParticleLike {
   readonly generation: Node<'uint'>;
 }
 
-// TODO: If this implements GPUParticleLike, perhaps it should be named GPUParticle?
+/** Shader-node view of one particle; unlike Particle, this is not a CPU value object. */
 export class GPUParticleContext implements GPUParticleLike {
   readonly index: Node<'uint'>;
 
@@ -205,7 +149,6 @@ export class GPUParticleContext implements GPUParticleLike {
   readonly tagMask: Node<'uint'>;
   readonly generation: Node<'uint'>;
 
-  // TODO: What's the difference between local true/false? What toVar() actually does in this context?
   constructor(
     index: Node<'uint'>,
     vectors: GPUParticleVectorNodes,
@@ -213,33 +156,33 @@ export class GPUParticleContext implements GPUParticleLike {
     alive: Node<'uint'>,
     tagMask: Node<'uint'>,
     generation: Node<'uint'>,
-    local = false,
+    materializeLocals = false,
   ) {
     this.index = index;
-    this.position = local ? vectors.position.toVar('particlePosition') : vectors.position;
-    this.orbitCenter = local ? vectors.orbitCenter.toVar('particleOrbitCenter') : vectors.orbitCenter;
-    this.rotation = local ? vectors.rotation.toVar('particleRotation') : vectors.rotation;
-    this.scale = local ? vectors.scale.toVar('particleScale') : vectors.scale;
-    this.velocity = local ? vectors.velocity.toVar('particleVelocity') : vectors.velocity;
-    this.angularVelocity = local ? vectors.angularVelocity.toVar('particleAngularVelocity') : vectors.angularVelocity;
-    this.scalarVelocity = local ? vectors.scalarVelocity.toVar('particleScalarVelocity') : vectors.scalarVelocity;
-    this.acceleration = local ? vectors.acceleration.toVar('particleAcceleration') : vectors.acceleration;
-    this.angularAcceleration = local ? vectors.angularAcceleration.toVar('particleAngularAcceleration') : vectors.angularAcceleration;
-    this.scalarAcceleration = local ? vectors.scalarAcceleration.toVar('particleScalarAcceleration') : vectors.scalarAcceleration;
-    this.color = local ? vectors.color.toVar('particleColor') : vectors.color;
+    this.position = materializeLocals ? vectors.position.toVar('particlePosition') : vectors.position;
+    this.orbitCenter = materializeLocals ? vectors.orbitCenter.toVar('particleOrbitCenter') : vectors.orbitCenter;
+    this.rotation = materializeLocals ? vectors.rotation.toVar('particleRotation') : vectors.rotation;
+    this.scale = materializeLocals ? vectors.scale.toVar('particleScale') : vectors.scale;
+    this.velocity = materializeLocals ? vectors.velocity.toVar('particleVelocity') : vectors.velocity;
+    this.angularVelocity = materializeLocals ? vectors.angularVelocity.toVar('particleAngularVelocity') : vectors.angularVelocity;
+    this.scalarVelocity = materializeLocals ? vectors.scalarVelocity.toVar('particleScalarVelocity') : vectors.scalarVelocity;
+    this.acceleration = materializeLocals ? vectors.acceleration.toVar('particleAcceleration') : vectors.acceleration;
+    this.angularAcceleration = materializeLocals ? vectors.angularAcceleration.toVar('particleAngularAcceleration') : vectors.angularAcceleration;
+    this.scalarAcceleration = materializeLocals ? vectors.scalarAcceleration.toVar('particleScalarAcceleration') : vectors.scalarAcceleration;
+    this.color = materializeLocals ? vectors.color.toVar('particleColor') : vectors.color;
 
-    this.speed = local ? scalars.speed.toVar('particleSpeed') : scalars.speed;
-    this.alpha = local ? scalars.alpha.toVar('particleAlpha') : scalars.alpha;
-    this.mass = local ? scalars.mass.toVar('particleMass') : scalars.mass;
-    this.distortionStrength = local
+    this.speed = materializeLocals ? scalars.speed.toVar('particleSpeed') : scalars.speed;
+    this.alpha = materializeLocals ? scalars.alpha.toVar('particleAlpha') : scalars.alpha;
+    this.mass = materializeLocals ? scalars.mass.toVar('particleMass') : scalars.mass;
+    this.distortionStrength = materializeLocals
       ? scalars.distortionStrength.toVar('particleDistortionStrength')
       : scalars.distortionStrength;
-    this.lifetime = local ? scalars.lifetime.toVar('particleLifetime') : scalars.lifetime;
-    this.time = local ? scalars.time.toVar('particleTime') : scalars.time;
-    this.realtime = local ? scalars.realtime.toVar('particleRealtime') : scalars.realtime;
-    this.alive = local ? alive.toVar('particleAlive') : alive;
-    this.tagMask = local ? tagMask.toVar('particleTagMask') : tagMask;
-    this.generation = local ? generation.toVar('particleGeneration') : generation;
+    this.lifetime = materializeLocals ? scalars.lifetime.toVar('particleLifetime') : scalars.lifetime;
+    this.time = materializeLocals ? scalars.time.toVar('particleTime') : scalars.time;
+    this.realtime = materializeLocals ? scalars.realtime.toVar('particleRealtime') : scalars.realtime;
+    this.alive = materializeLocals ? alive.toVar('particleAlive') : alive;
+    this.tagMask = materializeLocals ? tagMask.toVar('particleTagMask') : tagMask;
+    this.generation = materializeLocals ? generation.toVar('particleGeneration') : generation;
   }
 }
 
@@ -255,22 +198,42 @@ export class GPUParticleStorage {
     this.uintStorage = storage(attributes.uintData, 'uvec4', capacity * UINT_SLOT_COUNT) as PackedUintStorage;
   }
 
-  // TODO: the actual createVectorNodes function is only referred to here, the rest is member accesses. Its a short simple function, perhaps it can just be done inline here to avoid confusion since they're named the same?
   createVectorNodes(index: Node<'uint'> = instanceIndex): GPUParticleVectorNodes {
-    return createVectorNodes(this.floatStorage, index);
+    return {
+      position: this.floatElement(ParticleFloatSlot.PositionSpeed, index).xyz,
+      orbitCenter: this.floatElement(ParticleFloatSlot.OrbitCenterAlpha, index).xyz,
+      rotation: this.floatElement(ParticleFloatSlot.RotationMass, index).xyz,
+      scale: this.floatElement(ParticleFloatSlot.ScaleDistortion, index).xyz,
+      velocity: this.floatElement(ParticleFloatSlot.VelocityLifetime, index).xyz,
+      angularVelocity: this.floatElement(ParticleFloatSlot.AngularVelocityTime, index).xyz,
+      scalarVelocity: this.floatElement(ParticleFloatSlot.ScalarVelocityRealtime, index).xyz,
+      acceleration: this.floatElement(ParticleFloatSlot.Acceleration, index).xyz,
+      angularAcceleration: this.floatElement(ParticleFloatSlot.AngularAcceleration, index).xyz,
+      scalarAcceleration: this.floatElement(ParticleFloatSlot.ScalarAcceleration, index).xyz,
+      color: this.floatElement(ParticleFloatSlot.Color, index).xyz,
+    };
   }
 
-  // TODO: Same as above
   createScalarNodes(index: Node<'uint'> = instanceIndex): GPUParticleScalarNodes {
-    return createScalarNodes(this.floatStorage, index);
+    return {
+      speed: this.floatElement(ParticleFloatSlot.PositionSpeed, index).w,
+      alpha: this.floatElement(ParticleFloatSlot.OrbitCenterAlpha, index).w,
+      mass: this.floatElement(ParticleFloatSlot.RotationMass, index).w,
+      distortionStrength: this.floatElement(ParticleFloatSlot.ScaleDistortion, index).w,
+      lifetime: this.floatElement(ParticleFloatSlot.VelocityLifetime, index).w,
+      time: this.floatElement(ParticleFloatSlot.AngularVelocityTime, index).w,
+      realtime: this.floatElement(ParticleFloatSlot.ScalarVelocityRealtime, index).w,
+    };
   }
 
   createStateNode(index: Node<'uint'> = instanceIndex): Node<'uvec4'> {
     return this.uintStorage.element(index.mul(UINT_SLOT_COUNT));
   }
 
-  // TODO: The only difference between createParticle and loadParticle is one boolean argument. Surely this can be passed in?
-  createParticle(index: Node<'uint'> = instanceIndex): GPUParticleContext {
+  createParticle(
+    index: Node<'uint'> = instanceIndex,
+    materializeLocals = false,
+  ): GPUParticleContext {
     const state = this.createStateNode(index);
     return new GPUParticleContext(
       index,
@@ -279,21 +242,12 @@ export class GPUParticleStorage {
       state.x,
       state.y,
       state.z,
-      false,
+      materializeLocals,
     );
   }
 
-  loadParticle(index: Node<'uint'> = instanceIndex): GPUParticleContext {
-    const state = this.createStateNode(index);
-    return new GPUParticleContext(
-      index,
-      this.createVectorNodes(index),
-      this.createScalarNodes(index),
-      state.x,
-      state.y,
-      state.z,
-      true,
-    );
+  private floatElement(slot: ParticleFloatSlot, index: Node<'uint'>): Node<'vec4'> {
+    return this.floatStorage.element(index.mul(FLOAT_SLOT_COUNT).add(slot));
   }
 
   storeParticle(particle: GPUParticleLike): void {
@@ -360,7 +314,7 @@ export class GPUParticleRenderContext {
   }
 }
 
-// TODO: At this point in reading the file it gets confusing what each of these classes are used for. Can we add some descriptive comments?
+/** Accesses the compact particle attributes consumed by renderer compute/material nodes. */
 export class GPUParticleRenderStorage {
   private readonly floatStorage: PackedFloatStorage;
   private readonly uintStorage: PackedUintStorage;
@@ -424,32 +378,8 @@ export class GPUParticleRenderStorage {
   }
 }
 
-// TODO: Not a huge fan of usage before definition here and in other places -- is this ordering necessary? In this case its GPUParticleBufferStateImpl being used before definition
-export function createGPUParticleBufferState(
-  particles: Particle[],
-  capacity = particles.length,
-  tagMaskForParticle?: (particle: Particle) => number,
-  generationForParticle?: (particle: Particle, index: number) => number,
-): GPUParticleBufferState {
-  return new GPUParticleBufferStateImpl(
-    Math.max(1, capacity, particles.length),
-    particles,
-    tagMaskForParticle,
-    generationForParticle,
-  );
-}
-
-// TODO: Why do we need both of these next 2 functions
-export function createEmptyGPUParticleBufferState(capacity: number): GPUParticleBufferState {
-  return createGPUParticleBufferState([], capacity);
-}
-
-export function createGPUParticleRenderBufferState(capacity = 1): GPUParticleRenderBufferState {
-  return new GPUParticleRenderBufferStateImpl(Math.max(1, capacity));
-}
-
-// TODO: This class name isn't quite clear -- what does Impl mean here? Is it just "implementation"? Thats not a great pattern -- it would be better to just name this GPUParticleBufferState and prefix an I for the interface, but only if we actually need the interface to be separate from the class. Is there a reason we can't just have the class without the interface?
-class GPUParticleBufferStateImpl implements GPUParticleBufferState {
+/** Owns the canonical simulation attributes and their CPU synchronization paths. */
+export class GPUParticleBufferState {
   count = 0;
   capacity: number;
   version = 0;
@@ -480,7 +410,6 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.upload(particles, tagMaskForParticle, generationForParticle);
   }
 
-  // TODO: The initializeStorageAttribute seems to exist mostly to safeguard a simple function execution -- is that safeguarding necessary? When does `backend` actually vary in threejs?
   initialize(renderer: GPUStorageBufferRenderer): GPUParticleBufferInitialization {
     return {
       floatCreated: initializeStorageAttribute(renderer, this.attributes.floatData),
@@ -509,34 +438,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.attributes.uintData.needsUpdate = true;
   }
 
-  // TODO: uploadRange is never actually used. Is this meant to be a utility for hybrid behavior? Do we need it?
-  uploadRange(
-    particles: Particle[],
-    startIndex: number,
-    tagMaskForParticle?: (particle: Particle) => number,
-    generationForParticle?: (particle: Particle, index: number) => number,
-  ): void {
-    if (startIndex >= particles.length) return;
-
-    this.ensureCapacity(particles.length);
-
-    for (let index = startIndex; index < particles.length; index += 1) {
-      this.writeParticle(index, particles[index], tagMaskForParticle, generationForParticle);
-    }
-
-    const floatStart = startIndex * FLOAT_SLOT_COUNT * 4;
-    const floatCount = (particles.length - startIndex) * FLOAT_SLOT_COUNT * 4;
-    const uintStart = startIndex * UINT_SLOT_COUNT * 4;
-    const uintCount = (particles.length - startIndex) * UINT_SLOT_COUNT * 4;
-
-    this.attributes.floatData.addUpdateRange(floatStart, floatCount);
-    this.attributes.uintData.addUpdateRange(uintStart, uintCount);
-    this.attributes.floatData.needsUpdate = true;
-    this.attributes.uintData.needsUpdate = true;
-    this.count = particles.length;
-  }
-
-  // TODO: This is used in uploadDirtyGPUSlots in the particle system -- I'm guessing this is hybrid behavior? If some data changes on the particle on the CPU its marked as dirty and gets uploaded individually here?
+  /** Uploads one CPU-mutated slot without replacing GPU-native particles in other slots. */
   uploadIndex(
     index: number,
     particle: Particle,
@@ -627,7 +529,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.upload(particles, tagMaskForParticle, generationForParticle);
   }
 
-  // TODO: Structure-wise, why is readback here and SelectiveReadback is a class elsewhere? Would it not make more sense for selective readback to be implemented as a method on the buffer state?
+  /** Full synchronization path; selective readback is pooled by ParticleSystem separately. */
   async readback(renderer: GPUReadbackRenderer, particles: Particle[]): Promise<void> {
     const [floatBuffer, uintBuffer] = await Promise.all([
       renderer.getArrayBufferAsync(this.attributes.floatData),
@@ -689,7 +591,7 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
     this.version += 1;
   }
 
-  // TODO: What is the difference in usage between this and writeIndex? Don't both write particle data at the specified index?
+  /** Serializes one particle; uploadIndex additionally marks its GPU update ranges. */
   private writeParticle(
     index: number,
     particle: Particle,
@@ -718,8 +620,8 @@ class GPUParticleBufferStateImpl implements GPUParticleBufferState {
   }
 }
 
-// TODO: Same naming question as with GPUParticleBufferStateImpl
-class GPUParticleRenderBufferStateImpl implements GPUParticleRenderBufferState {
+/** Owns compact render-only attributes produced from the canonical simulation buffer. */
+export class GPUParticleRenderBufferState {
   count = 0;
   capacity: number;
   version = 0;
@@ -727,6 +629,7 @@ class GPUParticleRenderBufferStateImpl implements GPUParticleRenderBufferState {
   storage: GPUParticleRenderStorage;
   particle: GPUParticleRenderContext;
   alive: Node<'uint'>;
+  tagMask: Node<'uint'>;
 
   private floatData: Float32Array;
   private uintData: Uint32Array;
@@ -738,7 +641,9 @@ class GPUParticleRenderBufferStateImpl implements GPUParticleRenderBufferState {
     this.attributes = createAttributes(this.floatData, this.uintData);
     this.storage = new GPUParticleRenderStorage(this.attributes, capacity);
     this.particle = this.storage.createParticle();
-    this.alive = this.storage.createStateNode().x;
+    const state = this.storage.createStateNode();
+    this.alive = state.x;
+    this.tagMask = state.y;
   }
 
   initialize(renderer: GPUStorageBufferRenderer): GPUParticleBufferInitialization {
@@ -758,7 +663,9 @@ class GPUParticleRenderBufferStateImpl implements GPUParticleRenderBufferState {
     this.attributes = createAttributes(this.floatData, this.uintData);
     this.storage = new GPUParticleRenderStorage(this.attributes, this.capacity);
     this.particle = this.storage.createParticle();
-    this.alive = this.storage.createStateNode().x;
+    const state = this.storage.createStateNode();
+    this.alive = state.x;
+    this.tagMask = state.y;
     this.version += 1;
   }
 
@@ -767,70 +674,39 @@ class GPUParticleRenderBufferStateImpl implements GPUParticleRenderBufferState {
     destroyGPUStorageAttribute(renderer, this.attributes.uintData);
   }
 
-  // TODO: Why does this not need readback logic like the previous buffer state class? If readback and selective readback can be implemented in some sort of shared manner, then both the buffer state and render buffer state could expose similar selective readbility. Is that why SelectiveReadback is separate? Would it make more sense for them to inherit from the same abstract?
+  // Render buffers are derived and intentionally write-only. Readback always targets
+  // the canonical simulation buffer so consumers receive complete particle state.
 }
 
-// TODO: Standalone functions should be exported as helpers from a different folder, or if they pertain strictly to one class they should be static methods.
+export function createGPUParticleBufferState(
+  particles: Particle[],
+  capacity = particles.length,
+  tagMaskForParticle?: (particle: Particle) => number,
+  generationForParticle?: (particle: Particle, index: number) => number,
+): GPUParticleBufferState {
+  return new GPUParticleBufferState(
+    Math.max(1, capacity, particles.length),
+    particles,
+    tagMaskForParticle,
+    generationForParticle,
+  );
+}
+
+/** Convenience factory for callers that do not have an initial CPU particle array. */
+export function createEmptyGPUParticleBufferState(capacity: number): GPUParticleBufferState {
+  return new GPUParticleBufferState(Math.max(1, capacity), []);
+}
+
+export function createGPUParticleRenderBufferState(capacity = 1): GPUParticleRenderBufferState {
+  return new GPUParticleRenderBufferState(Math.max(1, capacity));
+}
+
+// These packing helpers are private because they define this file's particle ABI.
 function createAttributes(floatData: Float32Array, uintData: Uint32Array): GPUParticleAttributes {
   return {
     floatData: new StorageBufferAttribute(floatData, 4),
     uintData: new StorageBufferAttribute(uintData, 4),
   };
-}
-
-// TODO: nextPowerOfTwo has got to be generic enough to be an inline or a helper elsewhere.
-function nextPowerOfTwo(value: number): number {
-  return 2 ** Math.ceil(Math.log2(Math.max(1, value)));
-}
-
-function initializeStorageAttribute(
-  renderer: GPUStorageBufferRenderer,
-  attribute: StorageBufferAttribute,
-): boolean {
-  const backend = renderer.backend as {
-    get?(attribute: StorageBufferAttribute): { buffer?: unknown };
-    createStorageAttribute?(attribute: StorageBufferAttribute): void;
-  } | undefined;
-  const data = backend?.get?.(attribute);
-
-  if (!data?.buffer) {
-    backend?.createStorageAttribute?.(attribute);
-    return true;
-  }
-
-  return false;
-}
-
-function createVectorNodes(floatStorage: PackedFloatStorage, index: Node<'uint'> = instanceIndex): GPUParticleVectorNodes {
-  return {
-    position: floatElement(floatStorage, ParticleFloatSlot.PositionSpeed, index).xyz,
-    orbitCenter: floatElement(floatStorage, ParticleFloatSlot.OrbitCenterAlpha, index).xyz,
-    rotation: floatElement(floatStorage, ParticleFloatSlot.RotationMass, index).xyz,
-    scale: floatElement(floatStorage, ParticleFloatSlot.ScaleDistortion, index).xyz,
-    velocity: floatElement(floatStorage, ParticleFloatSlot.VelocityLifetime, index).xyz,
-    angularVelocity: floatElement(floatStorage, ParticleFloatSlot.AngularVelocityTime, index).xyz,
-    scalarVelocity: floatElement(floatStorage, ParticleFloatSlot.ScalarVelocityRealtime, index).xyz,
-    acceleration: floatElement(floatStorage, ParticleFloatSlot.Acceleration, index).xyz,
-    angularAcceleration: floatElement(floatStorage, ParticleFloatSlot.AngularAcceleration, index).xyz,
-    scalarAcceleration: floatElement(floatStorage, ParticleFloatSlot.ScalarAcceleration, index).xyz,
-    color: floatElement(floatStorage, ParticleFloatSlot.Color, index).xyz,
-  };
-}
-
-function createScalarNodes(floatStorage: PackedFloatStorage, index: Node<'uint'> = instanceIndex): GPUParticleScalarNodes {
-  return {
-    speed: floatElement(floatStorage, ParticleFloatSlot.PositionSpeed, index).w,
-    alpha: floatElement(floatStorage, ParticleFloatSlot.OrbitCenterAlpha, index).w,
-    mass: floatElement(floatStorage, ParticleFloatSlot.RotationMass, index).w,
-    distortionStrength: floatElement(floatStorage, ParticleFloatSlot.ScaleDistortion, index).w,
-    lifetime: floatElement(floatStorage, ParticleFloatSlot.VelocityLifetime, index).w,
-    time: floatElement(floatStorage, ParticleFloatSlot.AngularVelocityTime, index).w,
-    realtime: floatElement(floatStorage, ParticleFloatSlot.ScalarVelocityRealtime, index).w,
-  };
-}
-
-function floatElement(floatStorage: PackedFloatStorage, slot: number, index: Node<'uint'> = instanceIndex): Node<'vec4'> {
-  return floatStorage.element(index.mul(FLOAT_SLOT_COUNT).add(slot));
 }
 
 function renderFloatElement(floatStorage: PackedFloatStorage, slot: number, index: Node<'uint'> = instanceIndex): Node<'vec4'> {
@@ -897,12 +773,5 @@ export function destroyGPUStorageAttribute(
   renderer: GPUStorageBufferRenderer | undefined,
   attribute: StorageBufferAttribute,
 ): void {
-  const backend = renderer?.backend as {
-    has?(target: StorageBufferAttribute): boolean;
-    get?(target: StorageBufferAttribute): { buffer?: unknown };
-    destroyAttribute?(target: StorageBufferAttribute): void;
-  } | undefined;
-  if (backend?.has && !backend.has(attribute)) return;
-  if (backend?.get && !backend.get(attribute).buffer) return;
-  backend?.destroyAttribute?.(attribute);
+  destroyStorageAttribute(renderer, attribute);
 }

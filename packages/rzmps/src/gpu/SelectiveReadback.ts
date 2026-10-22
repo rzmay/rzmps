@@ -1,19 +1,30 @@
+import * as THREE from 'three';
 import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
-import { float, Fn, If, instanceIndex, storage, uint, vec3 } from 'three/tsl';
+import { Fn, If, instanceIndex, storage, uint, uvec4, vec4 } from 'three/tsl';
 import Particle from '../Particle';
 import {
-  createGPUParticleBufferState,
   destroyGPUStorageAttribute,
   type GPUParticleBufferState,
   type GPUParticleLike,
+  type GPUParticleScalarField,
+  type GPUParticleVectorField,
+} from './Particle';
+import {
+  initializeStorageAttribute,
   type GPUReadbackRenderer,
   type GPUStorageBufferRenderer,
-} from './Particle';
+  type PackedFloatStorage,
+  type PackedUintStorage,
+} from './Storage';
 
-// TODO: Concerns about the "slot" interface. It makes sense internally but externally requests should be made with string field names, specifically members of VectorField and ScalarField. Like a user should be able to make a request with a list of fields they need. I'm not sure how requests are currently made externally because the code is hard to trace in renderers, but the API should be more explicit and accessible so that devs can easily use it.
+export type GPUParticleReadbackField = GPUParticleVectorField | GPUParticleScalarField;
+
 export interface GPUSelectiveReadbackRequest {
+  /** Internal particle identity to sample. */
   slot: number;
   generation: number;
+  /** Particle values to copy. Omit to request every public particle field. */
+  fields?: readonly GPUParticleReadbackField[];
   identity?: Particle;
 }
 
@@ -25,16 +36,31 @@ export interface GPUSelectiveReadbackResult {
   particle: Particle;
 }
 
-type PackedUintStorage = { element(index: number | Node): Node<'uvec4'> };
+const READBACK_FIELDS: readonly GPUParticleReadbackField[] = [
+  'position', 'orbitCenter', 'rotation', 'scale', 'velocity',
+  'angularVelocity', 'scalarVelocity', 'acceleration', 'angularAcceleration',
+  'scalarAcceleration', 'color', 'speed', 'alpha', 'mass',
+  'distortionStrength', 'lifetime', 'time', 'realtime',
+];
 
+const VECTOR_FIELDS = new Set<GPUParticleReadbackField>([
+  'position', 'orbitCenter', 'rotation', 'scale', 'velocity',
+  'angularVelocity', 'scalarVelocity', 'acceleration', 'angularAcceleration',
+  'scalarAcceleration', 'color',
+]);
+
+/** Gathers arbitrary particle slots into a compact, contiguous readback buffer. */
 export class GPUSelectiveReadbackState {
   readonly capacity: number;
   readonly requestAttribute: StorageBufferAttribute;
-  readonly output: GPUParticleBufferState;
+  readonly outputFloatAttribute: StorageBufferAttribute;
+  readonly outputStateAttribute: StorageBufferAttribute;
   readonly version: number;
 
   private readonly requestData: Uint32Array;
   private readonly requests: GPUSelectiveReadbackRequest[] = [];
+  private fields: GPUParticleReadbackField[] = [...READBACK_FIELDS];
+  private fieldSignature = this.fields.join('|');
   private computeNode?: ComputeNode;
   private sourceVersion = -1;
   private static nextVersion = 1;
@@ -45,10 +71,18 @@ export class GPUSelectiveReadbackState {
     GPUSelectiveReadbackState.nextVersion += 1;
     this.requestData = new Uint32Array(this.capacity * 4);
     this.requestAttribute = new StorageBufferAttribute(this.requestData, 4);
-    this.output = createGPUParticleBufferState(
-      Array.from({ length: this.capacity }, () => new Particle()),
-      this.capacity,
+    this.outputFloatAttribute = new StorageBufferAttribute(
+      new Float32Array(this.capacity * READBACK_FIELDS.length * 4),
+      4,
     );
+    this.outputStateAttribute = new StorageBufferAttribute(
+      new Uint32Array(this.capacity * 4),
+      4,
+    );
+  }
+
+  get readbackByteLength(): number {
+    return this.requests.length * (this.fields.length + 1) * 4 * Uint32Array.BYTES_PER_ELEMENT;
   }
 
   setRequests(requests: GPUSelectiveReadbackRequest[]): void {
@@ -58,47 +92,74 @@ export class GPUSelectiveReadbackState {
 
     this.requests.length = 0;
     this.requests.push(...requests);
-    this.requestData.fill(0);
+    const requestAll = requests.some((request) => request.fields === undefined);
+    const requestedFields = requestAll
+      ? new Set(READBACK_FIELDS)
+      : new Set(requests.flatMap((request) => request.fields ?? []));
+    this.fields = READBACK_FIELDS.filter((field) => requestedFields.has(field));
+    const nextSignature = this.fields.join('|');
+    if (nextSignature !== this.fieldSignature) {
+      this.fieldSignature = nextSignature;
+      this.computeNode?.dispose?.();
+      this.computeNode = undefined;
+    }
 
+    this.requestData.fill(0);
     requests.forEach((request, index) => {
       const offset = index * 4;
       this.requestData[offset] = request.slot >>> 0;
       this.requestData[offset + 1] = request.generation >>> 0;
       this.requestData[offset + 2] = 1;
-      this.requestData[offset + 3] = 0;
     });
-
     this.requestAttribute.needsUpdate = true;
   }
 
   initialize(renderer: GPUStorageBufferRenderer): void {
     initializeStorageAttribute(renderer, this.requestAttribute);
-    this.output.initialize(renderer);
+    initializeStorageAttribute(renderer, this.outputFloatAttribute);
+    initializeStorageAttribute(renderer, this.outputStateAttribute);
   }
 
-  gather(renderer: GPUStorageBufferRenderer & { compute?: (node: ComputeNode) => void }, source: GPUParticleBufferState): void {
+  gather(
+    renderer: GPUStorageBufferRenderer & { compute?: (node: ComputeNode) => void },
+    source: GPUParticleBufferState,
+  ): void {
     if (!renderer.compute) throw new Error('GPU selective readback requires a renderer with compute support.');
     if (this.requests.length <= 0) return;
-
     this.initialize(renderer);
     renderer.compute(this.getComputeNode(source));
   }
 
   async readback(renderer: GPUReadbackRenderer): Promise<GPUSelectiveReadbackResult[]> {
-    const outputParticles = this.requests.map((request) => request.identity?.clone() ?? new Particle());
-    await this.output.readback(renderer, outputParticles);
+    const floatBytes = this.requests.length * this.fields.length * 4 * Float32Array.BYTES_PER_ELEMENT;
+    const stateBytes = this.requests.length * 4 * Uint32Array.BYTES_PER_ELEMENT;
+    const [floatBuffer, stateBuffer] = await Promise.all([
+      floatBytes > 0
+        ? renderer.getArrayBufferAsync(this.outputFloatAttribute, null, 0, floatBytes)
+        : Promise.resolve(new ArrayBuffer(0)),
+      renderer.getArrayBufferAsync(this.outputStateAttribute, null, 0, stateBytes),
+    ]);
+    const floatData = new Float32Array(floatBuffer);
+    const stateData = new Uint32Array(stateBuffer);
 
-    const uintData = this.output.attributes.uintData.array as Uint32Array;
-    return outputParticles.map((particle, index) => {
-      const generation = uintData[index * 4 + 2] ?? this.requests[index].generation;
-      const tagMask = uintData[index * 4 + 1] ?? 0;
-      if (!this.requests[index].identity) {
-        particle.id = `gpu:${this.requests[index].slot}:${generation}`;
+    return this.requests.map((request, index) => {
+      const particle = request.identity?.clone() ?? new Particle();
+      const stateOffset = index * 4;
+      const generation = stateData[stateOffset + 2] ?? request.generation;
+      const tagMask = stateData[stateOffset + 1] ?? 0;
+      particle.alive = (stateData[stateOffset] ?? 0) !== 0;
+      this.fields.forEach((field, fieldIndex) => {
+        this.readField(particle, field, floatData, (index * this.fields.length + fieldIndex) * 4);
+      });
+      particle.cache();
+
+      if (!request.identity) {
+        particle.id = `gpu:${request.slot}:${generation}`;
         particle.startTime = -particle.realtime;
       }
 
       return {
-        slot: this.requests[index].slot,
+        slot: request.slot,
         generation,
         valid: particle.alive,
         tagMask,
@@ -110,107 +171,84 @@ export class GPUSelectiveReadbackState {
   dispose(renderer?: GPUStorageBufferRenderer): void {
     this.computeNode?.dispose?.();
     this.computeNode = undefined;
-    this.output.dispose(renderer);
     destroyGPUStorageAttribute(renderer, this.requestAttribute);
+    destroyGPUStorageAttribute(renderer, this.outputFloatAttribute);
+    destroyGPUStorageAttribute(renderer, this.outputStateAttribute);
   }
 
   private getComputeNode(source: GPUParticleBufferState): ComputeNode {
     if (this.computeNode && this.sourceVersion === source.version) return this.computeNode;
 
-    const requestStorage = storage(this.requestAttribute, 'uvec4', this.capacity) as PackedUintStorage;
+    const requests = storage(this.requestAttribute, 'uvec4', this.capacity) as PackedUintStorage;
+    const output = storage(
+      this.outputFloatAttribute,
+      'vec4',
+      this.capacity * READBACK_FIELDS.length,
+    ) as PackedFloatStorage;
+    const states = storage(this.outputStateAttribute, 'uvec4', this.capacity) as PackedUintStorage;
+    const fieldCount = this.fields.length;
 
     this.computeNode?.dispose?.();
     this.computeNode = Fn(() => {
-      const request = requestStorage.element(instanceIndex);
+      const request = requests.element(instanceIndex);
       const slot = request.x;
       const generation = request.y;
       const enabled = request.z.notEqual(uint(0));
 
       If(enabled.and(slot.lessThan(uint(source.count))), () => {
-        const sourceParticle = source.storage.loadParticle(slot);
-
-        If(generation.equal(uint(0)).or(sourceParticle.generation.equal(generation)), () => {
-          this.output.storage.storeParticle(withIndex(sourceParticle, instanceIndex));
-        }).Else(() => {
-          this.output.storage.storeParticle(deadParticle(instanceIndex, generation));
-        });
-      }).Else(() => {
-        this.output.storage.storeParticle(deadParticle(instanceIndex, generation));
-      });
+        const particle = source.storage.createParticle(slot, true);
+        If(generation.equal(uint(0)).or(particle.generation.equal(generation)), () => {
+          states.element(instanceIndex).assign(uvec4(
+            particle.alive,
+            particle.tagMask,
+            particle.generation,
+            0,
+          ));
+          this.fields.forEach((field, fieldIndex) => {
+            output.element(instanceIndex.mul(fieldCount).add(fieldIndex))
+              .assign(this.getFieldNode(particle, field));
+          });
+        }).Else(() => this.writeInvalid(output, states, generation, fieldCount));
+      }).Else(() => this.writeInvalid(output, states, generation, fieldCount));
     })().compute(this.capacity);
     this.sourceVersion = source.version;
-
     return this.computeNode;
   }
-}
 
-// TODO: Could this be shared between other code that has to deal with dead particles? Again, standalone functions should likely be external helpers unless they pertain explicitly to one class, in which case they can be static methods
-function deadParticle(index: Node<'uint'>, generation: Node<'uint'>): GPUParticleLike {
-  const zero = vec3(0, 0, 0);
+  private writeInvalid(
+    output: PackedFloatStorage,
+    states: PackedUintStorage,
+    generation: Node<'uint'>,
+    fieldCount: number,
+  ): void {
+    states.element(instanceIndex).assign(uvec4(0, 0, generation, 0));
+    this.fields.forEach((_field, fieldIndex) => {
+      output.element(instanceIndex.mul(fieldCount).add(fieldIndex)).assign(vec4(0));
+    });
+  }
 
-  return {
-    index,
-    position: zero,
-    orbitCenter: zero,
-    rotation: zero,
-    scale: zero,
-    velocity: zero,
-    angularVelocity: zero,
-    scalarVelocity: zero,
-    acceleration: zero,
-    angularAcceleration: zero,
-    scalarAcceleration: zero,
-    color: zero,
-    speed: float(0),
-    alpha: float(0),
-    mass: float(0),
-    distortionStrength: float(0),
-    lifetime: float(0),
-    time: float(0),
-    realtime: float(0),
-    alive: uint(0),
-    tagMask: uint(0),
-    generation,
-  };
-}
+  private getFieldNode(
+    particle: GPUParticleLike,
+    field: GPUParticleReadbackField,
+  ): Node<'vec4'> {
+    const value = particle[field];
+    return VECTOR_FIELDS.has(field)
+      ? vec4(value as Node<'vec3'>, 0)
+      : vec4(value as Node<'float'>, 0, 0, 0);
+  }
 
-function withIndex(particle: GPUParticleLike, index: Node<'uint'>): GPUParticleLike {
-  return {
-    index,
-    position: particle.position,
-    orbitCenter: particle.orbitCenter,
-    rotation: particle.rotation,
-    scale: particle.scale,
-    velocity: particle.velocity,
-    angularVelocity: particle.angularVelocity,
-    scalarVelocity: particle.scalarVelocity,
-    acceleration: particle.acceleration,
-    angularAcceleration: particle.angularAcceleration,
-    scalarAcceleration: particle.scalarAcceleration,
-    color: particle.color,
-    speed: particle.speed,
-    alpha: particle.alpha,
-    mass: particle.mass,
-    distortionStrength: particle.distortionStrength,
-    lifetime: particle.lifetime,
-    time: particle.time,
-    realtime: particle.realtime,
-    alive: particle.alive,
-    tagMask: particle.tagMask,
-    generation: particle.generation,
-  };
-}
-
-// TODO: Cant this be an external helper that could be shared with gpu/Particle
-function initializeStorageAttribute(
-  renderer: GPUStorageBufferRenderer,
-  attribute: StorageBufferAttribute,
-): void {
-  const backend = renderer.backend as {
-    get?(attribute: StorageBufferAttribute): { buffer?: unknown };
-    createStorageAttribute?(attribute: StorageBufferAttribute): void;
-  } | undefined;
-  const data = backend?.get?.(attribute);
-
-  if (!data?.buffer) backend?.createStorageAttribute?.(attribute);
+  private readField(
+    particle: Particle,
+    field: GPUParticleReadbackField,
+    data: Float32Array,
+    offset: number,
+  ): void {
+    if (field === 'color') {
+      particle.color.setRGB(data[offset], data[offset + 1], data[offset + 2]);
+    } else if (VECTOR_FIELDS.has(field)) {
+      (particle[field] as THREE.Vector3).set(data[offset], data[offset + 1], data[offset + 2]);
+    } else {
+      (particle as unknown as Record<GPUParticleScalarField, number>)[field as GPUParticleScalarField] = data[offset];
+    }
+  }
 }

@@ -32,6 +32,61 @@ assert.equal(typeof ParticleForceField, 'function');
 assert.equal(typeof SpatialEffectHelper, 'function');
 
 {
+  const scene = new THREE.Scene();
+  const nearby = KillZone.Sphere({ position: new THREE.Vector3(10, 0, 0) }, 1, 8, 4);
+  const distant = KillZone.Sphere({ position: new THREE.Vector3(100, 0, 0) }, 1, 8, 4);
+  const custom = new KillZone({
+    position: new THREE.Vector3(100, 0, 0),
+    test: () => false,
+  });
+  scene.add(nearby, distant, custom);
+  const system = new ParticleSystem({
+    emitters: [],
+    renderers: [],
+    modules: [],
+    spatialEffectBoundsFiltering: true,
+  });
+  system._scene = scene;
+  system.deltaTime = 0.1;
+  system.particles.push(new Particle({
+    lifetime: 2,
+    position: new THREE.Vector3(),
+    velocity: new THREE.Vector3(100, 0, 0),
+  }));
+  system.updateBoundingBox();
+
+  const selected = system._getSpatialEffects();
+  assert.ok(selected.includes(nearby), 'velocity-expanded bounds should retain upcoming effects');
+  assert.ok(!selected.includes(distant), 'non-overlapping built-in effects should be filtered');
+  assert.ok(selected.includes(custom), 'custom-test effects must bypass bounds filtering');
+}
+
+{
+  const scene = new THREE.Scene();
+  const effect = KillZone.Sphere({ position: new THREE.Vector3(20, 0, 0) }, 1, 8, 4);
+  scene.add(effect);
+  const system = new ParticleSystem({
+    emitters: [],
+    renderers: [],
+    modules: [],
+    spatialEffectBoundsFiltering: true,
+  });
+  system._scene = scene;
+  system._isGPUProcessingActive = true;
+  system._gpuCPUMirrorStale = true;
+  system._gpuAllocationDiagnostics = {
+    activeCount: 1,
+    maxVelocity: 0,
+    bounds: new THREE.Box3(
+      new THREE.Vector3(19, -1, -1),
+      new THREE.Vector3(21, 1, 1),
+    ),
+  };
+  system.updateBoundingBox();
+  assert.ok(system._getSpatialEffects().includes(effect), 'GPU telemetry bounds should drive overlap filtering');
+}
+
+{
   assert.deepEqual(
     geometrySize(KillZone.Sphere(2, 16, 8).geometry),
     [4, 4, 4],

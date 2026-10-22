@@ -311,22 +311,6 @@ class Boids extends Module {
       tagMask,
     });
 
-    // ParticleOctree can use coarser aggregate nodes when a boid has no nearby
-    // leaf samples. Preserve that behavior on GPU so sparse cohorts do not keep
-    // their shared emission direction until they happen to enter a populated cell.
-    If(count.equal(0), () => {
-      grid.forEachParticle((neighbor) => {
-        alignment.addAssign(neighbor.velocity);
-        cohesion.addAssign(neighbor.position);
-        const away = vec3(particle.position.sub(neighbor.position));
-        separation.addAssign(away.div(max(away.lengthSq(), float(Number.EPSILON))));
-        count.addAssign(1);
-      }, {
-        excludeIndex: particle.index,
-        tagMask,
-      });
-    });
-
     this.particleAffectors.forEach((rule, ruleIndex) => {
       const sourceTags = acceptMultiple(rule.sourceTags);
       const sourceMask = context.system.getGPURendererTagMask(sourceTags);
@@ -363,12 +347,6 @@ class Boids extends Module {
         }, {
           excludeIndex: particle.index,
           tagMask: sourceMask,
-        });
-        If(sourceCount.equal(0), () => {
-          grid.forEachParticle(addSource, {
-            excludeIndex: particle.index,
-            tagMask: sourceMask,
-          });
         });
       };
       if (targetMask === undefined) collect();
