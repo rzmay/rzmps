@@ -9,6 +9,7 @@ import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
 import particlePresets from '../presets/particles';
 import scenePresets from '../presets/scenes';
 import BenchmarkPage from './BenchmarkPage';
+import LandingLayout from '../components/LandingLayout';
 
 const RENDERER_MODES = ['webgl', 'webgpu'];
 const PARTICLE_PRESET_NAMES = Object.keys(particlePresets);
@@ -62,6 +63,7 @@ function setQueryParam(name, value) {
 
 
 function DemoScene({
+  statsParent,
   onCodeChange,
   onMetadataChange,
   onParticleCountChange,
@@ -75,7 +77,7 @@ function DemoScene({
 }) {
   return (
     <>
-      <Stats />
+      <Stats parent={statsParent} className="demo-stats" />
       <CameraControls />
       <ParticleSystemDisplay
         initialPreset={particlePreset}
@@ -145,6 +147,7 @@ function PresetAttribution({ metadata }) {
 }
 
 function DemoPage() {
+  const demoRef = useRef(null);
   const [code, setCode] = useState('');
   const particleCountRef = useRef(null);
   const [showCode, setShowCode] = useState(false);
@@ -184,37 +187,40 @@ function DemoPage() {
   }, []);
 
   return (
-    <div className="demo-shell">
-      <Canvas
-        key={rendererMode}
-        gl={rendererMode === 'webgpu' ? createWebGPURenderer : undefined}
-        onCreated={({ gl }) => gl.setClearColor('#202020')}
-        shadows
-      >
-        <DemoScene
-          onCodeChange={setCode}
-          onMetadataChange={setMetadata}
-          onParticleCountChange={handleParticleCountChange}
-          onPresetChange={handlePresetChange}
-          onRendererChange={handleRendererChange}
-          onSceneChange={handleSceneChange}
-          onShowCodeChange={setShowCode}
-          particlePreset={particlePreset}
-          rendererMode={rendererMode}
-          scenePreset={scenePreset}
-        />
-      </Canvas>
+    <LandingLayout>
+      <div className="demo-shell" ref={demoRef}>
+        <Canvas
+          key={rendererMode}
+          gl={rendererMode === 'webgpu' ? createWebGPURenderer : undefined}
+          onCreated={({ gl }) => gl.setClearColor('#202020')}
+          shadows
+        >
+          <DemoScene
+            statsParent={demoRef}
+            onCodeChange={setCode}
+            onMetadataChange={setMetadata}
+            onParticleCountChange={handleParticleCountChange}
+            onPresetChange={handlePresetChange}
+            onRendererChange={handleRendererChange}
+            onSceneChange={handleSceneChange}
+            onShowCodeChange={setShowCode}
+            particlePreset={particlePreset}
+            rendererMode={rendererMode}
+            scenePreset={scenePreset}
+          />
+        </Canvas>
 
-      <div ref={particleCountRef} className="particle-count-monitor">0 particles</div>
+        <div ref={particleCountRef} className="particle-count-monitor">0 particles</div>
 
-      <PresetAttribution metadata={metadata} />
+        <PresetAttribution metadata={metadata} />
 
-      {showCode && (
-        <pre className="code-panel">
-          <code>{code}</code>
-        </pre>
-      )}
-    </div>
+        {showCode && (
+          <pre className="code-panel">
+            <code>{code}</code>
+          </pre>
+        )}
+      </div>
+    </LandingLayout>
   );
 }
 

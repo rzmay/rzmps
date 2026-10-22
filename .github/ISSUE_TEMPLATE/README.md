@@ -11,6 +11,8 @@ Use the template that best matches the work:
   contributor documentation.
 - `demo_feature_request.md`: demo UI, tooling, benchmark, or scene feature.
 - `demo_preset_request.md`: request for a new particle or scene preset.
+- `project_submission.yml`: submit a project for the showcase. Create the
+  `showcase` repository label so GitHub can apply it automatically.
 
 For security-sensitive reports, do not open a public issue. Contact a maintainer
 privately when a private channel is available.

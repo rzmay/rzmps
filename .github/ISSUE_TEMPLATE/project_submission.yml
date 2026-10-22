@@ -1,0 +1,39 @@
+name: Project submission
+description: Share a project built with RZMPS for the project showcase.
+title: "[Project]: "
+labels: [showcase]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Project name
+      placeholder: What did you build?
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: Project URL
+      description: Link to a live project, demo, or public repository.
+      placeholder: https://
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: About the project
+      description: Describe your project and how it uses RZMPS.
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or video
+      description: Upload images or link to a video showing the particle effects.
+  - type: input
+    id: credit
+    attributes:
+      label: Creator credit
+      description: Name and optional website or profile to credit in the showcase.
+    validations:
+      required: true

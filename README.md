@@ -1,6 +1,6 @@
 # 🧅 RZMPS
 
-**Robert May Particle System** is a modular, extensible particle system for
+**RZMPS** is a modular, extensible particle system for
 [Three.js](https://threejs.org/).
 
 [![npm](https://img.shields.io/npm/v/@rzmps/rzmps)](https://www.npmjs.com/package/@rzmps/rzmps)
