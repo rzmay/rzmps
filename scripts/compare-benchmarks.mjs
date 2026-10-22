@@ -7,6 +7,7 @@ import {
   dirname,
   resolve,
 } from 'node:path';
+import { assertComparable } from './benchmark-payload.mjs';
 
 const [
   baseInput,
@@ -31,6 +32,7 @@ const base = JSON.parse(
 const head = JSON.parse(
   readFileSync(headPath, 'utf8'),
 );
+assertComparable(base, head);
 
 const metrics = [
   {
@@ -295,7 +297,7 @@ const environmentWarnings = [];
 const sampleNote = base.metadata?.sampleCount || head.metadata?.sampleCount
   ? `Base and PR benchmarks use median values from ${base.metadata?.sampleCount ?? 1
   } base sample(s) and ${head.metadata?.sampleCount ?? 1
-  } PR sample(s). The PR workflow runs samples in ABBA order to reduce order effects.`
+  } PR sample(s). The PR workflow runs samples in ABBAAB order to reduce order effects.`
   : 'Base and PR benchmarks were run sequentially on the same GitHub Actions runner.';
 
 const baseHardware =

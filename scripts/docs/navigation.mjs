@@ -6,17 +6,17 @@ export const guideSections = [
   { text: 'Getting Started', description: 'Build an effect, then extend it with your own behavior.', pages: ['first-particle-system', 'first-module', 'first-spatial-effect'] },
   { text: 'Core Concepts', description: 'Understand how systems and their components work together.', pages: ['concepts', 'dynamic-values', 'module-priority', 'spatial-effects'] },
   { text: 'Feature Guides', description: 'Apply individual features to an existing particle system.', pages: ['tags', 'subsystems', 'collision-and-physics', 'particle-octree'] },
-  { text: 'Project Guides', description: 'Set up local development, validate effects, and use coding assistants.', pages: ['development', 'compatibility', 'ai-coding-assistants'] },
+  { text: 'Project Guides', description: 'Set up local development, measure performance, validate effects, and use coding assistants.', pages: ['development', 'benchmarks', 'compatibility', 'ai-coding-assistants'] },
 ];
 
-export function guideNavigation(directory) {
+export function guideNavigation(directory, generated = new Map()) {
   const included = new Set();
   const sections = guideSections.map(section => ({
     ...section,
     items: section.pages.map(slug => {
       if (included.has(slug)) throw new Error(`Guide appears more than once in navigation: ${slug}`);
       included.add(slug);
-      const source = fs.readFileSync(path.join(directory, slug + '.md'), 'utf8');
+      const source = generated.get(slug) ?? fs.readFileSync(path.join(directory, slug + '.md'), 'utf8');
       const text = source.match(/^# (.+)$/m)?.[1];
       if (!text) throw new Error(`${slug}: missing article title`);
       return { text, link: `/guides/${slug}` };

@@ -179,6 +179,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
   const lastFrame = useRef();
   const durationMs = getNumberParam('durationMs', DEFAULT_DURATION_MS);
   const warmupMs = getNumberParam('warmupMs', DEFAULT_WARMUP_MS);
+  const ciProfile = new URLSearchParams(window.location.search).get('profile') === 'ci';
 
   const cases = useMemo(() => [
     {
@@ -281,18 +282,22 @@ function BenchmarkScene({ onComplete, onProgress }) {
       create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
     },
     {
-      name: 'MeshRenderer 10k rendered',
-      particleCount: 10_000,
-      create: () => ({ renderer: new MeshRenderer({ maxParticles: 10_000 }) }),
+      name: ciProfile ? 'MeshRenderer 2k rendered (low-poly)' : 'MeshRenderer 10k rendered',
+      particleCount: ciProfile ? 2_000 : 10_000,
+      create: () => ({ renderer: new MeshRenderer({
+        maxParticles: ciProfile ? 2_000 : 10_000,
+        ...(ciProfile ? { geometry: new THREE.BoxGeometry(1, 1, 1) } : {}),
+      }) }),
     },
     {
       name: 'TrailRenderer 2k rendered',
       particleCount: 2_000,
       create: () => ({ renderer: new TrailRenderer({ texture: createParticleTexture() }) }),
     },
-  ], []);
+  ], [ciProfile]);
 
   const startNextCase = () => {
+    window.__RZMPS_BENCHMARK_CASES__ = cases.map(entry => entry.name);
     if (active.current?.system) {
       active.current.system.destroy();
       active.current = null;
@@ -326,6 +331,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     };
     lastFrame.current = undefined;
     onProgress(nextCase.name);
+    window.__RZMPS_BENCHMARK_PROGRESS__ = { activeCase: nextCase.name, phase: 'warmup', completed: results.current.length };
   };
 
   useFrame(() => {
@@ -345,6 +351,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
         active.current.phase = 'measure';
         active.current.phaseStartedAt = frameStart;
         lastFrame.current = frameStart;
+        window.__RZMPS_BENCHMARK_PROGRESS__.phase = 'measure';
       }
       return;
     }
@@ -365,6 +372,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     if (elapsed >= durationMs) {
       active.current.measuredDurationMs = elapsed;
       results.current.push(summarize(active.current));
+      window.__RZMPS_BENCHMARK_RESULTS__ = [...results.current];
       gl.info.reset();
       startNextCase();
     }

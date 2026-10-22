@@ -16,7 +16,17 @@ async function availablePort() {
   return port;
 }
 
-export async function startSiteDev({ port = 5173, host = '0.0.0.0', docsDirectory = path.join(root, 'apps/docs') } = {}) {
+export async function startSiteDev({ port = 5173, host = '0.0.0.0', docsDirectory = path.join(root, 'apps/docs'), prebundle = true } = {}) {
+  // HTTP-only integration tests do not consume the browser import graph. Letting
+  // either Vite optimizer wait for those imports can stall server.close() on CI.
+  const optimizerPlugins = () => prebundle ? [] : [{
+    name: 'rzmps-http-only',
+    configResolved(config) {
+      config.optimizeDeps.include = [];
+      config.optimizeDeps.noDiscovery = true;
+      config.server.preTransformRequests = false;
+    },
+  }];
   let docs, demo, restartPromise;
   let closing = false;
   try {
@@ -35,6 +45,9 @@ export async function startSiteDev({ port = 5173, host = '0.0.0.0', docsDirector
         })().finally(() => { restartPromise = undefined; });
         return restartPromise;
       });
+      // VitePress accepts server options, rather than an inline Vite config.
+      // Its dependency optimizer starts at listen(), so configure it first.
+      for (const plugin of optimizerPlugins()) plugin.configResolved(server.config);
       try {
         // Keep the private port stable so the demo's docs proxy survives restarts.
         await server.listen(docsPort);
@@ -48,7 +61,7 @@ export async function startSiteDev({ port = 5173, host = '0.0.0.0', docsDirector
     demo = await createDemoServer({
       root: path.join(root, 'apps/demo'),
       configFile: path.join(root, 'apps/demo/vite.config.mjs'),
-      plugins: [{
+      plugins: [...optimizerPlugins(), {
         name: 'rzmps-docs-reload-gate',
         configureServer(server) {
           server.middlewares.use((req, res, next) => {

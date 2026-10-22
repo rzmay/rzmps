@@ -31,7 +31,7 @@
     "start": "vite --host 0.0.0.0",
     "prebuild": "node ../../scripts/docs/generate.mjs --check",
     "build": "vite build",
-    "benchmark:run": "npm --prefix ../.. run build:modules && npm run build && node scripts/benchmark-rzmps.mjs",
+    "benchmark:run": "npm --prefix ../.. run build --workspace @rzmps/rzmps && node scripts/build-benchmark.mjs && node scripts/benchmark-rzmps.mjs",
     "benchmark:serve": "vite preview --host 127.0.0.1 --port 4173"
   },
   "browserslist": {

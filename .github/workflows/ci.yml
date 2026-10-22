@@ -30,6 +30,9 @@ jobs:
       - name: Run core tests
         run: npm test
 
+      - name: Validate benchmark reporting
+        run: node --test scripts/benchmark.test.mjs
+
       - name: Build packages
         run: npm run build:modules
 
