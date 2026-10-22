@@ -16,31 +16,65 @@ async function availablePort() {
   return port;
 }
 
-export async function startSiteDev({ port = 5173, host = '0.0.0.0' } = {}) {
-  let docs, demo;
+export async function startSiteDev({ port = 5173, host = '0.0.0.0', docsDirectory = path.join(root, 'apps/docs') } = {}) {
+  let docs, demo, restartPromise;
+  let closing = false;
   try {
     // A private ephemeral port prevents two apps from competing for the public entry port.
     const docsPort = await availablePort();
-    docs = await createDocsServer(path.join(root, 'apps/docs'), {
-      host: '127.0.0.1', port: docsPort, strictPort: true,
-      hmr: { clientPort: port },
-    });
-    // An explicit listen port also overrides the standalone VitePress port in its config.
-    await docs.listen(docsPort);
+    async function createDocs() {
+      const server = await createDocsServer(docsDirectory, {
+        host: '127.0.0.1', port: docsPort, strictPort: true,
+        hmr: { clientPort: port },
+      }, () => {
+        if (closing) return Promise.resolve();
+        // VitePress must resolve its config again, rather than restart Vite with stale site data.
+        restartPromise ??= (async () => {
+          await docs.close();
+          if (!closing) docs = await createDocs();
+        })().finally(() => { restartPromise = undefined; });
+        return restartPromise;
+      });
+      try {
+        // Keep the private port stable so the demo's docs proxy survives restarts.
+        await server.listen(docsPort);
+        return server;
+      } catch (error) { await server.close(); throw error; }
+    }
+    docs = await createDocs();
     const target = `http://127.0.0.1:${docs.httpServer.address().port}`;
     if (!port) port = await availablePort();
     docs.config.server.hmr.clientPort = port;
     demo = await createDemoServer({
       root: path.join(root, 'apps/demo'),
       configFile: path.join(root, 'apps/demo/vite.config.mjs'),
+      plugins: [{
+        name: 'rzmps-docs-reload-gate',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            if (!/^\/docs(?:\/|\?|$)/.test(req.url || '') || !restartPromise) return next();
+            // Vite's HMR ping accepts any HTTP response as success. Hold it until the docs
+            // server is listening so the browser cannot reload into a temporary proxy 502.
+            restartPromise.then(() => next(), error => {
+              res.statusCode = 503;
+              res.end(`Documentation restart failed: ${error.message}`);
+            });
+          });
+        },
+      }],
       server: {
         host, port, strictPort: true,
         proxy: { '^/docs(?:/|\\?|$)': { target, ws: true } },
       },
     });
     await demo.listen();
-    const close = async () => { await demo.close(); await docs.close(); };
-    return { demo, docs, close };
+    const close = async () => {
+      closing = true;
+      await restartPromise;
+      await demo.close();
+      await docs.close();
+    };
+    return { demo, get docs() { return docs; }, close };
   } catch (error) {
     await demo?.close();
     await docs?.close();

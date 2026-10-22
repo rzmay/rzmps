@@ -7,6 +7,7 @@ export const buildArtifacts = [
   'apps/docs/.vitepress/examples.generated.json',
   'apps/docs/public/llms.txt',
   'apps/docs/public/llms-full.txt',
+  'apps/docs/public/favicon.png',
   'examples/index.js',
   'packages/rzmps/AGENTS.md',
 ];

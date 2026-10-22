@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
+import fs from 'node:fs';
 import { createSiteServer } from './serve.mjs';
 import { discoverExamples } from '../docs/examples.mjs';
 
@@ -105,9 +106,14 @@ try {
     const response=await page.goto(origin+entry,{waitUntil:'networkidle0'});
     assert.equal(response.status(),200,entry);
     assert.equal(await page.$eval('main h1',element=>element.textContent.replace(/\u200b/g,'').trim()),'🧅 RZMPS',entry);
-    assert.match(await page.title(),/🧅 RZMPS/);
+    assert.match(await page.title(),/RZMPS/);
+    assert.doesNotMatch(await page.title(),/🧅/,'browser tab titles use plain text');
     console.log(`${entry}: rendered and hydrated documentation homepage`);
   }
+  const favicon=await page.$eval('link[rel="icon"]',element=>element.href);
+  assert.equal(new URL(favicon).pathname,'/docs/favicon.png');
+  const icon=await fetch(favicon);assert.equal(icon.status,200);
+  assert.deepEqual(Buffer.from(await icon.arrayBuffer()),fs.readFileSync(new URL('../../apps/demo/public/favicon.png',import.meta.url)));
   for(const example of discoverExamples()){
     await page.goto(`${origin}/docs/examples/${example.id}.html`,{waitUntil:'networkidle0'});
     const poster=await page.$('.vp-doc img[src*="/previews/"]');

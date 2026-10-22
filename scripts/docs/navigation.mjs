@@ -6,7 +6,7 @@ export const guideSections = [
   { text: 'Getting Started', description: 'Build an effect, then extend it with your own behavior.', pages: ['first-particle-system', 'first-module', 'first-spatial-effect'] },
   { text: 'Core Concepts', description: 'Understand how systems and their components work together.', pages: ['concepts', 'dynamic-values', 'module-priority', 'spatial-effects'] },
   { text: 'Feature Guides', description: 'Apply individual features to an existing particle system.', pages: ['tags', 'subsystems', 'collision-and-physics', 'particle-octree'] },
-  { text: 'Project & Deployment', description: 'Set up development, validate effects, and publish the demo and documentation.', pages: ['development', 'compatibility', 'ai-coding-assistants', 'deployment'] },
+  { text: 'Project Guides', description: 'Set up local development, validate effects, and use coding assistants.', pages: ['development', 'compatibility', 'ai-coding-assistants'] },
 ];
 
 export function guideNavigation(directory) {

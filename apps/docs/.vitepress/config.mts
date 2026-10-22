@@ -12,12 +12,12 @@ const apiSidebar = apiSections.map(({text,items},index)=>({
   items:items.map(item=>item.items?{...item,collapsed:true}:item),
 }));
 export default defineConfig({
-  title: '🧅 RZMPS',
+  title: 'RZMPS',
   description: 'Modular particle effects for Three.js',
   srcExclude: ['public/**'],
   base: new URL(docsUrl).pathname,
   sitemap: { hostname: docsUrl },
-  head: [['meta', {name:'theme-color',content:'#3451b2'}], ['link', {rel:'icon',href: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🧅</text></svg>')}]],
+  head: [['meta', {name:'theme-color',content:'#3451b2'}], ['link', {rel:'icon',type:'image/png',href: `${new URL(docsUrl).pathname}favicon.png`}]],
   transformHead: ({ pageData }) => [['link', { rel:'canonical', href:`${hostname}/${pageData.relativePath.replace(/\.md$/,'.html')}` }]],
   transformPageData(pageData) { pageData.frontmatter.lastUpdated = false; },
   vite: {
@@ -44,7 +44,7 @@ export default defineConfig({
     }],
   },
   themeConfig: {
-    siteTitle: '🧅 RZMPS',
+    siteTitle: 'RZMPS',
     search: { provider: 'local' },
     nav: [
       { text:'Getting Started', link:'/guides/first-particle-system' },

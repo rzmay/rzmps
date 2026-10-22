@@ -19,6 +19,8 @@ const docs = path.join(root, 'apps/docs');
 const origin = docsUrl.replace(/\/$/, '');
 const outputs = new Map();
 const emit = (file, content) => outputs.set(file, content);
+// Share the demo's canonical favicon; the docs copy is an ignored build artifact.
+emit('apps/docs/public/favicon.png',fs.readFileSync(path.join(root,'apps/demo/public/favicon.png')));
 function files(dir) { return fs.readdirSync(dir, {withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name,'en')).flatMap(e => e.isDirectory() ? files(path.join(dir,e.name)) : [path.join(dir,e.name)]); }
 function removeEmptySubdirectories(directory) {
   for (const entry of fs.readdirSync(directory, {withFileTypes:true})) if (entry.isDirectory()) {
@@ -143,7 +145,7 @@ for(const dir of generatedDirs)if(fs.existsSync(path.join(root,dir)))for(const f
 let differences=[];
 for(const [file,content]of outputs){
  const dest=path.join(root,file);
- if(fs.existsSync(dest)&&fs.readFileSync(dest,'utf8')===content)continue;
+ if(fs.existsSync(dest)&&fs.readFileSync(dest).equals(Buffer.isBuffer(content)?content:Buffer.from(content)))continue;
  if(check&&!isBuildArtifact(file))differences.push(file);
  else {fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,content);}
 }
