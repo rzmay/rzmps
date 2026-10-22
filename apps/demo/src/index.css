@@ -263,8 +263,15 @@ code {
 
 .preset-attribution-description {
   justify-self: center;
-  width: min(720px, 100%);
+  width: min(520px, 100%);
   color: rgba(255, 255, 255, 0.84);
+}
+
+@media (min-width: 960px) {
+  .preset-attribution-description {
+    /* Reserve 340px for the editor, its 15px inset, and a 16px gap on both sides. */
+    max-width: calc(100vw - 742px);
+  }
 }
 
 .preset-attribution-authors,
