@@ -21,14 +21,23 @@ export enum CollisionGeometryUpdatePolicy {
 // changes. ThreeCollisionBackend rebuilds CPU octrees and has no equivalent refit.
 
 export interface ThreeGPUCollisionBackendOptions {
+  /** Scene subtree scanned when explicit object lists are not sufficient. */
   world?: THREE.Object3D;
+  /** Mesh roots whose transforms and geometry are treated as immutable. */
   staticObjects?: THREE.Object3D[];
+  /** Mesh roots whose world transforms may change without vertex deformation. */
   dynamicObjects?: THREE.Object3D[];
+  /** Mesh roots whose position attributes may change. */
   geometryDynamicObjects?: THREE.Object3D[];
+  /** Filters every candidate mesh before classification. */
   objectFilter?: (object: THREE.Object3D) => boolean;
+  /** Selects static meshes discovered below world. */
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
+  /** Selects transform-dynamic meshes discovered below world. */
   dynamicObjectFilter?: (object: THREE.Object3D) => boolean;
+  /** Selects deforming meshes discovered below world. */
   geometryDynamicObjectFilter?: (object: THREE.Object3D) => boolean;
+  /** Default classification for meshes not selected by a more specific list or filter. */
   updatePolicy?: CollisionGeometryUpdatePolicy | `${CollisionGeometryUpdatePolicy}`;
 }
 
@@ -103,6 +112,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     return this.capsuleQuery !== undefined;
   }
 
+  /** Creates an uninitialized GPU backend; call update before constructing query nodes. */
   constructor(options: ThreeGPUCollisionBackendOptions = {}) {
     this.world = options.world;
     this.staticObjects = options.staticObjects;
@@ -134,6 +144,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     }
   }
 
+  /** Detects membership, topology, transform, and vertex changes and updates acceleration data. */
   update(): void {
     const next = this.collectMeshes();
     let topologyChanged = !this.initialized || next.size !== this.tracked.size;
@@ -207,6 +218,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.initialized = true;
   }
 
+  /** Returns a TSL hit record for a swept capsule query. */
   queryCapsule(
     start: Node<'vec3'>,
     end: Node<'vec3'>,
@@ -227,6 +239,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.invalidateGeometry(mesh);
   }
 
+  /** Releases packed GPU data and BVHs created by this backend. */
   destroy(): void {
     this.disposeData();
     this.tracked.clear();

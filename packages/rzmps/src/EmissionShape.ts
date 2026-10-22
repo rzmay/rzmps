@@ -9,8 +9,10 @@ import isPointInMesh, {
   POINT_IN_MESH_DIRECTIONS,
 } from './helpers/isPointInMesh';
 
+/** Fixed table size or a logarithmic estimate derived from a small ray probe pass. */
 export type VolumeSampleCount = number | 'auto';
 
+/** One reusable interior sample used by CPU and GPU volume emission. */
 export interface VolumeSample {
   position: THREE.Vector3;
   normal: THREE.Vector3;
@@ -19,9 +21,11 @@ export interface VolumeSample {
 }
 
 export interface EmissionShapeOptions {
+    /** Source mesh geometry; should be nondegenerate and suitable for the chosen sampling rule. */
     geometry: THREE.BufferGeometry;
+    /** Volume, surface, or vertex sampling. Defaults to EmissionSource.Volume. */
     source: EmissionSource | `${EmissionSource}`;
-    /** Number of shared CPU/GPU volume samples, or an automatically estimated count. */
+    /** Number of shared CPU/GPU volume samples, or an automatically estimated count. Defaults to auto. */
     volumeSamples: VolumeSampleCount;
 }
 
@@ -32,6 +36,7 @@ type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
 type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
 type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
+/** Samples geometry in parent space for emitter positions and normals; Object3D transforms move the source. */
 class EmissionShape extends THREE.Object3D {
     static MAX_VOLUME_ITERATIONS = 32;
 
@@ -109,6 +114,7 @@ class EmissionShape extends THREE.Object3D {
       samples: VolumeSample[];
     };
 
+    /** Creates a shape with sphere geometry and volume sampling by default. */
     constructor(options: Partial<EmissionShapeOptions> = {}) {
       super();
 
@@ -150,10 +156,12 @@ class EmissionShape extends THREE.Object3D {
 
     get volumeSamples(): VolumeSampleCount { return this._volumeSamples; }
 
+    /** Actual cached table size after automatic estimation and clamping. */
     get resolvedVolumeSamples(): number {
       return this.getVolumeSamples().length;
     }
 
+    /** Reports whether this geometry exposes the attributes required by GPU emission. */
     getGPUEmissionSupport(): GPUEmissionSupportReport {
       return getGPUEmissionShapeSupport(this);
     }
@@ -212,6 +220,7 @@ class EmissionShape extends THREE.Object3D {
         .normalize();
     }
 
+    /** Samples position and normal in parent space; volume rejection falls back to surface sampling after a bounded number of attempts. */
     getPoint(overrideSource?: EmissionSource): { position: THREE.Vector3, normal: THREE.Vector3 } {
       switch (overrideSource ?? this.source) {
         case EmissionSource.Vertices:

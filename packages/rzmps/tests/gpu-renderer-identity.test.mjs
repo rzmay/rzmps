@@ -69,11 +69,8 @@ let readbackCalls = 0;
 let requestedLimit = 0;
 const selectiveSystem = {
   cameraDistanceSq: 0,
-  requestReadback(limit) {
+  selectiveReadback(limit) {
     requestedLimit = limit;
-    return [{ slot: 0, generation: 0 }];
-  },
-  readbackGPUParticlesSelective() {
     readbackCalls += 1;
     return new Promise((resolve) => { resolveReadback = resolve; });
   },

@@ -38,6 +38,7 @@ type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
 type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
 type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
+/** Scene-space force modifier combining direction, attraction, rotation, and drag with delta-time scaling. */
 class ParticleForceField extends SpatialEffect {
   static readonly GPU_SPATIAL_TYPE: GPUSpatialEffectType = {
     key: 'rzmps.particle-force-field.v1',

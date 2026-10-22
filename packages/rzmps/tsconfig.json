@@ -8,6 +8,7 @@
     ],
     "module": "esnext",
     "declaration": true,
+    "stripInternal": true,
     "rootDir": "./src",
     "outDir": "./build",
     "types": [],

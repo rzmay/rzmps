@@ -62,24 +62,35 @@ const DEFAULT_BOUNDS = new THREE.Box3(
 );
 
 export interface ParticleSpatialGridOptions {
+  /** Simulation-space bounds used to map positions to cells. */
   bounds: THREE.Box3;
+  /** Coarse hash subdivisions per axis, expressed as a power-of-two depth. */
   brickSubdivisions: number;
+  /** Fine cell subdivisions inside each brick, expressed as a power-of-two depth. */
   cellSubdivisions: number;
+  /** Expands normalized bounds to stable powers of two. Defaults to true. */
   powerOfTwoBounds: boolean;
+  /** Expands GPU bounds when live particles leave the configured volume. Defaults to true. */
   autoExpand: boolean;
+  /** Fractional padding added when automatic expansion occurs. Defaults to 0.125. */
   expansionHysteresis: number;
+  /** Rebuild frequency from greater than zero through one. Defaults to one. */
   timeQuality: number;
   /** Zero means exact, unbounded traversal. A positive value explicitly truncates each query. */
   maxQuerySteps: number;
 }
 
 export interface ParticleSpatialGridQueryOptions {
+  /** Particle slot omitted from the query, normally the caller's own slot. */
   excludeIndex?: Node<'uint'>;
+  /** Bit mask requiring at least one matching particle tag. */
   tagMask?: number;
 }
 
 export type ParticleSpatialGridVisitor = (
+  /** Shader-node view of a matching particle. */
   particle: GPUParticleLike,
+  /** Squared simulation-space distance from the query center. */
   distanceSquared: Node<'float'>,
 ) => void;
 
@@ -134,6 +145,7 @@ export default class ParticleSpatialGrid {
   private reductions?: AtomicUintStorage;
   private diagnostics?: AtomicUintStorage;
 
+  /** Creates a sparse grid whose storage grows with particle capacity, not world volume. */
   constructor(options: Partial<ParticleSpatialGridOptions> = {}) {
     this.brickSubdivisions = clampDepth(options.brickSubdivisions ?? 3);
     this.cellSubdivisions = clampDepth(options.cellSubdivisions ?? 4);

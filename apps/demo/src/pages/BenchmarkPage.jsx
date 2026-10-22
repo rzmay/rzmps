@@ -63,10 +63,10 @@ import {
   MaxCulling,
 } from '@rzmps/rzmps';
 import { Curve, NumberKeyframe } from 'curves';
-import createDopplerBullet from '../presets/particles/dopplerBullet';
-import createFireworks from '../presets/particles/fireworks';
-import createBoids from '../presets/particles/boids';
-import createSnow from '../presets/particles/snow';
+import createDopplerBullet from '../../../../examples/dopplerBullet.js';
+import createFireworks from '../../../../examples/fireworks.js';
+import createBoids from '../../../../examples/boids.js';
+import createSnow from '../../../../examples/snow.js';
 
 class NoopRenderer extends Renderer {
   setup() {}
@@ -385,6 +385,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
   const warmupMs = getNumberParam('warmupMs', DEFAULT_WARMUP_MS);
   const suite = getStringParam('suite');
   const caseFilter = getStringParam('case').toLowerCase();
+  const ciProfile = new URLSearchParams(window.location.search).get('profile') === 'ci';
 
   if (
     suite === 'milestone1'
@@ -692,9 +693,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 100 || system.__boidAffectorReadbackPromise) return;
-            system.__boidAffectorReadbackPromise = system.readbackGPUParticlesSelective(
-              system.requestReadback(),
-            ).then((results) => { system.__boidAffectorReadback = results; });
+            system.__boidAffectorReadbackPromise = system.selectiveReadback()
+              .then((results) => { system.__boidAffectorReadback = results; });
           },
           validate: (system) => {
             const samples = system.__boidAffectorReadback;
@@ -749,9 +749,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
               && system.__movingSpatialBaseline
               && !system.__movingSpatialReadbackPromise
             ) {
-              system.__movingSpatialReadbackPromise = system.readbackGPUParticlesSelective(
-                system.requestReadback(),
-              ).then((results) => { system.__movingSpatialReadback = results; });
+              system.__movingSpatialReadbackPromise = system.selectiveReadback()
+                .then((results) => { system.__movingSpatialReadback = results; });
             }
           },
           validate: (system) => {
@@ -809,9 +808,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system) => {
             if (!system._gpuBuffers || system.__automaticFeatherReadbackPromise) return;
-            system.__automaticFeatherReadbackPromise = system.readbackGPUParticlesSelective(
-              system.requestReadback(2),
-            ).then((results) => { system.__automaticFeatherReadback = results; });
+            system.__automaticFeatherReadbackPromise = system.selectiveReadback(2)
+              .then((results) => { system.__automaticFeatherReadback = results; });
           },
           validate: (system) => {
             const samples = system.__automaticFeatherReadback;
@@ -863,9 +861,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
               || !system.isGPUProcessingActive
               || system.__emittingBoidsReadbackPromise
             ) return;
-            system.__emittingBoidsReadbackPromise = system.readbackGPUParticlesSelective(
-              system.requestReadback(),
-            ).then((results) => { system.__emittingBoidsReadback = results; });
+            system.__emittingBoidsReadbackPromise = system.selectiveReadback()
+              .then((results) => { system.__emittingBoidsReadback = results; });
             const grid = system.modules.find((module) => module instanceof Boids)
               ?.getParticleSpatialGrid(system);
             system.__emittingBoidsGridPromise = grid?.readDiagnostics(system.sceneRenderer)
@@ -963,9 +960,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 250 || system.__boidCoordinateReadbackPromise) return;
-            system.__boidCoordinateReadbackPromise = system.readbackGPUParticlesSelective(
-              system.requestReadback(1),
-            ).then((results) => { system.__boidCoordinateReadback = results; });
+            system.__boidCoordinateReadbackPromise = system.selectiveReadback(1)
+              .then((results) => { system.__boidCoordinateReadback = results; });
           },
           validate: (system) => {
             const velocity = system.__boidCoordinateReadback?.[0]?.particle.velocity;
@@ -1024,8 +1020,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 650 || system.__rzmpsCollisionReadbackPromise) return;
-            const requests = system.requestReadback();
-            system.__rzmpsCollisionReadbackPromise = system.readbackGPUParticlesSelective(requests)
+            system.__rzmpsCollisionReadbackPromise = system.selectiveReadback()
               .then((results) => { system.__rzmpsCollisionReadback = results; });
           },
           validate: (system) => {
@@ -1492,9 +1487,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
             && elapsed > 2200
             && !system.__rzmpsSnowReadbackPromise
           ) {
-            system.__rzmpsSnowReadbackPromise = system.readbackGPUParticlesSelective(
-              system.requestReadback(32),
-            ).then((results) => { system.__rzmpsSnowReadback = results; });
+            system.__rzmpsSnowReadbackPromise = system.selectiveReadback(32)
+              .then((results) => { system.__rzmpsSnowReadback = results; });
             const renderBuffer = system._gpuRenderOutputBuffers;
             if (renderBuffer && typeof system.sceneRenderer.getArrayBufferAsync === 'function') {
               system.__rzmpsSnowRenderReadbackPromise = Promise.all([
@@ -1763,9 +1757,12 @@ function BenchmarkScene({ onComplete, onProgress }) {
       create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
     },
     {
-      name: 'MeshRenderer 10k rendered',
-      particleCount: 10_000,
-      create: () => ({ renderer: new MeshRenderer({ maxParticles: 10_000 }) }),
+      name: ciProfile ? 'MeshRenderer 2k rendered (low-poly)' : 'MeshRenderer 10k rendered',
+      particleCount: ciProfile ? 2_000 : 10_000,
+      create: () => ({ renderer: new MeshRenderer({
+        maxParticles: ciProfile ? 2_000 : 10_000,
+        ...(ciProfile ? { geometry: new THREE.BoxGeometry(1, 1, 1) } : {}),
+      }) }),
     },
     {
       name: 'TrailRenderer 2k rendered',
@@ -1773,7 +1770,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       create: () => ({ renderer: new TrailRenderer({ texture: createParticleTexture() }) }),
     },
     ]);
-  }, [suite]);
+  }, [suite, ciProfile]);
   const cases = useMemo(() => (
     caseFilter
       ? allCases.filter(({ name }) => name.toLowerCase().includes(caseFilter))
@@ -1783,6 +1780,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
   const startNextCase = async () => {
     if (starting.current) return;
     starting.current = true;
+    window.__RZMPS_BENCHMARK_CASES__ = cases.map(entry => entry.name);
     if (active.current?.system) {
       active.current.system.destroy();
       active.current.sceneObjects?.forEach((object) => object.removeFromParent());
@@ -1852,6 +1850,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     lastFrame.current = undefined;
     onProgress(nextCase.name);
     starting.current = false;
+    window.__RZMPS_BENCHMARK_PROGRESS__ = { activeCase: nextCase.name, phase: 'warmup', completed: results.current.length };
   };
 
   useFrame(() => {
@@ -1897,6 +1896,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
         active.current.phase = 'measure';
         active.current.phaseStartedAt = frameStart;
         lastFrame.current = frameStart;
+        window.__RZMPS_BENCHMARK_PROGRESS__.phase = 'measure';
       }
       return;
     }
@@ -1959,6 +1959,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }
       active.current.measuredDurationMs = elapsed;
       results.current.push(summarize(active.current));
+      window.__RZMPS_BENCHMARK_RESULTS__ = [...results.current];
       gl.info.reset();
       void startNextCase().catch((error) => {
         setTimeout(() => { throw error; });

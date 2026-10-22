@@ -12,6 +12,7 @@ export interface PointLightOptions {
     color?: THREE.Color | string | number;
     intensity?: number;
     distance?: number;
+    /** Light intensity falloff exponent; defaults to lightOptions.decay or 2. */
     decay?: number;
     power?: number;
 }
@@ -30,6 +31,7 @@ export interface LightRendererOptions extends RendererOptions {
     lightOptions: PointLightOptions;
 }
 
+/** Maps a capped selection of particles to scene lights; limit count to control illumination cost. */
 class LightRenderer extends Renderer {
     lights: THREE.PointLight[] = [];
 

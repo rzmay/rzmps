@@ -50,15 +50,18 @@ export type SpatialEffectFeatherUpdate = (
   particle: Particle,
   deltaTime: number,
   particleSystem: ParticleSystem,
+  /** Transition distance used to attenuate the modifier near the boundary. */
   feather: number,
 ) => void;
 
 export type SpatialEffectModifier = SpatialEffectUpdate | SpatialEffectFeatherUpdate;
 
 export type SpatialEffectGPUUpdate = (
+  /** Shader-node particle view; mutate fields through TSL assignment methods. */
   particle: GPUParticleLike,
   deltaTime: Node<'float'>,
   context: GPUParticleUpdateContext,
+  /** Inclusion and feather strength from zero through one. */
   strength: Node<'float'>,
 ) => void;
 
@@ -90,21 +93,37 @@ export type SpatialEffectTest = (
 ) => boolean;
 
 export interface SpatialEffectOptions {
+  /** Local position of the effect volume. */
   position: THREE.Vector3;
+  /** Local scale of the effect volume. */
   scale: THREE.Vector3;
+  /** Volume geometry used for inclusion tests; transforms are applied in world space. */
   geometry: THREE.BufferGeometry;
+  /** Applies the modifier outside rather than inside the selected volume. */
   inverted: boolean;
+  /** Restricts the effect to particles with a matching tag. */
   tags: StrictMultiple<Tag>;
+  /** Additional predicate for candidate particles. */
   condition: (particle: Particle) => boolean;
+  /** Custom inclusion predicate replacing the geometry test. */
   test: SpatialEffectTest;
+  /** Numeric execution phase shared with modules. */
   priority: number | Priority;
+  /** World-space transition distance outside the volume. */
   feather: number;
+  /** Maps the normalized boundary transition to modifier strength. */
   featherEasing: SpatialEffectFeatherEasing;
+  /** Enables built-in feather application for supported modifiers. */
   automaticFeather: boolean;
+  /** TSL modifier required for the effect to run during GPU simulation. */
   modifyGPU: SpatialEffectGPUUpdate | null;
+  /** TSL equivalent of a custom CPU condition. */
   conditionGPU: SpatialEffectGPUCondition | null;
+  /** TSL inclusion callback returning influence from zero through one. */
   testGPU: SpatialEffectGPUTest | null;
+  /** Samples per axis for a custom geometry's baked GPU influence field. */
   bakedFieldResolution: number;
+  /** Declares whether transforms, vertices, or neither can change after construction. */
   updatePolicy: SpatialEffectUpdatePolicy;
 }
 
@@ -113,6 +132,7 @@ type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
 type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
 type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
+/** Scene-space modifier volume, discovered by particle systems or collected by specialized modules. */
 class SpatialEffect extends THREE.Object3D {
   static readonly GPU_INFLUENCE_FIELDS: GPUSpatialParameterField[] = [
     { name: 'inverseRow0', type: 'vec4' },
@@ -424,6 +444,7 @@ class SpatialEffect extends THREE.Object3D {
       || this._modifyParticle !== SpatialEffect.prototype._modifyParticle;
   }
 
+  /** Whether the effect has all callbacks and geometry needed by GPU simulation. */
   get supportsGPU(): boolean {
     return this.modifyGPU !== SpatialEffect.GPU_UNSUPPORTED
       && (!this._hasCustomCondition || this.conditionGPU !== undefined)

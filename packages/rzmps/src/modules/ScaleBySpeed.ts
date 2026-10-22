@@ -10,10 +10,13 @@ export interface ScaleBySpeedOptions extends Partial<ModuleOptions> {
     scale: ValueByParameter<THREE.Vector3>;
     scalarVelocity: ValueByParameter<THREE.Vector3>;
     scalarAcceleration: ValueByParameter<THREE.Vector3>;
+    /** Velocity-magnitude interval mapped to zero through one; values outside it are clamped. */
     speedRange?: SpeedRange;
 }
 
+/** Multiplies scale and adds scalar channels using velocity magnitude normalized over speedRange; two-value parameter ranges interpolate rather than randomly sample. */
 class ScaleBySpeed extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<ScaleBySpeedOptions> = {}) {
 
     super((particle: Particle) => {

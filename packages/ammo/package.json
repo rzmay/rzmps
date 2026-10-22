@@ -1,6 +1,6 @@
 {
   "name": "@rzmps/ammo",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Ammo physics engine extension for rzmps.",
   "homepage": "https://github.com/rzmay/rzmps#readme",
   "bugs": {
@@ -46,11 +46,11 @@
   "author": "Robert May",
   "license": "MIT",
   "peerDependencies": {
-    "@rzmps/rzmps": "^1.0.0",
+    "@rzmps/rzmps": "^2.0.0",
     "three": "^0.186.0"
   },
   "devDependencies": {
-    "@rzmps/rzmps": "^1.0.0",
+    "@rzmps/rzmps": "^2.0.0",
     "concurrently": "^6.1.0",
     "three": "^0.186.0",
     "typescript": "^5.0.0"

@@ -10,19 +10,31 @@ import type {
 import { isIgnoredCollisionObject } from './CollisionSceneUtils';
 
 export interface ThreeCollisionBackendOptions {
+  /** Explicit scene subtree to scan; omission uses the owning particle system scene. */
   world?: THREE.Object3D;
+  /** Explicit static collision membership; supplying an empty list deliberately excludes all static objects. */
   staticObjects?: THREE.Object3D[];
+  /** Explicit dynamic collision membership; supplying a list bypasses automatic membership selection. */
   dynamicObjects?: THREE.Object3D[];
 
+  /** Seconds without movement before automatic objects become static. Defaults to 2. */
   staticAfter?: number;
+  /** Dynamic octree rebuild fraction; reducing it trades freshness for CPU cost. Defaults to 1. */
   timeQuality?: number;
+  /** Scene membership scan fraction; defaults to timeQuality. */
   refreshQuality?: number;
+  /** Respects mesh material face sidedness when querying contact geometry. Defaults to true. */
   respectMaterialSide?: boolean;
+  /** Overrides the underlying triangle octree maximum subdivision level; null keeps its default. */
   maxLevel?: number | null;
+  /** Overrides the underlying triangle octree leaf capacity; null keeps its default. */
   trianglesPerLeaf?: number | null;
 
+  /** Selects collision candidates without itself classifying static versus dynamic. */
   objectFilter?: (object: THREE.Object3D) => boolean;
+  /** Selects explicitly classified static candidates during scene discovery. */
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
+  /** Selects explicitly classified dynamic candidates during scene discovery. */
   dynamicObjectFilter?: (object: THREE.Object3D) => boolean;
 }
 
@@ -50,6 +62,7 @@ type MembershipChanges = {
   dynamicChanged: boolean;
 };
 
+/** Triangle collision backend with separate static and dynamic octrees and optional automatic scene membership. */
 class ThreeCollisionBackend implements ICollisionBackend {
   readonly supportsCPU = true;
   readonly supportsGPU = false;

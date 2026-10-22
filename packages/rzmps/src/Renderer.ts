@@ -12,13 +12,20 @@ import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
 import type { GPUParticleReadbackField } from './gpu/SelectiveReadback';
 
 export interface RendererOptions {
+    /** Filters the simulated population by tag before rendering. */
     tags: StrictMultiple<Tag>;
+    /** Enables distance-based renderer update skipping. */
     useUpdateLOD: boolean;
+    /** Distance-based renderer update quality. */
     updateLOD: Partial<LODSettings>;
+    /** Reduces the number of rendered particles with distance without deleting simulated particles. */
     countLOD: Partial<LODSettings>;
+    /** Temporarily enlarges retained particles when count LOD reduces visibility.
+     * @defaultValue false */
     compensateSize: boolean;
 }
 
+/** Base renderer that filters particles and applies renderer LOD before delegating to a backend-compatible view. */
 export default abstract class Renderer {
     tags?: Tag[];
     useUpdateLOD: boolean;
@@ -50,6 +57,7 @@ export default abstract class Renderer {
         }
     }
 
+    /** Configures particle filtering and distance-based update/count quality. */
     constructor(options: Partial<RendererOptions> = {}) {
         this.tags = acceptMultiple(options.tags);
         this.updateLOD = options.updateLOD;
@@ -61,6 +69,7 @@ export default abstract class Renderer {
     }
 
     // Runs once, when the renderer is added to the system
+    /** Creates rendering resources when attached to a system. */
     public abstract setup(system: ParticleSystem): void;
 
     protected abstract _update(
@@ -69,10 +78,12 @@ export default abstract class Renderer {
         deltaTime: number,
     ): void;
 
+    /** Whether this renderer can consume GPU particle buffers without a selective CPU readback. */
     get supportsGPUInput(): boolean {
         return this.updateGPU !== Renderer.prototype.updateGPU;
     }
 
+    /** Synchronizes runtime values and invalidates structural GPU changes. */
     public syncGPUConfiguration(): void {
         this._lodHelper.configure(this.updateLOD);
         this._countLODHelper.configure(this.countLOD);
@@ -103,6 +114,7 @@ export default abstract class Renderer {
 
     protected onGPUConfigurationChange(): void { }
 
+    /** Consumes GPU simulation or render-output storage without materializing CPU particles. */
     public updateGPU(
         buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
         system: ParticleSystem,
@@ -114,6 +126,7 @@ export default abstract class Renderer {
         throw new Error('This particle renderer does not support GPU particle buffers.');
     }
 
+    /** Filters particles, applies renderer LOD and temporary size compensation, then delegates to the view. */
     public update(
         particles: Particle[],
         system: ParticleSystem,
@@ -183,7 +196,7 @@ export default abstract class Renderer {
     }
 
     // CPU-only renderers use this bridge in their updateGPU implementations.
-    // Subclasses pass named fields through requestReadback;
+    // Subclasses pass only the named fields consumed by Renderer.update;
     // the default requests all fields because Renderer.update consumes Particle.
     protected updateGPUFromSelectiveReadback(
         buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
@@ -193,16 +206,10 @@ export default abstract class Renderer {
         fields?: readonly GPUParticleReadbackField[],
     ): void {
         if (this._gpuReadbackPending) return;
-        const requests = system.requestReadback(Math.min(buffers.count, limit), fields);
-        if (requests.length <= 0) {
-            this.update([], system, deltaTime);
-            return;
-        }
-
         const sequence = this._gpuReadbackSequence + 1;
         this._gpuReadbackSequence = sequence;
         this._gpuReadbackPending = true;
-        void system.readbackGPUParticlesSelective(requests)
+        void system.selectiveReadback(Math.min(buffers.count, limit), fields)
             .then((results) => {
                 if (sequence !== this._gpuReadbackSequence) return;
                 this.update(
@@ -221,6 +228,8 @@ export default abstract class Renderer {
         this._gpuReadbackPending = false;
     }
     // Cleanup
+    /** Permanently releases owned rendering resources. */
     public abstract destroy(): void;
+    /** Removes displayed particles while retaining resources for reuse. */
     public abstract clear(): void;
 }

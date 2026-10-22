@@ -70,7 +70,7 @@ function ParticleSystemDisplay({
         renderer: gl,
         initialPreset,
         initialScene,
-        title: `RZMPS Demo v${RZMPS_VERSION}`,
+        title: `🧅 RZMPS Demo v${RZMPS_VERSION}`,
         width: 340,
         onSystemChange: (nextSystem) => {
           particleSystem.current = nextSystem;

@@ -19,6 +19,7 @@ import {
 
 export type GPUParticleReadbackField = GPUParticleVectorField | GPUParticleScalarField;
 
+/** One slot/generation selection and the minimal fields to transfer to CPU memory. */
 export interface GPUSelectiveReadbackRequest {
   /** Internal particle identity to sample. */
   slot: number;
@@ -28,6 +29,7 @@ export interface GPUSelectiveReadbackRequest {
   identity?: Particle;
 }
 
+/** CPU particle snapshot returned by an asynchronous selective readback. */
 export interface GPUSelectiveReadbackResult {
   slot: number;
   generation: number;

@@ -23,18 +23,28 @@ import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle'
 export type CollisionListener = (particle: Particle, collision: CollisionHit) => void;
 
 export interface CollisionOptions extends Partial<ModuleOptions> {
+  /** Collision query provider; omission selects the active scene backend or built-in mesh backend. */
   backend: ICollisionBackend;
+  /** Fraction of post-bounce velocity removed at contact, clamped from zero to one. */
   dampen: DynamicValue<number>;
+  /** Normal rebound multiplier sampled by normalized age; defaults to 1. */
   bounce: DynamicValue<number>;
+  /** Fraction of lifetime lost at contact; 1 removes the particle on collision. */
   lifetimeLoss: DynamicValue<number>;
+  /** Transfers contact impulses to backends supporting dynamic bodies. Defaults to false. */
   applyImpulses: boolean;
+  /** Multiplier on the collision radius derived from particle scale. Defaults to 1. */
   radiusScale: number;
+  /** Removes particles below this contact speed; zero disables the lower threshold. */
   minKillSpeed: number;
+  /** Removes particles above this contact speed; defaults to positive infinity. */
   maxKillSpeed: number;
 
+  /** Synchronous callback invoked for a reported particle contact. */
   onCollision?: CollisionListener;
 }
 
+/** Predicts contacts before movement at priority -0.01; bounce, damping, impulses, and lifecycle callbacks use the selected backend. */
 class Collision extends Module {
   private _backend?: ICollisionBackend;
 
@@ -60,6 +70,7 @@ class Collision extends Module {
     this.setBackend(backend);
   }
 
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(options: Partial<CollisionOptions> = {}) {
     // Collisions run immediately before movement so they can predict this frame's travel segment.
     super((particle, deltaTime) => this.collide(particle, deltaTime), {

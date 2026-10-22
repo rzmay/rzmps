@@ -17,15 +17,23 @@ import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gp
   * material will take precedent over materialOptions.
 */
 export interface MeshRendererOptions extends RendererOptions {
+    /** Shared source geometry/material; takes precedence over geometry, material, and materialOptions. */
     mesh: THREE.Mesh;
+    /** Allocated instance capacity; size it for the maximum visible population. Defaults to 10000. */
     maxParticles: number;
+    /** Shared geometry used when mesh is omitted; defaults to sphere geometry. */
     geometry: THREE.BufferGeometry,
+    /** Shared material used when mesh is omitted; takes precedence over materialOptions. */
     material: THREE.MeshStandardMaterial,
+    /** Construction options for a default MeshStandardMaterial. */
     materialOptions: THREE.MeshStandardMaterialParameters,
+    /** Enables instance shadow casting; false by default. */
     castShadow: boolean,
+    /** Enables instance shadow reception; false by default. */
     receiveShadow: boolean,
 }
 
+/** Instances shared mesh geometry and material across particles; geometry complexity multiplies by visible population. */
 class MeshRenderer extends Renderer {
     mesh: THREE.Mesh;
 

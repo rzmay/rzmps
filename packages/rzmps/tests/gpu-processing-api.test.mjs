@@ -59,10 +59,21 @@ const gpuModule = new Module(Module.CPU_UNSUPPORTED, {
 const explicitUnsupportedGPU = new Module(() => {}, {
   modifyGPU: null,
 });
+const cpuConditionOnlyModule = new Module(() => {}, {
+  condition: () => true,
+  modifyGPU() {},
+});
+const pairedConditionModule = new Module(() => {}, {
+  condition: () => true,
+  conditionGPU: (particle) => particle.alive.notEqual(0),
+  modifyGPU() {},
+});
 
 assert.equal(cpuOnlyModule.supportsGPU, false);
 assert.equal(gpuModule.supportsGPU, true);
 assert.equal(explicitUnsupportedGPU.supportsGPU, false);
+assert.equal(cpuConditionOnlyModule.supportsGPU, false);
+assert.equal(pairedConditionModule.supportsGPU, true);
 assert.throws(() => Module.CPU_UNSUPPORTED(new Particle(), 0), /does not support CPU processing/);
 assert.throws(() => Module.GPU_UNSUPPORTED(gpuModule, 0, {}), /does not support GPU processing/);
 
@@ -410,12 +421,6 @@ const customShapeEmitter = new Emitter({
 });
 assert.equal(customShapeEmitter.supportsGPUEmission, true);
 assert.ok(customShapeEmitter.getGPUEmissionSupport().features.includes('sampling:geometry-buffer'));
-const customGPUEmitter = new Emitter({
-  source: customGeometryShape,
-  emitGPU() {},
-});
-assert.equal(customGPUEmitter.supportsGPUEmission, true);
-assert.deepEqual(customGPUEmitter.getGPUEmissionSupport().features, ['customEmitGPU']);
 
 let gpuEmitterDispatches = 0;
 const previousEmitterReadbackRate = ParticleSystem.GPU_READBACK_RATE;
@@ -427,19 +432,7 @@ const gpuEmitterRenderer = Object.assign(Object.create(WebGPURenderer.prototype)
 });
 const gpuEmitterSystem = new ParticleSystem({
   gpuProcessing: true,
-  emitters: [
-    new Emitter({
-      emitGPU(context) {
-        const particleValue = context.output.storage.loadParticle();
-        context.allocationWriter.claimDeadSlotWithinBudget(particleValue, 1, () => {
-          particleValue.lifetime.assign(1);
-          particleValue.speed.assign(1);
-          particleValue.alpha.assign(1);
-        });
-        context.output.storage.storeParticle(particleValue);
-      },
-    }),
-  ],
+  emitters: [new Emitter({ rate: 1 })],
   renderers: [],
   modules: [],
   maxParticles: 32,
@@ -448,7 +441,7 @@ gpuEmitterSystem._renderer = gpuEmitterRenderer;
 gpuEmitterSystem.deltaTime = 1 / 60;
 assert.equal(gpuEmitterSystem._shouldExecuteEmittersOnGPU(), true);
 gpuEmitterSystem._processParticles();
-assert.equal(gpuEmitterDispatches, 4);
+assert.equal(gpuEmitterDispatches, 5);
 assert.ok(gpuEmitterSystem._gpuEmissionComputeCache.node);
 assert.equal(gpuEmitterSystem._gpuBuffers.count, gpuEmitterSystem._gpuBuffers.capacity);
 assert.equal(gpuEmitterSystem.particles.length, 0);

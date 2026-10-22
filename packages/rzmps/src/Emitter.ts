@@ -44,27 +44,44 @@ import {
 import type { PackedFloatStorage, PackedUintStorage } from './gpu/Storage';
 
 export type SpawnBurst = {
+    /** Normalized emission-cycle time, clamped to the range 0 through 1. */
     time: number,
+    /** Number of particles emitted when the burst fires. */
     count: DynamicUntimedValue<number>,
+    /** Internal CPU emission state; reset automatically with the emitter. */
     fired?: boolean,
 };
 
 export interface EmitterOptions {
+    /** Dynamic values sampled at birth; mutable values are isolated per particle. */
     initialValues: Partial<InitialParticleValues>;
+    /** Geometry and sampling rule used to place particles. Defaults to a sphere. */
     source: EmissionShape;
+    /** Timed particle batches within an emission cycle. Supplying bursts changes the default continuous rate to zero. */
     bursts: Multiple<SpawnBurst>;
+    /** Continuous particles per second. Defaults to 50 without bursts, otherwise 0. */
     rate: DynamicValue<number>;
+    /** Particles per world-space distance traveled by the emission context.
+     * @defaultValue 0 */
     rateOverDistance: DynamicValue<number>;
 
+    /** Initial velocity contribution along the sampled source direction.
+     * @defaultValue 1 */
     radialSpeed: DynamicValue<number>;
+    /** Amount of initial rotation alignment to source direction.
+     * @defaultValue 0 */
     alignment: DynamicValue<number>;
 
+    /** Tags assigned at birth, selected using tagSelection. */
     tags: StrictMultiple<Tag>;
+    /** Assigns all tags, distributes them, or samples them according to the selected mode. */
     tagSelection: TagSelectionMethod | `${TagSelectionMethod}`;
+    /** Enables update skipping; defaults to whether updateLOD is provided. */
     useUpdateLOD: boolean;
+    /** Distance-based emission update quality. */
     updateLOD: Partial<LODSettings>;
+    /** Distance-based emitted particle count reduction. */
     countLOD: Partial<LODSettings>;
-    emitGPU: GPUEmitterUpdate;
 }
 
 interface EmitterContextState {
@@ -76,6 +93,7 @@ interface EmitterContextState {
 }
 
 export interface EmissionContext {
+  /** Stable root or subsystem run identity. */
   key: string;
   transform: THREE.Matrix4;
   position: THREE.Vector3;
@@ -93,9 +111,13 @@ export interface EmissionContext {
   tags: Tag[];
 }
 
+/** @internal Context used to construct the built-in GPU birth graph. */
 export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
+  /** Emitter whose birth graph is being constructed. */
   emitter: Emitter;
+  /** Emitter position in the owning system's emitter array. */
   emitterIndex: number;
+  /** Destination storage for newly allocated particles. */
   output: GPUParticleBufferState;
   emitterRuntime?: GPUEmitterInstanceRuntime;
   durationNode?: Node<'float'>;
@@ -121,8 +143,10 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
   reclaimOld?: boolean;
 }
 
+/** @internal */
 export type GPUEmitterUpdate = (context: GPUEmitterUpdateContext) => void;
 
+/** Samples particle births from a shape using time, distance, and burst emission. */
 class Emitter {
   source: EmissionShape;
   rate: DynamicValue<number>;
@@ -138,7 +162,6 @@ class Emitter {
   useUpdateLOD: boolean;
   updateLOD?: Partial<LODSettings>;
   countLOD?: Partial<LODSettings>;
-  emitGPU?: GPUEmitterUpdate;
   private _lodHelper: LODHelper;
   private _countLODHelper: LODHelper;
   private readonly _gpuUpdateLODScale = uniform(1, 'float');
@@ -153,7 +176,6 @@ class Emitter {
   private _gpuStructureSignature = '';
   private _gpuSource?: EmissionShape;
   private _gpuGeometry?: THREE.BufferGeometry;
-  private _gpuEmitGPU?: GPUEmitterUpdate;
   private _gpuGeometrySampling?: {
     signature: string;
     positions: StorageBufferAttribute;
@@ -174,6 +196,7 @@ class Emitter {
   // Used for subsystems
   private _contextStates = new Map<string, EmitterContextState>();
 
+  /** Monotonic GPU configuration version used to invalidate compiled work. */
   get version(): number {
     return this._gpuVersion;
   }
@@ -186,6 +209,7 @@ class Emitter {
     if (value) this._gpuVersion += 1;
   }
 
+  /** Creates emission state; bursts default the continuous rate to zero. */
   constructor(
     options: Partial<EmitterOptions> = {},
   ) {
@@ -205,7 +229,6 @@ class Emitter {
     this.updateLOD = options.updateLOD;
     this.useUpdateLOD = options.useUpdateLOD ?? Boolean(this.updateLOD);
     this.countLOD = options.countLOD;
-    this.emitGPU = (options as Partial<EmitterOptions> & { emitGPU?: GPUEmitterUpdate }).emitGPU;
     this._lodHelper = new LODHelper(this.updateLOD);
     this._countLODHelper = new LODHelper(this.countLOD);
   }
@@ -214,6 +237,7 @@ class Emitter {
     * CONTROLS
   */
 
+  /** Clears timed bursts, movement credit, LOD state, and per-context emission clocks. */
   public reset(): void {
     this.bursts.forEach((burst) => {
       burst.fired = false;
@@ -224,14 +248,17 @@ class Emitter {
     this._countLODHelper.reset();
   }
 
+  /** Whether the current source and emission configuration support GPU-native births. */
   get supportsGPUEmission(): boolean {
     return this.getGPUEmissionSupport().supported;
   }
 
+  /** Returns feature and incompatibility details for GPU-native emission. */
   getGPUEmissionSupport(): GPUEmissionSupportReport {
     return getGPUEmitterSupport(this);
   }
 
+  /** Synchronizes runtime values and invalidates structural GPU changes. */
   syncGPUConfiguration(): void {
     this.normalizeBurstTimes();
     this._lodHelper.configure(this.updateLOD);
@@ -264,7 +291,6 @@ class Emitter {
       this.tags?.length ?? 0,
       this.tagSelection,
       this.initialValues.rotation === undefined ? 'aligned-rotation' : 'explicit-rotation',
-      this.emitGPU ? 'custom' : 'built-in',
     ].join('|');
     if (
       this._gpuStructureSignature
@@ -272,16 +298,15 @@ class Emitter {
         structureSignature !== this._gpuStructureSignature
         || this.source !== this._gpuSource
         || geometry !== this._gpuGeometry
-        || this.emitGPU !== this._gpuEmitGPU
       )
     ) this._gpuVersion += 1;
 
     this._gpuStructureSignature = structureSignature;
     this._gpuSource = this.source;
     this._gpuGeometry = geometry;
-    this._gpuEmitGPU = this.emitGPU;
   }
 
+  /** @internal Builds the standard TSL birth writer used by ParticleSystem. */
   createBuiltInGPUUpdate(): GPUEmitterUpdate {
     const volumeSampling = this.source.source === EmissionSource.Volume
       ? this.getGPUVolumeSampling()
@@ -591,6 +616,7 @@ class Emitter {
     };
   }
 
+  /** @internal Prepares request counts for the built-in GPU birth graph. */
   prepareBuiltInGPUEmission(context: GPUEmitterUpdateContext): void {
     const runtime = context.emitterRuntime;
     if (!runtime) return;
@@ -833,10 +859,12 @@ class Emitter {
     * SIMULATION
   */
 
+  /** Attaches the source shape to the particle system. */
   setup(particleSystem: ParticleSystem) {
     particleSystem.add(this.source);
   }
 
+  /** Emits births for the supplied simulation context and returns the newly created particles. */
   update(
     particles: Particle[],
     context: Partial<EmissionContext>,

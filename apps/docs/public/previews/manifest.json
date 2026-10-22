@@ -1,0 +1,565 @@
+{
+  "generatedBy": "npm run docs:previews",
+  "examples": {
+    "additiveSmoke": {
+      "inputHash": "82bde5b32eb6316f499d20b13260661a769d0aca6a21cf1e43d8e0c442e5260d",
+      "imageHash": "07925c19e8f3263a68b6ed8ac9db3eb9aceb34e01220827a142fd7a42a2ac9d8",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 89,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "boids": {
+      "inputHash": "7b82de5758ee0214ee6d22a7620ee996d57df00e8b71602bd138e8b85fc0e59f",
+      "imageHash": "b716fff19bf773e02027eb9d3ecbf1a3abf41794dcb9a9c96ef831cc52a8ed64",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 94,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          20,
+          15,
+          30
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "bubbles": {
+      "inputHash": "4cd6b36518d6684e09b985a1e86456a92adc83d61af3dcdea70a94d0399effa9",
+      "imageHash": "fa30c130d45b01f66b9947d4d7806e9882ff14592bb57b2eb36e69e02292080e",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 18,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "collision": {
+      "inputHash": "40211bad8eb86526a7ca2d4f84db5813951c3b506a4c83d99f1af1e138d0b35c",
+      "imageHash": "1c32745e877c56023666cf9c70f3b66067c07506367e5b53e83bde60ef55236f",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 70,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "collisionSubEmitters": {
+      "inputHash": "cedd8a42f1fd2bc25797db1fd0983333a01e73ff8832c77eee4c69acb71cc5e3",
+      "imageHash": "6eefbcf096e0f112061250380428fe482a6e2d2413bd8eb0dcb74c37c3e5908b",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 21,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "cubes": {
+      "inputHash": "84c9d88862b938571d6849f6d7a08636d84fba9c0a863d4b84fefd6c9bdfd385",
+      "imageHash": "cf32cf9d81742c5d224dd5b377084d8a158659ee28401ad47ff73e53b16c88af",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 31,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "dopplerBullet": {
+      "inputHash": "7c1f9c2c7b03c06e730b4b89916c2f6dd984470537a4337efb889ad7f37278f0",
+      "imageHash": "37484fb1449a2122c3f79fb8559cf77c201fe69ac559d3bd9a2411667a7eb433",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 241,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          25,
+          12,
+          45
+        ],
+        "target": [
+          0,
+          2,
+          4
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "fire": {
+      "inputHash": "aee8857139671c352e6df051f5220549b764f0b7df54be8ce4fe8b24f809f554",
+      "imageHash": "2778f11139df3a84f47d54211d59962da14f51d2cd2e7b980514a1666e223d86",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 80,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "fireball": {
+      "inputHash": "0d3fc020e9478dd264f6e9bf519dabc9710a06d5e854dd825e47587c753b0bb6",
+      "imageHash": "5e6cf20a1d59f856edfd098d19e33a14bebcf510969c344e0e4c1c8e51b3db56",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 5,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "fireworks": {
+      "inputHash": "2c0dff67beabb724e0e22f90d2c3de701b41e8a227d975ebce505dbe75022647",
+      "imageHash": "2b70796621019cb5dcc8ab8d46afaeeb3f1cff2e2077adf8a836c43200f5fb81",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 538,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          15,
+          32
+        ],
+        "target": [
+          0,
+          12,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "lodStress": {
+      "inputHash": "1a1ec13072f64303a2c07a0d66a78e6939dd8359d7b5e4afa5a8298da636ce62",
+      "imageHash": "1c8c67468bcef73bfbe9f57f68655ab828f2b74aee267401daf6f0f05cee4809",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 2993,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "particleTrail": {
+      "inputHash": "dcdd1bac3f13f19d0c7d196a068b91d30a97abc3de785820cc274a1b57b4af53",
+      "imageHash": "0955f6367c29c089c90f5f7232d606c12c1f0527dceac24a48e6104b78056bde",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 18,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "ribbonTrail": {
+      "inputHash": "c54206de1a93921b7964efdab9deb2c9e65e77a3a9445d48c55fd40a75f02287",
+      "imageHash": "29380aa8a437633861de1fb675d34895856aa81d32afacb3f7b5474b8c09181a",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 30,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "smoke": {
+      "inputHash": "51d1eb49568bb8f4f3d4e0c9bb89ba179505e751e35af99fd3922d5d367600d0",
+      "imageHash": "f53235449a4d576cee8623d031e274b322251f5eca789bcc79c8f9a7a19d40b8",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 89,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "snow": {
+      "inputHash": "3ec5a5133a29e276e973ae956f73fe039df585f5642e8291a49afee81cb64262",
+      "imageHash": "577eab041dbf70ee67cf4d465df72cb5d21b46aff1e019fc8afabf9dcd29d6d8",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 537,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "spheres": {
+      "inputHash": "1cfb9b1962ace7fcf846235e0b2751b5367c7d8e533c9a0bf6089d84c2e2cafe",
+      "imageHash": "3e6128f427694e34215618c6402f94da1e163da1c5a915b2ac7b2f79b135c7c9",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 31,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "stylizedDepth": {
+      "inputHash": "d05692edadecbfec7aede02be3c2f549e92539b48b6648bf7e28aabcb4787980",
+      "imageHash": "1a97453394d5f3677bfa676da2f9aa2cea2a5548ef267822efa5e1db06ba855c",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 537,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "suzanne": {
+      "inputHash": "a0810ea342b1ed29fddb978cb25b1b19056be5646f210c3d0ac2f94e11361cd9",
+      "imageHash": "487ae74a77a8e5ab38425aa2623a165e9e17f352ce24a545f80aa45814ad8f12",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 524,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "suzanneInstances": {
+      "inputHash": "6b98fb8cb252a142442f9e29f567973a8b1b21655b78a58157d71b5151e9eefa",
+      "imageHash": "e30b7f8e0f53ea537f8f79d8d73cc92f90d0cde54e96420999fdb964f753f1ba",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 31,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "tags": {
+      "inputHash": "c54e91e7f8a5f17e329a9fe35285f809fb7a37b22e21bbf6fe05e0be26c01fc4",
+      "imageHash": "8cfb7daca18a36fc333268ce5579c9ff169f7b305641e5d5f7a2e35b3e487ff3",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "time": 3,
+        "step": 180,
+        "particles": 31,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    }
+  }
+}

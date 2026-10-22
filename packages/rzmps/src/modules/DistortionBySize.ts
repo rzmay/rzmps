@@ -8,10 +8,13 @@ import { SizeRange } from './ColorBySize';
 
 export interface DistortionBySizeOptions extends Partial<ModuleOptions> {
     distortionStrength: ValueByParameter<number>;
+    /** Particle-size interval mapped to zero through one; values outside it are clamped. */
     sizeRange?: SizeRange;
 }
 
+/** Multiplies distortion strength using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample. */
 class DistortionBySize extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<DistortionBySizeOptions> = {}) {
 
     super((particle: Particle) => {

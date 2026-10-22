@@ -11,9 +11,11 @@ export interface ScaleByDepthOptions extends Partial<ModuleOptions> {
   scale: ValueByParameter<THREE.Vector3>;
   scalarVelocity: ValueByParameter<THREE.Vector3>;
   scalarAcceleration: ValueByParameter<THREE.Vector3>;
+  /** Camera-distance interval mapped to zero through one; omitted endpoints use camera near/far when available. */
   depthRange?: [number, number]
 }
 
+/** Multiplies scale and adds scalar channels using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
 class ScaleByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');
@@ -22,6 +24,7 @@ class ScaleByDepth extends Module {
 
   private _cameraDepthRange: [number, number] = [0, 100];
 
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: ScaleByDepthOptions) {
 
     super((particle: Particle) => {

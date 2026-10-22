@@ -1,0 +1,11 @@
+{
+  "name": "@rzmps/docs",
+  "private": true,
+  "scripts": {
+    "predev": "node ../../scripts/docs/generate.mjs --check",
+    "dev": "vitepress dev . --port 5174 --strictPort",
+    "prebuild": "node ../../scripts/docs/generate.mjs --check",
+    "build": "vitepress build .",
+    "preview": "vitepress preview ."
+  }
+}

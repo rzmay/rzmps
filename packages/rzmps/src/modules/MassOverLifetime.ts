@@ -5,10 +5,13 @@ import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 
 export interface MassOverLifetimeOptions extends Partial<ModuleOptions> {
     mass: DynamicValue<number>;
+    /** Multiplies mass by scale vector length; defaults to true. */
     multiplyMassBySize: boolean; // Default to true
 }
 
+/** Multiplies mass in the configured module phase, permanent by default; size multiplication defaults on and repeated updates can accumulate. */
 class MassOverLifetime extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<MassOverLifetimeOptions> = {}) {
 
     super((particle: Particle) => {

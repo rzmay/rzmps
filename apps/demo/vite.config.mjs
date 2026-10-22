@@ -43,6 +43,12 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    include: [
+      'three/addons/lighting/LightProbeGrid.js',
+      'three/addons/lighting/LightProbeGridWebGL.js',
+      'three/addons/helpers/LightProbeGridHelper.js',
+      'three/addons/helpers/LightProbeGridHelperWebGL.js',
+    ],
     exclude: [
       '@rzmps/rzmps',
       '@rzmps/ammo',

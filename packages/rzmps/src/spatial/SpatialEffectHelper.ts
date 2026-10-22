@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import SpatialEffect from '../SpatialEffect';
 
+/** Wireframe visualization of a spatial effect and feather boundary; call update after geometry changes. */
 class SpatialEffectHelper extends THREE.Object3D {
   spatialEffect: SpatialEffect;
   color: THREE.Color;
@@ -166,6 +167,7 @@ class SpatialEffectHelper extends THREE.Object3D {
     return expanded;
   }
 
+  /** Synchronizes the helper transform before updating descendant world matrices. */
   updateMatrixWorld(force?: boolean): void {
     this.updateTransform();
     super.updateMatrixWorld(force);

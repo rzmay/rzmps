@@ -48,15 +48,6 @@ export function getGPUEmissionShapeSupport(shape: EmissionShape): GPUEmissionSup
 }
 
 export function getGPUEmitterSupport(emitter: Emitter): GPUEmissionSupportReport {
-  if (emitter.emitGPU) {
-    return {
-      supported: true,
-      level: 'native',
-      reasons: [],
-      features: ['customEmitGPU'],
-    };
-  }
-
   const shapeReport = getGPUEmissionShapeSupport(emitter.source);
   const reasons = [...shapeReport.reasons];
   const features = [...shapeReport.features];

@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { LightProbeGrid } from 'three/addons/lighting/LightProbeGrid.js';
+import { LightProbeGridWebGL } from 'three/addons/lighting/LightProbeGridWebGL.js';
+import { LightProbeGridHelper } from 'three/addons/helpers/LightProbeGridHelper.js';
+import { LightProbeGridHelperWebGL } from 'three/addons/helpers/LightProbeGridHelperWebGL.js';
 import {
   createSceneParticleRoot,
   disposeSceneParticleRoot,
@@ -20,29 +24,13 @@ function addMesh(root, mesh) {
   return mesh;
 }
 
-async function loadProbeClasses(renderer) {
+function loadProbeClasses(renderer) {
   if (renderer.isWebGPURenderer) {
-    const [
-      { LightProbeGrid },
-      { LightProbeGridHelper },
-    ] = await Promise.all([
-      import('three/addons/lighting/LightProbeGrid.js'),
-      import('three/addons/helpers/LightProbeGridHelper.js'),
-    ]);
-
     return {
       Grid: LightProbeGrid,
       Helper: LightProbeGridHelper,
     };
   }
-
-  const [
-    { LightProbeGridWebGL },
-    { LightProbeGridHelperWebGL },
-  ] = await Promise.all([
-    import('three/addons/lighting/LightProbeGridWebGL.js'),
-    import('three/addons/helpers/LightProbeGridHelperWebGL.js'),
-  ]);
 
   return {
     Grid: LightProbeGridWebGL,
@@ -442,7 +430,7 @@ export default async function createLightProbeScene(
   const {
     Grid,
     Helper,
-  } = await loadProbeClasses(renderer);
+  } = loadProbeClasses(renderer);
 
   const probesLeft = new Grid(
     7.8,
