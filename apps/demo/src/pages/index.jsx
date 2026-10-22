@@ -128,7 +128,7 @@ function PresetAttribution({ metadata }) {
       </div>
 
       <div className="preset-attribution-sources">
-        <a href="/docs/">🧅 Documentation</a>
+        <a href="/docs/">Documentation</a>
         {metadata.particle?.sourceUrl && (
           <a href={metadata.particle.sourceUrl} target="_blank" rel="noreferrer">
             Particle source
