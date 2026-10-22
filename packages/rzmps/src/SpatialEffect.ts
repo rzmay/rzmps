@@ -20,6 +20,7 @@ export type SpatialEffectFeatherUpdate = (
   particle: Particle,
   deltaTime: number,
   particleSystem: ParticleSystem,
+  /** Transition distance used to attenuate the modifier near the boundary. */
   feather: number,
 ) => void;
 
@@ -34,16 +35,26 @@ export type SpatialEffectTest = (
 ) => boolean;
 
 export interface SpatialEffectOptions {
+  /** Local position of the effect volume. */
   position: THREE.Vector3;
+  /** Local scale of the effect volume. */
   scale: THREE.Vector3;
+  /** Volume geometry used for inclusion tests; transforms are applied in world space. */
   geometry: THREE.BufferGeometry;
+  /** Applies the modifier outside rather than inside the selected volume. */
   inverted: boolean;
+  /** Restricts the effect to particles with a matching tag. */
   tags: StrictMultiple<Tag>;
+  /** Additional predicate for candidate particles. */
   condition: (particle: Particle) => boolean;
+  /** Custom inclusion predicate replacing the geometry test. */
   test: SpatialEffectTest;
+  /** Numeric execution phase shared with modules. */
   priority: number | Priority;
   feather: number;
+  /** Maps the normalized boundary transition to modifier strength. */
   featherEasing: SpatialEffectFeatherEasing;
+  /** Enables built-in feather application for supported modifiers. */
   automaticFeather: boolean;
 }
 
@@ -52,6 +63,7 @@ type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
 type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
 type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
+/** Scene-space modifier volume, discovered by particle systems or collected by specialized modules. */
 class SpatialEffect extends THREE.Object3D {
   private static readonly _doubleSidedMaterial = new THREE.MeshBasicMaterial(
     { side: THREE.DoubleSide },

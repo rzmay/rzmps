@@ -5,7 +5,9 @@ import { EmissionSource } from './enums/EmissionSource';
 import isPointInMesh from './helpers/isPointInMesh';
 
 export interface EmissionShapeOptions {
+    /** Source mesh geometry; should be nondegenerate and suitable for the chosen sampling rule. */
     geometry: THREE.BufferGeometry;
+    /** Volume, surface, or vertex sampling. Defaults to EmissionSource.Volume. */
     source: EmissionSource | `${EmissionSource}`;
 }
 
@@ -16,6 +18,7 @@ type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
 type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
 type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
+/** Samples geometry in parent space for emitter positions and normals; Object3D transforms move the source. */
 class EmissionShape extends THREE.Object3D {
     static MAX_VOLUME_ITERATIONS = 5;
 
@@ -78,6 +81,7 @@ class EmissionShape extends THREE.Object3D {
 
     private _mesh: THREE.Mesh;
 
+    /** Creates a shape with sphere geometry and volume sampling by default. */
     constructor(options: Partial<EmissionShapeOptions> = {}) {
       super();
 
@@ -185,6 +189,7 @@ class EmissionShape extends THREE.Object3D {
         .normalize();
     }
 
+    /** Samples position and normal in parent space; volume rejection falls back to surface sampling after a bounded number of attempts. */
     getPoint(overrideSource?: EmissionSource): { position: THREE.Vector3, normal: THREE.Vector3 } {
       switch (overrideSource ?? this.source) {
         case EmissionSource.Vertices:

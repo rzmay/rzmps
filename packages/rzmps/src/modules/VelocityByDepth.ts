@@ -9,15 +9,18 @@ export interface VelocityByDepthOptions extends Partial<ModuleOptions> {
   position: ValueByParameter<THREE.Vector3>;
   velocity: ValueByParameter<THREE.Vector3>;
   acceleration: ValueByParameter<THREE.Vector3>;
+  /** Camera-distance interval mapped to zero through one; omitted endpoints use camera near/far when available. */
   depthRange?: [number, number];
 }
 
+/** Adds linear motion channels using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
 class VelocityByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
   depthRange?: [number, number];
 
   private _cameraDepthRange: [number, number] = [0, 100];
 
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<VelocityByDepthOptions> = {}) {
 
     super((particle: Particle) => {

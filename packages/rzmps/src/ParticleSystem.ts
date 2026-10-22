@@ -19,55 +19,111 @@ import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } fr
 import LODHelper, { type LODSettings } from './LODHelper';
 import SpatialEffect from './SpatialEffect';
 
+/** Construction options; fields can be omitted to use the documented defaults. */
 export interface ParticleSystemOptions {
+  /** Sources that create particles. Omission creates one default emitter; pass [] for manual particles. */
   emitters: Multiple<Emitter>;
+  /** Views of the simulated population. Omission creates a sprite renderer; pass [] for simulation only. */
   renderers: Multiple<Renderer>;
+  /** Ordered composition of particle modifiers; numeric priority determines the execution phase. */
   modules: Multiple<Module>;
+  /** Explicit generic spatial effects, combined with matching scene effects. */
   spatialEffects: Multiple<SpatialEffect>;
+  /** Selects which discovered or explicit spatial effects may affect this system. */
   spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
+  /** Enables generic spatial-effect processing.
+   * @defaultValue true */
   useSpatialEffects: boolean;
+  /** Nonnegative multiplier applied to simulation delta seconds.
+   * @defaultValue 1 */
   simulationSpeed: number;
+  /** Emission cycle length in seconds, independent of particle lifetime.
+   * @defaultValue 10 */
   duration: number;
+  /** Simulates a cycle before normal playback begins.
+   * @defaultValue false */
   prewarm: boolean;
+  /** Fixed prewarm steps per second; invalid values fall back to 24.
+   * @defaultValue 24 */
   prewarmFPS: number;
+  /** Restarts the emission cycle after duration.
+   * @defaultValue true */
   looping: boolean;
+  /** Controls cleanup after a nonlooping system ends; existing particles may remain.
+   * @defaultValue EndBehavior.None */
   endBehavior: EndBehavior | `${EndBehavior}`;
+  /** Maximum retained particles; excess particles are culled during simulation. */
   maxParticles: number;
+  /** Chooses whether old or newly spawned particles are culled at capacity.
+   * @defaultValue MaxCulling.New */
   maxCullingMode: MaxCulling | `${MaxCulling}`;
+  /** Camera-distance limit for normal updates; zero disables distance culling.
+   * @defaultValue 0 */
   simulationDistance: number;
+  /** Enables distance-based update skipping; defaults to whether updateLOD is supplied. */
   useUpdateLOD: boolean;
+  /** Distance-based simulation update quality; skipped elapsed time is accumulated. */
   updateLOD: Partial<LODSettings>;
+  /** Gravity acceleration vector; supplying it enables gravity unless gravityModifier overrides that choice. */
   gravity: THREE.Vector3;
+  /** Particle-age-dependent gravity multiplier; defaults to 1 with explicit gravity, otherwise 0. */
   gravityModifier: DynamicValue<number>;
+  /** Multiplier for velocity inherited from movement of the emitter context. */
   inheritVelocity: number;
+  /** Local or world coordinates for simulated particles; changing it converts existing particles. */
   simulationSpace: SimulationSpace | `${SimulationSpace}`;
 
+  /** Enables dynamic environment captures; requires renderer/camera context from rendering. */
+
   useLiveCubemap: boolean;
+  /** Dynamic reflection capture options; capture work is separate from simulation. */
   cubemapSettings: Partial<LiveCubemapOptions>;
+  /** Legacy shorthand for cubemapSettings.fps. */
   liveCubemapFPS: number;
+  /** Legacy shorthand for cubemapSettings.resolutionScale. */
   liveCubemapResolutionScale: number;
+  /** Legacy shorthand for cubemapSettings.intensity. */
   liveCubemapIntensity: number;
 }
 
+/** Parent-event emission and inheritance; child systems share their parent simulation clock. */
 export interface SubSystemOptions {
+  /** Predicate or switch selecting whether a parent particle may trigger child emission. */
   shouldEmit: boolean | ((particle: Particle) => boolean);
+  /** Fraction of eligible parent particles selected for subsystem emission. */
   ratio: number;
+  /** Emits while a parent particle remains alive, using an independent emission context. */
   emitContinuous: boolean;
+  /** Starts child emission from collision events reported by a Collision module. */
   emitOnCollision: boolean;
+  /** Starts child emission when a parent particle is born. */
   emitOnSpawn: boolean;
+  /** Starts child emission when a parent particle expires. */
   emitOnDeath: boolean;
+  /** Blends child scale with the triggering particle scale; zero retains child configuration. */
   inheritScale: number;
+  /** Blends child lifetime with the parent lifetime; zero retains independent child timing. */
   inheritLifetime: number;
+  /** Blends child color with the triggering particle color. */
   inheritColor: number;
+  /** Blends child alpha with the triggering particle alpha. */
   inheritAlpha: number;
+  /** Blends child mass with the triggering particle mass. */
   inheritMass: number;
   inheritVelocity: number;
 
+  /** Exponent controlling contact-impulse scaling of child size. */
+
   impulseAffectsScale: number;
+  /** Exponent controlling contact-impulse scaling of child velocity. */
   impulseAffectsSpeed: number;
+  /** Exponent controlling contact-impulse scaling of child lifetime. */
   impulseAffectsLifetime: number;
+  /** Exponent controlling contact-impulse scaling of child mass. */
   impulseAffectsMass: number;
+  /** Aligns child emission with collision impulse direction. */
   impulseAffectsAlignment: boolean;
+  /** Minimum contact impulse needed to trigger collision emission. */
   impulseThreshold: number;
 }
 
@@ -93,6 +149,7 @@ interface SubSystemEmissionRun {
 
 export type ParticleListener = (particle: Particle) => void;
 
+/** Owns particle simulation and renderer objects; attach to a Three.js scene and update once per frame. */
 class ParticleSystem extends THREE.Object3D {
   particles: Particle[] = [];
   emitters: Emitter[] = [];
@@ -124,6 +181,7 @@ class ParticleSystem extends THREE.Object3D {
   liveCubemap: LiveCubemap;
 
   private _simulationSpace: SimulationSpace = SimulationSpace.Local;
+  /** Coordinate space of particle state; assigning a new space converts existing particles and propagates to subsystems. */
   get simulationSpace(): SimulationSpace {
     return this._simulationSpace;
   }
@@ -139,6 +197,7 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _scene?: THREE.Scene;
+  /** Current containing scene, available after attachment or renderer context capture. */
   get scene() {
     if (this._scene) return this._scene;
 
@@ -152,19 +211,24 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _camera?: THREE.Camera;
+  /** Active camera captured during rendering; undefined before the first render. */
   get sceneCamera() { return this._camera; }
   private readonly _sceneCameraQuaternion = new THREE.Quaternion();
+  /** Cached world orientation of the last active render camera. */
   get sceneCameraQuaternion() { return this._sceneCameraQuaternion; }
 
   private _renderer?: THREE.WebGLRenderer;
+  /** Active renderer captured by the context object during rendering. */
   get sceneRenderer() { return this._renderer; }
   private _cameraDistanceSq = Number.MAX_SAFE_INTEGER;
+  /** Squared camera distance used for component LOD; explicit advancement refreshes it without skipping system steps. */
   get cameraDistanceSq(): number { return this._cameraDistanceSq; }
 
   private deltaTime = 0;
   private lastFrame: number;
 
   private _subSystemParent?: ParticleSystem;
+  /** Whether a parent owns simulation and emission contexts for this system. */
   get isSubSystem(): boolean { return !!this._subSystemParent; }
 
   private _deathListeners: ParticleListener[] = [];
@@ -175,12 +239,15 @@ class ParticleSystem extends THREE.Object3D {
   private _nextEmissionRunId = 0;
 
   private _playing = true;
+  /** Whether the system is emitting; pause is a separate flag. */
   get playing(): boolean { return this._playing; }
 
   private _paused = false;
+  /** Whether simulation is frozen by pause(). */
   get paused(): boolean { return this._paused; }
 
   private _ended = false;
+  /** Whether a nonlooping duration has ended or stop() was called. */
   get ended(): boolean { return this._ended; }
 
   private _elapsedTime = 0;
@@ -189,6 +256,7 @@ class ParticleSystem extends THREE.Object3D {
   private _lodAccumulatedDeltaTime = 0;
 
   private _destroyed = false;
+  /** Whether permanent destruction has completed. */
   get destroyed(): boolean { return this._destroyed; }
 
   private readonly _rendererObjects = new Set<THREE.Object3D>();
@@ -214,6 +282,7 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _directionNormalMatrix = new THREE.Matrix3();
   private readonly _inverseWorldMatrix = new THREE.Matrix4();
 
+  /** Creates a playing, looping system; omitted emitters and renderers receive sprite defaults. */
   constructor(options: Partial<ParticleSystemOptions> = {}) {
     super();
 
@@ -288,6 +357,7 @@ class ParticleSystem extends THREE.Object3D {
     * PROCESSING
   */
 
+  /** Advances from wall-clock time, respecting pause, simulation distance, and update LOD. */
   update(): void {
     if (this._destroyed) return;
 
@@ -331,23 +401,59 @@ class ParticleSystem extends THREE.Object3D {
 
     this._prewarm();
 
-    if (this._playing) this._updateSystemTime();
+    this._advanceSimulationStep(false);
 
+    // Cubemap updates require a renderer and run only on normal display updates.
+    if (this.useLiveCubemap) this.liveCubemap.update(this.scene, this.sceneRenderer, this.deltaTime);
+    this._handleEndBehavior();
+  }
+
+  /**
+   * Advances a root system synchronously using fixed simulation steps.
+   * @param frames - Nonnegative integer number of steps.
+   * @param deltaTime - Seconds per step, before simulationSpeed. Defaults to 1 / 60.
+   * @remarks
+   * Reuses prewarm's simulation path, including emission, lifecycle events, modules,
+   * spatial effects, and owned subsystems. Paused, destroyed, and parent-owned
+   * systems do not advance. Does not start playback or perform implicit prewarm.
+   * Camera distance and update LOD do not skip explicit steps. Live cubemap
+   * capture is deferred to normal updates; render the scene after advancing.
+   * Finite systems can naturally end, including their configured end behavior.
+   */
+  public advanceFrames(frames: number, deltaTime: number = 1 / 60): void {
+    if (!Number.isSafeInteger(frames) || frames < 0) {
+      throw new RangeError('frames must be a nonnegative safe integer');
+    }
+    if (!Number.isFinite(deltaTime) || deltaTime <= 0) {
+      throw new RangeError('deltaTime must be a positive finite number of seconds');
+    }
+    if (this._destroyed || this._paused || this._subSystemParent || frames === 0) return;
+
+    const previousDeltaTime = this.deltaTime;
+    try {
+      for (let frame = 0; frame < frames && !this._destroyed && !this._paused; frame += 1) {
+        this.deltaTime = this._scaleDeltaTime(deltaTime);
+        this._cameraDistanceSq = this._getSimulationDistanceSq();
+        this.syncRendererParents();
+        this._updateEmitterContextVelocity();
+        this._advanceSimulationStep();
+      }
+    } finally {
+      this.deltaTime = previousDeltaTime;
+      this.lastFrame = Date.now();
+    }
+  }
+
+  /** Shared simulation path for display updates, prewarm, and explicit advancement. */
+  private _advanceSimulationStep(handleEndBehavior: boolean = true): void {
+    if (this._playing) this._updateSystemTime();
     if (this._playing) this.emitters.forEach((emitter) => {
       const particles = emitter.update(this.particles, this.getEmitterContext(), this);
-      particles.forEach((p) => this._notifySpawn(p));
+      particles.forEach((particle) => this._notifySpawn(particle));
     });
-
-    // Particle processing
     this._processParticles();
-
-    // Subsystems
     this._updateSubSystems();
-
-    // Cubemap update
-    if (this.useLiveCubemap) this.liveCubemap.update(this.scene, this.sceneRenderer, this.deltaTime);
-
-    this._handleEndBehavior();
+    if (handleEndBehavior) this._handleEndBehavior();
   }
 
   private _scaleDeltaTime(deltaTime: number): number {
@@ -498,6 +604,7 @@ class ParticleSystem extends THREE.Object3D {
     }
   }
 
+  /** Recomputes particle bounds used by spatial processing and renderer helpers. */
   public updateBoundingBox(): void {
     this.boundingBox.makeEmpty();
 
@@ -800,6 +907,7 @@ class ParticleSystem extends THREE.Object3D {
   */
 
   // Start emitting
+  /** Starts or restarts emission from time zero, resets emitter contexts, and clears pause/end flags; existing particles are retained. */
   public start(children: boolean = true): void {
     const now = Date.now();
 
@@ -830,6 +938,7 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   // Pause emission and simulation
+  /** Freezes emission and simulation while playing; propagates to owned subsystems and optionally independent child systems. */
   public pause(children: boolean = true): void {
     if (!this._playing || this._paused) return;
     this._paused = true;
@@ -842,6 +951,7 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   // Stop emission and optionally clear particles
+  /** Stops emission and resets prewarm state. Retained particles continue updating; clearParticles chooses whether to remove them immediately. */
   public stop(clearParticles: boolean, children: boolean = true): void {
     this._playing = false;
     this._paused = false;
@@ -869,6 +979,7 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   // Clear particles
+  /** Clears particles and renderer contents without destroying the system; optionally includes independent child systems. */
   public clearParticles(children: boolean = true): void {
     this.particles.length = 0;
 
@@ -884,6 +995,7 @@ class ParticleSystem extends THREE.Object3D {
     if (children) this._iterateChildren((child) => child.clearParticles(false));
   }
 
+  /** Permanently destroys this system and renderer resources; later update or advancement calls do nothing. */
   public destroy(children: boolean = true): void {
     if (this._destroyed) return;
 
@@ -909,6 +1021,7 @@ class ParticleSystem extends THREE.Object3D {
     * ACCESSING
   */
 
+  /** Attaches an emitter and runs its setup hook. */
   public addEmitter(emitter: Emitter): this {
     this.emitters.push(emitter);
     emitter.setup(this);
@@ -916,6 +1029,7 @@ class ParticleSystem extends THREE.Object3D {
     return this;
   }
 
+  /** Removes an emitter from emission and clears its association with the system. */
   public removeEmitter(emitter: Emitter): this {
     const index = this.emitters.indexOf(emitter);
 
@@ -927,12 +1041,14 @@ class ParticleSystem extends THREE.Object3D {
     return this;
   }
 
+  /** Adds a modifier to the composition; execution order follows numeric priority. */
   public addModule(module: Module): this {
     this.modules.push(module);
 
     return this;
   }
 
+  /** Removes a modifier and runs its cleanup hook. */
   public removeModule(module: Module): this {
     const index = this.modules.indexOf(module);
 
@@ -944,12 +1060,14 @@ class ParticleSystem extends THREE.Object3D {
     return this;
   }
 
+  /** Adds an explicit generic effect; avoid adding the same effect more than once. */
   public addSpatialEffect(spatialEffect: SpatialEffect): this {
     this.spatialEffects.push(spatialEffect);
 
     return this;
   }
 
+  /** Removes an explicitly attached effect without destroying its scene object. */
   public removeSpatialEffect(spatialEffect: SpatialEffect): this {
     const index = this.spatialEffects.indexOf(spatialEffect);
 
@@ -960,6 +1078,7 @@ class ParticleSystem extends THREE.Object3D {
     return this;
   }
 
+  /** Adds a view of the particle population and runs renderer setup. */
   public addRenderer(renderer: Renderer): this {
     this.renderers.push(renderer);
     renderer.setup(this);
@@ -968,6 +1087,7 @@ class ParticleSystem extends THREE.Object3D {
     return this;
   }
 
+  /** Detaches a renderer and destroys its owned rendering resources. */
   public removeRenderer(renderer: Renderer): this {
     const index = this.renderers.indexOf(renderer);
 
@@ -979,12 +1099,14 @@ class ParticleSystem extends THREE.Object3D {
     return this;
   }
 
+  /** Registers an owned renderer object under the appropriate local/world render root. */
   public addRendererObject(object: THREE.Object3D): void {
     object.userData[PARTICLE_RENDERER_OBJECT_KEY] = true;
     this._rendererObjects.add(object);
     this.getRendererParent().add(object);
   }
 
+  /** Transfers a child to this parent, resets its local transform, and shares simulation space. Continuous emission defaults on unless an event trigger is selected. */
   public addSubSystem(subSystem: ParticleSystem, options: Partial<SubSystemOptions>): this {
     // No adding recursive self
     if (subSystem === this) return this;
@@ -1035,6 +1157,7 @@ class ParticleSystem extends THREE.Object3D {
     return this;
   }
 
+  /** Detaches a subsystem without destroying it; its simulation can then be advanced independently. */
   public removeSubSystem(subSystem: ParticleSystem): this {
     if (!this.subSystems.delete(subSystem)) return this;
 
@@ -1047,37 +1170,44 @@ class ParticleSystem extends THREE.Object3D {
     * LISTENERS
   */
 
+  /** Registers a synchronous listener for particle expiry; returns the system for composition. */
   public onDeath(listener: ParticleListener): this {
     this._deathListeners.push(listener);
     return this;
   }
 
+  /** Unregisters a previously attached death listener. */
   public removeDeathListener(listener: ParticleListener): this {
     this._deathListeners = this._deathListeners.filter((value) => value !== listener);
     return this;
   }
 
+  /** Registers a synchronous listener for emitter births. */
   public onSpawn(listener: ParticleListener): this {
     this._spawnListeners.push(listener);
     return this;
   }
 
+  /** Unregisters a previously attached spawn listener. */
   public removeSpawnListener(listener: ParticleListener): this {
     this._spawnListeners = this._spawnListeners.filter((value) => value !== listener);
     return this;
   }
 
+  /** Registers a synchronous listener for collisions reported by a Collision module. */
   public onCollision(listener: CollisionListener): this {
     this._collisionListeners.push(listener);
     return this;
   }
 
+  /** Unregisters a previously attached collision listener. */
   public removeCollisionListener(listener: CollisionListener): this {
     this._collisionListeners = this._collisionListeners.filter((value) => value !== listener);
     return this;
   }
 
   // Called by Collision after a hit is found.
+  /** Reports a contact to listeners and starts eligible collision-triggered subsystem emissions. */
   public notifyCollision(particle: Particle, collision: CollisionHit): void {
     this._collisionListeners.forEach((listener) => listener(particle, collision));
 
@@ -1218,28 +1348,19 @@ class ParticleSystem extends THREE.Object3D {
     this.emitters.forEach((emitter) => emitter.reset());
     this._elapsedTime = 0;
 
-    while (remaining > 0 && !this._destroyed) {
-      this.deltaTime = Math.min(frameDuration, remaining);
+    try {
+      while (remaining > 0 && !this._destroyed) {
+        this.deltaTime = Math.min(frameDuration, remaining);
 
-      this._updateSystemTime();
+        this._advanceSimulationStep(false);
 
-      if (this._playing) {
-        this.emitters.forEach((emitter) => {
-          const newParticles = emitter.update(this.particles, this.getEmitterContext(), this);
-          newParticles.forEach((p) => this._notifySpawn(p));
-        });
+        remaining -= this.deltaTime;
       }
-
-      this._processParticles();
-      this._updateSubSystems();
-
-      remaining -= this.deltaTime;
+    } finally {
+      this.useLiveCubemap = lastUseLiveCubemap;
+      this.deltaTime = previousDeltaTime;
+      this.lastFrame = Date.now();
     }
-
-    this.useLiveCubemap = lastUseLiveCubemap;
-
-    this.deltaTime = previousDeltaTime;
-    this.lastFrame = Date.now();
   }
 
   private _iterateChildren(callback: (child: ParticleSystem) => void): void {

@@ -1,0 +1,13 @@
+# Composition and Lifecycle
+
+A `ParticleSystem` owns arrays of emitters, modules, renderers, and explicitly selected spatial effects. These are mutable collections; use `addEmitter`, `addModule`, `addRenderer`, and their removal methods when changing composition so setup and cleanup hooks run. Passing a single component to the constructor is also supported. Constructor options may be copied to instance fields, so changing an options object later does not always reconfigure a component. Check the exposed runtime property and its source before relying on live edits.
+
+An emitter chooses where particles are born, their initial values, tags, and birth times. `rate` is particles per second; `rateOverDistance` adds emission based on source movement. A burst fires when its time is crossed. Lifetimes are seconds, while lifetime module callbacks receive normalized age from zero to one. A two-element array usually defines a sampled range; a `Set` selects a discrete value. Consult the exported dynamic-value types when supplying callbacks.
+
+Each update restores cached permanent values, prepares modules once, sorts modifiers into priority phases, integrates particles, then sends the resulting particle list to renderers. [Module priority](module-priority.md) explains which changes persist. Renderers can share one simulated population: a sprite, trail, light, and sound can all represent the same particle. [Tags](tags.md) select subsets without duplicating simulation.
+
+`start()` starts playback and resets the emission cycle, including when restarting a paused system. `pause()` freezes simulation. `stop(clearParticles)` stops emission and resets system time; surviving particles can continue moving on subsequent updates when they are retained. `destroy()` permanently releases owned resources. Removing a system from its scene performs temporary cleanup so it can be attached elsewhere. Call `destroy()` when you will no longer use it.
+
+The loop duration schedules emission; it is independent of each particle's lifetime. Turning looping off does not necessarily delete existing particles: `endBehavior` determines what happens after the duration. A population estimate for constant emission is rate multiplied by average lifetime, before bursts, culling, or subsystems. These are nominal estimates: timestep quantization and emission scheduling can lower the observed count. Set `maxParticles` to bound simulation costs, and remember that each renderer adds work.
+
+[Subsystems](subsystems.md) attach secondary effects to lifecycle events. [Spatial effects and collections](spatial-effects.md) coordinate scene-wide behavior. Both rendering backends use this same composition model; see [compatibility](compatibility.md).

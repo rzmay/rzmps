@@ -27,10 +27,11 @@
     "web-vitals": "^1.0.1"
   },
   "scripts": {
-    "prestart": "npm --prefix ../.. run build:modules",
+    "prestart": "npm --prefix ../.. run build:modules && node ../../scripts/docs/generate.mjs --check",
     "start": "vite --host 0.0.0.0",
+    "prebuild": "node ../../scripts/docs/generate.mjs --check",
     "build": "vite build",
-    "benchmark:run": "npm --prefix ../.. run build:modules && npm run build && node scripts/benchmark-rzmps.mjs",
+    "benchmark:run": "npm --prefix ../.. run build --workspace @rzmps/rzmps && node scripts/build-benchmark.mjs && node scripts/benchmark-rzmps.mjs",
     "benchmark:serve": "vite preview --host 127.0.0.1 --port 4173"
   },
   "browserslist": {
@@ -52,7 +53,8 @@
     "@rzmps/jolt": "^2.0.0",
     "@rzmps/rapier": "^2.0.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "eslint-config-airbnb": "^18.2.1",
+    "eslint": "~8.57.1",
+    "eslint-config-airbnb": "^19.0.4",
     "eslint-plugin-import": "^2.23.0",
     "eslint-plugin-jsx-a11y": "^6.4.1",
     "eslint-plugin-workspaces": "^0.6.2",

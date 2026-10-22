@@ -10,7 +10,9 @@ export interface ColorOverLifetimeOptions extends Partial<ModuleOptions> {
     alpha?: DynamicValue<number>;
 }
 
+/** Multiplies color and alpha by normalized-age values in the transient render phase; original particle color is restored next update. */
 class ColorOverLifetime extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: ColorOverLifetimeOptions = {}) {
 
     super((particle: Particle) => {

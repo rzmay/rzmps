@@ -23,9 +23,13 @@ jobs:
     if: github.event.pull_request.draft == false
 
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
       RZMPS_BENCHMARK_DURATION_MS: 1500
       RZMPS_BENCHMARK_WARMUP_MS: 500
+      RZMPS_BENCHMARK_PROFILE: ci
+      RZMPS_BENCHMARK_WIDTH: 640
+      RZMPS_BENCHMARK_HEIGHT: 360
       RZMPS_BENCHMARK_TIMEOUT_MS: 180000
 
     steps:
@@ -35,6 +39,7 @@ jobs:
           repository: ${{ github.event.pull_request.base.repo.full_name }}
           ref: ${{ github.event.pull_request.base.sha }}
           path: base
+          persist-credentials: false
 
       - name: Checkout PR
         uses: actions/checkout@v4
@@ -42,11 +47,12 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
           path: head
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: |
             base/package-lock.json
@@ -57,47 +63,35 @@ jobs:
 
       - name: Install base dependencies
         working-directory: base
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: true
         run: npm ci
-
-      - name: Benchmark base A
-        working-directory: base
-        run: |
-          npm run benchmark:export -- \
-            "$GITHUB_WORKSPACE/benchmark-results/base-a.json"
 
       - name: Install PR dependencies
         working-directory: head
         run: npm ci
 
-      - name: Benchmark PR A
+      - name: Build both libraries once
+        run: |
+          npm run build --workspace @rzmps/rzmps --prefix base
+          npm run build --workspace @rzmps/rzmps --prefix head
+
+      - name: Build both benchmarks with the same harness
         working-directory: head
         run: |
-          npm run benchmark:export -- \
-            "$GITHUB_WORKSPACE/benchmark-results/head-a.json"
+          node apps/demo/scripts/build-benchmark.mjs --library-root "$GITHUB_WORKSPACE/base" --out-dir "$GITHUB_WORKSPACE/benchmark-results/base-site"
+          node apps/demo/scripts/build-benchmark.mjs --library-root "$GITHUB_WORKSPACE/head" --out-dir "$GITHUB_WORKSPACE/benchmark-results/head-site"
 
-      - name: Benchmark PR B
+      - name: Measure interleaved samples (ABBAAB)
         working-directory: head
         run: |
-          npm run benchmark:export -- \
-            "$GITHUB_WORKSPACE/benchmark-results/head-b.json"
-
-      - name: Benchmark base B
-        working-directory: base
-        run: |
-          npm run benchmark:export -- \
-            "$GITHUB_WORKSPACE/benchmark-results/base-b.json"
-
-      - name: Benchmark base C
-        working-directory: base
-        run: |
-          npm run benchmark:export -- \
-            "$GITHUB_WORKSPACE/benchmark-results/base-c.json"
-
-      - name: Benchmark PR C
-        working-directory: head
-        run: |
-          npm run benchmark:export -- \
-            "$GITHUB_WORKSPACE/benchmark-results/head-c.json"
+          set -euo pipefail
+          for sample in base-a head-a head-b base-b base-c head-c; do
+            revision="${sample%-*}"
+            node apps/demo/scripts/benchmark-rzmps.mjs --vsync \
+              --dist "$GITHUB_WORKSPACE/benchmark-results/$revision-site" \
+              --output "$GITHUB_WORKSPACE/benchmark-results/$sample.json"
+          done
 
       - name: Aggregate benchmark samples
         working-directory: head
@@ -137,9 +131,13 @@ jobs:
             }' \
             > benchmark-results/metadata.json
 
-      - name: Upload benchmark results
+      - name: Upload benchmark results and failure diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
-          path: benchmark-results
+          path: |
+            benchmark-results/*.json
+            benchmark-results/*.png
+          if-no-files-found: warn
           retention-days: 30

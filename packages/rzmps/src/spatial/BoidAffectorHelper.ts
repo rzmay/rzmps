@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import BoidAffector from './BoidAffector';
 
+/** Visualization of an affector volume and direction; dispose its resources when removing it permanently. */
 class BoidAffectorHelper extends THREE.Object3D {
   affector: BoidAffector;
   color: THREE.Color;
@@ -173,6 +174,7 @@ class BoidAffectorHelper extends THREE.Object3D {
     this.sampleArrows = [];
   }
 
+  /** Synchronizes the helper transform to its affector before rendering. */
   onBeforeRender(): void {
     this._updateTransform();
   }

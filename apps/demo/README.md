@@ -1,4 +1,4 @@
-# RZMPS Demo
+# 🧅 RZMPS Demo
 
 Interactive browser demo for
 [RZMPS](https://www.npmjs.com/package/@rzmps/rzmps), the Robert May Particle System for
@@ -23,7 +23,6 @@ for `@rzmps/rzmps` and the optional physics integrations.
 - [Local Development](#local-development)
 - [Building](#building)
 - [Monorepo Package Notes](#monorepo-package-notes)
-- [Render Deployment](#render-deployment)
 - [Project Structure](#project-structure)
 - [Adding Presets](#adding-presets)
 - [License](#license)
@@ -209,51 +208,12 @@ the demo can pick up local library rebuilds during development.
 
 The demo imports `@rzmps/rzmps`, `@rzmps/rapier`, `@rzmps/jolt`, and
 `@rzmps/ammo` as npm packages. Local development from the repo root uses npm
-workspaces, so those packages resolve to sibling package folders. Production
-demo deployments should install from `apps/demo` so npm resolves the
-published registry packages instead.
+workspaces, so those packages resolve to sibling package folders. Build from the
+repository root with `npm run site:build` to bundle the workspace packages and documentation.
 
 The publishable packages each have a `prepack` script, so `npm pack` and
 `npm publish` build their `build/**/*` output automatically. The demo itself is
 not published to npm.
-
-## Render Deployment
-
-Use a Render Static Site and set the root directory to `apps/demo` when
-possible. The build command also passes `--workspaces=false`, which keeps npm
-from linking the local monorepo packages and forces the demo to install the
-published `@rzmps/*` packages from the registry.
-
-Recommended Render settings:
-
-```txt
-Service type: Static Site
-Root Directory: apps/demo
-Build Command: npm install --workspaces=false && npm run build --workspaces=false
-Publish Directory: dist
-```
-
-
-If Render still shows paths like `/opt/render/project/src/apps/demo` in
-build errors, its root directory is still the repo root. In that case either set
-Root Directory to `apps/demo`, or use these root-level settings instead:
-
-```txt
-Build Command: cd apps/demo && npm install --workspaces=false && npm run build --workspaces=false
-Publish Directory: apps/demo/dist
-```
-
-Equivalent `render.yaml`:
-
-```yaml
-services:
-  - type: web
-    runtime: static
-    name: rzmps-demo
-    rootDir: apps/demo
-    buildCommand: npm install --workspaces=false && npm run build --workspaces=false
-    staticPublishPath: dist
-```
 
 ## Project Structure
 
@@ -273,26 +233,20 @@ apps/demo
 
 Useful places to start:
 
-- `src/components/ParticleSystemDisplay.js`: loads the active particle preset
+- `src/components/ParticleSystemDisplay.jsx`: loads the active particle preset
   and updates the particle system each frame.
 - `src/gui/ParticleSystemGUI.js`: editor controls, preset switching, and code
   serialization.
-- `src/presets/particles`: particle system examples.
+- `../../examples`: canonical particle system examples.
 - `src/presets/scenes`: scene setup examples, including physics backends.
 
 ## Adding Presets
 
-Add a particle preset by creating a factory in `src/presets/particles`, then
-registering it in `src/presets/particles/index.js`.
-
-```js
-createMyPreset.author = 'github-user';
-
-const particlePresets = {
-  Fire: createFire,
-  "My Preset": createMyPreset,
-};
-```
+Add a particle factory in the root `examples/` directory with exported metadata and
+documentation source regions. Run `npm run docs:generate` from the repository root
+to discover it and create its Markdown guide. Complete the configuration explanations
+and run `npm run docs:check`. The registry is generated; do not edit it manually.
+Attach author metadata with `createMyPreset.author = 'github-user'`.
 
 Add a scene preset by creating a loader in `src/presets/scenes`, then
 registering it in `src/presets/scenes/index.js`.
@@ -314,3 +268,21 @@ createScene.author = 'github-user';
 ## License
 
 MIT
+
+## Shared examples and visual validation
+
+Particle factories live in the root `examples/` directory. The demo consumes its generated
+registry through the existing preset import path, preserving GUI metadata and code generation.
+Scene presets and assets remain under `src/presets/scenes` and `src/assets`.
+
+See [contributing](../../apps/docs/contributing.md) for adding metadata and source regions,
+authoring explanations, and generating documentation. From the repository root, build packages
+then run `npm run preview -- --example fire --backend webgl` (or `webgpu`). Preview output
+contains canvas PNGs, a contact sheet, and diagnostic metadata. `--scene` selects a demo scene.
+
+
+## Previewing with documentation
+
+Run `npm run site:build` from the repository root to produce one `dist` containing
+the demo at `/` and VitePress at `/docs/`. `npm run site:preview` serves both on port
+4173 and accepts `/docs` and `/docs/`.

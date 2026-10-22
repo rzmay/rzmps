@@ -1,0 +1,31 @@
+name: Published agent skill discovery
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      [
+        ".agents/**",
+        "scripts/docs/**",
+        "package*.json",
+        ".github/workflows/agent-discovery.yml",
+      ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  github-discovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Discover the skill in this published GitHub commit
+        run: npm run agents:check -- --source=https://github.com/${{ github.repository }}/tree/${{ github.sha }}
+      - name: Verify the public default-branch shorthand
+        if: github.ref_name == github.event.repository.default_branch
+        run: |
+          npx skills add rzmay/rzmps --list
+          npm run agents:check -- --github

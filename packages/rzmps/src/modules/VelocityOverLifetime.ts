@@ -15,7 +15,9 @@ export interface VelocityOverLifetimeOptions extends Partial<ModuleOptions> {
     speedModifier: DynamicValue<number>;
 }
 
+/** Adds age-dependent linear, orbital, and radial motion before integration without accumulating the transient velocity offset. */
 class VelocityOverLifetime extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<VelocityOverLifetimeOptions> = {}) {
 
     super((particle: Particle) => {

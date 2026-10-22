@@ -10,7 +10,9 @@ export interface RotationOverLifetimeOptions extends Partial<ModuleOptions> {
     angularAcceleration: DynamicValue<THREE.Vector3>;
 }
 
+/** Adds age-dependent angle, angular velocity, and angular acceleration before movement as transient adjustments. */
 class RotationOverLifetime extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<RotationOverLifetimeOptions> = {}) {
 
     super((particle: Particle) => {

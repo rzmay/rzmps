@@ -18,7 +18,7 @@ WebGL/WebGPU behavior.
 ## Documentation
 
 - [ ] Added or updated the relevant section in `README.md`
-- [ ] Added or updated the relevant section in `packages/rzmps/README.md`
+- [ ] Documented public behavior/defaults in TSDoc and updated the relevant guide in `apps/docs`
 - [ ] Documented renderer options, material/lighting behavior, and a short usage example
 
 ## Screenshot
