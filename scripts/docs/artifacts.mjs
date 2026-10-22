@@ -2,6 +2,7 @@
 export const buildArtifacts = [
   'apps/docs/api/',
   'apps/docs/guides/index.md',
+  'apps/docs/guides/benchmarks.md',
   'apps/docs/examples/index.md',
   'apps/docs/.vitepress/api.generated.json',
   'apps/docs/.vitepress/examples.generated.json',

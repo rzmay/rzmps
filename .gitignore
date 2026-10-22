@@ -461,3 +461,9 @@ apps/docs/.vitepress/.temp/
 /apps/docs/public/favicon.png
 /examples/index.js
 /packages/rzmps/AGENTS.md
+
+# Isolated benchmark bundles and CI diagnostics
+/apps/demo/benchmark-dist/
+/benchmark-results/
+
+/apps/docs/guides/benchmarks.md

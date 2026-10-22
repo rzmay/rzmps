@@ -7,9 +7,14 @@ import { setTimeout } from 'node:timers/promises';
 import { startSiteDev } from './dev.mjs';
 
 test('combined development serves the demo at root and proxies only docs paths', { timeout: 60000 }, async () => {
-  const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
+  const site = await startSiteDev({ port: 0, host: '127.0.0.1', prebundle: false });
   const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;
   try {
+    for (const server of [site.demo, site.docs]) {
+      assert.equal(server.config.optimizeDeps.noDiscovery, true);
+      assert.deepEqual(server.config.optimizeDeps.include, []);
+      assert.equal(server.config.server.preTransformRequests, false);
+    }
     const demo = await fetch(origin + '/', { redirect: 'manual' });
     assert.equal(demo.status, 200);
     assert.equal(demo.headers.get('location'), null);
@@ -36,24 +41,18 @@ test('Markdown hot updates and navigation dependency changes reload through the 
   try {
     await fs.symlink(path.resolve(import.meta.dirname, '../../node_modules'), path.join(directory, 'node_modules'), 'dir');
     await fs.mkdir(path.join(directory, '.vitepress'));
-    // These source-only requests never run a browser import graph; skip background prebundling.
     await fs.writeFile(path.join(directory, '.vitepress/config.mts'), `
 import navigation from '../navigation.mjs';
 export default {
   title: 'Test Docs', base: '/docs/',
   themeConfig: { sidebar: [{ text: navigation, items: [] }] },
-  vite: { plugins: [{ name: 'fixture-no-prebundling', configResolved(config) {
-    config.optimizeDeps.include = [];
-    config.optimizeDeps.noDiscovery = true;
-    config.server.preTransformRequests = false;
-  } }] },
 };
 `);
     const navigation = path.join(directory, 'navigation.mjs');
     const article = path.join(directory, 'index.md');
     await fs.writeFile(navigation, "export default 'Original Navigation';\n");
     await fs.writeFile(article, '# Original Article\n');
-    site = await startSiteDev({ port: 0, host: '127.0.0.1', docsDirectory: directory });
+    site = await startSiteDev({ port: 0, host: '127.0.0.1', docsDirectory: directory, prebundle: false });
     const originalServer = site.docs;
     const privatePort = originalServer.httpServer.address().port;
     let reachedRestartGap;
