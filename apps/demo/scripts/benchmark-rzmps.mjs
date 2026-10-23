@@ -139,6 +139,7 @@ async function runBenchmark() {
   const url = `http://${host}:${server.address().port}/benchmark.html?benchmark=1&profile=${profile}&durationMs=${durationMs}&warmupMs=${warmupMs}${suite ? `&suite=${encodeURIComponent(suite)}` : ''}${caseFilter ? `&case=${encodeURIComponent(caseFilter)}` : ''}`;
   let browser;
   let pageError;
+  let benchmarkValidated = false;
   const gpuValidationErrors = [];
   let page;
 
@@ -161,8 +162,11 @@ async function runBenchmark() {
         }
       }
     });
-    page.on('error', (error) => { pageError = error; });
+    page.on('error', (error) => {
+      if (!isExpectedWebGPUTeardownError(error)) pageError = error;
+    });
     page.on('pageerror', (error) => {
+      if (isExpectedWebGPUTeardownError(error)) return;
       pageError = error;
       console.error(`[browser pageerror] ${error.stack ?? error.message}`);
     });
@@ -200,6 +204,7 @@ async function runBenchmark() {
       },
     };
     validateBenchmark({ metadata, results });
+    benchmarkValidated = true;
 
     if (values.output) {
       await fs.mkdir(path.dirname(path.resolve(values.output)), { recursive: true });
@@ -273,11 +278,14 @@ async function runBenchmark() {
       console.log('RZMPS_BENCHMARK_JSON_END');
     }
   } catch (error) {
+    if (benchmarkValidated && isExpectedWebGPUTeardownError(error)) return;
+
     const progress = await page?.evaluate(() => ({
       ...window.__RZMPS_BENCHMARK_PROGRESS__,
       activeCase: document.querySelector('.benchmark-status span')?.textContent,
       status: document.querySelector('.benchmark-status small')?.textContent,
-      results: window.__RZMPS_BENCHMARK_RESULTS__ ?? [],
+      completedResults: window.__RZMPS_BENCHMARK_RESULTS__?.length ?? 0,
+      lastCompletedCase: window.__RZMPS_BENCHMARK_RESULTS__?.at(-1)?.name,
     })).catch(() => null);
 
     if (progress) {
