@@ -70,8 +70,31 @@ fit. Custom tests are not bounds-filtered because RZMPS cannot assume they depen
 ## Renderers, Events, and Readback
 
 GPU-native renderers override `updateGPU` and consume `GPUParticleBufferState` or the compact
-render-output buffer. CPU-oriented renderers use selective asynchronous readback. In a custom
-renderer, request only the particle slots and fields needed:
+render-output buffer. A renderer whose implementation needs ordinary `Particle` objects can
+override `updateGPU` and call the protected `updateCPUFromGPU` helper. It selectively reads the
+requested fields, ignores overlapping requests while one is pending, and passes the resulting
+particles through the renderer's public `update` method:
+
+```ts
+class DebugRenderer extends Renderer {
+  updateGPU(buffers, system, deltaTime) {
+    this.updateCPUFromGPU(
+      buffers,
+      system,
+      deltaTime,
+      64,
+      ["position", "color", "alpha"],
+    );
+  }
+
+  _update(particles) {
+    // Render the selectively reconstructed Particle objects.
+  }
+}
+```
+
+Request only the slots and fields the renderer actually consumes. Outside a renderer, use the
+public system API directly:
 
 ```ts
 const samples = await system.selectiveReadback(64, ["position", "color", "alpha"]);

@@ -1495,12 +1495,23 @@ function BenchmarkScene({ onComplete, onProgress }) {
             system.__rzmpsSnowSwitchedBack
             && system.isGPUProcessingActive
             && elapsed > 2200
-            && !system.__rzmpsSnowReadbackPromise
           ) {
-            system.__rzmpsSnowReadbackPromise = system.selectiveReadback(32)
-              .then((results) => { system.__rzmpsSnowReadback = results; });
+            // Chromium may cancel a map while the reset's retired GPU resources are released.
+            // Leave an empty observation unset so the benchmark retries it on the next frame.
+            if (!system.__rzmpsSnowReadback && !system.__rzmpsSnowReadbackPromise) {
+              system.__rzmpsSnowReadbackPromise = system.selectiveReadback(32)
+                .then((results) => {
+                  if (results.length > 0) system.__rzmpsSnowReadback = results;
+                })
+                .finally(() => { system.__rzmpsSnowReadbackPromise = undefined; });
+            }
             const renderBuffer = system._gpuRenderOutputBuffers;
-            if (renderBuffer && typeof system.sceneRenderer.getArrayBufferAsync === 'function') {
+            if (
+              renderBuffer
+              && !system.__rzmpsSnowRenderReadback
+              && !system.__rzmpsSnowRenderReadbackPromise
+              && typeof system.sceneRenderer.getArrayBufferAsync === 'function'
+            ) {
               system.__rzmpsSnowRenderReadbackPromise = Promise.all([
                 system.sceneRenderer.getArrayBufferAsync(renderBuffer.attributes.floatData),
                 system.sceneRenderer.getArrayBufferAsync(renderBuffer.attributes.uintData),
@@ -1510,7 +1521,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
                   uints: new Uint32Array(uintBuffer),
                   count: renderBuffer.count,
                 };
-              });
+              }).catch((error) => {
+                if (error?.name !== 'AbortError') throw error;
+              }).finally(() => { system.__rzmpsSnowRenderReadbackPromise = undefined; });
             }
           }
         },

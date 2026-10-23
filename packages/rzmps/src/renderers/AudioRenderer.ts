@@ -268,7 +268,7 @@ export default class AudioRenderer extends Renderer {
         || this.alphaAffectsLowPass > 0
       ) fields.push('alpha');
     }
-    this.updateGPUFromSelectiveReadback(buffers, system, deltaTime, sampleLimit, fields);
+    this.updateCPUFromGPU(buffers, system, deltaTime, sampleLimit, fields);
   }
 
   private _updateCameraState(system: ParticleSystem): void {

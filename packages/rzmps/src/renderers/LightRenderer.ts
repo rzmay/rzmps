@@ -98,14 +98,14 @@ class LightRenderer extends Renderer {
       buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
       system: ParticleSystem,
       deltaTime = 0,
-  ): void {
+    ): void {
       const ratio = Math.max(this.ratio, 0.01);
       const sampleLimit = Math.ceil(Math.max(this.count, 1) / ratio) * 2;
       const fields: GPUParticleReadbackField[] = ['position', 'time'];
       if (this.inheritParticleColor) fields.push('color');
       if (this.alphaAffectsIntensity) fields.push('alpha');
       if (this.sizeAffectsRange) fields.push('scale');
-      this.updateGPUFromSelectiveReadback(buffers, system, deltaTime, sampleLimit, fields);
+      this.updateCPUFromGPU(buffers, system, deltaTime, sampleLimit, fields);
     }
 
     _update(particles: Particle[]): void {

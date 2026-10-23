@@ -223,7 +223,7 @@ class TrailRenderer extends Renderer {
     if (this.mode === TrailMode.Particle) fields.push('lifetime');
     if (this.sizeAffectsWidth || this.sizeAffectsLifetime) fields.push('scale');
     if (this.inheritParticleColor) fields.push('color', 'alpha');
-    this.updateGPUFromSelectiveReadback(
+    this.updateCPUFromGPU(
       buffers,
       system,
       deltaTime,

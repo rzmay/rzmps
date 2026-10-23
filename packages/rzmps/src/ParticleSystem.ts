@@ -3340,8 +3340,13 @@ class ParticleSystem extends THREE.Object3D {
       return results;
     } catch (error) {
       // Reset/destroy can invalidate a buffer while its asynchronous map is in
-      // flight. That readback belongs to the retired lifecycle and is discarded.
-      if (lifecycleGeneration !== this._gpuLifecycleGeneration || this._destroyed) return [];
+      // flight. Chromium also reports device/context teardown as AbortError.
+      // Both cases cancel this optional observation rather than the simulation.
+      if (
+        lifecycleGeneration !== this._gpuLifecycleGeneration
+        || this._destroyed
+        || (error as { name?: unknown })?.name === 'AbortError'
+      ) return [];
       throw error;
     } finally {
       slot.pending = false;

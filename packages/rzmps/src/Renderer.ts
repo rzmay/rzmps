@@ -195,10 +195,13 @@ export default abstract class Renderer {
         return float(1).div(this._gpuCountScale.max(float(Number.EPSILON))) as Node<'float'>;
     }
 
-    // CPU-only renderers use this bridge in their updateGPU implementations.
-    // Subclasses pass only the named fields consumed by Renderer.update;
-    // the default requests all fields because Renderer.update consumes Particle.
-    protected updateGPUFromSelectiveReadback(
+    /**
+     * Selectively reads GPU particle fields and forwards the resulting particles through
+     * {@link update}. Use this from {@link updateGPU} when a renderer consumes CPU particle
+     * objects instead of GPU storage directly. Omit `fields` only when the renderer needs the
+     * complete particle state.
+     */
+    protected updateCPUFromGPU(
         buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
         system: ParticleSystem,
         deltaTime: number,
