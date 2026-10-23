@@ -80,12 +80,58 @@ export function initializeStorageAttribute(
   attribute: StorageBufferAttribute,
 ): boolean {
   const backend = renderer.backend as {
+    isWebGPUBackend?: boolean;
+    device?: {
+      createBuffer(descriptor: {
+        label?: string;
+        size: number;
+        usage: number;
+        mappedAtCreation: boolean;
+      }): unknown;
+      queue: {
+        writeBuffer(
+          buffer: unknown,
+          bufferOffset: number,
+          data: ArrayBufferLike,
+          dataOffset: number,
+          size: number,
+        ): void;
+      };
+    };
     get?(target: StorageBufferAttribute): { buffer?: unknown };
     createStorageAttribute?(target: StorageBufferAttribute): void;
   } | undefined;
   const data = backend?.get?.(attribute);
 
   if (!data?.buffer) {
+    const array = attribute.array;
+    const byteStride = attribute.itemSize * array.BYTES_PER_ELEMENT;
+    if (data && backend?.isWebGPUBackend === true && backend.device && byteStride % 4 === 0) {
+      // Three uses mappedAtCreation for initial attributes. Unmapped creation
+      // avoids exhausting Dawn's mapped staging allocations on large buffers.
+      const size = Math.max(4, Math.ceil(array.byteLength / 4) * 4);
+      const buffer = backend.device.createBuffer({
+        label: attribute.name,
+        size,
+        // GPUBufferUsage: COPY_SRC | COPY_DST | VERTEX | STORAGE.
+        usage: 0x04 | 0x08 | 0x20 | 0x80,
+        mappedAtCreation: false,
+      });
+      const chunkSize = 256 * 1024;
+      for (let offset = 0; offset < array.byteLength; offset += chunkSize) {
+        const length = Math.min(chunkSize, array.byteLength - offset);
+        backend.device.queue.writeBuffer(
+          buffer,
+          offset,
+          array.buffer,
+          array.byteOffset + offset,
+          length,
+        );
+      }
+      data.buffer = buffer;
+      return true;
+    }
+
     backend?.createStorageAttribute?.(attribute);
     return true;
   }

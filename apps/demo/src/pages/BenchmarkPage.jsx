@@ -382,9 +382,15 @@ function BenchmarkScene({ onComplete, onProgress }) {
   const { scene, gl, camera } = useThree();
   const active = useRef(null);
   const starting = useRef(false);
+  const failed = useRef(false);
   const caseIndex = useRef(-1);
   const results = useRef([]);
   const lastFrame = useRef();
+  const fail = (error) => {
+    failed.current = true;
+    window.__RZMPS_BENCHMARK_DONE__ = true;
+    throw error;
+  };
   const durationMs = getNumberParam('durationMs', DEFAULT_DURATION_MS);
   const warmupMs = getNumberParam('warmupMs', DEFAULT_WARMUP_MS);
   const suite = getStringParam('suite');
@@ -1645,6 +1651,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     },
     {
       name: 'Heavy modules 10k noise+forces',
+      cpuOnly: true,
       particleCount: 10_000,
       create: () => ({
         modules: [
@@ -1858,9 +1865,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
   };
 
   useFrame(() => {
+    if (failed.current) return;
+
     if (!active.current) {
       void startNextCase().catch((error) => {
-        setTimeout(() => { throw error; });
+        setTimeout(() => fail(error));
       });
       return;
     }
@@ -1873,12 +1882,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
     const simulationDispatchesBefore = active.current.system.__rzmpsBenchmarkSimulationDispatches ?? 0;
     const renderOutputDispatchesBefore = active.current.system.__rzmpsBenchmarkRenderOutputDispatches ?? 0;
     active.current.beforeUpdate?.(active.current.system, frameStart - active.current.phaseStartedAt);
-      try {
-        active.current.system.update();
-      } catch (error) {
-        window.__RZMPS_BENCHMARK_DONE__ = true;
-        throw error;
-      }
+    try {
+      active.current.system.update();
+    } catch (error) {
+      fail(error);
+    }
     const simulationNode = active.current.system._gpuSimulationComputeCache?.node;
     if (simulationNode && !active.current.simulationNodes.has(simulationNode)) {
       active.current.simulationNodes.add(simulationNode);
@@ -1929,7 +1937,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     active.current.gpuActiveSamples.push(active.current.system.isGPUProcessingActive);
 
     if (active.current.requireGPU && !active.current.system.isGPUProcessingActive) {
-      throw new Error(`${active.current.name} did not activate GPU processing.`);
+      fail(new Error(`${active.current.name} did not activate GPU processing.`));
     }
 
     const heapBytes = performance.memory?.usedJSHeapSize;
@@ -1950,16 +1958,15 @@ function BenchmarkScene({ onComplete, onProgress }) {
         active.current.expectedDeathEvents
         && (active.current.system.__rzmpsBenchmarkDeathEvents ?? 0) < active.current.expectedDeathEvents
       ) {
-        throw new Error(
+        fail(new Error(
           `${active.current.name} dispatched ${active.current.system.__rzmpsBenchmarkDeathEvents ?? 0}`
           + ` GPU death events; expected ${active.current.expectedDeathEvents}.`,
-        );
+        ));
       }
       try {
         active.current.validate?.(active.current.system);
       } catch (error) {
-        window.__RZMPS_BENCHMARK_DONE__ = true;
-        throw error;
+        fail(error);
       }
       active.current.measuredDurationMs = elapsed;
       results.current.push(summarize(active.current));

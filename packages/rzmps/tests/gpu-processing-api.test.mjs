@@ -229,6 +229,39 @@ buffers.upload([particle], (p) => (
 assert.equal(buffers.attributes.uintData.array[1], 3);
 assert.equal(buffers.attributes.uintData.array[5], 0);
 
+const unmappedBuffers = createEmptyGPUParticleBufferState(10_000);
+const unmappedData = new Map();
+const bufferDescriptors = [];
+const bufferWrites = [];
+unmappedBuffers.initialize({
+  backend: {
+    isWebGPUBackend: true,
+    device: {
+      createBuffer(descriptor) {
+        bufferDescriptors.push(descriptor);
+        return {};
+      },
+      queue: {
+        writeBuffer(_buffer, offset, _data, dataOffset, size) {
+          bufferWrites.push({ offset, dataOffset, size });
+        },
+      },
+    },
+    get(attribute) {
+      if (!unmappedData.has(attribute)) unmappedData.set(attribute, {});
+      return unmappedData.get(attribute);
+    },
+  },
+});
+assert.equal(bufferDescriptors.length, 2);
+assert.equal(bufferDescriptors.every((descriptor) => descriptor.mappedAtCreation === false), true);
+assert.equal(bufferWrites.every((write) => write.size <= 256 * 1024), true);
+assert.equal(
+  bufferWrites.reduce((total, write) => total + write.size, 0),
+  unmappedBuffers.attributes.floatData.array.byteLength
+    + unmappedBuffers.attributes.uintData.array.byteLength,
+);
+
 const growBuffers = createEmptyGPUParticleBufferState(4);
 const gpuBuffers = new Map();
 const copies = [];
