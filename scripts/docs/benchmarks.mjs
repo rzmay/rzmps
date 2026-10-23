@@ -29,7 +29,7 @@ Average update time measures \`ParticleSystem.update()\`; frame time includes th
 
 ## Pull Request Comparisons
 
-CI builds the base and PR libraries once, then measures both with the same benchmark page, browser dependencies, and build tooling. Three samples per revision run in interleaved ABBAAB order; the comparison uses the median for each metric.
+CI builds and runs the complete benchmark page from each revision against its matching library. Three samples per revision run in interleaved ABBAAB order; the comparison uses the median for each metric and includes only case names present in both revisions.
 
 GitHub-hosted runners use software WebGL. The CI profile uses a 640×360 viewport, browser frame pacing, and a 2,000-particle low polygon box workload for the mesh case. Its results are useful for relative comparisons on that runner and should be interpreted separately from the published hardware results above. Completed samples, environment metadata, and available timeout diagnostics are uploaded as workflow artifacts even when a run fails.
 `;
