@@ -227,6 +227,12 @@ export default abstract class Renderer {
         this._gpuReadbackSequence += 1;
         this._gpuReadbackPending = false;
     }
+
+    /** Restores transient backend state while retaining reusable rendering resources. */
+    public reset(): void {
+        this.cancelGPUSelectiveReadback();
+    }
+
     // Cleanup
     /** Permanently releases owned rendering resources. */
     public abstract destroy(): void;

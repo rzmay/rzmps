@@ -478,6 +478,26 @@ Permanently releases owned rendering resources.
 
 ***
 
+<a id="reset"></a>
+
+### reset()
+
+```ts
+reset(): void;
+```
+
+Restores transient backend state while retaining reusable rendering resources.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`reset`](Renderer.md#reset)
+
+***
+
 <a id="setup"></a>
 
 ### setup()

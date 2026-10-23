@@ -51,6 +51,16 @@ class MeshRenderer extends Renderer {
     private gpuMaterialBuffer?: GPUParticleBufferState | GPUParticleRenderBufferState;
     private gpuMaterialBufferVersion = -1;
     private gpuMaterialRendererVersion = -1;
+    private gpuNodesApplied = false;
+    private readonly cpuOpacityNode = attribute('instanceAlpha', 'float');
+    private readonly gpuInstanceColor = new THREE.Color(1, 1, 1);
+
+    private materialNodeState = new Map<THREE.Material, {
+      colorNode: Node | null;
+      maskShadowNode: Node | null;
+      opacityNode: Node | null;
+      positionNode: Node | null;
+    }>();
 
     private materialEnvironmentState = new Map<THREE.Material, {
       envMap?: THREE.Texture | null;
@@ -92,6 +102,8 @@ class MeshRenderer extends Renderer {
     }
 
     _update(particles: Particle[], system: ParticleSystem): void {
+      this.restoreCPUNodes();
+
       // CPU rendering owns the instance transforms until GPU mode restores
       // identity matrices and applies particle storage in the node material.
       this.identityMatrixCapacity = 0;
@@ -140,11 +152,23 @@ class MeshRenderer extends Renderer {
     }
 
     destroy(): void {
+        this.restoreCPUNodes();
         this.restoreMaterialEnvironment();
         this.instances.removeFromParent();
     }
 
+    override reset(): void {
+      super.reset();
+      this.restoreCPUNodes();
+      const materials = Array.isArray(this.instances.material)
+        ? this.instances.material
+        : [this.instances.material];
+      // Evict Three.js's cached WebGPU render object before its particle buffers are cleared.
+      materials.forEach((material) => material.dispose());
+    }
+
     clear(): void {
+      this.restoreCPUNodes();
       this.instances.count = 0;
       this.identityMatrixCapacity = 0;
       this.gpuMaterialBuffer = undefined;
@@ -159,8 +183,23 @@ class MeshRenderer extends Renderer {
       if (Array.isArray(material)) return material.forEach((mat) => this.preprocessMaterial(mat));
 
       material.transparent = true;
-      (material as THREE.Material & { opacityNode?: unknown }).opacityNode =
-        attribute('instanceAlpha', 'float');
+      const nodeMaterial = material as THREE.Material & {
+        colorNode?: Node | null;
+        maskShadowNode?: Node | null;
+        opacityNode?: Node | null;
+        positionNode?: Node | null;
+      };
+      if (!this.materialNodeState.has(material)) {
+        // WebGPU copies these source-material properties into its internal node material.
+        // Preserve explicit nulls so a mode reset rebuilds the ordinary material path.
+        this.materialNodeState.set(material, {
+          colorNode: nodeMaterial.colorNode ?? null,
+          maskShadowNode: nodeMaterial.maskShadowNode ?? null,
+          opacityNode: this.cpuOpacityNode,
+          positionNode: nodeMaterial.positionNode ?? null,
+        });
+      }
+      nodeMaterial.opacityNode = this.cpuOpacityNode;
       material.onBeforeCompile = (shader) => {
         shader.vertexShader = `
 attribute float instanceAlpha;
@@ -227,6 +266,7 @@ gl_FragColor.a *= vInstanceAlpha;`
       this.gpuMaterialBuffer = buffers;
       this.gpuMaterialBufferVersion = buffers.version;
       this.gpuMaterialRendererVersion = this.version;
+      this.gpuNodesApplied = true;
     }
 
     protected getGPUConfigurationSignature(): string {
@@ -235,8 +275,37 @@ gl_FragColor.a *= vInstanceAlpha;`
     }
 
     protected onGPUConfigurationChange(): void {
+      this.restoreCPUNodes();
       this.instances.geometry = this.mesh.geometry;
       this.instances.material = this.mesh.material;
+      this.preprocessMaterial(this.mesh.material);
+      this.gpuMaterialBuffer = undefined;
+      this.gpuMaterialBufferVersion = -1;
+      this.gpuMaterialRendererVersion = -1;
+    }
+
+    private restoreCPUNodes(): void {
+      if (!this.gpuNodesApplied) return;
+
+      const materials = Array.isArray(this.instances.material)
+        ? this.instances.material
+        : [this.instances.material];
+      materials.forEach((material) => {
+        const nodeMaterial = material as THREE.Material & {
+          colorNode?: Node | null;
+          maskShadowNode?: Node | null;
+          opacityNode?: Node | null;
+          positionNode?: Node | null;
+        };
+        const state = this.materialNodeState.get(material);
+        nodeMaterial.positionNode = state?.positionNode ?? null;
+        nodeMaterial.colorNode = state?.colorNode ?? null;
+        nodeMaterial.opacityNode = state?.opacityNode ?? this.cpuOpacityNode;
+        nodeMaterial.maskShadowNode = state?.maskShadowNode ?? null;
+        material.needsUpdate = true;
+      });
+
+      this.gpuNodesApplied = false;
       this.gpuMaterialBuffer = undefined;
       this.gpuMaterialBufferVersion = -1;
       this.gpuMaterialRendererVersion = -1;
@@ -252,10 +321,12 @@ gl_FragColor.a *= vInstanceAlpha;`
 
       for (let index = this.identityMatrixCapacity; index < count; index += 1) {
         this.instances.setMatrixAt(index, this.dummy.matrix);
+        this.instances.setColorAt(index, this.gpuInstanceColor);
         this._alphaAttr.setX(index, 1);
       }
 
       this.identityMatrixCapacity = count;
+      if (this.instances.instanceColor) this.instances.instanceColor.needsUpdate = true;
       this.instances.instanceMatrix.needsUpdate = true;
       this._alphaAttr.needsUpdate = true;
     }

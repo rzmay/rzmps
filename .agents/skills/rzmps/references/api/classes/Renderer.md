@@ -196,6 +196,22 @@ Permanently releases owned rendering resources.
 
 ***
 
+<a id="reset"></a>
+
+### reset()
+
+```ts
+reset(): void;
+```
+
+Restores transient backend state while retaining reusable rendering resources.
+
+#### Returns
+
+`void`
+
+***
+
 <a id="setup"></a>
 
 ### setup()

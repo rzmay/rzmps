@@ -52,6 +52,15 @@ class GPUCapableRenderer extends Renderer {
   clear() {}
 }
 
+class ResetTrackingRenderer extends GPUCapableRenderer {
+  resetCount = 0;
+
+  reset() {
+    super.reset();
+    this.resetCount += 1;
+  }
+}
+
 const cpuOnlyModule = new Module(() => {});
 const gpuModule = new Module(Module.CPU_UNSUPPORTED, {
   modifyGPU() {},
@@ -156,6 +165,17 @@ assert.equal(modeSwitchSystem.particles.length, 1);
 modeSwitchSystem.gpuProcessing = false;
 assert.equal(modeSwitchSystem.particles.length, 0);
 assert.equal(modeSwitchSystem.playing, true);
+
+const resetTrackingRenderer = new ResetTrackingRenderer();
+const rendererLifecycleSystem = new ParticleSystem({
+  emitters: [],
+  renderers: [resetTrackingRenderer],
+  modules: [],
+});
+rendererLifecycleSystem.clearParticles();
+assert.equal(resetTrackingRenderer.resetCount, 0);
+rendererLifecycleSystem.reset();
+assert.equal(resetTrackingRenderer.resetCount, 1);
 
 const resetSubSystem = new ParticleSystem({ emitters: [], renderers: [], modules: [] });
 const resetChildSystem = new ParticleSystem({ emitters: [], renderers: [], modules: [] });

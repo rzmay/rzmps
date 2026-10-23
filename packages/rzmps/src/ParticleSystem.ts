@@ -4028,6 +4028,7 @@ class ParticleSystem extends THREE.Object3D {
 
   /** Stop, clear all CPU/GPU state and timing, then begin a fresh run. */
   public reset(children: boolean = true): void {
+    this.renderers.forEach((renderer) => renderer.reset());
     this.stop(true, false);
     this.start(false);
 
