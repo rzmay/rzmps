@@ -37,6 +37,11 @@ function formatNumber(value, digits = 1) {
   return Number.isFinite(value) ? value.toFixed(digits) : 'n/a';
 }
 
+function isExpectedWebGPUTeardownError(error) {
+  return error?.name === 'OperationError'
+    && error.message?.includes('Instance dropped in popErrorScope');
+}
+
 function getChromeArgs() {
   const args = [
     '--disable-dev-shm-usage',
@@ -262,9 +267,11 @@ async function runBenchmark() {
       }
     });
 
-    console.log('RZMPS_BENCHMARK_JSON_START');
-    console.log(JSON.stringify({ metadata, results }, null, 2));
-    console.log('RZMPS_BENCHMARK_JSON_END');
+    if (!values.output) {
+      console.log('RZMPS_BENCHMARK_JSON_START');
+      console.log(JSON.stringify({ metadata, results }, null, 2));
+      console.log('RZMPS_BENCHMARK_JSON_END');
+    }
   } catch (error) {
     const progress = await page?.evaluate(() => ({
       ...window.__RZMPS_BENCHMARK_PROGRESS__,
@@ -285,7 +292,17 @@ async function runBenchmark() {
     }
     throw pageError ?? error;
   } finally {
-    try { if (browser) await browser.close(); } finally {
+    try {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (error) {
+          // Chromium/SwiftShader can reject WebGPU error-scope cleanup after all
+          // benchmark results have already been collected and validated.
+          if (!isExpectedWebGPUTeardownError(error)) throw error;
+        }
+      }
+    } finally {
       server.closeAllConnections();
       await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }
