@@ -38,8 +38,11 @@ function formatNumber(value, digits = 1) {
 }
 
 function isExpectedWebGPUTeardownError(error) {
-  return error?.name === 'OperationError'
-    && error.message?.includes('Instance dropped in popErrorScope');
+  const description = typeof error === 'string'
+    ? error
+    : `${error?.name ?? ''}: ${error?.message ?? String(error)}`;
+  return description.includes('OperationError')
+    && description.includes('Instance dropped in popErrorScope');
 }
 
 function getChromeArgs() {
@@ -209,6 +212,8 @@ async function runBenchmark() {
     if (values.output) {
       await fs.mkdir(path.dirname(path.resolve(values.output)), { recursive: true });
       await fs.writeFile(values.output, `${JSON.stringify({ metadata, results }, null, 2)}\n`);
+      console.log(`RZMPS benchmark complete: wrote ${results.length} cases to ${path.resolve(values.output)}`);
+      return;
     }
     console.log('RZMPS browser benchmark');
     console.log(`Browser: ${metadata.browser}`);
@@ -272,11 +277,9 @@ async function runBenchmark() {
       }
     });
 
-    if (!values.output) {
-      console.log('RZMPS_BENCHMARK_JSON_START');
-      console.log(JSON.stringify({ metadata, results }, null, 2));
-      console.log('RZMPS_BENCHMARK_JSON_END');
-    }
+    console.log('RZMPS_BENCHMARK_JSON_START');
+    console.log(JSON.stringify({ metadata, results }, null, 2));
+    console.log('RZMPS_BENCHMARK_JSON_END');
   } catch (error) {
     if (benchmarkValidated && isExpectedWebGPUTeardownError(error)) return;
 
