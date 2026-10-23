@@ -126,6 +126,10 @@ async function createBenchmarkRenderer(defaultProps) {
 
   await renderer.init();
 
+  if (renderer.backend.isWebGPUBackend !== true) {
+    throw new Error('GPU benchmarks require a native WebGPU backend; Three.js selected its WebGL fallback.');
+  }
+
   return renderer;
 }
 

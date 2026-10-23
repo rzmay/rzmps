@@ -708,6 +708,9 @@ gpuEligibilitySystem._gpuTagOverflow = false;
 
 assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule], []), true);
 assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule, cpuOnlyModule], []), false);
+gpuEligibilitySystem._renderer.backend = { isWebGLBackend: true };
+assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule], []), false);
+delete gpuEligibilitySystem._renderer.backend;
 const renderTimeGPUModule = new Module(Module.CPU_UNSUPPORTED, {
   priority: 1,
   modifyGPU() {},

@@ -50,6 +50,9 @@ function getChromeArgs() {
       '--use-gl=angle',
       '--use-angle=swiftshader',
       '--enable-unsafe-swiftshader',
+      '--enable-unsafe-webgpu',
+      '--use-webgpu-adapter=swiftshader',
+      '--use-gpu-in-tests',
     );
   } else {
     args.push('--use-angle=default');

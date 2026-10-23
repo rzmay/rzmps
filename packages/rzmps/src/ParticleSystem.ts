@@ -234,8 +234,15 @@ interface GPUSelectiveReadbackSlot {
 }
 
 function isWebGPURenderer(renderer: unknown): renderer is WebGPURenderer {
-  return renderer instanceof WebGPURenderer
-    || Boolean((renderer as { isWebGPURenderer?: boolean } | undefined)?.isWebGPURenderer);
+  const candidate = renderer as {
+    isWebGPURenderer?: boolean;
+    backend?: { isWebGLBackend?: boolean };
+  } | undefined;
+
+  // Three's WebGPURenderer keeps its identity after falling back to WebGL2,
+  // but that backend cannot execute RZMPS's storage-buffer compute pipeline.
+  return (renderer instanceof WebGPURenderer || candidate?.isWebGPURenderer === true)
+    && candidate?.backend?.isWebGLBackend !== true;
 }
 
 function nextPowerOfTwo(value: number): number {
