@@ -68,16 +68,17 @@ export class GPUAllocationWriter {
   private readonly occupancyStorage: AtomicUintStorage;
 
   constructor(private readonly state: GPUAllocationBufferState) {
-    this.counterStorage = storage(
-      state.counterAttribute,
+    const allocationStorage = storage(
+      state.attribute,
       'uint',
-      GPU_ALLOCATION_COUNTER_COUNT,
+      GPU_ALLOCATION_COUNTER_COUNT + state.capacity * 4,
     ).toAtomic() as AtomicUintStorage;
-    this.occupancyStorage = storage(
-      state.occupancyAttribute,
-      'uint',
-      state.capacity * 4,
-    ).toAtomic() as AtomicUintStorage;
+    this.counterStorage = allocationStorage;
+    this.occupancyStorage = allocationStorage;
+  }
+
+  private occupancyIndex(index: Node<'uint'>): Node<'uint'> {
+    return index.add(uint(GPU_ALLOCATION_COUNTER_COUNT));
   }
 
   recordAllocationAttempt(): void {
@@ -189,18 +190,18 @@ export class GPUAllocationWriter {
 
   snapshotAlive(particle: GPUParticleLike): void {
     atomicStore(
-      this.occupancyStorage.element(particle.index),
+      this.occupancyStorage.element(this.occupancyIndex(particle.index)),
       particle.alive,
     );
     atomicStore(
       this.occupancyStorage.element(
-        particle.index.add(this.state.capacity),
+        this.occupancyIndex(particle.index.add(this.state.capacity)),
       ),
       uint(0),
     );
     atomicStore(
       this.occupancyStorage.element(
-        particle.index.add(this.state.capacity * 2),
+        this.occupancyIndex(particle.index.add(this.state.capacity * 2)),
       ),
       uint(0),
     );
@@ -209,7 +210,7 @@ export class GPUAllocationWriter {
   markSpawned(particle: GPUParticleLike): void {
     atomicStore(
       this.occupancyStorage.element(
-          particle.index.add(this.state.capacity),
+        this.occupancyIndex(particle.index.add(this.state.capacity)),
       ),
       uint(1),
     );
@@ -217,7 +218,7 @@ export class GPUAllocationWriter {
 
   wasSpawned(particle: GPUParticleLike): Node<'bool'> {
     return atomicLoad(this.occupancyStorage.element(
-      particle.index.add(this.state.capacity),
+      this.occupancyIndex(particle.index.add(this.state.capacity)),
     )).notEqual(uint(0));
   }
 
@@ -225,7 +226,7 @@ export class GPUAllocationWriter {
     If(requestIndex.lessThan(uint(this.state.capacity)), () => {
       atomicStore(
         this.occupancyStorage.element(
-          requestIndex.add(this.state.capacity * 3),
+          this.occupancyIndex(requestIndex.add(this.state.capacity * 3)),
         ),
         sourceIndex,
       );
@@ -234,7 +235,7 @@ export class GPUAllocationWriter {
 
   emissionSource(requestIndex: Node<'uint'>): Node<'uint'> {
     return atomicLoad(this.occupancyStorage.element(
-      requestIndex.add(this.state.capacity * 3),
+      this.occupancyIndex(requestIndex.add(this.state.capacity * 3)),
     ));
   }
 
@@ -245,21 +246,19 @@ export class GPUAllocationWriter {
   ): void {
     If(
       atomicLoad(
-        this.occupancyStorage.element(particle.index),
+        this.occupancyStorage.element(this.occupancyIndex(particle.index)),
       ).notEqual(uint(0)),
       () => {
         const replacementIndex = claimReplacement().toVar('emitterReplacementIndex');
         If(replacementIndex.lessThan(replacementCount), () => {
           atomicStore(
             this.occupancyStorage.element(
-              particle.index.add(this.state.capacity * 2),
+              this.occupancyIndex(particle.index.add(this.state.capacity * 2)),
             ),
             replacementIndex.add(uint(1)),
           );
           atomicStore(
-            this.occupancyStorage.element(
-            particle.index,
-            ),
+            this.occupancyStorage.element(this.occupancyIndex(particle.index)),
             uint(0),
           );
         });
@@ -269,7 +268,7 @@ export class GPUAllocationWriter {
 
   isSelectedForReplacement(particle: GPUParticleLike): Node<'bool'> {
     return atomicLoad(this.occupancyStorage.element(
-      particle.index.add(this.state.capacity * 2),
+      this.occupancyIndex(particle.index.add(this.state.capacity * 2)),
     )).notEqual(uint(0));
   }
 
@@ -278,7 +277,7 @@ export class GPUAllocationWriter {
     initialize: (replacementIndex: Node<'uint'>) => void,
   ): void {
     const marker = atomicLoad(this.occupancyStorage.element(
-      particle.index.add(this.state.capacity * 2),
+      this.occupancyIndex(particle.index.add(this.state.capacity * 2)),
     )).toVar('emitterReplacementMarker');
 
     If(marker.notEqual(uint(0)), () => {
@@ -290,7 +289,7 @@ export class GPUAllocationWriter {
       this.recordAllocationSuccess();
       atomicStore(
         this.occupancyStorage.element(
-          particle.index.add(this.state.capacity * 2),
+          this.occupancyIndex(particle.index.add(this.state.capacity * 2)),
         ),
         uint(0),
       );
@@ -304,20 +303,20 @@ export class GPUAllocationWriter {
  */
 export class GPUAllocationBufferState {
   readonly capacity: number;
-  readonly counterAttribute: StorageBufferAttribute;
-  readonly occupancyAttribute: StorageBufferAttribute;
+  readonly attribute: StorageBufferAttribute;
   private readonly counterData: Uint32Array;
 
   constructor(capacity: number) {
     this.capacity = Math.max(1, Math.floor(capacity));
-    this.counterData = new Uint32Array(GPU_ALLOCATION_COUNTER_COUNT);
-    this.counterAttribute = new StorageBufferAttribute(this.counterData, 1);
-    this.occupancyAttribute = new StorageBufferAttribute(new Uint32Array(this.capacity * 4), 1);
+    // Counters and per-slot allocation state share one uint binding so native
+    // emission remains within WebGPU's default eight-buffer stage limit.
+    const data = new Uint32Array(GPU_ALLOCATION_COUNTER_COUNT + this.capacity * 4);
+    this.counterData = data.subarray(0, GPU_ALLOCATION_COUNTER_COUNT);
+    this.attribute = new StorageBufferAttribute(data, 1);
   }
 
   initialize(renderer: GPUStorageBufferRenderer): void {
-    initializeStorageAttribute(renderer, this.counterAttribute);
-    initializeStorageAttribute(renderer, this.occupancyAttribute);
+    initializeStorageAttribute(renderer, this.attribute);
   }
 
   reset(sequence: number, startingActiveCount = 0, cullingMode = 0): void {
@@ -330,7 +329,7 @@ export class GPUAllocationBufferState {
     this.counterData[AllocationCounter.BoundsMinimumY] = 0xffffffff;
     this.counterData[AllocationCounter.BoundsMinimumZ] = 0xffffffff;
     this.counterData[AllocationCounter.MaximumVelocity] = 0x80000000;
-    this.counterAttribute.needsUpdate = true;
+    this.attribute.needsUpdate = true;
   }
 
   createWriter(): GPUAllocationWriter {
@@ -342,7 +341,7 @@ export class GPUAllocationBufferState {
   }
 
   async readback(renderer: GPUReadbackRenderer): Promise<GPUAllocationDiagnostics> {
-    const buffer = await renderer.getArrayBufferAsync(this.counterAttribute);
+    const buffer = await renderer.getArrayBufferAsync(this.attribute);
     return diagnosticsFromCounters(new Uint32Array(buffer));
   }
 }

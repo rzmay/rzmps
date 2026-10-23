@@ -304,22 +304,22 @@ sampledVolumeEmitter.createBuiltInGPUUpdate();
 assert.equal(sampledVolumeEmitter._gpuVolumeSampling.count, 4);
 assert.ok(
   Math.abs(
-    sampledVolumeEmitter._gpuVolumeSampling.positions.array[3]
+    sampledVolumeEmitter._gpuVolumeSampling.vectors.array[3]
       - sampledVolumeShape.getVolumeSamples()[0].radius,
   ) < 1e-6,
   'GPU storage should use the radius from the shared CPU volume table',
 );
-const sampledVolumePositions = sampledVolumeEmitter._gpuVolumeSampling.positions;
+const sampledVolumeVectors = sampledVolumeEmitter._gpuVolumeSampling.vectors;
 sampledVolumeEmitter.createBuiltInGPUUpdate();
 assert.equal(
-  sampledVolumeEmitter._gpuVolumeSampling.positions,
-  sampledVolumePositions,
+  sampledVolumeEmitter._gpuVolumeSampling.vectors,
+  sampledVolumeVectors,
   'unchanged shared volume tables should reuse their GPU storage',
 );
 sampledVolumeShape.volumeSamples = 6;
 sampledVolumeEmitter.createBuiltInGPUUpdate();
 assert.equal(sampledVolumeEmitter._gpuVolumeSampling.count, 6);
-assert.notEqual(sampledVolumeEmitter._gpuVolumeSampling.positions, sampledVolumePositions);
+assert.notEqual(sampledVolumeEmitter._gpuVolumeSampling.vectors, sampledVolumeVectors);
 
 const gpuNativeEmitter = new Emitter({
   source: EmissionShape.Box({ source: EmissionSource.Volume }, 1, 2, 3),
@@ -432,7 +432,7 @@ const gpuEmitterRenderer = Object.assign(Object.create(WebGPURenderer.prototype)
 });
 const gpuEmitterSystem = new ParticleSystem({
   gpuProcessing: true,
-  emitters: [new Emitter({ rate: 1 })],
+  emitters: [new Emitter({ rate: 1 }), new Emitter({ rate: 2 })],
   renderers: [],
   modules: [],
   maxParticles: 32,
@@ -441,8 +441,8 @@ gpuEmitterSystem._renderer = gpuEmitterRenderer;
 gpuEmitterSystem.deltaTime = 1 / 60;
 assert.equal(gpuEmitterSystem._shouldExecuteEmittersOnGPU(), true);
 gpuEmitterSystem._processParticles();
-assert.equal(gpuEmitterDispatches, 5);
-assert.ok(gpuEmitterSystem._gpuEmissionComputeCache.node);
+assert.equal(gpuEmitterDispatches, 8);
+assert.equal(gpuEmitterSystem._gpuEmissionComputeCache.nodes.length, 2);
 assert.equal(gpuEmitterSystem._gpuBuffers.count, gpuEmitterSystem._gpuBuffers.capacity);
 assert.equal(gpuEmitterSystem.particles.length, 0);
 ParticleSystem.GPU_READBACK_RATE = previousEmitterReadbackRate;
@@ -467,11 +467,11 @@ builtInEmitterSystem.deltaTime = 1 / 60;
 assert.equal(builtInEmitterSystem._shouldExecuteEmittersOnGPU(), true);
 builtInEmitterSystem._processParticles();
 assert.equal(builtInEmitterDispatches, 5);
-assert.ok(builtInEmitterSystem._gpuEmissionComputeCache.node);
+assert.ok(builtInEmitterSystem._gpuEmissionComputeCache.nodes[0]);
 assert.ok(builtInEmitterSystem._gpuEmissionPrepareComputeCache.nodes[0]);
 assert.equal(builtInEmitterSystem._gpuBuffers.count, builtInEmitterSystem._gpuBuffers.capacity);
 assert.equal(builtInEmitterSystem.particles.length, 0);
-const initialEmissionNode = builtInEmitterSystem._gpuEmissionComputeCache.node;
+const initialEmissionNode = builtInEmitterSystem._gpuEmissionComputeCache.nodes[0];
 const initialPrepareNode = builtInEmitterSystem._gpuEmissionPrepareComputeCache.nodes[0];
 const initialEmitterVersion = builtInGPUEmitter.version;
 const initialConfigurationStats = builtInEmitterSystem.gpuConfigurationStats;
@@ -483,7 +483,7 @@ builtInEmitterSystem.duration = 24;
 builtInEmitterSystem.gravity.set(1, 2, 3);
 builtInEmitterSystem._processParticles();
 assert.equal(builtInGPUEmitter.version, initialEmitterVersion);
-assert.equal(builtInEmitterSystem._gpuEmissionComputeCache.node, initialEmissionNode);
+assert.equal(builtInEmitterSystem._gpuEmissionComputeCache.nodes[0], initialEmissionNode);
 assert.equal(builtInEmitterSystem._gpuEmissionPrepareComputeCache.nodes[0], initialPrepareNode);
 assert.equal(
   builtInEmitterSystem.gpuConfigurationStats.pipelineBuilds,
@@ -695,6 +695,23 @@ const renderTimeGPUModule = new Module(Module.CPU_UNSUPPORTED, {
 assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([renderTimeGPUModule], []), false);
 gpuEligibilitySystem.renderers = [new GPUCapableRenderer()];
 assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([renderTimeGPUModule], []), true);
+
+const subsystemLimitSystem = new ParticleSystem({
+  gpuProcessing: true,
+  emitters: [],
+  renderers: [new GPUCapableRenderer()],
+  modules: [],
+});
+subsystemLimitSystem.addSubSystem(new ParticleSystem({ renderers: [] }), {
+  emitContinuous: true,
+});
+subsystemLimitSystem._renderer = Object.assign(Object.create(WebGPURenderer.prototype), {
+  backend: {
+    device: { limits: { maxStorageBuffersPerShaderStage: 8 } },
+  },
+});
+assert.equal(subsystemLimitSystem._canProcessParticlesOnGPU([gpuModule], []), true);
+
 gpuEligibilitySystem.renderers = [new CPUOnlyRenderer()];
 assert.equal(
   gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule], [new ParticleForceField()]),
@@ -1010,11 +1027,19 @@ assert.equal(gpuDeathCallbackParticle.id, 'gpu-death-dispatch');
 assert.equal(gpuDeathSystem.particles[0].alive, false);
 
 const allocationState = new GPUAllocationBufferState(16);
+const initializedAllocationAttributes = [];
+allocationState.initialize({
+  backend: {
+    get: () => undefined,
+    createStorageAttribute: (attribute) => initializedAllocationAttributes.push(attribute),
+  },
+});
+assert.deepEqual(initializedAllocationAttributes, [allocationState.attribute]);
 allocationState.reset(4, 3, 1);
-allocationState.counterAttribute.array[0] = 5;
-allocationState.counterAttribute.array[1] = 2;
-allocationState.counterAttribute.array[2] = 3;
-allocationState.counterAttribute.array[3] = 1;
+allocationState.attribute.array[0] = 5;
+allocationState.attribute.array[1] = 2;
+allocationState.attribute.array[2] = 3;
+allocationState.attribute.array[3] = 1;
 const orderedFloatBits = (value) => {
   const float = new Float32Array([value]);
   const bits = new Uint32Array(float.buffer)[0];
@@ -1023,9 +1048,9 @@ const orderedFloatBits = (value) => {
     : (bits ^ 0x80000000) >>> 0;
 };
 [-2, -3, -4, 5, 6, 7, 8].forEach((value, index) => {
-  allocationState.counterAttribute.array[10 + index] = orderedFloatBits(value);
+  allocationState.attribute.array[10 + index] = orderedFloatBits(value);
 });
-allocationState.counterAttribute.array[17] = 1;
+allocationState.attribute.array[17] = 1;
 const allocationSnapshot = allocationState.snapshot();
 assert.equal(allocationSnapshot.sequence, 4);
 assert.equal(allocationSnapshot.capacity, 16);

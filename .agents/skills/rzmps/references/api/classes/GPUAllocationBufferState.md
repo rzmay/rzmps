@@ -33,32 +33,22 @@ new GPUAllocationBufferState(capacity): GPUAllocationBufferState;
 
 ## Properties
 
+<a id="attribute"></a>
+
+### attribute
+
+```ts
+readonly attribute: StorageBufferAttribute;
+```
+
+***
+
 <a id="capacity"></a>
 
 ### capacity
 
 ```ts
 readonly capacity: number;
-```
-
-***
-
-<a id="counterattribute"></a>
-
-### counterAttribute
-
-```ts
-readonly counterAttribute: StorageBufferAttribute;
-```
-
-***
-
-<a id="occupancyattribute"></a>
-
-### occupancyAttribute
-
-```ts
-readonly occupancyAttribute: StorageBufferAttribute;
 ```
 
 ## Methods

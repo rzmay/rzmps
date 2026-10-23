@@ -148,6 +148,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [NoiseOptions](Supporting-Types/interfaces/NoiseOptions.md)
 - [OctreeConfig](interfaces/OctreeConfig.md)
 - [OrientToDirectionOptions](Supporting-Types/interfaces/OrientToDirectionOptions.md)
+- [ParticleOctreeQueryOptions](interfaces/ParticleOctreeQueryOptions.md)
 - [ParticleSpatialGridOptions](interfaces/ParticleSpatialGridOptions.md)
 - [ParticleSpatialGridQueryOptions](interfaces/ParticleSpatialGridQueryOptions.md)
 - [PointLightOptions](Supporting-Types/interfaces/PointLightOptions.md)

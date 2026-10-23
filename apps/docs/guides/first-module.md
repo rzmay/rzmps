@@ -48,13 +48,10 @@ passes it as the callback's fourth argument.
 ```ts
 const crowdDrag = new Module(
   (particle, deltaTime, _system, octree) => {
-    const node = octree?.locate(particle.position);
-    if (!node) return;
-
-    const nearbyCount = Math.max(0, [node, ...node.neighbors].reduce(
-      (count, nearbyNode) => count + nearbyNode.particleIndices.length,
-      0,
-    ) - 1);
+    const nearbyCount = octree
+      .particlesInRadius(particle.position, 2)
+      .filter((neighbor) => neighbor !== particle)
+      .length;
     const damping = Math.max(0, 1 - nearbyCount * 0.02 * deltaTime);
     particle.velocity.multiplyScalar(damping);
   },
@@ -68,10 +65,10 @@ const crowdDrag = new Module(
 );
 ```
 
-This is an approximate neighborhood: it samples the particle's containing node and adjacent
-nodes, whose physical size depends on tree subdivision. For exact distance checks, inspect the
-referenced particles before applying the result. Custom aggregate data can make calculations such
-as average position or velocity cheaper still; see
+The octree prunes nodes outside the query sphere, then returns the particles that pass exact
+distance checks in the remaining leaves. Custom aggregate data remains useful when an
+approximation such as average position or velocity is cheaper than collecting every matching
+particle; see
 [particle spatial acceleration](particle-octree.md).
 
 For reusable behavior, extend Module and pass your per-particle callback and options to `super`. Override `prepare(system, deltaTime)` when expensive shared work should happen once per frame; call `super.prepare` if using automatic spatial-effect collection. Put resource cleanup in `cleanup()`. Dependencies in `dependents` participate in normal priority sorting rather than forcing an independent update loop.

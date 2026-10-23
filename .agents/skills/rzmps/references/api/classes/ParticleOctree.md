@@ -148,6 +148,40 @@ Returns the deepest containing node up to maxDepth; positions outside the volume
 
 ***
 
+<a id="particlesinradius"></a>
+
+### particlesInRadius()
+
+```ts
+particlesInRadius(
+   position,
+   radius,
+   options?
+): Particle[];
+```
+
+Returns particles inside an exact radius after pruning nonintersecting octree nodes.
+
+#### Parameters
+
+##### position
+
+`Vector3`
+
+##### radius
+
+`number`
+
+##### options?
+
+[`ParticleOctreeQueryOptions`](../interfaces/ParticleOctreeQueryOptions.md) = `{}`
+
+#### Returns
+
+[`Particle`](Particle.md)[]
+
+***
+
 <a id="rebuild"></a>
 
 ### rebuild()

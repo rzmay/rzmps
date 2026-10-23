@@ -653,7 +653,7 @@ class ParticleSystem extends THREE.Object3D {
     .setName('rzmpsWorldToSimulation') as unknown as GPUUniformNode<THREE.Matrix4, 'mat4'>;
   private readonly _gpuEventFrameNode = uniform(0, 'uint')
     .setName('rzmpsEventFrame') as unknown as GPUUniformNode<number, 'uint'>;
-  private _gpuEmissionComputeCache?: GPUComputeCache;
+  private _gpuEmissionComputeCache?: GPUComputeListCache;
   private _gpuOldEmissionComputeCache?: GPUComputeListCache;
   private _gpuOldSelectionComputeCache?: GPUComputeListCache;
   private _gpuOldDeathEventComputeCache?: GPUComputeCache;
@@ -1343,9 +1343,8 @@ class ParticleSystem extends THREE.Object3D {
     const emitterInstances = this._acquireGPUEmitterInstances('standalone', emitters.length, emitters, renderer);
     const prepareNodes = this._getGPUEmissionPrepareComputeNodes(context, emitters, emitterInstances);
     prepareNodes.forEach((node) => renderer.compute(node));
-    const computeNode = this._getGPUEmissionComputeNode(context, emitters, emitterInstances, false);
-
-    renderer.compute(computeNode);
+    this._getGPUEmissionComputeNodes(context, emitters, emitterInstances, false)
+      .forEach((node) => renderer.compute(node));
     if (this.maxCullingMode === MaxCulling.Old) {
       this._computeGPUOldEmissionPhase(context, emitters, emitterInstances);
     }
@@ -1353,12 +1352,12 @@ class ParticleSystem extends THREE.Object3D {
       .forEach((node) => renderer.compute(node));
   }
 
-  private _getGPUEmissionComputeNode(
+  private _getGPUEmissionComputeNodes(
     context: GPUParticleUpdateContext,
     emitters: Emitter[],
     emitterInstances: GPUEmitterInstanceBufferState,
     reclaimOld: boolean,
-  ): ComputeNode {
+  ): ComputeNode[] {
     const buffers = context.buffers;
     const cacheKey = [
       'emission',
@@ -1369,33 +1368,33 @@ class ParticleSystem extends THREE.Object3D {
 
     const cached = this._gpuEmissionComputeCache;
     if (cached?.key === cacheKey) {
-      return cached.node;
+      return cached.nodes;
     }
 
-    cached?.node.dispose?.();
+    cached?.nodes.forEach((node) => node.dispose?.());
 
-    const computeNode = Fn(() => {
-      emitters.forEach((emitter, emitterIndex) => {
-        emitter.createBuiltInGPUUpdate()({
-          ...context,
-          emitter,
-          emitterIndex,
-          output: buffers,
-          emitterRuntime: emitterInstances.createRuntime(emitterIndex),
-          tagMasks: this._getGPUEmitterTagMasks(emitter),
-          reclaimOld,
-        });
+    // Keep each emitter in its own pass so geometry sampling bindings do not
+    // accumulate with emitter count and exceed WebGPU's default stage limit.
+    const nodes = emitters.map((emitter, emitterIndex) => Fn(() => {
+      emitter.createBuiltInGPUUpdate()({
+        ...context,
+        emitter,
+        emitterIndex,
+        output: buffers,
+        emitterRuntime: emitterInstances.createRuntime(emitterIndex),
+        tagMasks: this._getGPUEmitterTagMasks(emitter),
+        reclaimOld,
       });
-    })().compute(buffers.capacity);
+    })().compute(buffers.capacity));
 
     const entry = {
       key: cacheKey,
-      node: computeNode,
+      nodes,
     };
-    this._gpuPipelineBuildCount += 1;
+    this._gpuPipelineBuildCount += nodes.length;
     this._gpuEmissionComputeCache = entry;
 
-    return computeNode;
+    return nodes;
   }
 
   private _computeGPUOldEmissionPhase(
@@ -2367,7 +2366,7 @@ class ParticleSystem extends THREE.Object3D {
     this._gpuEmissionPrepareComputeCache?.nodes.forEach((node) => node.dispose?.());
     this._gpuContinuousSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
     this._gpuEventSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
-    this._gpuEmissionComputeCache?.node.dispose?.();
+    this._gpuEmissionComputeCache?.nodes.forEach((node) => node.dispose?.());
     this._gpuOldEmissionComputeCache?.nodes.forEach((node) => node.dispose?.());
     this._gpuOldSelectionComputeCache?.nodes.forEach((node) => node.dispose?.());
     this._gpuOldDeathEventComputeCache?.node.dispose?.();
@@ -3133,7 +3132,7 @@ class ParticleSystem extends THREE.Object3D {
       this._gpuEmissionPrepareComputeCache = undefined;
       this._gpuEmissionFinalizeComputeCache?.nodes.forEach((node) => node.dispose?.());
       this._gpuEmissionFinalizeComputeCache = undefined;
-      this._gpuEmissionComputeCache?.node.dispose?.();
+      this._gpuEmissionComputeCache?.nodes.forEach((node) => node.dispose?.());
       this._gpuEmissionComputeCache = undefined;
       this._gpuOldEmissionComputeCache?.nodes.forEach((node) => node.dispose?.());
       this._gpuOldEmissionComputeCache = undefined;

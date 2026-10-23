@@ -178,16 +178,14 @@ class Emitter {
   private _gpuGeometry?: THREE.BufferGeometry;
   private _gpuGeometrySampling?: {
     signature: string;
-    positions: StorageBufferAttribute;
-    normals: StorageBufferAttribute;
+    vectors: StorageBufferAttribute;
     triangles: StorageBufferAttribute;
     vertexCount: number;
     triangleCount: number;
   };
   private _gpuVolumeSampling?: {
     signature: string;
-    positions: StorageBufferAttribute;
-    normals: StorageBufferAttribute;
+    vectors: StorageBufferAttribute;
     count: number;
   };
 
@@ -311,27 +309,17 @@ class Emitter {
     const volumeSampling = this.source.source === EmissionSource.Volume
       ? this.getGPUVolumeSampling()
       : undefined;
-    const sampledPositions = volumeSampling
-      ? storage(volumeSampling.positions, 'vec4', volumeSampling.count) as PackedFloatStorage
-      : undefined;
-    const sampledNormals = volumeSampling
-      ? storage(volumeSampling.normals, 'vec4', volumeSampling.count * 2) as PackedFloatStorage
+    const sampledVectors = volumeSampling
+      ? storage(volumeSampling.vectors, 'vec4', volumeSampling.count * 3) as PackedFloatStorage
       : undefined;
     const geometrySampling = this.source.source === EmissionSource.Volume
       ? undefined
       : this.getGPUGeometrySampling();
-    const geometryPositions = geometrySampling
+    const geometryVectors = geometrySampling
       ? storage(
-        geometrySampling.positions,
+        geometrySampling.vectors,
         'vec4',
-        geometrySampling.vertexCount,
-      ) as PackedFloatStorage
-      : undefined;
-    const geometryNormals = geometrySampling
-      ? storage(
-        geometrySampling.normals,
-        'vec4',
-        geometrySampling.vertexCount,
+        geometrySampling.vertexCount * 2,
       ) as PackedFloatStorage
       : undefined;
     const geometryTriangles = geometrySampling
@@ -354,8 +342,10 @@ class Emitter {
         let sampledNormal: Node<'vec3'>;
         if (this.source.source === EmissionSource.Vertices && geometrySampling) {
           const vertexIndex = int(hash(seed.add(43)).mul(geometrySampling.vertexCount).floor());
-          sampledPosition = geometryPositions!.element(vertexIndex).xyz as Node<'vec3'>;
-          sampledNormal = geometryNormals!.element(vertexIndex).xyz.normalize() as Node<'vec3'>;
+          sampledPosition = geometryVectors!.element(vertexIndex).xyz as Node<'vec3'>;
+          sampledNormal = geometryVectors!.element(
+            vertexIndex.add(geometrySampling.vertexCount),
+          ).xyz.normalize() as Node<'vec3'>;
         } else if (this.source.source === EmissionSource.Surface && geometrySampling) {
           const selectorIndex = int(hash(seed.add(43)).mul(geometrySampling.triangleCount).floor());
           const selector = geometryTriangles!.element(selectorIndex.mul(2));
@@ -365,37 +355,40 @@ class Emitter {
             selector.w,
           );
           const triangle = geometryTriangles!.element(triangleIndex.mul(2));
-          const point0 = geometryPositions!.element(triangle.x).xyz;
-          const point1 = geometryPositions!.element(triangle.y).xyz;
-          const point2 = geometryPositions!.element(triangle.z).xyz;
+          const point0 = geometryVectors!.element(triangle.x).xyz;
+          const point1 = geometryVectors!.element(triangle.y).xyz;
+          const point2 = geometryVectors!.element(triangle.z).xyz;
           const root = sqrt(hash(seed.add(47)));
           const weight0 = float(1).sub(root);
           const weight1 = root.mul(float(1).sub(hash(seed.add(53))));
           const weight2 = root.sub(weight1);
           sampledPosition = point0.mul(weight0).add(point1.mul(weight1)).add(point2.mul(weight2)) as Node<'vec3'>;
-          sampledNormal = geometryNormals!.element(triangle.x).xyz.mul(weight0)
-            .add(geometryNormals!.element(triangle.y).xyz.mul(weight1))
-            .add(geometryNormals!.element(triangle.z).xyz.mul(weight2))
+          sampledNormal = geometryVectors!.element(triangle.x.add(geometrySampling.vertexCount)).xyz.mul(weight0)
+            .add(geometryVectors!.element(triangle.y.add(geometrySampling.vertexCount)).xyz.mul(weight1))
+            .add(geometryVectors!.element(triangle.z.add(geometrySampling.vertexCount)).xyz.mul(weight2))
             .normalize() as Node<'vec3'>;
         } else {
           const sampleIndex = int(hash(seed.add(43)).mul(volumeSampling!.count).floor());
-          const sample = sampledPositions!.element(sampleIndex);
+          const sample = sampledVectors!.element(sampleIndex);
           const z = hash(seed.add(47)).mul(2).sub(1);
           const angle = hash(seed.add(53)).mul(Math.PI * 2);
           const radial = sqrt(float(1).sub(z.mul(z)));
           const direction = vec3(cos(angle).mul(radial), sin(angle).mul(radial), z);
           sampledPosition = sample.xyz.add(direction.mul(hash(seed.add(59)).mul(sample.w))) as Node<'vec3'>;
-          const neighborRecord = sampledNormals!.element(sampleIndex.mul(2).add(1));
-          const anchorNormal = sampledNormals!.element(sampleIndex.mul(2)).xyz;
+          const normalOffset = int(volumeSampling!.count).add(sampleIndex.mul(2));
+          const neighborRecord = sampledVectors!.element(normalOffset.add(1));
+          const anchorNormal = sampledVectors!.element(normalOffset).xyz;
           const blendedNormal = vec3(0).toVar('volumeSampleNormal');
           const totalWeight = float(0).toVar('volumeSampleNormalWeight');
           [sampleIndex, int(neighborRecord.x), int(neighborRecord.y), int(neighborRecord.z)]
             .forEach((neighborIndex) => {
-              const neighborPosition = sampledPositions!.element(neighborIndex).xyz;
+              const neighborPosition = sampledVectors!.element(neighborIndex).xyz;
               const delta = sampledPosition.sub(neighborPosition);
               const weight = float(1).div(delta.dot(delta).max(float(1e-8)));
               blendedNormal.addAssign(
-                sampledNormals!.element(neighborIndex.mul(2)).xyz.mul(weight),
+                sampledVectors!.element(
+                  int(volumeSampling!.count).add(neighborIndex.mul(2)),
+                ).xyz.mul(weight),
               );
               totalWeight.addAssign(weight);
             });
@@ -744,23 +737,25 @@ class Emitter {
     ].join(':');
     if (this._gpuVolumeSampling?.signature === signature) return this._gpuVolumeSampling;
 
-    this._gpuVolumeSampling?.positions.dispose();
-    this._gpuVolumeSampling?.normals.dispose();
-    const positions = new Float32Array(samples.length * 4);
-    const normals = new Float32Array(samples.length * 8);
+    this._gpuVolumeSampling?.vectors.dispose();
+    // Positions, normals, and neighbor records share one vec4 storage binding.
+    const vectors = new Float32Array(samples.length * 12);
     samples.forEach((sample, index) => {
-      const offset = index * 4;
-      positions.set([sample.position.x, sample.position.y, sample.position.z, sample.radius], offset);
+      const positionOffset = index * 4;
+      const normalOffset = samples.length * 4 + index * 8;
+      vectors.set(
+        [sample.position.x, sample.position.y, sample.position.z, sample.radius],
+        positionOffset,
+      );
       const neighbors = Array.from({ length: 3 }, (_, neighborIndex) => (
         sample.neighbors?.[neighborIndex] ?? index
       ));
-      normals.set([sample.normal.x, sample.normal.y, sample.normal.z, 0], offset * 2);
-      normals.set([...neighbors, 0], offset * 2 + 4);
+      vectors.set([sample.normal.x, sample.normal.y, sample.normal.z, 0], normalOffset);
+      vectors.set([...neighbors, 0], normalOffset + 4);
     });
     this._gpuVolumeSampling = {
       signature,
-      positions: new StorageBufferAttribute(positions, 4),
-      normals: new StorageBufferAttribute(normals, 4),
+      vectors: new StorageBufferAttribute(vectors, 4),
       count: samples.length,
     };
     return this._gpuVolumeSampling;
@@ -780,20 +775,21 @@ class Emitter {
     ].join(':');
     if (this._gpuGeometrySampling?.signature === signature) return this._gpuGeometrySampling;
 
-    this._gpuGeometrySampling?.positions.dispose();
-    this._gpuGeometrySampling?.normals.dispose();
+    this._gpuGeometrySampling?.vectors.dispose();
     this._gpuGeometrySampling?.triangles.dispose();
 
-    const positions = new Float32Array(position.count * 4);
-    const normals = new Float32Array(position.count * 4);
+    // Position and normal regions share one vec4 storage binding. Triangle
+    // indices remain uint storage because TSL storage bindings are homogeneous.
+    const vectors = new Float32Array(position.count * 8);
     for (let index = 0; index < position.count; index += 1) {
-      const offset = index * 4;
-      positions[offset] = position.getX(index);
-      positions[offset + 1] = position.getY(index);
-      positions[offset + 2] = position.getZ(index);
-      normals[offset] = normal?.getX(index) ?? 0;
-      normals[offset + 1] = normal?.getY(index) ?? 1;
-      normals[offset + 2] = normal?.getZ(index) ?? 0;
+      const positionOffset = index * 4;
+      const normalOffset = (position.count + index) * 4;
+      vectors[positionOffset] = position.getX(index);
+      vectors[positionOffset + 1] = position.getY(index);
+      vectors[positionOffset + 2] = position.getZ(index);
+      vectors[normalOffset] = normal?.getX(index) ?? 0;
+      vectors[normalOffset + 1] = normal?.getY(index) ?? 1;
+      vectors[normalOffset + 2] = normal?.getZ(index) ?? 0;
     }
 
     const triangleCount = geometry.index
@@ -846,8 +842,7 @@ class Emitter {
 
     this._gpuGeometrySampling = {
       signature,
-      positions: new StorageBufferAttribute(positions, 4),
-      normals: new StorageBufferAttribute(normals, 4),
+      vectors: new StorageBufferAttribute(vectors, 4),
       triangles: new StorageBufferAttribute(triangles, 4),
       vertexCount: position.count,
       triangleCount,

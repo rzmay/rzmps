@@ -64,13 +64,10 @@ module uses the grid's exact-radius query and performs the count entirely in the
 ```ts
 const crowdDrag = new Module(
   (particle, deltaTime, _system, octree) => {
-    const node = octree?.locate(particle.position);
-    if (!node) return;
-
-    const nearbyCount = Math.max(0, [node, ...node.neighbors].reduce(
-      (count, nearbyNode) => count + nearbyNode.particleIndices.length,
-      0,
-    ) - 1);
+    const nearbyCount = octree
+      .particlesInRadius(particle.position, 2)
+      .filter((neighbor) => neighbor !== particle)
+      .length;
     particle.velocity.multiplyScalar(
       Math.max(0, 1 - nearbyCount * 0.02 * deltaTime),
     );

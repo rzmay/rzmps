@@ -203,6 +203,7 @@ export type {
   OctreeAggregator,
   OctreeConfig,
   OctreeNode,
+  ParticleOctreeQueryOptions,
 } from './helpers/ParticleOctree';
 export { default as ParticleSpatialGrid } from './gpu/ParticleSpatialGrid';
 export type {

@@ -83,6 +83,13 @@ from GPU buffers, so listeners and CPU audio/render views can lag simulation sli
 subsystems consume spawn, death, collision, and continuous emission on the GPU; update only the
 root system, as on CPU.
 
+Native subsystem births stay within WebGPU's default limit of eight compute-stage storage-buffer
+bindings. Parent and child particle state each use separate float and integer buffers. The
+remaining pass-specific bindings come from packed allocation state, the emitter-runtime fields
+actually referenced by that pass, and packed shape-sampling data. Emitters dispatch separately so
+adding emitters does not accumulate their geometry bindings in one shader. Applications do not
+need to request a higher device limit.
+
 ## Collision and Neighbor Queries
 
 `Collision` selects `ThreeCollisionBackend` for CPU processing and `ThreeGPUCollisionBackend` for

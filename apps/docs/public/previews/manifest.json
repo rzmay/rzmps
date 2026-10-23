@@ -2,8 +2,8 @@
   "generatedBy": "npm run docs:previews",
   "examples": {
     "additiveSmoke": {
-      "inputHash": "82bde5b32eb6316f499d20b13260661a769d0aca6a21cf1e43d8e0c442e5260d",
-      "imageHash": "07925c19e8f3263a68b6ed8ac9db3eb9aceb34e01220827a142fd7a42a2ac9d8",
+      "inputHash": "d2d4190f1959c6e0f37f2da66a198d44869c40e48a7fb06005f135920c4e4a1e",
+      "imageHash": "fd56db947baf1501efc92a5af45f652b7f731a0ef0a56095b4ff2a9dae5f4198",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -30,8 +30,8 @@
       "warnings": []
     },
     "boids": {
-      "inputHash": "7b82de5758ee0214ee6d22a7620ee996d57df00e8b71602bd138e8b85fc0e59f",
-      "imageHash": "b716fff19bf773e02027eb9d3ecbf1a3abf41794dcb9a9c96ef831cc52a8ed64",
+      "inputHash": "d305d137197805f6c0af0aef8af5bc2e53fb39dd1ae7e9be58d3a4650a8a5390",
+      "imageHash": "410eecb8187737843c2a965d1a688da1c01e357db47eb2b4ab5b182d4f19f9ed",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -58,8 +58,8 @@
       "warnings": []
     },
     "bubbles": {
-      "inputHash": "4cd6b36518d6684e09b985a1e86456a92adc83d61af3dcdea70a94d0399effa9",
-      "imageHash": "fa30c130d45b01f66b9947d4d7806e9882ff14592bb57b2eb36e69e02292080e",
+      "inputHash": "59fc33e16a51568d148d26dc6c45334c245cf5dcfb7dcb1c8246bab683ea5948",
+      "imageHash": "a5a05282f6c653f6a8807d87dbe840ba3a5a47dd33033c4323f92f3f5a99a85e",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -86,7 +86,7 @@
       "warnings": []
     },
     "collision": {
-      "inputHash": "40211bad8eb86526a7ca2d4f84db5813951c3b506a4c83d99f1af1e138d0b35c",
+      "inputHash": "aba1456239f2ce2b46f34ee6b8a4b6247b2b2e42be580d3c2ef222300dd4ede8",
       "imageHash": "1c32745e877c56023666cf9c70f3b66067c07506367e5b53e83bde60ef55236f",
       "backend": "webgl",
       "width": 640,
@@ -114,7 +114,7 @@
       "warnings": []
     },
     "collisionSubEmitters": {
-      "inputHash": "cedd8a42f1fd2bc25797db1fd0983333a01e73ff8832c77eee4c69acb71cc5e3",
+      "inputHash": "94c6aa0cdd79a95fd93e00d50b9dc90b9dd5c4bac37f7d2690f6a3306674b81e",
       "imageHash": "6eefbcf096e0f112061250380428fe482a6e2d2413bd8eb0dcb74c37c3e5908b",
       "backend": "webgl",
       "width": 640,
@@ -142,8 +142,8 @@
       "warnings": []
     },
     "cubes": {
-      "inputHash": "84c9d88862b938571d6849f6d7a08636d84fba9c0a863d4b84fefd6c9bdfd385",
-      "imageHash": "cf32cf9d81742c5d224dd5b377084d8a158659ee28401ad47ff73e53b16c88af",
+      "inputHash": "a7dd38e507981edff9f9cadfa35f9605ae2dad6c7a804315327d2d32be2641eb",
+      "imageHash": "b8feb3146eae52147910a0684d50c85be762e694cecae933f1fdc739731fc2f3",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -170,8 +170,8 @@
       "warnings": []
     },
     "dopplerBullet": {
-      "inputHash": "7c1f9c2c7b03c06e730b4b89916c2f6dd984470537a4337efb889ad7f37278f0",
-      "imageHash": "37484fb1449a2122c3f79fb8559cf77c201fe69ac559d3bd9a2411667a7eb433",
+      "inputHash": "dc8204107a7ed4370f986aa60914b130ede876324aa9c736a525974769483e93",
+      "imageHash": "c1fa04935da003b9177ce5aa378abd3dc45d8f3ba3c8bc82ce06fddc52f72407",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -198,8 +198,8 @@
       "warnings": []
     },
     "fire": {
-      "inputHash": "aee8857139671c352e6df051f5220549b764f0b7df54be8ce4fe8b24f809f554",
-      "imageHash": "2778f11139df3a84f47d54211d59962da14f51d2cd2e7b980514a1666e223d86",
+      "inputHash": "65fb977c103d840d4e0ffab6176c01912f30bec9d002e1edbc6aaa02c7b67897",
+      "imageHash": "8713b40b0f241e403dd4a8462c098efe11634b61cc1ed4565998d0ee9b5a0820",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -226,8 +226,8 @@
       "warnings": []
     },
     "fireball": {
-      "inputHash": "0d3fc020e9478dd264f6e9bf519dabc9710a06d5e854dd825e47587c753b0bb6",
-      "imageHash": "5e6cf20a1d59f856edfd098d19e33a14bebcf510969c344e0e4c1c8e51b3db56",
+      "inputHash": "5ab606c5e3fc52be87cfb0e9111a126f6254fa3e4c317e860c46091b81a8a801",
+      "imageHash": "0882b5c1ac57071bac079d802045d640f58fed73b48d9b193b8ad4f88b658948",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -254,8 +254,8 @@
       "warnings": []
     },
     "fireworks": {
-      "inputHash": "2c0dff67beabb724e0e22f90d2c3de701b41e8a227d975ebce505dbe75022647",
-      "imageHash": "2b70796621019cb5dcc8ab8d46afaeeb3f1cff2e2077adf8a836c43200f5fb81",
+      "inputHash": "92b5352e90c28d9ed824db1138418bcfdbaa1db435ca7965966135e5c9949130",
+      "imageHash": "8b9fa90597c2d50d4b85be13472bf2c0527d6938884f485f04d6196eeda6bc4c",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -282,8 +282,8 @@
       "warnings": []
     },
     "lodStress": {
-      "inputHash": "1a1ec13072f64303a2c07a0d66a78e6939dd8359d7b5e4afa5a8298da636ce62",
-      "imageHash": "1c8c67468bcef73bfbe9f57f68655ab828f2b74aee267401daf6f0f05cee4809",
+      "inputHash": "09c43640a7457b4a4e8d96d07a04cffc656b5170e314c4676d0b8c217fff1e00",
+      "imageHash": "f5d3cbcdd3309ce1d063194dc448f1f7a61ec9d7627a1b9b14d4cf5c4409fe56",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -310,8 +310,8 @@
       "warnings": []
     },
     "particleTrail": {
-      "inputHash": "dcdd1bac3f13f19d0c7d196a068b91d30a97abc3de785820cc274a1b57b4af53",
-      "imageHash": "0955f6367c29c089c90f5f7232d606c12c1f0527dceac24a48e6104b78056bde",
+      "inputHash": "9ef0559a530144c37beafe55529ccce3cd073084f22cc802047b991871dcd3e7",
+      "imageHash": "e3f33ad295f9246a4f0e68fc73ab4b51bea2a0c91dad2ea44913d4252eb8224c",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -338,7 +338,7 @@
       "warnings": []
     },
     "ribbonTrail": {
-      "inputHash": "c54206de1a93921b7964efdab9deb2c9e65e77a3a9445d48c55fd40a75f02287",
+      "inputHash": "4326271b7529fc001f05659e1afe2e1b1941897c7ca59cd1ca9c77de1a5a02f7",
       "imageHash": "29380aa8a437633861de1fb675d34895856aa81d32afacb3f7b5474b8c09181a",
       "backend": "webgl",
       "width": 640,
@@ -366,8 +366,8 @@
       "warnings": []
     },
     "smoke": {
-      "inputHash": "51d1eb49568bb8f4f3d4e0c9bb89ba179505e751e35af99fd3922d5d367600d0",
-      "imageHash": "f53235449a4d576cee8623d031e274b322251f5eca789bcc79c8f9a7a19d40b8",
+      "inputHash": "b4f48a4681074dceb812acab2c2c5e1693bc15ce1ed71b6712003fffe0b4ee04",
+      "imageHash": "76512775316b8e89b2887bac8a3a48ae40f31bb76f97a0165cb12ec367201f9c",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -394,8 +394,8 @@
       "warnings": []
     },
     "snow": {
-      "inputHash": "3ec5a5133a29e276e973ae956f73fe039df585f5642e8291a49afee81cb64262",
-      "imageHash": "577eab041dbf70ee67cf4d465df72cb5d21b46aff1e019fc8afabf9dcd29d6d8",
+      "inputHash": "233f595b8fdacafbed4677e975dfbcc2b5f903afa1205836a86c5a9b93fb6aba",
+      "imageHash": "77a84b19bd0d302eac799299904b272ad0a4b21e2a804440d09ab91b6f849d82",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -422,7 +422,7 @@
       "warnings": []
     },
     "spheres": {
-      "inputHash": "1cfb9b1962ace7fcf846235e0b2751b5367c7d8e533c9a0bf6089d84c2e2cafe",
+      "inputHash": "342a03b0eed91f90b2f29aa6f685f586329b69c70a2a419659c5fa79e6deb6ca",
       "imageHash": "3e6128f427694e34215618c6402f94da1e163da1c5a915b2ac7b2f79b135c7c9",
       "backend": "webgl",
       "width": 640,
@@ -450,7 +450,7 @@
       "warnings": []
     },
     "stylizedDepth": {
-      "inputHash": "d05692edadecbfec7aede02be3c2f549e92539b48b6648bf7e28aabcb4787980",
+      "inputHash": "ce53e0886a8ce68b1d7ca08853c555514277685b4fbe273e9e899ddcb34d06a2",
       "imageHash": "1a97453394d5f3677bfa676da2f9aa2cea2a5548ef267822efa5e1db06ba855c",
       "backend": "webgl",
       "width": 640,
@@ -478,7 +478,7 @@
       "warnings": []
     },
     "suzanne": {
-      "inputHash": "a0810ea342b1ed29fddb978cb25b1b19056be5646f210c3d0ac2f94e11361cd9",
+      "inputHash": "39b9dd4739e290aa46dfbf3c91b95cba784662528d03ccb15d79288a9fc4106d",
       "imageHash": "487ae74a77a8e5ab38425aa2623a165e9e17f352ce24a545f80aa45814ad8f12",
       "backend": "webgl",
       "width": 640,
@@ -506,7 +506,7 @@
       "warnings": []
     },
     "suzanneInstances": {
-      "inputHash": "6b98fb8cb252a142442f9e29f567973a8b1b21655b78a58157d71b5151e9eefa",
+      "inputHash": "1ff72c402e39d7a5192e4e4a1410165d297784bca65c520d398321fdaeda16f5",
       "imageHash": "e30b7f8e0f53ea537f8f79d8d73cc92f90d0cde54e96420999fdb964f753f1ba",
       "backend": "webgl",
       "width": 640,
@@ -534,8 +534,8 @@
       "warnings": []
     },
     "tags": {
-      "inputHash": "c54e91e7f8a5f17e329a9fe35285f809fb7a37b22e21bbf6fe05e0be26c01fc4",
-      "imageHash": "8cfb7daca18a36fc333268ce5579c9ff169f7b305641e5d5f7a2e35b3e487ff3",
+      "inputHash": "0c2e261f43af914dc2a693df6df6c165e116949d3ed2d9712543114a3b827fa7",
+      "imageHash": "7b0cf12f7785c8c5108732d2608bad8276c5ae34d72556473413598e98f9a445",
       "backend": "webgl",
       "width": 640,
       "height": 400,
