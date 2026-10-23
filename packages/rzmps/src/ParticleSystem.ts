@@ -1259,11 +1259,7 @@ class ParticleSystem extends THREE.Object3D {
       renderer.updateGPU(gpuRenderBuffers!, this, this.deltaTime);
     });
 
-    const renderMirrorUpdate: Promise<Particle[]> | undefined = shouldRequestReadback
-      ? cpuMirrorUpdate?.then(() => readbackParticles)
-      : undefined;
-
-    if (!shouldRequestReadback || !cpuMirrorUpdate || !renderMirrorUpdate) {
+    if (!shouldRequestReadback || !cpuMirrorUpdate) {
       this._endGPUDebugFrame(debugFrame);
       return;
     }
@@ -1294,7 +1290,7 @@ class ParticleSystem extends THREE.Object3D {
         this._gpuCPUMirrorStale = this._gpuReadbackPending;
         this._applyGPUReadbackDeaths(readbackParticles, readbackWasAlive);
 
-        const renderParticles = await renderMirrorUpdate;
+        const renderParticles = readbackParticles;
 
         if (readbackSequence < this._latestAppliedGPUReadbackSequence) {
           this._logGPUDebug('render readback ignored: stale sequence', {
