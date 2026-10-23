@@ -3338,6 +3338,11 @@ class ParticleSystem extends THREE.Object3D {
       this._gpuSelectiveReadbackBytes += slot.state.readbackByteLength;
       this._gpuSelectiveReadbackLatencyMs = performance.now() - startedAt;
       return results;
+    } catch (error) {
+      // Reset/destroy can invalidate a buffer while its asynchronous map is in
+      // flight. That readback belongs to the retired lifecycle and is discarded.
+      if (lifecycleGeneration !== this._gpuLifecycleGeneration || this._destroyed) return [];
+      throw error;
     } finally {
       slot.pending = false;
     }
