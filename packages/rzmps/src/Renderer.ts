@@ -136,8 +136,7 @@ export default abstract class Renderer {
         if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(distanceSq))) return;
 
         const visibleParticles = particles.filter((p) => (
-            p.alive
-            && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
+            !this.tags || tagsIntersect(this.tags, p.tags ?? [])
         ));
         const countScale = this.countLOD ? this._countLODHelper.getScale(Math.sqrt(distanceSq)) : 1;
 
