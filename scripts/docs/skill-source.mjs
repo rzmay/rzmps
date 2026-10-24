@@ -8,6 +8,7 @@ export function generateSkill(markdown) {
   const routes = new Map([
     ['first-particle-system.md', 'references/getting-started.md'],
     ['concepts.md', 'references/concepts.md'],
+    ['gpu-processing.md', 'references/concepts.md#gpu-processing-and-extension-development'],
     ['../api/index.md', 'references/api.md'],
     ['../examples/index.md', 'references/examples.md'],
     ['compatibility.md', 'references/compatibility.md'],

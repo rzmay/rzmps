@@ -28,7 +28,7 @@ new ThreeCollisionBackend(options?): ThreeCollisionBackend;
 
 ##### options?
 
-[`ThreeCollisionBackendOptions`](../Supporting-Types/interfaces/ThreeCollisionBackendOptions.md) = `{}`
+[`ThreeCollisionBackendOptions`](../interfaces/ThreeCollisionBackendOptions.md) = `{}`
 
 #### Returns
 
@@ -78,10 +78,10 @@ dynamicOctree: Octree;
 
 <a id="maxlevel"></a>
 
-### maxLevel?
+### maxLevel
 
 ```ts
-optional maxLevel?: number;
+maxLevel: number | null;
 ```
 
 ***
@@ -176,6 +176,34 @@ staticOctree: Octree;
 
 ***
 
+<a id="supportscpu"></a>
+
+### supportsCPU
+
+```ts
+readonly supportsCPU: true = true;
+```
+
+#### Implementation of
+
+[`ICollisionBackend`](../interfaces/ICollisionBackend.md).[`supportsCPU`](../interfaces/ICollisionBackend.md#supportscpu)
+
+***
+
+<a id="supportsgpu"></a>
+
+### supportsGPU
+
+```ts
+readonly supportsGPU: false = false;
+```
+
+#### Implementation of
+
+[`ICollisionBackend`](../interfaces/ICollisionBackend.md).[`supportsGPU`](../interfaces/ICollisionBackend.md#supportsgpu)
+
+***
+
 <a id="timequality"></a>
 
 ### timeQuality
@@ -188,10 +216,10 @@ timeQuality: number;
 
 <a id="trianglesperleaf"></a>
 
-### trianglesPerLeaf?
+### trianglesPerLeaf
 
 ```ts
-optional trianglesPerLeaf?: number;
+trianglesPerLeaf: number | null;
 ```
 
 ***
@@ -227,6 +255,26 @@ collide(query): CollisionHit | null;
 #### Implementation of
 
 [`ICollisionBackend`](../interfaces/ICollisionBackend.md).[`collide`](../interfaces/ICollisionBackend.md#collide)
+
+***
+
+<a id="invalidategeometry"></a>
+
+### invalidateGeometry()
+
+```ts
+invalidateGeometry(object?): void;
+```
+
+#### Parameters
+
+##### object?
+
+`Object3D`\<`Object3DEventMap`\>
+
+#### Returns
+
+`void`
 
 ***
 

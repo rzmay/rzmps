@@ -1,7 +1,7 @@
 # 🧅 RZMPS
 
 A modular Three.js particle system. Compose emitters, lifetime modules, spatial effects,
-renderers, and event-triggered subsystems using WebGL or WebGPU rendering.
+renderers, and event-triggered subsystems with CPU or GPU simulation.
 
 ```bash
 npm install @rzmps/rzmps three three-mesh-bvh
@@ -9,6 +9,7 @@ npm install @rzmps/rzmps three three-mesh-bvh
 
 - [Getting started](https://rzmps.rzmay.com/docs/guides/first-particle-system.html)
 - [Guides](https://rzmps.rzmay.com/docs/guides/concepts.html)
+- [GPU processing and extension development](https://rzmps.rzmay.com/docs/guides/gpu-processing.html)
 - [Generated API reference](https://rzmps.rzmay.com/docs/api/)
 - [Example explanations](https://rzmps.rzmay.com/docs/examples/)
 - [Interactive demo](https://rzmps.rzmay.com/)

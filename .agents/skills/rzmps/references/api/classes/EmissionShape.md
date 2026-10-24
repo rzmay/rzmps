@@ -30,7 +30,7 @@ Creates a shape with sphere geometry and volume sampling by default.
 
 ##### options?
 
-`Partial`\<[`EmissionShapeOptions`](../Supporting-Types/interfaces/EmissionShapeOptions.md)\> = `{}`
+`Partial`\<[`EmissionShapeOptions`](../interfaces/EmissionShapeOptions.md)\> = `{}`
 
 #### Returns
 
@@ -54,12 +54,42 @@ source: EmissionSource;
 
 ***
 
+<a id="auto_volume_probes"></a>
+
+### AUTO\_VOLUME\_PROBES
+
+```ts
+static AUTO_VOLUME_PROBES: number = 32;
+```
+
+***
+
+<a id="max_auto_volume_samples"></a>
+
+### MAX\_AUTO\_VOLUME\_SAMPLES
+
+```ts
+static MAX_AUTO_VOLUME_SAMPLES: number = 4096;
+```
+
+***
+
 <a id="max_volume_iterations"></a>
 
 ### MAX\_VOLUME\_ITERATIONS
 
 ```ts
-static MAX_VOLUME_ITERATIONS: number = 5;
+static MAX_VOLUME_ITERATIONS: number = 32;
+```
+
+***
+
+<a id="min_auto_volume_samples"></a>
+
+### MIN\_AUTO\_VOLUME\_SAMPLES
+
+```ts
+static MIN_AUTO_VOLUME_SAMPLES: number = 256;
 ```
 
 ## Accessors
@@ -96,6 +126,40 @@ set geometry(value): void;
 
 ***
 
+<a id="resolvedvolumesamples"></a>
+
+### resolvedVolumeSamples
+
+#### Get Signature
+
+```ts
+get resolvedVolumeSamples(): number;
+```
+
+Actual cached table size after automatic estimation and clamping.
+
+##### Returns
+
+`number`
+
+***
+
+<a id="version"></a>
+
+### version
+
+#### Get Signature
+
+```ts
+get version(): number;
+```
+
+##### Returns
+
+`number`
+
+***
+
 <a id="vertices"></a>
 
 ### vertices
@@ -110,6 +174,38 @@ get vertices(): Vector3[];
 
 `Vector3`[]
 
+***
+
+<a id="volumesamples"></a>
+
+### volumeSamples
+
+#### Get Signature
+
+```ts
+get volumeSamples(): VolumeSampleCount;
+```
+
+##### Returns
+
+[`VolumeSampleCount`](../type-aliases/VolumeSampleCount.md)
+
+#### Set Signature
+
+```ts
+set volumeSamples(value): void;
+```
+
+##### Parameters
+
+###### value
+
+[`VolumeSampleCount`](../type-aliases/VolumeSampleCount.md)
+
+##### Returns
+
+`void`
+
 ## Methods
 
 <a id="computevertexnormals"></a>
@@ -123,6 +219,22 @@ computeVertexNormals(): void;
 #### Returns
 
 `void`
+
+***
+
+<a id="getgpuemissionsupport"></a>
+
+### getGPUEmissionSupport()
+
+```ts
+getGPUEmissionSupport(): GPUEmissionSupportReport;
+```
+
+Reports whether this geometry exposes the attributes required by GPU emission.
+
+#### Returns
+
+[`GPUEmissionSupportReport`](../interfaces/GPUEmissionSupportReport.md)
 
 ***
 
@@ -160,6 +272,22 @@ position: Vector3;
 
 ***
 
+<a id="getvolumesamples"></a>
+
+### getVolumeSamples()
+
+```ts
+getVolumeSamples(): readonly VolumeSample[];
+```
+
+Returns the local-space sample table shared by CPU and GPU volume emission.
+
+#### Returns
+
+readonly [`VolumeSample`](../interfaces/VolumeSample.md)[]
+
+***
+
 <a id="box"></a>
 
 ### Box()
@@ -174,7 +302,7 @@ static Box(options, ...args): EmissionShape;
 
 ###### options
 
-[`EmissionShapeFactoryOptions`](../Supporting-Types/type-aliases/EmissionShapeFactoryOptions.md)
+[`EmissionShapeFactoryOptions`](../type-aliases/EmissionShapeFactoryOptions.md)
 
 ###### args
 
@@ -216,7 +344,7 @@ static Cone(options, ...args): EmissionShape;
 
 ###### options
 
-[`EmissionShapeFactoryOptions`](../Supporting-Types/type-aliases/EmissionShapeFactoryOptions.md)
+[`EmissionShapeFactoryOptions`](../type-aliases/EmissionShapeFactoryOptions.md)
 
 ###### args
 
@@ -258,7 +386,7 @@ static Sphere(options, ...args): EmissionShape;
 
 ###### options
 
-[`EmissionShapeFactoryOptions`](../Supporting-Types/type-aliases/EmissionShapeFactoryOptions.md)
+[`EmissionShapeFactoryOptions`](../type-aliases/EmissionShapeFactoryOptions.md)
 
 ###### args
 
@@ -300,7 +428,7 @@ static Torus(options, ...args): EmissionShape;
 
 ###### options
 
-[`EmissionShapeFactoryOptions`](../Supporting-Types/type-aliases/EmissionShapeFactoryOptions.md)
+[`EmissionShapeFactoryOptions`](../type-aliases/EmissionShapeFactoryOptions.md)
 
 ###### args
 

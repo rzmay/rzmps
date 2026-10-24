@@ -20,6 +20,7 @@ The 2-second loop continuously feeds particles with 2.5-second lifetimes. Gravit
 
 ```js
   const particleTrail = new ParticleSystem({
+    maxParticles: 64,
     duration: 2,
     looping: true,
     gravity: new THREE.Vector3(0, -1.5, 0),
@@ -76,7 +77,7 @@ The 2-second loop continuously feeds particles with 2.5-second lifetimes. Gravit
 Only eight particles per second are needed because their trails supply most of the visible coverage. Emission starts within a radius-0.15 sphere, with upward velocities 4–6 and lateral components between -1.5 and 1.5. The 0.15 particle scale keeps each moving source compact.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/particleTrail.js#L22)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/particleTrail.js#L23)
 
 ```js
     emitters: [
@@ -103,7 +104,7 @@ Only eight particles per second are needed because their trails supply most of t
 TransformByNoise uses strong horizontal components (100) and zero vertical strength at frequency 5. The result strongly perturbs the lateral path while gravity and initial vertical velocity still shape its height. The large strength is a visible parameter to inspect carefully when adapting the effect to another scene scale.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/particleTrail.js#L40)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/particleTrail.js#L41)
 
 ```js
     modules: [
@@ -120,7 +121,7 @@ TransformByNoise uses strong horizontal components (100) and zero vertical stren
 Particle mode gives every selected particle its own trail, with ratio 1. Trail lifetime 0.75 and minimum vertex distance 0.05 balance persistence against vertex count. Width 0.18 tapers at both ends; the cyan-to-pink gradient makes progression along the path readable. dieWithParticles false lets older trail segments finish fading.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/particleTrail.js#L48)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/particleTrail.js#L49)
 
 ```js
     renderers: [

@@ -39,6 +39,42 @@ A plain Module defaults to permanent priority. The example's velocity increment 
 
 Use `Module.Priority.PreMovementTransient` when a temporary velocity adjustment must affect this frame's integration. Render-time transient modules run after movement. See [module priority](module-priority.md) before combining several modules that assign the same property.
 
+## Managed Octree
+
+Particle-to-particle comparisons should use a managed `ParticleOctree` instead of scanning the
+whole particle array for every particle. Enable it in the module options; RZMPS rebuilds it and
+passes it as the callback's fourth argument.
+
+```ts
+const crowdDrag = new Module(
+  (particle, deltaTime, _system, octree) => {
+    const nearbyCount = octree
+      .particlesInRadius(particle.position, 2)
+      .filter((neighbor) => neighbor !== particle)
+      .length;
+    const damping = Math.max(0, 1 - nearbyCount * 0.02 * deltaTime);
+    particle.velocity.multiplyScalar(damping);
+  },
+  {
+    useOctree: true,
+    octreeOptions: {
+      maxDepth: 6,
+      particlesPerLeaf: 8,
+    },
+  },
+);
+```
+
+The octree prunes nodes outside the query sphere, then returns the particles that pass exact
+distance checks in the remaining leaves. Custom aggregate data remains useful when an
+approximation such as average position or velocity is cheaper than collecting every matching
+particle; see
+[particle spatial acceleration](particle-octree.md).
+
 For reusable behavior, extend Module and pass your per-particle callback and options to `super`. Override `prepare(system, deltaTime)` when expensive shared work should happen once per frame; call `super.prepare` if using automatic spatial-effect collection. Put resource cleanup in `cleanup()`. Dependencies in `dependents` participate in normal priority sorting rather than forcing an independent update loop.
 
 Built-in modules already cover forces, noise, scale, rotation, depth, color, and collision. Reuse those when their semantics match the effect. Custom callbacks are most useful for application-specific logic, and should mutate the particle provided rather than storing a shared mutable vector in multiple particles.
+
+The callback above is CPU-only. Continue with [First GPU Module](first-gpu-module.md) to add the
+equivalent TSL operation, then use [GPU processing](gpu-processing.md) as the reference for managed
+spatial queries, invalidation, and testing requirements.

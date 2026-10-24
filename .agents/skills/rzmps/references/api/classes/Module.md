@@ -101,6 +101,16 @@ condition: (particle) => boolean;
 
 ***
 
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ModuleGPUCondition;
+```
+
+***
+
 <a id="dependents"></a>
 
 ### dependents
@@ -117,6 +127,46 @@ dependents: Module[] = [];
 
 ```ts
 optional explicitSpatialEffects?: SpatialEffect[];
+```
+
+***
+
+<a id="modifygpu"></a>
+
+### modifyGPU
+
+```ts
+modifyGPU: ModuleGPUUpdate;
+```
+
+***
+
+<a id="octree"></a>
+
+### octree?
+
+```ts
+optional octree?: ParticleOctree<unknown>;
+```
+
+***
+
+<a id="octreeaggregator"></a>
+
+### octreeAggregator
+
+```ts
+readonly octreeAggregator: OctreeAggregator<unknown>;
+```
+
+***
+
+<a id="octreeoptions"></a>
+
+### octreeOptions
+
+```ts
+readonly octreeOptions: Partial<OctreeConfig>;
 ```
 
 ***
@@ -171,6 +221,18 @@ spatialEffects: SpatialEffect[] = [];
 
 ***
 
+<a id="spatialgridoptions"></a>
+
+### spatialGridOptions?
+
+```ts
+readonly optional spatialGridOptions?:
+  | ParticleSpatialGrid
+| Partial<ParticleSpatialGridOptions>;
+```
+
+***
+
 <a id="tags"></a>
 
 ### tags?
@@ -191,12 +253,52 @@ optional updateLOD?: Partial<LODSettings>;
 
 ***
 
+<a id="useoctree"></a>
+
+### useOctree
+
+```ts
+readonly useOctree: boolean;
+```
+
+***
+
+<a id="usespatialgrid"></a>
+
+### useSpatialGrid
+
+```ts
+readonly useSpatialGrid: boolean;
+```
+
+***
+
 <a id="useupdatelod"></a>
 
 ### useUpdateLOD
 
 ```ts
 useUpdateLOD: boolean;
+```
+
+***
+
+<a id="cpu_unsupported"></a>
+
+### CPU\_UNSUPPORTED
+
+```ts
+static CPU_UNSUPPORTED: ModuleUpdate;
+```
+
+***
+
+<a id="gpu_unsupported"></a>
+
+### GPU\_UNSUPPORTED
+
+```ts
+static GPU_UNSUPPORTED: ModuleGPUUpdate;
 ```
 
 ***
@@ -209,6 +311,78 @@ useUpdateLOD: boolean;
 readonly static Priority: typeof Priority;
 ```
 
+## Accessors
+
+<a id="gpuparameteruploadcount"></a>
+
+### gpuParameterUploadCount
+
+#### Get Signature
+
+```ts
+get gpuParameterUploadCount(): number;
+```
+
+##### Returns
+
+`number`
+
+***
+
+<a id="needsupdate"></a>
+
+### needsUpdate
+
+#### Set Signature
+
+```ts
+set needsUpdate(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="supportsgpu"></a>
+
+### supportsGPU
+
+#### Get Signature
+
+```ts
+get supportsGPU(): boolean;
+```
+
+Whether both modification and any custom condition have GPU implementations.
+
+##### Returns
+
+`boolean`
+
+***
+
+<a id="version"></a>
+
+### version
+
+#### Get Signature
+
+```ts
+get version(): number;
+```
+
+##### Returns
+
+`number`
+
 ## Methods
 
 <a id="cleanup"></a>
@@ -219,11 +393,49 @@ readonly static Priority: typeof Priority;
 cleanup(): void;
 ```
 
-Extension hook to release temporary resources when the owning system is cleaned up.
+Releases managed CPU and GPU spatial acceleration references.
 
 #### Returns
 
 `void`
+
+***
+
+<a id="getparticleoctree"></a>
+
+### getParticleOctree()
+
+```ts
+getParticleOctree(): ParticleOctree<unknown> | undefined;
+```
+
+Returns the managed CPU structure after prepare(), when enabled.
+
+#### Returns
+
+[`ParticleOctree`](ParticleOctree.md)\<`unknown`\> \| `undefined`
+
+***
+
+<a id="getparticlespatialgrid"></a>
+
+### getParticleSpatialGrid()
+
+```ts
+getParticleSpatialGrid(particleSystem): ParticleSpatialGrid | undefined;
+```
+
+Dependency hook used by function-defined and class-based GPU neighbor modules.
+
+#### Parameters
+
+##### particleSystem
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md) \| `undefined`
 
 ***
 
@@ -233,8 +445,8 @@ Extension hook to release temporary resources when the owning system is cleaned 
 
 ```ts
 modify(
-   particles, 
-   deltaTime, 
+   particles,
+   deltaTime,
    particleSystem?
 ): void;
 ```
@@ -280,6 +492,20 @@ Prepares shared work once per system update; the base implementation collects ma
 ##### deltaTime
 
 `number`
+
+#### Returns
+
+`void`
+
+***
+
+<a id="syncgpuconfiguration"></a>
+
+### syncGPUConfiguration()
+
+```ts
+syncGPUConfiguration(): void;
+```
 
 #### Returns
 

@@ -37,7 +37,7 @@ new LODHelper(options?): LODHelper;
 ### continuous
 
 ```ts
-continuous: boolean;
+continuous: boolean = false;
 ```
 
 ***
@@ -47,7 +47,7 @@ continuous: boolean;
 ### distance
 
 ```ts
-distance: number;
+distance: number = 10;
 ```
 
 ***
@@ -57,7 +57,7 @@ distance: number;
 ### falloff
 
 ```ts
-falloff: number;
+falloff: number = 1.5;
 ```
 
 ***
@@ -67,7 +67,7 @@ falloff: number;
 ### maxLevel
 
 ```ts
-maxLevel: number;
+maxLevel: number = 4;
 ```
 
 ***
@@ -77,10 +77,30 @@ maxLevel: number;
 ### quality
 
 ```ts
-quality: number;
+quality: number = 0.5;
 ```
 
 ## Methods
+
+<a id="configure"></a>
+
+### configure()
+
+```ts
+configure(options?): void;
+```
+
+#### Parameters
+
+##### options?
+
+`Partial`\<[`LODSettings`](../interfaces/LODSettings.md)\> = `{}`
+
+#### Returns
+
+`void`
+
+***
 
 <a id="getscale"></a>
 

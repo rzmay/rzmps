@@ -98,13 +98,13 @@ description: Build and debug Three.js particle systems and VFX in RZMPS using em
 <!-- skill:instructions:start -->
 Inspect the installed package version and public exports before using a feature. In this repository, use the current branch's TypeScript source. Prefer existing emitters, modules, renderers, and spatial effects before adding custom behavior.
 
-Read [getting started](https://rzmps.rzmay.com/docs/guides/first-particle-system.html) for scene ownership and updates, [concepts](https://rzmps.rzmay.com/docs/guides/concepts.html) for lifecycle, priority, tags, spatial collections, and subsystem composition, or search the [generated API](https://rzmps.rzmay.com/docs/api/index.html) for signatures.
+Read [getting started](https://rzmps.rzmay.com/docs/guides/first-particle-system.html) for scene ownership and updates, [concepts](https://rzmps.rzmay.com/docs/guides/concepts.html) for lifecycle, priority, tags, spatial collections, and subsystem composition, and [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) before implementing TSL callbacks, readback, collision, or spatial-grid behavior. Search the [generated API](https://rzmps.rzmay.com/docs/api/index.html) for signatures.
 
 Reuse a canonical factory from `examples/`; inspect [example explanations](https://rzmps.rzmay.com/docs/examples/index.html) for its configuration rationale. Preserve the default factory and author metadata contracts. Add balanced documentation source regions and update the authored Markdown explanation, then run `npm run docs:generate` and `npm run docs:check`.
 
 Check the selected renderer and custom material compatibility using [compatibility](https://rzmps.rzmay.com/docs/guides/compatibility.html). Build packages, run `npm run preview -- --example <id> --backend webgl`, and inspect the contact sheet and metadata. Repeat with webgpu when relevant; report unavailable backends explicitly. Adjust warmup, interval, or scene to capture the actual event. Technical success alone does not establish visual quality.
 
-Update root systems once; parents own subsystem timing. Follow Module, Renderer, and SpatialEffect extension hooks and priority semantics. Use features present in the installed version and current branch. Reference files are generated from human documentation; edit their canonical source instead.
+Update root systems once; parents own subsystem timing. Follow Module, Renderer, Emitter, and SpatialEffect CPU/GPU extension hooks and priority semantics. Do not treat WebGPU rendering as proof of GPU simulation; check component support and `isGPUProcessingActive`. Use features present in the installed version and current branch. Reference files are generated from human documentation; edit their canonical source instead.
 
 Repository preview scripts and `examples/` are checkout tools. In a consumer project, adapt an example to its existing rendering loop or use a repository checkout for previews; do not assume consumers have repository npm scripts. Read the [installation guidance](https://rzmps.rzmay.com/docs/guides/ai-coding-assistants.html#installation) before installing the skill or changing agent configuration.
 <!-- skill:instructions:end -->
@@ -178,7 +178,7 @@ Average update time measures `ParticleSystem.update()`; frame time includes the 
 
 ## Pull Request Comparisons
 
-CI builds the base and PR libraries once, then measures both with the same benchmark page, browser dependencies, and build tooling. Three samples per revision run in interleaved ABBAAB order; the comparison uses the median for each metric.
+CI builds and runs the complete benchmark page from each revision against its matching library. Three samples per revision run in interleaved ABBAAB order; the comparison uses the median for each metric and includes only case names present in both revisions.
 
 GitHub-hosted runners use software WebGL. The CI profile uses a 640×360 viewport, browser frame pacing, and a 2,000-particle low polygon box workload for the mesh case. Its results are useful for relative comparisons on that runner and should be interpreted separately from the published hardware results above. Completed samples, environment metadata, and available timeout diagnostics are uploaded as workflow artifacts even when a run fails.
 
@@ -191,6 +191,12 @@ GitHub-hosted runners use software WebGL. The CI profile uses a 640×360 viewpor
 
 The base package includes `ThreeCollisionBackend`, which raycasts against a
 Three.js scene.
+
+For GPU processing, `Collision` automatically selects `ThreeGPUCollisionBackend` when no backend
+is supplied. It uses packed `three-mesh-bvh` acceleration data and distinguishes static,
+transform-dynamic, and geometry-dynamic scene meshes. Supplying an explicit CPU physics backend
+makes the collision module GPU-incompatible, and applying impulses to scene bodies remains a CPU
+feature. See [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) before choosing an explicit backend.
 
 See the generated API for constructor options and defaults.
 
@@ -252,7 +258,7 @@ Each update restores cached permanent values, prepares modules once, sorts modif
 
 The loop duration schedules emission; it is independent of each particle's lifetime. Turning looping off does not necessarily delete existing particles: `endBehavior` determines what happens after the duration. A population estimate for constant emission is rate multiplied by average lifetime, before bursts, culling, or subsystems. These are nominal estimates: timestep quantization and emission scheduling can lower the observed count. Set `maxParticles` to bound simulation costs, and remember that each renderer adds work.
 
-[Subsystems](https://rzmps.rzmay.com/docs/guides/subsystems.html) attach secondary effects to lifecycle events. [Spatial effects and collections](https://rzmps.rzmay.com/docs/guides/spatial-effects.html) coordinate scene-wide behavior. Both rendering backends use this same composition model; see [compatibility](https://rzmps.rzmay.com/docs/guides/compatibility.html).
+[Subsystems](https://rzmps.rzmay.com/docs/guides/subsystems.html) attach secondary effects to lifecycle events. [Spatial effects and collections](https://rzmps.rzmay.com/docs/guides/spatial-effects.html) coordinate scene-wide behavior. Both rendering backends use this same composition model; see [compatibility](https://rzmps.rzmay.com/docs/guides/compatibility.html) and [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html).
 
 
 ---
@@ -407,6 +413,191 @@ its sampled choice across repeated module updates. Emitter birth sampling select
 values for new particles. Do not mutate a vector supplied as a shared option inside a
 custom callback; update the particle's own state or reuse a separate scratch vector.
 
+GPU built-ins support the same constant, range, set, and callback forms. Function values are
+sampled into an interpolated lookup table with `ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION`
+entries, so sharp or high-frequency curves may need a higher resolution. GPU-aware options can
+also accept TSL nodes. Runtime value changes synchronize automatically; a change that alters a
+custom shader graph's structure should additionally set that component's `needsUpdate` flag.
+
+
+---
+
+<!-- Source: apps/docs/guides/first-gpu-module.md -->
+
+# First GPU Module
+
+A custom module needs a CPU callback and a TSL callback to behave on both simulation backends.
+This example adds the same upward acceleration in each path.
+
+```ts
+import { Module, ParticleSystem } from "@rzmps/rzmps";
+import { float, vec3 } from "three/tsl";
+
+const updraft = new Module(
+  (particle, deltaTime) => {
+    particle.velocity.y += 0.5 * deltaTime;
+  },
+  {
+    modifyGPU: (particle, deltaTime) => {
+      const acceleration = vec3(0, float(0.5).mul(deltaTime), 0);
+      particle.velocity.assign(particle.velocity.add(acceleration));
+    },
+  },
+);
+
+const particles = new ParticleSystem({
+  emitters,
+  modules: [updraft],
+  renderers,
+  gpuProcessing: true,
+});
+```
+
+The CPU callback runs once for each JavaScript particle. The GPU callback runs while RZMPS builds
+a compute graph: its particle properties and `deltaTime` are TSL nodes, not current JavaScript
+values. Build expressions with TSL functions and write fields with `assign`; JavaScript arithmetic
+or branching cannot inspect a node's per-particle value.
+
+The two callbacks should express the same behavior, but they need not use identical algorithms.
+`supportsGPU` is true only when `modifyGPU` exists and every custom CPU condition has a matching
+`conditionGPU`. After the renderer initializes, use `particles.isGPUProcessingActive` to check the
+backend actually selected.
+
+## Conditions and Spatial Queries
+
+A custom CPU `condition` also needs a TSL equivalent:
+
+```ts
+const risingOnly = new Module(
+  (particle, deltaTime) => {
+    particle.velocity.y += 0.5 * deltaTime;
+  },
+  {
+    condition: (particle) => particle.velocity.y > 0,
+    conditionGPU: (particle) => particle.velocity.y.greaterThan(0),
+    modifyGPU: (particle, deltaTime) => {
+      particle.velocity.y.addAssign(float(0.5).mul(deltaTime));
+    },
+  },
+);
+```
+
+## Managed Spatial Grid
+
+The GPU counterpart to a managed octree is `ParticleSpatialGrid`. This version of the crowd-drag
+module uses the grid's exact-radius query and performs the count entirely in the compute graph:
+
+```ts
+const crowdDrag = new Module(
+  (particle, deltaTime, _system, octree) => {
+    const nearbyCount = octree
+      .particlesInRadius(particle.position, 2)
+      .filter((neighbor) => neighbor !== particle)
+      .length;
+    particle.velocity.multiplyScalar(
+      Math.max(0, 1 - nearbyCount * 0.02 * deltaTime),
+    );
+  },
+  {
+    useOctree: true,
+    octreeOptions: { maxDepth: 6, particlesPerLeaf: 8 },
+    useSpatialGrid: true,
+    spatialGrid: { brickSubdivisions: 3, cellSubdivisions: 4 },
+    modifyGPU: (particle, deltaTime, _context, grid) => {
+      if (!grid) return;
+
+      const nearbyCount = float(0).toVar("nearbyCount");
+      grid.forEachParticleInRadius(
+        particle.position,
+        float(2),
+        () => nearbyCount.addAssign(1),
+        { excludeIndex: particle.index },
+      );
+      const damping = float(1)
+        .sub(nearbyCount.mul(0.02).mul(deltaTime))
+        .max(0);
+      particle.velocity.mulAssign(damping);
+    },
+  },
+);
+```
+
+RZMPS rebuilds both structures and passes the appropriate one as the final callback argument. A
+grid query emits shader-side work and never returns JavaScript particles. Its callback can inspect
+each neighbor and the squared distance when a count alone is not enough. Keep query bounds and
+grid resolution appropriate for the effect; see
+[particle spatial acceleration](https://rzmps.rzmay.com/docs/guides/particle-octree.html) for configuration and limitations.
+
+Runtime scalar, vector, color, range, and curve properties on built-in modules synchronize to GPU
+parameters automatically. A custom class can use its protected `gpuParameters` store for the same
+pattern. Set `needsUpdate = true` only when a change alters graph structure or owned resources.
+
+Continue with [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) for execution phases, fallback rules, readback,
+and validation.
+
+
+---
+
+<!-- Source: apps/docs/guides/first-gpu-spatial-effect.md -->
+
+# First GPU Spatial Effect
+
+A custom spatial effect pairs its ordinary particle modifier with `modifyGPU`. Built-in volume
+factories provide the CPU inclusion test and GPU influence calculation automatically.
+
+```ts
+import { ParticleSystem, SpatialEffect } from "@rzmps/rzmps";
+import { float, vec3 } from "three/tsl";
+
+const updraft = SpatialEffect.Sphere(
+  (particle, deltaTime, _system, strength) => {
+    particle.velocity.y += 2 * deltaTime * strength;
+  },
+  {
+    automaticFeather: false,
+    feather: 0.75,
+    modifyGPU: (particle, deltaTime, _context, strength) => {
+      const acceleration = vec3(0, float(2).mul(deltaTime).mul(strength), 0);
+      particle.velocity.assign(particle.velocity.add(acceleration));
+    },
+  },
+  2,
+  24,
+  16,
+);
+
+updraft.position.set(0, 1, 0);
+scene.add(updraft);
+
+const particles = new ParticleSystem({
+  emitters,
+  modules,
+  renderers,
+  gpuProcessing: true,
+});
+scene.add(particles);
+```
+
+With `automaticFeather: false`, both callbacks receive a strength from zero through one, so the
+example applies feathering explicitly and identically. With automatic feathering enabled, RZMPS
+blends supported particle fields around the callback instead.
+
+`SpatialEffect.Sphere`, `Box`, `Cone`, and `Torus` supply matching built-in CPU and GPU tests. Add
+`conditionGPU` only when adding a custom CPU `condition`. Add `testGPU` when replacing the volume's
+inclusion rule with a custom `test`; it returns a float influence rather than a JavaScript boolean.
+Custom geometry without `testGPU` uses a baked influence field.
+
+Spatial effects are scene objects. Their transforms can move while
+`updatePolicy: SpatialEffectUpdatePolicy.TransformDynamic` updates transform data without
+rebuilding geometry acceleration. Use `GeometryDynamic` only when vertex data itself changes.
+Custom tests are not bounds-filtered because RZMPS cannot assume they depend on the effect's
+geometry.
+
+After the renderer initializes, verify `particles.isGPUProcessingActive`. Unsupported generic
+spatial effects are skipped by GPU simulation instead of forcing the entire system onto CPU, so
+also inspect each custom effect's `supportsGPU` while developing it. See
+[GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) for batching, invalidation, and profiling.
+
 
 ---
 
@@ -453,9 +644,45 @@ A plain Module defaults to permanent priority. The example's velocity increment 
 
 Use `Module.Priority.PreMovementTransient` when a temporary velocity adjustment must affect this frame's integration. Render-time transient modules run after movement. See [module priority](https://rzmps.rzmay.com/docs/guides/module-priority.html) before combining several modules that assign the same property.
 
+## Managed Octree
+
+Particle-to-particle comparisons should use a managed `ParticleOctree` instead of scanning the
+whole particle array for every particle. Enable it in the module options; RZMPS rebuilds it and
+passes it as the callback's fourth argument.
+
+```ts
+const crowdDrag = new Module(
+  (particle, deltaTime, _system, octree) => {
+    const nearbyCount = octree
+      .particlesInRadius(particle.position, 2)
+      .filter((neighbor) => neighbor !== particle)
+      .length;
+    const damping = Math.max(0, 1 - nearbyCount * 0.02 * deltaTime);
+    particle.velocity.multiplyScalar(damping);
+  },
+  {
+    useOctree: true,
+    octreeOptions: {
+      maxDepth: 6,
+      particlesPerLeaf: 8,
+    },
+  },
+);
+```
+
+The octree prunes nodes outside the query sphere, then returns the particles that pass exact
+distance checks in the remaining leaves. Custom aggregate data remains useful when an
+approximation such as average position or velocity is cheaper than collecting every matching
+particle; see
+[particle spatial acceleration](https://rzmps.rzmay.com/docs/guides/particle-octree.html).
+
 For reusable behavior, extend Module and pass your per-particle callback and options to `super`. Override `prepare(system, deltaTime)` when expensive shared work should happen once per frame; call `super.prepare` if using automatic spatial-effect collection. Put resource cleanup in `cleanup()`. Dependencies in `dependents` participate in normal priority sorting rather than forcing an independent update loop.
 
 Built-in modules already cover forces, noise, scale, rotation, depth, color, and collision. Reuse those when their semantics match the effect. Custom callbacks are most useful for application-specific logic, and should mutate the particle provided rather than storing a shared mutable vector in multiple particles.
+
+The callback above is CPU-only. Continue with [First GPU Module](https://rzmps.rzmay.com/docs/guides/first-gpu-module.html) to add the
+equivalent TSL operation, then use [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) as the reference for managed
+spatial queries, invalidation, and testing requirements.
 
 
 ---
@@ -505,6 +732,160 @@ For a custom volume modifier, use `SpatialEffect.Box((particle, deltaTime) => { 
 
 Scene discovery and module-level collections serve different purposes. A generic field modifies intersecting particles directly; a specialized affector can instead be collected by a module such as Boids. See [spatial collections](https://rzmps.rzmay.com/docs/guides/spatial-effects.html) for explicit selection and filtering, and [module priority](https://rzmps.rzmay.com/docs/guides/module-priority.html) for execution phases.
 
+Custom CPU callbacks do not translate into shader code. Continue with
+[First GPU Spatial Effect](https://rzmps.rzmay.com/docs/guides/first-gpu-spatial-effect.html) to pair this volume with a TSL modifier,
+then use [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) as the reference for batching and moving-geometry
+policies.
+
+
+---
+
+<!-- Source: apps/docs/guides/gpu-processing.md -->
+
+# GPU Processing and Extension Development
+
+RZMPS keeps the same `ParticleSystem` composition on CPU and GPU: emitters create particles,
+modules and spatial effects modify them, and renderers display them. Set `gpuProcessing: true`
+(the default) and render the system once with an initialized Three.js `WebGPURenderer` to make
+GPU simulation eligible. `isGPUProcessingActive` reports the backend actually selected for the
+current system; `gpuProcessing` only expresses the requested mode.
+
+```ts
+const particles = new ParticleSystem({
+  emitters: [emitter],
+  modules: [force, color],
+  renderers: [sprites],
+  gpuProcessing: true,
+});
+
+scene.add(particles);
+renderer.setAnimationLoop(() => {
+  particles.update();
+  renderer.render(scene, camera);
+});
+```
+
+WebGL always uses CPU simulation. A WebGPU system also uses CPU simulation when GPU processing is
+disabled, a module lacks a GPU implementation, GPU tag capacity is exceeded, or a CPU-input
+renderer is combined with a render-time modifier. Unsupported generic spatial effects are skipped
+by the GPU path rather than moving the entire system to CPU. Inspect `supportsGPU`,
+`getGPUEmissionSupport()`, `getGPUExecutionSchedule()`, and `isGPUProcessingActive` when composing
+custom components. Changing `gpuProcessing` starts a fresh run because CPU objects and GPU buffers
+are separate authoritative states.
+
+## Writing CPU and GPU Modules
+
+The CPU callback mutates a JavaScript `Particle`. `modifyGPU` builds a Three.js Shading Language
+(TSL) graph over a `GPUParticleLike`; it does not execute once per particle in JavaScript. Work
+through [First GPU Module](https://rzmps.rzmay.com/docs/guides/first-gpu-module.html) for a complete paired implementation and
+[First GPU Spatial Effect](https://rzmps.rzmay.com/docs/guides/first-gpu-spatial-effect.html) for influence, feathering, and custom test
+rules.
+
+Reuse ordinary CPU hooks for setup and cleanup. `prepare(system, deltaTime)` runs once before a
+module's work on either backend. A function-defined module can request managed acceleration with
+`useOctree`/`octreeOptions` for CPU or `useSpatialGrid`/`spatialGrid` for GPU; the resulting
+`ParticleOctree` or `ParticleSpatialGrid` is passed as the optional final callback argument.
+`cleanup()` must call `super.cleanup()` when overridden so managed references are released.
+
+Dynamic numbers, vectors, colors, ranges, sets, and callbacks are available to built-in GPU
+components. Callback curves are sampled into interpolated uniform tables at
+`ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION`; increase it when a high-frequency curve needs more
+fidelity. TSL nodes can be supplied directly where a dynamic value is evaluated by GPU code.
+
+## Emitters and Spatial Effects
+
+Built-in GPU emission supports rate, distance rate, timed bursts, tags, initial values, LOD, and
+volume, surface, or vertex sampling from buffer geometry. CPU and GPU volume emission share the
+shape's baked Halton sample table. `volumeSamples` is `"auto"` by default; assigning a number fixes
+the table size, while changing geometry or the sample setting rebuilds it. Surface selection is
+weighted by triangle area. Burst times are normalized emission-cycle values from 0 through 1.
+
+Emitters use the built-in GPU birth pipeline; they are configured through `Emitter` and
+`EmissionShape`, not extended with a separate shader callback. Custom behavior belongs in a
+module or spatial effect after birth.
+
+Custom `SpatialEffect` implementations pair the CPU `modify`, `condition`, and `test` callbacks
+with `modifyGPU`, `conditionGPU`, and `testGPU`. The GPU test returns a float influence from 0 to 1,
+which supplies feather strength to `modifyGPU`. Built-in analytic volumes are batched and indexed.
+Custom geometry uses a baked field, controlled by `bakedFieldResolution`; set `updatePolicy` to
+`Static`, `TransformDynamic`, or `GeometryDynamic` when automatic change detection is not the best
+fit. Custom tests are not bounds-filtered because RZMPS cannot assume they depend on geometry.
+
+## Renderers, Events, and Readback
+
+GPU-native renderers override `updateGPU` and consume `GPUParticleBufferState` or the compact
+render-output buffer. A renderer whose implementation needs ordinary `Particle` objects can
+override `updateGPU` and call the protected `updateCPUFromGPU` helper. It selectively reads the
+requested fields, ignores overlapping requests while one is pending, and passes the resulting
+particles through the renderer's public `update` method:
+
+```ts
+class DebugRenderer extends Renderer {
+  updateGPU(buffers, system, deltaTime) {
+    this.updateCPUFromGPU(
+      buffers,
+      system,
+      deltaTime,
+      64,
+      ["position", "color", "alpha"],
+    );
+  }
+
+  _update(particles) {
+    // Render the selectively reconstructed Particle objects.
+  }
+}
+```
+
+Request only the slots and fields the renderer actually consumes. Outside a renderer, use the
+public system API directly:
+
+```ts
+const samples = await system.selectiveReadback(64, ["position", "color", "alpha"]);
+```
+
+Readback is delayed and may return no result if its bounded pool is busy. Do not use it to drive
+same-frame simulation decisions. Lifecycle and collision events are also delivered asynchronously
+from GPU buffers, so listeners and CPU audio/render views can lag simulation slightly. GPU-native
+subsystems consume spawn, death, collision, and continuous emission on the GPU; update only the
+root system, as on CPU.
+
+Native subsystem births stay within WebGPU's default limit of eight compute-stage storage-buffer
+bindings. Parent and child particle state each use separate float and integer buffers. The
+remaining pass-specific bindings come from packed allocation state, the emitter-runtime fields
+actually referenced by that pass, and packed shape-sampling data. Emitters dispatch separately so
+adding emitters does not accumulate their geometry bindings in one shader. Applications do not
+need to request a higher device limit.
+
+## Collision and Neighbor Queries
+
+`Collision` selects `ThreeCollisionBackend` for CPU processing and `ThreeGPUCollisionBackend` for
+GPU processing when no backend is supplied. An explicit CPU-only backend makes the module GPU
+incompatible. GPU collision does not support applying impulses back to scene bodies. Classify GPU
+geometry with `CollisionGeometryUpdatePolicy`: static geometry is built once, transform-dynamic
+geometry updates transforms, and geometry-dynamic meshes refit or rebuild changed acceleration
+data.
+
+Use `ParticleOctree` for CPU neighbor work and `ParticleSpatialGrid` for GPU queries. A grid query
+emits TSL and invokes its visitor in shader code; it does not return JavaScript particles. Bounds
+can expand automatically, but a larger volume lowers spatial resolution because the logical cell
+count stays fixed. `maxQuerySteps: 0` performs unbounded exact traversal; a positive value is an
+explicit performance cap.
+
+## Configuration and Validation
+
+Built-in components synchronize ordinary runtime property changes before each GPU frame. Constant
+and sampled value changes update uniforms; structural changes invalidate and rebuild the affected
+compute graph or resources. Custom components should expose changed scalar/vector data through
+their GPU parameter nodes and set `needsUpdate = true` when changing graph structure, geometry
+layout, callback identity, or buffer ownership.
+
+Test both execution paths. WebGPU rendering alone does not prove GPU simulation is active: assert
+`isGPUProcessingActive` after rendering has captured its context. Compare CPU and GPU behavior at
+fixed timesteps, exercise resets and subsystem events, and inspect `gpuBufferStats`,
+`gpuEventStats`, `gpuSpatialStats`, `gpuSelectiveReadbackStats`, and `gpuConfigurationStats` when
+profiling. GPU output is expected to be behaviorally equivalent, not bit-for-bit identical.
+
 
 ---
 
@@ -524,6 +905,14 @@ Build an effect, then extend it with your own behavior.
 - [First Module](https://rzmps.rzmay.com/docs/guides/first-module.html)
 - [First Spatial Effect](https://rzmps.rzmay.com/docs/guides/first-spatial-effect.html)
 
+## GPU Processing
+
+Port custom behavior to GPU compute and understand the GPU execution model.
+
+- [First GPU Module](https://rzmps.rzmay.com/docs/guides/first-gpu-module.html)
+- [First GPU Spatial Effect](https://rzmps.rzmay.com/docs/guides/first-gpu-spatial-effect.html)
+- [GPU Processing and Extension Development](https://rzmps.rzmay.com/docs/guides/gpu-processing.html)
+
 ## Core Concepts
 
 Understand how systems and their components work together.
@@ -540,7 +929,7 @@ Apply individual features to an existing particle system.
 - [Using Tags](https://rzmps.rzmay.com/docs/guides/tags.html)
 - [Using Subsystems](https://rzmps.rzmay.com/docs/guides/subsystems.html)
 - [Collision and Physics](https://rzmps.rzmay.com/docs/guides/collision-and-physics.html)
-- [Using ParticleOctree](https://rzmps.rzmay.com/docs/guides/particle-octree.html)
+- [Particle Spatial Acceleration](https://rzmps.rzmay.com/docs/guides/particle-octree.html)
 
 ## Project Guides
 
@@ -579,9 +968,29 @@ Prefer a built-in lifetime module before writing an equivalent callback: those m
 
 <!-- Source: apps/docs/guides/particle-octree.md -->
 
-# Using ParticleOctree
+# Particle Spatial Acceleration
 
-`ParticleOctree<TAggregate>` groups particle positions into cubic cells and computes an application-defined aggregate. It supports flocking and approximate neighborhood calculations. It is separate from mesh collision acceleration: its entries are particle indices, not triangle faces.
+RZMPS provides complementary structures for particle-to-particle work:
+
+| Operation | `ParticleOctree` (CPU) | `ParticleSpatialGrid` (GPU) |
+| --- | --- | --- |
+| Bounds | `setBounds`, `bounds` | `setBounds`, `bounds` |
+| Resolution | `maxDepth`, `particlesPerLeaf` | `maxDepth`, brick/cell subdivisions |
+| Update | `rebuild(particles, tags?)` | `rebuild(renderer, buffers, token?)` |
+| Position lookup | `locate(position)` returns a node | `locate(position)` returns a cell coordinate |
+| Radius query | `particlesInRadius` array | `forEachParticleInRadius` TSL visitor |
+| Quality | `timeQuality` | `timeQuality` |
+| Cleanup | garbage-collected CPU data | `dispose(renderer?)` / `destroy(renderer?)` |
+
+Use `ParticleOctree` for CPU comparisons, neighborhood queries, and aggregate approximations. Use
+`ParticleSpatialGrid` for GPU comparisons and exact-radius shader queries. They share conceptual
+configuration names where the meanings match, but their results are intentionally different:
+octree queries return CPU particle arrays and expose aggregates, while grid queries emit shader work and never
+materialize a JavaScript particle array.
+
+## CPU: ParticleOctree
+
+`ParticleOctree<TAggregate>` groups particle positions into cubic cells and computes an application-defined aggregate. It supports exact-radius queries as well as aggregate approximations. It is separate from mesh collision acceleration: its entries are particle indices, not triangle faces.
 
 Supply a configuration and an aggregator with `new` and `combine` functions. `new` must handle an absent particle because the tree asks it for an empty node aggregate. `combine` merges aggregates; return independent state or carefully manage mutation so sibling nodes cannot corrupt one another.
 
@@ -600,15 +1009,64 @@ const tree = new ParticleOctree<number>({
 tree.setBounds(system.boundingBox);
 tree.rebuild(system.particles);
 const node = tree.locate(system.particles[0].position);
+const neighbors = tree.particlesInRadius(
+  system.particles[0].position,
+  2,
+  { excludeIndex: 0 },
+);
 ```
 
 Guard the last line when the population is empty. `rebuild` accepts an optional tag selection. Only particles inside the resolved bounds and matching that selection contribute. Choose bounds in the same coordinate space as particle positions. Call `setBounds` when your population moves beyond the original volume; `locate` returns the root for a position outside the tree, which is not a nearest-neighbor result.
 
 `maxDepth` defaults to 8 and `particlesPerLeaf` to 4. Deeper trees reduce cell size but increase node construction and neighbor bookkeeping. Increasing leaf capacity limits subdivision in dense populations. `timeQuality` defaults to 1; values below 1 skip some rebuilds after the first build. Check the boolean return from `rebuild` before assuming aggregates describe the current frame.
 
+`particlesInRadius` prunes nodes using sphere-AABB intersection before exact distance tests in
+leaf nodes. It is typically `O(log n + k)` for a balanced tree and `k` results, with an `O(n)`
+worst case for broad queries or degenerate distributions. Options can exclude one particle index
+and require matching tags. Queries use the population and node placement from the last successful
+rebuild, so throttled trees may omit particles that have since crossed into the query volume.
+
 `getNodes()` returns a new array of node references. Nodes expose bounds, neighbors, aggregate, and indices into the particle array passed to the last successful rebuild. Rebuilds replace node identities; do not retain nodes across rebuilds. Treat skipped rebuild data as stale if particles have been removed or reordered. `quantizeBounds` can stabilize moving bounds to reduce spatial churn, at the cost of looser bounds.
 
 The [Boids example](https://rzmps.rzmay.com/docs/examples/boids.html) demonstrates aggregation in a complete effect. Profile construction as well as query costs before increasing depth or rebuild frequency.
+
+## GPU: ParticleSpatialGrid
+
+Modules normally request a managed grid instead of constructing one. Set `useSpatialGrid: true`
+for defaults or pass options through `spatialGrid`; the module's `modifyGPU` callback receives the
+grid as its final argument. The equivalent CPU callback receives its managed octree when
+`useOctree` or `octreeOptions` is configured.
+
+```ts
+const neighbors = new Module(
+  (particle, deltaTime, system, octree) => {
+    const neighbors = octree.particlesInRadius(particle.position, 2);
+    // Compare CPU neighbors; skip particle itself when needed.
+  },
+  {
+    useOctree: true,
+    useSpatialGrid: true,
+    spatialGrid: { brickSubdivisions: 3, cellSubdivisions: 4 },
+    modifyGPU: (particle, deltaTime, context, grid) => {
+      grid?.forEachParticleInRadius(
+        particle.position,
+        float(2),
+        (neighbor, distanceSquared) => {
+          // Build TSL operations using neighbor and distanceSquared.
+        },
+        { excludeIndex: particle.index },
+      );
+    },
+  },
+);
+```
+
+Custom infrastructure can instantiate `ParticleSpatialGrid` directly, call `rebuild` with a
+WebGPU renderer and `GPUParticleBufferState`, then dispose it explicitly. A positive
+`maxQuerySteps` truncates traversal; zero is unbounded. Automatic bounds expansion prevents lost
+particles, but because the number of cells is fixed, expanding bounds increases cell size and
+reduces spatial resolution. Keep bounds tight enough for the expected population and use
+`readDiagnostics` only for validation or profiling because it performs asynchronous GPU readback.
 
 
 ---
@@ -626,6 +1084,14 @@ Modules can collect scene effects for their own algorithms. Set `requireSpatialE
 For a module, explicitly supplying `spatialEffects: []` deliberately gives it an empty collection and suppresses discovery. Supplying a nonempty collection limits it to those objects. `spatialEffectFilter` and constructor requirements still filter that explicit list. Distinguish this module-level selection from the system's generic effects list.
 
 Use [First Spatial Effect](https://rzmps.rzmay.com/docs/guides/first-spatial-effect.html) to build a field. For expensive selection, cache work in `prepare()` rather than traversing the scene inside every particle callback. If you override `prepare()`, call `super.prepare(system, deltaTime)` when you rely on the base spatial collection behavior.
+
+On GPU, built-in analytic effects can be parameterized, batched, and indexed together. A custom
+effect must provide GPU callbacks to run there; an unsupported generic effect is skipped rather
+than forcing the whole system to CPU. Geometry-backed custom effects can use a baked inclusion
+field, and `updatePolicy` distinguishes static, transform-only, and deforming geometry updates.
+Optional system bounds filtering applies only to effects whose built-in geometry test guarantees
+that bounds overlap is meaningful. See [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) for callback signatures
+and update policies.
 
 
 ---
@@ -645,6 +1111,12 @@ Collision emission needs a Collision module and collidable scene geometry or a c
 [Fireworks](https://rzmps.rzmay.com/docs/examples/fireworks.html) combines continuous rocket smoke and a death burst. [Metal Balls](https://rzmps.rzmay.com/docs/examples/collisionSubEmitters.html) combines collision sparks and collision audio. Inspect their source-linked system regions as well as their emitter regions: the child's lifetime, gravity, and looping choices are independent of the parent.
 
 Destroy the owning root to clean up the effect. Do not also update owned subsystems from a scene traversal, or attempt to reuse one child under two parents. Explicit frame advancement follows the same parent-owned event processing as normal updates.
+
+GPU-active roots schedule subsystem systems parent-before-child and keep native spawn, death,
+collision, and continuous runs in GPU buffers. CPU listeners and CPU-input renderers receive
+asynchronous event/readback data and can observe a small delay. A function-valued `shouldEmit`
+cannot be translated automatically to a GPU predicate; inspect `getGPUEmissionSupport()` when a
+custom subsystem selector is involved.
 
 
 ---

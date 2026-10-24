@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
+import type { Node } from 'three/webgpu';
 import {
   abs,
   attribute,
@@ -11,7 +12,6 @@ import {
   dot,
   float,
   Fn,
-  materialOpacity,
   mix,
   output,
   perspectiveDepthToViewZ,
@@ -31,6 +31,8 @@ import type { LitSpriteOptions } from './LitSprite';
 
 type WebGPULitSpriteOptions = LitSpriteOptions & {
   sceneDepthTexture: THREE.DepthTexture;
+  spriteDataNode: Node<'vec4'>;
+  colorNode: Node<'vec3'>;
 };
 
 type TSLMatrix4Node = {
@@ -63,6 +65,8 @@ const WebGPULitSprite = (
     transmissionMap,
     distortionMap,
     distortionStrength,
+    spriteDataNode,
+    colorNode,
     ...materialOptions
   } = options;
 
@@ -75,19 +79,19 @@ const WebGPULitSprite = (
     metalness,
     roughness: roughness ?? 0.5,
     transparent: true,
-    vertexColors: true,
     side: THREE.DoubleSide,
     ...materialOptions,
+    vertexColors: colorNode === undefined,
   } as THREE.MeshStandardMaterialParameters);
 
+  const spriteData = spriteDataNode ?? attribute('instanceSpriteData', 'vec4');
   const spriteUv = spritesheetUV(
     vec2(gridSize?.x ?? 1, gridSize?.y ?? 1),
     uv(),
-    attribute('instanceSpriteData', 'vec4').x,
+    spriteData.x,
   );
 
   const spriteColor = texture(pointTexture, spriteUv);
-  const spriteData = attribute('instanceSpriteData', 'vec4');
   let opacity = spriteColor.a.mul(spriteData.y);
 
   if (alphaMap) {
@@ -148,10 +152,10 @@ const WebGPULitSprite = (
     material.normalNode = normalNode;
   }
 
-  const finalAlpha = opacity.mul(materialOpacity).toVar();
+  const finalAlpha = opacity.clamp(0, 1).toVar();
 
   material.name = 'RZMPS WebGPU Lit Sprite';
-  material.colorNode = spriteColor.rgb;
+  material.colorNode = colorNode ? spriteColor.rgb.mul(colorNode) : spriteColor.rgb;
   material.opacityNode = finalAlpha;
   material.alphaTest = 0.001;
   material.envMap = envMap ?? null;

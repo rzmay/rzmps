@@ -43,13 +43,11 @@ The parent loops every five seconds under gravity and uses live cubemap reflecti
         bounce: 0.75,
         dampen: 0.05,
         radiusScale: 1,
-        applyImpulses: true,
       }),
     ],
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
-        castShadow: true,
         materialOptions: {
           roughness: 0.2,
           metalness: 0.6,
@@ -72,10 +70,11 @@ The parent loops every five seconds under gravity and uses live cubemap reflecti
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L89)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L87)
 
 ```js
   const sparks = new ParticleSystem({
+    maxParticles: 128,
     duration: 0.08,
     looping: false,
     gravityModifier: 1,
@@ -149,7 +148,7 @@ The balls emit at five per second with lifetime eight, keeping the population ne
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L94)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L93)
 
 ```js
     emitters: [
@@ -187,13 +186,12 @@ The parent Collision module retains bounce 0.75 and dampen 0.05, so balls can st
         bounce: 0.75,
         dampen: 0.05,
         radiusScale: 1,
-        applyImpulses: true,
       }),
     ],
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L115)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L114)
 
 ```js
     modules: [
@@ -209,13 +207,12 @@ The parent Collision module retains bounce 0.75 and dampen 0.05, so balls can st
 Lit sprites with metalness 0.6 and roughness 0.2 make live reflections visible. Collision audio uses volume 0.18, pitch variation 0.8–1.2, and impulse-dependent volume and low-pass filtering. Sparks use short 0.16-second emissive trails with depth writing disabled so their bright streaks layer cleanly. PNG previews cannot validate the sound itself.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L62)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L61)
 
 ```js
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
-        castShadow: true,
         materialOptions: {
           roughness: 0.2,
           metalness: 0.6,
@@ -237,7 +234,7 @@ Lit sprites with metalness 0.6 and roughness 0.2 make live reflections visible. 
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L122)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L121)
 
 ```js
     renderers: [

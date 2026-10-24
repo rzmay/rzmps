@@ -15,6 +15,7 @@ export default async function createParticleTrail() {
 
   // #region docs:system:1
   const particleTrail = new ParticleSystem({
+    maxParticles: 64,
     duration: 2,
     looping: true,
     gravity: new THREE.Vector3(0, -1.5, 0),

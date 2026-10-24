@@ -51,3 +51,9 @@ Random lifetime values are often evaluated with a particle ID seed, so a particl
 its sampled choice across repeated module updates. Emitter birth sampling selects new
 values for new particles. Do not mutate a vector supplied as a shared option inside a
 custom callback; update the particle's own state or reuse a separate scratch vector.
+
+GPU built-ins support the same constant, range, set, and callback forms. Function values are
+sampled into an interpolated lookup table with `ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION`
+entries, so sharp or high-frequency curves may need a higher resolution. GPU-aware options can
+also accept TSL nodes. Runtime value changes synchronize automatically; a change that alters a
+custom shader graph's structure should additionally set that component's `needsUpdate` flag.

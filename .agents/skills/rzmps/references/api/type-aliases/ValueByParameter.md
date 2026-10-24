@@ -9,8 +9,9 @@
 # Type Alias: ValueByParameter\<T\>
 
 ```ts
-type ValueByParameter<T> = 
+type ValueByParameter<T> =
   | T
+  | Node
   | ((t) => ValueByParameter<T>)
   | [ValueByParameter<T>, ValueByParameter<T>];
 ```

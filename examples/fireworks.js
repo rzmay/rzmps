@@ -51,6 +51,7 @@ export default async function createFireworks() {
 
   // #region docs:system:1
   const fireworks = new ParticleSystem({
+    maxParticles: 32,
     duration: 2.6,
     looping: true,
     // #region docs:emitters:1
@@ -98,6 +99,7 @@ export default async function createFireworks() {
 
   // #region docs:system:2
   const smoke = new ParticleSystem({
+    maxParticles: 2048,
     duration: 10,
     looping: true,
     gravityModifier: -0.015,
@@ -164,6 +166,7 @@ export default async function createFireworks() {
 
   // #region docs:system:3
   const sparkles = new ParticleSystem({
+    maxParticles: 512,
     duration: 5,
     looping: false,
     gravityModifier: 0.18,

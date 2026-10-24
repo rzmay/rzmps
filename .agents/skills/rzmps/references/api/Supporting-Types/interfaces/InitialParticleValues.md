@@ -98,6 +98,8 @@ mass: DynamicValue<number>;
 position: DynamicValue<Vector3>;
 ```
 
+Offset from the emission shape's sampled position, in emitter-local space.
+
 ***
 
 <a id="rotation"></a>

@@ -50,11 +50,21 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
       }),
     ],
     renderers: [
+      new AudioRenderer({
+        sound: bulletLoopSound,
+        onSpawnSound: gunshotSound,
+        loop: true,
+        maxClips: 8,
+        volume: 3.5,
+        pitch: [0.82, 1.24],
+        lowPass: 14000,
+        speedAffectsVolume: 0.12,
+        depthAffectsVolume: 0.45,
+        dopplerEffect: 2.4,
+      }),
       new MeshRenderer({
         mesh: bulletMesh,
         maxParticles: 8,
-        castShadow: true,
-        receiveShadow: true,
       }),
       new TrailRenderer({
         mode: TrailMode.Particle,
@@ -96,7 +106,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L169)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L179)
 
 ```js
   return new ParticleSystem({
@@ -163,7 +173,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L241)
+[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L251)
 
 ```js
   return new ParticleSystem({
@@ -221,7 +231,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L304)
+[Source: system:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L314)
 
 ```js
   return new ParticleSystem({
@@ -285,7 +295,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L373)
+[Source: system:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L383)
 
 ```js
   return new ParticleSystem({
@@ -367,7 +377,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L174)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L184)
 
 ```js
     emitters: [
@@ -394,7 +404,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L245)
+[Source: emitters:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L255)
 
 ```js
     emitters: [
@@ -419,7 +429,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L308)
+[Source: emitters:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L318)
 
 ```js
     emitters: [
@@ -450,7 +460,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L377)
+[Source: emitters:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L387)
 
 ```js
     emitters: [
@@ -477,7 +487,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 The root has no explicit module list. Secondary smoke uses force, noise, growth, rotation, and a fade envelope. Heat and shockwave systems grow while distortion fades; flash color shifts from pale yellow to orange. These separate timing curves keep the initial flash brief while the slower wake remains visible.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L197)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L207)
 
 ```js
     modules: [
@@ -506,7 +516,7 @@ The root has no explicit module list. Secondary smoke uses force, noise, growth,
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L266)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L276)
 
 ```js
     modules: [
@@ -527,7 +537,7 @@ The root has no explicit module list. Secondary smoke uses force, noise, growth,
 ```
 
 
-[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L335)
+[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L345)
 
 ```js
     modules: [
@@ -550,7 +560,7 @@ The root has no explicit module list. Secondary smoke uses force, noise, growth,
 ```
 
 
-[Source: modules:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L395)
+[Source: modules:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L405)
 
 ```js
     modules: [
@@ -577,11 +587,21 @@ The metallic mesh is paired with a faint 0.28-second trail of width 0.055 and op
 
 ```js
     renderers: [
+      new AudioRenderer({
+        sound: bulletLoopSound,
+        onSpawnSound: gunshotSound,
+        loop: true,
+        maxClips: 8,
+        volume: 3.5,
+        pitch: [0.82, 1.24],
+        lowPass: 14000,
+        speedAffectsVolume: 0.12,
+        depthAffectsVolume: 0.45,
+        dopplerEffect: 2.4,
+      }),
       new MeshRenderer({
         mesh: bulletMesh,
         maxParticles: 8,
-        castShadow: true,
-        receiveShadow: true,
       }),
       new TrailRenderer({
         mode: TrailMode.Particle,
@@ -622,7 +642,7 @@ The metallic mesh is paired with a faint 0.28-second trail of width 0.055 and op
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L222)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L232)
 
 ```js
     renderers: [
@@ -640,7 +660,7 @@ The metallic mesh is paired with a faint 0.28-second trail of width 0.055 and op
 ```
 
 
-[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L283)
+[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L293)
 
 ```js
     renderers: [
@@ -660,7 +680,7 @@ The metallic mesh is paired with a faint 0.28-second trail of width 0.055 and op
 ```
 
 
-[Source: renderers:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L354)
+[Source: renderers:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L364)
 
 ```js
     renderers: [
@@ -678,7 +698,7 @@ The metallic mesh is paired with a faint 0.28-second trail of width 0.055 and op
 ```
 
 
-[Source: renderers:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L409)
+[Source: renderers:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L419)
 
 ```js
     renderers: [

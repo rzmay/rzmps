@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 import { createDefaultSceneBackground } from '../presets/scenes/background';
 import { getSceneParticleRoot } from '../presets/scenes/particleRoot';
-import { EndBehavior, MaxCulling } from '@rzmps/rzmps';
+import { Collision, EndBehavior, MaxCulling } from '@rzmps/rzmps';
 
 import { EmitterGUI } from './particle-system-gui/EmitterGUI';
 import { ModuleGUI } from './particle-system-gui/ModuleGUI';
@@ -16,6 +16,7 @@ import { ParticleSystemSerializer } from './particle-system-gui/ParticleSystemSe
 import { DEFAULT_MODULE_FACTORIES, DEFAULT_RENDERER_FACTORIES } from './particle-system-gui/constants';
 
 const SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY = '__rzmps_configureParticleSystem';
+const SCENE_COLLISION_BACKEND_KEY = '__rzmps_activeCollisionBackend';
 
 const RESOURCE_LINKS = [
     { label: 'GitHub', href: 'https://github.com/rzmay/rzmps', Icon: GitFork },
@@ -55,6 +56,7 @@ export class ParticleSystemGUI {
             renderer: options.rendererMode ?? 'webgl',
             showCode: false,
         };
+        this.configureSystemForRenderer(this.system);
 
         // Focused collaborators keep this class responsible for orchestration only.
         this.valueEditor = new GUIValueEditor(this);
@@ -73,7 +75,9 @@ export class ParticleSystemGUI {
             container: options.container,
         });
         this.injectStyles();
-        this.gui.onChange(() => this.emitCode());
+        this.gui.onChange(() => {
+            this.emitCode();
+        });
         this.addResourceLinks();
         if (this.onRendererChange) {
             this.gui
@@ -100,6 +104,7 @@ export class ParticleSystemGUI {
     setSystem(next, presetName) {
         if (next === this.system)
             return;
+        this.configureSystemForRenderer(next);
         this.currentPresetName = presetName;
         const previous = this.system;
         previous.removeEventListener?.('destroyed', this.handleSystemDestroyed);
@@ -277,6 +282,7 @@ export class ParticleSystemGUI {
         this.sceneCleanup?.();
         this.sceneCleanup = undefined;
         this.sceneUpdate = undefined;
+        this.configureCollisionBackend(this.system);
         this.currentSceneName = name;
         this.onSceneChange?.(name);
         this.applyDefaultSceneState();
@@ -363,6 +369,28 @@ export class ParticleSystemGUI {
 
     configureSystemForScene(system = this.system) {
         this.scene?.userData?.[SCENE_PARTICLE_SYSTEM_CONFIGURER_KEY]?.(system);
+        this.configureCollisionBackend(system);
+    }
+
+    configureCollisionBackend(system = this.system) {
+        const backend = this.scene?.userData?.[SCENE_COLLISION_BACKEND_KEY];
+        const pending = [system];
+        const visited = new Set();
+
+        while (pending.length > 0) {
+            const current = pending.pop();
+            if (!current || visited.has(current)) continue;
+            visited.add(current);
+
+            current.modules?.forEach((module) => {
+                if (module instanceof Collision) module.setBackend(backend);
+            });
+            current.subSystems?.forEach((_options, subSystem) => pending.push(subSystem));
+        }
+    }
+
+    configureSystemForRenderer(system = this.system) {
+        if (this.viewState.renderer === 'webgl') system.gpuProcessing = false;
     }
 
     getPresetFactory(entry) {
@@ -394,6 +422,7 @@ export class ParticleSystemGUI {
         const destroyed = this.isSystemDestroyed(system);
         folder.add(system, 'simulationSpace', ['local', 'world']).name('Simulation Space');
         folder.add(system, 'useSpatialEffects').name('Spatial Effects');
+        folder.add(system, 'spatialEffectBoundsFiltering').name('Spatial Bounds Filter');
         const gravityFolder = folder.addFolder('Gravity');
         gravityFolder.close();
         this.addVector3(gravityFolder, system.gravity, 'Gravity');
@@ -408,6 +437,18 @@ export class ParticleSystemGUI {
         folder.add(system, 'maxParticles', 0, 100000, 1).name('Max Particles');
         folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling');
         folder.add(system, 'simulationDistance', 0, 1000, 0.1).name('Simulation Distance');
+        const gpuProcessing = folder.add(system, 'gpuProcessing').name('GPU Processing');
+        if (this.viewState.renderer === 'webgl') gpuProcessing.disable();
+        folder.add(system, 'gpuDebug').name('GPU Debug Logs');
+        folder.add(system, 'gpuDebugInterval', 1, 120, 1).name('GPU Debug Every');
+        const rendererMode = this.viewState.renderer;
+        const gpuStatus = {
+            get active() {
+                if (rendererMode === 'webgl') return 'CPU';
+                return system.isGPUProcessingActive ? 'Active' : 'CPU fallback';
+            },
+        };
+        folder.add(gpuStatus, 'active').name('GPU Status').disable().listen();
         const updateLODFolder = folder.addFolder('Update LOD');
         updateLODFolder.close();
         this.buildUpdateLOD(updateLODFolder, system);
@@ -420,6 +461,7 @@ export class ParticleSystemGUI {
         };
         const actions = {
             start: () => system.start(controlOptions.children),
+            reset: () => system.reset(controlOptions.children),
             pause: () => system.pause(controlOptions.children),
             stop: () => system.stop(false, controlOptions.children),
             stopAndClear: () => system.stop(true, controlOptions.children),
@@ -427,7 +469,8 @@ export class ParticleSystemGUI {
             respawn: () => void this.respawnSystem(),
         };
         folder.add(controlOptions, 'children').name('Propagate Children');
-        folder.add(actions, 'start').name('Start / Restart');
+        folder.add(actions, 'start').name('Start');
+        folder.add(actions, 'reset').name('Reset');
         folder.add(actions, 'pause').name('Pause');
         folder.add(actions, 'stop').name('Stop');
         folder.add(actions, 'stopAndClear').name('Stop + Clear');

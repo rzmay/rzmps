@@ -68,6 +68,8 @@ elapsedTime: number;
 key: string;
 ```
 
+Stable root or subsystem run identity.
+
 ***
 
 <a id="looping"></a>

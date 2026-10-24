@@ -176,6 +176,10 @@ const systemRows = results.map((result) => [
   `${formatInteger(result.minSimulatedParticles)}-${formatInteger(result.maxSimulatedParticles)
   }`,
   formatInteger(result.maxParticlesLimit),
+  result.rendererType ?? 'unknown',
+  result.gpuProcessingRequested
+    ? `forced (${formatInteger(result.gpuActiveFrames)}/${formatInteger(result.gpuMeasuredFrames)})`
+    : 'off',
   formatInteger(result.frames),
   formatNumber(result.avgFps),
   formatNumber(result.onePercentLowFps),
@@ -214,6 +218,8 @@ const block = [
       'Target Particles',
       'Simulated Particles',
       'Particle Cap',
+      'Renderer',
+      'GPU',
       'Rendered Frames',
       'Avg FPS',
       '1% Low FPS',

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Node } from 'three/webgpu';
 import Renderer, { type RendererOptions } from '../Renderer';
 import Particle from '../Particle';
 import ParticleSystem from '../ParticleSystem';
@@ -16,6 +17,20 @@ import { SpriteMaterialType } from '../enums/SpriteMaterialType';
 import { TRAIL_RENDERER_USER_DATA_KEY } from './TrailRenderer';
 import LiveCubemap from './LiveCubemap';
 import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
+import {
+  cameraPosition,
+  cameraWorldMatrix,
+  cos,
+  float,
+  modelWorldMatrix,
+  positionLocal,
+  sin,
+  uint,
+  uniform,
+  vec3,
+  vec4,
+} from 'three/tsl';
+import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
 
 export const SCENE_COLOR_DATA_USER_DATA_KEY = "__rzmps_sceneColorData";
 
@@ -115,6 +130,10 @@ class SpriteRenderer extends Renderer {
   private material: THREE.ShaderMaterial;
   private quadMaterial: THREE.ShaderMaterial;
   private webgpuMaterial: THREE.Material;
+  private webgpuGPUMaterial?: THREE.Material;
+  private webgpuGPUMaterialBuffer?: GPUParticleBufferState | GPUParticleRenderBufferState;
+  private webgpuGPUMaterialBufferVersion = -1;
+  private webgpuGPUMaterialRendererVersion = -1;
   private readonly hiddenMaterial = new THREE.MeshBasicMaterial({
     colorWrite: false,
     depthWrite: false,
@@ -131,6 +150,10 @@ class SpriteRenderer extends Renderer {
     this.points.material = this.material;
     this.webglQuadMesh.material = this.quadMaterial;
     this.webgpuMaterial = this.loadWebGPUMaterial(value);
+    this.webgpuGPUMaterial?.dispose();
+    this.webgpuGPUMaterial = undefined;
+    this.webgpuGPUMaterialBuffer = undefined;
+    this.webgpuGPUMaterialBufferVersion = -1;
     this.webgpuMesh.material = this.webgpuMaterial;
     this.environmentSource = undefined;
     this.updateTransmissionRenderOrder();
@@ -148,8 +171,11 @@ class SpriteRenderer extends Renderer {
   private webglQuadSpriteDataAttribute: THREE.InstancedBufferAttribute;
   private readonly webgpuGeometry: THREE.PlaneGeometry;
   private readonly webgpuMesh: THREE.InstancedMesh;
+  private readonly gpuCameraZoom = uniform(1, 'float');
   private webgpuSpriteDataAttribute: THREE.InstancedBufferAttribute;
   private webgpuCapacity = 10000;
+  private webgpuIdentityMatrixCapacity = 0;
+  private webgpuInstancesUseCPUTransforms = false;
 
   private readonly matrix = new THREE.Matrix4();
   private readonly quaternion = new THREE.Quaternion();
@@ -233,6 +259,9 @@ class SpriteRenderer extends Renderer {
       this.webgpuMaterial,
       this.webgpuCapacity,
     );
+    // Three wraps large instance matrices in a cached interleaved buffer. Dynamic
+    // usage makes that wrapper upload CPU/GPU transition edits every frame.
+    this.webgpuMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.webgpuMesh.frustumCulled = false;
     this.webgpuMesh.castShadow = this.castShadow;
     this.webgpuMesh.count = 0;
@@ -277,6 +306,7 @@ class SpriteRenderer extends Renderer {
 
     // Update attributes
     if (system.sceneRenderer instanceof WebGPURenderer) {
+      this.webgpuMesh.material = this.webgpuMaterial;
       if (system.sceneCamera) {
         this.updateWebGPUInstances(
           particles,
@@ -367,6 +397,51 @@ class SpriteRenderer extends Renderer {
     );
   }
 
+  updateGPU(
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+    system: ParticleSystem,
+  ): void {
+    this.prepareGPUVisibility(system);
+    this.gpuCameraZoom.value = system.sceneCamera instanceof THREE.PerspectiveCamera
+      ? system.sceneCamera.zoom
+      : 1;
+    this.setActiveRenderer(system.sceneRenderer);
+    this.webgpuMesh.count = Math.min(buffers.count, this.webgpuCapacity);
+    this.webgpuMesh.castShadow = this.castShadow;
+
+    if (this.webgpuGPUMaterialBuffer !== buffers) {
+      this.webgpuIdentityMatrixCapacity = 0;
+    }
+    this.syncIdentityWebGPUInstances(this.webgpuMesh.count);
+    if (this.webgpuInstancesUseCPUTransforms) {
+      this.webgpuMesh.instanceMatrix.needsUpdate = true;
+      this.webgpuInstancesUseCPUTransforms = false;
+    }
+    this.applyGPUWebGPUNodes(buffers, system);
+
+    let environment: THREE.Texture | undefined;
+    if (this._materialOptions && 'envMap' in this._materialOptions) {
+      environment = this._materialOptions.envMap;
+    } else if (system.useLiveCubemap) {
+      environment = system.liveCubemap.map;
+    } else {
+      environment = system.scene?.environment ?? undefined;
+    }
+
+    const envIntensity = system.useLiveCubemap && !('envMap' in (this._materialOptions ?? {}))
+      ? system.liveCubemap.intensity
+      : this._materialOptions && 'envIntensity' in this._materialOptions
+        ? this._materialOptions.envIntensity ?? 1
+        : system.scene?.environmentIntensity ?? 1;
+
+    this.updateWebGPUEnvironmentMap(environment ?? null, envIntensity);
+    this.updateWebGPUSoftParticles(
+      system.sceneRenderer as WebGPURenderer,
+      system.scene,
+      system.sceneCamera,
+    );
+  }
+
   private updateAttributes(particles: Particle[]) {
     this.geometry.setAttribute('position', new THREE.BufferAttribute(
       new Float32Array(
@@ -418,6 +493,7 @@ class SpriteRenderer extends Renderer {
     this.quadMaterial.dispose();
     this.webgpuGeometry.dispose();
     this.webgpuMaterial.dispose();
+    this.webgpuGPUMaterial?.dispose();
     this.hiddenMaterial.dispose();
 
     this.points.removeFromParent();
@@ -430,6 +506,13 @@ class SpriteRenderer extends Renderer {
     this.updateAttributes([]);
     this.webglQuadMesh.count = 0;
     this.webgpuMesh.count = 0;
+    this.webgpuIdentityMatrixCapacity = 0;
+    this.webgpuMesh.material = this.webgpuMaterial;
+    this.webgpuGPUMaterial?.dispose();
+    this.webgpuGPUMaterial = undefined;
+    this.webgpuGPUMaterialBuffer = undefined;
+    this.webgpuGPUMaterialBufferVersion = -1;
+    this.webgpuGPUMaterialRendererVersion = -1;
   }
 
   private loadMaterial(
@@ -459,7 +542,13 @@ class SpriteRenderer extends Renderer {
     });
   }
 
-  private loadWebGPUMaterial(options: Partial<LitSpriteOptions | UnlitSpriteOptions> | undefined) {
+  private loadWebGPUMaterial(
+    options: Partial<LitSpriteOptions | UnlitSpriteOptions> | undefined,
+    gpuNodes?: {
+      spriteDataNode: Node<'vec4'>;
+      colorNode: Node<'vec3'>;
+    },
+  ) {
     const createMaterial = this.materialType === SpriteMaterialType.Lit ? WebGPULitSprite : WebGPUUnlitSprite;
 
     return createMaterial(this.texture, {
@@ -470,6 +559,7 @@ class SpriteRenderer extends Renderer {
       alphaMap: this.alphaMap,
       softParticleDistance: this.softParticleDistance,
       sceneDepthTexture: WEBGPU_SCENE_DEPTH_TEXTURE,
+      ...gpuNodes,
     });
   }
 
@@ -551,6 +641,10 @@ class SpriteRenderer extends Renderer {
   ): void {
     const count = Math.min(particles.length, this.webgpuCapacity);
 
+    // CPU rendering writes complete transforms into these matrices. GPU node
+    // materials require identity matrices before applying storage-buffer state.
+    this.webgpuIdentityMatrixCapacity = 0;
+    this.webgpuInstancesUseCPUTransforms = true;
     this.webgpuMesh.count = count;
 
     if (cameraQuaternion) {
@@ -609,6 +703,120 @@ class SpriteRenderer extends Renderer {
     if (this.webgpuMesh.instanceColor) this.webgpuMesh.instanceColor.needsUpdate = true;
     this.webgpuSpriteDataAttribute.needsUpdate = true;
 
+  }
+
+  private syncIdentityWebGPUInstances(count: number): void {
+    if (this.webgpuIdentityMatrixCapacity >= count) return;
+
+    this.matrix.identity();
+
+    for (let index = this.webgpuIdentityMatrixCapacity; index < count; index += 1) {
+      this.webgpuMesh.setMatrixAt(index, this.matrix);
+    }
+
+    this.webgpuIdentityMatrixCapacity = count;
+    this.webgpuMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  private applyGPUWebGPUNodes(
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+    system: ParticleSystem,
+  ): void {
+    if (
+      this.webgpuGPUMaterialBuffer !== buffers
+      || this.webgpuGPUMaterialBufferVersion !== buffers.version
+      || this.webgpuGPUMaterialRendererVersion !== this.version
+      || !this.webgpuGPUMaterial
+    ) {
+      this.webgpuGPUMaterial?.dispose();
+      this.webgpuGPUMaterial = this.loadWebGPUMaterial(this._materialOptions, {
+        spriteDataNode: this.getGPUSpriteDataNode(buffers, system),
+        colorNode: buffers.particle.color,
+      });
+      (this.webgpuGPUMaterial as THREE.Material & { positionNode?: Node }).positionNode =
+        this.getGPUPositionNode(buffers, system);
+      this.webgpuGPUMaterialBuffer = buffers;
+      this.webgpuGPUMaterialBufferVersion = buffers.version;
+      this.webgpuGPUMaterialRendererVersion = this.version;
+    }
+
+    this.webgpuMesh.material = this.webgpuGPUMaterial;
+  }
+
+  protected getGPUConfigurationSignature(): string {
+    return [
+      this.texture.uuid,
+      this.alphaMap?.uuid ?? '',
+      this.materialType,
+      this.frames,
+      this.gridSize.x,
+      this.gridSize.y,
+      this.billboard ? 1 : 0,
+      this.sizeAttenuation ? 1 : 0,
+      this.randomStartFrame ? 1 : 0,
+      this.softParticleDistance > 0 ? 1 : 0,
+      this._materialOptions?.transmissionMap?.uuid ?? '',
+      (this._materialOptions as { normalMap?: THREE.Texture } | undefined)?.normalMap?.uuid ?? '',
+      getGPUOptionSignature(this._materialOptions),
+    ].join(':');
+  }
+
+  protected onGPUConfigurationChange(): void {
+    this.webgpuGPUMaterial?.dispose();
+    this.webgpuGPUMaterial = undefined;
+    this.webgpuGPUMaterialBuffer = undefined;
+    this.webgpuGPUMaterialBufferVersion = -1;
+    this.webgpuGPUMaterialRendererVersion = -1;
+  }
+
+  private getGPUPositionNode(
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+    system: ParticleSystem,
+  ): Node<'vec3'> {
+    const particle = buffers.particle;
+    const visible = this.getGPUVisibilityNode(particle, system);
+    const scaleMultiplier = this.getGPUScaleMultiplierNode();
+    const attenuationScale = !this.sizeAttenuation
+      && system.sceneCamera instanceof THREE.PerspectiveCamera
+      ? modelWorldMatrix.mul(vec4(particle.position, 1)).xyz
+        .distance(cameraPosition)
+        .max(system.sceneCamera.near)
+        .div(this.gpuCameraZoom.max(0.000001))
+      : float(1);
+    const localQuad = vec3(
+      positionLocal.x.mul(particle.scale.x).mul(visible).mul(scaleMultiplier).mul(attenuationScale),
+      positionLocal.y.mul(particle.scale.y).mul(visible).mul(scaleMultiplier).mul(attenuationScale),
+      float(0),
+    );
+    const rolledQuad = rotateZ(localQuad, particle.rotation.x);
+    const orientedQuad = this.billboard
+      ? transformDirectionGPU(
+        transformDirectionNodeGPU(rolledQuad, cameraWorldMatrix),
+        getWorldToSystemRotationMatrix(system),
+      )
+      : rotateXYZ(localQuad, particle.rotation);
+
+    return orientedQuad.add(particle.position) as Node<'vec3'>;
+  }
+
+  private getGPUSpriteDataNode(
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+    system: ParticleSystem,
+  ): Node<'vec4'> {
+    const particle = buffers.particle;
+    const visible = this.getGPUVisibilityNode(particle, system);
+    const frame = particle.realtime
+      .div(1000)
+      .mul(this.gpuParameters.number('fps', () => this.fps, particle.time, 1, particle.index))
+      .floor()
+      .mod(Math.max(this.frames, 1));
+
+    return vec4(
+      frame,
+      particle.alpha.mul(visible),
+      this.billboard ? particle.rotation.x : float(0),
+      particle.distortionStrength.mul(visible),
+    ) as Node<'vec4'>;
   }
 
   private updateWebGLQuadInstances(
@@ -1094,6 +1302,93 @@ class SpriteRenderer extends Renderer {
       object.visible = visible;
     });
   }
+}
+
+function rotateXYZ(position: Node<'vec3'>, rotation: Node<'vec3'>): Node<'vec3'> {
+  const cx = cos(rotation.x);
+  const sx = sin(rotation.x);
+  const cy = cos(rotation.y);
+  const sy = sin(rotation.y);
+  const cz = cos(rotation.z);
+  const sz = sin(rotation.z);
+
+  const xRotated = vec3(
+    position.x,
+    position.y.mul(cx).sub(position.z.mul(sx)),
+    position.y.mul(sx).add(position.z.mul(cx)),
+  );
+  const yRotated = vec3(
+    xRotated.x.mul(cy).add(xRotated.z.mul(sy)),
+    xRotated.y,
+    xRotated.z.mul(cy).sub(xRotated.x.mul(sy)),
+  );
+
+  return vec3(
+    yRotated.x.mul(cz).sub(yRotated.y.mul(sz)),
+    yRotated.x.mul(sz).add(yRotated.y.mul(cz)),
+    yRotated.z,
+  );
+}
+
+function rotateZ(position: Node<'vec3'>, rotation: Node<'float'>): Node<'vec3'> {
+  const c = cos(rotation);
+  const s = sin(rotation);
+
+  return vec3(
+    position.x.mul(c).sub(position.y.mul(s)),
+    position.x.mul(s).add(position.y.mul(c)),
+    position.z,
+  );
+}
+
+function transformDirectionGPU(direction: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
+  const e = matrix.elements;
+
+  return vec3(
+    direction.x.mul(e[0]).add(direction.y.mul(e[4])).add(direction.z.mul(e[8])),
+    direction.x.mul(e[1]).add(direction.y.mul(e[5])).add(direction.z.mul(e[9])),
+    direction.x.mul(e[2]).add(direction.y.mul(e[6])).add(direction.z.mul(e[10])),
+  ) as Node<'vec3'>;
+}
+
+function transformDirectionNodeGPU(direction: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
+  return matrix.mul(vec4(direction, float(0))).xyz as Node<'vec3'>;
+}
+
+function getWorldToSystemRotationMatrix(system: ParticleSystem): THREE.Matrix4 {
+  const matrix = new THREE.Matrix4();
+
+  if (system.simulationSpace !== 'world') {
+    system.updateWorldMatrix(true, false);
+    matrix.extractRotation(system.matrixWorld).invert();
+  }
+
+  return matrix;
+}
+
+function getGPUOptionSignature(value: unknown, depth = 0): string {
+  if (value === undefined || value === null) return String(value);
+  if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
+    return `${typeof value}:${value}`;
+  }
+  if (typeof value === 'function') return 'function';
+  if (value instanceof THREE.Texture) return `texture:${value.uuid}`;
+  if (value instanceof THREE.Color) return `color:${value.getHexString()}`;
+  if (value instanceof THREE.Vector2 || value instanceof THREE.Vector3 || value instanceof THREE.Vector4) {
+    return `${value.constructor.name}:${value.toArray().join(',')}`;
+  }
+  if (Array.isArray(value)) {
+    return `array:${value.map((entry) => getGPUOptionSignature(entry, depth + 1)).join(',')}`;
+  }
+  if (typeof value !== 'object' || depth >= 2) {
+    return (value as { constructor?: { name?: string } }).constructor?.name ?? typeof value;
+  }
+
+  const record = value as Record<string, unknown>;
+  return Object.keys(record)
+    .sort()
+    .map((key) => `${key}=${getGPUOptionSignature(record[key], depth + 1)}`)
+    .join(';');
 }
 
 export default SpriteRenderer;

@@ -4,7 +4,7 @@
 
 # Rendering Compatibility and Visual Validation
 
-RZMPS supports Three.js WebGL and WebGPU rendering. Particle processing uses the same CPU simulation path for either renderer. Choose the rendering backend independently from emitters and modules. A browser must expose WebGPU on a secure origin; localhost is suitable for development. The preview command fails explicitly if the requested backend cannot initialize.
+RZMPS supports Three.js WebGL and WebGPU rendering. WebGL uses CPU particle simulation. WebGPU can use either CPU simulation or GPU compute; `gpuProcessing` requests compute and `isGPUProcessingActive` reports the backend selected after renderer context is available. Component compatibility can still select CPU processing, so WebGPU rendering alone does not prove that simulation is on the GPU. See [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) for eligibility and extension hooks. A browser must expose WebGPU on a secure origin; localhost is suitable for development. The preview command fails explicitly if the requested backend cannot initialize.
 
 Initialize a WebGPURenderer before rendering. See the demo's `createWebGPURenderer` utility for the light-node registrations used by its scenes. Custom ShaderMaterial or other Three.js extensions can have their own backend constraints; check them before substituting materials.
 

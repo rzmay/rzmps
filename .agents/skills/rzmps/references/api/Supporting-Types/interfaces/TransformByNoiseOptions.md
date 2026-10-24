@@ -41,6 +41,22 @@ Additional per-particle predicate, evaluated after tag matching.
 
 ***
 
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ModuleGPUCondition | null;
+```
+
+Optional TSL condition callback for GPU processing.
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`conditionGPU`](../../interfaces/ModuleOptions.md#conditiongpu)
+
+***
+
 <a id="damping"></a>
 
 ### damping
@@ -85,6 +101,22 @@ Frequency multiplier between successive noise octaves. Defaults to 2.
 
 ***
 
+<a id="modifygpu"></a>
+
+### modifyGPU?
+
+```ts
+optional modifyGPU?: ModuleGPUUpdate | null;
+```
+
+TSL modifier used when GPU processing is active.
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`modifyGPU`](../../interfaces/ModuleOptions.md#modifygpu)
+
+***
+
 <a id="octaves"></a>
 
 ### octaves
@@ -98,6 +130,38 @@ Number of noise layers; additional layers increase sampling work. Defaults to 1.
 #### Inherited from
 
 [`NoiseOptions`](NoiseOptions.md).[`octaves`](NoiseOptions.md#octaves)
+
+***
+
+<a id="octreeaggregator"></a>
+
+### octreeAggregator?
+
+```ts
+optional octreeAggregator?: OctreeAggregator<unknown>;
+```
+
+Aggregate factory used while rebuilding the managed CPU ParticleOctree.
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`octreeAggregator`](../../interfaces/ModuleOptions.md#octreeaggregator)
+
+***
+
+<a id="octreeoptions"></a>
+
+### octreeOptions?
+
+```ts
+optional octreeOptions?: Partial<OctreeConfig>;
+```
+
+Configures and implicitly enables the managed CPU ParticleOctree.
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`octreeOptions`](../../interfaces/ModuleOptions.md#octreeoptions)
 
 ***
 
@@ -154,7 +218,7 @@ Execution phase: negative is permanent before movement, 0–1 is transient befor
 ### requireSpatialEffects?
 
 ```ts
-optional requireSpatialEffects?: 
+optional requireSpatialEffects?:
   | SpatialEffectConstructor<SpatialEffect>
   | SpatialEffectConstructor<SpatialEffect>[];
 ```
@@ -221,6 +285,24 @@ Explicit module effect collection; supplying an empty array suppresses automatic
 
 ***
 
+<a id="spatialgrid"></a>
+
+### spatialGrid?
+
+```ts
+optional spatialGrid?:
+  | ParticleSpatialGrid
+| Partial<ParticleSpatialGridOptions>;
+```
+
+Configures a system-owned grid or supplies an explicitly caller-owned grid.
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`spatialGrid`](../../interfaces/ModuleOptions.md#spatialgrid)
+
+***
+
 <a id="strength"></a>
 
 ### strength
@@ -278,6 +360,38 @@ Module update quality settings; skipped callbacks do not accumulate their own de
 #### Inherited from
 
 [`ModuleOptions`](../../interfaces/ModuleOptions.md).[`updateLOD`](../../interfaces/ModuleOptions.md#updatelod)
+
+***
+
+<a id="useoctree"></a>
+
+### useOctree?
+
+```ts
+optional useOctree?: boolean;
+```
+
+Enables a managed CPU ParticleOctree with default options.
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`useOctree`](../../interfaces/ModuleOptions.md#useoctree)
+
+***
+
+<a id="usespatialgrid"></a>
+
+### useSpatialGrid?
+
+```ts
+optional useSpatialGrid?: boolean;
+```
+
+Enables a managed GPU ParticleSpatialGrid with default options.
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`useSpatialGrid`](../../interfaces/ModuleOptions.md#usespatialgrid)
 
 ***
 

@@ -46,13 +46,11 @@ A five-second loop emits particles with eight-second lifetimes under full gravit
         bounce: 0.75,
         dampen: 0.05,
         radiusScale: 1,
-        applyImpulses: true,
       }),
     ],
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
-        castShadow: true,
 
         materialOptions: {
           roughness: 0.5,
@@ -107,7 +105,6 @@ Collision uses bounce 0.75 and dampen 0.05, retaining substantial rebound while 
         bounce: 0.75,
         dampen: 0.05,
         radiusScale: 1,
-        applyImpulses: true,
       }),
     ],
 ```
@@ -118,13 +115,12 @@ Collision uses bounce 0.75 and dampen 0.05, retaining substantial rebound while 
 Lit Circle sprites use spherical normals and normal lighting 1 to appear round at low geometric cost. Roughness 0.5 softens highlights and castShadow true helps locate particles above scene geometry. Shadows require the scene lights and renderer to enable shadow support.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/collision.js#L48)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/collision.js#L47)
 
 ```js
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
-        castShadow: true,
 
         materialOptions: {
           roughness: 0.5,

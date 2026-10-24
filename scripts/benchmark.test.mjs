@@ -45,6 +45,61 @@ test('aggregation and comparison use medians and preserve measurement metadata',
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('cross-revision comparison retains only shared benchmark cases', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rzmps-benchmark-intersection-'));
+  const run = (script, args) => execFileSync(process.execPath, [path.join(root, 'scripts', script), ...args], { encoding: 'utf8' });
+  try {
+    const base = structuredClone(snapshot);
+    const head = structuredClone(snapshot);
+    const sharedName = base.results[1].name;
+    base.results = [base.results[0], base.results[1]];
+    head.results = [
+      base.results[1],
+      { ...base.results[0], name: 'PR-only benchmark' },
+    ];
+    const basePath = path.join(directory, 'base.json');
+    const headPath = path.join(directory, 'head.json');
+    fs.writeFileSync(basePath, JSON.stringify(base));
+    fs.writeFileSync(headPath, JSON.stringify(head));
+
+    run('intersect-benchmarks.mjs', [basePath, headPath]);
+    const filteredBase = JSON.parse(fs.readFileSync(basePath));
+    const filteredHead = JSON.parse(fs.readFileSync(headPath));
+    assert.deepEqual(filteredBase.results.map((result) => result.name), [sharedName]);
+    assert.deepEqual(filteredHead.results.map((result) => result.name), [sharedName]);
+    assert.deepEqual(filteredBase.metadata.caseIntersection.baseOnly, [base.results[0].name]);
+    assert.deepEqual(filteredHead.metadata.caseIntersection.headOnly, ['PR-only benchmark']);
+    assertComparable(filteredBase, filteredHead);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('cross-revision comparison maps legacy case names to CPU cases', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rzmps-benchmark-legacy-intersection-'));
+  const run = (script, args) => execFileSync(process.execPath, [path.join(root, 'scripts', script), ...args], { encoding: 'utf8' });
+  try {
+    const base = structuredClone(snapshot);
+    const head = structuredClone(snapshot);
+    const legacyName = base.results[0].name;
+    base.results = [base.results[0]];
+    head.results = [
+      { ...head.results[0], name: `${legacyName} [CPU]` },
+      { ...head.results[0], name: `${legacyName} [GPU]` },
+    ];
+    const basePath = path.join(directory, 'base.json');
+    const headPath = path.join(directory, 'head.json');
+    fs.writeFileSync(basePath, JSON.stringify(base));
+    fs.writeFileSync(headPath, JSON.stringify(head));
+
+    run('intersect-benchmarks.mjs', [basePath, headPath]);
+    const filteredBase = JSON.parse(fs.readFileSync(basePath));
+    const filteredHead = JSON.parse(fs.readFileSync(headPath));
+    assert.deepEqual(filteredBase.results.map((result) => result.name), [`${legacyName} [CPU]`]);
+    assert.deepEqual(filteredHead.results.map((result) => result.name), [`${legacyName} [CPU]`]);
+    assert.deepEqual(filteredHead.metadata.caseIntersection.headOnly, [`${legacyName} [GPU]`]);
+    assertComparable(filteredBase, filteredHead);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('documentation includes the current published table without a second maintained snapshot', () => {
   const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
   const page = benchmarkGuide(readme);

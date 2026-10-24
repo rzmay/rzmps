@@ -9,8 +9,9 @@
 # Type Alias: DynamicValue\<T\>
 
 ```ts
-type DynamicValue<T> = 
+type DynamicValue<T> =
   | T
+  | Node
   | ((t) => DynamicValue<T>)
   | [DynamicValue<T>, DynamicValue<T>]
 | Set<DynamicValue<T>>;

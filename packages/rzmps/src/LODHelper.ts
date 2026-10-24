@@ -10,14 +10,18 @@ export type LODSettingsOptions = LODSettings;
 
 /** Distance-based quality selection with update credit; reuse an instance to preserve skip cadence. */
 export default class LODHelper {
-  distance: number;
-  quality: number;
-  maxLevel: number;
-  falloff: number;
-  continuous: boolean;
+  distance = 10;
+  quality = 0.5;
+  maxLevel = 4;
+  falloff = 1.5;
+  continuous = false;
   private _updateCredit = 1;
 
   constructor(options: Partial<LODSettings> = {}) {
+    this.configure(options);
+  }
+
+  configure(options: Partial<LODSettings> = {}): void {
     this.distance = Math.max(options.distance ?? 10, 0);
     this.quality = Math.min(Math.max(options.quality ?? 0.5, 0.01), 1);
     this.maxLevel = Math.max(Math.floor(options.maxLevel ?? 4), 0);

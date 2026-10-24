@@ -12,6 +12,7 @@ export default async function createRibbonTrail() {
   // #region docs:system:1
   // #region docs:modules:none
   const ribbonTrail = new ParticleSystem({
+    maxParticles: 128,
     duration: 4,
     looping: true,
     // #region docs:emitters:1

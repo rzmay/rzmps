@@ -3,6 +3,8 @@ import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { ValueByParameter } from '../types/ValueByParameter';
+import type { Node } from 'three/webgpu';
+import { uniform } from 'three/tsl';
 import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 
 export interface VelocityByDepthOptions extends Partial<ModuleOptions> {
@@ -16,6 +18,8 @@ export interface VelocityByDepthOptions extends Partial<ModuleOptions> {
 /** Adds linear motion channels using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
 class VelocityByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
+  private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');
+  private readonly _gpuDepthRange = uniform(new THREE.Vector2(), 'vec2');
   depthRange?: [number, number];
 
   private _cameraDepthRange: [number, number] = [0, 100];
@@ -57,6 +61,28 @@ class VelocityByDepth extends Module {
     }, {
       ...options,
       priority: Module.Priority.PreMovementTransient,
+      modifyGPU: (particle) => {
+          const time = this.getDepthTimeGPU(particle.position);
+
+          particle.position.assign(
+            particle.position.add(this.gpuParameters.parameterVector(
+              'position', () => this.options.position,
+              time,
+            )),
+          );
+          particle.velocity.assign(
+            particle.velocity.add(this.gpuParameters.parameterVector(
+              'velocity', () => this.options.velocity,
+              time,
+            )),
+          );
+          particle.acceleration.assign(
+            particle.acceleration.add(this.gpuParameters.parameterVector(
+              'acceleration', () => this.options.acceleration,
+              time,
+            )),
+          );
+        }
     });
 
     this.depthRange = options.depthRange;
@@ -76,8 +102,16 @@ class VelocityByDepth extends Module {
         this._cameraDepthRange = [camera.near, camera.far];
       }
     }
+    this._gpuDepthRange.value.set(
+      this.depthRange?.[0] ?? this._cameraDepthRange[0],
+      this.depthRange?.[1] ?? this._cameraDepthRange[1],
+    );
   }
 
+  private getDepthTimeGPU(position: Node<'vec3'>) {
+    return position.sub(this._gpuCameraPosition).length().sub(this._gpuDepthRange.x)
+      .div(this._gpuDepthRange.y.sub(this._gpuDepthRange.x).max(Number.EPSILON)).clamp(0, 1);
+  }
 }
 
 export default VelocityByDepth;

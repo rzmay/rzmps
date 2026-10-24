@@ -10,7 +10,7 @@
 
 ## Extends
 
-- [`RendererOptions`](RendererOptions.md)
+- [`RendererOptions`](../../interfaces/RendererOptions.md)
 
 ## Properties
 
@@ -52,7 +52,7 @@ false
 
 #### Inherited from
 
-[`RendererOptions`](RendererOptions.md).[`compensateSize`](RendererOptions.md#compensatesize)
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`compensateSize`](../../interfaces/RendererOptions.md#compensatesize)
 
 ***
 
@@ -78,7 +78,7 @@ Reduces the number of rendered particles with distance without deleting simulate
 
 #### Inherited from
 
-[`RendererOptions`](RendererOptions.md).[`countLOD`](RendererOptions.md#countlod)
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`countLOD`](../../interfaces/RendererOptions.md#countlod)
 
 ***
 
@@ -174,7 +174,7 @@ Filters the simulated population by tag before rendering.
 
 #### Inherited from
 
-[`RendererOptions`](RendererOptions.md).[`tags`](RendererOptions.md#tags)
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`tags`](../../interfaces/RendererOptions.md#tags)
 
 ***
 
@@ -190,7 +190,7 @@ Distance-based renderer update quality.
 
 #### Inherited from
 
-[`RendererOptions`](RendererOptions.md).[`updateLOD`](RendererOptions.md#updatelod)
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`updateLOD`](../../interfaces/RendererOptions.md#updatelod)
 
 ***
 
@@ -206,4 +206,4 @@ Enables distance-based renderer update skipping.
 
 #### Inherited from
 
-[`RendererOptions`](RendererOptions.md).[`useUpdateLOD`](RendererOptions.md#useupdatelod)
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`useUpdateLOD`](../../interfaces/RendererOptions.md#useupdatelod)

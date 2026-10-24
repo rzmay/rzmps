@@ -25,6 +25,12 @@ export class ModuleGUI extends GUIEditorBase {
     }
 
     buildModule(folder, module, system = this.system) {
+        const gpuStatus = {
+            get compatible() {
+                return module.supportsGPU ? 'GPU compatible' : 'CPU only';
+            },
+        };
+        folder.add(gpuStatus, 'compatible').name('GPU').disable().listen();
         this.addTags(folder, module);
         const updateLODFolder = folder.addFolder('Update LOD');
         updateLODFolder.close();
@@ -41,6 +47,12 @@ export class ModuleGUI extends GUIEditorBase {
                 'priority',
                 'backend',
                 'collisionListeners',
+                'collisionHitSamples',
+                'collisionPositionSamples',
+                'collisionNormalSamples',
+                'collisionHitAttribute',
+                'collisionPositionAttribute',
+                'collisionNormalAttribute',
                 'explicitForceFields',
                 'forceFields',
                 'forceFieldFilter',

@@ -20,6 +20,7 @@ A 10-second loop keeps emission continuous, while zero gravity isolates instance
 
 ```js
   const system = new ParticleSystem({
+    maxParticles: 256,
     duration: 10,
     looping: true,
     gravity: new THREE.Vector3(0, 0, 0),
@@ -71,7 +72,7 @@ A 10-second loop keeps emission continuous, while zero gravity isolates instance
 Rate 12 and mean lifetime 6 imply roughly 72 simultaneous cubes. The discrete color Set avoids intermediate hues. Scale ranges from 0.4 to 1, applied to a 0.25-unit box mesh, so visible cube edges stay small enough to separate the instances.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L28)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L29)
 
 ```js
     emitters: [
@@ -99,7 +100,7 @@ Rate 12 and mean lifetime 6 imply roughly 72 simultaneous cubes. The discrete co
 Angular velocity is sampled between differently oriented vectors so cubes do not all rotate around the same axis. The cubic fade keeps them opaque early and removes them near death. There is no added acceleration module, so the emitter’s initial motion stays easy to distinguish from rotation.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L48)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L49)
 
 ```js
     modules: [
@@ -118,7 +119,7 @@ Angular velocity is sampled between differently oriented vectors so cubes do not
 MeshRenderer instances a BoxGeometry and MeshStandardMaterial. Cast and receive shadows are enabled, making real geometric faces apparent when the scene has shadow-casting lights. Compare this example with the sprite-based Spheres preset to see the difference between geometry and spherical normal shading.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L59)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L60)
 
 ```js
     renderers: [

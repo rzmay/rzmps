@@ -62,7 +62,7 @@ new NoiseModule(update, options?): NoiseModule;
 
 ##### options?
 
-`Partial`\<[`NoiseOptions`](../Supporting-Types/interfaces/NoiseOptions.md)\>
+`Partial`\<[`NoiseOptions`](../Supporting-Types/interfaces/NoiseOptions.md)\> & `object`
 
 #### Returns
 
@@ -111,6 +111,20 @@ condition: (particle) => boolean;
 #### Inherited from
 
 [`Module`](Module.md).[`condition`](Module.md#condition)
+
+***
+
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ModuleGPUCondition;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`conditionGPU`](Module.md#conditiongpu)
 
 ***
 
@@ -172,6 +186,20 @@ lacunarity: number = 2.0;
 
 ***
 
+<a id="modifygpu"></a>
+
+### modifyGPU
+
+```ts
+modifyGPU: ModuleGPUUpdate;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`modifyGPU`](Module.md#modifygpu)
+
+***
+
 <a id="octaves"></a>
 
 ### octaves
@@ -179,6 +207,48 @@ lacunarity: number = 2.0;
 ```ts
 octaves: number = 1;
 ```
+
+***
+
+<a id="octree"></a>
+
+### octree?
+
+```ts
+optional octree?: ParticleOctree<unknown>;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`octree`](Module.md#octree)
+
+***
+
+<a id="octreeaggregator"></a>
+
+### octreeAggregator
+
+```ts
+readonly octreeAggregator: OctreeAggregator<unknown>;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`octreeAggregator`](Module.md#octreeaggregator)
+
+***
+
+<a id="octreeoptions"></a>
+
+### octreeOptions
+
+```ts
+readonly octreeOptions: Partial<OctreeConfig>;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`octreeOptions`](Module.md#octreeoptions)
 
 ***
 
@@ -268,6 +338,22 @@ spatialEffects: SpatialEffect[] = [];
 
 ***
 
+<a id="spatialgridoptions"></a>
+
+### spatialGridOptions?
+
+```ts
+readonly optional spatialGridOptions?:
+  | ParticleSpatialGrid
+| Partial<ParticleSpatialGridOptions>;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`spatialGridOptions`](Module.md#spatialgridoptions)
+
+***
+
 <a id="tags"></a>
 
 ### tags?
@@ -306,6 +392,34 @@ optional updateLOD?: Partial<LODSettings>;
 
 ***
 
+<a id="useoctree"></a>
+
+### useOctree
+
+```ts
+readonly useOctree: boolean;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`useOctree`](Module.md#useoctree)
+
+***
+
+<a id="usespatialgrid"></a>
+
+### useSpatialGrid
+
+```ts
+readonly useSpatialGrid: boolean;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`useSpatialGrid`](Module.md#usespatialgrid)
+
+***
+
 <a id="useupdatelod"></a>
 
 ### useUpdateLOD
@@ -317,6 +431,34 @@ useUpdateLOD: boolean;
 #### Inherited from
 
 [`Module`](Module.md).[`useUpdateLOD`](Module.md#useupdatelod)
+
+***
+
+<a id="cpu_unsupported"></a>
+
+### CPU\_UNSUPPORTED
+
+```ts
+static CPU_UNSUPPORTED: ModuleUpdate;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`CPU_UNSUPPORTED`](Module.md#cpu_unsupported)
+
+***
+
+<a id="gpu_unsupported"></a>
+
+### GPU\_UNSUPPORTED
+
+```ts
+static GPU_UNSUPPORTED: ModuleGPUUpdate;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`GPU_UNSUPPORTED`](Module.md#gpu_unsupported)
 
 ***
 
@@ -332,6 +474,94 @@ readonly static Priority: typeof Priority;
 
 [`Module`](Module.md).[`Priority`](Module.md#priority-1)
 
+## Accessors
+
+<a id="gpuparameteruploadcount"></a>
+
+### gpuParameterUploadCount
+
+#### Get Signature
+
+```ts
+get gpuParameterUploadCount(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Module`](Module.md).[`gpuParameterUploadCount`](Module.md#gpuparameteruploadcount)
+
+***
+
+<a id="needsupdate"></a>
+
+### needsUpdate
+
+#### Set Signature
+
+```ts
+set needsUpdate(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`Boids`](Boids.md).[`needsUpdate`](Boids.md#needsupdate)
+
+***
+
+<a id="supportsgpu"></a>
+
+### supportsGPU
+
+#### Get Signature
+
+```ts
+get supportsGPU(): boolean;
+```
+
+Whether both modification and any custom condition have GPU implementations.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`Module`](Module.md).[`supportsGPU`](Module.md#supportsgpu)
+
+***
+
+<a id="version"></a>
+
+### version
+
+#### Get Signature
+
+```ts
+get version(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Module`](Module.md).[`version`](Module.md#version)
+
 ## Methods
 
 <a id="cleanup"></a>
@@ -342,7 +572,7 @@ readonly static Priority: typeof Priority;
 cleanup(): void;
 ```
 
-Extension hook to release temporary resources when the owning system is cleaned up.
+Releases managed CPU and GPU spatial acceleration references.
 
 #### Returns
 
@@ -374,14 +604,84 @@ generateNoise(particle): ParticleNoiseValues;
 
 ***
 
+<a id="generatenoisegpu"></a>
+
+### generateNoiseGPU()
+
+```ts
+generateNoiseGPU(particle, time?): GPUParticleNoiseValues;
+```
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+##### time?
+
+`Node`\<`"float"`\>
+
+#### Returns
+
+[`GPUParticleNoiseValues`](../Supporting-Types/interfaces/GPUParticleNoiseValues.md)
+
+***
+
+<a id="getparticleoctree"></a>
+
+### getParticleOctree()
+
+```ts
+getParticleOctree(): ParticleOctree<unknown> | undefined;
+```
+
+Returns the managed CPU structure after prepare(), when enabled.
+
+#### Returns
+
+[`ParticleOctree`](ParticleOctree.md)\<`unknown`\> \| `undefined`
+
+#### Inherited from
+
+[`Module`](Module.md).[`getParticleOctree`](Module.md#getparticleoctree)
+
+***
+
+<a id="getparticlespatialgrid"></a>
+
+### getParticleSpatialGrid()
+
+```ts
+getParticleSpatialGrid(particleSystem): ParticleSpatialGrid | undefined;
+```
+
+Dependency hook used by function-defined and class-based GPU neighbor modules.
+
+#### Parameters
+
+##### particleSystem
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md) \| `undefined`
+
+#### Inherited from
+
+[`Module`](Module.md).[`getParticleSpatialGrid`](Module.md#getparticlespatialgrid)
+
+***
+
 <a id="modify"></a>
 
 ### modify()
 
 ```ts
 modify(
-   particles, 
-   deltaTime, 
+   particles,
+   deltaTime,
    particleSystem?
 ): void;
 ```
@@ -439,6 +739,24 @@ Prepares shared work once per system update; the base implementation collects ma
 #### Inherited from
 
 [`Module`](Module.md).[`prepare`](Module.md#prepare)
+
+***
+
+<a id="syncgpuconfiguration"></a>
+
+### syncGPUConfiguration()
+
+```ts
+syncGPUConfiguration(): void;
+```
+
+#### Returns
+
+`void`
+
+#### Overrides
+
+[`Module`](Module.md).[`syncGPUConfiguration`](Module.md#syncgpuconfiguration)
 
 ***
 

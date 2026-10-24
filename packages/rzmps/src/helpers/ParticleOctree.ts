@@ -44,6 +44,13 @@ export interface OctreeAggregator<TAggregate> {
   combine(a: TAggregate, b: TAggregate): TAggregate;
 }
 
+export interface ParticleOctreeQueryOptions {
+  /** Particle index omitted from the query, normally the caller's own index. */
+  excludeIndex?: number;
+  /** Requires at least one matching particle tag. */
+  tags?: Multiple<Tag>;
+}
+
 /** Particle-space octree with caller-defined aggregation; rebuild replaces node identities and may be throttled. */
 class ParticleOctree<TAggregate> {
   root: OctreeNode<TAggregate>;
@@ -143,6 +150,68 @@ class ParticleOctree<TAggregate> {
   /** Returns a new array of current node references; node identities are replaced on rebuild. */
   getNodes(): OctreeNode<TAggregate>[] {
     return [...this.nodes];
+  }
+
+  /** Returns particles inside an exact radius after pruning nonintersecting octree nodes. */
+  particlesInRadius(
+    position: THREE.Vector3,
+    radius: number,
+    options: ParticleOctreeQueryOptions = {},
+  ): Particle[] {
+    const resolvedRadius = Math.max(0, radius);
+    if (Number.isNaN(resolvedRadius) || this.root.isEmpty) return [];
+
+    const acceptedTags = acceptMultiple(options.tags);
+    const particles: Particle[] = [];
+    this.visitNodeInRadius(
+      this.root,
+      position,
+      resolvedRadius * resolvedRadius,
+      particles,
+      options.excludeIndex,
+      acceptedTags,
+    );
+    return particles;
+  }
+
+  private visitNodeInRadius(
+    node: OctreeNode<TAggregate>,
+    position: THREE.Vector3,
+    radiusSquared: number,
+    particles: Particle[],
+    excludeIndex?: number,
+    tags?: Tag[],
+  ): void {
+    let nodeDistanceSquared = 0;
+    for (const axis of ['x', 'y', 'z'] as const) {
+      const value = position[axis];
+      if (value < node.min[axis]) nodeDistanceSquared += (node.min[axis] - value) ** 2;
+      else if (value > node.max[axis]) nodeDistanceSquared += (value - node.max[axis]) ** 2;
+    }
+    if (nodeDistanceSquared > radiusSquared) return;
+
+    if (!node.isLeaf) {
+      node.children.forEach((child) => {
+        this.visitNodeInRadius(
+          child,
+          position,
+          radiusSquared,
+          particles,
+          excludeIndex,
+          tags,
+        );
+      });
+      return;
+    }
+
+    node.particleIndices.forEach((particleIndex) => {
+      if (particleIndex === excludeIndex) return;
+      const particle = this.particles[particleIndex];
+      if (!particle || (tags?.length && !tagsIntersect(tags, particle.tags ?? []))) return;
+
+      const distanceSquared = particle.position.distanceToSquared(position);
+      if (distanceSquared <= radiusSquared) particles.push(particle);
+    });
   }
 
   private buildNode(

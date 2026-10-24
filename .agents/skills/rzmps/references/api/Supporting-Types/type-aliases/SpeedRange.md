@@ -9,7 +9,7 @@
 # Type Alias: SpeedRange
 
 ```ts
-type SpeedRange = 
+type SpeedRange =
   | [number, number]
   | {
   max: number;

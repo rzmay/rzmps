@@ -34,7 +34,7 @@ Configures particle filtering and distance-based update/count quality.
 
 ##### options?
 
-`Partial`\<[`RendererOptions`](../Supporting-Types/interfaces/RendererOptions.md)\> = `{}`
+`Partial`\<[`RendererOptions`](../interfaces/RendererOptions.md)\> = `{}`
 
 #### Returns
 
@@ -90,6 +90,78 @@ optional updateLOD?: Partial<LODSettings>;
 useUpdateLOD: boolean;
 ```
 
+## Accessors
+
+<a id="gpuparameteruploadcount"></a>
+
+### gpuParameterUploadCount
+
+#### Get Signature
+
+```ts
+get gpuParameterUploadCount(): number;
+```
+
+##### Returns
+
+`number`
+
+***
+
+<a id="needsupdate"></a>
+
+### needsUpdate
+
+#### Set Signature
+
+```ts
+set needsUpdate(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="supportsgpuinput"></a>
+
+### supportsGPUInput
+
+#### Get Signature
+
+```ts
+get supportsGPUInput(): boolean;
+```
+
+Whether this renderer can consume GPU particle buffers without a selective CPU readback.
+
+##### Returns
+
+`boolean`
+
+***
+
+<a id="version"></a>
+
+### version
+
+#### Get Signature
+
+```ts
+get version(): number;
+```
+
+##### Returns
+
+`number`
+
 ## Methods
 
 <a id="clear"></a>
@@ -124,6 +196,22 @@ Permanently releases owned rendering resources.
 
 ***
 
+<a id="reset"></a>
+
+### reset()
+
+```ts
+reset(): void;
+```
+
+Restores transient backend state while retaining reusable rendering resources.
+
+#### Returns
+
+`void`
+
+***
+
 <a id="setup"></a>
 
 ### setup()
@@ -146,14 +234,30 @@ Creates rendering resources when attached to a system.
 
 ***
 
+<a id="syncgpuconfiguration"></a>
+
+### syncGPUConfiguration()
+
+```ts
+syncGPUConfiguration(): void;
+```
+
+Synchronizes runtime values and invalidates structural GPU changes.
+
+#### Returns
+
+`void`
+
+***
+
 <a id="update"></a>
 
 ### update()
 
 ```ts
 update(
-   particles, 
-   system, 
+   particles,
+   system,
    deltaTime?
 ): void;
 ```
@@ -165,6 +269,41 @@ Filters particles, applies renderer LOD and temporary size compensation, then de
 ##### particles
 
 [`Particle`](Particle.md)[]
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime?
+
+`number` = `0`
+
+#### Returns
+
+`void`
+
+***
+
+<a id="updategpu"></a>
+
+### updateGPU()
+
+```ts
+updateGPU(
+   buffers,
+   system,
+   deltaTime?
+): void;
+```
+
+Consumes GPU simulation or render-output storage without materializing CPU particles.
+
+#### Parameters
+
+##### buffers
+
+  \| [`GPUParticleBufferState`](../interfaces/GPUParticleBufferState.md)
+  \| [`GPUParticleRenderBufferState`](../interfaces/GPUParticleRenderBufferState.md)
 
 ##### system
 

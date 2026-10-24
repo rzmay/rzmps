@@ -9,3 +9,11 @@ Modules can collect scene effects for their own algorithms. Set `requireSpatialE
 For a module, explicitly supplying `spatialEffects: []` deliberately gives it an empty collection and suppresses discovery. Supplying a nonempty collection limits it to those objects. `spatialEffectFilter` and constructor requirements still filter that explicit list. Distinguish this module-level selection from the system's generic effects list.
 
 Use [First Spatial Effect](first-spatial-effect.md) to build a field. For expensive selection, cache work in `prepare()` rather than traversing the scene inside every particle callback. If you override `prepare()`, call `super.prepare(system, deltaTime)` when you rely on the base spatial collection behavior.
+
+On GPU, built-in analytic effects can be parameterized, batched, and indexed together. A custom
+effect must provide GPU callbacks to run there; an unsupported generic effect is skipped rather
+than forcing the whole system to CPU. Geometry-backed custom effects can use a baked inclusion
+field, and `updatePolicy` distinguishes static, transform-only, and deforming geometry updates.
+Optional system bounds filtering applies only to effects whose built-in geometry test guarantees
+that bounds overlap is meaningful. See [GPU processing](gpu-processing.md) for callback signatures
+and update policies.

@@ -26,7 +26,7 @@ Creates emission state; bursts default the continuous rate to zero.
 
 ##### options?
 
-`Partial`\<[`EmitterOptions`](../Supporting-Types/interfaces/EmitterOptions.md)\> = `{}`
+`Partial`\<[`EmitterOptions`](../interfaces/EmitterOptions.md)\> = `{}`
 
 #### Returns
 
@@ -152,6 +152,80 @@ optional updateLOD?: Partial<LODSettings>;
 useUpdateLOD: boolean;
 ```
 
+## Accessors
+
+<a id="gpuparameteruploadcount"></a>
+
+### gpuParameterUploadCount
+
+#### Get Signature
+
+```ts
+get gpuParameterUploadCount(): number;
+```
+
+##### Returns
+
+`number`
+
+***
+
+<a id="needsupdate"></a>
+
+### needsUpdate
+
+#### Set Signature
+
+```ts
+set needsUpdate(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="supportsgpuemission"></a>
+
+### supportsGPUEmission
+
+#### Get Signature
+
+```ts
+get supportsGPUEmission(): boolean;
+```
+
+Whether the current source and emission configuration support GPU-native births.
+
+##### Returns
+
+`boolean`
+
+***
+
+<a id="version"></a>
+
+### version
+
+#### Get Signature
+
+```ts
+get version(): number;
+```
+
+Monotonic GPU configuration version used to invalidate compiled work.
+
+##### Returns
+
+`number`
+
 ## Methods
 
 <a id="clearcontext"></a>
@@ -171,6 +245,22 @@ clearContext(key): void;
 #### Returns
 
 `void`
+
+***
+
+<a id="getgpuemissionsupport"></a>
+
+### getGPUEmissionSupport()
+
+```ts
+getGPUEmissionSupport(): GPUEmissionSupportReport;
+```
+
+Returns feature and incompatibility details for GPU-native emission.
+
+#### Returns
+
+[`GPUEmissionSupportReport`](../interfaces/GPUEmissionSupportReport.md)
 
 ***
 
@@ -212,14 +302,30 @@ Attaches the source shape to the particle system.
 
 ***
 
+<a id="syncgpuconfiguration"></a>
+
+### syncGPUConfiguration()
+
+```ts
+syncGPUConfiguration(): void;
+```
+
+Synchronizes runtime values and invalidates structural GPU changes.
+
+#### Returns
+
+`void`
+
+***
+
 <a id="update"></a>
 
 ### update()
 
 ```ts
 update(
-   particles, 
-   context, 
+   particles,
+   context,
    particleSystem
 ): Particle[];
 ```
@@ -243,3 +349,23 @@ Emits births for the supplied simulation context and returns the newly created p
 #### Returns
 
 [`Particle`](Particle.md)[]
+
+***
+
+<a id="updategpulod"></a>
+
+### updateGPULOD()
+
+```ts
+updateGPULOD(cameraDistance): void;
+```
+
+#### Parameters
+
+##### cameraDistance
+
+`number`
+
+#### Returns
+
+`void`

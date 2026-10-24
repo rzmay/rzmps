@@ -120,6 +120,20 @@ condition: (particle) => boolean;
 
 ***
 
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ModuleGPUCondition;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`conditionGPU`](Module.md#conditiongpu)
+
+***
+
 <a id="dependents"></a>
 
 ### dependents
@@ -158,6 +172,30 @@ maintainSpeed: boolean;
 
 ***
 
+<a id="modifygpu"></a>
+
+### modifyGPU
+
+```ts
+modifyGPU: ModuleGPUUpdate;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`modifyGPU`](Module.md#modifygpu)
+
+***
+
+<a id="neighborradius"></a>
+
+### neighborRadius
+
+```ts
+neighborRadius: DynamicValue<number>;
+```
+
+***
+
 <a id="octree"></a>
 
 ### octree?
@@ -165,6 +203,24 @@ maintainSpeed: boolean;
 ```ts
 optional octree?: ParticleOctree<BoidAggregate>;
 ```
+
+#### Overrides
+
+[`Module`](Module.md).[`octree`](Module.md#octree)
+
+***
+
+<a id="octreeaggregator"></a>
+
+### octreeAggregator
+
+```ts
+readonly octreeAggregator: OctreeAggregator<unknown>;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`octreeAggregator`](Module.md#octreeaggregator)
 
 ***
 
@@ -175,6 +231,10 @@ optional octree?: ParticleOctree<BoidAggregate>;
 ```ts
 octreeOptions: OctreeConfig;
 ```
+
+#### Overrides
+
+[`Module`](Module.md).[`octreeOptions`](Module.md#octreeoptions)
 
 ***
 
@@ -264,6 +324,32 @@ spatialEffects: SpatialEffect[] = [];
 
 ***
 
+<a id="spatialgrid"></a>
+
+### spatialGrid?
+
+```ts
+optional spatialGrid?: ParticleSpatialGrid;
+```
+
+***
+
+<a id="spatialgridoptions"></a>
+
+### spatialGridOptions
+
+```ts
+spatialGridOptions:
+  | ParticleSpatialGrid
+| Partial<ParticleSpatialGridOptions>;
+```
+
+#### Overrides
+
+[`Module`](Module.md).[`spatialGridOptions`](Module.md#spatialgridoptions)
+
+***
+
 <a id="speed"></a>
 
 ### speed?
@@ -312,6 +398,34 @@ optional updateLOD?: Partial<LODSettings>;
 
 ***
 
+<a id="useoctree"></a>
+
+### useOctree
+
+```ts
+readonly useOctree: boolean;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`useOctree`](Module.md#useoctree)
+
+***
+
+<a id="usespatialgrid"></a>
+
+### useSpatialGrid
+
+```ts
+readonly useSpatialGrid: boolean;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`useSpatialGrid`](Module.md#usespatialgrid)
+
+***
+
 <a id="useupdatelod"></a>
 
 ### useUpdateLOD
@@ -346,6 +460,34 @@ readonly static BoidAffectorHelper: typeof BoidAffectorHelper;
 
 ***
 
+<a id="cpu_unsupported"></a>
+
+### CPU\_UNSUPPORTED
+
+```ts
+static CPU_UNSUPPORTED: ModuleUpdate;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`CPU_UNSUPPORTED`](Module.md#cpu_unsupported)
+
+***
+
+<a id="gpu_unsupported"></a>
+
+### GPU\_UNSUPPORTED
+
+```ts
+static GPU_UNSUPPORTED: ModuleGPUUpdate;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`GPU_UNSUPPORTED`](Module.md#gpu_unsupported)
+
+***
+
 <a id="priority-1"></a>
 
 ### Priority
@@ -358,6 +500,94 @@ readonly static Priority: typeof Priority;
 
 [`Module`](Module.md).[`Priority`](Module.md#priority-1)
 
+## Accessors
+
+<a id="gpuparameteruploadcount"></a>
+
+### gpuParameterUploadCount
+
+#### Get Signature
+
+```ts
+get gpuParameterUploadCount(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Module`](Module.md).[`gpuParameterUploadCount`](Module.md#gpuparameteruploadcount)
+
+***
+
+<a id="needsupdate"></a>
+
+### needsUpdate
+
+#### Set Signature
+
+```ts
+set needsUpdate(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`Module`](Module.md).[`needsUpdate`](Module.md#needsupdate)
+
+***
+
+<a id="supportsgpu"></a>
+
+### supportsGPU
+
+#### Get Signature
+
+```ts
+get supportsGPU(): boolean;
+```
+
+Whether both modification and any custom condition have GPU implementations.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`Module`](Module.md).[`supportsGPU`](Module.md#supportsgpu)
+
+***
+
+<a id="version"></a>
+
+### version
+
+#### Get Signature
+
+```ts
+get version(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Module`](Module.md).[`version`](Module.md#version)
+
 ## Methods
 
 <a id="cleanup"></a>
@@ -368,15 +598,61 @@ readonly static Priority: typeof Priority;
 cleanup(): void;
 ```
 
-Extension hook to release temporary resources when the owning system is cleaned up.
+Releases managed CPU and GPU spatial acceleration references.
 
 #### Returns
 
 `void`
 
-#### Inherited from
+#### Overrides
 
 [`Module`](Module.md).[`cleanup`](Module.md#cleanup)
+
+***
+
+<a id="getparticleoctree"></a>
+
+### getParticleOctree()
+
+```ts
+getParticleOctree(): ParticleOctree<unknown> | undefined;
+```
+
+Returns the managed CPU structure after prepare(), when enabled.
+
+#### Returns
+
+[`ParticleOctree`](ParticleOctree.md)\<`unknown`\> \| `undefined`
+
+#### Inherited from
+
+[`Module`](Module.md).[`getParticleOctree`](Module.md#getparticleoctree)
+
+***
+
+<a id="getparticlespatialgrid"></a>
+
+### getParticleSpatialGrid()
+
+```ts
+getParticleSpatialGrid(particleSystem): ParticleSpatialGrid;
+```
+
+Dependency hook used by function-defined and class-based GPU neighbor modules.
+
+#### Parameters
+
+##### particleSystem
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md)
+
+#### Overrides
+
+[`Module`](Module.md).[`getParticleSpatialGrid`](Module.md#getparticlespatialgrid)
 
 ***
 
@@ -386,8 +662,8 @@ Extension hook to release temporary resources when the owning system is cleaned 
 
 ```ts
 modify(
-   particles, 
-   deltaTime, 
+   particles,
+   deltaTime,
    particleSystem?
 ): void;
 ```
@@ -441,6 +717,24 @@ Prepares shared work once per system update; the base implementation collects ma
 #### Overrides
 
 [`Module`](Module.md).[`prepare`](Module.md#prepare)
+
+***
+
+<a id="syncgpuconfiguration"></a>
+
+### syncGPUConfiguration()
+
+```ts
+syncGPUConfiguration(): void;
+```
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Module`](Module.md).[`syncGPUConfiguration`](Module.md#syncgpuconfiguration)
 
 ***
 

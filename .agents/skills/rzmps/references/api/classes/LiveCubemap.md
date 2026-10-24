@@ -161,8 +161,8 @@ setup(parent): void;
 
 ```ts
 update(
-   scene?, 
-   renderer?, 
+   scene?,
+   renderer?,
    deltaTime?
 ): void;
 ```

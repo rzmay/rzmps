@@ -40,3 +40,8 @@ Name the updraft (`updraft.name = 'updraft'`) before using the filter shown abov
 For a custom volume modifier, use `SpatialEffect.Box((particle, deltaTime) => { ... }, options, width, height, depth)`. Scale and position it like another Object3D. A custom `test` option can replace the geometric inclusion rule, while `inverted` applies to the opposite side of a volume. Choose a permanent priority for forces and a transient priority for temporary color or scale changes.
 
 Scene discovery and module-level collections serve different purposes. A generic field modifies intersecting particles directly; a specialized affector can instead be collected by a module such as Boids. See [spatial collections](spatial-effects.md) for explicit selection and filtering, and [module priority](module-priority.md) for execution phases.
+
+Custom CPU callbacks do not translate into shader code. Continue with
+[First GPU Spatial Effect](first-gpu-spatial-effect.md) to pair this volume with a TSL modifier,
+then use [GPU processing](gpu-processing.md) as the reference for batching and moving-geometry
+policies.

@@ -34,6 +34,35 @@ class ScaleOverLifetime extends Module {
     }, {
       ...options,
       priority: Module.Priority.Transient,
+      modifyGPU: (particle) => {
+          particle.scale.assign(
+            particle.scale.mul(this.gpuParameters.vector(
+              'scale',
+              () => this.options.scale,
+              particle.time,
+              new THREE.Vector3(1, 1, 1),
+              particle.index,
+            )),
+          );
+          particle.scalarVelocity.assign(
+            particle.scalarVelocity.add(this.gpuParameters.vector(
+              'scalarVelocity',
+              () => this.options.scalarVelocity,
+              particle.time,
+              new THREE.Vector3(),
+              particle.index,
+            )),
+          );
+          particle.scalarAcceleration.assign(
+            particle.scalarAcceleration.add(this.gpuParameters.vector(
+              'scalarAcceleration',
+              () => this.options.scalarAcceleration,
+              particle.time,
+              new THREE.Vector3(),
+              particle.index,
+            )),
+          );
+        }
     });
   }
 }

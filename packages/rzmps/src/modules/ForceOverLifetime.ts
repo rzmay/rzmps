@@ -30,7 +30,18 @@ class ForceOverLifetime extends Module {
       );
     }, {
       ...options,
-      priority: Module.Priority.Permanent,
+      priority: Module.Priority.Transient,
+      modifyGPU: (particle) => {
+          particle.acceleration.assign(
+            particle.acceleration.add(this.gpuParameters.vector(
+              'force',
+              () => this.options.force,
+              particle.time,
+              new THREE.Vector3(0, 0, 0),
+              particle.index,
+            )),
+          );
+        }
     });
   }
 }

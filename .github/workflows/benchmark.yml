@@ -76,7 +76,7 @@ jobs:
           npm run build --workspace @rzmps/rzmps --prefix base
           npm run build --workspace @rzmps/rzmps --prefix head
 
-      - name: Build both benchmarks with the same harness
+      - name: Build each revision's benchmark suite
         working-directory: head
         run: |
           node apps/demo/scripts/build-benchmark.mjs --library-root "$GITHUB_WORKSPACE/base" --out-dir "$GITHUB_WORKSPACE/benchmark-results/base-site"
@@ -107,6 +107,13 @@ jobs:
             "$GITHUB_WORKSPACE/benchmark-results/head-a.json" \
             "$GITHUB_WORKSPACE/benchmark-results/head-b.json" \
             "$GITHUB_WORKSPACE/benchmark-results/head-c.json"
+
+      - name: Keep cases available in both revisions
+        working-directory: head
+        run: |
+          node scripts/intersect-benchmarks.mjs \
+            "$GITHUB_WORKSPACE/benchmark-results/base.json" \
+            "$GITHUB_WORKSPACE/benchmark-results/head.json"
 
       - name: Write PR metadata
         env:

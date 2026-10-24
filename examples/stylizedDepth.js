@@ -17,6 +17,7 @@ const depthRange = [5, 24];
 export default async function createStylizedDepth() {
   // #region docs:system:1
   const system = new ParticleSystem({
+    maxParticles: 2048,
     duration: 14,
     prewarm: true,
     prewarmFPS: 30,

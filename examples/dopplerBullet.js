@@ -70,11 +70,21 @@ export default async function createDopplerBullet() {
     // #endregion docs:emitters:1
     // #region docs:renderers:1
     renderers: [
+      new AudioRenderer({
+        sound: bulletLoopSound,
+        onSpawnSound: gunshotSound,
+        loop: true,
+        maxClips: 8,
+        volume: 3.5,
+        pitch: [0.82, 1.24],
+        lowPass: 14000,
+        speedAffectsVolume: 0.12,
+        depthAffectsVolume: 0.45,
+        dopplerEffect: 2.4,
+      }),
       new MeshRenderer({
         mesh: bulletMesh,
         maxParticles: 8,
-        castShadow: true,
-        receiveShadow: true,
       }),
       new TrailRenderer({
         mode: TrailMode.Particle,

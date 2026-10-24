@@ -40,7 +40,6 @@ export default async function createCollision() {
         bounce: 0.75,
         dampen: 0.05,
         radiusScale: 1,
-        applyImpulses: true,
       }),
     ],
     // #endregion docs:modules:1
@@ -48,7 +47,6 @@ export default async function createCollision() {
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
-        castShadow: true,
 
         materialOptions: {
           roughness: 0.5,

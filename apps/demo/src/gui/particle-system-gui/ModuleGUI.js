@@ -25,6 +25,12 @@ export class ModuleGUI extends GUIEditorBase {
     }
 
     buildModule(folder, module, system = this.system) {
+        const gpuStatus = {
+            get compatible() {
+                return module.supportsGPU ? 'GPU compatible' : 'CPU only';
+            },
+        };
+        folder.add(gpuStatus, 'compatible').name('GPU').disable().listen();
         this.addTags(folder, module);
         const updateLODFolder = folder.addFolder('Update LOD');
         updateLODFolder.close();
@@ -36,11 +42,31 @@ export class ModuleGUI extends GUIEditorBase {
         else {
             const hidden = new Set([
                 'modify',
+                'modifyGPU',
+                'condition',
+                'conditionGPU',
+                'gpuParameters',
                 'noiseGenerator',
                 'dependents',
                 'priority',
                 'backend',
+                'useOctree',
+                'octreeOptions',
+                'octreeAggregator',
+                'useSpatialGrid',
+                'spatialGridOptions',
+                'particleSpatialGrid',
+                'spatialEffects',
+                'explicitSpatialEffects',
+                'spatialEffectFilter',
+                'requireSpatialEffects',
                 'collisionListeners',
+                'collisionHitSamples',
+                'collisionPositionSamples',
+                'collisionNormalSamples',
+                'collisionHitAttribute',
+                'collisionPositionAttribute',
+                'collisionNormalAttribute',
                 'explicitForceFields',
                 'forceFields',
                 'forceFieldFilter',

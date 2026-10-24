@@ -30,7 +30,7 @@ Creates a playing, looping system; omitted emitters and renderers receive sprite
 
 ##### options?
 
-`Partial`\<[`ParticleSystemOptions`](../Supporting-Types/interfaces/ParticleSystemOptions.md)\> = `{}`
+`Partial`\<[`ParticleSystemOptions`](../interfaces/ParticleSystemOptions.md)\> = `{}`
 
 #### Returns
 
@@ -80,6 +80,26 @@ emitters: Emitter[] = [];
 
 ```ts
 endBehavior: EndBehavior;
+```
+
+***
+
+<a id="gpudebug"></a>
+
+### gpuDebug
+
+```ts
+gpuDebug: boolean;
+```
+
+***
+
+<a id="gpudebuginterval"></a>
+
+### gpuDebugInterval
+
+```ts
+gpuDebugInterval: number;
 ```
 
 ***
@@ -224,6 +244,16 @@ simulationSpeed: number;
 
 ***
 
+<a id="spatialeffectboundsfiltering"></a>
+
+### spatialEffectBoundsFiltering
+
+```ts
+spatialEffectBoundsFiltering: boolean;
+```
+
+***
+
 <a id="spatialeffectfilter"></a>
 
 ### spatialEffectFilter?
@@ -302,6 +332,76 @@ useSpatialEffects: boolean;
 useUpdateLOD: boolean;
 ```
 
+***
+
+<a id="gpu_debug"></a>
+
+### GPU\_DEBUG
+
+```ts
+static GPU_DEBUG: boolean = false;
+```
+
+***
+
+<a id="gpu_debug_interval"></a>
+
+### GPU\_DEBUG\_INTERVAL
+
+```ts
+static GPU_DEBUG_INTERVAL: number = 30;
+```
+
+***
+
+<a id="gpu_dynamic_value_resolution"></a>
+
+### GPU\_DYNAMIC\_VALUE\_RESOLUTION
+
+```ts
+static GPU_DYNAMIC_VALUE_RESOLUTION: number = 16;
+```
+
+***
+
+<a id="gpu_event_buffer_capacity"></a>
+
+### GPU\_EVENT\_BUFFER\_CAPACITY
+
+```ts
+static GPU_EVENT_BUFFER_CAPACITY: number = 4096;
+```
+
+***
+
+<a id="gpu_initial_buffer_size"></a>
+
+### GPU\_INITIAL\_BUFFER\_SIZE
+
+```ts
+static GPU_INITIAL_BUFFER_SIZE: number = 256;
+```
+
+***
+
+<a id="gpu_readback_rate"></a>
+
+### GPU\_READBACK\_RATE
+
+```ts
+static GPU_READBACK_RATE: number = 24;
+```
+
+***
+
+<a id="gpu_selective_readback_pool_size"></a>
+
+### GPU\_SELECTIVE\_READBACK\_POOL\_SIZE
+
+```ts
+static GPU_SELECTIVE_READBACK_POOL_SIZE: number = 8;
+```
+
 ## Accessors
 
 <a id="cameradistancesq"></a>
@@ -358,6 +458,323 @@ Whether a nonlooping duration has ended or stop() was called.
 
 ***
 
+<a id="gpuallocationstats"></a>
+
+### gpuAllocationStats
+
+#### Get Signature
+
+```ts
+get gpuAllocationStats():
+  | GPUAllocationDiagnostics
+  | undefined;
+```
+
+##### Returns
+
+  \| [`GPUAllocationDiagnostics`](../interfaces/GPUAllocationDiagnostics.md)
+  \| `undefined`
+
+***
+
+<a id="gpubufferstats"></a>
+
+### gpuBufferStats
+
+#### Get Signature
+
+```ts
+get gpuBufferStats(): object;
+```
+
+Current particle-buffer occupancy; allocation diagnostics can lag by an asynchronous readback.
+
+##### Returns
+
+`object`
+
+###### activeSlots
+
+```ts
+activeSlots: number;
+```
+
+###### allocated
+
+```ts
+allocated: number;
+```
+
+###### live
+
+```ts
+live: number;
+```
+
+###### usage
+
+```ts
+usage: number;
+```
+
+***
+
+<a id="gpuconfigurationstats"></a>
+
+### gpuConfigurationStats
+
+#### Get Signature
+
+```ts
+get gpuConfigurationStats(): object;
+```
+
+Counts expensive graph/resource builds separately from uniform parameter uploads.
+
+##### Returns
+
+`object`
+
+###### parameterUploads
+
+```ts
+parameterUploads: number;
+```
+
+###### pipelineBuilds
+
+```ts
+pipelineBuilds: number;
+```
+
+###### resourceBuilds
+
+```ts
+resourceBuilds: number;
+```
+
+***
+
+<a id="gpueventstats"></a>
+
+### gpuEventStats
+
+#### Get Signature
+
+```ts
+get gpuEventStats(): object;
+```
+
+GPU lifecycle/collision event queue diagnostics.
+
+##### Returns
+
+`object`
+
+###### buffers
+
+```ts
+buffers: number;
+```
+
+###### nextDispatchSequence
+
+```ts
+nextDispatchSequence: number;
+```
+
+###### overflowCount
+
+```ts
+overflowCount: number;
+```
+
+###### pending
+
+```ts
+pending: number;
+```
+
+***
+
+<a id="gpuprocessing"></a>
+
+### gpuProcessing
+
+#### Get Signature
+
+```ts
+get gpuProcessing(): boolean;
+```
+
+Whether GPU simulation is requested; actual activation also depends on renderer and components.
+
+##### Returns
+
+`boolean`
+
+#### Set Signature
+
+```ts
+set gpuProcessing(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="gpuselectivereadbackstats"></a>
+
+### gpuSelectiveReadbackStats
+
+#### Get Signature
+
+```ts
+get gpuSelectiveReadbackStats(): object;
+```
+
+Selective readback pool traffic and most recent latency.
+
+##### Returns
+
+`object`
+
+###### buffers
+
+```ts
+buffers: number;
+```
+
+###### bytes
+
+```ts
+bytes: number;
+```
+
+###### latencyMs
+
+```ts
+latencyMs: number;
+```
+
+###### overflowCount
+
+```ts
+overflowCount: number;
+```
+
+###### pending
+
+```ts
+pending: number;
+```
+
+***
+
+<a id="gpuspatialstats"></a>
+
+### gpuSpatialStats
+
+#### Get Signature
+
+```ts
+get gpuSpatialStats(): object;
+```
+
+Batched spatial-effect index, parameter upload, and refit diagnostics.
+
+##### Returns
+
+`object`
+
+###### batchableEffects
+
+```ts
+batchableEffects: number;
+```
+
+###### bvhBoundsUploadBytes
+
+```ts
+bvhBoundsUploadBytes: number;
+```
+
+###### bvhNodes
+
+```ts
+bvhNodes: number;
+```
+
+###### bvhRefits
+
+```ts
+bvhRefits: number;
+```
+
+###### implementationTypes
+
+```ts
+implementationTypes: number;
+```
+
+###### leafUpdates
+
+```ts
+leafUpdates: number;
+```
+
+###### parameterUploadBytes
+
+```ts
+parameterUploadBytes: number;
+```
+
+###### parameterUploads
+
+```ts
+parameterUploads: number;
+```
+
+###### parameterVec4s
+
+```ts
+parameterVec4s: number;
+```
+
+###### structuralBuilds
+
+```ts
+structuralBuilds: number;
+```
+
+***
+
+<a id="isgpuprocessingactive"></a>
+
+### isGPUProcessingActive
+
+#### Get Signature
+
+```ts
+get isGPUProcessingActive(): boolean;
+```
+
+Whether the most recent simulation step selected GPU compute.
+
+##### Returns
+
+`boolean`
+
+***
+
 <a id="issubsystem"></a>
 
 ### isSubSystem
@@ -373,6 +790,22 @@ Whether a parent owns simulation and emission contexts for this system.
 ##### Returns
 
 `boolean`
+
+***
+
+<a id="liveparticlecount"></a>
+
+### liveParticleCount
+
+#### Get Signature
+
+```ts
+get liveParticleCount(): number;
+```
+
+##### Returns
+
+`number`
 
 ***
 
@@ -473,14 +906,14 @@ Cached world orientation of the last active render camera.
 #### Get Signature
 
 ```ts
-get sceneRenderer(): WebGLRenderer | undefined;
+get sceneRenderer(): WebGLRenderer | WebGPURenderer | undefined;
 ```
 
 Active renderer captured by the context object during rendering.
 
 ##### Returns
 
-`WebGLRenderer` \| `undefined`
+`WebGLRenderer` \| `WebGPURenderer` \| `undefined`
 
 ***
 
@@ -517,6 +950,29 @@ set simulationSpace(value): void;
 `void`
 
 ## Methods
+
+<a id="acquireparticlespatialgrid"></a>
+
+### acquireParticleSpatialGrid()
+
+```ts
+acquireParticleSpatialGrid(gridOrOptions?): ParticleSpatialGrid;
+```
+
+Acquires a compatible system-owned grid, or registers a caller-owned instance.
+
+#### Parameters
+
+##### gridOrOptions?
+
+  \| [`ParticleSpatialGrid`](ParticleSpatialGrid.md)
+  \| `Partial`\<[`ParticleSpatialGridOptions`](../interfaces/ParticleSpatialGridOptions.md)\> = `{}`
+
+#### Returns
+
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md)
+
+***
 
 <a id="addemitter"></a>
 
@@ -559,6 +1015,32 @@ Adds a modifier to the composition; execution order follows numeric priority.
 #### Returns
 
 `this`
+
+***
+
+<a id="addparticle"></a>
+
+### addParticle()
+
+```ts
+addParticle(particle, particles?): boolean;
+```
+
+Adds a particle while preserving stable GPU slots and the configured capacity policy.
+
+#### Parameters
+
+##### particle
+
+[`Particle`](Particle.md)
+
+##### particles?
+
+[`Particle`](Particle.md)[] = `...`
+
+#### Returns
+
+`boolean`
 
 ***
 
@@ -646,7 +1128,7 @@ Transfers a child to this parent, resets its local transform, and shares simulat
 
 ##### options
 
-`Partial`\<[`SubSystemOptions`](../Supporting-Types/interfaces/SubSystemOptions.md)\>
+`Partial`\<[`SubSystemOptions`](../interfaces/SubSystemOptions.md)\>
 
 #### Returns
 
@@ -737,6 +1219,58 @@ Permanently destroys this system and renderer resources; later update or advance
 
 ***
 
+<a id="getgpuemissionsupport"></a>
+
+### getGPUEmissionSupport()
+
+```ts
+getGPUEmissionSupport(): ParticleSystemGPUEmissionSupportReport;
+```
+
+Audits built-in/custom emitter and subsystem eligibility for GPU-native emission.
+
+#### Returns
+
+[`ParticleSystemGPUEmissionSupportReport`](../interfaces/ParticleSystemGPUEmissionSupportReport.md)
+
+***
+
+<a id="getgpuexecutionschedule"></a>
+
+### getGPUExecutionSchedule()
+
+```ts
+getGPUExecutionSchedule(): GPUSystemSchedule;
+```
+
+Returns the stable parent-before-child GPU subsystem schedule.
+
+#### Returns
+
+[`GPUSystemSchedule`](../interfaces/GPUSystemSchedule.md)
+
+***
+
+<a id="getgpurenderertagmask"></a>
+
+### getGPURendererTagMask()
+
+```ts
+getGPURendererTagMask(tags): number | undefined;
+```
+
+#### Parameters
+
+##### tags
+
+`string`[] \| `undefined`
+
+#### Returns
+
+`number` \| `undefined`
+
+***
+
 <a id="notifycollision"></a>
 
 ### notifyCollision()
@@ -777,7 +1311,7 @@ Registers a synchronous listener for collisions reported by a Collision module.
 
 ##### listener
 
-[`CollisionListener`](../Supporting-Types/type-aliases/CollisionListener.md)
+[`CollisionListener`](../type-aliases/CollisionListener.md)
 
 #### Returns
 
@@ -799,7 +1333,7 @@ Registers a synchronous listener for particle expiry; returns the system for com
 
 ##### listener
 
-[`ParticleListener`](../Supporting-Types/type-aliases/ParticleListener.md)
+[`ParticleListener`](../type-aliases/ParticleListener.md)
 
 #### Returns
 
@@ -821,7 +1355,7 @@ Registers a synchronous listener for emitter births.
 
 ##### listener
 
-[`ParticleListener`](../Supporting-Types/type-aliases/ParticleListener.md)
+[`ParticleListener`](../type-aliases/ParticleListener.md)
 
 #### Returns
 
@@ -865,7 +1399,7 @@ Unregisters a previously attached collision listener.
 
 ##### listener
 
-[`CollisionListener`](../Supporting-Types/type-aliases/CollisionListener.md)
+[`CollisionListener`](../type-aliases/CollisionListener.md)
 
 #### Returns
 
@@ -887,7 +1421,7 @@ Unregisters a previously attached death listener.
 
 ##### listener
 
-[`ParticleListener`](../Supporting-Types/type-aliases/ParticleListener.md)
+[`ParticleListener`](../type-aliases/ParticleListener.md)
 
 #### Returns
 
@@ -997,7 +1531,7 @@ Unregisters a previously attached spawn listener.
 
 ##### listener
 
-[`ParticleListener`](../Supporting-Types/type-aliases/ParticleListener.md)
+[`ParticleListener`](../type-aliases/ParticleListener.md)
 
 #### Returns
 
@@ -1024,6 +1558,57 @@ Detaches a subsystem without destroying it; its simulation can then be advanced 
 #### Returns
 
 `this`
+
+***
+
+<a id="reset"></a>
+
+### reset()
+
+```ts
+reset(children?): void;
+```
+
+Stop, clear all CPU/GPU state and timing, then begin a fresh run.
+
+#### Parameters
+
+##### children?
+
+`boolean` = `true`
+
+#### Returns
+
+`void`
+
+***
+
+<a id="selectivereadback"></a>
+
+### selectiveReadback()
+
+```ts
+selectiveReadback(limit?, fields?): Promise<GPUSelectiveReadbackResult[]>;
+```
+
+Reads a bounded selection of active GPU particles asynchronously.
+
+Request only the fields the caller consumes. The bounded readback pool can return an empty
+array while busy, and results may trail the current simulation frame.
+
+#### Parameters
+
+##### limit?
+
+`number` = `Number.POSITIVE_INFINITY`
+
+##### fields?
+
+readonly [`GPUParticleReadbackField`](../type-aliases/GPUParticleReadbackField.md)[]
+
+#### Returns
+
+`Promise`\<[`GPUSelectiveReadbackResult`](../interfaces/GPUSelectiveReadbackResult.md)[]\>
 
 ***
 

@@ -30,6 +30,22 @@ Enables built-in feather application for supported modifiers.
 
 ***
 
+<a id="bakedfieldresolution"></a>
+
+### bakedFieldResolution
+
+```ts
+bakedFieldResolution: number;
+```
+
+Samples per axis for a custom geometry's baked GPU influence field.
+
+#### Inherited from
+
+[`SpatialEffectOptions`](SpatialEffectOptions.md).[`bakedFieldResolution`](SpatialEffectOptions.md#bakedfieldresolution)
+
+***
+
 <a id="bvhoptions"></a>
 
 ### bvhOptions
@@ -66,6 +82,24 @@ Additional predicate for candidate particles.
 
 ***
 
+<a id="conditiongpu"></a>
+
+### conditionGPU
+
+```ts
+conditionGPU:
+  | SpatialEffectGPUCondition
+  | null;
+```
+
+TSL equivalent of a custom CPU condition.
+
+#### Inherited from
+
+[`SpatialEffectOptions`](SpatialEffectOptions.md).[`conditionGPU`](SpatialEffectOptions.md#conditiongpu)
+
+***
+
 <a id="distance"></a>
 
 ### distance
@@ -83,6 +117,8 @@ distance: number;
 ```ts
 feather: number;
 ```
+
+World-space transition distance outside the volume.
 
 #### Inherited from
 
@@ -135,6 +171,24 @@ Applies the modifier outside rather than inside the selected volume.
 #### Inherited from
 
 [`SpatialEffectOptions`](SpatialEffectOptions.md).[`inverted`](SpatialEffectOptions.md#inverted)
+
+***
+
+<a id="modifygpu"></a>
+
+### modifyGPU
+
+```ts
+modifyGPU:
+  | SpatialEffectGPUUpdate
+  | null;
+```
+
+TSL modifier required for the effect to run during GPU simulation.
+
+#### Inherited from
+
+[`SpatialEffectOptions`](SpatialEffectOptions.md).[`modifyGPU`](SpatialEffectOptions.md#modifygpu)
 
 ***
 
@@ -209,6 +263,40 @@ Restricts the effect to particles with a matching tag.
 #### Inherited from
 
 [`SpatialEffectOptions`](SpatialEffectOptions.md).[`tags`](SpatialEffectOptions.md#tags)
+
+***
+
+<a id="testgpu"></a>
+
+### testGPU
+
+```ts
+testGPU:
+  | SpatialEffectGPUTest
+  | null;
+```
+
+TSL inclusion callback returning influence from zero through one.
+
+#### Inherited from
+
+[`SpatialEffectOptions`](SpatialEffectOptions.md).[`testGPU`](SpatialEffectOptions.md#testgpu)
+
+***
+
+<a id="updatepolicy"></a>
+
+### updatePolicy
+
+```ts
+updatePolicy: SpatialEffectUpdatePolicy;
+```
+
+Declares whether transforms, vertices, or neither can change after construction.
+
+#### Inherited from
+
+[`SpatialEffectOptions`](SpatialEffectOptions.md).[`updatePolicy`](SpatialEffectOptions.md#updatepolicy)
 
 ***
 

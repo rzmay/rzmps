@@ -20,6 +20,7 @@ The 4-second loop supplies a continuous ribbon field. Each particle lasts one se
 
 ```js
   const ribbonTrail = new ParticleSystem({
+    maxParticles: 128,
     duration: 4,
     looping: true,
     emitters: [
@@ -61,7 +62,7 @@ The 4-second loop supplies a continuous ribbon field. Each particle lasts one se
 The torus source emits 50 particles per second with radial speed 5. A short one-second lifetime and scale 0.12 produce many closely spaced samples around the source. Increasing speed without increasing emission rate would separate those samples and visibly change the ribbon shape.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L18)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L19)
 
 ```js
     emitters: [
@@ -87,6 +88,7 @@ No module array is supplied here; the system therefore uses its empty module def
 
 ```js
   const ribbonTrail = new ParticleSystem({
+    maxParticles: 128,
     duration: 4,
     looping: true,
     emitters: [
@@ -128,7 +130,7 @@ No module array is supplied here; the system therefore uses its empty module def
 Ribbon mode connects particles into three ribbons rather than assigning an independent trail to each particle. Ratio 1 includes all samples and width 0.15 keeps the strands narrow. The width envelope tapers both ends and the white-to-cyan gradient distinguishes the length of the ribbon. Roughness and metalness zero create a clean nonmetallic surface response.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L31)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L32)
 
 ```js
     renderers: [

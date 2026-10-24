@@ -31,6 +31,7 @@ export default async function createBoids() {
     separationWeight: 2.4,
     affectorWeight: 2.2,
     affectorDistance: 1.8,
+    neighborRadius: 5,
     steering: 3.75,
     particleAffectors: [
       {
@@ -51,6 +52,7 @@ export default async function createBoids() {
     separationWeight: 2.15,
     affectorWeight: 5.5,
     affectorDistance: 3.2,
+    neighborRadius: 5,
     steering: 3.35,
     particleAffectors: [
       {

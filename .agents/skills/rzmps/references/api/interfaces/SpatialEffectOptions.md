@@ -26,6 +26,18 @@ Enables built-in feather application for supported modifiers.
 
 ***
 
+<a id="bakedfieldresolution"></a>
+
+### bakedFieldResolution
+
+```ts
+bakedFieldResolution: number;
+```
+
+Samples per axis for a custom geometry's baked GPU influence field.
+
+***
+
 <a id="condition"></a>
 
 ### condition
@@ -48,6 +60,20 @@ Additional predicate for candidate particles.
 
 ***
 
+<a id="conditiongpu"></a>
+
+### conditionGPU
+
+```ts
+conditionGPU:
+  | SpatialEffectGPUCondition
+  | null;
+```
+
+TSL equivalent of a custom CPU condition.
+
+***
+
 <a id="feather"></a>
 
 ### feather
@@ -55,6 +81,8 @@ Additional predicate for candidate particles.
 ```ts
 feather: number;
 ```
+
+World-space transition distance outside the volume.
 
 ***
 
@@ -91,6 +119,20 @@ inverted: boolean;
 ```
 
 Applies the modifier outside rather than inside the selected volume.
+
+***
+
+<a id="modifygpu"></a>
+
+### modifyGPU
+
+```ts
+modifyGPU:
+  | SpatialEffectGPUUpdate
+  | null;
+```
+
+TSL modifier required for the effect to run during GPU simulation.
 
 ***
 
@@ -151,3 +193,29 @@ test: SpatialEffectTest;
 ```
 
 Custom inclusion predicate replacing the geometry test.
+
+***
+
+<a id="testgpu"></a>
+
+### testGPU
+
+```ts
+testGPU:
+  | SpatialEffectGPUTest
+  | null;
+```
+
+TSL inclusion callback returning influence from zero through one.
+
+***
+
+<a id="updatepolicy"></a>
+
+### updatePolicy
+
+```ts
+updatePolicy: SpatialEffectUpdatePolicy;
+```
+
+Declares whether transforms, vertices, or neither can change after construction.

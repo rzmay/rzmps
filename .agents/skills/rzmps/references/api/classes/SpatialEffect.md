@@ -54,6 +54,26 @@ THREE.Object3D.constructor
 
 ## Properties
 
+<a id="automaticfeather"></a>
+
+### automaticFeather
+
+```ts
+automaticFeather: boolean;
+```
+
+***
+
+<a id="bakedfieldresolution"></a>
+
+### bakedFieldResolution
+
+```ts
+bakedFieldResolution: number;
+```
+
+***
+
 <a id="condition"></a>
 
 ### condition
@@ -71,6 +91,16 @@ condition: (particle) => boolean;
 #### Returns
 
 `boolean`
+
+***
+
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: SpatialEffectGPUCondition;
+```
 
 ***
 
@@ -94,12 +124,32 @@ featherEasing: SpatialEffectFeatherEasing;
 
 ***
 
+<a id="gpuspatialtype"></a>
+
+### gpuSpatialType?
+
+```ts
+optional gpuSpatialType?: GPUSpatialEffectType;
+```
+
+***
+
 <a id="inverted"></a>
 
 ### inverted
 
 ```ts
 inverted: boolean;
+```
+
+***
+
+<a id="modifygpu"></a>
+
+### modifyGPU
+
+```ts
+modifyGPU: SpatialEffectGPUUpdate;
 ```
 
 ***
@@ -122,6 +172,74 @@ priority: Priority = Priority.Transient;
 optional tags?: string[];
 ```
 
+***
+
+<a id="updatepolicy"></a>
+
+### updatePolicy
+
+```ts
+updatePolicy: SpatialEffectUpdatePolicy;
+```
+
+***
+
+<a id="writegpuparameters"></a>
+
+### writeGPUParameters?
+
+```ts
+optional writeGPUParameters?: (target, offset, system) => void;
+```
+
+#### Parameters
+
+##### target
+
+`Float32Array`
+
+##### offset
+
+`number`
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+`void`
+
+***
+
+<a id="gpu_influence_aligned_size"></a>
+
+### GPU\_INFLUENCE\_ALIGNED\_SIZE
+
+```ts
+readonly static GPU_INFLUENCE_ALIGNED_SIZE: 24 = 24;
+```
+
+***
+
+<a id="gpu_influence_fields"></a>
+
+### GPU\_INFLUENCE\_FIELDS
+
+```ts
+readonly static GPU_INFLUENCE_FIELDS: GPUSpatialParameterField[];
+```
+
+***
+
+<a id="gpu_unsupported"></a>
+
+### GPU\_UNSUPPORTED
+
+```ts
+static GPU_UNSUPPORTED: SpatialEffectGPUUpdate;
+```
+
 ## Accessors
 
 <a id="geometry"></a>
@@ -131,7 +249,7 @@ optional tags?: string[];
 #### Get Signature
 
 ```ts
-get geometry(): 
+get geometry():
   | BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
   | undefined;
 ```
@@ -174,7 +292,121 @@ get modifiesParticles(): boolean;
 
 `boolean`
 
+***
+
+<a id="needsupdate"></a>
+
+### needsUpdate
+
+#### Set Signature
+
+```ts
+set needsUpdate(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="supportsgpu"></a>
+
+### supportsGPU
+
+#### Get Signature
+
+```ts
+get supportsGPU(): boolean;
+```
+
+Whether the effect has all callbacks and geometry needed by GPU simulation.
+
+##### Returns
+
+`boolean`
+
+***
+
+<a id="supportsparameterizedgpuinfluence"></a>
+
+### supportsParameterizedGPUInfluence
+
+#### Get Signature
+
+```ts
+get supportsParameterizedGPUInfluence(): boolean;
+```
+
+##### Returns
+
+`boolean`
+
+***
+
+<a id="usesbuiltintest"></a>
+
+### usesBuiltInTest
+
+#### Get Signature
+
+```ts
+get usesBuiltInTest(): boolean;
+```
+
+Whether the effect uses the geometry-backed built-in containment test.
+
+##### Returns
+
+`boolean`
+
+***
+
+<a id="version"></a>
+
+### version
+
+#### Get Signature
+
+```ts
+get version(): number;
+```
+
+##### Returns
+
+`number`
+
 ## Methods
+
+<a id="bakedfieldgpu"></a>
+
+### bakedFieldGPU()
+
+```ts
+bakedFieldGPU(particle, context): Node<"float">;
+```
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+##### context
+
+[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+
+#### Returns
+
+`Node`\<`"float"`\>
+
+***
 
 <a id="containsworldposition"></a>
 
@@ -220,14 +452,36 @@ getFeather(position): number;
 
 ***
 
+<a id="getworldbounds"></a>
+
+### getWorldBounds()
+
+```ts
+getWorldBounds(target?): Box3;
+```
+
+World-space influence bounds, including the feather region.
+
+#### Parameters
+
+##### target?
+
+`Box3` = `...`
+
+#### Returns
+
+`Box3`
+
+***
+
 <a id="modify"></a>
 
 ### modify()
 
 ```ts
 modify(
-   particles, 
-   deltaTime, 
+   particles,
+   deltaTime,
    particleSystem
 ): void;
 ```
@@ -243,6 +497,28 @@ modify(
 `number`
 
 ##### particleSystem
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+`void`
+
+***
+
+<a id="syncgputransform"></a>
+
+### syncGPUTransform()
+
+```ts
+syncGPUTransform(system): void;
+```
+
+Refreshes transform uniforms used by non-batched and baked GPU influence paths.
+
+#### Parameters
+
+##### system
 
 [`ParticleSystem`](ParticleSystem.md)
 
@@ -276,14 +552,38 @@ test(particle, particleSystem): boolean;
 
 ***
 
+<a id="testgpu"></a>
+
+### testGPU()
+
+```ts
+testGPU(particle, context): Node<"float">;
+```
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+##### context
+
+[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+
+#### Returns
+
+`Node`\<`"float"`\>
+
+***
+
 <a id="box"></a>
 
 ### Box()
 
 ```ts
 static Box(
-   modify, 
-   options, 
+   modify,
+   options,
    ...args
 ): SpatialEffect;
 ```
@@ -316,8 +616,8 @@ static Box(
 
 ```ts
 static Cone(
-   modify, 
-   options, 
+   modify,
+   options,
    ...args
 ): SpatialEffect;
 ```
@@ -380,8 +680,8 @@ static Plane(options?): SpatialEffectTest;
 
 ```ts
 static Sphere(
-   modify, 
-   options, 
+   modify,
+   options,
    ...args
 ): SpatialEffect;
 ```
@@ -408,14 +708,38 @@ static Sphere(
 
 ***
 
+<a id="testgpuinfluence"></a>
+
+### testGPUInfluence()
+
+```ts
+static testGPUInfluence(particle, params): Node<"float">;
+```
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+##### params
+
+[`GPUSpatialParameterAccessor`](../interfaces/GPUSpatialParameterAccessor.md)
+
+#### Returns
+
+`Node`\<`"float"`\>
+
+***
+
 <a id="torus"></a>
 
 ### Torus()
 
 ```ts
 static Torus(
-   modify, 
-   options, 
+   modify,
+   options,
    ...args
 ): SpatialEffect;
 ```

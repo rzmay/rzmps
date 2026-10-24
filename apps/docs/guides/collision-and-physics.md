@@ -3,6 +3,12 @@
 The base package includes `ThreeCollisionBackend`, which raycasts against a
 Three.js scene.
 
+For GPU processing, `Collision` automatically selects `ThreeGPUCollisionBackend` when no backend
+is supplied. It uses packed `three-mesh-bvh` acceleration data and distinguishes static,
+transform-dynamic, and geometry-dynamic scene meshes. Supplying an explicit CPU physics backend
+makes the collision module GPU-incompatible, and applying impulses to scene bodies remains a CPU
+feature. See [GPU processing](gpu-processing.md) before choosing an explicit backend.
+
 See the generated API for constructor options and defaults.
 
 The `ThreeCollisionBackend` uses two octrees for static and dynamic collisions.

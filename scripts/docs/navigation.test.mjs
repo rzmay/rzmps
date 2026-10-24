@@ -9,18 +9,27 @@ import { apiNavigation, apiIndex } from './api-structure.mjs';
 const root = path.resolve(import.meta.dirname, '../..');
 const flatten = items => items.flatMap(item => item.items ? flatten(item.items) : [item]);
 
-test('guide order separates tutorials, concepts, features, and project work; labels follow article titles', () => {
+test('guide order separates tutorials, GPU work, concepts, features, and project work; labels follow article titles', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rzmps-guide-navigation-'));
   try {
     fs.cpSync(path.join(root, 'apps/docs/guides'), directory, { recursive: true });
     const sections = guideNavigation(directory);
-    assert.deepEqual(sections.map(section => section.text), ['Getting Started', 'Core Concepts', 'Feature Guides', 'Project Guides']);
-    assert.deepEqual(sections[0].items.map(item => item.link), ['/guides/first-particle-system', '/guides/first-module', '/guides/first-spatial-effect']);
-    assert.ok(sections[2].items.some(item => item.text === 'Using Tags'));
+    assert.deepEqual(sections.map(section => section.text), ['Getting Started', 'GPU Processing', 'Core Concepts', 'Feature Guides', 'Project Guides']);
+    assert.deepEqual(sections[0].items.map(item => item.link), [
+      '/guides/first-particle-system',
+      '/guides/first-module',
+      '/guides/first-spatial-effect',
+    ]);
+    assert.deepEqual(sections[1].items.map(item => item.link), [
+      '/guides/first-gpu-module',
+      '/guides/first-gpu-spatial-effect',
+      '/guides/gpu-processing',
+    ]);
+    assert.ok(sections[3].items.some(item => item.text === 'Using Tags'));
     const tags = path.join(directory, 'tags.md');
     fs.writeFileSync(tags, fs.readFileSync(tags, 'utf8').replace(/^# .+/, '# Selecting Particles with Tags'));
     assert.ok(flatten(guideNavigation(directory)).some(item => item.text === 'Selecting Particles with Tags'));
-    assert.match(guideIndex(sections), /## Getting Started[\s\S]+## Core Concepts[\s\S]+## Feature Guides/);
+    assert.match(guideIndex(sections), /## Getting Started[\s\S]+## GPU Processing[\s\S]+## Core Concepts[\s\S]+## Feature Guides/);
     fs.writeFileSync(path.join(directory, 'forgotten-guide.md'), '# Forgotten Guide\n');
     assert.throws(() => guideNavigation(directory), /Guide missing from navigation/);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }

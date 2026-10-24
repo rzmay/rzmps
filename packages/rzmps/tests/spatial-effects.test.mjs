@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
+  Boids,
   KillZone,
   Module,
   Particle,
@@ -29,6 +30,61 @@ assert.equal(typeof SpatialEffect, 'function');
 assert.equal(typeof KillZone, 'function');
 assert.equal(typeof ParticleForceField, 'function');
 assert.equal(typeof SpatialEffectHelper, 'function');
+
+{
+  const scene = new THREE.Scene();
+  const nearby = KillZone.Sphere({ position: new THREE.Vector3(10, 0, 0) }, 1, 8, 4);
+  const distant = KillZone.Sphere({ position: new THREE.Vector3(100, 0, 0) }, 1, 8, 4);
+  const custom = new KillZone({
+    position: new THREE.Vector3(100, 0, 0),
+    test: () => false,
+  });
+  scene.add(nearby, distant, custom);
+  const system = new ParticleSystem({
+    emitters: [],
+    renderers: [],
+    modules: [],
+    spatialEffectBoundsFiltering: true,
+  });
+  system._scene = scene;
+  system.deltaTime = 0.1;
+  system.particles.push(new Particle({
+    lifetime: 2,
+    position: new THREE.Vector3(),
+    velocity: new THREE.Vector3(100, 0, 0),
+  }));
+  system.updateBoundingBox();
+
+  const selected = system._getSpatialEffects();
+  assert.ok(selected.includes(nearby), 'velocity-expanded bounds should retain upcoming effects');
+  assert.ok(!selected.includes(distant), 'non-overlapping built-in effects should be filtered');
+  assert.ok(selected.includes(custom), 'custom-test effects must bypass bounds filtering');
+}
+
+{
+  const scene = new THREE.Scene();
+  const effect = KillZone.Sphere({ position: new THREE.Vector3(20, 0, 0) }, 1, 8, 4);
+  scene.add(effect);
+  const system = new ParticleSystem({
+    emitters: [],
+    renderers: [],
+    modules: [],
+    spatialEffectBoundsFiltering: true,
+  });
+  system._scene = scene;
+  system._isGPUProcessingActive = true;
+  system._gpuCPUMirrorStale = true;
+  system._gpuAllocationDiagnostics = {
+    activeCount: 1,
+    maxVelocity: 0,
+    bounds: new THREE.Box3(
+      new THREE.Vector3(19, -1, -1),
+      new THREE.Vector3(21, 1, 1),
+    ),
+  };
+  system.updateBoundingBox();
+  assert.ok(system._getSpatialEffects().includes(effect), 'GPU telemetry bounds should drive overlap filtering');
+}
 
 {
   assert.deepEqual(
@@ -205,6 +261,47 @@ assert.equal(typeof SpatialEffectHelper, 'function');
 }
 
 {
+  const parent = new THREE.Group();
+  const field = ParticleForceField.Sphere({
+    direction: new THREE.Vector3(2, 0, 0),
+  }, 1, 16, 8);
+  parent.add(field);
+  const system = createSystem();
+
+  const original = new Particle({ mass: 1, position: new THREE.Vector3() });
+  field.modify([original], 0.5, system);
+  assert.ok(original.velocity.x > 0);
+
+  parent.position.x = 5;
+  const oldPosition = new Particle({ mass: 1, position: new THREE.Vector3() });
+  const movedPosition = new Particle({
+    mass: 1,
+    position: new THREE.Vector3(5, 0, 0),
+  });
+  field.modify([oldPosition, movedPosition], 0.5, system);
+  assert.equal(oldPosition.velocity.x, 0, 'a parent transform must move CPU influence');
+  assert.ok(movedPosition.velocity.x > 0);
+}
+
+{
+  const system = new ParticleSystem({ emitters: [], renderers: [], modules: [] });
+  const effect = SpatialEffect.Torus(() => {}, {
+    modifyGPU() {},
+    bakedFieldResolution: 3,
+  }, 1, 0.25, 4, 4);
+  effect.syncGPUTransform(system);
+  const texture = effect._bakedFieldTexture;
+  assert.ok(texture, 'non-analytic geometry should create a baked GPU influence field');
+  effect.position.x = 4;
+  effect.syncGPUTransform(system);
+  assert.equal(
+    effect._bakedFieldTexture,
+    texture,
+    'rigid movement must retain the local-space baked influence texture',
+  );
+}
+
+{
   const inside = new Particle({
     mass: 1,
     position: new THREE.Vector3(0, 0, 0),
@@ -344,6 +441,25 @@ assert.equal(typeof SpatialEffectHelper, 'function');
   assert.equal(effect.getFeather(new THREE.Vector3(2, 0, 0)), 1);
   assert.equal(effect.getFeather(new THREE.Vector3(3, 0, 0)), 0.5);
   assert.equal(effect.getFeather(new THREE.Vector3(5, 0, 0)), 0);
+}
+
+{
+  const scene = new THREE.Scene();
+  const system = new ParticleSystem({ emitters: [], renderers: [], modules: [] });
+  system.position.set(0, 10, 0);
+  scene.add(system);
+  const affector = Boids.BoidAffector.Sphere({
+    position: new THREE.Vector3(0, 10, 0),
+    range: 1,
+  }, 0.5, 8, 4);
+  scene.add(affector);
+  scene.updateMatrixWorld(true);
+
+  assert.equal(
+    affector.test(new Particle({ position: new THREE.Vector3() }), system),
+    true,
+    'BoidAffector range tests should compare world-space positions for local systems',
+  );
 }
 
 {

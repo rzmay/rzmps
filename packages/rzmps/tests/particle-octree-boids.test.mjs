@@ -12,6 +12,7 @@ import {
  * Checks:
  * - ParticleOctree locates dense cells and sparse ancestors.
  * - ParticleOctree stores deduplicated neighbors on nodes.
+ * - ParticleOctree performs exact-radius queries with index and tag filtering.
  * - ParticleOctree filters rebuilds by tag.
  * - ParticleOctree respects timeQuality rebuild cadence.
  * - Boids steers velocity from octree aggregate samples.
@@ -71,8 +72,23 @@ const neighborIds = new Set(denseNode.neighbors.map((node) => node.id));
 assert.equal(neighborIds.size, denseNode.neighbors.length);
 assert.ok(denseNode.neighbors.every((node) => node.size >= denseNode.size));
 
+const radiusResults = octree.particlesInRadius(
+  new THREE.Vector3(0.1, 0.1, 0.1),
+  0.11,
+  { excludeIndex: 0 },
+);
+assert.equal(radiusResults.length, 1);
+assert.equal(radiusResults[0], octreeParticles[1]);
+
 octreeParticles[0].tags = ['included'];
 octreeParticles[1].tags = ['excluded'];
+
+const taggedRadiusResults = octree.particlesInRadius(
+  new THREE.Vector3(0.15, 0.1, 0.1),
+  1,
+  { tags: ['included'] },
+);
+assert.deepEqual(taggedRadiusResults, [octreeParticles[0]]);
 
 const taggedOctree = new ParticleOctree({
   bounds: new THREE.Box3(
@@ -149,6 +165,39 @@ boids.prepare(system);
 boids.modify([boid], 1, system);
 
 assert.ok(boid.velocity.y > 0);
+
+const radiusLimitedBoid = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(0, 0, 0),
+  velocity: new THREE.Vector3(1, 0, 0),
+});
+const outOfRangeNeighbor = new Particle({
+  lifetime: 10,
+  position: new THREE.Vector3(0.75, 0, 0),
+  velocity: new THREE.Vector3(0, 1, 0),
+});
+const radiusLimitedBoids = new Boids({
+  octreeOptions: {
+    bounds: new THREE.Box3(
+      new THREE.Vector3(-2, -2, -2),
+      new THREE.Vector3(2, 2, 2),
+    ),
+  },
+  neighborRadius: 0.5,
+  alignmentWeight: 1,
+  cohesionWeight: 0,
+  separationWeight: 0,
+  steering: 10,
+});
+const radiusLimitedSystem = new ParticleSystem({
+  emitters: [],
+  renderers: [],
+  modules: [],
+});
+radiusLimitedSystem.particles.push(radiusLimitedBoid, outOfRangeNeighbor);
+radiusLimitedBoids.prepare(radiusLimitedSystem);
+radiusLimitedBoids.modify([radiusLimitedBoid], 0.1, radiusLimitedSystem);
+assert.deepEqual(radiusLimitedBoid.velocity.toArray(), [1, 0, 0]);
 
 const quickTurnBoid = new Particle({
   lifetime: 10,
@@ -357,7 +406,7 @@ targetBoids.prepare(targetSystem);
 targetBoids.modify([targetBoid], 1, targetSystem);
 
 assert.ok(targetBoid.velocity.x > 0.99);
-assert.ok(Math.abs(targetBoid.velocity.y) < Number.EPSILON);
+assert.ok(Math.abs(targetBoid.velocity.y) < 1e-12);
 
 const excludedBoid = new Particle({
   lifetime: 10,

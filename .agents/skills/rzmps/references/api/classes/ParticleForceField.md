@@ -40,6 +40,34 @@ new ParticleForceField(options?): ParticleForceField;
 
 ## Properties
 
+<a id="automaticfeather"></a>
+
+### automaticFeather
+
+```ts
+automaticFeather: boolean;
+```
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`automaticFeather`](SpatialEffect.md#automaticfeather)
+
+***
+
+<a id="bakedfieldresolution"></a>
+
+### bakedFieldResolution
+
+```ts
+bakedFieldResolution: number;
+```
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`bakedFieldResolution`](SpatialEffect.md#bakedfieldresolution)
+
+***
+
 <a id="condition"></a>
 
 ### condition
@@ -61,6 +89,20 @@ condition: (particle) => boolean;
 #### Inherited from
 
 [`SpatialEffect`](SpatialEffect.md).[`condition`](SpatialEffect.md#condition)
+
+***
+
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: SpatialEffectGPUCondition;
+```
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`conditionGPU`](SpatialEffect.md#conditiongpu)
 
 ***
 
@@ -112,6 +154,20 @@ featherEasing: SpatialEffectFeatherEasing;
 
 ***
 
+<a id="gpuspatialtype"></a>
+
+### gpuSpatialType?
+
+```ts
+optional gpuSpatialType?: GPUSpatialEffectType;
+```
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`gpuSpatialType`](SpatialEffect.md#gpuspatialtype)
+
+***
+
 <a id="gravity"></a>
 
 ### gravity?
@@ -133,6 +189,20 @@ inverted: boolean;
 #### Inherited from
 
 [`SpatialEffect`](SpatialEffect.md).[`inverted`](SpatialEffect.md#inverted)
+
+***
+
+<a id="modifygpu"></a>
+
+### modifyGPU
+
+```ts
+modifyGPU: SpatialEffectGPUUpdate;
+```
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`modifyGPU`](SpatialEffect.md#modifygpu)
 
 ***
 
@@ -222,6 +292,104 @@ optional tags?: string[];
 
 [`SpatialEffect`](SpatialEffect.md).[`tags`](SpatialEffect.md#tags)
 
+***
+
+<a id="updatepolicy"></a>
+
+### updatePolicy
+
+```ts
+updatePolicy: SpatialEffectUpdatePolicy;
+```
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`updatePolicy`](SpatialEffect.md#updatepolicy)
+
+***
+
+<a id="writegpuparameters"></a>
+
+### writeGPUParameters?
+
+```ts
+optional writeGPUParameters?: (target, offset, system) => void;
+```
+
+#### Parameters
+
+##### target
+
+`Float32Array`
+
+##### offset
+
+`number`
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`writeGPUParameters`](SpatialEffect.md#writegpuparameters)
+
+***
+
+<a id="gpu_influence_aligned_size"></a>
+
+### GPU\_INFLUENCE\_ALIGNED\_SIZE
+
+```ts
+readonly static GPU_INFLUENCE_ALIGNED_SIZE: 24 = 24;
+```
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`GPU_INFLUENCE_ALIGNED_SIZE`](SpatialEffect.md#gpu_influence_aligned_size)
+
+***
+
+<a id="gpu_influence_fields"></a>
+
+### GPU\_INFLUENCE\_FIELDS
+
+```ts
+readonly static GPU_INFLUENCE_FIELDS: GPUSpatialParameterField[];
+```
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`GPU_INFLUENCE_FIELDS`](SpatialEffect.md#gpu_influence_fields)
+
+***
+
+<a id="gpu_spatial_type"></a>
+
+### GPU\_SPATIAL\_TYPE
+
+```ts
+readonly static GPU_SPATIAL_TYPE: GPUSpatialEffectType;
+```
+
+***
+
+<a id="gpu_unsupported"></a>
+
+### GPU\_UNSUPPORTED
+
+```ts
+static GPU_UNSUPPORTED: SpatialEffectGPUUpdate;
+```
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`GPU_UNSUPPORTED`](SpatialEffect.md#gpu_unsupported)
+
 ## Accessors
 
 <a id="geometry"></a>
@@ -280,7 +448,147 @@ get modifiesParticles(): boolean;
 
 [`SpatialEffect`](SpatialEffect.md).[`modifiesParticles`](SpatialEffect.md#modifiesparticles)
 
+***
+
+<a id="needsupdate"></a>
+
+### needsUpdate
+
+#### Set Signature
+
+```ts
+set needsUpdate(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+SpatialEffect.needsUpdate
+```
+
+***
+
+<a id="supportsgpu"></a>
+
+### supportsGPU
+
+#### Get Signature
+
+```ts
+get supportsGPU(): boolean;
+```
+
+Whether the effect has all callbacks and geometry needed by GPU simulation.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`supportsGPU`](SpatialEffect.md#supportsgpu)
+
+***
+
+<a id="supportsparameterizedgpuinfluence"></a>
+
+### supportsParameterizedGPUInfluence
+
+#### Get Signature
+
+```ts
+get supportsParameterizedGPUInfluence(): boolean;
+```
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`supportsParameterizedGPUInfluence`](SpatialEffect.md#supportsparameterizedgpuinfluence)
+
+***
+
+<a id="usesbuiltintest"></a>
+
+### usesBuiltInTest
+
+#### Get Signature
+
+```ts
+get usesBuiltInTest(): boolean;
+```
+
+Whether the effect uses the geometry-backed built-in containment test.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`usesBuiltInTest`](SpatialEffect.md#usesbuiltintest)
+
+***
+
+<a id="version"></a>
+
+### version
+
+#### Get Signature
+
+```ts
+get version(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`version`](SpatialEffect.md#version)
+
 ## Methods
+
+<a id="bakedfieldgpu"></a>
+
+### bakedFieldGPU()
+
+```ts
+bakedFieldGPU(particle, context): Node<"float">;
+```
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+##### context
+
+[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+
+#### Returns
+
+`Node`\<`"float"`\>
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`bakedFieldGPU`](SpatialEffect.md#bakedfieldgpu)
+
+***
 
 <a id="containsworldposition"></a>
 
@@ -358,14 +666,40 @@ getForce(particle, particleSystem?): Vector3;
 
 ***
 
+<a id="getworldbounds"></a>
+
+### getWorldBounds()
+
+```ts
+getWorldBounds(target?): Box3;
+```
+
+World-space influence bounds, including the feather region.
+
+#### Parameters
+
+##### target?
+
+`Box3` = `...`
+
+#### Returns
+
+`Box3`
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`getWorldBounds`](SpatialEffect.md#getworldbounds)
+
+***
+
 <a id="modify"></a>
 
 ### modify()
 
 ```ts
 modify(
-   particles, 
-   deltaTime, 
+   particles,
+   deltaTime,
    particleSystem
 ): void;
 ```
@@ -391,6 +725,32 @@ modify(
 #### Inherited from
 
 [`SpatialEffect`](SpatialEffect.md).[`modify`](SpatialEffect.md#modify)
+
+***
+
+<a id="syncgputransform"></a>
+
+### syncGPUTransform()
+
+```ts
+syncGPUTransform(system): void;
+```
+
+Refreshes transform uniforms used by non-batched and baked GPU influence paths.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`syncGPUTransform`](SpatialEffect.md#syncgputransform)
 
 ***
 
@@ -422,6 +782,66 @@ test(particle, particleSystem): boolean;
 
 ***
 
+<a id="testgpu"></a>
+
+### testGPU()
+
+```ts
+testGPU(particle, context): Node<"float">;
+```
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+##### context
+
+[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+
+#### Returns
+
+`Node`\<`"float"`\>
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`testGPU`](SpatialEffect.md#testgpu)
+
+***
+
+<a id="writestaticgpuparameters"></a>
+
+### writeStaticGPUParameters()
+
+```ts
+writeStaticGPUParameters(
+   target,
+   offset,
+   system
+): void;
+```
+
+#### Parameters
+
+##### target
+
+`Float32Array`
+
+##### offset
+
+`number`
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+`void`
+
+***
+
 <a id="box"></a>
 
 ### Box()
@@ -430,8 +850,8 @@ test(particle, particleSystem): boolean;
 
 ```ts
 static Box(
-   modify, 
-   options, 
+   modify,
+   options,
    ...args
 ): ParticleForceField;
 ```
@@ -518,8 +938,8 @@ SpatialEffect.Box
 
 ```ts
 static Cone(
-   modify, 
-   options, 
+   modify,
+   options,
    ...args
 ): ParticleForceField;
 ```
@@ -640,8 +1060,8 @@ static Plane(options?): SpatialEffectTest;
 
 ```ts
 static Sphere(
-   modify, 
-   options, 
+   modify,
+   options,
    ...args
 ): ParticleForceField;
 ```
@@ -720,6 +1140,34 @@ SpatialEffect.Sphere
 
 ***
 
+<a id="testgpuinfluence"></a>
+
+### testGPUInfluence()
+
+```ts
+static testGPUInfluence(particle, params): Node<"float">;
+```
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+##### params
+
+[`GPUSpatialParameterAccessor`](../interfaces/GPUSpatialParameterAccessor.md)
+
+#### Returns
+
+`Node`\<`"float"`\>
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`testGPUInfluence`](SpatialEffect.md#testgpuinfluence)
+
+***
+
 <a id="torus"></a>
 
 ### Torus()
@@ -728,8 +1176,8 @@ SpatialEffect.Sphere
 
 ```ts
 static Torus(
-   modify, 
-   options, 
+   modify,
+   options,
    ...args
 ): ParticleForceField;
 ```

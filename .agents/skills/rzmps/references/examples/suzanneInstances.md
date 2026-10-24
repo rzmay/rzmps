@@ -20,6 +20,7 @@ The 10-second loop and zero gravity keep the instanced models floating. GLTF geo
 
 ```js
   const system = new ParticleSystem({
+    maxParticles: 256,
     duration: 10,
     looping: true,
     gravity: new THREE.Vector3(0, 0, 0),
@@ -68,7 +69,7 @@ The 10-second loop and zero gravity keep the instanced models floating. GLTF geo
 Rate 12, lifetimes 4–8 seconds, and scale 0.4–1 produce a manageable group of roughly 72 instances at average lifetime. Alignment 1 orients particles to emission direction. A four-color Set varies the instances without constructing a separate material for each particle.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/suzanneInstances.js#L44)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/suzanneInstances.js#L45)
 
 ```js
     emitters: [
@@ -96,7 +97,7 @@ Rate 12, lifetimes 4–8 seconds, and scale 0.4–1 produce a manageable group o
 The sole ColorOverLifetime module applies a cubic alpha fade. It leaves scale and trajectory alone so the recognizable mesh silhouette and directional alignment carry the effect. Most of each lifetime remains visible before the late fade removes the instance.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/suzanneInstances.js#L64)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/suzanneInstances.js#L65)
 
 ```js
     modules: [
@@ -112,7 +113,7 @@ The sole ColorOverLifetime module applies a cubic alpha fade. It leaves scale an
 MeshRenderer shares the loaded Suzanne geometry with a MeshStandardMaterial and enables cast/receive shadows. Unlike the Suzanne surface-emission example, every particle represents a full model. Watch geometry cost and draw workload when increasing the population.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/suzanneInstances.js#L72)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/suzanneInstances.js#L73)
 
 ```js
     renderers: [

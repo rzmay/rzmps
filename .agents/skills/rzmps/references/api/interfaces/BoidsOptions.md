@@ -110,6 +110,34 @@ Additional per-particle predicate, evaluated after tag matching.
 
 ***
 
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ModuleGPUCondition | null;
+```
+
+Optional TSL condition callback for GPU processing.
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`conditionGPU`](ModuleOptions.md#conditiongpu)
+
+***
+
+<a id="grid"></a>
+
+### grid
+
+```ts
+grid:
+  | ParticleSpatialGrid
+| Partial<ParticleSpatialGridOptions>;
+```
+
+***
+
 <a id="maintainspeed"></a>
 
 ### maintainSpeed
@@ -120,6 +148,48 @@ maintainSpeed: boolean;
 
 ***
 
+<a id="modifygpu"></a>
+
+### modifyGPU?
+
+```ts
+optional modifyGPU?: ModuleGPUUpdate | null;
+```
+
+TSL modifier used when GPU processing is active.
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`modifyGPU`](ModuleOptions.md#modifygpu)
+
+***
+
+<a id="neighborradius"></a>
+
+### neighborRadius
+
+```ts
+neighborRadius: DynamicValue<number>;
+```
+
+***
+
+<a id="octreeaggregator"></a>
+
+### octreeAggregator?
+
+```ts
+optional octreeAggregator?: OctreeAggregator<unknown>;
+```
+
+Aggregate factory used while rebuilding the managed CPU ParticleOctree.
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`octreeAggregator`](ModuleOptions.md#octreeaggregator)
+
+***
+
 <a id="octreeoptions"></a>
 
 ### octreeOptions
@@ -127,6 +197,12 @@ maintainSpeed: boolean;
 ```ts
 octreeOptions: Partial<OctreeConfig>;
 ```
+
+Configures and implicitly enables the managed CPU ParticleOctree.
+
+#### Overrides
+
+[`ModuleOptions`](ModuleOptions.md).[`octreeOptions`](ModuleOptions.md#octreeoptions)
 
 ***
 
@@ -161,7 +237,7 @@ Execution phase: negative is permanent before movement, 0–1 is transient befor
 ### requireSpatialEffects?
 
 ```ts
-optional requireSpatialEffects?: 
+optional requireSpatialEffects?:
   | SpatialEffectConstructor<SpatialEffect>
   | SpatialEffectConstructor<SpatialEffect>[];
 ```
@@ -226,6 +302,24 @@ Explicit module effect collection; supplying an empty array suppresses automatic
 
 ***
 
+<a id="spatialgrid"></a>
+
+### spatialGrid
+
+```ts
+spatialGrid:
+  | ParticleSpatialGrid
+| Partial<ParticleSpatialGridOptions>;
+```
+
+Configures a system-owned grid or supplies an explicitly caller-owned grid.
+
+#### Overrides
+
+[`ModuleOptions`](ModuleOptions.md).[`spatialGrid`](ModuleOptions.md#spatialgrid)
+
+***
+
 <a id="speed"></a>
 
 ### speed
@@ -285,6 +379,38 @@ Module update quality settings; skipped callbacks do not accumulate their own de
 #### Inherited from
 
 [`ModuleOptions`](ModuleOptions.md).[`updateLOD`](ModuleOptions.md#updatelod)
+
+***
+
+<a id="useoctree"></a>
+
+### useOctree?
+
+```ts
+optional useOctree?: boolean;
+```
+
+Enables a managed CPU ParticleOctree with default options.
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`useOctree`](ModuleOptions.md#useoctree)
+
+***
+
+<a id="usespatialgrid"></a>
+
+### useSpatialGrid?
+
+```ts
+optional useSpatialGrid?: boolean;
+```
+
+Enables a managed GPU ParticleSpatialGrid with default options.
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`useSpatialGrid`](ModuleOptions.md#usespatialgrid)
 
 ***
 

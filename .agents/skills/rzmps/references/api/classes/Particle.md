@@ -42,6 +42,16 @@ acceleration: Vector3;
 
 ***
 
+<a id="alive"></a>
+
+### alive
+
+```ts
+alive: boolean = true;
+```
+
+***
+
 <a id="alpha"></a>
 
 ### alpha

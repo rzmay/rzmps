@@ -48,8 +48,8 @@ combine(a, b): TAggregate;
 
 ```ts
 new(
-   particle?, 
-   particleIndex?, 
+   particle?,
+   particleIndex?,
    node?
 ): TAggregate;
 ```

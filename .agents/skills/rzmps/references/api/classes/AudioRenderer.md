@@ -168,6 +168,16 @@ dopplerEffect: number;
 
 ***
 
+<a id="gpuinterpolationrate"></a>
+
+### gpuInterpolationRate
+
+```ts
+gpuInterpolationRate: number;
+```
+
+***
+
 <a id="highpass"></a>
 
 ### highPass
@@ -478,6 +488,96 @@ useUpdateLOD: boolean;
 volume: DynamicValue<number>;
 ```
 
+## Accessors
+
+<a id="gpuparameteruploadcount"></a>
+
+### gpuParameterUploadCount
+
+#### Get Signature
+
+```ts
+get gpuParameterUploadCount(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`gpuParameterUploadCount`](Renderer.md#gpuparameteruploadcount)
+
+***
+
+<a id="needsupdate"></a>
+
+### needsUpdate
+
+#### Set Signature
+
+```ts
+set needsUpdate(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.needsUpdate
+```
+
+***
+
+<a id="supportsgpuinput"></a>
+
+### supportsGPUInput
+
+#### Get Signature
+
+```ts
+get supportsGPUInput(): boolean;
+```
+
+Whether this renderer can consume GPU particle buffers without a selective CPU readback.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`supportsGPUInput`](Renderer.md#supportsgpuinput)
+
+***
+
+<a id="version"></a>
+
+### version
+
+#### Get Signature
+
+```ts
+get version(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`version`](Renderer.md#version)
+
 ## Methods
 
 <a id="clear"></a>
@@ -520,6 +620,26 @@ Permanently releases owned rendering resources.
 
 ***
 
+<a id="reset"></a>
+
+### reset()
+
+```ts
+reset(): void;
+```
+
+Restores transient backend state while retaining reusable rendering resources.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`reset`](Renderer.md#reset)
+
+***
+
 <a id="setup"></a>
 
 ### setup()
@@ -546,14 +666,34 @@ Creates rendering resources when attached to a system.
 
 ***
 
+<a id="syncgpuconfiguration"></a>
+
+### syncGPUConfiguration()
+
+```ts
+syncGPUConfiguration(): void;
+```
+
+Synchronizes runtime values and invalidates structural GPU changes.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`syncGPUConfiguration`](Renderer.md#syncgpuconfiguration)
+
+***
+
 <a id="update"></a>
 
 ### update()
 
 ```ts
 update(
-   particles, 
-   system, 
+   particles,
+   system,
    deltaTime?
 ): void;
 ```
@@ -581,3 +721,42 @@ Filters particles, applies renderer LOD and temporary size compensation, then de
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`update`](Renderer.md#update)
+
+***
+
+<a id="updategpu"></a>
+
+### updateGPU()
+
+```ts
+updateGPU(
+   buffers,
+   system,
+   deltaTime?
+): void;
+```
+
+Consumes GPU simulation or render-output storage without materializing CPU particles.
+
+#### Parameters
+
+##### buffers
+
+  \| [`GPUParticleBufferState`](../interfaces/GPUParticleBufferState.md)
+  \| [`GPUParticleRenderBufferState`](../interfaces/GPUParticleRenderBufferState.md)
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime?
+
+`number` = `0`
+
+#### Returns
+
+`void`
+
+#### Overrides
+
+[`Renderer`](Renderer.md).[`updateGPU`](Renderer.md#updategpu)

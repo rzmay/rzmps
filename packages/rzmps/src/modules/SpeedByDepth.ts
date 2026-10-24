@@ -3,6 +3,8 @@ import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { ValueByParameter } from '../types/ValueByParameter';
+import type { Node } from 'three/webgpu';
+import { uniform } from 'three/tsl';
 import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
 
 export interface SpeedByDepthOptions extends Partial<ModuleOptions> {
@@ -14,6 +16,8 @@ export interface SpeedByDepthOptions extends Partial<ModuleOptions> {
 /** Multiplies scalar integration speed using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
 class SpeedByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
+  private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');
+  private readonly _gpuDepthRange = uniform(new THREE.Vector2(), 'vec2');
   depthRange?: [number, number];
 
   private _cameraDepthRange: [number, number] = [0, 100];
@@ -39,6 +43,16 @@ class SpeedByDepth extends Module {
     }, {
       ...options,
       priority: Module.Priority.PreMovementTransient,
+      modifyGPU: (particle) => {
+          particle.speed.assign(
+            particle.speed.mul(this.gpuParameters.parameterNumber(
+              'speed',
+              () => this.options.speed,
+              this.getDepthTimeGPU(particle.position),
+              1,
+            )),
+          );
+        }
     });
 
     this.depthRange = options.depthRange;
@@ -58,8 +72,16 @@ class SpeedByDepth extends Module {
         this._cameraDepthRange = [camera.near, camera.far];
       }
     }
+    this._gpuDepthRange.value.set(
+      this.depthRange?.[0] ?? this._cameraDepthRange[0],
+      this.depthRange?.[1] ?? this._cameraDepthRange[1],
+    );
   }
 
+  private getDepthTimeGPU(position: Node<'vec3'>) {
+    return position.sub(this._gpuCameraPosition).length().sub(this._gpuDepthRange.x)
+      .div(this._gpuDepthRange.y.sub(this._gpuDepthRange.x).max(Number.EPSILON)).clamp(0, 1);
+  }
 }
 
 export default SpeedByDepth;

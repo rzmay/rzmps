@@ -126,6 +126,7 @@ export class EmitterGUI extends GUIEditorBase {
         const geometry = emitter.source.geometry;
         const params = geometry.parameters ?? {};
         const shape = this.geometryShapeName(geometry);
+        const automaticVolumeSamples = emitter.source.volumeSamples === 'auto';
         const state = {
             shape,
             source: emitter.source.source,
@@ -138,8 +139,11 @@ export class EmitterGUI extends GUIEditorBase {
             tube: params.tube ?? 0.4,
             tubularSegments: params.tubularSegments ?? 32,
             arc: params.arc ?? Math.PI * 2,
+            automaticVolumeSamples,
+            volumeSamples: automaticVolumeSamples ? emitter.source.resolvedVolumeSamples : emitter.source.volumeSamples,
         };
-        folder.add(state, 'shape', ['Box', 'Sphere', 'Cone', 'Torus']).name('Shape').onChange(() => {
+        folder.add(state, 'shape', ['Custom', 'Box', 'Sphere', 'Cone', 'Torus']).name('Shape').onChange(() => {
+            if (state.shape === 'Custom') return;
             this.replaceEmitterShape(emitter, state);
             this.rebuild();
         });
@@ -148,8 +152,25 @@ export class EmitterGUI extends GUIEditorBase {
             Surface: EmissionSource.Surface,
             Vertices: EmissionSource.Vertices,
         }).name('Source').onChange((value) => {
-            emitter.source.source = Number(value);
+            emitter.source.source = value;
         });
+        let volumeSamplesController;
+        folder.add(state, 'automaticVolumeSamples').name('Automatic Samples').onChange((value) => {
+            emitter.source.volumeSamples = value ? 'auto' : Number(state.volumeSamples);
+            if (value) {
+                state.volumeSamples = emitter.source.resolvedVolumeSamples;
+                volumeSamplesController.updateDisplay().disable();
+            }
+            else {
+                volumeSamplesController.enable();
+            }
+        });
+        volumeSamplesController = folder.add(state, 'volumeSamples', 1, 8192, 1).name('Volume Samples').listen().onFinishChange((value) => {
+            if (!state.automaticVolumeSamples)
+                emitter.source.volumeSamples = Number(value);
+        });
+        if (state.automaticVolumeSamples)
+            volumeSamplesController.disable();
         const rebuildShape = () => this.replaceEmitterShape(emitter, state);
         if (shape === 'Box') {
             folder.add(state, 'width', 0.01).onChange(rebuildShape);
@@ -179,13 +200,16 @@ export class EmitterGUI extends GUIEditorBase {
         if (geometry.type.includes('Box')) return 'Box';
         if (geometry.type.includes('Cone')) return 'Cone';
         if (geometry.type.includes('Torus')) return 'Torus';
-        return 'Sphere';
+        if (geometry.type.includes('Sphere')) return 'Sphere';
+        return 'Custom';
     }
 
     replaceEmitterShape(emitter, state) {
-        const source = Number(state.source);
+        const source = state.source;
         let shape;
         switch (state.shape) {
+            case 'Custom':
+                return;
             case 'Box':
                 shape = EmissionShape.Box(Number(state.width), Number(state.height), Number(state.depth));
                 break;
@@ -200,7 +224,10 @@ export class EmitterGUI extends GUIEditorBase {
                 break;
         }
         shape.source = source;
+        shape.volumeSamples = state.automaticVolumeSamples ? 'auto' : Number(state.volumeSamples);
         emitter.source = shape;
+        if (state.automaticVolumeSamples)
+            state.volumeSamples = shape.resolvedVolumeSamples;
     }
 
     buildInitialValues(folder, emitter) {

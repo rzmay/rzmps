@@ -8,6 +8,26 @@
 
 # Interface: ICollisionBackend
 
+## Properties
+
+<a id="supportscpu"></a>
+
+### supportsCPU?
+
+```ts
+readonly optional supportsCPU?: boolean;
+```
+
+***
+
+<a id="supportsgpu"></a>
+
+### supportsGPU?
+
+```ts
+readonly optional supportsGPU?: boolean;
+```
+
 ## Methods
 
 <a id="applyimpulse"></a>
@@ -61,6 +81,26 @@ collide(query): CollisionHit | null;
 ```ts
 optional destroy(): void;
 ```
+
+#### Returns
+
+`void`
+
+***
+
+<a id="setgpuprocessingactive"></a>
+
+### setGPUProcessingActive()?
+
+```ts
+optional setGPUProcessingActive(active): void;
+```
+
+#### Parameters
+
+##### active
+
+`boolean`
 
 #### Returns
 

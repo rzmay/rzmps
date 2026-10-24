@@ -2,7 +2,7 @@ import path from 'node:path';
 import ts from 'typescript';
 
 const compare = (a, b) => a.text.localeCompare(b.text, 'en');
-const priority = ['ParticleSystem', 'Particle', 'Emitter', 'EmissionShape', 'Module', 'Renderer', 'SpriteRenderer', 'MeshRenderer', 'TrailRenderer', 'LightRenderer', 'AudioRenderer', 'SpatialEffect', 'ParticleForceField', 'BoidAffector', 'KillZone', 'ParticleOctree', 'LODHelper', 'LiveCubemap', 'Textures', 'ParticleSystemOptions', 'ParticleOptions', 'EmitterOptions', 'EmissionShapeOptions', 'ModuleOptions', 'RendererOptions', 'DynamicValue', 'DynamicUntimedValue', 'ValueByParameter'];
+const priority = ['ParticleSystem', 'Particle', 'Emitter', 'EmissionShape', 'Module', 'Renderer', 'SpriteRenderer', 'MeshRenderer', 'TrailRenderer', 'LightRenderer', 'AudioRenderer', 'SpatialEffect', 'ParticleForceField', 'BoidAffector', 'KillZone', 'ParticleOctree', 'ParticleSpatialGrid', 'GPUParticleContext', 'GPUParticleBufferState', 'GPUSelectiveReadbackState', 'LODHelper', 'LiveCubemap', 'Textures', 'ParticleSystemOptions', 'ParticleOptions', 'EmitterOptions', 'EmissionShapeOptions', 'ModuleOptions', 'RendererOptions', 'DynamicValue', 'DynamicUntimedValue', 'ValueByParameter'];
 const importantFirst = (a, b) => {
   const rank = item => { const index = priority.indexOf(item.text); return index < 0 ? priority.length : index; };
   return rank(a) - rank(b) || compare(a, b);
@@ -17,10 +17,12 @@ function exportSources(source) {
 }
 
 function classSection(name, source) {
+  if (/^GPU/.test(name) || name === 'ParticleSpatialGrid') return 'GPU Infrastructure';
   if (['./ParticleSystem', './Particle'].includes(source)) return 'Particle Systems';
   if (['./Emitter', './EmissionShape'].includes(source)) return 'Emitters';
   if (source === './Module' || source?.startsWith('./modules/')) return 'Modules';
   if (source === './Renderer' || (source?.startsWith('./renderers/') && name !== 'LiveCubemap')) return 'Renderers';
+  if (source?.startsWith('./gpu/')) return 'GPU Infrastructure';
   if (name.endsWith('Helper') || name === 'LiveCubemap' || source?.startsWith('./helpers/') || source?.startsWith('./collision/')) return 'Helpers';
   if (source === './SpatialEffect' || source?.startsWith('./spatial/')) return 'Spatial Effects';
   throw new Error(`API class needs a navigation section: ${name} (${source})`);
@@ -35,6 +37,7 @@ export function apiNavigation(pages, entrySource) {
     { text: 'Modules', description: 'Start with the Module base class, then choose modifiers for motion, appearance, or behavior.' },
     { text: 'Renderers', description: 'Start with Renderer, then represent particles as sprites, meshes, trails, lights, or audio.' },
     { text: 'Spatial Effects', description: 'Apply shared scene influences, force fields, and spatial selection.' },
+    { text: 'GPU Infrastructure', description: 'Build advanced GPU extensions with particle-node views, buffers, selective readback, scheduling, events, and spatial queries.' },
     { text: 'Types', description: 'Look up constructor options, dynamic values, enums, callbacks, and data contracts used by the public API. Supporting types appear here even when they are not direct package exports.' },
     { text: 'Helpers', description: 'Find spatial indexing, level of detail, collision backends, cubemap utilities, textures, and debug visualization.' },
   ].map(section => ({ ...section, items: [] }));

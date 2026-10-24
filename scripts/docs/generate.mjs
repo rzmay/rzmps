@@ -33,7 +33,10 @@ function removeEmptySubdirectories(directory) {
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rzmps-docs-'));
 try {
   execFileSync(process.execPath, [path.join(root,'node_modules/typedoc/bin/typedoc'), '--options', path.join(root,'typedoc.json'), '--out', temp], { cwd:root, stdio:'inherit' });
-  for (const file of files(temp).filter(f=>f.endsWith('.md'))) emit(`apps/docs/api/${path.relative(temp,file)}`, banner + fs.readFileSync(file,'utf8'));
+  for (const file of files(temp).filter(f=>f.endsWith('.md'))) {
+    const markdown = fs.readFileSync(file, 'utf8').replace(/[ \t]+$/gm, '');
+    emit(`apps/docs/api/${path.relative(temp,file)}`, banner + markdown);
+  }
 } finally { fs.rmSync(temp,{recursive:true,force:true}); }
 const apiSections = apiNavigation(new Map([...outputs].map(([file,content])=>[file.replace('apps/docs/api/',''),content])), fs.readFileSync(path.join(root,'packages/rzmps/src/index.ts'),'utf8'));
 emit('apps/docs/api/index.md', banner + apiIndex(apiSections));

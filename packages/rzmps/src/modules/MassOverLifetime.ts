@@ -17,7 +17,23 @@ class MassOverLifetime extends Module {
     super((particle: Particle) => {
       particle.mass *= evaluateDynamicNumber(this.options.mass ?? 1, particle.time, particle.id)
         * (options.multiplyMassBySize ?? true ? particle.scale.length() : 1);
-    }, { ...options });
+    }, {
+      ...options,
+      modifyGPU: (particle) => {
+          const massFactor = this.gpuParameters.number(
+            'mass',
+            () => this.options.mass,
+            particle.time,
+            1,
+            particle.index,
+          );
+          const sizeFactor = options.multiplyMassBySize ?? true ? particle.scale.length() : 1;
+
+          particle.mass.assign(
+            particle.mass.mul(massFactor).mul(sizeFactor),
+          );
+        }
+    });
   }
 }
 

@@ -11,3 +11,9 @@ Collision emission needs a Collision module and collidable scene geometry or a c
 [Fireworks](../examples/fireworks.md) combines continuous rocket smoke and a death burst. [Metal Balls](../examples/collisionSubEmitters.md) combines collision sparks and collision audio. Inspect their source-linked system regions as well as their emitter regions: the child's lifetime, gravity, and looping choices are independent of the parent.
 
 Destroy the owning root to clean up the effect. Do not also update owned subsystems from a scene traversal, or attempt to reuse one child under two parents. Explicit frame advancement follows the same parent-owned event processing as normal updates.
+
+GPU-active roots schedule subsystem systems parent-before-child and keep native spawn, death,
+collision, and continuous runs in GPU buffers. CPU listeners and CPU-input renderers receive
+asynchronous event/readback data and can observe a small delay. A function-valued `shouldEmit`
+cannot be translated automatically to a GPU predicate; inspect `getGPUEmissionSupport()` when a
+custom subsystem selector is involved.

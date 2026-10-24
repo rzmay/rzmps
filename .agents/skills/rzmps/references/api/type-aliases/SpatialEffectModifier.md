@@ -9,7 +9,7 @@
 # Type Alias: SpatialEffectModifier
 
 ```ts
-type SpatialEffectModifier = 
+type SpatialEffectModifier =
   | SpatialEffectUpdate
   | SpatialEffectFeatherUpdate;
 ```

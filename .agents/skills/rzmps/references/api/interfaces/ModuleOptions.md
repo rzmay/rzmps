@@ -32,6 +32,54 @@ Additional per-particle predicate, evaluated after tag matching.
 
 ***
 
+<a id="conditiongpu"></a>
+
+### conditionGPU
+
+```ts
+conditionGPU: ModuleGPUCondition | null;
+```
+
+Optional TSL condition callback for GPU processing.
+
+***
+
+<a id="modifygpu"></a>
+
+### modifyGPU
+
+```ts
+modifyGPU: ModuleGPUUpdate | null;
+```
+
+TSL modifier used when GPU processing is active.
+
+***
+
+<a id="octreeaggregator"></a>
+
+### octreeAggregator
+
+```ts
+octreeAggregator: OctreeAggregator<unknown>;
+```
+
+Aggregate factory used while rebuilding the managed CPU ParticleOctree.
+
+***
+
+<a id="octreeoptions"></a>
+
+### octreeOptions
+
+```ts
+octreeOptions: Partial<OctreeConfig>;
+```
+
+Configures and implicitly enables the managed CPU ParticleOctree.
+
+***
+
 <a id="priority"></a>
 
 ### priority
@@ -49,7 +97,7 @@ Execution phase: negative is permanent before movement, 0–1 is transient befor
 ### requireSpatialEffects
 
 ```ts
-requireSpatialEffects: 
+requireSpatialEffects:
   | SpatialEffectConstructor<SpatialEffect>
   | SpatialEffectConstructor<SpatialEffect>[];
 ```
@@ -92,6 +140,20 @@ Explicit module effect collection; supplying an empty array suppresses automatic
 
 ***
 
+<a id="spatialgrid"></a>
+
+### spatialGrid
+
+```ts
+spatialGrid:
+  | ParticleSpatialGrid
+| Partial<ParticleSpatialGridOptions>;
+```
+
+Configures a system-owned grid or supplies an explicitly caller-owned grid.
+
+***
+
 <a id="tags"></a>
 
 ### tags
@@ -113,6 +175,30 @@ updateLOD: Partial<LODSettings>;
 ```
 
 Module update quality settings; skipped callbacks do not accumulate their own delta.
+
+***
+
+<a id="useoctree"></a>
+
+### useOctree
+
+```ts
+useOctree: boolean;
+```
+
+Enables a managed CPU ParticleOctree with default options.
+
+***
+
+<a id="usespatialgrid"></a>
+
+### useSpatialGrid
+
+```ts
+useSpatialGrid: boolean;
+```
+
+Enables a managed GPU ParticleSpatialGrid with default options.
 
 ***
 

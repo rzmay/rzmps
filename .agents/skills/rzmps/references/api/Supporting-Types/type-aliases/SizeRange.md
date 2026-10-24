@@ -9,7 +9,7 @@
 # Type Alias: SizeRange
 
 ```ts
-type SizeRange = 
+type SizeRange =
   | [number, number]
   | {
   max: number;
