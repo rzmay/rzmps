@@ -132,6 +132,18 @@ lifetime: number;
 
 ***
 
+<a id="lodpriority"></a>
+
+### lodPriority
+
+```ts
+lodPriority: number;
+```
+
+Persistent birth priority, independent of identity.
+
+***
+
 <a id="mass"></a>
 
 ### mass
@@ -159,6 +171,18 @@ noise: Record<string, ParticleNoiseValues>;
 ```ts
 orbitCenter: Vector3;
 ```
+
+***
+
+<a id="parent"></a>
+
+### parent
+
+```ts
+parent: Particle | null = null;
+```
+
+Immediate visual parent; null for simulated particles.
 
 ***
 
@@ -271,6 +295,38 @@ velocity: Vector3;
 ```
 
 ## Accessors
+
+<a id="ischild"></a>
+
+### isChild
+
+#### Get Signature
+
+```ts
+get isChild(): boolean;
+```
+
+##### Returns
+
+`boolean`
+
+***
+
+<a id="root"></a>
+
+### root
+
+#### Get Signature
+
+```ts
+get root(): Particle;
+```
+
+##### Returns
+
+`Particle`
+
+***
 
 <a id="start"></a>
 

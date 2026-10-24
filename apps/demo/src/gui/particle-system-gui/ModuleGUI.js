@@ -32,9 +32,7 @@ export class ModuleGUI extends GUIEditorBase {
         };
         folder.add(gpuStatus, 'compatible').name('GPU').disable().listen();
         this.addTags(folder, module);
-        const updateLODFolder = folder.addFolder('Update LOD');
-        updateLODFolder.close();
-        this.buildUpdateLOD(updateLODFolder, module);
+
         const candidate = module;
         if (candidate.options && typeof candidate.options === 'object') {
             this.addObject(folder, candidate.options, new Set(['tags', ...LOD_GUI_KEYS]));

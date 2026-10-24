@@ -19,7 +19,8 @@ new GPUParticleRenderContext(
    index,
    vectors,
    scalars,
-   state
+   state,
+   owner?
 ): GPUParticleRenderContext;
 ```
 
@@ -40,6 +41,10 @@ new GPUParticleRenderContext(
 ##### state
 
 `Node`\<`"uvec4"`\>
+
+##### owner?
+
+[`GPUParticleRenderStorage`](GPUParticleRenderStorage.md)
 
 #### Returns
 
@@ -107,6 +112,16 @@ readonly index: Node<"uint">;
 
 ***
 
+<a id="lodpriority"></a>
+
+### lodPriority
+
+```ts
+readonly lodPriority: Node<"uint">;
+```
+
+***
+
 <a id="position"></a>
 
 ### position
@@ -164,3 +179,83 @@ readonly tagMask: Node<"uint">;
 ```ts
 readonly time: Node<"float">;
 ```
+
+## Accessors
+
+<a id="id"></a>
+
+### id
+
+#### Get Signature
+
+```ts
+get id(): Node<"uvec2">;
+```
+
+##### Returns
+
+`Node`\<`"uvec2"`\>
+
+***
+
+<a id="ischild"></a>
+
+### isChild
+
+#### Get Signature
+
+```ts
+get isChild(): Node<"bool">;
+```
+
+##### Returns
+
+`Node`\<`"bool"`\>
+
+***
+
+<a id="lodpriorityvalue"></a>
+
+### lodPriorityValue
+
+#### Get Signature
+
+```ts
+get lodPriorityValue(): Node<"float">;
+```
+
+##### Returns
+
+`Node`\<`"float"`\>
+
+***
+
+<a id="parent"></a>
+
+### parent
+
+#### Get Signature
+
+```ts
+get parent(): GPUParticleRenderContext;
+```
+
+##### Returns
+
+`GPUParticleRenderContext`
+
+***
+
+<a id="root"></a>
+
+### root
+
+#### Get Signature
+
+```ts
+get root(): GPUParticleRenderContext;
+```
+
+##### Returns
+
+`GPUParticleRenderContext`

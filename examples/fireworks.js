@@ -3,6 +3,7 @@ import {
   AudioRenderer,
   ColorOverLifetime,
   Emitter,
+  CompensationMode,
   EmissionShape,
   LightRenderer,
   ParticleSystem,
@@ -167,6 +168,7 @@ export default async function createFireworks() {
   // #region docs:system:3
   const sparkles = new ParticleSystem({
     maxParticles: 512,
+    lod: { distance: 30, quality: 0.5, maxLevel: 2, continuous: true },
     duration: 5,
     looping: false,
     gravityModifier: 0.18,
@@ -175,7 +177,7 @@ export default async function createFireworks() {
       new Emitter({
         source: EmissionShape.Sphere(0.08),
         rate: 0,
-        bursts: [{ time: 0, count: [100, 300] }],
+        bursts: [{ time: 0, count: [50, 150] }],
         radialSpeed: [4.5, 12],
         initialValues: {
           lifetime: [0.75, 1.35],
@@ -196,12 +198,15 @@ export default async function createFireworks() {
     // #region docs:renderers:3
     renderers: [
       new SpriteRenderer(sparklesSprite, {
+        children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
+        compensation: CompensationMode.Children,
         material: 'unlit',
         gridSize: { x: 5, y: 2 },
         fps: 10,
         randomStartFrame: true,
       }),
       new TrailRenderer({
+        children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
         lifetime: 0.1,
         minimumVertexDistance: 0.02,
         dieWithParticles: false,

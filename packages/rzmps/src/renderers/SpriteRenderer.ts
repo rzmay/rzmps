@@ -397,10 +397,30 @@ class SpriteRenderer extends Renderer {
     );
   }
 
-  updateGPU(
+  private ensureInstanceCapacity(count: number): void {
+    if (count <= this.webgpuCapacity) return;
+    this.webgpuCapacity = 2 ** Math.ceil(Math.log2(count));
+    for (const mesh of [this.webgpuMesh, this.webglQuadMesh]) {
+      mesh.dispose();
+      mesh.instanceMatrix = new THREE.InstancedBufferAttribute(
+        new Float32Array(this.webgpuCapacity * 16), 16,
+      ).setUsage(THREE.DynamicDrawUsage);
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.webgpuCapacity * 3), 3);
+    }
+    this.webgpuSpriteDataAttribute = new THREE.InstancedBufferAttribute(new Float32Array(this.webgpuCapacity * 4), 4);
+    this.webgpuGeometry.setAttribute('instanceSpriteData', this.webgpuSpriteDataAttribute);
+    this.webglQuadSpriteDataAttribute = new THREE.InstancedBufferAttribute(
+      new Float32Array(this.webgpuCapacity * 4), 4,
+    );
+    this.webglQuadGeometry.setAttribute('instanceSpriteData', this.webglQuadSpriteDataAttribute);
+    this.webgpuIdentityMatrixCapacity = 0;
+  }
+
+  protected _updateGPU(
     buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
   ): void {
+    this.ensureInstanceCapacity(buffers.count);
     this.prepareGPUVisibility(system);
     this.gpuCameraZoom.value = system.sceneCamera instanceof THREE.PerspectiveCamera
       ? system.sceneCamera.zoom
@@ -418,6 +438,8 @@ class SpriteRenderer extends Renderer {
       this.webgpuInstancesUseCPUTransforms = false;
     }
     this.applyGPUWebGPUNodes(buffers, system);
+    if ('bindIndirect' in buffers) buffers.bindIndirect(this.webgpuGeometry, system.sceneRenderer as WebGPURenderer);
+    else this.webgpuGeometry.indirect = null;
 
     let environment: THREE.Texture | undefined;
     if (this._materialOptions && 'envMap' in this._materialOptions) {
@@ -506,6 +528,7 @@ class SpriteRenderer extends Renderer {
     this.updateAttributes([]);
     this.webglQuadMesh.count = 0;
     this.webgpuMesh.count = 0;
+    this.webgpuGeometry.indirect = null;
     this.webgpuIdentityMatrixCapacity = 0;
     this.webgpuMesh.material = this.webgpuMaterial;
     this.webgpuGPUMaterial?.dispose();
@@ -639,12 +662,14 @@ class SpriteRenderer extends Renderer {
     sizeAttenuation = true,
     billboard = true,
   ): void {
-    const count = Math.min(particles.length, this.webgpuCapacity);
+    this.ensureInstanceCapacity(particles.length);
+    const count = particles.length;
 
     // CPU rendering writes complete transforms into these matrices. GPU node
     // materials require identity matrices before applying storage-buffer state.
     this.webgpuIdentityMatrixCapacity = 0;
     this.webgpuInstancesUseCPUTransforms = true;
+    this.webgpuGeometry.indirect = null;
     this.webgpuMesh.count = count;
 
     if (cameraQuaternion) {
@@ -712,8 +737,10 @@ class SpriteRenderer extends Renderer {
 
     for (let index = this.webgpuIdentityMatrixCapacity; index < count; index += 1) {
       this.webgpuMesh.setMatrixAt(index, this.matrix);
+      this.webgpuMesh.setColorAt(index, this.color.setRGB(1, 1, 1));
     }
 
+    if (this.webgpuMesh.instanceColor) this.webgpuMesh.instanceColor.needsUpdate = true;
     this.webgpuIdentityMatrixCapacity = count;
     this.webgpuMesh.instanceMatrix.needsUpdate = true;
   }
@@ -823,7 +850,8 @@ class SpriteRenderer extends Renderer {
     particles: Particle[],
     camera: THREE.Camera | undefined,
   ): void {
-    const count = Math.min(particles.length, this.webgpuCapacity);
+    this.ensureInstanceCapacity(particles.length);
+    const count = particles.length;
 
     this.webglQuadMesh.count = count;
 

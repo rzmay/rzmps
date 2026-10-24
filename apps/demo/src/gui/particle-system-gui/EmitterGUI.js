@@ -1,4 +1,4 @@
-import { Emitter, EmissionShape, EmissionSource, LODHelper } from '@rzmps/rzmps';
+import { Emitter, EmissionShape, EmissionSource } from '@rzmps/rzmps';
 import { GUIEditorBase } from './GUIEditorBase';
 import { INITIAL_VALUE_DEFAULTS } from './constants';
 
@@ -29,13 +29,7 @@ export class EmitterGUI extends GUIEditorBase {
         this.addDynamicValue(folder, emitter, 'alignment', 'Alignment');
         this.addTags(folder, emitter);
         folder.add(emitter, 'tagSelection', ['all', 'random', 'distribute']).name('Tag Selection');
-        const updateLODFolder = folder.addFolder('Update LOD');
-        updateLODFolder.close();
-        this.buildUpdateLOD(updateLODFolder, emitter);
 
-        const countLODFolder = folder.addFolder('Count LOD');
-        countLODFolder.close();
-        this.buildCountLOD(countLODFolder, emitter);
 
         const emissionShapeFolder = folder.addFolder('Emission Shape');
         emissionShapeFolder.close();
@@ -60,39 +54,13 @@ export class EmitterGUI extends GUIEditorBase {
     // -------------------------------------------------------------------------
     // Level-of-detail controls
     // -------------------------------------------------------------------------
-    buildUpdateLOD(folder, target) {
-        this.ensureUpdateLOD(target);
-        const refresh = () => {
-            target._lodHelper = new LODHelper(target.updateLOD);
-        };
-
-        folder.add(target, 'useUpdateLOD').name('Enabled').onChange(refresh);
-        this.addLODSettings(folder, target.updateLOD, refresh);
-    }
-
-    buildCountLOD(folder, target, includeSizeCompensation = false) {
-        const state = {
-            enabled: Boolean(target.countLOD),
-        };
-        const settings = this.normalizeLODSettings(target.countLOD);
-        const refresh = () => {
-            target.countLOD = state.enabled ? settings : undefined;
-            target._countLODHelper = new LODHelper(target.countLOD);
-        };
-
+    buildLOD(folder, target) {
+        const state = { enabled: Boolean(target.lod) };
+        const settings = this.normalizeLODSettings(target.lod);
+        const refresh = () => { target.lod = state.enabled ? settings : undefined; };
         folder.add(state, 'enabled').name('Enabled').onChange(refresh);
         this.addLODSettings(folder, settings, refresh);
-
-        if (includeSizeCompensation) {
-            target.compensateSize ??= false;
-            folder.add(target, 'compensateSize').name('Compensate Size');
-        }
-    }
-
-    ensureUpdateLOD(target) {
-        target.updateLOD = this.normalizeLODSettings(target.updateLOD);
-        target.useUpdateLOD ??= Boolean(target.updateLOD);
-        target._lodHelper ??= new LODHelper(target.updateLOD);
+        folder.add(target, 'quality').name('Current Quality').disable().listen();
     }
 
     normalizeLODSettings(settings) {

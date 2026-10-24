@@ -37,3 +37,5 @@ Rocket sprites are lit, with launch and death audio selected from two clips and 
 
 <ExampleCode region="renderers" />
 
+
+Spark bursts simulate 50–150 particles, with one small artistic sprite child per spark. Spark-system population LOD reduces births at distance and uses renderer child compensation. Finite bursts recover only through future emission events; moving closer does not restore previously omitted or culled sparks. The trail renderer uses matching artistic children, each maintaining an independent history under its stable child ID.

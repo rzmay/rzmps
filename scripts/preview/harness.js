@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { validateGPUChildren } from './validateGPUChildren.js';
 import { examples } from '../../examples/index.js';
 import scenePresets from '../../apps/demo/src/presets/scenes/index.js';
 import { getSceneParticleRoot } from '../../apps/demo/src/presets/scenes/particleRoot.js';
@@ -18,6 +19,7 @@ async function capture(options) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
   let renderer, system, sceneHandle;
+  const shaderBindings = [];
   const scene = new THREE.Scene();
   const assetErrors = [];
   const oldOnError = THREE.DefaultLoadingManager.onError;
@@ -36,6 +38,20 @@ async function capture(options) {
       if (!navigator.gpu || !await navigator.gpu.requestAdapter()) throw new Error('WebGPU is unavailable; no fallback was attempted');
       renderer = await createWebGPURenderer({ antialias:true, forceWebGL:false });
       if (!renderer.backend.isWebGPUBackend) throw new Error('WebGPU initialization used an unexpected backend');
+      const backend = renderer.backend;
+      for (const method of ['createComputePipeline', 'createRenderPipeline']) {
+        const original = backend[method].bind(backend);
+        backend[method] = (input, ...args) => {
+          const pipeline = input.pipeline ?? input;
+          for (const program of [pipeline.computeProgram, pipeline.vertexProgram, pipeline.fragmentProgram]) {
+            if (!program) continue;
+            const storageBuffers = (program.code.match(/var<storage/g) ?? []).length;
+            shaderBindings.push({ stage: program.stage, name: program.name || (program.stage === 'compute' ? 'simulation' : 'render'), storageBuffers });
+            if (storageBuffers > 8) throw new Error(`${program.stage} shader uses ${storageBuffers} storage buffers`);
+          }
+          return original(input, ...args);
+        };
+      }
     } else renderer = new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
     renderer.setPixelRatio(1);
     renderer.setSize(options.width,options.height);
@@ -92,19 +108,40 @@ async function capture(options) {
       await render();
       const data=renderer.domElement.toDataURL('image/png');
       if(!data.startsWith('data:image/png;base64,'))throw new Error('Canvas PNG export failed');
+      // Preview metadata is an explicit observation, so inspect GPU state rather
+      // than reporting the runtime diagnostic's intentionally delayed count.
+      const gpuCounts = new Map();
+      if (options.backend === 'webgpu') {
+        const pending = [];
+        system.traverse(object => {
+          const buffers = object.gpuParticleBuffers;
+          if (!object.isGPUProcessingActive || !buffers) return;
+          pending.push(renderer.getArrayBufferAsync(buffers.attributes.uintData).then(buffer => {
+            const states = new Uint32Array(buffer);
+            let count = 0;
+            for (let slot = 0; slot < buffers.count; slot++) if (states[slot * 4]) count++;
+            gpuCounts.set(object, count);
+          }));
+        });
+        await Promise.all(pending);
+      }
       let particles=0;
+      const systems = [];
       system.traverse(object=>{
         if(!Array.isArray(object.particles))return;
-        particles+=object.particles.length;
+        const simulated = gpuCounts.get(object) ?? object.liveParticleCount;
+        particles += simulated;
+        systems.push({ name: object.name, quality: object.quality, gpuProcessingActive: object.isGPUProcessingActive, simulated });
         for(const particle of object.particles) {
           const values=[...particle.position.toArray(),...particle.velocity.toArray(),...particle.scale.toArray(),particle.alpha];
           if(values.some(value=>!Number.isFinite(value)))throw new Error(`Non-finite particle state in ${object.name || 'system'}`);
         }
       });
-      frames.push({data,time:step*options.deltaTime,step,particles,simulationSpeed:system.simulationSpeed,simulatedSeconds:step*options.deltaTime*Math.max(0,system.simulationSpeed)});
+      frames.push({data,systems,time:step*options.deltaTime,step,particles,simulationSpeed:system.simulationSpeed,simulatedSeconds:step*options.deltaTime*Math.max(0,system.simulationSpeed)});
     }
+    const childValidation = options.backend === 'webgpu' ? await validateGPUChildren(system, renderer) : [];
     const contactSheet=await makeContactSheet(frames,options);
-    return {frames,contactSheet,camera:{position:camera.position.toArray(),target:options.cameraTarget,fov:options.cameraFov},rendererInfo:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles},userAgent:navigator.userAgent,assetErrors};
+    return {frames,contactSheet,shaderBindings,childValidation,camera:{position:camera.position.toArray(),target:options.cameraTarget,fov:options.cameraFov},rendererInfo:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles},userAgent:navigator.userAgent,assetErrors};
   } finally {
     try {
       system?.destroy();

@@ -24,7 +24,6 @@ import {
   min,
   storage,
   uint,
-  uvec4,
   vec3,
   vec4,
 } from 'three/tsl';
@@ -188,6 +187,9 @@ export default class ParticleSpatialGrid {
     buffers: GPUParticleBufferState,
     buildToken?: unknown,
   ): boolean {
+    if (buildToken !== undefined && this.lastBuildToken === buildToken && this.lastBufferVersion === buffers.version) {
+      return false;
+    }
     this.updateAccumulator += this.timeQuality;
     if (
       this.lastBufferVersion === buffers.version
@@ -208,6 +210,80 @@ export default class ParticleSpatialGrid {
    * Emits a shader-side exact-radius query. The callback receives a loaded particle
    * and may read all particle attributes. No JavaScript particle array is created.
    */
+  /** GPU-resolved cell extent, including automatic bounds expansion. */
+  getCellSizeNode(): Node<'vec3'> {
+    this.assertReady();
+    return this.gpuBounds!.element(1).xyz
+      .sub(this.gpuBounds!.element(0).xyz)
+      .div(float(this.cellsPerAxis)) as Node<'vec3'>;
+  }
+
+  /**
+   * Bounded nearest-neighbor spacing for visual density compensation. Searches
+   * the containing cell first, so distant clusters cannot consume the query
+   * budget before the caller's own cluster. Sparse fallback uses visual size,
+   * never the size of the grid's accumulated world bounds.
+   */
+  estimateLocalSpacingNode(
+    position: Node<'vec3'>,
+    excludeIndex: Node<'uint'>,
+    fallbackRadius: Node<'float'>,
+  ): Node<'float'> {
+    this.assertReady();
+    const boundsMin = this.gpuBounds!.element(0).xyz;
+    const size = this.gpuBounds!.element(1).xyz.sub(boundsMin).max(vec3(1e-6));
+    const coordinate = ivec3(clamp(
+      floor(position.sub(boundsMin).div(size).mul(float(this.cellsPerAxis))),
+      vec3(0),
+      vec3(this.cellsPerAxis - 1),
+    )).toVar();
+    const reachSquared = fallbackRadius.max(0.001).mul(8).pow(2);
+    const nearest = reachSquared.add(1).toVar();
+    const found = uint(0).toVar();
+    const visit = (cell: Node<'ivec3'>, budget: number) => {
+      const encoded = atomicLoad(this.heads!.element(this.hashCoordinateNode(cell))).toVar();
+      const visited = uint(0).toVar();
+      Loop(() => {
+        If(encoded.equal(uint(0)).or(visited.greaterThanEqual(uint(budget))), () => {
+          Break();
+        });
+        const slot = encoded.sub(1).toVar();
+        If(slot.greaterThanEqual(uint(this.capacity)), () => {
+          Break();
+        });
+        const record = this.coordinates!.element(slot);
+        const particle = this.currentBuffers!.storage.createParticle(slot);
+        const exact = record.x.equal(cell.x).and(record.y.equal(cell.y)).and(record.z.equal(cell.z));
+        const accepted = exact.and(slot.notEqual(excludeIndex))
+          .and(particle.alive.notEqual(uint(0)))
+          .and(particle.generation.equal(uint(record.w)));
+        If(accepted, () => {
+          const distanceSquared = particle.position.sub(position).lengthSq();
+          If(distanceSquared.lessThanEqual(reachSquared), () => {
+            nearest.assign(nearest.min(distanceSquared));
+            found.assign(uint(1));
+          });
+        });
+        encoded.assign(this.links!.element(slot));
+        visited.addAssign(1);
+      });
+    };
+    visit(coordinate, 64);
+    If(found.equal(uint(0)), () => {
+      for (const [x, y, z] of [[-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1]]) {
+        const neighbor = coordinate.add(ivec3(x, y, z));
+        const inside = neighbor.x.greaterThanEqual(int(0))
+          .and(neighbor.y.greaterThanEqual(int(0)))
+          .and(neighbor.z.greaterThanEqual(int(0)))
+          .and(neighbor.x.lessThan(int(this.cellsPerAxis)))
+          .and(neighbor.y.lessThan(int(this.cellsPerAxis)))
+          .and(neighbor.z.lessThan(int(this.cellsPerAxis)));
+        If(inside, () => visit(neighbor, 16));
+      }
+    });
+    return found.notEqual(uint(0)).select(nearest.max(0).sqrt().mul(0.5), fallbackRadius) as Node<'float'>;
+  }
+
   forEachParticleInRadius(
     position: Node<'vec3'>,
     radius: Node<'float'>,
@@ -237,18 +313,26 @@ export default class ParticleSpatialGrid {
       ({ i: gridX, j: gridY }) => {
         const gridZ = int(queryMin.z).toVar('spatialGridZ');
         Loop(() => {
-          If(gridZ.greaterThan(queryMax.z), () => { Break(); });
+          If(gridZ.greaterThan(queryMax.z), () => {
+            Break();
+          });
           if (this.maxQuerySteps > 0) {
-            If(visited.greaterThanEqual(uint(this.maxQuerySteps)), () => { Break(); });
+            If(visited.greaterThanEqual(uint(this.maxQuerySteps)), () => {
+              Break();
+            });
           }
           const coordinate = ivec3(int(gridX), int(gridY), int(gridZ));
           const bucket = this.hashCoordinateNode(coordinate);
           const encoded = atomicLoad(this.heads!.element(bucket)).toVar('spatialGridLink');
 
           Loop(() => {
-            If(encoded.equal(uint(EMPTY_LINK)), () => { Break(); });
+            If(encoded.equal(uint(EMPTY_LINK)), () => {
+              Break();
+            });
             const slot = encoded.sub(1).toVar('spatialGridSlot');
-            If(slot.greaterThanEqual(uint(this.capacity)), () => { Break(); });
+            If(slot.greaterThanEqual(uint(this.capacity)), () => {
+              Break();
+            });
 
             const record = this.coordinates!.element(slot);
             const exactCell = record.x.equal(coordinate.x)
@@ -504,22 +588,22 @@ export default class ParticleSpatialGrid {
         const inside = particle.position.greaterThanEqual(boundsMin).all()
           .and(particle.position.lessThanEqual(boundsMax).all());
         If(inside, () => {
-        const coordinate = ivec3(clamp(
-          floor(
-            particle.position.sub(boundsMin)
-              .div(boundsMax.sub(boundsMin).max(vec3(Number.EPSILON)))
-              .mul(float(this.cellsPerAxis)),
-          ),
-          vec3(0),
-          vec3(this.cellsPerAxis - 1),
-        ));
-        const bucket = this.hashCoordinateNode(coordinate);
-        const encoded = particle.index.add(uint(1));
-        const previous = atomicFunc(
+          const coordinate = ivec3(clamp(
+            floor(
+              particle.position.sub(boundsMin)
+                .div(boundsMax.sub(boundsMin).max(vec3(Number.EPSILON)))
+                .mul(float(this.cellsPerAxis)),
+            ),
+            vec3(0),
+            vec3(this.cellsPerAxis - 1),
+          ));
+          const bucket = this.hashCoordinateNode(coordinate);
+          const encoded = particle.index.add(uint(1));
+          const previous = atomicFunc(
           'atomicExchange' as Parameters<typeof atomicFunc>[0],
           this.heads!.element(bucket),
           encoded,
-        );
+          );
         this.links!.element(particle.index).assign(previous);
           this.coordinates!.element(particle.index).assign(
             ivec4(coordinate.x, coordinate.y, coordinate.z, int(particle.generation)),

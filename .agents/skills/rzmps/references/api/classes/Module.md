@@ -243,16 +243,6 @@ optional tags?: string[];
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-***
-
 <a id="useoctree"></a>
 
 ### useOctree
@@ -269,16 +259,6 @@ readonly useOctree: boolean;
 
 ```ts
 readonly useSpatialGrid: boolean;
-```
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
 ```
 
 ***
@@ -451,7 +431,7 @@ modify(
 ): void;
 ```
 
-Applies tag, condition, and LOD selection before invoking the particle callback.
+Applies tag and condition selection before invoking the particle callback.
 
 #### Parameters
 

@@ -4,6 +4,7 @@ import Emitter, { type EmissionContext } from './Emitter';
 import type { GPUEmissionSupportReport } from './gpu/Emission';
 import Module from './Module';
 import Renderer from './Renderer';
+import ParticleOctree from './helpers/ParticleOctree';
 import acceptMultiple from './helpers/acceptMultiple';
 import SpriteRenderer from './renderers/SpriteRenderer';
 import type { Multiple } from './types/Multiple';
@@ -16,11 +17,12 @@ import type { Tag } from './types/Tag';
 import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
-import { WebGPURenderer, type ComputeNode, type Node } from 'three/webgpu';
-import { float, Fn, hash, If, instanceIndex, Loop, mix, pow, uint, uniform } from 'three/tsl';
+import { WebGPURenderer, type ComputeNode, type Node, StorageBufferAttribute } from 'three/webgpu';
+import { float, Fn, hash, If, instanceIndex, Loop, mix, pow, storage, uint, uniform } from 'three/tsl';
 import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } from './renderers/LiveCubemap';
 import LODHelper, { type LODSettings } from './LODHelper';
 import {
+  destroyGPUStorageAttribute,
   createGPUParticleBufferState,
   createGPUParticleRenderBufferState,
   type GPUParticleLike,
@@ -53,6 +55,7 @@ import { GPUEmissionRunBufferState } from './gpu/Emission';
 import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
 import SpatialEffect from './SpatialEffect';
 import ParticleSpatialGrid, { type ParticleSpatialGridOptions } from './gpu/ParticleSpatialGrid';
+import type { PackedFloatStorage } from './gpu/Storage';
 
 /** Construction options; fields can be omitted to use the documented defaults. */
 export interface ParticleSystemOptions {
@@ -97,10 +100,8 @@ export interface ParticleSystemOptions {
   /** Camera-distance limit for normal updates; zero disables distance culling.
    * @defaultValue 0 */
   simulationDistance: number;
-  /** Enables distance-based update skipping; defaults to whether updateLOD is supplied. */
-  useUpdateLOD: boolean;
-  /** Distance-based simulation update quality; skipped elapsed time is accumulated. */
-  updateLOD: Partial<LODSettings>;
+  /** Distance-based simulated population quality; omission disables LOD. */
+  lod: Partial<LODSettings>;
   /** Gravity acceleration vector; supplying it enables gravity unless gravityModifier overrides that choice. */
   gravity: THREE.Vector3;
   /** Particle-age-dependent gravity multiplier; defaults to 1 with explicit gravity, otherwise 0. */
@@ -283,13 +284,25 @@ class ParticleSystem extends THREE.Object3D {
   maxParticles: number = 10000;
   maxCullingMode: MaxCulling;
   simulationDistance: number;
-  useUpdateLOD: boolean;
-  updateLOD?: Partial<LODSettings>;
+  lod?: Partial<LODSettings>;
+  /** Central population quality shared by emitters and renderers. */
+  quality = 1;
+  private _renderFrameToken: object = {};
+  /** Shared per-step cache key for renderer spatial preprocessing. */
+  get renderFrameToken(): object {
+    return this._renderFrameToken;
+  }
+  private _gpuLODCull?: { buffers: GPUParticleBufferState; count: number; version: number; node: ComputeNode };
+  private readonly _gpuLODQuality = uniform(1, 'float');
 
   useLiveCubemap: boolean;
   liveCubemap: LiveCubemap;
   private _gpuProcessing = true;
-  /** Whether GPU simulation is requested; actual activation also depends on renderer and components. */
+  /** Canonical GPU storage for renderer preprocessing and managed spatial queries. */
+  get gpuParticleBuffers(): GPUParticleBufferState | undefined {
+    return this._gpuBuffers;
+  }
+  /** Whether GPU simulation is requested; activation depends on renderer and components. */
   get gpuProcessing(): boolean { return this._gpuProcessing; }
   set gpuProcessing(value: boolean) {
     const next = Boolean(value);
@@ -306,6 +319,14 @@ class ParticleSystem extends THREE.Object3D {
   gpuDebugInterval: number;
   private _isGPUProcessingActive = false;
   private readonly _particleSpatialGrids = new Map<string, ParticleSpatialGrid>();
+  /** System-owned CPU spatial data, created lazily for density compensation. */
+  particleOctree?: ParticleOctree<unknown>;
+  private _particleSpacing = new Map<string, number>();
+  private _particleOctreeToken?: object;
+  private _gpuParticleSpacing?: {
+    buffers: GPUParticleBufferState; version: number;
+    attribute: StorageBufferAttribute; storage: PackedFloatStorage; node: ComputeNode; token?: object;
+  };
   private readonly _explicitParticleSpatialGrids = new Set<ParticleSpatialGrid>();
   private _gpuSpatialBuildSequence = 0;
   private _processingMode?: 'cpu' | 'gpu';
@@ -447,6 +468,71 @@ class ParticleSystem extends THREE.Object3D {
     return grid;
   }
 
+  /** Stable per-root local spacing shared by all CPU renderer views. */
+  getParticleSpacing(particle: Particle, population: Particle[] = this.particles): number {
+    const cached = this._particleSpacing.get(particle.id);
+    if (cached !== undefined) return cached;
+    if (this._particleOctreeToken !== this.renderFrameToken) {
+      // Reuse an unfiltered module tree when available. Filtered trees cannot
+      // represent the whole system's population.
+      const spatialModule = this.modules.find(module => !module.tags?.length && module.getParticleOctree());
+      const existing = spatialModule?.getParticleOctree();
+      this.particleOctree = existing ?? this.particleOctree ?? new ParticleOctree<number>(
+        { maxDepth: 3, particlesPerLeaf: 16 },
+        { new: p => p ? 1 : 0, combine: (a, b) => a + b },
+      );
+      if (!existing) {
+        const bounds = new THREE.Box3();
+        for (const p of population) if (p.alive) bounds.expandByPoint(p.position);
+        if (bounds.isEmpty()) bounds.set(particle.position, particle.position);
+        this.particleOctree.setBounds(bounds).rebuild(population);
+      }
+      const liveIds = new Set(population.filter(p => p.alive).map(p => p.id));
+      for (const id of this._particleSpacing.keys()) if (!liveIds.has(id)) this._particleSpacing.delete(id);
+      this._particleOctreeToken = this.renderFrameToken;
+    }
+    const spacing = this.particleOctree!.estimateSpacing(particle);
+    this._particleSpacing.set(particle.id, spacing);
+    return spacing;
+  }
+
+  /** System-owned GPU spacing pass; all native renderers share its output.
+   * Values are keyed by simulation slot generation and never read back to CPU.
+   */
+  getParticleSpacingGPU(): PackedFloatStorage {
+    const buffers = this._gpuBuffers!;
+    const renderer = this.sceneRenderer as WebGPURenderer;
+    let state = this._gpuParticleSpacing;
+    if (!state || state.buffers !== buffers || state.version !== buffers.version) {
+      if (state) {
+        state.node.dispose();
+        destroyGPUStorageAttribute(renderer, state.attribute);
+      }
+      const grid = this.acquireParticleSpatialGrid({ brickSubdivisions: 2, cellSubdivisions: 0, maxQuerySteps: 64 });
+      grid.rebuild(renderer, buffers, this.renderFrameToken);
+      const attribute = new StorageBufferAttribute(new Float32Array(buffers.capacity * 4), 4);
+      const spacing = storage(attribute, 'vec4', buffers.capacity) as PackedFloatStorage;
+      const node = Fn(() => {
+        const particle = buffers.storage.createParticle();
+        const value = spacing.element(instanceIndex);
+        If(particle.alive.notEqual(uint(0)).and(value.y.notEqual(float(particle.generation))), () => {
+          const fallback = particle.scale.length().mul(0.5).max(0.001);
+          value.x.assign(grid.estimateLocalSpacingNode(particle.position, instanceIndex, fallback));
+          value.y.assign(float(particle.generation));
+        });
+      })().compute(buffers.capacity).setName('rzmps.spacing');
+      state = { buffers, version: buffers.version, attribute, storage: spacing, node };
+      this._gpuParticleSpacing = state;
+    }
+    if (state.token !== this.renderFrameToken) {
+      const grid = this.acquireParticleSpatialGrid({ brickSubdivisions: 2, cellSubdivisions: 0, maxQuerySteps: 64 });
+      grid.rebuild(renderer, buffers, this.renderFrameToken);
+      renderer.compute(state.node);
+      state.token = this.renderFrameToken;
+    }
+    return state.storage;
+  }
+
   get gpuAllocationStats(): GPUAllocationDiagnostics | undefined {
     return this._gpuAllocationDiagnostics ?? this._gpuAllocationBuffer?.snapshot();
   }
@@ -571,7 +657,6 @@ class ParticleSystem extends THREE.Object3D {
   private _prewarmed = false;
   private _isPrewarming = false;
   private _lodHelper: LODHelper;
-  private _lodAccumulatedDeltaTime = 0;
 
   private _destroyed = false;
   /** Whether permanent destruction has completed. */
@@ -702,9 +787,8 @@ class ParticleSystem extends THREE.Object3D {
     this.maxParticles = Math.max(options.maxParticles ?? this.maxParticles, 0);
     this.maxCullingMode = (options.maxCullingMode as MaxCulling) ?? MaxCulling.New;
     this.simulationDistance = Math.max(options.simulationDistance ?? 0, 0);
-    this.updateLOD = options.updateLOD;
-    this.useUpdateLOD = options.useUpdateLOD ?? Boolean(this.updateLOD);
-    this._lodHelper = new LODHelper(this.updateLOD);
+    this.lod = options.lod;
+    this._lodHelper = new LODHelper(this.lod);
 
     // Init live cubemap, even if unused
     this.useLiveCubemap = options.useLiveCubemap
@@ -758,11 +842,9 @@ class ParticleSystem extends THREE.Object3D {
     * PROCESSING
   */
 
-  /** Advances from wall-clock time, respecting pause, simulation distance, and update LOD. */
+  /** Advances from wall-clock time, respecting pause, simulation distance, and population LOD. */
   update(): void {
     if (this._destroyed) return;
-
-    this._lodHelper.configure(this.updateLOD);
 
     // Subsystems are owned and ticked by parent, avoid double update
     if (this._subSystemParent) return;
@@ -781,23 +863,16 @@ class ParticleSystem extends THREE.Object3D {
 
     const simulationDistanceSq = this._getSimulationDistanceSq();
     this._cameraDistanceSq = simulationDistanceSq;
+    this._updateLODQuality();
 
     if (!this._isWithinSimulationDistance(simulationDistanceSq)) {
       this.deltaTime = nextDeltaTime;
       this.lastFrame = now;
-      this._lodAccumulatedDeltaTime = 0;
       this._updateEmitterContextVelocity();
       return;
     }
 
-    if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(simulationDistanceSq))) {
-      this._lodAccumulatedDeltaTime += nextDeltaTime;
-      this.lastFrame = now;
-      return;
-    }
-
-    this.deltaTime = nextDeltaTime + this._lodAccumulatedDeltaTime;
-    this._lodAccumulatedDeltaTime = 0;
+    this.deltaTime = nextDeltaTime;
     this.lastFrame = now;
 
     this.syncRendererParents();
@@ -820,7 +895,7 @@ class ParticleSystem extends THREE.Object3D {
    * Reuses prewarm's simulation path, including emission, lifecycle events, modules,
    * spatial effects, and owned subsystems. Paused, destroyed, and parent-owned
    * systems do not advance. Does not start playback or perform implicit prewarm.
-   * Camera distance and update LOD do not skip explicit steps. Live cubemap
+   * Camera distance does not skip explicit steps; population LOD still applies. Live cubemap
    * capture is deferred to normal updates; render the scene after advancing.
    * Finite systems can naturally end, including their configured end behavior.
    */
@@ -849,7 +924,14 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   /** Shared simulation path for display updates, prewarm, and explicit advancement. */
+  private _updateLODQuality(): void {
+    this._lodHelper.configure(this.lod);
+    this.quality = this.lod ? this._lodHelper.getScale(Math.sqrt(this.cameraDistanceSq)) : 1;
+    this._gpuLODQuality.value = this.quality;
+  }
+
   private _advanceSimulationStep(handleEndBehavior: boolean = true): void {
+    this._updateLODQuality();
     if (this._playing) this._updateSystemTime();
     if (this._playing && !this._shouldExecuteEmittersOnGPU()) this.emitters.forEach((emitter) => {
       const particles = emitter.update(this.particles, this.getEmitterContext(), this);
@@ -869,6 +951,19 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _processParticles() {
+    this._renderFrameToken = {};
+    this._updateLODQuality();
+    // LOD destruction is deliberately separate from lifecycle death notification.
+    if (!this._isGPUProcessingActive && this.quality < 1) {
+      this.particles = this.particles.filter((particle) => {
+        if (particle.lodPriority < this.quality) return true;
+        particle.alive = false;
+        this.subSystems.forEach((_options, subSystem) => {
+          subSystem.emitters.forEach(emitter => emitter.clearContext(particle.id));
+        });
+        return false;
+      });
+    }
     // Cull particles
     if (this.particles.length > this.maxParticles) {
       if (this._usesGPUStableParticleSlots()) {
@@ -1065,6 +1160,22 @@ class ParticleSystem extends THREE.Object3D {
       initialization: mainBufferInitialization,
       sample: this._sampleGPUParticles(this.particles),
     });
+
+    const lodBuffers = this._gpuBuffers;
+    if (
+      !this._gpuLODCull
+      || this._gpuLODCull.buffers !== lodBuffers
+      || this._gpuLODCull.version !== lodBuffers.version
+      || this._gpuLODCull.count !== lodBuffers.count
+    ) {
+      this._gpuLODCull?.node.dispose();
+      const node = Fn(() => {
+        const state = lodBuffers.storage.createStateNode();
+        If(float(state.w).div(4294967296).greaterThanEqual(this._gpuLODQuality), () => { state.x.assign(uint(0)); });
+      })().compute(lodBuffers.count).setName('rzmps.lod.cull');
+      this._gpuLODCull = { buffers: lodBuffers, count: lodBuffers.count, version: lodBuffers.version, node };
+    }
+    if (this.quality < 1) sceneRenderer.compute(this._gpuLODCull.node);
 
     this._gpuDirtyParticleSlots.clear();
     this._updateGPURuntimeUniforms();
@@ -1290,7 +1401,7 @@ class ParticleSystem extends THREE.Object3D {
         this._gpuCPUMirrorStale = this._gpuReadbackPending;
         this._applyGPUReadbackDeaths(readbackParticles, readbackWasAlive);
 
-        const renderParticles = readbackParticles;
+        const renderParticles = readbackParticles.filter(particle => particle.alive);
 
         if (readbackSequence < this._latestAppliedGPUReadbackSequence) {
           this._logGPUDebug('render readback ignored: stale sequence', {
@@ -1328,8 +1439,9 @@ class ParticleSystem extends THREE.Object3D {
           sample: this._sampleGPUParticles(this.particles),
         });
 
+        const renderParticles = this.particles.filter(particle => particle.alive);
         cpuInputRenderers.forEach((renderer) => {
-          renderer.update(this.particles, this, this.deltaTime);
+          renderer.update(renderParticles, this, this.deltaTime);
         });
 
         this._endGPUDebugFrame(debugFrame);
@@ -2275,8 +2387,7 @@ class ParticleSystem extends THREE.Object3D {
     } else {
       this._gpuEmitterPositionNode.value.set(0, 0, 0);
     }
-    const cameraDistance = Math.sqrt(this.cameraDistanceSq);
-    this.emitters.forEach((emitter) => emitter.updateGPULOD(cameraDistance));
+    this.emitters.forEach((emitter) => emitter.updateGPUQuality(this.quality));
   }
 
   private _getGPUModifierListSignature(modifiers: Array<Module | SpatialEffect>): string {
@@ -2366,6 +2477,8 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _disposeGPUComputeCaches(): void {
+    this._gpuLODCull?.node.dispose();
+    this._gpuLODCull = undefined;
     this._gpuEmissionPrepareComputeCache?.nodes.forEach((node) => node.dispose?.());
     this._gpuContinuousSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
     this._gpuEventSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
@@ -2483,6 +2596,10 @@ class ParticleSystem extends THREE.Object3D {
 
   private _snapshotGPUParticle(particle: GPUParticleLike): GPUParticleLike {
     return {
+      id: particle.id,
+      isChild: particle.isChild,
+      parent: particle.parent,
+      root: particle.root,
       index: particle.index,
       position: particle.position.toVar('basePosition'),
       orbitCenter: particle.orbitCenter.toVar('baseOrbitCenter'),
@@ -2505,6 +2622,7 @@ class ParticleSystem extends THREE.Object3D {
       alive: particle.alive.toVar('baseAlive'),
       tagMask: particle.tagMask.toVar('baseTagMask'),
       generation: particle.generation.toVar('baseGeneration'),
+      lodPriority: particle.lodPriority,
     };
   }
 
@@ -3434,7 +3552,9 @@ class ParticleSystem extends THREE.Object3D {
         this._gpuDirtyParticleSlots.add(index);
       }
 
-      if (wasAlive[index] && !particle.alive) this._gpuDirtyParticleSlots.add(index);
+      if (wasAlive[index] && !particle.alive && particle.lodPriority < this.quality) {
+        this._gpuDirtyParticleSlots.add(index);
+      }
     });
   }
 
@@ -3690,27 +3810,20 @@ class ParticleSystem extends THREE.Object3D {
     parentDeltaTime: number,
   ): void {
     if (this._destroyed || this._paused) return;
-    this._lodHelper.configure(this.updateLOD);
     if (!this._renderer && parent.sceneRenderer) this._renderer = parent.sceneRenderer;
     if (!this._scene && parent.scene) this._scene = parent.scene;
     if (!this._camera && parent.sceneCamera) this._camera = parent.sceneCamera;
 
     const simulationDistanceSq = this._getSimulationDistanceSq();
     this._cameraDistanceSq = simulationDistanceSq;
+    this._updateLODQuality();
     if (!this._isWithinSimulationDistance(simulationDistanceSq)) {
-      this._lodAccumulatedDeltaTime = 0;
       return;
     }
 
     const nextDeltaTime = this._scaleDeltaTime(parentDeltaTime);
-    if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(simulationDistanceSq))) {
-      this._lodAccumulatedDeltaTime += nextDeltaTime;
-      return;
-    }
-
     this.syncRendererParents();
-    this.deltaTime = nextDeltaTime + this._lodAccumulatedDeltaTime;
-    this._lodAccumulatedDeltaTime = 0;
+    this.deltaTime = nextDeltaTime;
     if (options.emitContinuous) this._prewarm();
     if (this._playing && options.emitContinuous) this._updateSystemTime();
 
@@ -3727,24 +3840,17 @@ class ParticleSystem extends THREE.Object3D {
     parentDeltaTime: number,
   ): void {
     if (this._destroyed || this._paused) return;
-    this._lodHelper.configure(this.updateLOD);
 
     const simulationDistanceSq = this._getSimulationDistanceSq();
     this._cameraDistanceSq = simulationDistanceSq;
+    this._updateLODQuality();
     if (!this._isWithinSimulationDistance(simulationDistanceSq)) {
-      this._lodAccumulatedDeltaTime = 0;
       return;
     }
 
     const nextDeltaTime = this._scaleDeltaTime(parentDeltaTime);
-    if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(simulationDistanceSq))) {
-      this._lodAccumulatedDeltaTime += nextDeltaTime;
-      return;
-    }
-
     this.syncRendererParents();
-    this.deltaTime = nextDeltaTime + this._lodAccumulatedDeltaTime;
-    this._lodAccumulatedDeltaTime = 0;
+    this.deltaTime = nextDeltaTime;
     if (options.emitContinuous) this._prewarm();
     if (this._playing && options.emitContinuous) this._updateSystemTime();
 
@@ -3971,9 +4077,7 @@ class ParticleSystem extends THREE.Object3D {
     this._ended = false;
     this._elapsedTime = 0;
     this.lastFrame = now;
-    this._lodAccumulatedDeltaTime = 0;
     this._resetEmitterContextVelocity();
-    this._lodHelper.reset();
 
     this.emitters.forEach((emitter) => emitter.reset());
     this._gpuStandaloneEmitterInstances?.reset();
@@ -4017,7 +4121,6 @@ class ParticleSystem extends THREE.Object3D {
     this._ended = true;
     this._prewarmed = false
     this._resetEmitterContextVelocity();
-    this._lodHelper.reset();
 
     this.subSystems.forEach((_options, subSystem) => {
       // Clear the complete subsystem tree once through this system below.
@@ -4054,6 +4157,14 @@ class ParticleSystem extends THREE.Object3D {
     const gpuRenderer = isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined;
     this._gpuLifecycleGeneration += 1;
     this.particles.length = 0;
+    this._particleSpacing.clear();
+    this.particleOctree = undefined;
+    this._particleOctreeToken = undefined;
+    if (this._gpuParticleSpacing) {
+      this._gpuParticleSpacing.node.dispose();
+      destroyGPUStorageAttribute(gpuRenderer, this._gpuParticleSpacing.attribute);
+      this._gpuParticleSpacing = undefined;
+    }
     this._isGPUProcessingActive = false;
     this._processingMode = undefined;
     this._gpuBuffers?.dispose(gpuRenderer);
@@ -4126,6 +4237,7 @@ class ParticleSystem extends THREE.Object3D {
     if (children) this._iterateChildren((child) => child.destroy(false));
 
     this.renderers.forEach((renderer) => {
+      renderer.reset();
       renderer.destroy();
     });
     const gpuRenderer = isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined;
@@ -4247,6 +4359,7 @@ class ParticleSystem extends THREE.Object3D {
 
     if (index !== -1) {
       this.renderers.splice(index, 1);
+      renderer.reset();
       renderer.destroy();
     }
 

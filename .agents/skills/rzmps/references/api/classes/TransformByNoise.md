@@ -382,20 +382,6 @@ time: number = 0;
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-#### Inherited from
-
-[`NoiseModule`](NoiseModule.md).[`updateLOD`](NoiseModule.md#updatelod)
-
-***
-
 <a id="useoctree"></a>
 
 ### useOctree
@@ -421,20 +407,6 @@ readonly useSpatialGrid: boolean;
 #### Inherited from
 
 [`NoiseModule`](NoiseModule.md).[`useSpatialGrid`](NoiseModule.md#usespatialgrid)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-#### Inherited from
-
-[`NoiseModule`](NoiseModule.md).[`useUpdateLOD`](NoiseModule.md#useupdatelod)
 
 ***
 
@@ -698,7 +670,7 @@ modify(
 ): void;
 ```
 
-Applies tag, condition, and LOD selection before invoking the particle callback.
+Applies tag and condition selection before invoking the particle callback.
 
 #### Parameters
 

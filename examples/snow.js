@@ -26,7 +26,7 @@ export default async function createSnow() {
         source: new EmissionShape({
           geometry: new THREE.BoxGeometry(30, 0.1, 30),
         }),
-        rate: 200,
+        rate: 70,
         radialSpeed: 0,
         initialValues: {
           lifetime: 16,
@@ -70,6 +70,7 @@ export default async function createSnow() {
     renderers: [
       new SpriteRenderer(Textures.Default, {
         material: 'lit',
+        children: { count: 2, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
         alphaMap: snowflakeAlpha,
         materialOptions: {
           normalLighting: 0.25,

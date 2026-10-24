@@ -242,7 +242,9 @@ export default class AudioRenderer extends Renderer {
     particles.forEach((particle) => this._updateParticle(particle));
   }
 
-  public updateGPU(
+  protected get updateGPUUsesCPUReadback(): boolean { return true; }
+
+  protected _updateGPU(
     buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
     deltaTime = 0,

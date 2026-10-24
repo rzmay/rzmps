@@ -28,7 +28,8 @@ new GPUParticleContext(
    alive,
    tagMask,
    generation,
-   materializeLocals?
+   materializeLocals?,
+   lodPriority?
 ): GPUParticleContext;
 ```
 
@@ -61,6 +62,10 @@ new GPUParticleContext(
 ##### materializeLocals?
 
 `boolean` = `false`
+
+##### lodPriority?
+
+`Node`\<`"uint"`\> = `...`
 
 #### Returns
 
@@ -205,6 +210,20 @@ readonly lifetime: Node<"float">;
 #### Implementation of
 
 [`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`lifetime`](../interfaces/GPUParticleLike.md#lifetime)
+
+***
+
+<a id="lodpriority"></a>
+
+### lodPriority
+
+```ts
+readonly lodPriority: Node<"uint">;
+```
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`lodPriority`](../interfaces/GPUParticleLike.md#lodpriority)
 
 ***
 
@@ -373,3 +392,99 @@ readonly velocity: Node<"vec3">;
 #### Implementation of
 
 [`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`velocity`](../interfaces/GPUParticleLike.md#velocity)
+
+## Accessors
+
+<a id="id"></a>
+
+### id
+
+#### Get Signature
+
+```ts
+get id(): Node<"uvec2">;
+```
+
+##### Returns
+
+`Node`\<`"uvec2"`\>
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`id`](../interfaces/GPUParticleLike.md#id)
+
+***
+
+<a id="ischild"></a>
+
+### isChild
+
+#### Get Signature
+
+```ts
+get isChild(): Node<"bool">;
+```
+
+##### Returns
+
+`Node`\<`"bool"`\>
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`isChild`](../interfaces/GPUParticleLike.md#ischild)
+
+***
+
+<a id="lodpriorityvalue"></a>
+
+### lodPriorityValue
+
+#### Get Signature
+
+```ts
+get lodPriorityValue(): Node<"float">;
+```
+
+##### Returns
+
+`Node`\<`"float"`\>
+
+***
+
+<a id="parent"></a>
+
+### parent
+
+#### Get Signature
+
+```ts
+get parent(): null;
+```
+
+##### Returns
+
+`null`
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`parent`](../interfaces/GPUParticleLike.md#parent)
+
+***
+
+<a id="root"></a>
+
+### root
+
+#### Get Signature
+
+```ts
+get root(): GPUParticleContext;
+```
+
+##### Returns
+
+`GPUParticleContext`
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`root`](../interfaces/GPUParticleLike.md#root)

@@ -215,3 +215,6 @@ export type {
 
 // Texture helper
 export * as Textures from './Textures';
+
+export { CompensationMode } from './Renderer';
+export type { RendererChildrenOptions } from './Renderer';

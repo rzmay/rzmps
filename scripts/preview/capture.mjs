@@ -148,6 +148,14 @@ export async function capturePreview(options) {
       captures: result.frames.map(({ data, ...rest }) => rest),
       camera: result.camera,
       rendererInfo: result.rendererInfo,
+      childValidation: result.childValidation,
+      shaderBindings: Object.values((result.shaderBindings ?? []).reduce((stages, entry) => {
+        const key = `${entry.stage}:${entry.name}`;
+        const stage = stages[key] ??= { stage: entry.stage, name: entry.name, pipelines: 0, maxStorageBuffers: 0 };
+        stage.pipelines += 1;
+        stage.maxStorageBuffers = Math.max(stage.maxStorageBuffers, entry.storageBuffers);
+        return stages;
+      }, {})),
       userAgent: result.userAgent,
     });
     if (diagnostics.errors.length) throw new Error(`Browser errors: ${diagnostics.errors.join('\n')}`);

@@ -69,15 +69,18 @@ fit. Custom tests are not bounds-filtered because RZMPS cannot assume they depen
 
 ## Renderers, Events, and Readback
 
-GPU-native renderers override `updateGPU` and consume `GPUParticleBufferState` or the compact
+GPU-native renderers override `_updateGPU` and consume `GPUParticleBufferState` or the compact
 render-output buffer. A renderer whose implementation needs ordinary `Particle` objects can
-override `updateGPU` and call the protected `updateCPUFromGPU` helper. It selectively reads the
+override `_updateGPU` and call the protected `updateCPUFromGPU` helper. It selectively reads the
 requested fields, ignores overlapping requests while one is pending, and passes the resulting
-particles through the renderer's public `update` method:
+particles through the renderer's public `update` method. Override `updateGPUUsesCPUReadback` to
+keep child expansion on that CPU path:
 
 ```ts
 class DebugRenderer extends Renderer {
-  updateGPU(buffers, system, deltaTime) {
+  get updateGPUUsesCPUReadback() { return true; }
+
+  _updateGPU(buffers, system, deltaTime) {
     this.updateCPUFromGPU(
       buffers,
       system,
@@ -141,3 +144,5 @@ Test both execution paths. WebGPU rendering alone does not prove GPU simulation 
 fixed timesteps, exercise resets and subsystem events, and inspect `gpuBufferStats`,
 `gpuEventStats`, `gpuSpatialStats`, `gpuSelectiveReadbackStats`, and `gpuConfigurationStats` when
 profiling. GPU output is expected to be behaviorally equivalent, not bit-for-bit identical.
+
+See [renderer children and population LOD](./renderer-children-lod.md) for system quality, destructive culling, visual expansion, hierarchy access, and default GPU buffer limits.

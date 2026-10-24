@@ -17,33 +17,31 @@
 
 ## Properties
 
-<a id="compensatesize"></a>
+<a id="children"></a>
 
-### compensateSize
-
-```ts
-compensateSize: boolean;
-```
-
-Temporarily enlarges retained particles when count LOD reduces visibility.
-
-#### Default Value
+### children
 
 ```ts
-false
+children: RendererChildrenOptions;
 ```
+
+Artistic render-only copies, generated before LOD children.
 
 ***
 
-<a id="countlod"></a>
+<a id="compensation"></a>
 
-### countLOD
+### compensation
 
 ```ts
-countLOD: Partial<LODSettings>;
+compensation:
+  | "none"
+  | "children"
+  | "size"
+  | CompensationMode;
 ```
 
-Reduces the number of rendered particles with distance without deleting simulated particles.
+Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
@@ -56,27 +54,3 @@ tags: StrictMultiple<string>;
 ```
 
 Filters the simulated population by tag before rendering.
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD
-
-```ts
-updateLOD: Partial<LODSettings>;
-```
-
-Distance-based renderer update quality.
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-Enables distance-based renderer update skipping.

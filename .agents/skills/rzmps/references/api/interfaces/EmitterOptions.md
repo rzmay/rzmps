@@ -40,18 +40,6 @@ Timed particle batches within an emission cycle. Supplying bursts changes the de
 
 ***
 
-<a id="countlod"></a>
-
-### countLOD
-
-```ts
-countLOD: Partial<LODSettings>;
-```
-
-Distance-based emitted particle count reduction.
-
-***
-
 <a id="initialvalues"></a>
 
 ### initialValues
@@ -149,27 +137,3 @@ tagSelection:
 ```
 
 Assigns all tags, distributes them, or samples them according to the selected mode.
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD
-
-```ts
-updateLOD: Partial<LODSettings>;
-```
-
-Distance-based emission update quality.
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-Enables update skipping; defaults to whether updateLOD is provided.

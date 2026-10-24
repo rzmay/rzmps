@@ -28,7 +28,7 @@ Base renderer that filters particles and applies renderer LOD before delegating 
 new Renderer(options?): Renderer;
 ```
 
-Configures particle filtering and distance-based update/count quality.
+Configures particle filtering, artistic children, and LOD compensation.
 
 #### Parameters
 
@@ -42,22 +42,26 @@ Configures particle filtering and distance-based update/count quality.
 
 ## Properties
 
-<a id="compensatesize"></a>
+<a id="children"></a>
 
-### compensateSize
+### children
 
 ```ts
-compensateSize: boolean;
+children: RendererChildrenOptions;
 ```
 
 ***
 
-<a id="countlod"></a>
+<a id="compensation"></a>
 
-### countLOD?
+### compensation
 
 ```ts
-optional countLOD?: Partial<LODSettings>;
+compensation:
+  | "none"
+  | "children"
+  | "size"
+  | CompensationMode;
 ```
 
 ***
@@ -68,26 +72,6 @@ optional countLOD?: Partial<LODSettings>;
 
 ```ts
 optional tags?: string[];
-```
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
 ```
 
 ## Accessors
@@ -262,7 +246,7 @@ update(
 ): void;
 ```
 
-Filters particles, applies renderer LOD and temporary size compensation, then delegates to the view.
+Expands render-only children and compensation before delegating to the view.
 
 #### Parameters
 
@@ -296,7 +280,7 @@ updateGPU(
 ): void;
 ```
 
-Consumes GPU simulation or render-output storage without materializing CPU particles.
+Base-class GPU preprocessing; subclasses consume the resulting ordinary render view.
 
 #### Parameters
 

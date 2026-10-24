@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { attribute, float, uint } from 'three/tsl';
-import type { Node } from 'three/webgpu';
+import type { Node, WebGPURenderer } from 'three/webgpu';
 import { cos, positionLocal, sin, vec3 } from 'three/tsl';
 import Renderer, { type RendererOptions } from '../Renderer';
 import ParticleSystem from '../ParticleSystem';
@@ -101,13 +101,28 @@ class MeshRenderer extends Renderer {
       system.addRendererObject(this.instances);
     }
 
+    private ensureInstanceCapacity(count: number): void {
+      if (count <= this.instances.instanceMatrix.count) return;
+      const capacity = 2 ** Math.ceil(Math.log2(count));
+      this.instances.dispose();
+      this.instances.instanceMatrix = new THREE.InstancedBufferAttribute(
+        new Float32Array(capacity * 16), 16,
+      ).setUsage(THREE.DynamicDrawUsage);
+      this.instances.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
+      this._alphaAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+      this.mesh.geometry.setAttribute('instanceAlpha', this._alphaAttr);
+      this.identityMatrixCapacity = 0;
+    }
+
     _update(particles: Particle[], system: ParticleSystem): void {
+      this.ensureInstanceCapacity(particles.length);
       this.restoreCPUNodes();
 
       // CPU rendering owns the instance transforms until GPU mode restores
       // identity matrices and applies particle storage in the node material.
       this.identityMatrixCapacity = 0;
       this.instancesUseCPUTransforms = true;
+      this.instances.geometry.indirect = null;
       this.instances.count = particles.length;
 
       this.instances.castShadow = this.castShadow;
@@ -132,10 +147,11 @@ class MeshRenderer extends Renderer {
       this._alphaAttr.needsUpdate = true;
     }
 
-    updateGPU(
+    protected _updateGPU(
       buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
       system: ParticleSystem,
     ): void {
+      this.ensureInstanceCapacity(buffers.count);
       this.prepareGPUVisibility(system);
       this.instances.count = buffers.count;
 
@@ -149,6 +165,10 @@ class MeshRenderer extends Renderer {
         this.instancesUseCPUTransforms = false;
       }
       this.applyGPUNodes(buffers, system);
+    if ('bindIndirect' in buffers) {
+      buffers.bindIndirect(this.instances.geometry, system.sceneRenderer as WebGPURenderer);
+    }
+    else this.instances.geometry.indirect = null;
     }
 
     destroy(): void {
@@ -170,6 +190,7 @@ class MeshRenderer extends Renderer {
     clear(): void {
       this.restoreCPUNodes();
       this.instances.count = 0;
+      this.instances.geometry.indirect = null;
       this.identityMatrixCapacity = 0;
       this.gpuMaterialBuffer = undefined;
       this.gpuMaterialBufferVersion = -1;

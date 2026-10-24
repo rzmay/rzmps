@@ -60,31 +60,35 @@ brightness: DynamicValue<number>;
 
 ***
 
-<a id="compensatesize"></a>
+<a id="children"></a>
 
-### compensateSize
+### children
 
 ```ts
-compensateSize: boolean;
+children: RendererChildrenOptions;
 ```
 
 #### Inherited from
 
-[`Renderer`](Renderer.md).[`compensateSize`](Renderer.md#compensatesize)
+[`Renderer`](Renderer.md).[`children`](Renderer.md#children)
 
 ***
 
-<a id="countlod"></a>
+<a id="compensation"></a>
 
-### countLOD?
+### compensation
 
 ```ts
-optional countLOD?: Partial<LODSettings>;
+compensation:
+  | "none"
+  | "children"
+  | "size"
+  | CompensationMode;
 ```
 
 #### Inherited from
 
-[`Renderer`](Renderer.md).[`countLOD`](Renderer.md#countlod)
+[`Renderer`](Renderer.md).[`compensation`](Renderer.md#compensation)
 
 ***
 
@@ -189,34 +193,6 @@ optional tags?: string[];
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`tags`](Renderer.md#tags)
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-#### Inherited from
-
-[`Renderer`](Renderer.md).[`updateLOD`](Renderer.md#updatelod)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-#### Inherited from
-
-[`Renderer`](Renderer.md).[`useUpdateLOD`](Renderer.md#useupdatelod)
 
 ## Accessors
 
@@ -486,7 +462,7 @@ update(
 ): void;
 ```
 
-Filters particles, applies renderer LOD and temporary size compensation, then delegates to the view.
+Expands render-only children and compensation before delegating to the view.
 
 #### Parameters
 
@@ -524,7 +500,7 @@ updateGPU(
 ): void;
 ```
 
-Consumes GPU simulation or render-output storage without materializing CPU particles.
+Base-class GPU preprocessing; subclasses consume the resulting ordinary render view.
 
 #### Parameters
 
@@ -545,6 +521,6 @@ Consumes GPU simulation or render-output storage without materializing CPU parti
 
 `void`
 
-#### Overrides
+#### Inherited from
 
 [`Renderer`](Renderer.md).[`updateGPU`](Renderer.md#updategpu)

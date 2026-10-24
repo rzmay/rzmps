@@ -13,7 +13,6 @@ import type { Multiple, StrictMultiple } from './types/Multiple';
 import type { Tag } from './types/Tag';
 import { TagSelectionMethod } from './enums/TagSelectionMethod';
 import { EmissionSource } from './enums/EmissionSource';
-import LODHelper, { type LODSettings } from './LODHelper';
 import { getGPUEmitterSupport, type GPUEmissionSupportReport } from './gpu/Emission';
 import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from './gpu/Particle';
 import type { GPUEmitterInstanceRuntime } from './gpu/EmitterInstanceBuffer';
@@ -76,18 +75,14 @@ export interface EmitterOptions {
     tags: StrictMultiple<Tag>;
     /** Assigns all tags, distributes them, or samples them according to the selected mode. */
     tagSelection: TagSelectionMethod | `${TagSelectionMethod}`;
-    /** Enables update skipping; defaults to whether updateLOD is provided. */
-    useUpdateLOD: boolean;
-    /** Distance-based emission update quality. */
-    updateLOD: Partial<LODSettings>;
-    /** Distance-based emitted particle count reduction. */
-    countLOD: Partial<LODSettings>;
+
 }
 
 interface EmitterContextState {
   startTime: number;
   lastSpawn: number;
   distanceCredit: number;
+  burstCredit: number;
   lastDistancePosition?: THREE.Vector3;
   firedBursts: Set<number>;
 }
@@ -159,13 +154,7 @@ class Emitter {
 
   tags?: Tag[];
   tagSelection: TagSelectionMethod = TagSelectionMethod.All;
-  useUpdateLOD: boolean;
-  updateLOD?: Partial<LODSettings>;
-  countLOD?: Partial<LODSettings>;
-  private _lodHelper: LODHelper;
-  private _countLODHelper: LODHelper;
-  private readonly _gpuUpdateLODScale = uniform(1, 'float');
-  private readonly _gpuCountLODScale = uniform(1, 'float');
+  private readonly _gpuQuality = uniform(1, 'float');
   private readonly _gpuSourceMatrix = uniform(new THREE.Matrix4(), 'mat4') as Node<'mat4'> & {
     value: THREE.Matrix4;
   };
@@ -224,11 +213,7 @@ class Emitter {
 
     this.tags = acceptMultiple(options.tags);
     this.tagSelection = (options.tagSelection as TagSelectionMethod) ?? this.tagSelection;
-    this.updateLOD = options.updateLOD;
-    this.useUpdateLOD = options.useUpdateLOD ?? Boolean(this.updateLOD);
-    this.countLOD = options.countLOD;
-    this._lodHelper = new LODHelper(this.updateLOD);
-    this._countLODHelper = new LODHelper(this.countLOD);
+
   }
 
   /*
@@ -242,8 +227,6 @@ class Emitter {
     });
 
     this._contextStates.clear();
-    this._lodHelper.reset();
-    this._countLODHelper.reset();
   }
 
   /** Whether the current source and emission configuration support GPU-native births. */
@@ -259,8 +242,6 @@ class Emitter {
   /** Synchronizes runtime values and invalidates structural GPU changes. */
   syncGPUConfiguration(): void {
     this.normalizeBurstTimes();
-    this._lodHelper.configure(this.updateLOD);
-    this._countLODHelper.configure(this.countLOD);
     this._gpuParameters.sync();
     if (this._gpuParameters.version !== this._gpuParameterVersion) {
       this._gpuParameterVersion = this._gpuParameters.version;
@@ -338,6 +319,7 @@ class Emitter {
       const initializeParticle = (claimIndex: Node<'uint'>) => {
         const seed = instanceIndex.add(particle.generation.mul(65537))
           .add(uint(context.emitterIndex * 4099));
+        particle.lodPriority.assign(uint(hash(seed.add(9173)).mul(this._gpuQuality).mul(4294967040)));
         let sampledPosition: Node<'vec3'>;
         let sampledNormal: Node<'vec3'>;
         if (this.source.source === EmissionSource.Vertices && geometrySampling) {
@@ -619,25 +601,11 @@ class Emitter {
     const normalizedTime = context.normalizedTimeNode
       ?? elapsedTime.div(duration.max(float(Number.EPSILON)));
     const requestCount = runtime.pendingRequestCount().toVar('emitterRequestCount');
-    const shouldUpdate = uint(1).toVar('emitterShouldUpdate');
-    const lodCreditScale = 1_000_000;
-    if (this.useUpdateLOD) {
-      const credit = runtime.burstState.w;
-      const increment = uint(this._gpuUpdateLODScale.mul(lodCreditScale).round());
-      If(runtime.identity.x.equal(uint(0)), () => {
-        runtime.burstState.w.assign(increment);
-      }).ElseIf(credit.greaterThanEqual(uint(lodCreditScale)), () => {
-        runtime.burstState.w.assign(credit.sub(uint(lodCreditScale)).add(increment));
-      }).Else(() => {
-        shouldUpdate.assign(uint(0));
-        runtime.burstState.w.assign(credit.add(increment));
-      });
-    }
     const resetContext = runtime.identity.x.equal(uint(0))
       .or(elapsedTime.lessThan(runtime.timing.w))
       .toVar('resetEmitterContext');
 
-    If(shouldUpdate.notEqual(uint(0)), () => {
+    {
       If(resetContext, () => {
         requestCount.assign(uint(0));
         runtime.setPendingRequestCount(0);
@@ -645,6 +613,7 @@ class Emitter {
         runtime.timing.x.assign(elapsedTime);
         runtime.timing.y.assign(elapsedTime);
         runtime.timing.z.assign(float(0));
+        runtime.distance.w.assign(float(0));
         runtime.distance.xyz.assign(context.emitterPositionNode ?? vec3(0, 0, 0));
         for (let wordIndex = 0; wordIndex < Math.ceil(this.bursts.length / 32); wordIndex += 1) {
           runtime.firedBurstWord(wordIndex).assign(uint(0));
@@ -653,7 +622,7 @@ class Emitter {
         const rate = this._gpuParameters.number(
           'rate', () => this.rate, normalizedTime, 0, uint(context.emitterIndex * 4099),
         )
-          .mul(this._gpuCountLODScale);
+          .mul(this._gpuQuality);
         If(rate.greaterThan(float(0)), () => {
           const emissionCredit = elapsedTime.sub(runtime.timing.y).mul(rate);
           const due = emissionCredit.floor();
@@ -672,7 +641,7 @@ class Emitter {
         normalizedTime,
         0,
         uint(context.emitterIndex * 6151),
-      ).mul(this._gpuCountLODScale);
+      ).mul(this._gpuQuality);
       if (context.emitterPositionNode) {
         const emitterPosition = context.emitterPositionNode;
         If(resetContext.not().and(rateOverDistance.greaterThan(float(0))), () => {
@@ -697,33 +666,27 @@ class Emitter {
           `burst.${burstIndex}.time`, () => this.bursts[burstIndex]?.time, normalizedTime, 0,
         );
         If(hasFired.not().and(normalizedTime.greaterThanEqual(burstTime)), () => {
-          requestCount.addAssign(uint(
-            this._gpuParameters.number(
-              `burst.${burstIndex}.count`,
-              () => this.bursts[burstIndex]?.count,
-              normalizedTime,
-              0,
-              uint(context.emitterIndex * 4099 + burstIndex * 131),
-            ).mul(this._gpuCountLODScale).floor(),
-          ));
+          const burstCredit = this._gpuParameters.number(
+            `burst.${burstIndex}.count`, () => this.bursts[burstIndex]?.count,
+            normalizedTime, 0, uint(context.emitterIndex * 4099 + burstIndex * 131),
+          ).mul(this._gpuQuality).add(runtime.distance.w);
+          const due = burstCredit.floor();
+          requestCount.addAssign(uint(due));
+          runtime.distance.w.assign(burstCredit.sub(due));
           burstWord.assign(bitOr(burstWord, bit));
         });
       });
-    });
+    }
 
     runtime.timing.w.assign(elapsedTime);
+    If(this._gpuQuality.lessThanEqual(float(0)), () => { requestCount.assign(uint(0)); });
     runtime.resetRequestCount(requestCount);
   }
 
-  updateGPULOD(cameraDistance: number): void {
+  updateGPUQuality(quality: number): void {
     this.source.updateMatrix();
     this._gpuSourceMatrix.value.copy(this.source.matrix);
-    this._gpuUpdateLODScale.value = this.useUpdateLOD
-      ? this._lodHelper.getScale(cameraDistance)
-      : 1;
-    this._gpuCountLODScale.value = this.countLOD
-      ? this._countLODHelper.getScale(cameraDistance)
-      : 1;
+    this._gpuQuality.value = quality;
   }
 
   private getGPUVolumeSampling(): NonNullable<Emitter['_gpuVolumeSampling']> {
@@ -866,11 +829,6 @@ class Emitter {
     particleSystem: ParticleSystem,
   ): Particle[] {
     this.normalizeBurstTimes();
-    if (
-      this.useUpdateLOD
-      && !this._lodHelper.shouldUpdate(Math.sqrt(particleSystem.cameraDistanceSq))
-    ) return [];
-
     const now = Date.now();
     const elapsedMilliseconds = context.elapsedTime === undefined
       ? undefined
@@ -894,10 +852,9 @@ class Emitter {
       return spawned;
     }
 
-    const emissionMultiplier = this.countLOD
-      ? this._countLODHelper.getScale(Math.sqrt(particleSystem.cameraDistanceSq))
-      : 1;
+    const emissionMultiplier = particleSystem.quality;
     const rate = evaluateDynamicNumber(this.rate, time) * emissionMultiplier;
+    if (emissionMultiplier <= 0) state.lastSpawn = elapsedMilliseconds ?? now;
     if (rate > 0) {
       const secondsPerParticle = 1000 / rate;
       const spawnClock = elapsedMilliseconds ?? now;
@@ -910,7 +867,7 @@ class Emitter {
       }
 
       if (particlesDue > 0) {
-        state.lastSpawn = spawnClock;
+        state.lastSpawn = emissionMultiplier === 1 ? spawnClock : state.lastSpawn + particlesDue * secondsPerParticle;
       }
     }
 
@@ -940,7 +897,9 @@ class Emitter {
 
     this.bursts.forEach((burst, index) => {
       if (!state.firedBursts.has(index) && burst.time <= time) {
-        const count = evaluateDynamicNumber(burst.count) * emissionMultiplier;
+        const requested = evaluateDynamicNumber(burst.count) * emissionMultiplier + state.burstCredit;
+        const count = Math.floor(requested);
+        state.burstCredit = requested - count;
         for (let i = 0; i < Math.floor(count); i += 1) {
           const particle = this.spawnParticle(particles, time, context, particleSystem);
           if (particle) spawned.push(particle);
@@ -971,6 +930,7 @@ class Emitter {
         startTime,
         lastSpawn: startTime,
         distanceCredit: 0,
+        burstCredit: 0,
         firedBursts: new Set<number>(),
       };
       this._contextStates.set(key, state);
@@ -1089,6 +1049,7 @@ class Emitter {
       }),
     });
 
+    particle.lodPriority = particleSystem.quality * Math.random();
     return particleSystem.addParticle(particle, particles) ? particle : undefined;
   }
 

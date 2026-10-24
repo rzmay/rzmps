@@ -74,6 +74,17 @@ class Particle {
 
   id: string;
 
+  /** Persistent birth priority, independent of identity. */
+  lodPriority = Math.random();
+  /** Immediate visual parent; null for simulated particles. */
+  parent: Particle | null = null;
+  get isChild(): boolean {
+    return this.parent !== null;
+  }
+  get root(): Particle {
+    return this.parent?.root ?? this;
+  }
+
   private _start: ParticleStartValues;
 
   get start(): Readonly<ParticleStartValues> {
@@ -171,6 +182,8 @@ class Particle {
     particle.realtime = this.realtime;
     particle.alive = this.alive;
     particle.id = this.id;
+    particle.lodPriority = this.lodPriority;
+    particle.parent = this.parent;
     particle.noise = { ...this.noise };
     particle.data = { ...this.data };
 

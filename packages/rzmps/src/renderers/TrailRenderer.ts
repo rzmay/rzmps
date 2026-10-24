@@ -214,7 +214,9 @@ class TrailRenderer extends Renderer {
     };
   }
 
-  updateGPU(
+  protected get updateGPUUsesCPUReadback(): boolean { return true; }
+
+  protected _updateGPU(
     buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
     deltaTime = 0,

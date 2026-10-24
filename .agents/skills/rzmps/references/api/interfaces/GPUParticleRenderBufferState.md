@@ -52,6 +52,18 @@ count: number = 0;
 
 ***
 
+<a id="instancecountnode"></a>
+
+### instanceCountNode?
+
+```ts
+optional instanceCountNode?: Node<"uint">;
+```
+
+Actual GPU-produced visual range, including original simulation slots.
+
+***
+
 <a id="particle"></a>
 
 ### particle
@@ -91,6 +103,32 @@ version: number = 0;
 ```
 
 ## Methods
+
+<a id="bindindirect"></a>
+
+### bindIndirect()
+
+```ts
+bindIndirect(geometry, renderer): void;
+```
+
+Binds an accurate GPU-only draw range after expansion.
+
+#### Parameters
+
+##### geometry
+
+`BufferGeometry`
+
+##### renderer
+
+[`GPUStorageBufferRenderer`](GPUStorageBufferRenderer.md) & `object`
+
+#### Returns
+
+`void`
+
+***
 
 <a id="dispose"></a>
 

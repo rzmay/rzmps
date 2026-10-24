@@ -9,6 +9,7 @@ import {
   If,
   storage,
   uint,
+  uvec2,
   uintBitsToFloat,
   vec4,
 } from 'three/tsl';
@@ -177,8 +178,12 @@ export class GPUEventReader {
   private readonly eventFloatStorage: PackedFloatStorage;
 
   constructor(private readonly state: GPUEventBufferState) {
-    this.counterStorage = storage(state.counterAttribute, 'uint', GPU_EVENT_COUNTER_COUNT).toAtomic() as AtomicUintStorage;
-    this.eventFloatStorage = storage(state.floatAttribute, 'vec4', state.capacity * GPU_EVENT_FLOAT_SLOT_COUNT) as PackedFloatStorage;
+    this.counterStorage = storage(
+      state.counterAttribute, 'uint', GPU_EVENT_COUNTER_COUNT,
+    ).toAtomic() as AtomicUintStorage;
+    this.eventFloatStorage = storage(
+      state.floatAttribute, 'vec4', state.capacity * GPU_EVENT_FLOAT_SLOT_COUNT,
+    ) as PackedFloatStorage;
   }
 
   count(): Node<'uint'> {
@@ -203,6 +208,16 @@ export class GPUEventReader {
       generation: bitcastFloatToUint(record.z),
       sequence: uint(this.state.sequence),
       particle: {
+        get id() {
+          return uvec2(this.index, this.generation);
+        },
+        get isChild() {
+          return uint(0).equal(uint(1));
+        },
+        parent: null,
+        get root() {
+          return this;
+        },
         index: bitcastFloatToUint(record.y),
         position: positionSpeed.xyz,
         orbitCenter: orbitCenterAlpha.xyz,
@@ -225,6 +240,7 @@ export class GPUEventReader {
         alive: uint(1),
         tagMask: bitcastFloatToUint(record.w),
         generation: bitcastFloatToUint(record.z),
+        lodPriority: uint(0),
       },
       collisionPoint: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionPoint)).xyz,
       collisionNormal: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionNormal)).xyz,
@@ -243,8 +259,12 @@ export class GPUEventWriter {
   constructor(state: GPUEventBufferState) {
     this.version = state.version;
     this.capacity = state.capacity;
-    this.counterStorage = storage(state.counterAttribute, 'uint', GPU_EVENT_COUNTER_COUNT).toAtomic() as AtomicUintStorage;
-    this.eventFloatStorage = storage(state.floatAttribute, 'vec4', state.capacity * GPU_EVENT_FLOAT_SLOT_COUNT) as PackedFloatStorage;
+    this.counterStorage = storage(
+      state.counterAttribute, 'uint', GPU_EVENT_COUNTER_COUNT,
+    ).toAtomic() as AtomicUintStorage;
+    this.eventFloatStorage = storage(
+      state.floatAttribute, 'vec4', state.capacity * GPU_EVENT_FLOAT_SLOT_COUNT,
+    ) as PackedFloatStorage;
   }
 
   emitDeath(particle: GPUParticleLike): void {
@@ -298,16 +318,34 @@ export class GPUEventWriter {
   private writeParticleSnapshot(eventIndex: Node<'uint'>, particle: GPUParticleLike): void {
     const base = eventIndex.mul(GPU_EVENT_FLOAT_SLOT_COUNT);
 
-    this.eventFloatStorage.element(base.add(EventFloatSlot.PositionSpeed)).assign(vec4(particle.position, particle.speed));
-    this.eventFloatStorage.element(base.add(EventFloatSlot.OrbitCenterAlpha)).assign(vec4(particle.orbitCenter, particle.alpha));
-    this.eventFloatStorage.element(base.add(EventFloatSlot.RotationMass)).assign(vec4(particle.rotation, particle.mass));
-    this.eventFloatStorage.element(base.add(EventFloatSlot.ScaleDistortion)).assign(vec4(particle.scale, particle.distortionStrength));
-    this.eventFloatStorage.element(base.add(EventFloatSlot.VelocityLifetime)).assign(vec4(particle.velocity, particle.lifetime));
-    this.eventFloatStorage.element(base.add(EventFloatSlot.AngularVelocityTime)).assign(vec4(particle.angularVelocity, particle.time));
-    this.eventFloatStorage.element(base.add(EventFloatSlot.ScalarVelocityRealtime)).assign(vec4(particle.scalarVelocity, particle.realtime));
+    this.eventFloatStorage.element(base.add(EventFloatSlot.PositionSpeed)).assign(
+      vec4(particle.position, particle.speed),
+    );
+    this.eventFloatStorage.element(base.add(EventFloatSlot.OrbitCenterAlpha)).assign(
+      vec4(particle.orbitCenter, particle.alpha),
+    );
+    this.eventFloatStorage.element(base.add(EventFloatSlot.RotationMass)).assign(
+      vec4(particle.rotation, particle.mass),
+    );
+    this.eventFloatStorage.element(base.add(EventFloatSlot.ScaleDistortion)).assign(
+      vec4(particle.scale, particle.distortionStrength),
+    );
+    this.eventFloatStorage.element(base.add(EventFloatSlot.VelocityLifetime)).assign(
+      vec4(particle.velocity, particle.lifetime),
+    );
+    this.eventFloatStorage.element(base.add(EventFloatSlot.AngularVelocityTime)).assign(
+      vec4(particle.angularVelocity, particle.time),
+    );
+    this.eventFloatStorage.element(base.add(EventFloatSlot.ScalarVelocityRealtime)).assign(
+      vec4(particle.scalarVelocity, particle.realtime),
+    );
     this.eventFloatStorage.element(base.add(EventFloatSlot.Acceleration)).assign(vec4(particle.acceleration, 0));
-    this.eventFloatStorage.element(base.add(EventFloatSlot.AngularAcceleration)).assign(vec4(particle.angularAcceleration, 0));
-    this.eventFloatStorage.element(base.add(EventFloatSlot.ScalarAcceleration)).assign(vec4(particle.scalarAcceleration, 0));
+    this.eventFloatStorage.element(base.add(EventFloatSlot.AngularAcceleration)).assign(
+      vec4(particle.angularAcceleration, 0),
+    );
+    this.eventFloatStorage.element(base.add(EventFloatSlot.ScalarAcceleration)).assign(
+      vec4(particle.scalarAcceleration, 0),
+    );
     this.eventFloatStorage.element(base.add(EventFloatSlot.Color)).assign(vec4(particle.color, 0));
   }
 }
