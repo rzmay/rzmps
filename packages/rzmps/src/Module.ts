@@ -198,7 +198,6 @@ export default class Module {
       .forEach((p) => this._modify(p, deltaTime, particleSystem, this.octree));
   }
 
-  // Process into array including self and dependents
   /** Flattens dependents before this module; priority sorting still determines execution phases. */
   public withDependents(): Module[] {
     // Run dependents before this
