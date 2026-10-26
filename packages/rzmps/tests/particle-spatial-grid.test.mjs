@@ -141,6 +141,17 @@ assert.equal(managedGrid, system.acquireParticleSpatialGrid(gridOptions));
 managedGridModule.modifyGPU({}, {}, { system }, managedGrid);
 assert.equal(callbackGrid, managedGrid);
 
+assert.equal(managedGridModule.useSpatialGrid, true);
+assert.equal(managedGridModule.spatialGridOptions, gridOptions);
+managedGridModule.cleanup();
+assert.equal(managedGridModule.spatialGrid, undefined);
+assert.equal(managedGridModule.getParticleSpatialGrid(system), managedGrid);
+const disabledGridModule = new Module(Module.CPU_UNSUPPORTED, {
+  useSpatialGrid: false,
+  spatialGridOptions: gridOptions,
+});
+assert.equal(disabledGridModule.getParticleSpatialGrid(system), undefined);
+
 // Boids uses the same managed acquisition and cleanup as function-defined modules.
 const boids = new Boids({ spatialGridOptions: gridOptions });
 assert.equal(boids.useOctree, true);

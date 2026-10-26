@@ -23,9 +23,101 @@ the fluid solver's velocity and pressure arrays are dense, not sparse bricks.
 
 With `maxBounds: 16` the GPU and solver domains stay at 16 (cell width 0.25).
 The escaped marker retains vx=1 and falls ballistically; the cap is not a wall.
-The normal 30-second collection test and the injected-outlier test are covered
+The normal 60-second collection test and the injected-outlier test are covered
 by `fluid.test.mjs`. This demonstrates the grid-growth failure mechanism, not
 proof that every possible long-running instability has been eliminated.
+
+## Corrective Pass Results
+
+The develop merge is resolved, including its shortcut/decal changes and tests.
+The options-only managed-grid API is retained without compatibility guards.
+
+### Bounds Ownership
+
+The particle hash could previously expand on the GPU while the Eulerian solver
+kept its old bounds until a readback completed, up to 500 ms later. Those passes
+would disagree about the world positions represented by their cells. Fluid
+modules now own resizing: the hash uses a fixed domain during each update and
+readback only queues a change for the next prepare/rebuild. Gas remaps its fields
+in that update before advancing them. `automaticPadding` controls domain growth;
+`autoShrink` is now honored by the CPU controller. Cubic/power-of-two shape is
+retained; those constraints and hash `autoExpand` are not editable fluid controls.
+
+Lifecycle generations discard stale reads after cleanup or a domain change.
+GPU tests deliberately request hash expansion, inject an outlier, and check that
+hash and solver bounds remain equal both before and after the queued resize.
+The 16-unit FLIP cap remains a coarsening mitigation, not an artificial wall.
+
+### Runtime Parameters
+
+Changing `pressureIterations` between odd/even values could leave a cached
+projection reading the wrong pressure ping-pong buffer. Changing it to zero
+could even apply a previous nonzero pressure solution. Projection is now
+invalidated when the effective iteration count changes; a 1/0/4/0 GPU test
+verifies that zero iterations leaves the seeded velocity unchanged.
+
+FLIP `picRatio` was compiled into a cached transfer shader. It is now a uniform,
+so editing it changes the next simulation update rather than waiting for an
+unrelated shader rebuild.
+
+### Transport Accuracy
+
+`GasSimulation.advectionMethod` supports `semiLagrangian` (the unchanged default)
+and experimental `macCormack`. The latter uses a forward prediction, reverse
+error estimate, and eight-donor limiter, reverting to first order near solids,
+domain edges, or steps larger than one cell. It uses three lazily allocated
+scratch fields, an additional 12 MiB at resolution 64, and stays within the
+default WebGPU storage-buffer limit. Changing method or grid quality at runtime
+is GPU-tested.
+
+The deterministic test translates a Gaussian of width 0.35 at speed 0.3 for
+two seconds, at 60 Hz in a 16-unit, 64-cell domain, with sources, pressure-driven
+motion, buoyancy, noise, diffusion, and explicit decay absent:
+
+| Metric | First Order | Bounded MacCormack |
+| --- | ---: | ---: |
+| Relative L1 error against analytic translation | 0.38534 | 0.18406 |
+| Peak after translation | 0.58949 | 0.75415 |
+| Sum of sampled density | 43.21693 | 43.47659 |
+
+The improvement is measured accuracy, not just extra energy. MacCormack is still
+not mass-conservative (about 0.6% excess sampled density in this test), which is
+one reason it is not promoted to the default.
+
+Independent component bounds are insufficient for density-weighted heat/color:
+bounding heat and density separately does not bound heat divided by density.
+Higher-order transport additionally bounds specific temperature and color using
+nonempty donor ratios. Tests cover constant color/temperature transport, mixed
+hot/cold donors, no new density maxima, no negatives/nonfinite values, and a
+solid `FluidCollider` slab with no measurable density crossing at 60 Hz.
+No global temperature or color limit is imposed on user input.
+
+The scheme follows
+[NVIDIA's bounded MacCormack treatment](https://developer.nvidia.com/gpugems/gpugems3/part-v-physics-simulation/chapter-30-real-time-simulation-and-rendering-3d-fluids).
+
+### Pressure Limitation Confirmed
+
+The manual study now reports both centered and forward-difference divergence.
+For a smooth seeded x-velocity, centered RMS divergence was 0.27275 before
+projection, 0.24211 after 16 iterations and 0.18869 after 64. More iterations
+help but the ordinary count does not produce a nearly divergence-free field.
+
+For an alternating-cell x-velocity, centered interior divergence starts at zero
+while forward-difference RMS is 8. After 64 iterations the latter is still 7.97;
+centered divergence near the affected boundary increases to about 0.175. The
+centered stencil is insensitive to this grid-scale mode. The forward difference
+is an independent diagnostic, not a claim that the current cell-centered data
+is a face-centered velocity field.
+
+This supports making a consistent face/MAC pressure representation the next
+solver correction. It does **not** prove that this mode caused the user's
+observed thrashing. Raising iterations or tuning dissipation cannot substitute
+for that correction. Higher-order transport remains opt-in while this is open;
+it retains details that the current projection may not resolve adequately.
+
+The window-focus/catch-up emission issue remains untouched. No matched
+Blender-cache replay or Unreal run was completed in this corrective pass; the
+analytic transport test is a matched known-solution comparison, not engine parity.
 
 ## Cool Gas
 

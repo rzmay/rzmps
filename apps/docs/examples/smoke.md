@@ -23,6 +23,8 @@ The 10-second loop sustains a plume while particles live for 4.5 seconds. The sm
 
 A cone of radius 0.75 and height 1.2 provides a broad source. Rate 36 and lifetime 4.5 imply about 162 live particles at steady emission. Upward velocity 0.75 and radial speed 0.18 favor a column with modest spread. Scale 2.5 overlaps the low-opacity, alpha-0.55 sprites into a continuous volume.
 
+Uniform scale values and color strings use the standard input shortcuts.
+
 <ExampleCode region="emitters" />
 
 ## Modules

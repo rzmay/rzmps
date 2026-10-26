@@ -158,7 +158,7 @@ Constructors selecting scene effects for this module during prepare.
 ### scalarAcceleration
 
 ```ts
-scalarAcceleration: ValueByParameter<Vector3>;
+scalarAcceleration: ValueByParameter<Vector3Input>;
 ```
 
 ***
@@ -168,7 +168,7 @@ scalarAcceleration: ValueByParameter<Vector3>;
 ### scalarVelocity
 
 ```ts
-scalarVelocity: ValueByParameter<Vector3>;
+scalarVelocity: ValueByParameter<Vector3Input>;
 ```
 
 ***
@@ -178,7 +178,7 @@ scalarVelocity: ValueByParameter<Vector3>;
 ### scale
 
 ```ts
-scale: ValueByParameter<Vector3>;
+scale: ValueByParameter<Vector3Input>;
 ```
 
 ***
@@ -233,7 +233,7 @@ Explicit module effect collection; supplying an empty array suppresses automatic
 optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
-Configures and implicitly enables the managed, system-owned GPU spatial grid.
+Configures and implicitly enables the managed GPU ParticleSpatialGrid.
 
 #### Inherited from
 

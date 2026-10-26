@@ -22,6 +22,16 @@ try {
     await page.goto(`${origin}/@fs${fixture}?example=${example}`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.ready);
   };
+  await open('gasBlenderSmoke');
+  await page.evaluate(() => window.runFrames(30));
+  for (const mode of ['smooth', 'checkerboard']) {
+    for (const iterations of [0, 16, 64]) {
+      results[`projection-${mode}-${iterations}`] = await page.evaluate(async ({ iterations, mode }) => {
+        await window.projectGas(iterations, mode);
+        return window.lastProjectionMetrics;
+      }, { iterations, mode });
+    }
+  }
   for (const limit of [16, null]) {
     await open('flipFluid');
     await page.evaluate(limit => { window.debugFluid.flip.maxBounds = limit ?? Infinity; }, limit);

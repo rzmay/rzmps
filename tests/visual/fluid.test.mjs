@@ -52,8 +52,11 @@ test('fluid presets preserve scenes, the teapot fills, and reference gas fields 
     const settled = await page.evaluate(() => window.runFrames(1020));
     assert.ok(settled.speed <= 6.01, 'velocity must remain bounded after 30 simulated seconds');
     assert.ok(settled.inContainer > settled.count * 0.9, 'the liquid must remain collected inside the actual teapot');
+    const longRunning = await page.evaluate(() => window.runFrames(1800));
+    assert.ok(longRunning.speed <= 6.01, 'liquid must remain bounded through 60 simulated seconds');
+    assert.ok(longRunning.inContainer > longRunning.count * 0.9, 'liquid must stay in the vessel through 60 seconds');
 
-    await page.evaluate(() => window.moveParticle([30, 0, 0], [1, 0, 0]));
+    await page.evaluate(() => window.moveParticle([30, 0, 0], [1, 0, 0], 2000));
     await new Promise(resolve => setTimeout(resolve, 550));
     await page.evaluate(() => window.runFrames(1));
     await new Promise(resolve => setTimeout(resolve, 100));

@@ -52,6 +52,7 @@ assert.ok(gas.density.texture.isStorageTexture);
 assert.ok(gas.colorField.texture.isStorageTexture);
 assert.equal(gas.density.data, undefined);
 assert.equal(gas.scalarDiffusion, 0);
+assert.equal(gas.advectionMethod, 'semiLagrangian');
 assert.equal(gas.densityDissipation, 0.6);
 assert.equal(gas.densityCutoff, 0.01);
 assert.deepEqual(gas.temperatureRange, [0, 1]);
@@ -121,4 +122,20 @@ gas.cleanup();
 clampedGas.cleanup();
 shrinkingGas.cleanup();
 flip.cleanup();
+
+// A readback from a previous lifecycle cannot queue a domain change after cleanup.
+const staleFlip = new FLIPSimulation();
+const staleSystem = new ParticleSystem({ modules: [staleFlip], emitters: [], renderers: [] });
+const staleGrid = staleFlip.getParticleSpatialGrid(staleSystem);
+let resolveMetrics;
+staleGrid.readParticleMetrics = () => new Promise((resolve) => { resolveMetrics = resolve; });
+staleFlip.lastBoundsRead = -Infinity;
+const originalBounds = staleFlip.bounds.clone();
+staleFlip.refreshBounds(staleGrid, {});
+staleFlip.cleanup();
+resolveMetrics({ bounds: new THREE.Box3(new THREE.Vector3(-32, -32, -32), new THREE.Vector3(32, 32, 32)), maxParticleSpeed: 10 });
+await new Promise(setImmediate);
+assert.ok(staleFlip.bounds.equals(originalBounds));
+assert.equal(staleFlip.pendingBounds, undefined);
+staleSystem.destroy();
 console.log('fluid-gpu tests passed');

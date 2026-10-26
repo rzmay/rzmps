@@ -56,6 +56,10 @@ export class ModuleGUI extends GUIEditorBase {
                 'octreeAggregator',
                 'useSpatialGrid',
                 'spatialGridOptions',
+                'advectionMethod',
+                'advectionAttributes',
+                'velocityAdvected', 'densityAdvected', 'colorAdvected',
+                'spatialGrid',
                 'spatialEffects',
                 'explicitSpatialEffects',
                 'spatialEffectFilter',
@@ -125,7 +129,8 @@ export class ModuleGUI extends GUIEditorBase {
                     'visualCacheKey', 'visualDensityNode', 'visualColorNode', 'visualOutputNodes',
                     'maxima', 'maximaAttribute', 'maximaNodes', 'maximaResetNode',
                     'pendingPreviousBounds',
-                    'lastBoundsRead', 'boundsReadPending',
+                    'lastBoundsRead', 'boundsReadPending', 'boundsGeneration',
+                    'pendingBounds', 'projectionIterations',
                 ].forEach((key) => hidden.add(key));
             }
             Object.keys(candidate)
@@ -151,6 +156,10 @@ export class ModuleGUI extends GUIEditorBase {
                     const octree = candidate.getParticleOctree?.();
                     if (octree) octree[key] = value;
                 }));
+        }
+        if (candidate instanceof FluidSimulation && 'advectionMethod' in candidate) {
+            folder.add(candidate, 'advectionMethod', ['semiLagrangian', 'macCormack'])
+                .name('Advection Method').onChange(() => this.emitCode());
         }
         if (candidate.useSpatialGrid) {
             const quality = folder.addFolder('Spatial Grid Options');
@@ -179,6 +188,8 @@ export class ModuleGUI extends GUIEditorBase {
             ['powerOfTwoBounds', 'cubicBounds', 'centeredAtOrigin',
                 'autoExpand', 'autoShrink', 'shrinkDelay', 'expansionHysteresis',
                 'timeQuality', 'maxQuerySteps']
+                .filter((key) => !(candidate instanceof FluidSimulation
+                    && ['powerOfTwoBounds', 'cubicBounds', 'autoExpand'].includes(key)))
                 .forEach((key) => quality.add(settings, key).name(this.prettyName(key)).onChange((value) => {
                     candidate.setSpatialGridOptions({ [key]: value });
                     this.emitCode();

@@ -23,6 +23,8 @@ The 10-second loop uses a small gravity modifier 0.05 and live cubemap reflectio
 
 Eight particles per second from a radius-0.5 sphere yield around 76 particles at average lifetime before contact losses. Scale 0.25–1 gives varied bubble sizes, and radial speed 1–3 spreads them. Mass 0.25 changes the physics response relative to the heavier collision examples.
 
+Uniform scale values and color strings use the standard input shortcuts.
+
 <ExampleCode region="emitters" />
 
 ## Modules

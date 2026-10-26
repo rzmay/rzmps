@@ -14,6 +14,18 @@
 
 ## Properties
 
+<a id="advectionmethod"></a>
+
+### advectionMethod
+
+```ts
+advectionMethod: "semiLagrangian" | "macCormack";
+```
+
+Bounded higher-order transport, or the cheaper first-order fallback.
+
+***
+
 <a id="automaticpadding"></a>
 
 ### automaticPadding
@@ -21,6 +33,8 @@
 ```ts
 automaticPadding: boolean;
 ```
+
+Fluid-owned growth applied between updates. GPU hash auto-expansion is disabled.
 
 #### Inherited from
 
@@ -430,7 +444,7 @@ Explicit module effect collection; supplying an empty array suppresses automatic
 spatialGridOptions: Partial<ParticleSpatialGridOptions>;
 ```
 
-Configures and implicitly enables the managed, system-owned GPU spatial grid.
+Configures and implicitly enables the managed GPU ParticleSpatialGrid.
 
 #### Inherited from
 

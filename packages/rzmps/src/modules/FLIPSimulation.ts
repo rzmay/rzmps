@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
-import { Fn, If, float, instanceIndex, max, min, mix, storage, uint, vec3, vec4 } from 'three/tsl';
+import { Fn, If, float, instanceIndex, max, min, mix, storage, uint, uniform, vec3, vec4 } from 'three/tsl';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
 import Collision from './Collision';
@@ -37,6 +37,7 @@ class FLIPSimulation extends FluidSimulation {
   private velocityBeforeAttribute?: StorageBufferAttribute;
   private velocityBefore?: { element(index: Node | number): Node<'vec4'> };
   private gatherCacheKey = '';
+  private readonly picRatioNode = uniform(0);
 
   constructor(options: Partial<FLIPSimulationOptions> = {}) {
     super({
@@ -108,6 +109,7 @@ class FLIPSimulation extends FluidSimulation {
     grid?: ParticleSpatialGrid,
   ): void {
     if (!grid) throw new Error('FLIPSimulation requires a GPU spatial grid.');
+    this.picRatioNode.value = THREE.MathUtils.clamp(this.picRatio, 0, 1);
     this.ensureGridResolution(renderer, grid);
     this.refreshBounds(grid, renderer);
     this.computeSolidField(context, renderer);
@@ -319,7 +321,7 @@ class FLIPSimulation extends FluidSimulation {
     const picVelocity = vec3(picSample.xyz).div(max(picSample.w, float(1e-6)));
     const before = vec3(beforeSample.xyz).div(max(beforeSample.w, float(1e-6)));
     const flipVelocity = vec3(particle.velocity).add(picVelocity.sub(before));
-    const velocity = this.clampVelocity(mix(flipVelocity, picVelocity, float(this.picRatio)));
+    const velocity = this.clampVelocity(mix(flipVelocity, picVelocity, this.picRatioNode));
     const gravityModifier = this.gpuParameters.number(
       'gravityModifier.flip', () => context.system.gravityModifier,
       particle.time, 0, particle.index,

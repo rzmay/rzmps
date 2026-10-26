@@ -85,7 +85,7 @@ Velocity decay per second, optionally multiplied by size or speed.
 ### limit
 
 ```ts
-limit: DynamicValue<Vector3>;
+limit: DynamicValue<Vector3Input>;
 ```
 
 Absolute per-axis velocity limits, sampled by normalized particle age.
@@ -251,7 +251,7 @@ Explicit module effect collection; supplying an empty array suppresses automatic
 optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
-Configures and implicitly enables the managed, system-owned GPU spatial grid.
+Configures and implicitly enables the managed GPU ParticleSpatialGrid.
 
 #### Inherited from
 

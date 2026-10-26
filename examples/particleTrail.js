@@ -32,7 +32,7 @@ export default async function createParticleTrail() {
             new THREE.Vector3(-1.5, 4, -1.5),
             new THREE.Vector3(1.5, 6, 1.5),
           ],
-          scale: new THREE.Vector3(0.15, 0.15, 0.15),
+          scale: 0.15,
         },
       }),
     ],

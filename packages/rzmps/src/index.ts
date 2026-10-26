@@ -108,6 +108,8 @@ export { default as SpriteRenderer } from './renderers/SpriteRenderer';
 export { default as VolumeRenderer } from './renderers/VolumeRenderer';
 export type { VolumeRendererOptions } from './renderers/VolumeRenderer';
 export { default as AudioRenderer } from './renderers/AudioRenderer';
+export { default as DecalRenderer, DECAL_RENDERER_USER_DATA_KEY } from './renderers/DecalRenderer';
+export type { DecalRendererOptions, DecalDirectionSampler, DecalHitSelection } from './renderers/DecalRenderer';
 export { SpriteMaterialType } from './enums/SpriteMaterialType';
 export { default as TrailRenderer } from './renderers/TrailRenderer';
 export { TrailMode } from './enums/TrailMode';
@@ -201,6 +203,7 @@ export type {
 } from './collision/ThreeGPUCollisionBackend';
 
 // Dynamic Value
+export type { ColorInput, Vector3Input } from './types/ValueInput';
 export type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
 export type { ValueByParameter } from './types/ValueByParameter';
 export { default as ParticleOctree } from './helpers/ParticleOctree';

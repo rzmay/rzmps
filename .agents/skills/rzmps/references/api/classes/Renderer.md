@@ -17,6 +17,7 @@ Base renderer that filters particles and applies renderer LOD before delegating 
 - [`SpriteRenderer`](SpriteRenderer.md)
 - [`VolumeRenderer`](VolumeRenderer.md)
 - [`AudioRenderer`](AudioRenderer.md)
+- [`DecalRenderer`](DecalRenderer.md)
 - [`TrailRenderer`](TrailRenderer.md)
 
 ## Constructors

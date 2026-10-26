@@ -17,6 +17,8 @@ type AtomicUintStorage = { element(index: Node | number): Node<'uint'> };
 type FloatUniform = Node<'float'> & { value: number };
 
 export interface GasSimulationOptions extends FluidSimulationOptions {
+  /** Defaults to semiLagrangian. macCormack enables experimental bounded higher-order transport. */
+  advectionMethod: 'semiLagrangian' | 'macCormack';
   /** Exponential density decay rate in inverse seconds. Zero preserves density. */
   densityDissipation: number;
   /** Density below this value is cleared along with its temperature and color. */
@@ -47,6 +49,7 @@ export interface GasSimulationOptions extends FluidSimulationOptions {
 }
 
 class GasSimulation extends FluidSimulation {
+  advectionMethod: GasSimulationOptions['advectionMethod'];
   density: VolumeField;
   colorField: VolumeField;
   densityDissipation: number;
@@ -111,12 +114,18 @@ class GasSimulation extends FluidSimulation {
   private curlNode?: ComputeNode;
   private confinementNode?: ComputeNode;
   private readonly vorticityNode = uniform(0) as FloatUniform;
+  private advectionAttributes: StorageBufferAttribute[] = [];
+  private velocityAdvected!: Vec4Storage;
+  private densityAdvected!: Vec4Storage;
+  private colorAdvected!: Vec4Storage;
+  private advectionNodes = new WeakMap<object, ComputeNode>();
 
   constructor(options: Partial<GasSimulationOptions> = {}) {
     super({
       ...options,
       automaticPadding: options.automaticPadding ?? true,
     });
+    this.advectionMethod = options.advectionMethod ?? 'semiLagrangian';
     this.densityDissipation = Math.max(0, options.densityDissipation ?? 0.6);
     this.densityCutoff = Math.max(0, options.densityCutoff ?? 0.01);
     this.temperatureDissipation = Math.max(0, options.temperatureDissipation ?? 1.2);
@@ -160,7 +169,11 @@ class GasSimulation extends FluidSimulation {
     grid?: ParticleSpatialGrid,
   ): void {
     if (!grid) throw new Error('GasSimulation requires a GPU spatial grid.');
+    if (!['semiLagrangian', 'macCormack'].includes(this.advectionMethod)) {
+      throw new RangeError('Unknown gas advectionMethod.');
+    }
     this.ensureGridResolution(renderer, grid);
+    if (this.advectionMethod === 'macCormack') this.ensureAdvectionFields();
     this.syncSimulationUniforms();
     this.refreshBounds(grid, renderer);
     this.remapFields(renderer);
@@ -172,7 +185,7 @@ class GasSimulation extends FluidSimulation {
       this.buoyancy, this.weight, this.velocitySourceStrength, this.sourceStrength,
       this.sourceTemperature, Boolean(this.temperatureOverLifetime), this.temperatureRange.join(','),
       Boolean(this.temperatureColor), this.turbulenceStrength, this.noiseFrequency,
-      this.noiseSpeed, this.noiseOctaves].join('|');
+      this.noiseSpeed, this.noiseOctaves, this.advectionMethod].join('|');
     if (cacheKey !== this.gpuCacheKey) {
       this.gpuCacheKey = cacheKey;
       this.velocityNodes = new WeakMap();
@@ -184,15 +197,13 @@ class GasSimulation extends FluidSimulation {
       this.outputNodes = new WeakMap();
     }
 
+    if (this.advectionMethod === 'macCormack') {
+      this.predictAdvection(this.velocityCurrent, this.velocityAdvected, context, renderer);
+    }
     const velocity = this.velocityNodes.get(this.densityCurrent) ?? Fn(() => {
       const coordinate = this.cellCoordinate(instanceIndex);
       const center = this.cellCenter(coordinate);
-      const backtrace = center.sub(this.sampleVelocity(center).mul(dt));
-      const backtraceSolid = this.isSolid(this.cellIndex(this.worldToCell(backtrace)));
-      const previous = backtraceSolid.select(
-        this.velocityCurrent.element(instanceIndex).xyz,
-        this.sampleVelocity(backtrace),
-      );
+      const previous = this.advectField(this.velocityCurrent, this.velocityAdvected, center, dt).xyz;
       const density = this.densityCurrent.element(instanceIndex);
       const temperature = density.y.div(max(density.x, float(1e-6)));
       const lift = temperature.mul(this.buoyancy).sub(density.x.mul(this.weight));
@@ -251,19 +262,21 @@ class GasSimulation extends FluidSimulation {
     const colorCurrent = this.colorCurrent;
     const densityNext = this.densityNext;
     const colorNext = this.colorNext;
+    if (this.advectionMethod === 'macCormack') {
+      this.predictAdvection(densityCurrent, this.densityAdvected, context, renderer);
+      this.predictAdvection(colorCurrent, this.colorAdvected, context, renderer);
+    }
     const sources = this.sourceNodes.get(densityCurrent) ?? Fn(() => {
       const coordinate = this.cellCoordinate(instanceIndex);
       const center = this.cellCenter(coordinate);
-      const backtrace = center.sub(this.sampleVelocity(center).mul(dt));
-      const backtraceSolid = this.isSolid(this.cellIndex(this.worldToCell(backtrace)));
-      const previousDensity = backtraceSolid.select(
-        densityCurrent.element(instanceIndex),
-        this.sampleField(backtrace, densityCurrent),
-      );
-      const previousColor = backtraceSolid.select(
-        colorCurrent.element(instanceIndex),
-        this.sampleField(backtrace, colorCurrent),
-      );
+      let previousDensity = this.advectField(densityCurrent, this.densityAdvected, center, dt);
+      let previousColor = this.advectField(colorCurrent, this.colorAdvected, center, dt);
+      if (this.advectionMethod === 'macCormack') {
+        [previousDensity, previousColor] = this.limitSpecificFields(
+          previousDensity, previousColor, densityCurrent, colorCurrent,
+          center.sub(this.sampleVelocity(center).mul(dt)),
+        );
+      }
       const diffusion = clamp(this.scalarDiffusionNode.mul(dt), 0, 1);
       const mixedDensity = mix(previousDensity, this.neighborAverage(densityCurrent, coordinate), diffusion);
       const mixedColor = mix(previousColor, this.neighborAverage(colorCurrent, coordinate), diffusion);
@@ -495,6 +508,7 @@ class GasSimulation extends FluidSimulation {
     this.maximaResetNode = undefined;
     this.curlNode = undefined;
     this.confinementNode = undefined;
+    this.advectionNodes = new WeakMap();
   }
 
   private remapFields(renderer: ParticleSpatialGridRenderer): void {
@@ -564,7 +578,18 @@ class GasSimulation extends FluidSimulation {
       this.visualColorAttribute,
       this.maximaAttribute,
       this.curlAttribute,
+      ...this.advectionAttributes,
     ].forEach((attribute) => attribute?.dispose());
+    this.advectionAttributes = [];
+  }
+
+  private ensureAdvectionFields(): void {
+    if (this.advectionAttributes.length) return;
+    this.advectionAttributes = Array.from({ length: 3 }, () => (
+      new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4)
+    ));
+    [this.velocityAdvected, this.densityAdvected, this.colorAdvected] = this.advectionAttributes
+      .map((attribute) => storage(attribute, 'vec4', this.cellCount) as Vec4Storage);
   }
 
   private makeTexture(): Storage3DTexture {
@@ -626,6 +651,96 @@ class GasSimulation extends FluidSimulation {
     })().compute(this.cellCount);
     this.confinementNode = confinement;
     renderer.compute(confinement);
+  }
+
+  private predictAdvection(
+    source: Vec4Storage,
+    target: Vec4Storage,
+    context: GPUParticleUpdateContext,
+    renderer: ParticleSpatialGridRenderer,
+  ): void {
+    const node = this.advectionNodes.get(source) ?? Fn(() => {
+      const center = this.cellCenter(this.cellCoordinate(instanceIndex));
+      const position = center.sub(this.sampleVelocity(center).mul(context.deltaTimeNode));
+      const blocked = this.isSolid(this.cellIndex(this.worldToCell(position)));
+      const value = blocked.select(source.element(instanceIndex), this.sampleField(position, source));
+      target.element(instanceIndex).assign(this.isSolid().select(vec4(0), value));
+    })().compute(this.cellCount);
+    this.advectionNodes.set(source, node);
+    renderer.compute(node);
+  }
+
+  private advectField(
+    source: Vec4Storage,
+    predicted: Vec4Storage,
+    center: Node<'vec3'>,
+    dt: Node<'float'>,
+  ): Node<'vec4'> {
+    const displacement = this.sampleVelocity(center).mul(dt).toVar('gasDisplacement');
+    const backtrace = center.sub(displacement);
+    const blocked = this.isSolid(this.cellIndex(this.worldToCell(backtrace)));
+    const firstOrder = blocked.select(source.element(instanceIndex), this.sampleField(backtrace, source));
+    if (this.advectionMethod === 'semiLagrangian') return firstOrder as Node<'vec4'>;
+
+    const reversePosition = center.add(displacement);
+    const reversed = this.sampleField(reversePosition, predicted);
+    const corrected = predicted.element(instanceIndex).add(source.element(instanceIndex).sub(reversed).mul(0.5));
+    const base = backtrace.sub(this.boundsMinNode).div(this.cellSizeNode).sub(0.5).floor();
+    const lower = vec4(1e30).toVar('gasDonorMinimum');
+    const upper = vec4(-1e30).toVar('gasDonorMaximum');
+    const valid = displacement.abs().lessThanEqual(vec3(this.cellSizeNode)).all()
+      .toVar('gasAdvectionValid');
+    // Limit against the original donor cells, reverting near solids or domain edges.
+    for (let z = 0; z < 2; z += 1) {
+      for (let y = 0; y < 2; y += 1) {
+        for (let x = 0; x < 2; x += 1) {
+          const coordinate = base.add(vec3(x, y, z));
+          const index = this.cellIndex(ivec3(clamp(coordinate, vec3(0), vec3(this.resolution - 1))));
+          const value = source.element(index);
+          lower.assign(min(lower, value));
+          upper.assign(max(upper, value));
+          valid.assign(valid.and(coordinate.greaterThanEqual(vec3(0)).all())
+            .and(coordinate.lessThan(vec3(this.resolution)).all()).and(this.isSolid(index).not()));
+          const reverseCoordinate = reversePosition.sub(this.boundsMinNode).div(this.cellSizeNode)
+            .sub(0.5).floor().add(vec3(x, y, z));
+          const reverseIndex = this.cellIndex(ivec3(clamp(reverseCoordinate, vec3(0), vec3(this.resolution - 1))));
+          valid.assign(valid.and(reverseCoordinate.greaterThanEqual(vec3(0)).all())
+            .and(reverseCoordinate.lessThan(vec3(this.resolution)).all()).and(this.isSolid(reverseIndex).not()));
+        }
+      }
+    }
+    return valid.select(clamp(corrected, lower, upper), firstOrder) as Node<'vec4'>;
+  }
+
+  private limitSpecificFields(
+    transportedDensity: Node<'vec4'>,
+    transportedColor: Node<'vec4'>,
+    density: Vec4Storage,
+    color: Vec4Storage,
+    position: Node<'vec3'>,
+  ): [Node<'vec4'>, Node<'vec4'>] {
+    const base = position.sub(this.boundsMinNode).div(this.cellSizeNode).sub(0.5).floor();
+    const lower = vec4(1e30).toVar('gasSpecificMinimum');
+    const upper = vec4(-1e30).toVar('gasSpecificMaximum');
+    const found = float(0).toVar('gasSpecificDonors');
+    for (let z = 0; z < 2; z += 1) {
+      for (let y = 0; y < 2; y += 1) {
+        for (let x = 0; x < 2; x += 1) {
+          const index = this.cellIndex(ivec3(clamp(base.add(vec3(x, y, z)), vec3(0), vec3(this.resolution - 1))));
+          const state = density.element(index);
+          const specific = vec4(state.y, color.element(index).xyz).div(state.x.max(1e-6));
+          const present = state.x.greaterThan(1e-6).and(this.isSolid(index).not());
+          lower.assign(present.select(min(lower, specific), lower));
+          upper.assign(present.select(max(upper, specific), upper));
+          found.addAssign(present.select(1, 0));
+        }
+      }
+    }
+    // Bounding heat and density separately does not bound heat / density.
+    const state = transportedDensity.toVar('gasTransportedDensity');
+    const specific = vec4(state.y, transportedColor.xyz).div(state.x.max(1e-6));
+    const weighted = found.greaterThan(0).select(clamp(specific, lower, upper), specific).mul(state.x);
+    return [vec4(state.x, weighted.x, 0, 0), vec4(weighted.yzw, 0)];
   }
 
   private splatRadius(scale: Node<'vec3'>): Node<'float'> {

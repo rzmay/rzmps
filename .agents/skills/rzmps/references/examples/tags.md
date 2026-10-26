@@ -36,8 +36,8 @@ The 10-second loop shares emission and zero-gravity integration between cubes an
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.1, 0.1, 0.1),
-            new THREE.Vector3(0.25, 0.25, 0.25),
+            0.1,
+            0.25,
           ],
           alpha: 1,
         },
@@ -56,7 +56,7 @@ The 10-second loop shares emission and zero-gravity integration between cubes an
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
         tags: 'spheres'
       }),
@@ -107,8 +107,8 @@ The emitter assigns spheres and cubes with tagSelection distribute, alternating 
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.1, 0.1, 0.1),
-            new THREE.Vector3(0.25, 0.25, 0.25),
+            0.1,
+            0.25,
           ],
           alpha: 1,
         },
@@ -137,7 +137,7 @@ Only cubes receive rotation and cubic alpha fade. Only spheres receive growth fr
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
         tags: 'spheres'
       }),

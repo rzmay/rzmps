@@ -22,6 +22,7 @@ export interface FluidSimulationOptions extends Partial<ModuleOptions> {
   /** Maximum domain side length in simulation units. Infinity leaves growth unlimited.
    * Power-of-two grids round this limit down. Escaped particles are not confined by it. */
   maxBounds: number;
+  /** Fluid-owned growth applied between updates. GPU hash auto-expansion is disabled. */
   automaticPadding: boolean;
   showGridHelper: boolean;
   /** Kept for older presets. The spatial grid depth takes precedence when supplied. */
@@ -62,10 +63,13 @@ abstract class FluidSimulation extends Module {
   protected solid!: FloatStorage;
   private lastBoundsRead = 0;
   private boundsReadPending = false;
+  private boundsGeneration = 0;
+  private pendingBounds?: { grid: ParticleSpatialGrid; bounds: THREE.Box3 };
   private compactBoundsReadCount = 0;
   private pressureNodes: ComputeNode[] = [];
   private divergenceNode?: ComputeNode;
   private projectionNodes = new WeakMap<object, ComputeNode>();
+  private projectionIterations = -1;
   private solidNode?: ComputeNode;
   private solidCacheKey = '';
   private _boundsHelper?: THREE.Group;
@@ -104,8 +108,8 @@ abstract class FluidSimulation extends Module {
       powerOfTwoBounds: true,
       cubicBounds: true,
       centeredAtOrigin: gridOptions.centeredAtOrigin ?? true,
-      // A bounded fluid domain owns resizing; GPU hash expansion must not outrun it.
-      autoExpand: Number.isFinite(maxBounds) ? false : gridOptions.autoExpand ?? false,
+      // The hash and Eulerian solver must use exactly the same bounds each frame.
+      autoExpand: false,
       autoShrink: gridOptions.autoShrink ?? true,
       shrinkDelay: gridOptions.shrinkDelay ?? 600,
       expansionHysteresis: gridOptions.expansionHysteresis ?? 0.125,
@@ -149,7 +153,7 @@ abstract class FluidSimulation extends Module {
     }
     super.prepare(particleSystem, dt);
     const grid = this.getParticleSpatialGrid(particleSystem);
-    if (grid) this.applyBoundsLimit(grid);
+    if (grid) this.synchronizeGridBounds(grid);
     this.updateParticleCollisionBackend();
     this.updateBoundsHelper(particleSystem);
     this.forceNode.value.copy(this.externalForce);
@@ -329,6 +333,11 @@ abstract class FluidSimulation extends Module {
     useOccupancy = false,
     solid?: FloatStorage,
   ): void {
+    const iterations = Math.max(0, Math.floor(this.pressureIterations));
+    if (iterations !== this.projectionIterations) {
+      this.projectionIterations = iterations;
+      this.projectionNodes = new WeakMap();
+    }
     const divergence = this.divergenceNode ?? Fn(() => {
       const coordinate = this.cellCoordinate(instanceIndex);
       const fluidCell = solid
@@ -355,7 +364,7 @@ abstract class FluidSimulation extends Module {
     this.divergenceNode = divergence;
     renderer.compute(divergence);
 
-    for (let iteration = 0; iteration < this.pressureIterations; iteration += 1) {
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
       const source = iteration % 2 === 0 ? this.pressureCurrent : this.pressureNext;
       const target = iteration % 2 === 0 ? this.pressureNext : this.pressureCurrent;
       const node = this.pressureNodes[iteration] ?? Fn(() => {
@@ -383,7 +392,7 @@ abstract class FluidSimulation extends Module {
       renderer.compute(node);
     }
 
-    const pressure = this.pressureIterations % 2 === 0 ? this.pressureCurrent : this.pressureNext;
+    const pressure = iterations % 2 === 0 ? this.pressureCurrent : this.pressureNext;
     const project = this.projectionNodes.get(input) ?? Fn(() => {
       const coordinate = this.cellCoordinate(instanceIndex);
       const source = vec3(input.element(instanceIndex).xyz);
@@ -455,45 +464,46 @@ abstract class FluidSimulation extends Module {
     return valid.select(field.element(index), boundaryValue) as Node<'float'>;
   }
 
-  private applyBoundsLimit(grid: ParticleSpatialGrid): void {
-    if (Number.isFinite(this.maxBounds)) {
-      if (grid.autoExpand) grid.setOptions({ autoExpand: false });
-      const limited = FluidSimulation.limitBounds(this.bounds, this.maxBounds);
-      if (!limited.equals(grid.bounds)) grid.setBounds(limited);
-      if (!limited.equals(this.bounds)) {
-        const previous = this.bounds.clone();
-        this.bounds.copy(limited);
-        this.cellSize = limited.getSize(new THREE.Vector3()).x / this.resolution;
-        this.boundsMinNode.value.copy(limited.min);
-        this.cellSizeNode.value = this.cellSize;
-        this.onBoundsChanged(previous);
-      }
+  private synchronizeGridBounds(grid: ParticleSpatialGrid): void {
+    if (grid.autoExpand || !grid.cubicBounds || !grid.powerOfTwoBounds) {
+      grid.setOptions({ autoExpand: false, cubicBounds: true, powerOfTwoBounds: true });
     }
+    const requested = this.pendingBounds?.grid === grid ? this.pendingBounds.bounds : this.bounds;
+    this.pendingBounds = undefined;
+    const bounds = FluidSimulation.limitBounds(ParticleSpatialGrid.normalizeBounds(
+      requested, true, true, grid.centeredAtOrigin,
+    ), this.maxBounds);
+    if (!bounds.equals(grid.bounds)) grid.setBounds(bounds);
+    if (bounds.equals(this.bounds)) return;
+    const previous = this.bounds.clone();
+    this.bounds.copy(bounds);
+    this.cellSize = bounds.getSize(new THREE.Vector3()).x / this.resolution;
+    this.boundsMinNode.value.copy(bounds.min);
+    this.cellSizeNode.value = this.cellSize;
+    this.boundsGeneration += 1;
+    this.boundsReadPending = false;
+    this.onBoundsChanged(previous);
   }
 
   protected refreshBounds(grid: ParticleSpatialGrid, renderer: ParticleSpatialGridRenderer): void {
     if (this.boundsReadPending || performance.now() - this.lastBoundsRead < 500) return;
     this.boundsReadPending = true;
     this.lastBoundsRead = performance.now();
+    const generation = this.boundsGeneration;
+    const currentBounds = this.bounds.clone();
     const particleMetrics = grid.readParticleMetrics(renderer);
     void Promise.all([
-      grid.readBounds(renderer),
       particleMetrics,
       particleMetrics.then((metrics) => this.readAutomaticPadding(
         renderer,
         grid,
         metrics.maxParticleSpeed,
       )),
-    ]).then(([readBounds, metrics, automaticPadding]) => {
+    ]).then(([metrics, automaticPadding]) => {
+      if (generation !== this.boundsGeneration || this.spatialGrid !== grid) return;
       const { bounds: particleBounds } = metrics;
       this.particleBounds.copy(particleBounds);
       this.automaticPaddingDistance = automaticPadding;
-      const currentBounds = ParticleSpatialGrid.normalizeBounds(
-        readBounds,
-        grid.powerOfTwoBounds,
-        grid.cubicBounds,
-        grid.centeredAtOrigin,
-      );
       const automaticBounds = FluidSimulation.padBoundsByDistance(
         particleBounds,
         Math.max(automaticPadding, this.manualPaddingDistance(particleBounds)),
@@ -520,7 +530,7 @@ abstract class FluidSimulation extends Module {
           const compact = targetSide < currentSide * 0.75;
           this.compactBoundsReadCount = compact ? this.compactBoundsReadCount + 1 : 0;
           const readsBeforeShrink = Math.max(1, Math.ceil(grid.shrinkDelay / 30));
-          if (this.compactBoundsReadCount >= readsBeforeShrink) {
+          if (grid.autoShrink && this.compactBoundsReadCount >= readsBeforeShrink) {
             this.compactBoundsReadCount = 0;
             requestedBounds = targetBounds;
           }
@@ -534,15 +544,10 @@ abstract class FluidSimulation extends Module {
         grid.cubicBounds,
         grid.centeredAtOrigin,
       ), this.maxBounds);
-      if (!bounds.equals(readBounds)) grid.setBounds(bounds);
-      if (this.bounds.equals(bounds)) return;
-      const previous = this.bounds.clone();
-      this.bounds.copy(bounds);
-      this.cellSize = this.bounds.getSize(new THREE.Vector3()).x / this.resolution;
-      this.boundsMinNode.value.copy(this.bounds.min);
-      this.cellSizeNode.value = this.cellSize;
-      this.onBoundsChanged(previous);
-    }).catch(() => {}).finally(() => { this.boundsReadPending = false; });
+      if (!this.bounds.equals(bounds)) this.pendingBounds = { grid, bounds };
+    }).catch(() => {}).finally(() => {
+      if (generation === this.boundsGeneration) this.boundsReadPending = false;
+    });
   }
 
   protected readAutomaticPadding(
@@ -564,6 +569,10 @@ abstract class FluidSimulation extends Module {
   }
 
   public override cleanup(): void {
+    this.boundsGeneration += 1;
+    this.pendingBounds = undefined;
+    this.boundsReadPending = false;
+    this.lastBoundsRead = 0;
     super.cleanup();
     this.particleCollisionBackend.destroy();
     if (this._boundsHelper) {

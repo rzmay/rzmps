@@ -29,7 +29,7 @@ optional alpha?: DynamicValue<number>;
 ### color?
 
 ```ts
-optional color?: DynamicValue<Color>;
+optional color?: DynamicValue<ColorRepresentation>;
 ```
 
 ***
@@ -211,7 +211,7 @@ Explicit module effect collection; supplying an empty array suppresses automatic
 optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
-Configures and implicitly enables the managed, system-owned GPU spatial grid.
+Configures and implicitly enables the managed GPU ParticleSpatialGrid.
 
 #### Inherited from
 

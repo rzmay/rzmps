@@ -54,6 +54,16 @@ _modify: ModuleUpdate;
 
 ***
 
+<a id="advectionmethod"></a>
+
+### advectionMethod
+
+```ts
+advectionMethod: "semiLagrangian" | "macCormack";
+```
+
+***
+
 <a id="autobounds"></a>
 
 ### autoBounds

@@ -41,7 +41,7 @@ export default async function createGasVolume(simulationOptions = {}) {
       brickSubdivisions: 2,
       cellSubdivisions: 4,
       powerOfTwoBounds: true,
-      autoExpand: true,
+      autoExpand: false,
       shrinkDelay: 180,
     },
     ...simulationOptions,

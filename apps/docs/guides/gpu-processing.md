@@ -39,7 +39,7 @@ rules.
 
 Reuse ordinary CPU hooks for setup and cleanup. `prepare(system, deltaTime)` runs once before a
 module's work on either backend. A function-defined module can request managed acceleration with
-`useOctree`/`octreeOptions` for CPU or `useSpatialGrid`/`spatialGrid` for GPU; the resulting
+`useOctree`/`octreeOptions` for CPU or `useSpatialGrid`/`spatialGridOptions` for GPU; the resulting
 `ParticleOctree` or `ParticleSpatialGrid` is passed as the optional final callback argument.
 `cleanup()` must call `super.cleanup()` when overridden so managed references are released.
 

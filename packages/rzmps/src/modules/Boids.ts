@@ -15,9 +15,7 @@ import type { Tag } from '../types/Tag';
 import BoidAffector from '../spatial/BoidAffector';
 import BoidAffectorHelper from '../spatial/BoidAffectorHelper';
 import type { BoidAffectorOptions } from '../spatial/BoidAffector';
-import ParticleSpatialGrid, {
-  type ParticleSpatialGridOptions,
-} from '../gpu/ParticleSpatialGrid';
+import type { ParticleSpatialGridOptions } from '../gpu/ParticleSpatialGrid';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import type { Node } from 'three/webgpu';
 import { acos, cos, float, If, max, mix, sin, uint, vec3, vec4 } from 'three/tsl';

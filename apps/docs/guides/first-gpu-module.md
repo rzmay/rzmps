@@ -76,7 +76,7 @@ const crowdDrag = new Module(
     useOctree: true,
     octreeOptions: { maxDepth: 6, particlesPerLeaf: 8 },
     useSpatialGrid: true,
-    spatialGrid: { brickSubdivisions: 3, cellSubdivisions: 4 },
+    spatialGridOptions: { brickSubdivisions: 3, cellSubdivisions: 4 },
     modifyGPU: (particle, deltaTime, _context, grid) => {
       if (!grid) return;
 

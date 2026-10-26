@@ -10,7 +10,10 @@ import Priority from './enums/Priority';
 import type { GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateContext } from './gpu/Particle';
 import type { Node } from 'three/webgpu';
 import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
-import ParticleSpatialGrid, { type ParticleSpatialGridOptions, type ParticleSpatialGridRenderer } from './gpu/ParticleSpatialGrid';
+import ParticleSpatialGrid, {
+  type ParticleSpatialGridOptions,
+  type ParticleSpatialGridRenderer
+} from './gpu/ParticleSpatialGrid';
 import ParticleOctree, {
   type OctreeAggregator,
   type OctreeConfig,
@@ -82,7 +85,7 @@ export interface ModuleOptions {
   octreeAggregator: OctreeAggregator<unknown>;
   /** Enables a managed GPU ParticleSpatialGrid with default options. */
   useSpatialGrid: boolean;
-  /** Configures and implicitly enables the managed, system-owned GPU spatial grid. */
+  /** Configures and implicitly enables the managed GPU ParticleSpatialGrid. */
   spatialGridOptions: Partial<ParticleSpatialGridOptions>;
 }
 
@@ -198,7 +201,6 @@ export default class Module {
       .forEach((p) => this._modify(p, deltaTime, particleSystem, this.octree));
   }
 
-  // Process into array including self and dependents
   /** Flattens dependents before this module; priority sorting still determines execution phases. */
   public withDependents(): Module[] {
     // Run dependents before this
@@ -263,7 +265,11 @@ export default class Module {
     _context: GPUParticleUpdateContext,
     _renderer: ParticleSpatialGridRenderer,
     _grid?: ParticleSpatialGrid,
-  ): void {}
+  ): void {
+    void _context;
+    void _renderer;
+    void _grid;
+  }
 
   /** Optional render-time GPU pass, after transient particle attributes have been evaluated. */
   public renderGPU(
@@ -271,7 +277,12 @@ export default class Module {
     _renderBuffers: GPUParticleRenderBufferState,
     _renderer: ParticleSpatialGridRenderer,
     _grid?: ParticleSpatialGrid,
-  ): void {}
+  ): void {
+    void _context;
+    void _renderBuffers;
+    void _renderer;
+    void _grid;
+  }
 
   // Optional clean up hook for modules that require it
   /** Releases managed CPU and GPU spatial acceleration references. */

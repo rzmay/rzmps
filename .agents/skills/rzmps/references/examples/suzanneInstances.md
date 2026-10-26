@@ -36,8 +36,8 @@ The 10-second loop and zero gravity keep the instanced models floating. GLTF geo
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.4, 0.4, 0.4),
-            new THREE.Vector3(1.0, 1.0, 1.0),
+            0.4,
+            1.0,
           ],
           alpha: 1,
         },
@@ -82,8 +82,8 @@ Rate 12, lifetimes 4–8 seconds, and scale 0.4–1 produce a manageable group o
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.4, 0.4, 0.4),
-            new THREE.Vector3(1.0, 1.0, 1.0),
+            0.4,
+            1.0,
           ],
           alpha: 1,
         },
