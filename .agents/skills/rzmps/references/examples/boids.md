@@ -37,8 +37,8 @@ The 24-second loop and lifetimes up to 22 seconds sustain two interacting popula
           speed: [3.2, 4.8],
           color: flockColors,
           scale: [
-            new THREE.Vector3(0.34, 0.34, 0.34),
-            new THREE.Vector3(0.48, 0.48, 0.48),
+            0.34,
+            0.48,
           ],
           alpha: 0.88,
         },
@@ -53,8 +53,8 @@ The 24-second loop and lifetimes up to 22 seconds sustain two interacting popula
           speed: [2.6, 3.7],
           color: hazardColors,
           scale: [
-            new THREE.Vector3(0.65, 0.65, 0.65),
-            new THREE.Vector3(1.05, 1.05, 1.05),
+            0.65,
+            1.05,
           ],
           alpha: 0.95,
         },
@@ -118,8 +118,8 @@ The main flock emits 38 particles per second from a radius-12 sphere, while two 
           speed: [3.2, 4.8],
           color: flockColors,
           scale: [
-            new THREE.Vector3(0.34, 0.34, 0.34),
-            new THREE.Vector3(0.48, 0.48, 0.48),
+            0.34,
+            0.48,
           ],
           alpha: 0.88,
         },
@@ -134,8 +134,8 @@ The main flock emits 38 particles per second from a radius-12 sphere, while two 
           speed: [2.6, 3.7],
           color: hazardColors,
           scale: [
-            new THREE.Vector3(0.65, 0.65, 0.65),
-            new THREE.Vector3(1.05, 1.05, 1.05),
+            0.65,
+            1.05,
           ],
           alpha: 0.95,
         },

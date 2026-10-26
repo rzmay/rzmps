@@ -49,12 +49,12 @@ export default async function createLODStress() {
         initialValues: {
           lifetime: [2.5, 5],
           speed: [0.6, 1.8],
-          scale: new THREE.Vector3(0.08, 0.08, 0.08),
+          scale: 0.08,
           color: new Set([
-            new THREE.Color('#57d6ff'),
-            new THREE.Color('#fff176'),
-            new THREE.Color('#ff6fb1'),
-            new THREE.Color('#8aff8a'),
+            '#57d6ff',
+            '#fff176',
+            '#ff6fb1',
+            '#8aff8a',
           ]),
           alpha: 0.85,
         },
@@ -70,7 +70,7 @@ export default async function createLODStress() {
         updateLOD: moduleUpdateLOD,
       }),
       new TransformByNoise({
-        strength: new THREE.Vector3(2.5, 2.5, 2.5),
+        strength: 2.5,
         frequency: 2.2,
         useUpdateLOD: true,
         updateLOD: moduleUpdateLOD,
@@ -78,7 +78,7 @@ export default async function createLODStress() {
       new ScaleOverLifetime({
         scale: (time) => {
           const size = ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25)));
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({

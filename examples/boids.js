@@ -10,14 +10,14 @@ import {
 
 export default async function createBoids() {
   const flockColors = new Set([
-    new THREE.Color('#7ce7ff'),
-    new THREE.Color('#c7fff3'),
-    new THREE.Color('#95ff7c'),
+    '#7ce7ff',
+    '#c7fff3',
+    '#95ff7c',
   ]);
 
   const hazardColors = new Set([
-    new THREE.Color('#ff4c5f'),
-    new THREE.Color('#ff9a4c'),
+    '#ff4c5f',
+    '#ff9a4c',
   ]);
 
   const flockSource = EmissionShape.Sphere(12, 32, 16);
@@ -85,8 +85,8 @@ export default async function createBoids() {
           speed: [3.2, 4.8],
           color: flockColors,
           scale: [
-            new THREE.Vector3(0.34, 0.34, 0.34),
-            new THREE.Vector3(0.48, 0.48, 0.48),
+            0.34,
+            0.48,
           ],
           alpha: 0.88,
         },
@@ -101,8 +101,8 @@ export default async function createBoids() {
           speed: [2.6, 3.7],
           color: hazardColors,
           scale: [
-            new THREE.Vector3(0.65, 0.65, 0.65),
-            new THREE.Vector3(1.05, 1.05, 1.05),
+            0.65,
+            1.05,
           ],
           alpha: 0.95,
         },

@@ -1,3 +1,6 @@
+import type { ColorInput, Vector3Input } from '../types/ValueInput';
+import acceptColor from './acceptColor';
+import acceptVector3 from './acceptVector3';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import { float, hash, int, mix, uniform, uniformArray, vec3 } from 'three/tsl';
@@ -9,7 +12,7 @@ import evaluateDynamicColor from './evaluateDynamicColor';
 import isTSLNode from './isTSLNode';
 
 type DynamicKind = 'number' | 'vector' | 'color';
-type DynamicParameter = DynamicValue<number> | DynamicValue<THREE.Vector3> | DynamicValue<THREE.Color> | undefined;
+type DynamicParameter = DynamicValue<number> | DynamicValue<Vector3Input> | DynamicValue<ColorInput> | undefined;
 type DynamicGetter = () => DynamicParameter;
 
 interface DynamicBinding {
@@ -66,7 +69,7 @@ export class GPUDynamicParameterStore {
 
   vector(
     key: string,
-    getter: () => DynamicValue<THREE.Vector3> | undefined,
+    getter: () => DynamicValue<Vector3Input> | undefined,
     time: Node<'float'>,
     fallback = new THREE.Vector3(),
     seed?: Node,
@@ -76,7 +79,7 @@ export class GPUDynamicParameterStore {
 
   color(
     key: string,
-    getter: () => DynamicValue<THREE.Color> | undefined,
+    getter: () => DynamicValue<ColorInput> | undefined,
     time: Node<'float'>,
     fallback = new THREE.Color(),
     seed?: Node,
@@ -95,7 +98,7 @@ export class GPUDynamicParameterStore {
 
   parameterVector(
     key: string,
-    getter: () => DynamicValue<THREE.Vector3> | undefined,
+    getter: () => DynamicValue<Vector3Input> | undefined,
     parameter: Node<'float'>,
     fallback = new THREE.Vector3(),
   ): Node<'vec3'> {
@@ -104,7 +107,7 @@ export class GPUDynamicParameterStore {
 
   parameterColor(
     key: string,
-    getter: () => DynamicValue<THREE.Color> | undefined,
+    getter: () => DynamicValue<ColorInput> | undefined,
     parameter: Node<'float'>,
     fallback = new THREE.Color(),
   ): Node<'vec3'> {
@@ -295,8 +298,8 @@ function createDynamicBinding(
 
 function sampleByKind(kind: DynamicKind, value: DynamicParameter): Array<number | THREE.Vector3> {
   if (kind === 'number') return sampleDynamicValue(value as DynamicValue<number>, evaluateDynamicNumber);
-  if (kind === 'vector') return sampleDynamicValue(value as DynamicValue<THREE.Vector3>, evaluateDynamicVector);
-  return sampleDynamicValue(value as DynamicValue<THREE.Color>, evaluateDynamicColor)
+  if (kind === 'vector') return sampleDynamicValue(value as DynamicValue<Vector3Input>, evaluateDynamicVector);
+  return sampleDynamicValue(value as DynamicValue<ColorInput>, evaluateDynamicColor)
     .map((sample) => new THREE.Vector3(sample.r, sample.g, sample.b));
 }
 
@@ -321,8 +324,11 @@ function createUniformValue(
   value: DynamicParameter | number | THREE.Vector3 | THREE.Color,
 ): number | THREE.Vector3 {
   if (kind === 'number') return value as number;
-  if (value instanceof THREE.Color) return new THREE.Vector3(value.r, value.g, value.b);
-  return (value as THREE.Vector3).clone();
+  if (kind === 'color') {
+    const color = acceptColor(value as ColorInput);
+    return new THREE.Vector3(color.r, color.g, color.b);
+  }
+  return acceptVector3(value as Vector3Input).clone();
 }
 
 function updateUniformValue(node: Node, value: number | THREE.Vector3): DynamicBindingUpdate {
@@ -372,8 +378,8 @@ function updateChildren(
 
 function isConstantOfKind(kind: DynamicKind, value: DynamicParameter): boolean {
   if (kind === 'number') return typeof value === 'number';
-  if (kind === 'vector') return value instanceof THREE.Vector3;
-  return value instanceof THREE.Color;
+  if (kind === 'vector') return value instanceof THREE.Vector3 || typeof value === 'number';
+  return value instanceof THREE.Color || typeof value === 'string' || typeof value === 'number';
 }
 
 export function evaluateDynamicNumberGPU(
@@ -402,7 +408,7 @@ export function evaluateDynamicNumberGPU(
 }
 
 export function evaluateDynamicVectorGPU(
-  value: DynamicValue<THREE.Vector3> | undefined,
+  value: DynamicValue<Vector3Input> | undefined,
   time: Node<'float'>,
   fallback = new THREE.Vector3(),
   seed?: Node,
@@ -412,7 +418,7 @@ export function evaluateDynamicVectorGPU(
   if (typeof value === 'function') {
     return sampleDynamicVectorGPU(value, time);
   }
-  if (value instanceof THREE.Vector3) return vec3(value);
+  if (value instanceof THREE.Vector3 || typeof value === 'number') return vec3(acceptVector3(value));
   if (Array.isArray(value)) {
     return mix(
       evaluateDynamicVectorGPU(value[0], time, fallback, seed),
@@ -427,7 +433,7 @@ export function evaluateDynamicVectorGPU(
 }
 
 export function evaluateDynamicColorGPU(
-  value: DynamicValue<THREE.Color> | undefined,
+  value: DynamicValue<ColorInput> | undefined,
   time: Node<'float'>,
   fallback = new THREE.Color(),
   seed?: Node,
@@ -437,7 +443,10 @@ export function evaluateDynamicColorGPU(
   if (typeof value === 'function') {
     return sampleDynamicColorGPU(value, time);
   }
-  if (value instanceof THREE.Color) return vec3(value.r, value.g, value.b);
+  if (value instanceof THREE.Color || typeof value === 'string' || typeof value === 'number') {
+    const color = acceptColor(value);
+    return vec3(color.r, color.g, color.b);
+  }
   if (Array.isArray(value)) {
     return mix(
       evaluateDynamicColorGPU(value[0], time, fallback, seed),
@@ -470,7 +479,7 @@ function selectDynamicNumberSetGPU(
 }
 
 function selectDynamicVectorSetGPU(
-  value: Set<DynamicValue<THREE.Vector3>>,
+  value: Set<DynamicValue<Vector3Input>>,
   time: Node<'float'>,
   fallback: THREE.Vector3,
   seed?: Node,
@@ -488,7 +497,7 @@ function selectDynamicVectorSetGPU(
 }
 
 function selectDynamicColorSetGPU(
-  value: Set<DynamicValue<THREE.Color>>,
+  value: Set<DynamicValue<ColorInput>>,
   time: Node<'float'>,
   fallback: THREE.Color,
   seed?: Node,
@@ -514,7 +523,7 @@ function sampleDynamicNumberGPU(
 }
 
 function sampleDynamicVectorGPU(
-  value: DynamicValue<THREE.Vector3>,
+  value: DynamicValue<Vector3Input>,
   time: Node<'float'>,
 ): Node<'vec3'> {
   const samples = sampleDynamicValue(value, evaluateDynamicVector);
@@ -522,7 +531,7 @@ function sampleDynamicVectorGPU(
 }
 
 function sampleDynamicColorGPU(
-  value: DynamicValue<THREE.Color>,
+  value: DynamicValue<ColorInput>,
   time: Node<'float'>,
 ): Node<'vec3'> {
   const samples = sampleDynamicValue(value, evaluateDynamicColor)
@@ -530,9 +539,9 @@ function sampleDynamicColorGPU(
   return sampleVectorArrayGPU(samples, time);
 }
 
-function sampleDynamicValue<T>(
-  value: DynamicValue<T>,
-  evaluate: (value: DynamicValue<T>, time: number, seed?: string) => T,
+function sampleDynamicValue<T, Input = T>(
+  value: DynamicValue<Input>,
+  evaluate: (value: DynamicValue<Input>, time: number, seed?: string) => T,
 ): T[] {
   const resolution = Math.max(2, Math.floor(ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION));
   return Array.from({ length: resolution }, (_unused, index) => {

@@ -1,3 +1,4 @@
+import type { ColorInput } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -9,7 +10,7 @@ import evaluateByParameterColor from '../helpers/evaluateByParameterColor';
 import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
 
 export interface ColorByDepthOptions extends Partial<ModuleOptions> {
-  color: ValueByParameter<THREE.Color>;
+  color: ValueByParameter<ColorInput>;
   alpha: ValueByParameter<number>;
 
   /** Camera-distance interval mapped to zero through one; omitted endpoints use camera near/far when available. */

@@ -34,8 +34,8 @@ This 10-second looping system has zero gravity and no gravity modifier, so the p
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.1, 0.1, 0.1),
-            new THREE.Vector3(0.25, 0.25, 0.25),
+            0.1,
+            0.25,
           ],
           alpha: 1,
         },
@@ -76,8 +76,8 @@ Rate 12 and mean lifetime 9 imply roughly 108 live particles before culling. A d
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.1, 0.1, 0.1),
-            new THREE.Vector3(0.25, 0.25, 0.25),
+            0.1,
+            0.25,
           ],
           alpha: 1,
         },

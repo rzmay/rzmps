@@ -1,3 +1,4 @@
+import type { Vector3Input } from '../types/ValueInput';
 import * as THREE from 'three';
 import type { ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -12,7 +13,7 @@ import { vec3 } from 'three/tsl';
 
 export interface TransformByNoiseOptions extends Partial<ModuleOptions>, NoiseOptions {
     /** Per-axis noise force amplitude sampled by normalized age. */
-    strength: DynamicValue<THREE.Vector3>;
+    strength: DynamicValue<Vector3Input>;
     /** Noise time advancement per second of particle age; zero keeps the noise time slice fixed. */
     scrollSpeed: DynamicValue<number>;
     /** Attenuates noise strength when frequency exceeds one. */

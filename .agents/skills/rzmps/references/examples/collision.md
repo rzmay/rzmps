@@ -32,11 +32,11 @@ A five-second loop emits particles with eight-second lifetimes under full gravit
         radialSpeed: [1, 5],
         initialValues: {
           lifetime: 8,
-          scale: new THREE.Vector3(0.125, 0.125, 0.125),
+          scale: 0.125,
           mass: 1,
           color: [
-            new THREE.Color('#ff6633'),
-            new THREE.Color('#ffd166'),
+            '#ff6633',
+            '#ffd166',
           ],
         },
       }),
@@ -80,11 +80,11 @@ The radius-0.25 sphere emits 30 particles per second with radial speeds 1–5. A
         radialSpeed: [1, 5],
         initialValues: {
           lifetime: 8,
-          scale: new THREE.Vector3(0.125, 0.125, 0.125),
+          scale: 0.125,
           mass: 1,
           color: [
-            new THREE.Color('#ff6633'),
-            new THREE.Color('#ffd166'),
+            '#ff6633',
+            '#ffd166',
           ],
         },
       }),

@@ -29,7 +29,7 @@ alpha: ValueByParameter<number>;
 ### color
 
 ```ts
-color: ValueByParameter<Color>;
+color: ValueByParameter<ColorRepresentation>;
 ```
 
 ***

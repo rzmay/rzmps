@@ -39,16 +39,16 @@ The 10-second loop uses a small gravity modifier 0.05 and live cubemap reflectio
           lifetime: [7, 12],
 
           scale: [
-            new THREE.Vector3(0.25, 0.25, 0.25),
-            new THREE.Vector3(1, 1, 1),
+            0.25,
+            1,
           ],
 
           mass: 0.25,
 
           color: [
-            new THREE.Color('#bdefff'),
-            new THREE.Color('#d8c8ff'),
-            new THREE.Color('#bfffe4'),
+            '#bdefff',
+            '#d8c8ff',
+            '#bfffe4',
           ],
         },
       }),
@@ -68,7 +68,7 @@ The 10-second loop uses a small gravity modifier 0.05 and live cubemap reflectio
       }),
 
       new ScaleOverLifetime({
-        scale: (time) => new THREE.Vector3(1, 1, 1).multiplyScalar(Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1))),
+        scale: (time) => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)),
       }),
 
       new DistortionBySize({
@@ -131,6 +131,8 @@ The 10-second loop uses a small gravity modifier 0.05 and live cubemap reflectio
 
 Eight particles per second from a radius-0.5 sphere yield around 76 particles at average lifetime before contact losses. Scale 0.25–1 gives varied bubble sizes, and radial speed 1–3 spreads them. Mass 0.25 changes the physics response relative to the heavier collision examples.
 
+Uniform scale values and color strings use the standard input shortcuts.
+
 
 [Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/bubbles.js#L60)
 
@@ -149,16 +151,16 @@ Eight particles per second from a radius-0.5 sphere yield around 76 particles at
           lifetime: [7, 12],
 
           scale: [
-            new THREE.Vector3(0.25, 0.25, 0.25),
-            new THREE.Vector3(1, 1, 1),
+            0.25,
+            1,
           ],
 
           mass: 0.25,
 
           color: [
-            new THREE.Color('#bdefff'),
-            new THREE.Color('#d8c8ff'),
-            new THREE.Color('#bfffe4'),
+            '#bdefff',
+            '#d8c8ff',
+            '#bfffe4',
           ],
         },
       }),
@@ -188,7 +190,7 @@ Gentle noise strength (0.2, 0.05, 0.2) adds lateral wobble. Collision lifetimeLo
       }),
 
       new ScaleOverLifetime({
-        scale: (time) => new THREE.Vector3(1, 1, 1).multiplyScalar(Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1))),
+        scale: (time) => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)),
       }),
 
       new DistortionBySize({

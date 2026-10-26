@@ -37,7 +37,7 @@ export default async function createStylizedDepth() {
           lifetime: [7, 12],
           speed: 1,
           velocity: new THREE.Vector3(0.01, 0.02, 0.3),
-          scale: new THREE.Vector3(0.02, 0.02, 0.02),
+          scale: 0.02,
         },
       }),
     ],
@@ -46,12 +46,12 @@ export default async function createStylizedDepth() {
     // #region docs:modules:1
     modules: [
       new ColorByDepth({
-        color: [new THREE.Color('#fff7db'), new THREE.Color('#84d7ff')],
+        color: ['#fff7db', '#84d7ff'],
         alpha: [1, 0.5],
         depthRange,
       }),
       new ScaleByDepth({
-        scale: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(2, 2, 2)],
+        scale: [1, 2],
         depthRange,
       }),
       new RotationByDepth({

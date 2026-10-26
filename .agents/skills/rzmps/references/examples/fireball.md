@@ -32,8 +32,8 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
         initialValues: {
           lifetime: 0.6,
           speed: 1,
-          scale: new THREE.Vector3(2.5, 2.5, 2.5),
-          color: [new THREE.Color('#ffffff'), new THREE.Color('#ffd166')],
+          scale: 2.5,
+          color: ['#ffffff', '#ffd166'],
           rotation: [new THREE.Vector3(-90, 0, 0), new THREE.Vector3(90, 0, 0)],
           alpha: 1,
           velocity: new THREE.Vector3(0, 0, 0),
@@ -45,11 +45,11 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#fff2e8'),
+        color: '#fff2e8',
         alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
     ],
@@ -70,7 +70,7 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
         brightness: 5,
         rangeMultiplier: 3,
         lightOptions: {
-          color: new THREE.Color('#ffae97'),
+          color: '#ffae97',
           intensity: 1,
           distance: 8,
           decay: 2,
@@ -94,9 +94,9 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
         radialSpeed: 2,
         initialValues: {
           lifetime: 0.5,
-          scale: new THREE.Vector3(6, 6, 6),
+          scale: 6,
           velocity: new THREE.Vector3(0, 1.35, 0),
-          color: new THREE.Color('#ffffff'),
+          color: '#ffffff',
           rotation: [
             new THREE.Vector3(-Math.PI, 0, 0),
             new THREE.Vector3(Math.PI, 0, 0),
@@ -116,7 +116,7 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
         frequency: 1.6,
       }),
       new ScaleOverLifetime({
-        scale: (time) => new THREE.Vector3(2, 2, 2).multiplyScalar(Easing.cubic.out(time)),
+        scale: (time) => 2 * Easing.cubic.out(time),
       }),
       new ColorOverLifetime({
         alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
@@ -163,8 +163,8 @@ The main emitter has no continuous rate: five particles burst at time zero from 
         initialValues: {
           lifetime: 0.6,
           speed: 1,
-          scale: new THREE.Vector3(2.5, 2.5, 2.5),
-          color: [new THREE.Color('#ffffff'), new THREE.Color('#ffd166')],
+          scale: 2.5,
+          color: ['#ffffff', '#ffd166'],
           rotation: [new THREE.Vector3(-90, 0, 0), new THREE.Vector3(90, 0, 0)],
           alpha: 1,
           velocity: new THREE.Vector3(0, 0, 0),
@@ -185,9 +185,9 @@ The main emitter has no continuous rate: five particles burst at time zero from 
         radialSpeed: 2,
         initialValues: {
           lifetime: 0.5,
-          scale: new THREE.Vector3(6, 6, 6),
+          scale: 6,
           velocity: new THREE.Vector3(0, 1.35, 0),
-          color: new THREE.Color('#ffffff'),
+          color: '#ffffff',
           rotation: [
             new THREE.Vector3(-Math.PI, 0, 0),
             new THREE.Vector3(Math.PI, 0, 0),
@@ -210,11 +210,11 @@ The main scale multiplier grows from 0.35 to 1.8, making the explosion expand ra
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#fff2e8'),
+        color: '#fff2e8',
         alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
     ],
@@ -236,7 +236,7 @@ The main scale multiplier grows from 0.35 to 1.8, making the explosion expand ra
         frequency: 1.6,
       }),
       new ScaleOverLifetime({
-        scale: (time) => new THREE.Vector3(2, 2, 2).multiplyScalar(Easing.cubic.out(time)),
+        scale: (time) => 2 * Easing.cubic.out(time),
       }),
       new ColorOverLifetime({
         alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
@@ -276,7 +276,7 @@ The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft in
         brightness: 5,
         rangeMultiplier: 3,
         lightOptions: {
-          color: new THREE.Color('#ffae97'),
+          color: '#ffae97',
           intensity: 1,
           distance: 8,
           decay: 2,

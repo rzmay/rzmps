@@ -196,6 +196,7 @@ export type {
 } from './collision/ThreeGPUCollisionBackend';
 
 // Dynamic Value
+export type { ColorInput, Vector3Input } from './types/ValueInput';
 export type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
 export type { ValueByParameter } from './types/ValueByParameter';
 export { default as ParticleOctree } from './helpers/ParticleOctree';

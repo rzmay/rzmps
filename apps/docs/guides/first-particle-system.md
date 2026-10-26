@@ -20,14 +20,14 @@ const particles = new ParticleSystem({
     radialSpeed: 2,
     initialValues: {
       lifetime: 1.25,
-      scale: new THREE.Vector3(0.2, 0.2, 0.2),
-      color: new THREE.Color("#ff9f43"),
+      scale: 0.2,
+      color: "#ff9f43",
     },
   }),
   modules: [
     new ColorOverLifetime({ alpha: (t) => 1 - t }),
     new ScaleOverLifetime({
-      scale: (t) => new THREE.Vector3(1 + t, 1 + t, 1 + t),
+      scale: (t) => 1 + t,
     }),
   ],
   renderers: new SpriteRenderer(undefined, {

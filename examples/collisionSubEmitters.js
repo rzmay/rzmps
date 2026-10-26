@@ -41,9 +41,9 @@ export default async function createCollisionSubEmitters() {
         radialSpeed: [1, 5],
         initialValues: {
           lifetime: 8,
-          scale: new THREE.Vector3(0.125, 0.125, 0.125),
+          scale: 0.125,
           mass: 1,
-          color: new THREE.Color('#aaa'),
+          color: '#aaa',
         },
       }),
     ],
@@ -101,10 +101,10 @@ export default async function createCollisionSubEmitters() {
         radialSpeed: [0.5, 2],
         initialValues: {
           lifetime: [0.18, 0.42],
-          scale: [new THREE.Vector3(0.05, 0.05, 0.05), new THREE.Vector3(0.15, 0.15, 0.15)],
+          scale: [0.05, 0.15],
           color: [
-            new THREE.Color('#fff4b0'),
-            new THREE.Color('#ff8a3d'),
+            '#fff4b0',
+            '#ff8a3d',
           ],
         },
       }),

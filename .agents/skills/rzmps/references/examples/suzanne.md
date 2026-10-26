@@ -33,8 +33,8 @@ This continuously looping 10-second system emits from a loaded model. Geometry i
         initialValues: {
           lifetime: 2.2,
           speed: 0,
-          scale: new THREE.Vector3(0.1125, 0.1125, 0.1125),
-          color: new THREE.Color('#70d6ff'),
+          scale: 0.1125,
+          color: '#70d6ff',
           alpha: 0.85,
           velocity: new THREE.Vector3(0, 0, 0),
         },
@@ -42,7 +42,7 @@ This continuously looping 10-second system emits from a loaded model. Geometry i
     ],
     modules: [
       new ColorOverLifetime({
-        color: new THREE.Color('#70d6ff'),
+        color: '#70d6ff',
         alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
     ],
@@ -74,8 +74,8 @@ EmissionSource.Surface samples Suzanne’s geometry at 256 particles per second.
         initialValues: {
           lifetime: 2.2,
           speed: 0,
-          scale: new THREE.Vector3(0.1125, 0.1125, 0.1125),
-          color: new THREE.Color('#70d6ff'),
+          scale: 0.1125,
+          color: '#70d6ff',
           alpha: 0.85,
           velocity: new THREE.Vector3(0, 0, 0),
         },
@@ -94,7 +94,7 @@ The color module keeps the cyan tint and applies a cubic alpha fade. Late fading
 ```js
     modules: [
       new ColorOverLifetime({
-        color: new THREE.Color('#70d6ff'),
+        color: '#70d6ff',
         alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
     ],
