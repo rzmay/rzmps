@@ -103,9 +103,6 @@ class Boids extends Module {
   private separation = new THREE.Vector3();
   private affector = new THREE.Vector3();
   private toNode = new THREE.Vector3();
-  private sampleCenter = new THREE.Vector3();
-  private sampleVelocity = new THREE.Vector3();
-  private sampleDirection = new THREE.Vector3();
   private desiredVelocity = new THREE.Vector3();
   private currentDirection = new THREE.Vector3();
   private steeringAxis = new THREE.Vector3();
@@ -179,6 +176,9 @@ class Boids extends Module {
       particle.velocity.copy(this.currentDirection.normalize().multiplyScalar(speed));
     }, {
       ...options,
+      // Boids owns its octree aggregates and GPU grid rather than the base module's managed structures.
+      useOctree: false,
+      useSpatialGrid: false,
       priority: options.priority ?? Module.Priority.Permanent,
       modifyGPU: (particle, deltaTime, context) => this.modifyBoidGPU(
         particle,
