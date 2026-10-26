@@ -216,10 +216,10 @@ optional octree?: ParticleOctree<BoidAggregate>;
 ### octreeAggregator
 
 ```ts
-readonly octreeAggregator: OctreeAggregator<unknown>;
+readonly octreeAggregator: OctreeAggregator<BoidAggregate>;
 ```
 
-#### Inherited from
+#### Overrides
 
 [`Module`](Module.md).[`octreeAggregator`](Module.md#octreeaggregator)
 
@@ -230,10 +230,10 @@ readonly octreeAggregator: OctreeAggregator<unknown>;
 ### octreeOptions
 
 ```ts
-octreeOptions: OctreeConfig;
+readonly octreeOptions: Partial<OctreeConfig>;
 ```
 
-#### Overrides
+#### Inherited from
 
 [`Module`](Module.md).[`octreeOptions`](Module.md#octreeoptions)
 
@@ -325,27 +325,17 @@ spatialEffects: SpatialEffect[] = [];
 
 ***
 
-<a id="spatialgrid"></a>
-
-### spatialGrid?
-
-```ts
-optional spatialGrid?: ParticleSpatialGrid;
-```
-
-***
-
 <a id="spatialgridoptions"></a>
 
-### spatialGridOptions
+### spatialGridOptions?
 
 ```ts
-spatialGridOptions:
+readonly optional spatialGridOptions?:
   | ParticleSpatialGrid
 | Partial<ParticleSpatialGridOptions>;
 ```
 
-#### Overrides
+#### Inherited from
 
 [`Module`](Module.md).[`spatialGridOptions`](Module.md#spatialgridoptions)
 
@@ -549,6 +539,38 @@ set needsUpdate(value): void;
 
 ***
 
+<a id="spatialgrid"></a>
+
+### spatialGrid
+
+#### Get Signature
+
+```ts
+get spatialGrid(): ParticleSpatialGrid | undefined;
+```
+
+##### Returns
+
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md) \| `undefined`
+
+#### Set Signature
+
+```ts
+set spatialGrid(grid): void;
+```
+
+##### Parameters
+
+###### grid
+
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md) \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
 <a id="supportsgpu"></a>
 
 ### supportsGPU
@@ -636,7 +658,7 @@ Returns the managed CPU structure after prepare(), when enabled.
 ### getParticleSpatialGrid()
 
 ```ts
-getParticleSpatialGrid(particleSystem): ParticleSpatialGrid;
+getParticleSpatialGrid(particleSystem): ParticleSpatialGrid | undefined;
 ```
 
 Dependency hook used by function-defined and class-based GPU neighbor modules.
@@ -649,9 +671,9 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 #### Returns
 
-[`ParticleSpatialGrid`](ParticleSpatialGrid.md)
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md) \| `undefined`
 
-#### Overrides
+#### Inherited from
 
 [`Module`](Module.md).[`getParticleSpatialGrid`](Module.md#getparticlespatialgrid)
 

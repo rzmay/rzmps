@@ -111,6 +111,13 @@ assert.equal(taggedOctree.rebuild(octreeParticles), true);
 assert.deepEqual(taggedOctree.bounds.min.toArray(), [-1, -1, -1]);
 assert.deepEqual(taggedOctree.bounds.max.toArray(), [2, 2, 2]);
 
+// Configured tags are the default for rebuild; an explicit selection still overrides them.
+const configuredTagsOctree = new ParticleOctree({ tags: 'included' }, aggregate);
+configuredTagsOctree.rebuild(octreeParticles);
+assert.equal(configuredTagsOctree.root.aggregate.count, 1);
+configuredTagsOctree.rebuild(octreeParticles, []);
+assert.equal(configuredTagsOctree.root.aggregate.count, octreeParticles.length);
+
 const throttledOctree = new ParticleOctree({
   bounds: new THREE.Box3(
     new THREE.Vector3(0, 0, 0),

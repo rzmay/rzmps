@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
+  Boids,
   Module,
   Particle,
   ParticleOctree,
@@ -86,6 +87,18 @@ managedOctreeModule.modify(system.particles, 1 / 60, system);
 assert.equal(callbackOctree, managedOctreeModule.getParticleOctree());
 assert.equal(callbackOctree.root.aggregate.count, 1);
 
+// Octree config can override the module's processing tags without changing particle filtering.
+const sourceFilteredModule = new Module(() => {}, {
+  tags: 'included',
+  octreeOptions: { bounds: configuredBounds, tags: 'excluded' },
+});
+sourceFilteredModule.prepare(system, 0);
+assert.equal(sourceFilteredModule.getParticleOctree().root.aggregate.count, 1);
+assert.deepEqual(sourceFilteredModule.getParticleOctree().particlesInRadius(new THREE.Vector3(), 10), [excluded]);
+sourceFilteredModule.octreeOptions.tags = [];
+sourceFilteredModule.prepare(system, 0);
+assert.equal(sourceFilteredModule.getParticleOctree().root.aggregate.count, 2);
+
 // Function-defined GPU modules receive a compatible system-managed grid.
 let callbackGrid;
 const gridOptions = { brickSubdivisions: 1, cellSubdivisions: 2 };
@@ -109,6 +122,31 @@ assert.equal(explicitGridModule.getParticleSpatialGrid(system), explicit);
 explicitGridModule.cleanup();
 assert.equal(explicitGridModule.getParticleSpatialGrid(system), explicit);
 
-system.destroy();
 
+// Boids uses the same managed acquisition and cleanup, including the legacy grid alias.
+const boids = new Boids({ spatialGrid: gridOptions });
+assert.equal(boids.useOctree, true);
+assert.equal(boids.useSpatialGrid, true);
+assert.equal(boids.getParticleSpatialGrid(system), managedGrid);
+assert.equal(boids.spatialGrid, managedGrid);
+boids.prepare(system);
+assert.equal(boids.getParticleOctree(), boids.octree);
+assert.ok(boids.octree.root.aggregate.particleAffectors instanceof Map);
+boids.cleanup();
+assert.equal(boids.octree, undefined);
+assert.equal(boids.spatialGrid, undefined);
+assert.equal(boids.getParticleSpatialGrid(system), managedGrid);
+const explicitBoids = new Boids({ grid: explicit });
+assert.equal(explicitBoids.getParticleSpatialGrid(system), explicit);
+explicitBoids.cleanup();
+assert.equal(explicitBoids.spatialGrid, undefined);
+assert.equal(explicitBoids.getParticleSpatialGrid(system), explicit);
+
+// No target tag filter means all boids participate, even when affector sources have tags.
+const unfilteredBoids = new Boids({ particleAffectors: { sourceTags: 'excluded' } });
+unfilteredBoids.prepare(system);
+assert.equal(unfilteredBoids.octree.root.aggregate.count, system.particles.length);
+assert.equal(unfilteredBoids.octree.root.aggregate.particleAffectors.get(0).count, 1);
+
+system.destroy();
 console.log('particle-spatial-grid tests passed');
