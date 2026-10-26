@@ -111,6 +111,13 @@ assert.equal(taggedOctree.rebuild(octreeParticles), true);
 assert.deepEqual(taggedOctree.bounds.min.toArray(), [-1, -1, -1]);
 assert.deepEqual(taggedOctree.bounds.max.toArray(), [2, 2, 2]);
 
+// Configured tags are the default for rebuild; an explicit selection still overrides them.
+const configuredTagsOctree = new ParticleOctree({ tags: 'included' }, aggregate);
+configuredTagsOctree.rebuild(octreeParticles);
+assert.equal(configuredTagsOctree.root.aggregate.count, 1);
+configuredTagsOctree.rebuild(octreeParticles, []);
+assert.equal(configuredTagsOctree.root.aggregate.count, octreeParticles.length);
+
 const throttledOctree = new ParticleOctree({
   bounds: new THREE.Box3(
     new THREE.Vector3(0, 0, 0),
@@ -165,6 +172,16 @@ boids.prepare(system);
 boids.modify([boid], 1, system);
 
 assert.ok(boid.velocity.y > 0);
+
+// Explicit octree options must preserve Boids' aggregate format and rebuild only once per prepare.
+const boidsRoot = boids.octree.root;
+assert.ok(boidsRoot.aggregate.particleAffectors instanceof Map);
+assert.equal(boidsRoot.aggregate.count, 2);
+boids.prepare(system);
+assert.equal(boids.octree.root, boidsRoot);
+boids.prepare(system);
+assert.notEqual(boids.octree.root, boidsRoot);
+assert.ok(boids.octree.root.aggregate.particleAffectors instanceof Map);
 
 const radiusLimitedBoid = new Particle({
   lifetime: 10,

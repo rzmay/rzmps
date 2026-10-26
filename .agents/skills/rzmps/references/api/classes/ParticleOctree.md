@@ -96,6 +96,16 @@ root: OctreeNode<TAggregate>;
 
 ***
 
+<a id="tags"></a>
+
+### tags?
+
+```ts
+optional tags?: Multiple<string>;
+```
+
+***
+
 <a id="timequality"></a>
 
 ### timeQuality
@@ -200,7 +210,8 @@ Replaces tree nodes and aggregates from the supplied population; returns false w
 
 ##### tags?
 
-[`Multiple`](../Supporting-Types/type-aliases/Multiple.md)\<`string`\>
+  \| [`Multiple`](../Supporting-Types/type-aliases/Multiple.md)\<`string`\>
+  \| `undefined` = `...`
 
 #### Returns
 

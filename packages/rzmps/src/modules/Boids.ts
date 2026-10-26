@@ -84,7 +84,7 @@ class Boids extends Module {
 
   octree?: ParticleOctree<BoidAggregate>;
 
-  octreeOptions: OctreeConfig;
+  readonly octreeAggregator: OctreeAggregator<BoidAggregate> = this.createAggregator();
   speed?: DynamicValue<number>;
   alignmentWeight: DynamicValue<number>;
   cohesionWeight: DynamicValue<number>;
@@ -94,8 +94,13 @@ class Boids extends Module {
   steering: DynamicValue<number>;
   maintainSpeed: boolean;
   particleAffectors: BoidParticleAffectorOptions[];
-  spatialGrid?: ParticleSpatialGrid;
-  spatialGridOptions: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  get spatialGrid(): ParticleSpatialGrid | undefined {
+    return this.particleSpatialGrid;
+  }
+
+  set spatialGrid(grid: ParticleSpatialGrid | undefined) {
+    this.particleSpatialGrid = grid;
+  }
   neighborRadius: DynamicValue<number>;
 
   private alignment = new THREE.Vector3();
@@ -103,9 +108,6 @@ class Boids extends Module {
   private separation = new THREE.Vector3();
   private affector = new THREE.Vector3();
   private toNode = new THREE.Vector3();
-  private sampleCenter = new THREE.Vector3();
-  private sampleVelocity = new THREE.Vector3();
-  private sampleDirection = new THREE.Vector3();
   private desiredVelocity = new THREE.Vector3();
   private currentDirection = new THREE.Vector3();
   private steeringAxis = new THREE.Vector3();
@@ -179,6 +181,21 @@ class Boids extends Module {
       particle.velocity.copy(this.currentDirection.normalize().multiplyScalar(speed));
     }, {
       ...options,
+      useOctree: true,
+      octreeOptions: {
+        ...options.octreeOptions,
+        bounds: options.octreeOptions?.bounds?.clone(),
+        timeQuality: THREE.MathUtils.clamp(
+          options.timeQuality ?? options.octreeOptions?.timeQuality ?? 0.5,
+          Number.EPSILON,
+          1,
+        ),
+      },
+      useSpatialGrid: true,
+      spatialGrid: options.spatialGrid ?? options.grid ?? {
+        brickSubdivisions: 2,
+        cellSubdivisions: 2,
+      },
       priority: options.priority ?? Module.Priority.Permanent,
       modifyGPU: (particle, deltaTime, context) => this.modifyBoidGPU(
         particle,
@@ -195,20 +212,6 @@ class Boids extends Module {
         : undefined,
     });
 
-    this.octreeOptions = {
-      bounds: options.octreeOptions?.bounds?.clone() ?? new THREE.Box3(
-        new THREE.Vector3(-0.5, -0.5, -0.5),
-        new THREE.Vector3(0.5, 0.5, 0.5),
-      ),
-      maxDepth: options.octreeOptions?.maxDepth ?? 8,
-      particlesPerLeaf: options.octreeOptions?.particlesPerLeaf ?? 4,
-      quantizeBounds: options.octreeOptions?.quantizeBounds ?? 0,
-      timeQuality: THREE.MathUtils.clamp(
-        options.timeQuality ?? options.octreeOptions?.timeQuality ?? 0.5,
-        Number.EPSILON,
-        1,
-      ),
-    };
     this.speed = options.speed;
     this.alignmentWeight = options.alignmentWeight ?? 1;
     this.cohesionWeight = options.cohesionWeight ?? 1;
@@ -218,14 +221,17 @@ class Boids extends Module {
     this.steering = options.steering ?? 0.5;
     this.maintainSpeed = options.maintainSpeed ?? true;
     this.particleAffectors = acceptMultiple(options.particleAffectors) ?? [];
-    this.spatialGridOptions = options.spatialGrid ?? options.grid ?? {
-      brickSubdivisions: 2,
-      cellSubdivisions: 2,
-    };
     this.neighborRadius = options.neighborRadius ?? 1;
   }
 
   public prepare(particleSystem: ParticleSystem): void {
+    // The managed tree includes both flock members and tagged particle-affector sources.
+    this.octreeOptions.tags = this.tags?.length
+      ? Array.from(new Set([
+        ...this.tags,
+        ...this.particleAffectors.flatMap((affector) => acceptMultiple(affector.sourceTags) ?? []),
+      ]))
+      : undefined;
     super.prepare(particleSystem, 0);
     this.particleSystem = particleSystem;
 
@@ -238,45 +244,10 @@ class Boids extends Module {
     // GPU and CPU use exact-radius queries over their respective spatial structures.
     if (particleSystem.isGPUProcessingActive) return;
 
-    if (particleSystem.boundingBox.isEmpty()) particleSystem.updateBoundingBox();
-    this.octreeOptions.bounds = particleSystem.boundingBox.clone();
-    if (this.octree) this.octree.setBounds(this.octreeOptions.bounds);
-
-    if (!this.octree) {
-      this.octree = new ParticleOctree(
-        {
-          bounds: this.octreeOptions.bounds?.clone(),
-          maxDepth: this.octreeOptions.maxDepth,
-          particlesPerLeaf: this.octreeOptions.particlesPerLeaf,
-          quantizeBounds: this.octreeOptions.quantizeBounds,
-          timeQuality: this.octreeOptions.timeQuality,
-        },
-        this.createAggregator(),
-      );
-    }
-
     this.particleIndices = new WeakMap();
     particleSystem.particles.forEach((particle, index) => {
       this.particleIndices.set(particle, index);
     });
-
-    // The tree contains regular boids plus any particles used as source affectors.
-    if (!this.tags?.length && this.particleAffectors.length === 0) {
-      this.octree.rebuild(particleSystem.particles);
-      return;
-    }
-
-    const tags = new Set<Tag>(this.tags ?? []);
-    this.particleAffectors.forEach((particleAffector) => {
-      acceptMultiple(particleAffector.sourceTags)?.forEach((tag) => tags.add(tag));
-    });
-
-    this.octree.rebuild(particleSystem.particles, Array.from(tags));
-  }
-
-  public override getParticleSpatialGrid(particleSystem: ParticleSystem): ParticleSpatialGrid {
-    this.spatialGrid ??= particleSystem.acquireParticleSpatialGrid(this.spatialGridOptions);
-    return this.spatialGrid;
   }
 
   private modifyBoidGPU(
@@ -284,7 +255,7 @@ class Boids extends Module {
     deltaTime: Node<'float'>,
     context: GPUParticleUpdateContext,
   ): void {
-    const grid = this.getParticleSpatialGrid(context.system);
+    const grid = this.getParticleSpatialGrid(context.system)!;
     const radius = this.gpuParameters.number(
       'neighborRadius', () => this.neighborRadius, particle.time, 1, particle.index,
     ).max(Number.EPSILON);

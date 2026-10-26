@@ -6,6 +6,8 @@ import type { Multiple } from '../types/Multiple';
 import type { Tag } from '../types/Tag';
 
 export interface OctreeConfig {
+  /** Default rebuild filter; omission or an empty selection includes every tag. */
+  tags?: Multiple<Tag>;
   /** Particle-space bounds; particles outside the resolved volume are omitted. */
   bounds: THREE.Box3;
   /** Maximum subdivision depth.
@@ -55,6 +57,7 @@ export interface ParticleOctreeQueryOptions {
 class ParticleOctree<TAggregate> {
   root: OctreeNode<TAggregate>;
   bounds = new THREE.Box3();
+  tags?: Multiple<Tag>;
   timeQuality: number;
   maxDepth: number;
   particlesPerLeaf: number;
@@ -76,6 +79,7 @@ class ParticleOctree<TAggregate> {
     config: Partial<OctreeConfig>,
     private aggregator: OctreeAggregator<TAggregate>,
   ) {
+    this.tags = config.tags;
     this.maxDepth = Math.max(0, Math.floor(config.maxDepth ?? 8));
     this.particlesPerLeaf = Math.max(1, Math.floor(config.particlesPerLeaf ?? 4));
     this.timeQuality = THREE.MathUtils.clamp(config.timeQuality ?? 1, Number.EPSILON, 1);
@@ -102,7 +106,7 @@ class ParticleOctree<TAggregate> {
   }
 
   /** Replaces tree nodes and aggregates from the supplied population; returns false when throttled by timeQuality. */
-  rebuild(particles: Particle[], tags?: Multiple<Tag>): boolean {
+  rebuild(particles: Particle[], tags: Multiple<Tag> | undefined = this.tags): boolean {
     this.updateAccumulator += this.timeQuality;
 
     if (this.hasBuiltTree && this.updateAccumulator < 1) return false;

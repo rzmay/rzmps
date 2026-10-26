@@ -1144,7 +1144,9 @@ The [Boids example](https://rzmps.rzmay.com/docs/examples/boids.html) demonstrat
 Modules normally request a managed grid instead of constructing one. Set `useSpatialGrid: true`
 for defaults or pass options through `spatialGrid`; the module's `modifyGPU` callback receives the
 grid as its final argument. The equivalent CPU callback receives its managed octree when
-`useOctree` or `octreeOptions` is configured.
+`useOctree` or `octreeOptions` is configured. Boids uses this managed lifecycle with its own
+aggregate format and includes particle-affector source tags in the tree population;
+its GPU grid uses the same managed acquisition and cleanup as other modules.
 
 ```ts
 const neighbors = new Module(
