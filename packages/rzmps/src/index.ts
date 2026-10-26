@@ -98,6 +98,7 @@ export type {
 } from './Emitter';
 export { EmissionSource } from './enums/EmissionSource';
 export { TagSelectionMethod } from './enums/TagSelectionMethod';
+export { AdvectionMethod } from './enums/AdvectionMethod';
 
 // Renderers
 export { default as Renderer } from './Renderer';

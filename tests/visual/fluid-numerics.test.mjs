@@ -30,6 +30,11 @@ test('fluid runtime changes and bounded gas transport preserve numerical invaria
       'disabling pressure must not apply an old odd-parity pressure buffer');
     assert.ok(await page.evaluate(() => window.projectGas(4)) > 0.001);
     assert.equal(await page.evaluate(() => window.projectGas(0)), 0);
+    await page.evaluate(() => window.projectGas(16, 'waves'));
+    const projection = await page.evaluate(() => window.lastProjectionMetrics.faces);
+    assert.ok(projection.after < projection.before * 0.6, 'pressure must reduce actual transport divergence');
+    assert.ok(projection.residualError < 1e-4, 'projected divergence must equal the discrete Poisson residual');
+    console.log('Gas face projection:', JSON.stringify(projection));
 
     const translated = {};
     for (const method of ['semiLagrangian', 'macCormack']) {
@@ -80,6 +85,10 @@ test('fluid runtime changes and bounded gas transport preserve numerical invaria
       assert.ok(wall.solidCells > 0, 'the actual FluidCollider must occupy grid cells');
       assert.equal(wall.occupiedDensity, 0);
       assert.ok(wall.leaked < 1e-5, `${method}: gas must not cross an occupied slab`);
+      await page.evaluate(() => window.projectGas(16, 'waves'));
+      const wallProjection = await page.evaluate(() => window.lastProjectionMetrics.faces);
+      assert.equal(wallProjection.blockedFlux, 0, 'pressure cannot introduce normal flow through solid faces');
+      assert.ok(wallProjection.residualError < 1e-4, 'solid boundary stencils must match the pressure operator');
     }
 
     await open('gasVolume');
@@ -120,6 +129,18 @@ test('fluid runtime changes and bounded gas transport preserve numerical invaria
     const rebuilt = await page.evaluate(() => window.runFrames(2));
     assert.equal(await page.evaluate(() => window.debugFluid.flip.resolution), 32);
     assert.equal(rebuilt.field.nonfinite, 0, 'quality rebuilds and method changes must discard obsolete cached passes');
+
+    await open('gasVolume');
+    const plume = [];
+    for (let interval = 0; interval < 6; interval++) {
+      const stats = await page.evaluate(() => window.runFrames(600));
+      assert.equal(stats.field.negative, 0);
+      assert.equal(stats.field.nonfinite, 0);
+      assert.ok(stats.field.maxTemperature <= 1.0001, 'the continuous plume cannot manufacture hotter source temperatures');
+      assert.ok(stats.field.peak < 100, 'the default plume must not develop extreme density spikes');
+      plume.push({ seconds: (interval + 1) * 10, ...stats.field });
+    }
+    console.log('Continuous gas through 60 seconds:', JSON.stringify(plume));
     assert.deepEqual(errors, []);
   } finally {
     await browser?.close();

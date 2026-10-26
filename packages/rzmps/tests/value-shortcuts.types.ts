@@ -1,6 +1,6 @@
 import { Color, Vector3 } from 'three';
 import { vec3 } from 'three/tsl';
-import { Emitter, ColorBySpeed, ScaleByDepth, TransformByNoise, DecalRenderer } from '../build/index.mjs';
+import { AdvectionMethod, GasSimulation, Emitter, ColorBySpeed, ScaleByDepth, TransformByNoise, DecalRenderer } from '../build/index.mjs';
 import { MeshBasicMaterial } from 'three';
 import type {
   ModuleCondition, ModuleGPUCondition, ModuleUpdate, ModuleGPUUpdate,
@@ -11,6 +11,13 @@ type Expect<T extends true> = T;
 export type CPUConditionArguments = Expect<Equal<Parameters<ModuleCondition>, Parameters<ModuleUpdate>>>;
 export type GPUConditionArguments = Expect<Equal<Parameters<ModuleGPUCondition>, Parameters<ModuleGPUUpdate>>>;
 export type CPUConditionResult = Expect<Equal<ReturnType<ModuleCondition>, boolean>>;
+
+new GasSimulation({ advectionMethod: AdvectionMethod.MacCormack });
+new GasSimulation({ advectionMethod: 'semiLagrangian' });
+new GasSimulation({
+  // @ts-expect-error Only supported advection enum values and their strings are accepted.
+  advectionMethod: 'unsupported',
+});
 
 new Emitter({
   initialValues: {

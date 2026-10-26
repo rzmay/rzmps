@@ -19,10 +19,13 @@
 ### advectionMethod
 
 ```ts
-advectionMethod: "semiLagrangian" | "macCormack";
+advectionMethod:
+  | "semiLagrangian"
+  | "macCormack"
+  | AdvectionMethod;
 ```
 
-Bounded higher-order transport, or the cheaper first-order fallback.
+Defaults to semiLagrangian. macCormack enables experimental bounded higher-order transport.
 
 ***
 
@@ -97,20 +100,10 @@ Exponential accumulated-color decay rate in inverse seconds. Zero preserves colo
 ### condition?
 
 ```ts
-optional condition?: (particle) => boolean;
+optional condition?: ModuleCondition;
 ```
 
 Additional per-particle predicate, evaluated after tag matching.
-
-#### Parameters
-
-##### particle
-
-[`Particle`](../classes/Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 

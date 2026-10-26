@@ -215,24 +215,35 @@ class FLIPSimulation extends FluidSimulation {
             particle.scale.x.abs(),
             max(particle.scale.y.abs(), particle.scale.z.abs()),
           );
-          const restDistance = diameter.mul(this.particleSpacing).max(1e-5);
+          const searchRadius = max(diameter, grid.getMaxParticleRadiusNode().mul(2))
+            .mul(this.particleSpacing).max(1e-5);
           const correction = vec3(0).toVar('flipParticleSeparation');
-          const neighborCount = float(0).toVar('flipParticleSeparationCount');
           grid.forEachParticleInRadius(
             particle.position,
-            restDistance,
+            searchRadius,
             (neighbor, distanceSquared) => {
               const offset = vec3(particle.position.sub(neighbor.position));
-              const distance = distanceSquared.sqrt().max(1e-5);
-              const overlap = restDistance.sub(distance).max(0);
-              correction.addAssign(offset.div(distance).mul(overlap));
-              neighborCount.addAssign(1);
+              const neighborDiameter = max(neighbor.scale.x.abs(),
+                max(neighbor.scale.y.abs(), neighbor.scale.z.abs()));
+              const pairDistance = diameter.add(neighborDiameter).mul(0.5 * this.particleSpacing);
+              const distance = distanceSquared.sqrt();
+              const overlap = pairDistance.sub(distance).max(0);
+              // Coincident pairs need a stable antisymmetric direction, not a
+              // zero vector. Both particles see the same hash and opposite signs.
+              const ordered = particle.index.lessThan(neighbor.index);
+              const low = ordered.select(particle.index, neighbor.index);
+              const high = ordered.select(neighbor.index, particle.index);
+              const hash = uint(low.mul(73856093)).bitXor(uint(high.mul(19349663)));
+              const fallback = vec3(hash.bitAnd(1023), hash.shiftRight(10).bitAnd(1023),
+                hash.shiftRight(20).bitAnd(1023)).div(511.5).sub(1).normalize()
+                .mul(particle.index.lessThan(neighbor.index).select(1, -1));
+              const direction = distance.greaterThan(1e-5).select(offset.div(distance.max(1e-5)), fallback);
+              correction.addAssign(direction.mul(overlap).mul(0.5));
             },
             { excludeIndex: particle.index, tagMask },
           );
-          If(neighborCount.greaterThan(0), () => {
+          If(correction.lengthSq().greaterThan(0), () => {
             const displacement = vec3(correction
-              .div(neighborCount)
               .mul(this.particleSeparation));
             const distance = displacement.length().max(1e-5);
             const maxDisplacement = diameter.mul(0.1);
@@ -243,7 +254,6 @@ class FLIPSimulation extends FluidSimulation {
         this.separationPositions!.element(instanceIndex).assign(vec4(separatedPosition, 0));
       })().compute(context.buffers.count);
       this.separationNode = separation;
-      renderer.compute(separation);
       // Commit after every neighbor query has finished reading the original positions.
       const apply = this.separationApplyNode ?? Fn(() => {
         const particle = context.buffers.storage.createParticle(undefined, true);
@@ -262,9 +272,12 @@ class FLIPSimulation extends FluidSimulation {
             If(hit.get('found') as Node<'bool'>, () => {
               const normal = (hit.get('normal') as Node<'vec3'>).normalize();
               const distance = (hit.get('distanceSq') as Node<'float'>).sqrt();
-              const position = (hit.get('capsulePoint') as Node<'vec3'>).add(
-                normal.mul(radius.sub(distance).max(0)),
-              );
+              const contact = hit.get('capsulePoint') as Node<'vec3'>;
+              const remaining = transformPointGPU(targetPosition, context.simulationToWorldNode).sub(contact);
+              // A contact at the start of a sweep must not discard tangential
+              // separation: markers resting on a wall still need room to spread.
+              const tangent = remaining.sub(normal.mul(min(remaining.dot(normal), float(0))));
+              const position = contact.add(normal.mul(radius.sub(distance).max(0))).add(tangent);
               particle.position.assign(transformPointGPU(position, context.worldToSimulationNode));
             }).Else(() => {
               particle.position.assign(targetPosition);
@@ -276,6 +289,9 @@ class FLIPSimulation extends FluidSimulation {
         });
       })().compute(context.buffers.count);
       this.separationApplyNode = apply;
+      // Grid advection may have moved markers since the system built the hash.
+      if (this.advectParticlesEnabled) grid.rebuild(renderer, context.buffers, {});
+      renderer.compute(separation);
       renderer.compute(apply);
     }
   }

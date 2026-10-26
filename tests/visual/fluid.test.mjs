@@ -52,6 +52,11 @@ test('fluid presets preserve scenes, the teapot fills, and reference gas fields 
     const settled = await page.evaluate(() => window.runFrames(1020));
     assert.ok(settled.speed <= 6.01, 'velocity must remain bounded after 30 simulated seconds');
     assert.ok(settled.inContainer > settled.count * 0.9, 'the liquid must remain collected inside the actual teapot');
+    const packing = await page.evaluate(() => window.fluidPacking());
+    console.log('Post-emission FLIP packing:', JSON.stringify(packing));
+    assert.ok(packing.nearCoincident < 0.01, 'resting wall contacts must not trap nearly coincident chains');
+    assert.ok(packing.compressed < 0.4, 'settled liquid must not collapse into densely compressed chains');
+    assert.ok(packing.medianSpacing > 0.8, 'post-emission liquid must retain most of its rest spacing');
     const longRunning = await page.evaluate(() => window.runFrames(1800));
     assert.ok(longRunning.speed <= 6.01, 'liquid must remain bounded through 60 simulated seconds');
     assert.ok(longRunning.inContainer > longRunning.count * 0.9, 'liquid must stay in the vessel through 60 seconds');

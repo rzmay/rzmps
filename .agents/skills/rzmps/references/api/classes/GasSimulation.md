@@ -59,7 +59,10 @@ _modify: ModuleUpdate;
 ### advectionMethod
 
 ```ts
-advectionMethod: "semiLagrangian" | "macCormack";
+advectionMethod:
+  | "semiLagrangian"
+  | "macCormack"
+  | AdvectionMethod;
 ```
 
 ***
@@ -183,18 +186,8 @@ colorField: VolumeField;
 ### condition
 
 ```ts
-condition: (particle) => boolean;
+condition: ModuleCondition;
 ```
-
-#### Parameters
-
-##### particle
-
-[`Particle`](Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 

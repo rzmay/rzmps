@@ -1,24 +1,26 @@
 import * as THREE from 'three';
 import { Storage3DTexture, StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
-  Fn, atomicMax, atomicStore, clamp, float, floatBitsToUint, instanceIndex, ivec3,
+  Fn, If, atomicMax, atomicStore, clamp, float, floatBitsToUint, floor, instanceIndex, int, ivec3,
   max, min, mix, pow, storage, textureStore, uint, uniform, vec3, vec4,
 } from 'three/tsl';
-import type { GPUParticleRenderBufferState, GPUParticleUpdateContext } from '../gpu/Particle';
+import type { GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateContext } from '../gpu/Particle';
 import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
 import { generateGPUParticleNoise4D } from '../helpers/noise';
 import type { VolumeField } from '../interfaces/VolumeField';
 import type { ValueByParameter } from '../types/ValueByParameter';
 import type { DynamicValue } from '../types/DynamicValue';
 import FluidSimulation, { type FluidSimulationOptions } from './FluidSimulation';
+import { AdvectionMethod } from '../enums/AdvectionMethod';
 
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
+type FloatStorage = { element(index: Node | number): Node<'float'> };
 type AtomicUintStorage = { element(index: Node | number): Node<'uint'> };
 type FloatUniform = Node<'float'> & { value: number };
 
 export interface GasSimulationOptions extends FluidSimulationOptions {
   /** Defaults to semiLagrangian. macCormack enables experimental bounded higher-order transport. */
-  advectionMethod: 'semiLagrangian' | 'macCormack';
+  advectionMethod: AdvectionMethod | `${AdvectionMethod}`;
   /** Exponential density decay rate in inverse seconds. Zero preserves density. */
   densityDissipation: number;
   /** Density below this value is cleared along with its temperature and color. */
@@ -119,13 +121,14 @@ class GasSimulation extends FluidSimulation {
   private densityAdvected!: Vec4Storage;
   private colorAdvected!: Vec4Storage;
   private advectionNodes = new WeakMap<object, ComputeNode>();
+  private pressureProjection?: GasPressureProjection;
 
   constructor(options: Partial<GasSimulationOptions> = {}) {
     super({
       ...options,
       automaticPadding: options.automaticPadding ?? true,
     });
-    this.advectionMethod = options.advectionMethod ?? 'semiLagrangian';
+    this.advectionMethod = options.advectionMethod ?? AdvectionMethod.SemiLagrangian;
     this.densityDissipation = Math.max(0, options.densityDissipation ?? 0.6);
     this.densityCutoff = Math.max(0, options.densityCutoff ?? 0.01);
     this.temperatureDissipation = Math.max(0, options.temperatureDissipation ?? 1.2);
@@ -178,6 +181,7 @@ class GasSimulation extends FluidSimulation {
     this.refreshBounds(grid, renderer);
     this.remapFields(renderer);
     this.computeSolidField(context, renderer);
+    this.getPressureProjection().initialize(renderer, this.velocityCurrent);
     const dt = context.deltaTimeNode;
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
 
@@ -243,11 +247,12 @@ class GasSimulation extends FluidSimulation {
       grid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
         const particleRadius = this.splatRadius(particle.scale);
         const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(particleRadius)));
-        const mass = max(particle.mass, float(0)).mul(particle.alpha).mul(weight);
+        const mass = max(particle.mass, float(0)).mul(particle.alpha).mul(weight)
+          .mul(this.sourceStep(particle, dt));
         sourceMass.addAssign(mass);
         momentum.addAssign(particle.velocity.mul(mass));
       }, { tagMask });
-      const blend = clamp(sourceMass.mul(this.velocitySourceStrength).mul(dt), 0, 1);
+      const blend = clamp(float(1).sub(pow(float(Math.E), sourceMass.mul(-this.velocitySourceStrength))), 0, 1);
       const previous = vec3(this.velocityNext.element(instanceIndex).xyz);
       const updated = mix(previous, momentum.div(max(sourceMass, float(1e-6))), blend);
       this.velocityNext.element(instanceIndex).assign(vec4(this.clampVelocity(updated), 0));
@@ -256,7 +261,7 @@ class GasSimulation extends FluidSimulation {
     renderer.compute(velocitySources);
 
     this.applyVorticity(context, renderer);
-    this.solveProjection(renderer, this.velocityNext, this.velocityCurrent, false, this.solid);
+    this.solveProjection(renderer, this.velocityNext, this.velocityCurrent);
 
     const densityCurrent = this.densityCurrent;
     const colorCurrent = this.colorCurrent;
@@ -328,7 +333,7 @@ class GasSimulation extends FluidSimulation {
         const particleRadius = this.splatRadius(particle.scale);
         const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(particleRadius)));
         const contribution = max(particle.mass, float(0)).mul(particle.alpha)
-          .mul(weight).mul(this.sourceStrength).mul(dt);
+          .mul(weight).mul(this.sourceStrength).mul(this.sourceStep(particle, dt));
         sourceDensity.addAssign(contribution);
         sourceTemperature.addAssign(contribution.mul(this.particleTemperature(particle.time, particle.index)));
       }, { tagMask });
@@ -347,7 +352,8 @@ class GasSimulation extends FluidSimulation {
       grid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
         const particleRadius = this.splatRadius(particle.scale);
         const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(particleRadius)));
-        const contribution = max(particle.mass, float(0)).mul(particle.alpha).mul(weight).mul(this.sourceStrength).mul(dt);
+        const contribution = max(particle.mass, float(0)).mul(particle.alpha).mul(weight)
+          .mul(this.sourceStrength).mul(this.sourceStep(particle, dt));
         sourceColor.addAssign(particle.color.mul(contribution));
       }, { tagMask });
       colorNext.element(instanceIndex).assign(vec4(
@@ -475,6 +481,7 @@ class GasSimulation extends FluidSimulation {
   }
 
   protected override onBoundsChanged(previous: THREE.Box3): void {
+    this.pressureProjection?.invalidate();
     this.pendingPreviousBounds ??= previous;
     this.density.bounds.copy(this.bounds);
     this.colorField.bounds.copy(this.bounds);
@@ -567,6 +574,8 @@ class GasSimulation extends FluidSimulation {
   }
 
   private disposeGasFields(): void {
+    this.pressureProjection?.dispose();
+    this.pressureProjection = undefined;
     this.densityTexture?.dispose();
     this.colorTexture?.dispose();
     [
@@ -581,6 +590,26 @@ class GasSimulation extends FluidSimulation {
       ...this.advectionAttributes,
     ].forEach((attribute) => attribute?.dispose());
     this.advectionAttributes = [];
+  }
+
+  private getPressureProjection(): GasPressureProjection {
+    this.pressureProjection ??= new GasPressureProjection(
+      this.resolution, this.cellSizeNode, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
+    );
+    return this.pressureProjection;
+  }
+
+  protected override sampleVelocity(position: Node<'vec3'>, field = this.velocityCurrent): Node<'vec3'> {
+    if (field !== this.velocityCurrent) return super.sampleVelocity(position, field);
+    return this.getPressureProjection().sample(position.sub(this.boundsMinNode).div(this.cellSizeNode));
+  }
+
+  protected override solveProjection(
+    renderer: ParticleSpatialGridRenderer,
+    input: Vec4Storage,
+    output: Vec4Storage,
+  ): void {
+    this.getPressureProjection().solve(renderer, input, output, this.pressureIterations);
   }
 
   private ensureAdvectionFields(): void {
@@ -749,6 +778,12 @@ class GasSimulation extends FluidSimulation {
     return max(particleRadius, minimum) as Node<'float'>;
   }
 
+  private sourceStep(particle: GPUParticleLike, dt: Node<'float'>): Node<'float'> {
+    // Sources are sampled before aging/integration. Do not emit gas for the
+    // portion of a long update during which this particle has already expired.
+    return min(dt, max(particle.lifetime.sub(particle.realtime.div(1000)), float(0)));
+  }
+
   protected override async readAutomaticPadding(
     renderer: ParticleSpatialGridRenderer,
     _grid: ParticleSpatialGrid,
@@ -847,6 +882,180 @@ class GasSimulation extends FluidSimulation {
       parameter,
       new THREE.Color(0xffffff),
     );
+  }
+}
+
+// Gas transport uses staggered face fluxes so D, G and the pressure Laplacian
+// describe the same operator. Center velocities remain the force/source workspace.
+class GasPressureProjection {
+  readonly attribute: StorageBufferAttribute;
+  private readonly faces: Vec4Storage;
+  private readonly faceCount: number;
+  private initialized = false;
+  private builds = new WeakMap<object, ComputeNode>();
+  private centers = new WeakMap<object, ComputeNode>();
+  private divergenceNode?: ComputeNode;
+  private pressureNodes: ComputeNode[] = [];
+  private projectNode?: ComputeNode;
+
+  constructor(
+    private readonly n: number,
+    private readonly h: Node<'float'>,
+    private readonly maxVelocity: Node<'float'>,
+    private readonly solid: FloatStorage,
+    private readonly pressure: FloatStorage,
+    private readonly divergence: FloatStorage,
+  ) {
+    this.faceCount = (n + 1) ** 3;
+    this.attribute = new StorageBufferAttribute(new Float32Array(this.faceCount * 4), 4);
+    this.faces = storage(this.attribute, 'vec4', this.faceCount) as Vec4Storage;
+  }
+
+  invalidate(): void { this.initialized = false; }
+
+  dispose(): void { this.attribute.dispose(); }
+
+  private coordinate(index: Node<'uint'>, side: number): Node<'ivec3'> {
+    return ivec3(int(index.mod(side)), int(index.div(side).mod(side)), int(index.div(side * side)));
+  }
+
+  private index(coordinate: Node<'ivec3'>, side: number): Node<'uint'> {
+    return uint(coordinate.x.add(coordinate.y.mul(side)).add(coordinate.z.mul(side * side)));
+  }
+
+  private cell(coordinate: Node<'ivec3'>): Node<'uint'> {
+    return this.index(ivec3(clamp(vec3(coordinate), vec3(0), vec3(this.n - 1))), this.n);
+  }
+
+  private inside(coordinate: Node<'ivec3'>): Node<'bool'> {
+    return vec3(coordinate).greaterThanEqual(vec3(0)).all()
+      .and(vec3(coordinate).lessThan(vec3(this.n)).all());
+  }
+
+  private occupied(coordinate: Node<'ivec3'>): Node<'bool'> {
+    return this.inside(coordinate).and(this.solid.element(this.cell(coordinate)).greaterThanEqual(0.5));
+  }
+
+  private axis(axis: number): Node<'ivec3'> {
+    return ivec3(axis === 0 ? 1 : 0, axis === 1 ? 1 : 0, axis === 2 ? 1 : 0);
+  }
+
+  private gradient(face: Node<'ivec3'>, axis: number): Node<'float'> {
+    const lower = face.sub(this.axis(axis));
+    const upper = face;
+    const boundary = this.inside(lower).and(this.inside(upper)).not();
+    const p0 = this.inside(lower).select(this.pressure.element(this.cell(lower)), float(0));
+    const p1 = this.inside(upper).select(this.pressure.element(this.cell(upper)), float(0));
+    return this.occupied(lower).or(this.occupied(upper)).select(
+      float(0), p1.sub(p0).mul(boundary.select(2, 1)).div(this.h),
+    );
+  }
+
+  private build(renderer: ParticleSpatialGridRenderer, input: Vec4Storage): void {
+    const node = this.builds.get(input) ?? Fn(() => {
+      const face = this.coordinate(instanceIndex, this.n + 1);
+      const components = (['x', 'y', 'z'] as const).map((component, axis) => {
+        const lower = face.sub(this.axis(axis));
+        const a = input.element(this.cell(lower))[component];
+        const b = input.element(this.cell(face))[component];
+        const average = this.inside(lower).and(this.inside(face)).select(a.add(b).mul(0.5),
+          this.inside(lower).select(a, b));
+        return this.occupied(lower).or(this.occupied(face)).select(float(0), average);
+      });
+      this.faces.element(instanceIndex).assign(vec4(components[0], components[1], components[2], 0));
+    })().compute(this.faceCount);
+    this.builds.set(input, node);
+    renderer.compute(node);
+    this.initialized = true;
+  }
+
+  initialize(renderer: ParticleSpatialGridRenderer, input: Vec4Storage): void {
+    if (!this.initialized) this.build(renderer, input);
+  }
+
+  sample(position: Node<'vec3'>): Node<'vec3'> {
+    const values = (['x', 'y', 'z'] as const).map((component, axis) => {
+      const offset = vec3(axis === 0 ? 0 : 0.5, axis === 1 ? 0 : 0.5, axis === 2 ? 0 : 0.5);
+      const coordinate = position.sub(offset);
+      const base = floor(coordinate);
+      const fraction = coordinate.sub(base);
+      const limits = vec3(axis === 0 ? this.n : this.n - 1,
+        axis === 1 ? this.n : this.n - 1, axis === 2 ? this.n : this.n - 1);
+      const at = (x: number, y: number, z: number) => this.faces.element(this.index(
+        ivec3(clamp(base.add(vec3(x, y, z)), vec3(0), limits)), this.n + 1,
+      ))[component];
+      return mix(
+        mix(mix(at(0, 0, 0), at(1, 0, 0), fraction.x), mix(at(0, 1, 0), at(1, 1, 0), fraction.x), fraction.y),
+        mix(mix(at(0, 0, 1), at(1, 0, 1), fraction.x), mix(at(0, 1, 1), at(1, 1, 1), fraction.x), fraction.y),
+        fraction.z,
+      );
+    });
+    return vec3(values[0], values[1], values[2]);
+  }
+
+  solve(renderer: ParticleSpatialGridRenderer, input: Vec4Storage, output: Vec4Storage, iterations: number): void {
+    this.build(renderer, input);
+    this.divergenceNode ??= Fn(() => {
+      const c = this.coordinate(instanceIndex, this.n);
+      const lower = this.faces.element(this.index(c, this.n + 1));
+      const divergence = this.faces.element(this.index(c.add(ivec3(1, 0, 0)), this.n + 1)).x.sub(lower.x)
+        .add(this.faces.element(this.index(c.add(ivec3(0, 1, 0)), this.n + 1)).y.sub(lower.y))
+        .add(this.faces.element(this.index(c.add(ivec3(0, 0, 1)), this.n + 1)).z.sub(lower.z)).div(this.h);
+      this.divergence.element(instanceIndex).assign(this.occupied(c).select(float(0), divergence));
+      this.pressure.element(instanceIndex).assign(0);
+    })().compute(this.n ** 3);
+    renderer.compute(this.divergenceNode);
+
+    // Each color reads only the opposite color, with dispatch boundaries between
+    // updates. Solid faces are Neumann; open domain faces have zero pressure at h/2.
+    for (let parity = 0; parity < 2; parity += 1) {
+      this.pressureNodes[parity] ??= Fn(() => {
+        const c = this.coordinate(instanceIndex, this.n);
+        If(c.x.add(c.y).add(c.z).mod(2).equal(parity).and(this.occupied(c).not()), () => {
+          const sum = float(0).toVar();
+          const diagonal = float(0).toVar();
+          for (let axis = 0; axis < 3; axis += 1) {
+            for (const sign of [-1, 1]) {
+              const neighbor = c.add(this.axis(axis).mul(sign));
+              const weight = this.occupied(neighbor).select(0, this.inside(neighbor).select(1, 2));
+              diagonal.addAssign(weight);
+              sum.addAssign(this.inside(neighbor).select(
+                this.pressure.element(this.cell(neighbor)).mul(weight), float(0),
+              ));
+            }
+          }
+          this.pressure.element(instanceIndex).assign(sum.sub(
+            this.divergence.element(instanceIndex).mul(this.h.mul(this.h)),
+          ).div(max(diagonal, float(1))));
+        });
+      })().compute(this.n ** 3);
+    }
+    for (let iteration = 0; iteration < Math.max(0, Math.floor(iterations)); iteration += 1) {
+      renderer.compute(this.pressureNodes[0]);
+      renderer.compute(this.pressureNodes[1]);
+    }
+
+    this.projectNode ??= Fn(() => {
+      const face = this.coordinate(instanceIndex, this.n + 1);
+      const gradient = vec3(this.gradient(face, 0), this.gradient(face, 1), this.gradient(face, 2));
+      // Safety limits can leave residual divergence when active, as with the
+      // center-velocity limit. They are not part of the pressure operator.
+      this.faces.element(instanceIndex).xyz.assign(clamp(
+        this.faces.element(instanceIndex).xyz.sub(gradient), this.maxVelocity.negate(), this.maxVelocity,
+      ));
+    })().compute(this.faceCount);
+    renderer.compute(this.projectNode);
+
+    const centerNode = this.centers.get(input) ?? Fn(() => {
+      const c = this.coordinate(instanceIndex, this.n);
+      const gradient = vec3(...[0, 1, 2].map(axis => this.gradient(c, axis)
+        .add(this.gradient(c.add(this.axis(axis)), axis)).mul(0.5)) as [Node<'float'>, Node<'float'>, Node<'float'>]);
+      const velocity = input.element(instanceIndex).xyz.sub(gradient);
+      const limited = velocity.mul(clamp(this.maxVelocity.div(max(velocity.length(), float(1e-6))), 0, 1));
+      output.element(instanceIndex).assign(this.occupied(c).select(vec4(0), vec4(limited, 0)));
+    })().compute(this.n ** 3);
+    this.centers.set(input, centerNode);
+    renderer.compute(centerNode);
   }
 }
 

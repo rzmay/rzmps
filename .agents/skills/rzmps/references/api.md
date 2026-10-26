@@ -194,6 +194,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 
 ### Enums
 
+- [AdvectionMethod](api/enumerations/AdvectionMethod.md)
 - [CollisionGeometryUpdatePolicy](api/enumerations/CollisionGeometryUpdatePolicy.md)
 - [EmissionSource](api/enumerations/EmissionSource.md)
 - [EndBehavior](api/enumerations/EndBehavior.md)

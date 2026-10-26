@@ -111,7 +111,7 @@ export class ModuleGUI extends GUIEditorBase {
                     'gatherNode', 'forceNodeCompute', 'gpuCacheKey', 'gatherCacheKey',
                     'visualCacheKey', 'visualDensityNode', 'visualColorNode', 'visualOutputNodes',
                     'maxima', 'maximaAttribute', 'maximaNodes', 'maximaResetNode',
-                    'pendingPreviousBounds',
+                    'pendingPreviousBounds', 'pressureProjection',
                     'lastBoundsRead', 'boundsReadPending',
                 ].forEach((key) => hidden.add(key));
             }

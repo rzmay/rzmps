@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
   FLIPSimulation,
+  AdvectionMethod,
   FluidCollider,
   GasSimulation,
   ParticleOctree,
@@ -53,6 +54,11 @@ assert.ok(gas.colorField.texture.isStorageTexture);
 assert.equal(gas.density.data, undefined);
 assert.equal(gas.scalarDiffusion, 0);
 assert.equal(gas.advectionMethod, 'semiLagrangian');
+assert.equal(AdvectionMethod.SemiLagrangian, 'semiLagrangian');
+assert.equal(AdvectionMethod.MacCormack, 'macCormack');
+const higherOrderGas = new GasSimulation({ advectionMethod: AdvectionMethod.MacCormack });
+assert.equal(higherOrderGas.advectionMethod, 'macCormack');
+higherOrderGas.cleanup();
 assert.equal(gas.densityDissipation, 0.6);
 assert.equal(gas.densityCutoff, 0.01);
 assert.deepEqual(gas.temperatureRange, [0, 1]);

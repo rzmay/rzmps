@@ -3,6 +3,7 @@ import {
   Emitter,
   EmissionShape,
   ColorOverLifetime,
+  Collision,
   ForceOverLifetime,
   GasSimulation,
   ParticleSystem,
@@ -14,6 +15,7 @@ import {
 export default async function createGasVolume(simulationOptions = {}) {
   // #region docs:modules:1
   const gas = new GasSimulation({
+    advectionMethod: 'macCormack',
     pressureIterations: 16,
     externalForce: new THREE.Vector3(0, 0.05, 0),
     densityDissipation: 0.9,
@@ -77,6 +79,7 @@ export default async function createGasVolume(simulationOptions = {}) {
     // #region docs:modules:2
     modules: [
       gas,
+      new Collision({ lifetimeLoss: 1 }),
       new ForceOverLifetime({
         force: new THREE.Vector3(0, 0.35, 0),
       }),

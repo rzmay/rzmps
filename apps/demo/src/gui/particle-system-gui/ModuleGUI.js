@@ -58,6 +58,7 @@ export class ModuleGUI extends GUIEditorBase {
                 'spatialGridOptions',
                 'advectionMethod',
                 'advectionAttributes',
+                'pressureProjection',
                 'velocityAdvected', 'densityAdvected', 'colorAdvected',
                 'spatialGrid',
                 'spatialEffects',
