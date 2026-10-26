@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install preview browser
+        run: npx puppeteer browsers install chrome --install-deps
+
       - name: Run core tests
         run: npm test
 

@@ -12,7 +12,7 @@ services:
         value: "22"
       - key: SKIP_INSTALL_DEPS
         value: "true"
-      - key: PUPPETEER_SKIP_DOWNLOAD
+      - key: CI
         value: "true"
     routes:
       - type: rewrite

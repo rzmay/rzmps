@@ -9,6 +9,7 @@ export const buildArtifacts = [
   'apps/docs/public/llms.txt',
   'apps/docs/public/llms-full.txt',
   'apps/docs/public/favicon.png',
+  'apps/docs/public/previews/',
   'examples/index.js',
   'packages/rzmps/AGENTS.md',
 ];

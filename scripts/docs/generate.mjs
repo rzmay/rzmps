@@ -46,7 +46,6 @@ const benchmarks = banner + benchmarkGuide(fs.readFileSync(path.join(root,'READM
 emit('apps/docs/guides/benchmarks.md', benchmarks);
 emit('apps/docs/guides/index.md', banner + guideIndex(guideNavigation(path.join(docs,'guides'), new Map([['benchmarks', benchmarks]]))));
 const examples = discoverExamples();
-if (check) validatePreviews(examples);
 const guides = new Map();
 for (const example of examples) {
   const file = path.join(docs, 'examples', example.id+'.md');
@@ -140,7 +139,7 @@ for (const [file, content] of pages) {
   const target=href.startsWith('/')?path.join(docs,href):path.resolve(path.dirname(file),href);
   const candidates=[target,target+'.md',path.join(target,'index.md'),...(href.startsWith('/') ? [path.join(docs,'public',href)] : [])];
   // Preview assets are captured after the generated registry has been written.
-  if(!check && href.startsWith('/previews/') && !candidates.some(p=>fs.existsSync(p))) continue;
+  if(href.startsWith('/previews/') && !candidates.some(p=>fs.existsSync(p))) continue;
   if(!candidates.some(p=>fs.existsSync(p)||outputs.has(path.relative(root,p))))throw new Error(`${file}: broken link ${href}`);
  }
 }
@@ -161,10 +160,11 @@ if(differences.length)throw new Error(`Generated documentation is out of date:\n
 if (!check) {
   // Renamed API sections must not leave empty folders in editors or prompt status caches.
   for (const directory of generatedDirs) removeEmptySubdirectories(path.join(root, directory));
-  // Write the registry first so newly discovered factories are available to the capture harness.
-  if (!skipPreviews) {
-    await generatePreviews();
-    validatePreviews(examples);
-  }
+}
+// Previews are ignored build artifacts, so checks rebuild them too. Write the registry
+// first so newly discovered factories are available to the capture harness.
+if (!skipPreviews) {
+  await generatePreviews();
+  validatePreviews(examples);
 }
 console.log(`${check?'Checked':'Generated'} documentation for ${examples.length} shared examples and ${outputs.size} derived files.`);

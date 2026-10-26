@@ -290,6 +290,10 @@ Use `npm run docs:dev` for the same startup sequence without package watchers.
 `npm run docs:generate` still generates both documentation sources and previews;
 `npm run docs:generate -- --skip-previews` defers previews to `npm run docs:previews`.
 
+Preview images and their manifest in `apps/docs/public/previews/` are ignored build
+artifacts. Documentation builds regenerate missing or stale previews using Puppeteer;
+CI installs Chrome before building. Local captures are reused while their inputs match.
+
 Build the core package:
 
 ```bash
