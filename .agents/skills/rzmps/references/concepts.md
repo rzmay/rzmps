@@ -627,7 +627,7 @@ const crowdDrag = new Module(
     useOctree: true,
     octreeOptions: { maxDepth: 6, particlesPerLeaf: 8 },
     useSpatialGrid: true,
-    spatialGrid: { brickSubdivisions: 3, cellSubdivisions: 4 },
+    spatialGridOptions: { brickSubdivisions: 3, cellSubdivisions: 4 },
     modifyGPU: (particle, deltaTime, _context, grid) => {
       if (!grid) return;
 
@@ -908,7 +908,7 @@ rules.
 
 Reuse ordinary CPU hooks for setup and cleanup. `prepare(system, deltaTime)` runs once before a
 module's work on either backend. A function-defined module can request managed acceleration with
-`useOctree`/`octreeOptions` for CPU or `useSpatialGrid`/`spatialGrid` for GPU; the resulting
+`useOctree`/`octreeOptions` for CPU or `useSpatialGrid`/`spatialGridOptions` for GPU; the resulting
 `ParticleOctree` or `ParticleSpatialGrid` is passed as the optional final callback argument.
 `cleanup()` must call `super.cleanup()` when overridden so managed references are released.
 
@@ -1159,7 +1159,7 @@ The [Boids example](https://rzmps.rzmay.com/docs/examples/boids.html) demonstrat
 ## GPU: ParticleSpatialGrid
 
 Modules normally request a managed grid instead of constructing one. Set `useSpatialGrid: true`
-for defaults or pass options through `spatialGrid`; the module's `modifyGPU` callback receives the
+for defaults or pass construction options through `spatialGridOptions`; the module's `modifyGPU` callback receives the
 grid as its final argument. The equivalent CPU callback receives its managed octree when
 `useOctree` or `octreeOptions` is configured. Boids uses this managed lifecycle with its own
 aggregate format and includes particle-affector source tags in the tree population;
@@ -1174,7 +1174,7 @@ const neighbors = new Module(
   {
     useOctree: true,
     useSpatialGrid: true,
-    spatialGrid: { brickSubdivisions: 3, cellSubdivisions: 4 },
+    spatialGridOptions: { brickSubdivisions: 3, cellSubdivisions: 4 },
     modifyGPU: (particle, deltaTime, context, grid) => {
       grid?.forEachParticleInRadius(
         particle.position,

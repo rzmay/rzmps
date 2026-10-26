@@ -60,6 +60,8 @@ const sharedB = system.acquireParticleSpatialGrid({ brickSubdivisions: 2, cellSu
 assert.equal(sharedA, sharedB);
 const explicit = new ParticleSpatialGrid();
 assert.equal(system.acquireParticleSpatialGrid(explicit), explicit);
+assert.throws(() => new Module(() => {}, { spatialGridOptions: explicit }), /construction options/);
+assert.throws(() => new Boids({ spatialGridOptions: explicit }), /construction options/);
 
 // Function-defined CPU modules receive a lifecycle-managed, tag-filtered octree.
 let callbackOctree;
@@ -103,7 +105,7 @@ assert.equal(sourceFilteredModule.getParticleOctree().root.aggregate.count, 2);
 let callbackGrid;
 const gridOptions = { brickSubdivisions: 1, cellSubdivisions: 2 };
 const managedGridModule = new Module(Module.CPU_UNSUPPORTED, {
-  spatialGrid: gridOptions,
+  spatialGridOptions: gridOptions,
   modifyGPU(_particle, _deltaTime, _context, gridValue) {
     callbackGrid = gridValue;
   },
@@ -113,18 +115,19 @@ assert.equal(managedGrid, system.acquireParticleSpatialGrid(gridOptions));
 managedGridModule.modifyGPU({}, {}, { system }, managedGrid);
 assert.equal(callbackGrid, managedGrid);
 
-// Explicit grids remain caller-owned and survive module cleanup.
-const explicitGridModule = new Module(Module.CPU_UNSUPPORTED, {
-  spatialGrid: explicit,
-  modifyGPU() {},
+assert.equal(managedGridModule.useSpatialGrid, true);
+assert.equal(managedGridModule.spatialGridOptions, gridOptions);
+managedGridModule.cleanup();
+assert.equal(managedGridModule.spatialGrid, undefined);
+assert.equal(managedGridModule.getParticleSpatialGrid(system), managedGrid);
+const disabledGridModule = new Module(Module.CPU_UNSUPPORTED, {
+  useSpatialGrid: false,
+  spatialGridOptions: gridOptions,
 });
-assert.equal(explicitGridModule.getParticleSpatialGrid(system), explicit);
-explicitGridModule.cleanup();
-assert.equal(explicitGridModule.getParticleSpatialGrid(system), explicit);
+assert.equal(disabledGridModule.getParticleSpatialGrid(system), undefined);
 
-
-// Boids uses the same managed acquisition and cleanup, including the legacy grid alias.
-const boids = new Boids({ spatialGrid: gridOptions });
+// Boids uses the same managed acquisition and cleanup as function-defined modules.
+const boids = new Boids({ spatialGridOptions: gridOptions });
 assert.equal(boids.useOctree, true);
 assert.equal(boids.useSpatialGrid, true);
 assert.equal(boids.getParticleSpatialGrid(system), managedGrid);
@@ -136,11 +139,6 @@ boids.cleanup();
 assert.equal(boids.octree, undefined);
 assert.equal(boids.spatialGrid, undefined);
 assert.equal(boids.getParticleSpatialGrid(system), managedGrid);
-const explicitBoids = new Boids({ grid: explicit });
-assert.equal(explicitBoids.getParticleSpatialGrid(system), explicit);
-explicitBoids.cleanup();
-assert.equal(explicitBoids.spatialGrid, undefined);
-assert.equal(explicitBoids.getParticleSpatialGrid(system), explicit);
 
 // No target tag filter means all boids participate, even when affector sources have tags.
 const unfilteredBoids = new Boids({ particleAffectors: { sourceTags: 'excluded' } });

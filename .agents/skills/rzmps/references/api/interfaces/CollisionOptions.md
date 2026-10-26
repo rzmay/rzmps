@@ -291,21 +291,19 @@ Explicit module effect collection; supplying an empty array suppresses automatic
 
 ***
 
-<a id="spatialgrid"></a>
+<a id="spatialgridoptions"></a>
 
-### spatialGrid?
+### spatialGridOptions?
 
 ```ts
-optional spatialGrid?:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
-Configures a system-owned grid or supplies an explicitly caller-owned grid.
+Configures and implicitly enables the managed GPU ParticleSpatialGrid.
 
 #### Inherited from
 
-[`ModuleOptions`](ModuleOptions.md).[`spatialGrid`](ModuleOptions.md#spatialgrid)
+[`ModuleOptions`](ModuleOptions.md).[`spatialGridOptions`](ModuleOptions.md#spatialgridoptions)
 
 ***
 

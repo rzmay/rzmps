@@ -603,7 +603,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
               cohesionWeight: 3,
               separationWeight: 0,
               steering: 12,
-              spatialGrid: {
+              spatialGridOptions: {
                 bounds: new THREE.Box3(
                   new THREE.Vector3(-4, -4, -4),
                   new THREE.Vector3(4, 4, 4),
@@ -938,7 +938,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
               steering: 20,
               maintainSpeed: false,
               neighborRadius: 1,
-              spatialGrid: {
+              spatialGridOptions: {
                 bounds: new THREE.Box3(
                   new THREE.Vector3(-16, -16, -16),
                   new THREE.Vector3(16, 16, 16),
@@ -1071,7 +1071,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
             renderer: new NoopRenderer(),
             modules: [new Boids({
               neighborRadius: 0.3,
-              spatialGrid: {
+              spatialGridOptions: {
                 bounds: new THREE.Box3(
                   new THREE.Vector3(-16, -16, -16),
                   new THREE.Vector3(16, 16, 16),

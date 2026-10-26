@@ -82,8 +82,8 @@ export interface ModuleOptions {
   octreeAggregator: OctreeAggregator<unknown>;
   /** Enables a managed GPU ParticleSpatialGrid with default options. */
   useSpatialGrid: boolean;
-  /** Configures a system-owned grid or supplies an explicitly caller-owned grid. */
-  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  /** Configures and implicitly enables the managed GPU ParticleSpatialGrid. */
+  spatialGridOptions: Partial<ParticleSpatialGridOptions>;
 }
 
 /** Per-particle modifier with priority phases, tag filtering, and a once-per-update preparation hook. */
@@ -118,8 +118,8 @@ export default class Module {
   readonly octreeOptions: Partial<OctreeConfig>;
   readonly octreeAggregator: OctreeAggregator<unknown>;
   readonly useSpatialGrid: boolean;
-  readonly spatialGridOptions?: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
-  protected particleSpatialGrid?: ParticleSpatialGrid;
+  spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
+  protected spatialGrid?: ParticleSpatialGrid;
 
   priority = Priority.Permanent;
   modifyGPU: ModuleGPUUpdate;
@@ -160,8 +160,8 @@ export default class Module {
     this.useOctree = options.useOctree ?? options.octreeOptions !== undefined;
     this.octreeOptions = options.octreeOptions ?? {};
     this.octreeAggregator = options.octreeAggregator ?? createDefaultOctreeAggregator();
-    this.useSpatialGrid = options.useSpatialGrid ?? options.spatialGrid !== undefined;
-    this.spatialGridOptions = options.spatialGrid;
+    this.useSpatialGrid = options.useSpatialGrid ?? options.spatialGridOptions !== undefined;
+    this.spatialGridOptions = options.spatialGridOptions;
   }
 
   /** Whether both modification and any custom condition have GPU implementations. */
@@ -240,17 +240,16 @@ export default class Module {
   /** Dependency hook used by function-defined and class-based GPU neighbor modules. */
   public getParticleSpatialGrid(particleSystem: ParticleSystem): ParticleSpatialGrid | undefined {
     if (!this.useSpatialGrid) return undefined;
-    this.particleSpatialGrid ??= particleSystem.acquireParticleSpatialGrid(
+    this.spatialGrid ??= particleSystem.acquireParticleSpatialGrid(
       this.spatialGridOptions ?? {},
     );
-    return this.particleSpatialGrid;
+    return this.spatialGrid;
   }
 
-  // Optional clean up hook for modules that require it
   /** Releases managed CPU and GPU spatial acceleration references. */
   public cleanup() {
     this.octree = undefined;
-    this.particleSpatialGrid = undefined;
+    this.spatialGrid = undefined;
   }
 
   protected prepareSpatialEffects(particleSystem: ParticleSystem): void {

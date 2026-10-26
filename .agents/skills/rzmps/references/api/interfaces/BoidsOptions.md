@@ -126,18 +126,6 @@ Optional TSL condition callback for GPU processing.
 
 ***
 
-<a id="grid"></a>
-
-### grid
-
-```ts
-grid:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
-```
-
-***
-
 <a id="maintainspeed"></a>
 
 ### maintainSpeed
@@ -305,21 +293,19 @@ Explicit module effect collection; supplying an empty array suppresses automatic
 
 ***
 
-<a id="spatialgrid"></a>
+<a id="spatialgridoptions"></a>
 
-### spatialGrid
+### spatialGridOptions
 
 ```ts
-spatialGrid:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+spatialGridOptions: Partial<ParticleSpatialGridOptions>;
 ```
 
-Configures a system-owned grid or supplies an explicitly caller-owned grid.
+Configures and implicitly enables the managed GPU ParticleSpatialGrid.
 
 #### Overrides
 
-[`ModuleOptions`](ModuleOptions.md).[`spatialGrid`](ModuleOptions.md#spatialgrid)
+[`ModuleOptions`](ModuleOptions.md).[`spatialGridOptions`](ModuleOptions.md#spatialgridoptions)
 
 ***
 

@@ -15,9 +15,7 @@ import type { Tag } from '../types/Tag';
 import BoidAffector from '../spatial/BoidAffector';
 import BoidAffectorHelper from '../spatial/BoidAffectorHelper';
 import type { BoidAffectorOptions } from '../spatial/BoidAffector';
-import ParticleSpatialGrid, {
-  type ParticleSpatialGridOptions,
-} from '../gpu/ParticleSpatialGrid';
+import type { ParticleSpatialGridOptions } from '../gpu/ParticleSpatialGrid';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import type { Node } from 'three/webgpu';
 import { acos, cos, float, If, max, mix, sin, uint, vec3, vec4 } from 'three/tsl';
@@ -69,8 +67,7 @@ export interface BoidsOptions extends Partial<ModuleOptions> {
   affectors: BoidAffector[];
   affectorFilter: (affector: BoidAffector) => boolean;
   particleAffectors: Multiple<BoidParticleAffectorOptions>;
-  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
-  grid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  spatialGridOptions: Partial<ParticleSpatialGridOptions>;
   neighborRadius: DynamicValue<number>;
 }
 
@@ -94,13 +91,6 @@ class Boids extends Module {
   steering: DynamicValue<number>;
   maintainSpeed: boolean;
   particleAffectors: BoidParticleAffectorOptions[];
-  get spatialGrid(): ParticleSpatialGrid | undefined {
-    return this.particleSpatialGrid;
-  }
-
-  set spatialGrid(grid: ParticleSpatialGrid | undefined) {
-    this.particleSpatialGrid = grid;
-  }
   neighborRadius: DynamicValue<number>;
 
   private alignment = new THREE.Vector3();
@@ -192,7 +182,7 @@ class Boids extends Module {
         ),
       },
       useSpatialGrid: true,
-      spatialGrid: options.spatialGrid ?? options.grid ?? {
+      spatialGridOptions: options.spatialGridOptions ?? {
         brickSubdivisions: 2,
         cellSubdivisions: 2,
       },

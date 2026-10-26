@@ -330,9 +330,7 @@ spatialEffects: SpatialEffect[] = [];
 ### spatialGridOptions?
 
 ```ts
-readonly optional spatialGridOptions?:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
 #### Inherited from
@@ -536,38 +534,6 @@ set needsUpdate(value): void;
 #### Inherited from
 
 [`Module`](Module.md).[`needsUpdate`](Module.md#needsupdate)
-
-***
-
-<a id="spatialgrid"></a>
-
-### spatialGrid
-
-#### Get Signature
-
-```ts
-get spatialGrid(): ParticleSpatialGrid | undefined;
-```
-
-##### Returns
-
-[`ParticleSpatialGrid`](ParticleSpatialGrid.md) \| `undefined`
-
-#### Set Signature
-
-```ts
-set spatialGrid(grid): void;
-```
-
-##### Parameters
-
-###### grid
-
-[`ParticleSpatialGrid`](ParticleSpatialGrid.md) \| `undefined`
-
-##### Returns
-
-`void`
 
 ***
 

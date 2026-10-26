@@ -227,6 +227,7 @@ export class ParticleSystemSerializer {
         if (module instanceof Boids) {
             return `new Boids(${this.serializeValue({
                 octreeOptions: module.octreeOptions,
+                spatialGridOptions: module.spatialGridOptions,
                 speed: module.speed,
                 alignmentWeight: module.alignmentWeight,
                 cohesionWeight: module.cohesionWeight,

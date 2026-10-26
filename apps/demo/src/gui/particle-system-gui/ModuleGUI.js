@@ -55,7 +55,7 @@ export class ModuleGUI extends GUIEditorBase {
                 'octreeAggregator',
                 'useSpatialGrid',
                 'spatialGridOptions',
-                'particleSpatialGrid',
+                'spatialGrid',
                 'spatialEffects',
                 'explicitSpatialEffects',
                 'spatialEffectFilter',
