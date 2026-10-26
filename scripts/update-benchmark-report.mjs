@@ -205,7 +205,7 @@ const block = [
   }s warmup`,
   `Measured: ${metadata.measuredAt}`,
   '',
-  'FPS and frame time are measured in an uncapped browser render loop by default. `1% Low FPS` is derived from p99 frame time, which is steadier than raw single-frame min/max FPS. `Update` is the measured `ParticleSystem.update()` slice inside that frame.',
+  'FPS and frame time are measured in an uncapped browser render loop by default. `1% Low FPS` is the reciprocal of the average of the slowest 1% of measured frames. P99 frame time is reported separately. `Update` is the measured `ParticleSystem.update()` slice inside that frame.',
   '',
   markdownTable(
     ['Environment', 'Value'],

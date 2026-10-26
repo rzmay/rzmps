@@ -1,28 +1,18 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { FluidCollider } from '@rzmps/rzmps';
-import teapotModel from '../../assets/models/utah_teapot.obj?url';
+import teapotModel from '../../assets/models/utah_teapot_quad.obj?url';
 import {
   createSceneParticleRoot,
   disposeSceneParticleRoot,
 } from './particleRoot';
 
-function addTeapotColliders(root) {
-  const wallCount = 32;
-  const radius = 1.2;
-  for (let index = 0; index < wallCount; index += 1) {
-    const angle = index / wallCount * Math.PI * 2;
-    const collider = FluidCollider.Box({ surfaceThickness: 0.015 }, 0.3, 2, 0.2);
-    collider.name = `Teapot Wall Collider ${index + 1}`;
-    collider.position.set(Math.sin(angle) * radius, 0.5, Math.cos(angle) * radius);
-    collider.rotation.y = angle;
-    root.add(collider);
-  }
-
-  const bottom = FluidCollider.Box({ surfaceThickness: 0.015 }, 2.45, 0.28, 2.45);
-  bottom.name = 'Teapot Bottom Collider';
-  bottom.position.y = -0.38;
-  root.add(bottom);
+function createTeapotColliderGeometry(source) {
+  // Collision only needs positions; UV and normal seams must not prevent welding.
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', source.getAttribute('position').clone());
+  return mergeVertices(geometry, 1e-4);
 }
 
 export default async function createFluidTeapot(scene) {
@@ -58,19 +48,19 @@ export default async function createFluidTeapot(scene) {
   });
   root.add(teapot);
   if (teapotGeometry) {
-    const surfaceCollider = new FluidCollider({
-      geometry: teapotGeometry,
+    const collider = new FluidCollider({
+      geometry: createTeapotColliderGeometry(teapotGeometry),
       surfaceThickness: 0.02,
-      gridOccupancy: false,
+      gridOccupancy: true,
+      bakedFieldResolution: 48,
       particleCollision: true,
     });
-    surfaceCollider.name = 'Teapot Surface Collider';
-    surfaceCollider.position.copy(teapot.position);
-    surfaceCollider.quaternion.copy(teapot.quaternion);
-    surfaceCollider.scale.copy(teapot.scale);
-    root.add(surfaceCollider);
+    collider.name = 'Utah Teapot Fluid Collider';
+    collider.position.copy(teapot.position);
+    collider.quaternion.copy(teapot.quaternion);
+    collider.scale.copy(teapot.scale);
+    root.add(collider);
   }
-  addTeapotColliders(root);
 
   const floor = new THREE.Mesh(new THREE.BoxGeometry(18, 0.2, 14), floorMaterial);
   floor.name = 'Fluid Studio Floor';

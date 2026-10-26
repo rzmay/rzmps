@@ -7,20 +7,42 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run build:modules && concurrently -k \"npm run dev --workspace @rzmps/rzmps\" \"npm run dev --workspace @rzmps/ammo\" \"npm run dev --workspace @rzmps/jolt\" \"npm run dev --workspace @rzmps/rapier\" \"npm --workspace demo --ignore-scripts start\"",
+    "dev": "npm run docs:generate -- --skip-previews && npm run build:modules && concurrently -k \"npm run dev --workspace @rzmps/rzmps\" \"npm run dev --workspace @rzmps/ammo\" \"npm run dev --workspace @rzmps/jolt\" \"npm run dev --workspace @rzmps/rapier\" \"node scripts/site/dev.mjs\"",
     "test": "npm test --workspace @rzmps/rzmps",
     "build:modules": "npm run build --workspace @rzmps/rzmps && npm run build --workspace @rzmps/ammo && npm run build --workspace @rzmps/jolt && npm run build --workspace @rzmps/rapier",
     "benchmark:run": "npm --workspace demo run benchmark:run --",
     "benchmark:update-report": "node scripts/update-benchmark-report.mjs",
     "benchmark:export": "node scripts/update-benchmark-report.mjs --json-only",
     "benchmark:compare": "node scripts/compare-benchmarks.mjs",
-    "presets:add-author": "node scripts/add-preset-author.mjs"
+    "presets:add-author": "node scripts/add-preset-author.mjs",
+    "docs:generate": "node scripts/docs/generate.mjs",
+    "docs:dev": "npm run docs:generate -- --skip-previews && npm run build:modules && node scripts/site/dev.mjs",
+    "docs:build": "npm run build --workspace @rzmps/docs",
+    "docs:check": "npm run docs:build && node --test scripts/docs/examples.test.mjs scripts/docs/distribution.test.mjs scripts/docs/navigation.test.mjs && node scripts/docs/check-links.mjs",
+    "preview": "node scripts/preview/capture.mjs",
+    "preview:smoke": "node --test tests/visual/preview.test.mjs",
+    "docs:previews": "node scripts/docs/generate-previews.mjs",
+    "agents:check": "node scripts/docs/package-agents.mjs && node scripts/docs/check-agents.mjs",
+    "site:build": "npm run build:modules && npm run docs:check && npm run build --workspace demo && node scripts/site/assemble.mjs",
+    "site:preview": "node scripts/site/serve.mjs",
+    "site:check": "node scripts/docs/generate.mjs --check && node --test scripts/site/site.test.mjs scripts/site/dev.test.mjs",
+    "site:browser-check": "node scripts/site/browser-check.mjs"
   },
   "devDependencies": {
+    "skills": "^1.7.2",
     "tsdown": "^0.23.0",
-    "unrun": "^0.3.1"
+    "typedoc": "^0.28.20",
+    "typedoc-plugin-markdown": "^4.14.0",
+    "typedoc-plugin-missing-exports": "^4.1.4",
+    "unrun": "^0.3.1",
+    "vitepress": "^1.6.4",
+    "yaml": "^2.9.1"
   },
   "overrides": {
     "three": "0.186.0"
-  }
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.19.0"
 }

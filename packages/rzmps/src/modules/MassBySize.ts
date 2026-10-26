@@ -8,10 +8,16 @@ import { SizeRange } from './ColorBySize';
 
 export interface MassBySizeOptions extends Partial<ModuleOptions> {
     mass: ValueByParameter<number>;
+    /** Particle-size interval mapped to zero through one; values outside it are clamped. */
     sizeRange?: SizeRange;
 }
 
+/**
+ * Multiplies particle mass using particle size normalized over sizeRange; two-value parameter ranges interpolate
+ * rather than randomly sample.
+ */
 class MassBySize extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<MassBySizeOptions> = {}) {
 
     super((particle: Particle) => {

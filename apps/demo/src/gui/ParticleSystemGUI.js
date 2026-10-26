@@ -397,7 +397,10 @@ export class ParticleSystemGUI {
     }
 
     configureSystemForRenderer(system = this.system) {
-        if (this.viewState.renderer === 'webgl') system.gpuProcessing = false;
+        if (this.viewState.renderer === 'webgl'
+            && !system.modules.some((module) => module instanceof FluidSimulation)) {
+            system.gpuProcessing = false;
+        }
     }
 
     getPresetFactory(entry) {
@@ -429,6 +432,7 @@ export class ParticleSystemGUI {
         const destroyed = this.isSystemDestroyed(system);
         folder.add(system, 'simulationSpace', ['local', 'world']).name('Simulation Space');
         folder.add(system, 'useSpatialEffects').name('Spatial Effects');
+        folder.add(system, 'spatialEffectBoundsFiltering').name('Spatial Bounds Filter');
         const gravityFolder = folder.addFolder('Gravity');
         gravityFolder.close();
         this.addVector3(gravityFolder, system.gravity, 'Gravity');

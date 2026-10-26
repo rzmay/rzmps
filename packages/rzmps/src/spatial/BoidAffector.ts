@@ -25,6 +25,7 @@ enum Weight {
   Obstacle = -1,
 }
 
+/** Scene-space flocking target or obstacle, collected by Boids modules and filtered by tags. */
 class BoidAffector extends SpatialEffect {
   // Decides default range for boid affectors
   static RANGE_INFLUENCE_THRESHOLD = 1e-6;

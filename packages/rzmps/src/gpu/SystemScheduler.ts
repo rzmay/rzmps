@@ -14,6 +14,11 @@ export interface GPUSystemSchedule {
   nodes: GPUSystemScheduleNode[];
 }
 
+/**
+ * Produces a stable parent-before-child traversal for one GPU simulation frame.
+ * Shared subsystem instances are visited once, while `visiting` detects cycles
+ * before the schedule is handed to ParticleSystem's allocation/emission passes.
+ */
 export function buildGPUSystemSchedule(root: ParticleSystem): GPUSystemSchedule {
   const nodes: GPUSystemScheduleNode[] = [];
   const visiting = new Set<ParticleSystem>();

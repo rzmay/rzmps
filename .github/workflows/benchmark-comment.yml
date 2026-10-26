@@ -18,12 +18,18 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success'
 
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
 
     steps:
       - name: Checkout trusted default branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       - name: Download benchmark artifact
         uses: actions/download-artifact@v4
@@ -86,6 +92,24 @@ jobs:
                 'utf8',
               ),
             );
+
+            // Artifacts are untrusted input. Only comment on the PR/revision
+            // that produced this workflow run, and never overwrite a newer run.
+            if (!Number.isSafeInteger(metadata.pr) || metadata.pr <= 0) {
+              throw new Error('Invalid PR number in benchmark artifact');
+            }
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo, pull_number: metadata.pr,
+            });
+            const run = context.payload.workflow_run;
+            if (pr.state !== 'open'
+              || pr.head.sha !== metadata.headSha
+              || pr.base.sha !== metadata.baseSha
+              || run.head_sha !== metadata.headSha
+              || pr.head.repo?.full_name !== run.head_repository?.full_name) {
+              core.info('Skipping a stale or mismatched benchmark report');
+              return;
+            }
 
             const body = fs.readFileSync(
               'benchmark-results/comparison.md',

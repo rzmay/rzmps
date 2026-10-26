@@ -6,10 +6,15 @@ export const LIVE_CUBEMAP_CAMERA_KEY = '__rzmps_liveCubemapCamera';
 export const PARTICLE_RENDERER_OBJECT_KEY = '__rzmps_particleRendererObject';
 
 export interface LiveCubemapOptions {
+  /** Capture size relative to renderer dimensions, rounded to a power of two. Defaults to 1 / 16. */
   resolutionScale: number;
+  /** Maximum scheduled capture frequency; rendering the six faces is additional work. Defaults to 24. */
   fps: number;
+  /** Reflection intensity supplied to consuming materials. Defaults to 1. */
   intensity: number;
+  /** Hides the capture owner during environment rendering. Defaults to false. */
   excludeParent: boolean;
+  /** Hides particle renderer objects during captures. Defaults to false. */
   excludeParticleRenderers: boolean;
 }
 
@@ -24,6 +29,7 @@ type HiddenMaterialState = {
   depthWrite: boolean;
 };
 
+/** Owns dynamic environment capture for both rendering backends; updates require a scene and initialized renderer. */
 export default class LiveCubemap extends THREE.Object3D {
 
   static isLiveCubemapCamera(camera?: THREE.Camera): boolean {

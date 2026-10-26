@@ -28,11 +28,19 @@ export type ModuleUpdate = (
 ) => void;
 
 export type ModuleGPUUpdate = (
+  /** Shader-node particle view; mutate fields through TSL assignment methods. */
   particle: GPUParticleLike,
   deltaTime: Node<'float'>,
   context: GPUParticleUpdateContext,
   spatialGrid?: ParticleSpatialGrid,
 ) => void;
+
+export type ModuleGPUCondition = (
+  particle: GPUParticleLike,
+  deltaTime: Node<'float'>,
+  context: GPUParticleUpdateContext,
+  spatialGrid?: ParticleSpatialGrid,
+) => Node<'bool'>;
 
 export type SpatialEffectConstructor<T extends SpatialEffect = SpatialEffect> = {
   new (...args: never[]): T;
@@ -40,24 +48,45 @@ export type SpatialEffectConstructor<T extends SpatialEffect = SpatialEffect> = 
 
 export interface ModuleOptions {
   // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
+  /** Execution phase:
+   * negative is permanent before movement,
+   * 0–1 is transient before movement,
+   * 1 or greater is transient after movement.
+  */
   priority: number | Priority;
 
+  /** Restricts processing to particles sharing a selected tag; omission accepts every tag. */
+
   tags: StrictMultiple<Tag>;
+  /** Additional per-particle predicate, evaluated after tag matching. */
   condition: (particle: Particle) => boolean;
-  conditionGPU: ModuleGPUUpdate | null;
+  /** Optional TSL condition callback for GPU processing. */
+  conditionGPU: ModuleGPUCondition | null;
+  /** Enables distance-based module update skipping. */
   useUpdateLOD: boolean;
+  /** Module update quality settings; skipped callbacks do not accumulate their own delta. */
   updateLOD: Partial<LODSettings>;
+  /** TSL modifier used when GPU processing is active. */
   modifyGPU: ModuleGPUUpdate | null;
+  /** Explicit module effect collection; supplying an empty array suppresses automatic discovery. */
   spatialEffects: SpatialEffect[];
+  /** Filters effects collected by this module. */
   spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
+  /** Constructors selecting scene effects for this module during prepare. */
   requireSpatialEffects: SpatialEffectConstructor | SpatialEffectConstructor[];
+  /** Enables a managed CPU ParticleOctree with default options. */
   useOctree: boolean;
+  /** Configures and implicitly enables the managed CPU ParticleOctree. */
   octreeOptions: Partial<OctreeConfig>;
+  /** Aggregate factory used while rebuilding the managed CPU ParticleOctree. */
   octreeAggregator: OctreeAggregator<unknown>;
+  /** Enables a managed GPU ParticleSpatialGrid with default options. */
   useSpatialGrid: boolean;
+  /** Configures and implicitly enables the managed, system-owned GPU spatial grid. */
   spatialGridOptions: Partial<ParticleSpatialGridOptions>;
 }
 
+/** Per-particle modifier with priority phases, tag filtering, and a once-per-update preparation hook. */
 export default class Module {
   public static readonly Priority = Priority;
 
@@ -75,7 +104,8 @@ export default class Module {
 
   tags?: Tag[];
   condition: (particle: Particle) => boolean;
-  conditionGPU?: ModuleGPUUpdate;
+  conditionGPU?: ModuleGPUCondition;
+  private readonly _hasCustomCondition: boolean;
   useUpdateLOD: boolean;
   updateLOD?: Partial<LODSettings>;
   private _lodHelper: LODHelper;
@@ -110,11 +140,13 @@ export default class Module {
     if (value) this._version += 1;
   }
 
+  /** Wraps a per-particle callback; options select filtering, spatial collection, and priority. */
   constructor(
     public _modify: ModuleUpdate,
     options: Partial<ModuleOptions> = {},
   ) {
     this.tags = acceptMultiple(options.tags);
+    this._hasCustomCondition = options.condition !== undefined;
     this.condition = options.condition ?? (() => true);
     this.conditionGPU = options.conditionGPU ?? undefined;
     this.updateLOD = options.updateLOD;
@@ -132,8 +164,10 @@ export default class Module {
     this.spatialGridOptions = options.spatialGridOptions;
   }
 
+  /** Whether both modification and any custom condition have GPU implementations. */
   get supportsGPU(): boolean {
-    return this.modifyGPU !== Module.GPU_UNSUPPORTED;
+    return this.modifyGPU !== Module.GPU_UNSUPPORTED
+      && (!this._hasCustomCondition || this.conditionGPU !== undefined);
   }
 
   public syncGPUConfiguration(): void {
@@ -151,6 +185,7 @@ export default class Module {
     this._gpuStructureSignature = structureSignature;
   }
 
+  /** Applies tag, condition, and LOD selection before invoking the particle callback. */
   public modify(particles: Particle[], deltaTime: number, particleSystem?: ParticleSystem): void {
     const distanceSq = particleSystem?.cameraDistanceSq ?? Number.MAX_SAFE_INTEGER;
     if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(distanceSq))) return;
@@ -164,6 +199,7 @@ export default class Module {
   }
 
   // Process into array including self and dependents
+  /** Flattens dependents before this module; priority sorting still determines execution phases. */
   public withDependents(): Module[] {
     // Run dependents before this
     return [
@@ -172,7 +208,7 @@ export default class Module {
     ]
   }
 
-  // Optional preparation hook called once-per-update rather than per particle
+  /** Prepares shared work once per system update; the base implementation collects matching spatial effects. */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public prepare(particleSystem: ParticleSystem, deltaTime: number) {
     this.prepareSpatialEffects(particleSystem);
@@ -237,6 +273,7 @@ export default class Module {
   ): void {}
 
   // Optional clean up hook for modules that require it
+  /** Releases managed CPU and GPU spatial acceleration references. */
   public cleanup() {
     this.octree = undefined;
     this.spatialGrid = undefined;

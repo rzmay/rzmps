@@ -9,6 +9,7 @@ import {
   cameraFar,
   cameraNear,
   cameraPosition,
+  cameraProjectionMatrix,
   cameraViewMatrix,
   float,
   linearDepth,
@@ -196,6 +197,7 @@ class VolumeRenderer extends Renderer {
     this.mesh.renderOrder = this.renderOrder;
     this.webglMaterial.depthTest = this.depthTest;
     this.webgpuMaterial.depthTest = this.depthTest;
+    this.setActiveMaterial(system.sceneRenderer);
   }
 
   private syncGPUUniforms(): void {
@@ -297,7 +299,8 @@ class VolumeRenderer extends Renderer {
   }
 
   private setActiveMaterial(renderer?: THREE.WebGLRenderer | WebGPURenderer): void {
-    this.mesh.material = renderer instanceof WebGPURenderer
+    const gpuTexture = (this.texture as THREE.Texture & { isStorageTexture?: boolean })?.isStorageTexture;
+    this.mesh.material = (renderer instanceof WebGPURenderer || (!renderer && gpuTexture))
       ? this.webgpuMaterial
       : this.webglMaterial;
   }
@@ -464,7 +467,22 @@ class VolumeRenderer extends Renderer {
     });
 
     if (this.texture) {
-      material.colorNode = Fn(() => {
+      // Test the ray's entry depth, including when the camera is inside the box.
+      // The march below clips individual samples against opaque scene depth.
+      material.depthNode = Fn(() => {
+        const origin = modelWorldMatrixInverse.mul(vec4(cameraPosition, 1)).xyz;
+        const direction = positionGeometry.sub(origin).normalize();
+        const inverseDirection = vec3(1).div(direction);
+        const nearPlanes = min(
+          vec3(-0.5).sub(origin).mul(inverseDirection),
+          vec3(0.5).sub(origin).mul(inverseDirection),
+        );
+        const entry = origin.add(direction.mul(max(max(max(nearPlanes.x, nearPlanes.y), nearPlanes.z), 0)));
+        const view = cameraViewMatrix.mul(modelWorldMatrix.mul(vec4(entry, 1)));
+        const clip = cameraProjectionMatrix.mul(vec4(view.xy, min(view.z, cameraNear.negate()), 1));
+        return clip.z.div(clip.w).clamp(0, 1);
+      })();
+      material.fragmentNode = Fn(() => {
         const origin = modelWorldMatrixInverse.mul(vec4(cameraPosition, 1)).xyz;
         const direction = positionGeometry.sub(origin).normalize();
         const inverseDirection = vec3(1).div(direction);
@@ -514,7 +532,7 @@ class VolumeRenderer extends Renderer {
           position.addAssign(step);
         });
         If(accumulated.a.lessThanEqual(0), () => Discard());
-        return accumulated;
+        return vec4(accumulated.rgb.div(max(accumulated.a, 1e-6)), accumulated.a);
       })();
     }
 

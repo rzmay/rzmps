@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import unlitSpriteVert from '../shaders/UnlitSprite.vert';
 import unlitSpriteFrag from '../shaders/UnlitSprite.frag';
 
-// TODO: Should all maps be animated? Distortion?
 export interface UnlitSpriteOptions extends THREE.ShaderMaterialParameters {
   gridSize: {x: number, y: number};
   frames: number;

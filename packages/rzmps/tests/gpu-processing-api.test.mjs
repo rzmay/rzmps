@@ -52,6 +52,15 @@ class GPUCapableRenderer extends Renderer {
   clear() {}
 }
 
+class ResetTrackingRenderer extends GPUCapableRenderer {
+  resetCount = 0;
+
+  reset() {
+    super.reset();
+    this.resetCount += 1;
+  }
+}
+
 const cpuOnlyModule = new Module(() => {});
 const gpuModule = new Module(Module.CPU_UNSUPPORTED, {
   modifyGPU() {},
@@ -59,10 +68,21 @@ const gpuModule = new Module(Module.CPU_UNSUPPORTED, {
 const explicitUnsupportedGPU = new Module(() => {}, {
   modifyGPU: null,
 });
+const cpuConditionOnlyModule = new Module(() => {}, {
+  condition: () => true,
+  modifyGPU() {},
+});
+const pairedConditionModule = new Module(() => {}, {
+  condition: () => true,
+  conditionGPU: (particle) => particle.alive.notEqual(0),
+  modifyGPU() {},
+});
 
 assert.equal(cpuOnlyModule.supportsGPU, false);
 assert.equal(gpuModule.supportsGPU, true);
 assert.equal(explicitUnsupportedGPU.supportsGPU, false);
+assert.equal(cpuConditionOnlyModule.supportsGPU, false);
+assert.equal(pairedConditionModule.supportsGPU, true);
 assert.throws(() => Module.CPU_UNSUPPORTED(new Particle(), 0), /does not support CPU processing/);
 assert.throws(() => Module.GPU_UNSUPPORTED(gpuModule, 0, {}), /does not support GPU processing/);
 
@@ -125,6 +145,13 @@ initialCapacitySystem.particles.push(...Array.from({ length: 300 }, () => new Pa
 assert.equal(initialCapacitySystem._getInitialGPUBufferCapacity(), 512);
 initialCapacitySystem.maxParticles = 400;
 assert.equal(initialCapacitySystem._getInitialGPUBufferCapacity(), 400);
+initialCapacitySystem.maxParticles = 10000;
+initialCapacitySystem.particles.length = 0;
+initialCapacitySystem.emitters = [new Emitter({
+  rate: 0,
+  bursts: { time: 0, count: 10000 },
+})];
+assert.equal(initialCapacitySystem._getInitialGPUBufferCapacity(), 10000);
 
 const modeSwitchSystem = new ParticleSystem({
   gpuProcessing: true,
@@ -138,6 +165,17 @@ assert.equal(modeSwitchSystem.particles.length, 1);
 modeSwitchSystem.gpuProcessing = false;
 assert.equal(modeSwitchSystem.particles.length, 0);
 assert.equal(modeSwitchSystem.playing, true);
+
+const resetTrackingRenderer = new ResetTrackingRenderer();
+const rendererLifecycleSystem = new ParticleSystem({
+  emitters: [],
+  renderers: [resetTrackingRenderer],
+  modules: [],
+});
+rendererLifecycleSystem.clearParticles();
+assert.equal(resetTrackingRenderer.resetCount, 0);
+rendererLifecycleSystem.reset();
+assert.equal(resetTrackingRenderer.resetCount, 1);
 
 const resetSubSystem = new ParticleSystem({ emitters: [], renderers: [], modules: [] });
 const resetChildSystem = new ParticleSystem({ emitters: [], renderers: [], modules: [] });
@@ -191,6 +229,39 @@ buffers.upload([particle], (p) => (
 assert.equal(buffers.attributes.uintData.array[1], 3);
 assert.equal(buffers.attributes.uintData.array[5], 0);
 
+const unmappedBuffers = createEmptyGPUParticleBufferState(10_000);
+const unmappedData = new Map();
+const bufferDescriptors = [];
+const bufferWrites = [];
+unmappedBuffers.initialize({
+  backend: {
+    isWebGPUBackend: true,
+    device: {
+      createBuffer(descriptor) {
+        bufferDescriptors.push(descriptor);
+        return {};
+      },
+      queue: {
+        writeBuffer(_buffer, offset, _data, dataOffset, size) {
+          bufferWrites.push({ offset, dataOffset, size });
+        },
+      },
+    },
+    get(attribute) {
+      if (!unmappedData.has(attribute)) unmappedData.set(attribute, {});
+      return unmappedData.get(attribute);
+    },
+  },
+});
+assert.equal(bufferDescriptors.length, 2);
+assert.equal(bufferDescriptors.every((descriptor) => descriptor.mappedAtCreation === false), true);
+assert.equal(bufferWrites.every((write) => write.size <= 256 * 1024), true);
+assert.equal(
+  bufferWrites.reduce((total, write) => total + write.size, 0),
+  unmappedBuffers.attributes.floatData.array.byteLength
+    + unmappedBuffers.attributes.uintData.array.byteLength,
+);
+
 const growBuffers = createEmptyGPUParticleBufferState(4);
 const gpuBuffers = new Map();
 const copies = [];
@@ -238,15 +309,70 @@ for (const createShape of [
   for (const source of [EmissionSource.Volume, EmissionSource.Surface, EmissionSource.Vertices]) {
     const shape = createShape(source);
     assert.equal(shape.getGPUEmissionSupport().supported, true);
-    assert.equal(new Emitter({ source: shape }).supportsBuiltInGPUEmission(), true);
+    assert.equal(new Emitter({ source: shape }).supportsGPUEmission, true);
   }
 }
 
 const customGeometryShape = new EmissionShape({
-  geometry: new THREE.PlaneGeometry(1, 1),
+  geometry: new THREE.BufferGeometry().setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute([
+      -0.5, -0.5, 0,
+      0.5, -0.5, 0,
+      0, 0.5, 0,
+    ], 3),
+  ),
   source: EmissionSource.Surface,
 });
-assert.equal(customGeometryShape.getGPUEmissionSupport().supported, false);
+assert.equal(customGeometryShape.getGPUEmissionSupport().supported, true);
+assert.ok(customGeometryShape.getGPUEmissionSupport().features.includes('sampling:geometry-buffer'));
+assert.doesNotThrow(() => new Emitter({ source: customGeometryShape }).createBuiltInGPUUpdate());
+const surfaceGetPoint = customGeometryShape.getPoint;
+customGeometryShape.getPoint = () => { throw new Error('surface GPU emission must use geometry buffers'); };
+assert.doesNotThrow(() => new Emitter({ source: customGeometryShape }).createBuiltInGPUUpdate());
+customGeometryShape.getPoint = surfaceGetPoint;
+
+const unequalSurfaceShape = new EmissionShape({
+  geometry: new THREE.BufferGeometry().setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute([
+      0, 0, 0, 1, 0, 0, 0, 1, 0,
+      10, 0, 0, 12, 0, 0, 10, 2, 0,
+    ], 3),
+  ),
+  source: EmissionSource.Surface,
+});
+const unequalSurfaceEmitter = new Emitter({ source: unequalSurfaceShape });
+unequalSurfaceEmitter.createBuiltInGPUUpdate();
+const surfaceTriangles = unequalSurfaceEmitter._gpuGeometrySampling.triangles.array;
+assert.equal(surfaceTriangles[3], 1);
+assert.ok(Math.abs(surfaceTriangles[4] / 0xffffffff - 0.4) < 1e-6);
+assert.equal(surfaceTriangles[11], 1);
+assert.equal(surfaceTriangles[12], 0xffffffff);
+
+const sampledVolumeShape = EmissionShape.Torus({ source: EmissionSource.Volume }, 1, 0.25, 4, 8);
+sampledVolumeShape.volumeSamples = 4;
+const sampledVolumeEmitter = new Emitter({ source: sampledVolumeShape });
+sampledVolumeEmitter.createBuiltInGPUUpdate();
+assert.equal(sampledVolumeEmitter._gpuVolumeSampling.count, 4);
+assert.ok(
+  Math.abs(
+    sampledVolumeEmitter._gpuVolumeSampling.vectors.array[3]
+      - sampledVolumeShape.getVolumeSamples()[0].radius,
+  ) < 1e-6,
+  'GPU storage should use the radius from the shared CPU volume table',
+);
+const sampledVolumeVectors = sampledVolumeEmitter._gpuVolumeSampling.vectors;
+sampledVolumeEmitter.createBuiltInGPUUpdate();
+assert.equal(
+  sampledVolumeEmitter._gpuVolumeSampling.vectors,
+  sampledVolumeVectors,
+  'unchanged shared volume tables should reuse their GPU storage',
+);
+sampledVolumeShape.volumeSamples = 6;
+sampledVolumeEmitter.createBuiltInGPUUpdate();
+assert.equal(sampledVolumeEmitter._gpuVolumeSampling.count, 6);
+assert.notEqual(sampledVolumeEmitter._gpuVolumeSampling.vectors, sampledVolumeVectors);
 
 const gpuNativeEmitter = new Emitter({
   source: EmissionShape.Box({ source: EmissionSource.Volume }, 1, 2, 3),
@@ -284,7 +410,6 @@ const builtInGPUEmitter = new Emitter({
     color: new THREE.Color(1, 1, 1),
   },
 });
-assert.equal(builtInGPUEmitter.supportsBuiltInGPUEmission(), true);
 assert.equal(builtInGPUEmitter.supportsGPUEmission, true);
 assert.ok(builtInGPUEmitter.getGPUEmissionSupport().features.includes('builtIn:BoxGeometry:volume'));
 const builtInSphereGPUEmitter = new Emitter({
@@ -296,7 +421,6 @@ const builtInSphereGPUEmitter = new Emitter({
     speed: 1,
   },
 });
-assert.equal(builtInSphereGPUEmitter.supportsBuiltInGPUEmission(), true);
 assert.equal(builtInSphereGPUEmitter.supportsGPUEmission, true);
 const builtInBurstGPUEmitter = new Emitter({
   source: EmissionShape.Sphere({ source: EmissionSource.Volume }, 0.1, 16, 8),
@@ -312,8 +436,21 @@ const builtInBurstGPUEmitter = new Emitter({
     color: new Set([new THREE.Color(1, 1, 1), new THREE.Color(1, 0.8, 0.4)]),
   },
 });
-assert.equal(builtInBurstGPUEmitter.supportsBuiltInGPUEmission(), true);
 assert.equal(builtInBurstGPUEmitter.supportsGPUEmission, true);
+
+const manyBurstGPUEmitter = new Emitter({
+  bursts: Array.from({ length: 65 }, (_, index) => ({ time: index / 64, count: 1 })),
+});
+assert.equal(manyBurstGPUEmitter.supportsGPUEmission, true);
+assert.equal(manyBurstGPUEmitter.bursts.length, 65);
+const boundedBurstTimesEmitter = new Emitter({
+  bursts: [
+    { time: Number.NEGATIVE_INFINITY, count: 1 },
+    { time: Number.NaN, count: 1 },
+    { time: Number.POSITIVE_INFINITY, count: 1 },
+  ],
+});
+assert.deepEqual(boundedBurstTimesEmitter.bursts.map((burst) => burst.time), [0, 0, 1]);
 
 const lodGPUEmitter = new Emitter({
   rate: 20,
@@ -322,7 +459,6 @@ const lodGPUEmitter = new Emitter({
   updateLOD: { distance: 5, quality: 0.5 },
   countLOD: { distance: 5, quality: 0.5 },
 });
-assert.equal(lodGPUEmitter.supportsBuiltInGPUEmission(), true);
 assert.ok(lodGPUEmitter.getGPUEmissionSupport().features.includes('updateLOD'));
 assert.ok(lodGPUEmitter.getGPUEmissionSupport().features.includes('countLOD'));
 
@@ -330,19 +466,14 @@ const distributeTagsEmitter = new Emitter({
   tags: ['a', 'b'],
   tagSelection: TagSelectionMethod.Distribute,
 });
-assert.equal(distributeTagsEmitter.supportsGPUEmission, false);
-assert.match(distributeTagsEmitter.getGPUEmissionSupport().reasons.join('\n'), /Distributed tag selection/);
+assert.equal(distributeTagsEmitter.supportsGPUEmission, true);
+assert.ok(distributeTagsEmitter.getGPUEmissionSupport().features.includes('tags:distribute'));
 
 const customShapeEmitter = new Emitter({
   source: customGeometryShape,
 });
-assert.equal(customShapeEmitter.supportsGPUEmission, false);
-const customGPUEmitter = new Emitter({
-  source: customGeometryShape,
-  emitGPU() {},
-});
-assert.equal(customGPUEmitter.supportsGPUEmission, true);
-assert.deepEqual(customGPUEmitter.getGPUEmissionSupport().features, ['customEmitGPU']);
+assert.equal(customShapeEmitter.supportsGPUEmission, true);
+assert.ok(customShapeEmitter.getGPUEmissionSupport().features.includes('sampling:geometry-buffer'));
 
 let gpuEmitterDispatches = 0;
 const previousEmitterReadbackRate = ParticleSystem.GPU_READBACK_RATE;
@@ -354,19 +485,7 @@ const gpuEmitterRenderer = Object.assign(Object.create(WebGPURenderer.prototype)
 });
 const gpuEmitterSystem = new ParticleSystem({
   gpuProcessing: true,
-  emitters: [
-    new Emitter({
-      emitGPU(context) {
-        const particleValue = context.output.storage.loadParticle();
-        context.allocationWriter.claimDeadSlotWithinBudget(particleValue, 1, () => {
-          particleValue.lifetime.assign(1);
-          particleValue.speed.assign(1);
-          particleValue.alpha.assign(1);
-        });
-        context.output.storage.storeParticle(particleValue);
-      },
-    }),
-  ],
+  emitters: [new Emitter({ rate: 1 }), new Emitter({ rate: 2 })],
   renderers: [],
   modules: [],
   maxParticles: 32,
@@ -375,8 +494,8 @@ gpuEmitterSystem._renderer = gpuEmitterRenderer;
 gpuEmitterSystem.deltaTime = 1 / 60;
 assert.equal(gpuEmitterSystem._shouldExecuteEmittersOnGPU(), true);
 gpuEmitterSystem._processParticles();
-assert.equal(gpuEmitterDispatches, 4);
-assert.ok(gpuEmitterSystem._gpuEmissionComputeCache.node);
+assert.equal(gpuEmitterDispatches, 8);
+assert.equal(gpuEmitterSystem._gpuEmissionComputeCache.nodes.length, 2);
 assert.equal(gpuEmitterSystem._gpuBuffers.count, gpuEmitterSystem._gpuBuffers.capacity);
 assert.equal(gpuEmitterSystem.particles.length, 0);
 ParticleSystem.GPU_READBACK_RATE = previousEmitterReadbackRate;
@@ -401,11 +520,11 @@ builtInEmitterSystem.deltaTime = 1 / 60;
 assert.equal(builtInEmitterSystem._shouldExecuteEmittersOnGPU(), true);
 builtInEmitterSystem._processParticles();
 assert.equal(builtInEmitterDispatches, 5);
-assert.ok(builtInEmitterSystem._gpuEmissionComputeCache.node);
+assert.ok(builtInEmitterSystem._gpuEmissionComputeCache.nodes[0]);
 assert.ok(builtInEmitterSystem._gpuEmissionPrepareComputeCache.nodes[0]);
 assert.equal(builtInEmitterSystem._gpuBuffers.count, builtInEmitterSystem._gpuBuffers.capacity);
 assert.equal(builtInEmitterSystem.particles.length, 0);
-const initialEmissionNode = builtInEmitterSystem._gpuEmissionComputeCache.node;
+const initialEmissionNode = builtInEmitterSystem._gpuEmissionComputeCache.nodes[0];
 const initialPrepareNode = builtInEmitterSystem._gpuEmissionPrepareComputeCache.nodes[0];
 const initialEmitterVersion = builtInGPUEmitter.version;
 const initialConfigurationStats = builtInEmitterSystem.gpuConfigurationStats;
@@ -417,7 +536,7 @@ builtInEmitterSystem.duration = 24;
 builtInEmitterSystem.gravity.set(1, 2, 3);
 builtInEmitterSystem._processParticles();
 assert.equal(builtInGPUEmitter.version, initialEmitterVersion);
-assert.equal(builtInEmitterSystem._gpuEmissionComputeCache.node, initialEmissionNode);
+assert.equal(builtInEmitterSystem._gpuEmissionComputeCache.nodes[0], initialEmissionNode);
 assert.equal(builtInEmitterSystem._gpuEmissionPrepareComputeCache.nodes[0], initialPrepareNode);
 assert.equal(
   builtInEmitterSystem.gpuConfigurationStats.pipelineBuilds,
@@ -497,13 +616,12 @@ const gpuEmissionSupportSystem = new ParticleSystem({
 });
 assert.equal(gpuEmissionSupportSystem.getGPUEmissionSupport().supported, true);
 
-const unsupportedEmissionSupportSystem = new ParticleSystem({
+const customEmissionSupportSystem = new ParticleSystem({
   emitters: [customShapeEmitter],
   renderers: [],
   modules: [],
 });
-assert.equal(unsupportedEmissionSupportSystem.getGPUEmissionSupport().supported, false);
-assert.match(unsupportedEmissionSupportSystem.getGPUEmissionSupport().reasons.join('\n'), /Emitter 0/);
+assert.equal(customEmissionSupportSystem.getGPUEmissionSupport().supported, true);
 
 const parentEmissionSupportSystem = new ParticleSystem({
   emitters: [],
@@ -623,6 +741,9 @@ gpuEligibilitySystem._gpuTagOverflow = false;
 
 assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule], []), true);
 assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule, cpuOnlyModule], []), false);
+gpuEligibilitySystem._renderer.backend = { isWebGLBackend: true };
+assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule], []), false);
+delete gpuEligibilitySystem._renderer.backend;
 const renderTimeGPUModule = new Module(Module.CPU_UNSUPPORTED, {
   priority: 1,
   modifyGPU() {},
@@ -630,6 +751,23 @@ const renderTimeGPUModule = new Module(Module.CPU_UNSUPPORTED, {
 assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([renderTimeGPUModule], []), false);
 gpuEligibilitySystem.renderers = [new GPUCapableRenderer()];
 assert.equal(gpuEligibilitySystem._canProcessParticlesOnGPU([renderTimeGPUModule], []), true);
+
+const subsystemLimitSystem = new ParticleSystem({
+  gpuProcessing: true,
+  emitters: [],
+  renderers: [new GPUCapableRenderer()],
+  modules: [],
+});
+subsystemLimitSystem.addSubSystem(new ParticleSystem({ renderers: [] }), {
+  emitContinuous: true,
+});
+subsystemLimitSystem._renderer = Object.assign(Object.create(WebGPURenderer.prototype), {
+  backend: {
+    device: { limits: { maxStorageBuffersPerShaderStage: 8 } },
+  },
+});
+assert.equal(subsystemLimitSystem._canProcessParticlesOnGPU([gpuModule], []), true);
+
 gpuEligibilitySystem.renderers = [new CPUOnlyRenderer()];
 assert.equal(
   gpuEligibilitySystem._canProcessParticlesOnGPU([gpuModule], [new ParticleForceField()]),
@@ -945,11 +1083,30 @@ assert.equal(gpuDeathCallbackParticle.id, 'gpu-death-dispatch');
 assert.equal(gpuDeathSystem.particles[0].alive, false);
 
 const allocationState = new GPUAllocationBufferState(16);
+const initializedAllocationAttributes = [];
+allocationState.initialize({
+  backend: {
+    get: () => undefined,
+    createStorageAttribute: (attribute) => initializedAllocationAttributes.push(attribute),
+  },
+});
+assert.deepEqual(initializedAllocationAttributes, [allocationState.attribute]);
 allocationState.reset(4, 3, 1);
-allocationState.counterAttribute.array[0] = 5;
-allocationState.counterAttribute.array[1] = 2;
-allocationState.counterAttribute.array[2] = 3;
-allocationState.counterAttribute.array[3] = 1;
+allocationState.attribute.array[0] = 5;
+allocationState.attribute.array[1] = 2;
+allocationState.attribute.array[2] = 3;
+allocationState.attribute.array[3] = 1;
+const orderedFloatBits = (value) => {
+  const float = new Float32Array([value]);
+  const bits = new Uint32Array(float.buffer)[0];
+  return (bits & 0x80000000) !== 0
+    ? (bits ^ 0xffffffff) >>> 0
+    : (bits ^ 0x80000000) >>> 0;
+};
+[-2, -3, -4, 5, 6, 7, 8].forEach((value, index) => {
+  allocationState.attribute.array[10 + index] = orderedFloatBits(value);
+});
+allocationState.attribute.array[17] = 1;
 const allocationSnapshot = allocationState.snapshot();
 assert.equal(allocationSnapshot.sequence, 4);
 assert.equal(allocationSnapshot.capacity, 16);
@@ -960,6 +1117,9 @@ assert.equal(allocationSnapshot.allocationFailures, 3);
 assert.equal(allocationSnapshot.recycledDeaths, 1);
 assert.equal(allocationSnapshot.startingActiveCount, 3);
 assert.equal(allocationSnapshot.estimatedActiveCount, 4);
+assert.deepEqual(allocationSnapshot.bounds.min.toArray(), [-2, -3, -4]);
+assert.deepEqual(allocationSnapshot.bounds.max.toArray(), [5, 6, 7]);
+assert.equal(allocationSnapshot.maxVelocity, 8);
 const allocationReadback = await allocationState.readback({
   getArrayBufferAsync(attribute) {
     return Promise.resolve(attribute.array.buffer);
@@ -967,7 +1127,7 @@ const allocationReadback = await allocationState.readback({
 });
 assert.equal(allocationReadback.estimatedActiveCount, 4);
 
-const emitterInstanceState = new GPUEmitterInstanceBufferState(2);
+const emitterInstanceState = new GPUEmitterInstanceBufferState(2, 96);
 emitterInstanceState.upload([{
   active: true,
   parentSlot: 7,
@@ -976,6 +1136,7 @@ emitterInstanceState.upload([{
   runId: 42,
   flags: 5,
   firedBurstsMask: 0b101,
+  firedBurstWords: [0b101, 0x80000000, 7],
   startTime: 10,
   lastSpawn: 11,
   distanceCredit: 0.5,
@@ -988,7 +1149,10 @@ assert.equal(emitterInstanceState.uintAttribute.array[1], 7);
 assert.equal(emitterInstanceState.uintAttribute.array[2], 3);
 assert.equal(emitterInstanceState.uintAttribute.array[3], 1);
 assert.equal(emitterInstanceState.uintAttribute.array[4], 42);
+assert.equal(emitterInstanceState.burstWordCount, 3);
 assert.equal(emitterInstanceState.uintAttribute.array[6], 0b101);
+assert.equal(emitterInstanceState.uintAttribute.array[8], 0x80000000);
+assert.equal(emitterInstanceState.uintAttribute.array[9], 7);
 const emitterInstanceReadback = await emitterInstanceState.readback({
   getArrayBufferAsync(attribute) {
     return Promise.resolve(attribute.array.buffer);
@@ -999,6 +1163,7 @@ assert.equal(emitterInstanceReadback[0].parentSlot, 7);
 assert.equal(emitterInstanceReadback[0].parentGeneration, 3);
 assert.equal(emitterInstanceReadback[0].lastSpawn, 11);
 assert.equal(emitterInstanceReadback[0].lastDistancePosition.z, 3);
+assert.deepEqual(emitterInstanceReadback[0].firedBurstWords, [0b101, 0x80000000, 7]);
 assert.throws(() => emitterInstanceState.upload([
   emitterInstanceReadback[0],
   emitterInstanceReadback[0],
@@ -1300,11 +1465,18 @@ const selectiveSourceParticle = new Particle({
 selectiveSourceParticle.id = 'selective-source';
 selectiveSourceParticle.alive = true;
 const selectiveState = new GPUSelectiveReadbackState(2);
-selectiveState.setRequests([{ slot: 3, generation: 9, identity: selectiveSourceParticle }]);
-selectiveState.output.upload([selectiveSourceParticle], () => 5, () => 9);
+selectiveState.setRequests([{
+  slot: 3,
+  generation: 9,
+  fields: ['position'],
+  identity: selectiveSourceParticle,
+}]);
+selectiveState.outputFloatAttribute.array.set([3, 4, 5, 0]);
+selectiveState.outputStateAttribute.array.set([1, 5, 9, 0]);
 const selectiveResults = await selectiveState.readback({
-  getArrayBufferAsync(attribute) {
-    return Promise.resolve(attribute.array.buffer);
+  getArrayBufferAsync(attribute, _target, offset = 0, count = -1) {
+    const end = count < 0 ? attribute.array.byteLength : offset + count;
+    return Promise.resolve(attribute.array.buffer.slice(offset, end));
   },
 });
 
@@ -1315,6 +1487,7 @@ assert.equal(selectiveResults[0].valid, true);
 assert.equal(selectiveResults[0].tagMask, 5);
 assert.equal(selectiveResults[0].particle.id, 'selective-source');
 assert.equal(selectiveResults[0].particle.position.x, 3);
+assert.equal(selectiveState.readbackByteLength, 32);
 assert.throws(() => selectiveState.setRequests([
   { slot: 0, generation: 1 },
   { slot: 1, generation: 1 },

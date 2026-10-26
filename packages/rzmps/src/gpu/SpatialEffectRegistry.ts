@@ -7,17 +7,24 @@ import {
   destroyGPUStorageAttribute,
   type GPUParticleLike,
   type GPUParticleUpdateContext,
-  type GPUStorageBufferRenderer,
 } from './Particle';
 import type ParticleSystem from '../ParticleSystem';
+import {
+  type GPUStorageBufferRenderer,
+  type PackedFloatStorage,
+  type PackedIntStorage,
+  type PackedUintStorage,
+  type ScalarUintStorage,
+} from './Storage';
 
+// This small closed set is the parameter-buffer ABI. Effects batch only when
+// their shader functions, compilation key, and complete parameter layout match.
 export type GPUSpatialParameterType = 'float' | 'vec3' | 'vec4';
 
 export interface GPUSpatialParameterField {
   name: string;
   type: GPUSpatialParameterType;
 }
-
 export interface GPUSpatialParameterLayout {
   id: string;
   fields: GPUSpatialParameterField[];
@@ -97,11 +104,13 @@ export interface GPUSpatialEffectRegistryStats {
   bvhBoundsUploadBytes: number;
 }
 
-type PackedFloatStorage = { element(index: Node | number): Node<'vec4'> };
-type PackedUintStorage = { element(index: Node | number): Node<'uvec4'> };
-type PackedIntStorage = { element(index: Node | number): Node<'ivec4'> };
-type PackedScalarUintStorage = { element(index: Node | number): Node<'uint'> };
-
+/**
+ * Packs compatible effects into shared parameter/metadata buffers and a BVH.
+ * Structural changes rebuild the registry; transforms and values update reserved
+ * storage ranges in place. Traversal culls per particle, so buffers cannot overflow.
+ * Scene-level bounds filtering is intentionally absent: systems have no reliable
+ * finite travel bounds, and premature filtering would miss moving effects/particles.
+ */
 export class GPUSpatialEffectRegistry {
   private static nextVersion = 1;
 
@@ -189,6 +198,14 @@ export class GPUSpatialEffectRegistry {
   ): GPUSpatialEffectRegistry {
     return new GPUSpatialEffectRegistry(
       GPUSpatialEffectRegistry.createBuild(effects, system, tagMaskForEffect),
+    );
+  }
+
+  static isBatchableEffect(effect: SpatialEffect): effect is SpatialEffect & GPUSpatialBatchableEffect {
+    const candidate = effect as SpatialEffect & GPUSpatialBatchableEffect;
+    return effect.supportsGPU && Boolean(
+      candidate.gpuSpatialType?.testGPU
+      && candidate.writeGPUParameters,
     );
   }
 
@@ -432,6 +449,8 @@ export class GPUSpatialEffectRegistry {
       }
     };
 
+    // These are authoring-time errors raised while constructing a shader graph:
+    // a custom effect requested a missing field or declared a misaligned layout.
     return {
       float(name) {
         const fieldOffset = fieldOffsets.get(name);
@@ -457,6 +476,10 @@ export class GPUSpatialEffectRegistry {
     };
   }
 
+  /**
+   * Applies one contiguous run of spatial effects from the modifier order.
+   * Segment IDs preserve ordering around non-batched modules; the BVH only culls.
+   */
   applySegment(
     segmentId: number,
     particle: GPUParticleLike,
@@ -467,7 +490,7 @@ export class GPUSpatialEffectRegistry {
     const metadata = storage(this.metadataAttribute, 'uvec4', this.metadataAttribute.count) as PackedUintStorage;
     const bounds = storage(this.bvhBoundsAttribute, 'vec4', this.bvhBoundsAttribute.count) as PackedFloatStorage;
     const nodes = storage(this.bvhNodeAttribute, 'ivec4', this.bvhNodeAttribute.count) as PackedIntStorage;
-    const leaves = storage(this.leafAttribute, 'uint', this.leafAttribute.count) as PackedScalarUintStorage;
+    const leaves = storage(this.leafAttribute, 'uint', this.leafAttribute.count) as ScalarUintStorage;
     const nodeIndex = int(0).toVar('spatialBVHNode');
 
     Loop({ start: 0, end: this.bvhNodeAttribute.count, type: 'int' }, () => {
@@ -528,11 +551,7 @@ export class GPUSpatialEffectRegistry {
 }
 
 export function isBatchableEffect(effect: SpatialEffect): effect is SpatialEffect & GPUSpatialBatchableEffect {
-  const candidate = effect as SpatialEffect & GPUSpatialBatchableEffect;
-  return effect.supportsGPU && Boolean(
-    candidate.gpuSpatialType?.testGPU
-    && candidate.writeGPUParameters,
-  );
+  return GPUSpatialEffectRegistry.isBatchableEffect(effect);
 }
 
 function getSortedEffects(effects: SpatialEffect[]): Array<{ effect: SpatialEffect; order: number }> {
@@ -592,60 +611,14 @@ function alignVec4(value: number): number {
 }
 
 function getEffectWorldBounds(effect: SpatialEffect, system: ParticleSystem): THREE.Box3 {
-  effect.updateWorldMatrix(true, false);
-  const geometry = effect.geometry;
-
-  if (!geometry) {
-    const center = effect.getWorldPosition(new THREE.Vector3());
-    const radius = Math.max(effect.feather, Number.EPSILON);
-    return new THREE.Box3(center.clone().subScalar(radius), center.clone().addScalar(radius));
-  }
-
-  if (!geometry.boundingBox) geometry.computeBoundingBox();
-  const local = geometry.boundingBox
-    ?? new THREE.Box3(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5));
-  const world = new THREE.Box3();
-  const corner = new THREE.Vector3();
-
-  for (let x = 0; x <= 1; x += 1) {
-    for (let y = 0; y <= 1; y += 1) {
-      for (let z = 0; z <= 1; z += 1) {
-        corner.set(
-          x === 0 ? local.min.x : local.max.x,
-          y === 0 ? local.min.y : local.max.y,
-          z === 0 ? local.min.z : local.max.z,
-        );
-        world.expandByPoint(corner.applyMatrix4(effect.matrixWorld));
-      }
-    }
-  }
-
-  world.expandByScalar(Math.max(effect.feather, Number.EPSILON));
+  const world = effect.getWorldBounds();
   if (system.simulationSpace === 'local') {
     system.updateWorldMatrix(true, false);
     const inverse = system.matrixWorld.clone().invert();
-    return transformBounds(world, inverse);
+    return world.applyMatrix4(inverse);
   }
 
   return world;
-}
-
-function transformBounds(bounds: THREE.Box3, matrix: THREE.Matrix4): THREE.Box3 {
-  const transformed = new THREE.Box3();
-  const corner = new THREE.Vector3();
-  for (let x = 0; x <= 1; x += 1) {
-    for (let y = 0; y <= 1; y += 1) {
-      for (let z = 0; z <= 1; z += 1) {
-        corner.set(
-          x === 0 ? bounds.min.x : bounds.max.x,
-          y === 0 ? bounds.min.y : bounds.max.y,
-          z === 0 ? bounds.min.z : bounds.max.z,
-        );
-        transformed.expandByPoint(corner.applyMatrix4(matrix));
-      }
-    }
-  }
-  return transformed;
 }
 
 function buildBVH(records: GPUSpatialEffectRecord[]): {
@@ -745,6 +718,8 @@ function createSignature(types: GPUSpatialEffectType[]): string {
   return `types:${types.map(getTypeKey).join(';')}`;
 }
 
+// Reserve at least twice the live payload so parameter/transform updates stay in
+// the same GPU allocation. Structural growth still creates a new registry.
 function reservedLength(required: number, minimum: number): number {
   let capacity = Math.max(1, minimum);
   while (capacity < required * 2) capacity *= 2;
@@ -772,6 +747,8 @@ function reserveInt32(source: Int32Array, minimum: number): Int32Array {
 type TypedArray = Float32Array | Uint32Array | Int32Array;
 type UpdateRange = { start: number; count: number };
 
+// These are contiguous typed-array component ranges, not particle ranges. Uploading
+// only changed spans avoids replacing a complete parameter or BVH buffer.
 function copyChangedRange(target: TypedArray, offset: number, source: TypedArray): boolean {
   let changed = false;
   for (let index = 0; index < source.length; index += 1) {

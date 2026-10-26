@@ -90,7 +90,7 @@ function ParticleSystemDisplay({
         renderer: gl,
         initialPreset,
         initialScene,
-        title: `RZMPS Demo v${RZMPS_VERSION}`,
+        title: `🧅 RZMPS Demo v${RZMPS_VERSION}`,
         width: 340,
         onSystemChange: (nextSystem) => {
           particleSystem.current = nextSystem;
@@ -132,7 +132,10 @@ function ParticleSystemDisplay({
 
   useFrame((_state, delta) => {
     const system = particleSystem.current;
-    if (system?.sceneRenderer === gl) system.update();
+    const requiresGPU = system?.modules.some((module) => module instanceof FluidSimulation);
+    const rendererReady = system?.sceneRenderer === gl
+      && (!requiresGPU || (system.gpuProcessing && gl.backend?.isWebGPUBackend === true));
+    if (rendererReady) system.update();
     onParticleCountChange(collectSystemStats(particleSystem.current));
     guiRef.current?.update(delta);
   });

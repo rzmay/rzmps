@@ -6,10 +6,19 @@ import type { Multiple } from '../types/Multiple';
 import type { Tag } from '../types/Tag';
 
 export interface OctreeConfig {
+  /** Particle-space bounds; particles outside the resolved volume are omitted. */
   bounds: THREE.Box3;
+  /** Maximum subdivision depth.
+   * @defaultValue 8 */
   maxDepth: number;
+  /** Target capacity before further subdivision.
+   * @defaultValue 4 */
   particlesPerLeaf: number;
+  /** Fraction of calls that rebuild after the initial build, clamped above zero through 1.
+   * @defaultValue 1 */
   timeQuality: number;
+  /** Bounds quantization increment; zero disables quantization.
+   * @defaultValue 0 */
   quantizeBounds: number;
 }
 
@@ -35,6 +44,14 @@ export interface OctreeAggregator<TAggregate> {
   combine(a: TAggregate, b: TAggregate): TAggregate;
 }
 
+export interface ParticleOctreeQueryOptions {
+  /** Particle index omitted from the query, normally the caller's own index. */
+  excludeIndex?: number;
+  /** Requires at least one matching particle tag. */
+  tags?: Multiple<Tag>;
+}
+
+/** Particle-space octree with caller-defined aggregation; rebuild replaces node identities and may be throttled. */
 class ParticleOctree<TAggregate> {
   root: OctreeNode<TAggregate>;
   bounds = new THREE.Box3();
@@ -54,6 +71,7 @@ class ParticleOctree<TAggregate> {
   private boundsCenter = new THREE.Vector3();
   private boundsSize = new THREE.Vector3();
 
+  /** Creates an empty tree and normalizes depth, leaf capacity, and rebuild-quality settings. */
   constructor(
     config: Partial<OctreeConfig>,
     private aggregator: OctreeAggregator<TAggregate>,
@@ -67,6 +85,7 @@ class ParticleOctree<TAggregate> {
     this.assignNeighbors();
   }
 
+  /** Resolves and copies particle-space bounds; call rebuild to populate the new volume. */
   setBounds(bounds?: THREE.Box3): this {
     const nextBounds = bounds ?? new THREE.Box3(
       new THREE.Vector3(-0.5, -0.5, -0.5),
@@ -82,6 +101,7 @@ class ParticleOctree<TAggregate> {
     return this;
   }
 
+  /** Replaces tree nodes and aggregates from the supplied population; returns false when throttled by timeQuality. */
   rebuild(particles: Particle[], tags?: Multiple<Tag>): boolean {
     this.updateAccumulator += this.timeQuality;
 
@@ -111,6 +131,7 @@ class ParticleOctree<TAggregate> {
     return true;
   }
 
+  /** Returns the deepest containing node up to maxDepth; positions outside the volume return the root. */
   locate(position: THREE.Vector3, maxDepth: number = this.maxDepth): OctreeNode<TAggregate> {
     if (!this.containsPosition(position)) return this.root;
 
@@ -126,8 +147,71 @@ class ParticleOctree<TAggregate> {
     return node;
   }
 
+  /** Returns a new array of current node references; node identities are replaced on rebuild. */
   getNodes(): OctreeNode<TAggregate>[] {
     return [...this.nodes];
+  }
+
+  /** Returns particles inside an exact radius after pruning nonintersecting octree nodes. */
+  particlesInRadius(
+    position: THREE.Vector3,
+    radius: number,
+    options: ParticleOctreeQueryOptions = {},
+  ): Particle[] {
+    const resolvedRadius = Math.max(0, radius);
+    if (Number.isNaN(resolvedRadius) || this.root.isEmpty) return [];
+
+    const acceptedTags = acceptMultiple(options.tags);
+    const particles: Particle[] = [];
+    this.visitNodeInRadius(
+      this.root,
+      position,
+      resolvedRadius * resolvedRadius,
+      particles,
+      options.excludeIndex,
+      acceptedTags,
+    );
+    return particles;
+  }
+
+  private visitNodeInRadius(
+    node: OctreeNode<TAggregate>,
+    position: THREE.Vector3,
+    radiusSquared: number,
+    particles: Particle[],
+    excludeIndex?: number,
+    tags?: Tag[],
+  ): void {
+    let nodeDistanceSquared = 0;
+    for (const axis of ['x', 'y', 'z'] as const) {
+      const value = position[axis];
+      if (value < node.min[axis]) nodeDistanceSquared += (node.min[axis] - value) ** 2;
+      else if (value > node.max[axis]) nodeDistanceSquared += (value - node.max[axis]) ** 2;
+    }
+    if (nodeDistanceSquared > radiusSquared) return;
+
+    if (!node.isLeaf) {
+      node.children.forEach((child) => {
+        this.visitNodeInRadius(
+          child,
+          position,
+          radiusSquared,
+          particles,
+          excludeIndex,
+          tags,
+        );
+      });
+      return;
+    }
+
+    node.particleIndices.forEach((particleIndex) => {
+      if (particleIndex === excludeIndex) return;
+      const particle = this.particles[particleIndex];
+      if (!particle || (tags?.length && !tagsIntersect(tags, particle.tags ?? []))) return;
+
+      const distanceSquared = particle.position.distanceToSquared(position);
+      if (distanceSquared <= radiusSquared) particles.push(particle);
+    });
   }
 
   private buildNode(

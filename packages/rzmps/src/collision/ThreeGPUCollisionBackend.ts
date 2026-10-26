@@ -5,9 +5,7 @@ import type { Node } from 'three/webgpu';
 // @ts-expect-error three-mesh-bvh does not publish declarations for deep imports.
 import { BVHComputeData } from 'three-mesh-bvh/src/webgpu/BVHComputeData.js';
 import type { CollisionQuery, ICollisionBackend } from '../interfaces/ICollisionBackend';
-import ParticleSystem from '../ParticleSystem';
-import { TRAIL_RENDERER_USER_DATA_KEY } from '../renderers/TrailRenderer';
-import { SPRITE_RENDERER_USER_DATA_KEY } from '../renderers/SpriteRenderer';
+import { isIgnoredCollisionObject } from './CollisionSceneUtils';
 import capsuleBVHCollisionNode, {
   CapsuleQuery,
 } from './capsuleBVHCollisionNode';
@@ -19,18 +17,31 @@ export enum CollisionGeometryUpdatePolicy {
   Auto = 'auto',
 }
 
+// This policy is GPU-specific: BLAS refits distinguish transform-only and vertex
+// changes. ThreeCollisionBackend rebuilds CPU octrees and has no equivalent refit.
+
 export interface ThreeGPUCollisionBackendOptions {
+  /** Scene subtree scanned when explicit object lists are not sufficient. */
   world?: THREE.Object3D;
+  /** Mesh roots whose transforms and geometry are treated as immutable. */
   staticObjects?: THREE.Object3D[];
+  /** Mesh roots whose world transforms may change without vertex deformation. */
   dynamicObjects?: THREE.Object3D[];
+  /** Mesh roots whose position attributes may change. */
   geometryDynamicObjects?: THREE.Object3D[];
+  /** Filters every candidate mesh before classification. */
   objectFilter?: (object: THREE.Object3D) => boolean;
+  /** Selects static meshes discovered below world. */
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
+  /** Selects transform-dynamic meshes discovered below world. */
   dynamicObjectFilter?: (object: THREE.Object3D) => boolean;
+  /** Selects deforming meshes discovered below world. */
   geometryDynamicObjectFilter?: (object: THREE.Object3D) => boolean;
-  updatePolicy?: CollisionGeometryUpdatePolicy;
+  /** Default classification for meshes not selected by a more specific list or filter. */
+  updatePolicy?: CollisionGeometryUpdatePolicy | `${CollisionGeometryUpdatePolicy}`;
 }
 
+/** Runtime observability for rebuild cost, uploads, and update-policy tuning. */
 export interface ThreeGPUCollisionBackendStats {
   objects: number;
   uniqueGeometries: number;
@@ -41,6 +52,8 @@ export interface ThreeGPUCollisionBackendStats {
   uploadBytes: number;
 }
 
+// GPU tracking records attribute/topology revisions needed by BLAS refits. The CPU
+// octree tracks whole-object membership instead, so sharing the record would conflate APIs.
 type TrackedMesh = {
   mesh: THREE.Mesh;
   policy: CollisionGeometryUpdatePolicy;
@@ -99,6 +112,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     return this.capsuleQuery !== undefined;
   }
 
+  /** Creates an uninitialized GPU backend; call update before constructing query nodes. */
   constructor(options: ThreeGPUCollisionBackendOptions = {}) {
     this.world = options.world;
     this.staticObjects = options.staticObjects;
@@ -108,9 +122,14 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.staticObjectFilter = options.staticObjectFilter;
     this.dynamicObjectFilter = options.dynamicObjectFilter;
     this.geometryDynamicObjectFilter = options.geometryDynamicObjectFilter;
-    this.updatePolicy = options.updatePolicy ?? CollisionGeometryUpdatePolicy.Auto;
+    this.updatePolicy = (options.updatePolicy as CollisionGeometryUpdatePolicy)
+      ?? CollisionGeometryUpdatePolicy.Auto;
   }
 
+  // ICollisionBackend's CPU query is synchronous, while this backend only exposes
+  // TSL query nodes. A CPU MeshBVH backend could be added separately; replacing the
+  // octree would trade its inexpensive scene rebuilds for faster triangle queries.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   collide(_query: CollisionQuery): null {
     return null;
   }
@@ -126,6 +145,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     }
   }
 
+  /** Detects membership, topology, transform, and vertex changes and updates acceleration data. */
   update(): void {
     const next = this.collectMeshes();
     let topologyChanged = !this.initialized || next.size !== this.tracked.size;
@@ -194,11 +214,12 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     } else if (transformChanged) {
       this.data.updateTransforms();
       this.stats.transformUpdates += 1;
-      this.stats.uploadBytes += getStorageByteLength(this.data, ['nodes', 'transforms']);
+      this.stats.uploadBytes += ThreeGPUCollisionBackend.storageByteLength(this.data, ['nodes', 'transforms']);
     }
     this.initialized = true;
   }
 
+  /** Returns a TSL hit record for a swept capsule query. */
   queryCapsule(
     start: Node<'vec3'>,
     end: Node<'vec3'>,
@@ -219,6 +240,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.invalidateGeometry(mesh);
   }
 
+  /** Releases packed GPU data and BVHs created by this backend. */
   destroy(): void {
     this.disposeData();
     this.tracked.clear();
@@ -252,7 +274,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
       this.stats.topologyRebuilds += Math.max(topologyGeometryCount, 1);
     }
     this.stats.geometryRefits += changedGeometryCount;
-    this.stats.uploadBytes += getStorageByteLength(
+    this.stats.uploadBytes += ThreeGPUCollisionBackend.storageByteLength(
       this.data,
       ['nodes', 'index', 'attributes', 'transforms'],
     );
@@ -305,10 +327,10 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
         matrixWorld: mesh.matrixWorld.clone(),
         geometry,
         positionAttribute: position,
-        positionVersion: attributeVersion(position),
+        positionVersion: ThreeGPUCollisionBackend.attributeVersion(position),
         positionCount: position.count,
         indexAttribute: index,
-        indexVersion: attributeVersion(index),
+        indexVersion: ThreeGPUCollisionBackend.attributeVersion(index),
         indexCount: index?.count ?? position.count,
         drawRangeStart: geometry.drawRange.start,
         drawRangeCount: geometry.drawRange.count,
@@ -317,7 +339,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     const addRoot = (root: THREE.Object3D, policy: CollisionGeometryUpdatePolicy) => {
       root.updateWorldMatrix(true, true);
       root.traverse((object) => {
-        if (object instanceof THREE.Mesh && !isIgnoredObject(object)) add(object, policy);
+        if (object instanceof THREE.Mesh && !isIgnoredCollisionObject(object)) add(object, policy);
       });
     };
 
@@ -327,7 +349,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     if (this.world) {
       this.world.updateWorldMatrix(true, true);
       this.world.traverse((object) => {
-        if (!(object instanceof THREE.Mesh) || isIgnoredObject(object)) return;
+        if (!(object instanceof THREE.Mesh) || isIgnoredCollisionObject(object)) return;
         let policy = this.updatePolicy;
         if (this.geometryDynamicObjectFilter?.(object)) policy = CollisionGeometryUpdatePolicy.GeometryDynamic;
         else if (this.dynamicObjectFilter?.(object)) policy = CollisionGeometryUpdatePolicy.TransformDynamic;
@@ -343,36 +365,20 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.data = undefined;
     this.capsuleQuery = undefined;
   }
-}
 
-function getStorageByteLength(
-  data: BVHComputeDataRuntime,
-  keys: string[],
-): number {
-  const arrays = new Set<ArrayBufferView>();
-  keys.forEach((key) => {
-    const array = data.storage[key]?.proxyNode?.value?.array;
-    if (array) arrays.add(array);
-  });
-  return Array.from(arrays).reduce((bytes, array) => bytes + array.byteLength, 0);
-}
+  private static storageByteLength(data: BVHComputeDataRuntime, keys: string[]): number {
+    const arrays = new Set<ArrayBufferView>();
+    keys.forEach((key) => {
+      const array = data.storage[key]?.proxyNode?.value?.array;
+      if (array) arrays.add(array);
+    });
+    return Array.from(arrays).reduce((bytes, array) => bytes + array.byteLength, 0);
+  }
 
-function isIgnoredObject(object: THREE.Object3D): boolean {
-  return object instanceof ParticleSystem
-    || object instanceof THREE.BoxHelper
-    || object instanceof THREE.Box3Helper
-    || object instanceof THREE.AxesHelper
-    || object instanceof THREE.GridHelper
-    || object instanceof THREE.ArrowHelper
-    || object instanceof THREE.PlaneHelper
-    || object instanceof THREE.CameraHelper
-    || object instanceof THREE.SkeletonHelper
-    || object instanceof THREE.PolarGridHelper
-    || object.userData[TRAIL_RENDERER_USER_DATA_KEY]
-    || object.userData[SPRITE_RENDERER_USER_DATA_KEY];
-}
-
-function attributeVersion(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined): number {
-  if (!attribute) return -1;
-  return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
+  private static attributeVersion(
+    attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined,
+  ): number {
+    if (!attribute) return -1;
+    return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
+  }
 }

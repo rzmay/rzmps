@@ -172,13 +172,20 @@ abstract class FluidSimulation extends Module {
     return this.sampleField(position, field).xyz as Node<'vec3'>;
   }
 
-  protected sampleField(position: Node<'vec3'>, field: Vec4Storage): Node<'vec4'> {
+  protected sampleField(
+    position: Node<'vec3'>,
+    field: Vec4Storage,
+    occupancyOnly = false,
+  ): Node<'vec4'> {
     const gridPosition = vec3(position.sub(this.boundsMinNode).div(this.cellSizeNode).sub(0.5));
     const base = floor(gridPosition);
     const ratio = clamp(gridPosition.sub(base), vec3(0), vec3(1));
-    const sample = (x: number, y: number, z: number) => field.element(this.cellIndex(ivec3(clamp(
-      base.add(vec3(x, y, z)), vec3(0), vec3(this.resolution - 1),
-    ))));
+    const sample = (x: number, y: number, z: number) => {
+      const value = field.element(this.cellIndex(ivec3(clamp(
+        base.add(vec3(x, y, z)), vec3(0), vec3(this.resolution - 1),
+      ))));
+      return occupancyOnly ? vec4(value.xyz, value.w.greaterThan(0).select(1, 0)) : value;
+    };
     const lower = mix(
       mix(sample(0, 0, 0), sample(1, 0, 0), ratio.x),
       mix(sample(0, 1, 0), sample(1, 1, 0), ratio.x),
@@ -298,6 +305,10 @@ abstract class FluidSimulation extends Module {
     return this.solid.element(index).greaterThanEqual(0.5);
   }
 
+  protected targetDivergence(_index: Node<'uint'>): Node<'float'> {
+    return float(0);
+  }
+
   protected solveProjection(
     renderer: ParticleSpatialGridRenderer,
     input: Vec4Storage,
@@ -321,7 +332,8 @@ abstract class FluidSimulation extends Module {
       const front = this.velocityAt(input, coordinate, 0, 0, 1, useOccupancy, solid).z;
       this.divergence.element(instanceIndex).assign(
         active.select(
-          right.sub(left).add(up.sub(down)).add(front.sub(back)).mul(0.5).div(this.cellSizeNode),
+          right.sub(left).add(up.sub(down)).add(front.sub(back)).mul(0.5).div(this.cellSizeNode)
+            .sub(this.targetDivergence(instanceIndex)),
           float(0),
         ),
       );
@@ -397,11 +409,15 @@ abstract class FluidSimulation extends Module {
     const neighborValue = field.element(this.cellIndex(ivec3(clamp(
       vec3(neighbor), vec3(0), vec3(this.resolution - 1),
     ))));
-    const fluidCell = solid ? solid.element(this.cellIndex(ivec3(clamp(
+    const solidNeighbor = solid ? inside.and(solid.element(this.cellIndex(ivec3(clamp(
       vec3(neighbor), vec3(0), vec3(this.resolution - 1),
-    )))).lessThan(0.5) : inside;
-    const valid = (useOccupancy ? inside.and(neighborValue.w.greaterThan(0)) : inside).and(fluidCell);
-    return valid.select(neighborValue.xyz, field.element(this.cellIndex(coordinate)).xyz) as Node<'vec3'>;
+    )))).greaterThanEqual(0.5)) : inside.and(false);
+    const center = field.element(this.cellIndex(coordinate)).xyz;
+    const valid = useOccupancy ? inside.and(neighborValue.w.greaterThan(0)) : inside;
+    // Reflect the normal component at solid faces so divergence includes wall
+    // inflow and pressure can support gravity in a filled container.
+    const reflected = center.mul(vec3(x === 0 ? 1 : -1, y === 0 ? 1 : -1, z === 0 ? 1 : -1));
+    return solidNeighbor.select(reflected, valid.select(neighborValue.xyz, center)) as Node<'vec3'>;
   }
 
   private pressureAt(

@@ -6,11 +6,13 @@ import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import particleRatio from '../helpers/particleRatio';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
+import type { GPUParticleReadbackField } from '../gpu/SelectiveReadback';
 
 export interface PointLightOptions {
     color?: THREE.Color | string | number;
     intensity?: number;
     distance?: number;
+    /** Light intensity falloff exponent; defaults to lightOptions.decay or 2. */
     decay?: number;
     power?: number;
 }
@@ -29,6 +31,7 @@ export interface LightRendererOptions extends RendererOptions {
     lightOptions: PointLightOptions;
 }
 
+/** Maps a capped selection of particles to scene lights; limit count to control illumination cost. */
 class LightRenderer extends Renderer {
     lights: THREE.PointLight[] = [];
 
@@ -95,10 +98,14 @@ class LightRenderer extends Renderer {
       buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
       system: ParticleSystem,
       deltaTime = 0,
-  ): void {
+    ): void {
       const ratio = Math.max(this.ratio, 0.01);
       const sampleLimit = Math.ceil(Math.max(this.count, 1) / ratio) * 2;
-      this.updateGPUFromSelectiveReadback(buffers, system, deltaTime, sampleLimit);
+      const fields: GPUParticleReadbackField[] = ['position', 'time'];
+      if (this.inheritParticleColor) fields.push('color');
+      if (this.alphaAffectsIntensity) fields.push('alpha');
+      if (this.sizeAffectsRange) fields.push('scale');
+      this.updateCPUFromGPU(buffers, system, deltaTime, sampleLimit, fields);
     }
 
     _update(particles: Particle[]): void {

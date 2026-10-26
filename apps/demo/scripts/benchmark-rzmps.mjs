@@ -1,15 +1,25 @@
-import { spawn } from 'node:child_process';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
+import { createSiteServer } from '../../../scripts/site/serve.mjs';
+import { validateBenchmark } from '../../../scripts/benchmark-payload.mjs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 
 const host = '127.0.0.1';
-const port = Number(process.env.RZMPS_BENCHMARK_PORT ?? 4173);
+const port = Number(process.env.RZMPS_BENCHMARK_PORT ?? 0);
+const { values } = parseArgs({ options: {
+  dist: { type: 'string' }, output: { type: 'string' },
+  open: { type: 'boolean' }, headed: { type: 'boolean' }, vsync: { type: 'boolean' },
+} });
+const profile = process.env.RZMPS_BENCHMARK_PROFILE ?? 'default';
+if (!['default', 'ci'].includes(profile)) throw new Error('Unknown benchmark profile');
 const durationMs = Number(process.env.RZMPS_BENCHMARK_DURATION_MS ?? 4000);
 const warmupMs = Number(process.env.RZMPS_BENCHMARK_WARMUP_MS ?? 1000);
 const timeoutMs = Number(process.env.RZMPS_BENCHMARK_TIMEOUT_MS ?? 180_000);
-const openBrowser = process.argv.includes('--open') || process.argv.includes('--headed');
-const useVsync = process.argv.includes('--vsync');
+const openBrowser = values.open || values.headed;
+const useVsync = values.vsync;
 const pacingMode = useVsync ? 'vsync' : 'uncapped';
 const suite = process.env.RZMPS_BENCHMARK_SUITE ?? '';
 const caseFilter = process.env.RZMPS_BENCHMARK_CASE ?? '';
@@ -17,56 +27,22 @@ const viewport = {
   width: Number(process.env.RZMPS_BENCHMARK_WIDTH ?? 1280),
   height: Number(process.env.RZMPS_BENCHMARK_HEIGHT ?? 720),
 };
+for (const [name, value] of Object.entries({ durationMs, warmupMs, timeoutMs, ...viewport })) {
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be positive`);
+}
 const demoRoot = fileURLToPath(new URL('..', import.meta.url));
-const viteBin = fileURLToPath(new URL('../../../node_modules/.bin/vite', import.meta.url));
-const url = `http://${host}:${port}/?benchmark=1&durationMs=${durationMs}&warmupMs=${warmupMs}${suite ? `&suite=${encodeURIComponent(suite)}` : ''}${caseFilter ? `&case=${encodeURIComponent(caseFilter)}` : ''}`;
+const directory = values.dist ? path.resolve(values.dist) : path.join(demoRoot, 'benchmark-dist');
 
 function formatNumber(value, digits = 1) {
   return Number.isFinite(value) ? value.toFixed(digits) : 'n/a';
 }
 
-function wait(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-async function waitForServer(serverUrl, timeoutMs = 30_000) {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const response = await fetch(serverUrl);
-      if (response.ok) return;
-    } catch {
-      await wait(250);
-    }
-  }
-
-  throw new Error(`Timed out waiting for benchmark server at ${serverUrl}`);
-}
-
-function startServer() {
-  const child = spawn(
-    viteBin,
-    [
-      'preview',
-      '--host',
-      host,
-      '--port',
-      String(port),
-      '--strictPort',
-    ],
-    {
-      cwd: demoRoot,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-
-  child.stdout.on('data', (data) => process.stderr.write(data));
-  child.stderr.on('data', (data) => process.stderr.write(data));
-
-  return child;
+function isExpectedWebGPUTeardownError(error) {
+  const description = typeof error === 'string'
+    ? error
+    : `${error?.name ?? ''}: ${error?.message ?? String(error)}`;
+  return description.includes('OperationError')
+    && description.includes('Instance dropped in popErrorScope');
 }
 
 function getChromeArgs() {
@@ -82,6 +58,9 @@ function getChromeArgs() {
       '--use-gl=angle',
       '--use-angle=swiftshader',
       '--enable-unsafe-swiftshader',
+      '--enable-unsafe-webgpu',
+      '--use-webgpu-adapter=swiftshader',
+      '--use-gpu-in-tests',
     );
   } else {
     args.push('--use-angle=default');
@@ -155,21 +134,28 @@ async function collectBrowserHardware(page) {
 }
 
 async function runBenchmark() {
-  const server = startServer();
+  const server = createSiteServer(directory);
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, resolve);
+  });
+  const url = `http://${host}:${server.address().port}/benchmark.html?benchmark=1&profile=${profile}&durationMs=${durationMs}&warmupMs=${warmupMs}${suite ? `&suite=${encodeURIComponent(suite)}` : ''}${caseFilter ? `&case=${encodeURIComponent(caseFilter)}` : ''}`;
   let browser;
   let pageError;
+  let benchmarkValidated = false;
   const gpuValidationErrors = [];
+  let page;
 
   try {
-    await waitForServer(`http://${host}:${port}/`);
-
     browser = await puppeteer.launch({
       headless: openBrowser ? false : 'new',
       args: getChromeArgs(),
       defaultViewport: viewport,
+      // waitForFunction keeps a CDP call open for the measurement window.
+      protocolTimeout: timeoutMs + 15_000,
     });
 
-    const page = await browser.newPage();
+    page = await browser.newPage();
     page.on('console', (message) => {
       if (message.type() === 'error') {
         const value = message.text();
@@ -179,44 +165,35 @@ async function runBenchmark() {
         }
       }
     });
+    page.on('error', (error) => {
+      if (!isExpectedWebGPUTeardownError(error)) pageError = error;
+    });
     page.on('pageerror', (error) => {
+      if (isExpectedWebGPUTeardownError(error)) return;
       pageError = error;
       console.error(`[browser pageerror] ${error.stack ?? error.message}`);
     });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     const browserHardware = await collectBrowserHardware(page);
-    try {
-      await page.waitForFunction(
-        'window.__RZMPS_BENCHMARK_DONE__ === true',
-        { timeout: timeoutMs },
-      );
-    } catch (error) {
-      if (pageError) {
-        throw pageError;
-      }
-
-      const progress = await page.evaluate(() => ({
-        activeCase: document.querySelector('.benchmark-status span')?.textContent,
-        status: document.querySelector('.benchmark-status small')?.textContent,
-        results: window.__RZMPS_BENCHMARK_RESULTS__ ?? [],
-      })).catch(() => null);
-
-      if (progress) {
-        console.error('Benchmark timed out with page progress:');
-        console.error(JSON.stringify(progress, null, 2));
-      }
-
-      throw error;
-    }
+    await page.waitForFunction(
+      'window.__RZMPS_BENCHMARK_DONE__ === true',
+      { timeout: timeoutMs, polling: 1000 },
+    );
 
     const results = await page.evaluate(() => window.__RZMPS_BENCHMARK_RESULTS__ ?? []);
     if (pageError) throw pageError;
     if (gpuValidationErrors.length > 0) {
       throw new Error(`WebGPU validation failed: ${gpuValidationErrors[0]}`);
     }
+    const expected = await page.evaluate(() => window.__RZMPS_BENCHMARK_CASES__);
+    if (!expected?.length || JSON.stringify(expected) !== JSON.stringify(results.map(row => row.name))) {
+      throw new Error('Benchmark returned an incomplete case list');
+    }
     const browserVersion = await browser.version();
     const metadata = {
       browser: browserVersion,
+      harnessVersion: 1,
+      profile,
       viewport,
       durationMs,
       warmupMs,
@@ -229,7 +206,15 @@ async function runBenchmark() {
         ...browserHardware,
       },
     };
+    validateBenchmark({ metadata, results });
+    benchmarkValidated = true;
 
+    if (values.output) {
+      await fs.mkdir(path.dirname(path.resolve(values.output)), { recursive: true });
+      await fs.writeFile(values.output, `${JSON.stringify({ metadata, results }, null, 2)}\n`);
+      console.log(`RZMPS benchmark complete: wrote ${results.length} cases to ${path.resolve(values.output)}`);
+      return;
+    }
     console.log('RZMPS browser benchmark');
     console.log(`Browser: ${metadata.browser}`);
     console.log(`Viewport: ${viewport.width}x${viewport.height}`);
@@ -295,9 +280,43 @@ async function runBenchmark() {
     console.log('RZMPS_BENCHMARK_JSON_START');
     console.log(JSON.stringify({ metadata, results }, null, 2));
     console.log('RZMPS_BENCHMARK_JSON_END');
+  } catch (error) {
+    if (benchmarkValidated && isExpectedWebGPUTeardownError(error)) return;
+
+    const progress = await page?.evaluate(() => ({
+      ...window.__RZMPS_BENCHMARK_PROGRESS__,
+      activeCase: document.querySelector('.benchmark-status span')?.textContent,
+      status: document.querySelector('.benchmark-status small')?.textContent,
+      completedResults: window.__RZMPS_BENCHMARK_RESULTS__?.length ?? 0,
+      lastCompletedCase: window.__RZMPS_BENCHMARK_RESULTS__?.at(-1)?.name,
+    })).catch(() => null);
+
+    if (progress) {
+      console.error('Benchmark failed with page progress:');
+      console.error(JSON.stringify(progress, null, 2));
+    }
+
+    if (values.output) {
+      await fs.mkdir(path.dirname(path.resolve(values.output)), { recursive: true });
+      await fs.writeFile(`${values.output}.failure.json`, JSON.stringify({ url, progress, error: String(error), pageError: String(pageError ?? '') }, null, 2));
+      await page?.screenshot({ path: `${values.output}.failure.png`, timeout: 5000 }).catch(() => {});
+    }
+    throw pageError ?? error;
   } finally {
-    if (browser) await browser.close();
-    server.kill();
+    try {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (error) {
+          // Chromium/SwiftShader can reject WebGPU error-scope cleanup after all
+          // benchmark results have already been collected and validated.
+          if (!isExpectedWebGPUTeardownError(error)) throw error;
+        }
+      }
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
   }
 }
 

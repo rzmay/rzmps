@@ -439,3 +439,31 @@ $RECYCLE.BIN/
 # RZMPS generated artifacts
 packages/*/build/
 apps/*/dist/
+
+# Generated local documentation build and visual validation artifacts
+apps/docs/.vitepress/dist/
+apps/docs/.vitepress/cache/
+/previews/
+.puppeteer/
+apps/docs/.vitepress/.temp/
+/dist/
+
+# Documentation and runtime artifacts rebuilt from canonical docs and source.
+# Keep .agents/ committed for skill installation directly from GitHub.
+/apps/docs/api/
+/apps/docs/guides/index.md
+/apps/docs/examples/index.md
+/apps/docs/.vitepress/api.generated.json
+/apps/docs/.vitepress/examples.generated.json
+/apps/docs/public/llms.txt
+/apps/docs/public/llms-full.txt
+/apps/docs/public/favicon.png
+/apps/docs/public/previews/
+/examples/index.js
+/packages/rzmps/AGENTS.md
+
+# Isolated benchmark bundles and CI diagnostics
+/apps/demo/benchmark-dist/
+/benchmark-results/
+
+/apps/docs/guides/benchmarks.md

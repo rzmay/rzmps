@@ -23,19 +23,33 @@ import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle'
 export type CollisionListener = (particle: Particle, collision: CollisionHit) => void;
 
 export interface CollisionOptions extends Partial<ModuleOptions> {
+  /** Collision query provider; omission selects the active scene backend or built-in mesh backend. */
   backend: ICollisionBackend;
+  /** Fraction of post-bounce velocity removed at contact, clamped from zero to one. */
   dampen: DynamicValue<number>;
+  /** Normal rebound multiplier sampled by normalized age; defaults to 1. */
   bounce: DynamicValue<number>;
+  /** Fraction of lifetime lost at contact; 1 removes the particle on collision. */
   lifetimeLoss: DynamicValue<number>;
+  /** Transfers contact impulses to backends supporting dynamic bodies. Defaults to false. */
   applyImpulses: boolean;
+  /** Multiplier on the collision radius derived from particle scale. Defaults to 1. */
   radiusScale: number;
+  /** Extra world-space contact margin added to the scale-derived radius. */
   radiusOffset: number;
+  /** Removes particles below this contact speed; zero disables the lower threshold. */
   minKillSpeed: number;
+  /** Removes particles above this contact speed; defaults to positive infinity. */
   maxKillSpeed: number;
 
+  /** Synchronous callback invoked for a reported particle contact. */
   onCollision?: CollisionListener;
 }
 
+/**
+ * Predicts contacts before movement at priority -0.01; bounce, damping, impulses, and lifecycle callbacks use the
+ * selected backend.
+ */
 class Collision extends Module {
   private _backend?: ICollisionBackend;
 
@@ -62,6 +76,7 @@ class Collision extends Module {
     this.setBackend(backend);
   }
 
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(options: Partial<CollisionOptions> = {}) {
     // Collisions run immediately before movement so they can predict this frame's travel segment.
     super((particle, deltaTime) => this.collide(particle, deltaTime), {
@@ -163,12 +178,7 @@ class Collision extends Module {
     const hit = this.backend.queryCapsule(start, end, radius);
     const found = hit.get('found') as Node<'bool'>;
     const worldCapsulePoint = hit.get('capsulePoint') as Node<'vec3'>;
-    const sampledWorldNormal = (hit.get('normal') as Node<'vec3'>).normalize();
-    const worldTravel = end.sub(start);
-    const worldNormal = sampledWorldNormal.dot(worldTravel).greaterThan(0).select(
-      sampledWorldNormal.negate(),
-      sampledWorldNormal,
-    ) as Node<'vec3'>;
+    const worldNormal = (hit.get('normal') as Node<'vec3'>).normalize();
     const distance = sqrt(hit.get('distanceSq') as Node<'float'>);
     const correctedWorldPosition = worldCapsulePoint.add(
       worldNormal.mul(radius.sub(distance).max(0)),
@@ -209,12 +219,7 @@ class Collision extends Module {
     const found = hit.get('found') as Node<'bool'>;
     const worldPoint = hit.get('point') as Node<'vec3'>;
     const worldCapsulePoint = hit.get('capsulePoint') as Node<'vec3'>;
-    const sampledWorldNormal = (hit.get('normal') as Node<'vec3'>).normalize();
-    const worldTravel = end.sub(start);
-    const worldNormal = sampledWorldNormal.dot(worldTravel).greaterThan(0).select(
-      sampledWorldNormal.negate(),
-      sampledWorldNormal,
-    ) as Node<'vec3'>;
+    const worldNormal = (hit.get('normal') as Node<'vec3'>).normalize();
     const distance = sqrt(hit.get('distanceSq') as Node<'float'>);
     const correctedWorldPosition = worldCapsulePoint.add(
       worldNormal.mul(radius.sub(distance).max(0)),

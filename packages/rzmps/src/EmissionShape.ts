@@ -1,13 +1,31 @@
 import * as THREE from 'three';
 import { BufferAttribute } from 'three';
 import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.js';
+import { MeshBVH } from 'three-mesh-bvh';
 import { EmissionSource } from './enums/EmissionSource';
-import isPointInMesh from './helpers/isPointInMesh';
 import { getGPUEmissionShapeSupport, type GPUEmissionSupportReport } from './gpu/Emission';
+import isPointInMesh, {
+  countDistinctRayHits,
+} from './helpers/isPointInMesh';
+
+/** Fixed table size or a logarithmic estimate derived from a small ray probe pass. */
+export type VolumeSampleCount = number | 'auto';
+
+/** One reusable interior sample used by CPU and GPU volume emission. */
+export interface VolumeSample {
+  position: THREE.Vector3;
+  normal: THREE.Vector3;
+  radius: number;
+  neighbors?: number[];
+}
 
 export interface EmissionShapeOptions {
+    /** Source mesh geometry; should be nondegenerate and suitable for the chosen sampling rule. */
     geometry: THREE.BufferGeometry;
+    /** Volume, surface, or vertex sampling. Defaults to EmissionSource.Volume. */
     source: EmissionSource | `${EmissionSource}`;
+    /** Number of shared CPU/GPU volume samples, or an automatically estimated count. Defaults to auto. */
+    volumeSamples: VolumeSampleCount;
 }
 
 export type EmissionShapeFactoryOptions = Omit<Partial<EmissionShapeOptions>, 'geometry'>;
@@ -17,8 +35,15 @@ type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
 type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
 type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
+/** Samples geometry in parent space for emitter positions and normals; Object3D transforms move the source. */
 class EmissionShape extends THREE.Object3D {
-    static MAX_VOLUME_ITERATIONS = 5;
+    static MAX_VOLUME_ITERATIONS = 32;
+
+    static AUTO_VOLUME_PROBES = 32;
+
+    static MIN_AUTO_VOLUME_SAMPLES = 256;
+
+    static MAX_AUTO_VOLUME_SAMPLES = 4096;
 
     private static readonly _doubleSidedMaterial = new THREE.MeshBasicMaterial(
       { side: THREE.DoubleSide },
@@ -71,6 +96,10 @@ class EmissionShape extends THREE.Object3D {
 
     source: EmissionSource;
 
+    private _volumeSamples: VolumeSampleCount = 'auto';
+
+    private _version = 0;
+
     private _geometry: THREE.BufferGeometry;
 
     private _surfaceSampler: MeshSurfaceSampler;
@@ -79,11 +108,18 @@ class EmissionShape extends THREE.Object3D {
 
     private _mesh: THREE.Mesh;
 
+    private _volumeSampleCache?: {
+      signature: string;
+      samples: VolumeSample[];
+    };
+
+    /** Creates a shape with sphere geometry and volume sampling by default. */
     constructor(options: Partial<EmissionShapeOptions> = {}) {
       super();
 
       this._geometry = options.geometry ?? new THREE.SphereGeometry();
       this.source = (options.source as EmissionSource) ?? EmissionSource.Volume;
+      this._volumeSamples = EmissionShape.normalizeVolumeSamples(options.volumeSamples ?? 'auto');
 
       this._mesh = new THREE.Mesh(this._geometry, EmissionShape._doubleSidedMaterial);
       this._surfaceSampler = new MeshSurfaceSampler(this._mesh)
@@ -96,15 +132,35 @@ class EmissionShape extends THREE.Object3D {
     set geometry(value: THREE.BufferGeometry) {
       this._geometry = value;
       this._mesh = new THREE.Mesh(this._geometry, EmissionShape._doubleSidedMaterial);
-      this._surfaceSampler = new MeshSurfaceSampler(this._mesh);
+      this._surfaceSampler = new MeshSurfaceSampler(this._mesh).build();
+      this._volumeSampleCache = undefined;
 
       this.computeVertexNormals();
       this._geometry.computeBoundingBox();
       this._mesh.updateMatrix();
+      this._version += 1;
     }
 
     get geometry() { return this._geometry; }
 
+    get version(): number { return this._version; }
+
+    set volumeSamples(value: VolumeSampleCount) {
+      const next = EmissionShape.normalizeVolumeSamples(value);
+      if (next === this._volumeSamples) return;
+      this._volumeSamples = next;
+      this._volumeSampleCache = undefined;
+      this._version += 1;
+    }
+
+    get volumeSamples(): VolumeSampleCount { return this._volumeSamples; }
+
+    /** Actual cached table size after automatic estimation and clamping. */
+    get resolvedVolumeSamples(): number {
+      return this.getVolumeSamples().length;
+    }
+
+    /** Reports whether this geometry exposes the attributes required by GPU emission. */
     getGPUEmissionSupport(): GPUEmissionSupportReport {
       return getGPUEmissionShapeSupport(this);
     }
@@ -122,33 +178,6 @@ class EmissionShape extends THREE.Object3D {
       }
 
       return res;
-    }
-
-    // Calculate the normal of a point in the geometry volume
-    private _calculatePointNormal(point: THREE.Vector3, maxVertices = 5): THREE.Vector3 {
-      // Get the closest vertices
-      const { vertices } = this;
-      const closest = vertices
-        .sort((a, b) => Math.abs(point.distanceTo(a)) - Math.abs(point.distanceTo(b)))
-        .splice(0, maxVertices);
-
-      // Get weighted average
-      const sumVectors = (vectors: THREE.Vector3[]) => vectors.reduce(
-        (a, b) => a.addScaledVector(b, 1),
-      );
-      const sumArray = (values: number[]) => values.reduce(
-        (a, b) => a + b,
-      );
-      const weightedMean = (factorsArray: THREE.Vector3[], weightsArray: number[]) => sumVectors(
-        factorsArray.map(
-          (factor, index) => factor.multiplyScalar(weightsArray[index]),
-        ),
-      ).divideScalar(sumArray(weightsArray));
-
-      return weightedMean(
-        closest,
-        closest.map((vector) => Math.abs(point.distanceTo(vector))),
-      );
     }
 
     computeVertexNormals(): void {
@@ -190,6 +219,7 @@ class EmissionShape extends THREE.Object3D {
         .normalize();
     }
 
+    /** Samples position and normal in parent space; falls back to surface sampling after too many attempts. */
     getPoint(overrideSource?: EmissionSource): { position: THREE.Vector3, normal: THREE.Vector3 } {
       switch (overrideSource ?? this.source) {
         case EmissionSource.Vertices:
@@ -213,36 +243,241 @@ class EmissionShape extends THREE.Object3D {
 
         case EmissionSource.Volume:
         default:
-          // If no bounding box, fallback to surface
-          if (!this._geometry.boundingBox) return this.getPoint(EmissionSource.Surface);
-
-          // Choose random points in bounding box until one is contained by geometry (volume)
-          const { min, max } = this._geometry.boundingBox;
-          const randomPoint = new THREE.Vector3();
-
-          // Search for the allotted iterations
-          let iterations = 0;
-          while (iterations < EmissionShape.MAX_VOLUME_ITERATIONS) {
-            randomPoint.set(
-              THREE.MathUtils.lerp(min.x, max.x, Math.random()),
-              THREE.MathUtils.lerp(min.y, max.y, Math.random()),
-              THREE.MathUtils.lerp(min.z, max.z, Math.random()),
+          const samples = this.getVolumeSamples();
+          if (samples.length === 0) return this.getPoint(EmissionSource.Surface);
+          const sampleIndex = Math.floor(Math.random() * samples.length);
+          const sample = samples[sampleIndex];
+          const z = Math.random() * 2 - 1;
+          const angle = Math.random() * Math.PI * 2;
+          const radial = Math.sqrt(Math.max(0, 1 - z * z));
+          const jitter = new THREE.Vector3(
+            Math.cos(angle) * radial,
+            Math.sin(angle) * radial,
+            z,
+          ).multiplyScalar(Math.random() * sample.radius);
+          const sampledPosition = sample.position.clone().add(jitter);
+          const sampledNormal = new THREE.Vector3();
+          let totalWeight = 0;
+          [sampleIndex, ...(sample.neighbors ?? [])].forEach((neighborIndex) => {
+            const neighbor = samples[neighborIndex];
+            const weight = 1 / Math.max(
+              sampledPosition.distanceToSquared(neighbor.position),
+              1e-8,
             );
-
-            if (isPointInMesh(randomPoint, this._mesh)) {
-              return {
-                position: this._toParentPosition(randomPoint),
-                normal: this._toParentNormal(this._calculatePointNormal(randomPoint)),
-              };
-            }
-
-            iterations += 1;
-          }
-
-          // If not found, get from surface sampler
-          return this.getPoint(EmissionSource.Surface);
+            sampledNormal.addScaledVector(neighbor.normal, weight);
+            totalWeight += weight;
+          });
+          if (totalWeight > 0) sampledNormal.divideScalar(totalWeight).normalize();
+          if (sampledNormal.lengthSq() <= Number.EPSILON) sampledNormal.copy(sample.normal);
+          return {
+            position: this._toParentPosition(sampledPosition),
+            normal: this._toParentNormal(sampledNormal),
+          };
       }
     }
+
+    /** Returns the local-space sample table shared by CPU and GPU volume emission. */
+    getVolumeSamples(): readonly VolumeSample[] {
+      const position = this._geometry.getAttribute('position');
+      const index = this._geometry.index;
+      const signature = [
+        this._version,
+        position?.count ?? 0,
+        getAttributeVersion(position),
+        index?.count ?? 0,
+        index?.version ?? 0,
+      ].join(':');
+      if (this._volumeSampleCache?.signature === signature) {
+        return this._volumeSampleCache.samples;
+      }
+
+      if (!position || position.count < 3) {
+        this._volumeSampleCache = { signature, samples: [] };
+        return this._volumeSampleCache.samples;
+      }
+
+      // Build on a clone because MeshBVH may generate or reorder an index buffer.
+      const samplingGeometry = this._geometry.clone();
+      samplingGeometry.computeBoundingBox();
+      const bounds = samplingGeometry.boundingBox;
+      if (!bounds || bounds.isEmpty()) {
+        samplingGeometry.dispose();
+        this._volumeSampleCache = { signature, samples: [] };
+        return this._volumeSampleCache.samples;
+      }
+
+      const bvh = new MeshBVH(samplingGeometry);
+      const boundsSize = bounds.getSize(new THREE.Vector3());
+      const boundsDiagonal = Math.max(boundsSize.length(), Number.EPSILON);
+      const candidate = new THREE.Vector3();
+      // Rotate the Halton set per bake to retain even coverage without fixing
+      // every geometry to the same sequence alignment.
+      const sequenceOffset = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+      let candidateIndex = 1;
+
+      const distinctHitCount = (origin: THREE.Vector3, direction: THREE.Vector3): number => {
+        return countDistinctRayHits(origin, direction, bvh, boundsDiagonal * 1e-7);
+      };
+
+      let sampleCount = typeof this._volumeSamples === 'number' ? this._volumeSamples : 256;
+      if (this._volumeSamples === 'auto') {
+        const crossings: number[] = [];
+        const safeRadii: number[] = [];
+        const probeDirection = new THREE.Vector3();
+        const probeClosest = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 };
+        for (let probe = 1; probe <= EmissionShape.AUTO_VOLUME_PROBES; probe += 1) {
+          candidate.set(
+            THREE.MathUtils.lerp(bounds.min.x, bounds.max.x, halton(probe, 2)),
+            THREE.MathUtils.lerp(bounds.min.y, bounds.max.y, halton(probe, 3)),
+            THREE.MathUtils.lerp(bounds.min.z, bounds.max.z, halton(probe, 5)),
+          );
+          const probeZ = halton(probe, 7) * 2 - 1;
+          const probeAngle = halton(probe, 11) * Math.PI * 2;
+          const probeRadial = Math.sqrt(Math.max(0, 1 - probeZ * probeZ));
+          probeDirection.set(
+            Math.cos(probeAngle) * probeRadial,
+            Math.sin(probeAngle) * probeRadial,
+            probeZ,
+          );
+          const forwardCrossings = distinctHitCount(candidate, probeDirection);
+          const count = forwardCrossings
+            + distinctHitCount(candidate, probeDirection.clone().negate());
+          if (count > 0) crossings.push(count);
+          if (forwardCrossings % 2 === 1) {
+            const result = bvh.closestPointToPoint(candidate, probeClosest);
+            if (result && result.distance > 0) safeRadii.push(result.distance);
+          }
+        }
+        crossings.sort((a, b) => a - b);
+        safeRadii.sort((a, b) => a - b);
+        const percentileIndex = Math.floor(Math.max(0, crossings.length - 1) * 0.9);
+        const layers = Math.max(1, (crossings[percentileIndex] ?? 2) / 2);
+        const medianRadius = safeRadii[Math.floor(safeRadii.length / 2)] ?? boundsDiagonal;
+        const radiusComplexity = boundsDiagonal / Math.max(medianRadius, boundsDiagonal * 1e-6);
+        const estimated = 256 * (
+          1
+          + Math.log2(layers)
+          + 0.5 * Math.log2(Math.max(1, radiusComplexity / 24))
+        );
+        sampleCount = THREE.MathUtils.clamp(
+          Math.ceil(estimated / 128) * 128,
+          EmissionShape.MIN_AUTO_VOLUME_SAMPLES,
+          EmissionShape.MAX_AUTO_VOLUME_SAMPLES,
+        );
+      }
+
+      const samples: VolumeSample[] = [];
+      const closest = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 };
+      const triangle = new THREE.Triangle();
+      const a = new THREE.Vector3();
+      const b = new THREE.Vector3();
+      const c = new THREE.Vector3();
+      const samplingPosition = samplingGeometry.getAttribute('position');
+      const samplingIndex = samplingGeometry.index;
+      for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
+        let found = false;
+        for (let attempt = 0; attempt < EmissionShape.MAX_VOLUME_ITERATIONS; attempt += 1) {
+          const sequencePoint = candidateIndex;
+          candidateIndex += 1;
+          candidate.set(
+            THREE.MathUtils.lerp(
+              bounds.min.x,
+              bounds.max.x,
+              (halton(sequencePoint, 2) + sequenceOffset.x) % 1,
+            ),
+            THREE.MathUtils.lerp(
+              bounds.min.y,
+              bounds.max.y,
+              (halton(sequencePoint, 3) + sequenceOffset.y) % 1,
+            ),
+            THREE.MathUtils.lerp(
+              bounds.min.z,
+              bounds.max.z,
+              (halton(sequencePoint, 5) + sequenceOffset.z) % 1,
+            ),
+          );
+          if (isPointInMesh(candidate, bvh, boundsDiagonal)) {
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          const surfacePosition = new THREE.Vector3();
+          const surfaceNormal = new THREE.Vector3();
+          this._surfaceSampler.sample(surfacePosition, surfaceNormal);
+          samples.push({
+            position: surfacePosition,
+            normal: surfaceNormal.normalize(),
+            radius: 0,
+            neighbors: [],
+          });
+          continue;
+        }
+
+        const closestResult = bvh.closestPointToPoint(candidate, closest);
+        if (!closestResult) continue;
+        const triangleOffset = closestResult.faceIndex * 3;
+        const ia = samplingIndex?.getX(triangleOffset) ?? triangleOffset;
+        const ib = samplingIndex?.getX(triangleOffset + 1) ?? triangleOffset + 1;
+        const ic = samplingIndex?.getX(triangleOffset + 2) ?? triangleOffset + 2;
+        a.fromBufferAttribute(samplingPosition, ia);
+        b.fromBufferAttribute(samplingPosition, ib);
+        c.fromBufferAttribute(samplingPosition, ic);
+        const normal = triangle.set(a, b, c).getNormal(new THREE.Vector3());
+        samples.push({
+          position: candidate.clone(),
+          normal,
+          radius: Math.max(0, closestResult.distance - boundsDiagonal * 1e-6),
+          neighbors: [],
+        });
+      }
+
+      // Bake a small neighborhood once so runtime normal interpolation does
+      // not scan the complete sample table for every emitted particle.
+      samples.forEach((sample, sampleIndex) => {
+        const nearest: Array<{ index: number; distanceSq: number }> = [];
+        samples.forEach((candidateSample, candidateIndex) => {
+          if (candidateIndex === sampleIndex) return;
+          const distanceSq = sample.position.distanceToSquared(candidateSample.position);
+          const insertAt = nearest.findIndex((entry) => distanceSq < entry.distanceSq);
+          if (insertAt < 0) {
+            if (nearest.length < 3) nearest.push({ index: candidateIndex, distanceSq });
+          } else {
+            nearest.splice(insertAt, 0, { index: candidateIndex, distanceSq });
+            if (nearest.length > 3) nearest.pop();
+          }
+        });
+        sample.neighbors = nearest.map((entry) => entry.index);
+      });
+
+      // Keep the cache local-space; transforms can change without rebaking geometry.
+      this._volumeSampleCache = { signature, samples };
+      samplingGeometry.dispose();
+      return samples;
+    }
+
+    private static normalizeVolumeSamples(value: VolumeSampleCount): VolumeSampleCount {
+      if (value === 'auto') return value;
+      return Math.max(1, Math.floor(Number.isFinite(value) ? value : 256));
+    }
+}
+
+function halton(index: number, base: number): number {
+  let result = 0;
+  let fraction = 1 / base;
+  let value = index;
+  while (value > 0) {
+    result += fraction * (value % base);
+    value = Math.floor(value / base);
+    fraction /= base;
+  }
+  return result;
+}
+
+function getAttributeVersion(attribute?: THREE.BufferAttribute | THREE.InterleavedBufferAttribute): number {
+  if (!attribute) return 0;
+  return 'data' in attribute ? attribute.data.version : attribute.version;
 }
 
 export default EmissionShape;

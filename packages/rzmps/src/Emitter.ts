@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Node } from 'three/webgpu';
+import { StorageBufferAttribute, type Node } from 'three/webgpu';
 import EmissionShape from './EmissionShape';
 import Particle from './Particle';
 import type { InitialParticleValues } from './interfaces/InitialParticleValues';
@@ -29,41 +29,60 @@ import {
   int,
   mix,
   cos,
-  pow,
   shiftLeft,
   sin,
+  sqrt,
+  storage,
   uint,
   uniform,
-  uniformArray,
   vec3,
   vec4,
 } from 'three/tsl';
 import {
   GPUDynamicParameterStore,
 } from './helpers/evaluateDynamicGPU';
+import type { PackedFloatStorage, PackedUintStorage } from './gpu/Storage';
 
 export type SpawnBurst = {
+    /** Normalized emission-cycle time, clamped to the range 0 through 1. */
     time: number,
+    /** Number of particles emitted when the burst fires. */
     count: DynamicUntimedValue<number>,
+    /** Internal CPU emission state; reset automatically with the emitter. */
     fired?: boolean,
 };
 
 export interface EmitterOptions {
+    /** Dynamic values sampled at birth; mutable values are isolated per particle. */
     initialValues: Partial<InitialParticleValues>;
+    /** Geometry and sampling rule used to place particles. Defaults to a sphere. */
     source: EmissionShape;
+    /** Timed particle batches within an emission cycle.
+     * Supplying bursts changes the default continuous rate to zero. */
     bursts: Multiple<SpawnBurst>;
+    /** Continuous particles per second. Defaults to 50 without bursts, otherwise 0. */
     rate: DynamicValue<number>;
+    /** Particles per world-space distance traveled by the emission context.
+     * @defaultValue 0 */
     rateOverDistance: DynamicValue<number>;
 
+    /** Initial velocity contribution along the sampled source direction.
+     * @defaultValue 1 */
     radialSpeed: DynamicValue<number>;
+    /** Amount of initial rotation alignment to source direction.
+     * @defaultValue 0 */
     alignment: DynamicValue<number>;
 
+    /** Tags assigned at birth, selected using tagSelection. */
     tags: StrictMultiple<Tag>;
+    /** Assigns all tags, distributes them, or samples them according to the selected mode. */
     tagSelection: TagSelectionMethod | `${TagSelectionMethod}`;
+    /** Enables update skipping; defaults to whether updateLOD is provided. */
     useUpdateLOD: boolean;
+    /** Distance-based emission update quality. */
     updateLOD: Partial<LODSettings>;
+    /** Distance-based emitted particle count reduction. */
     countLOD: Partial<LODSettings>;
-    emitGPU: GPUEmitterUpdate;
 }
 
 interface EmitterContextState {
@@ -75,6 +94,7 @@ interface EmitterContextState {
 }
 
 export interface EmissionContext {
+  /** Stable root or subsystem run identity. */
   key: string;
   transform: THREE.Matrix4;
   position: THREE.Vector3;
@@ -92,9 +112,13 @@ export interface EmissionContext {
   tags: Tag[];
 }
 
+/** @internal Context used to construct the built-in GPU birth graph. */
 export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
+  /** Emitter whose birth graph is being constructed. */
   emitter: Emitter;
+  /** Emitter position in the owning system's emitter array. */
   emitterIndex: number;
+  /** Destination storage for newly allocated particles. */
   output: GPUParticleBufferState;
   emitterRuntime?: GPUEmitterInstanceRuntime;
   durationNode?: Node<'float'>;
@@ -120,8 +144,10 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
   reclaimOld?: boolean;
 }
 
+/** @internal */
 export type GPUEmitterUpdate = (context: GPUEmitterUpdateContext) => void;
 
+/** Samples particle births from a shape using time, distance, and burst emission. */
 class Emitter {
   source: EmissionShape;
   rate: DynamicValue<number>;
@@ -137,7 +163,6 @@ class Emitter {
   useUpdateLOD: boolean;
   updateLOD?: Partial<LODSettings>;
   countLOD?: Partial<LODSettings>;
-  emitGPU?: GPUEmitterUpdate;
   private _lodHelper: LODHelper;
   private _countLODHelper: LODHelper;
   private readonly _gpuUpdateLODScale = uniform(1, 'float');
@@ -152,13 +177,25 @@ class Emitter {
   private _gpuStructureSignature = '';
   private _gpuSource?: EmissionShape;
   private _gpuGeometry?: THREE.BufferGeometry;
-  private _gpuEmitGPU?: GPUEmitterUpdate;
+  private _gpuGeometrySampling?: {
+    signature: string;
+    vectors: StorageBufferAttribute;
+    triangles: StorageBufferAttribute;
+    vertexCount: number;
+    triangleCount: number;
+  };
+  private _gpuVolumeSampling?: {
+    signature: string;
+    vectors: StorageBufferAttribute;
+    count: number;
+  };
 
   private _lastTagIndex: number = 0;
 
   // Used for subsystems
   private _contextStates = new Map<string, EmitterContextState>();
 
+  /** Monotonic GPU configuration version used to invalidate compiled work. */
   get version(): number {
     return this._gpuVersion;
   }
@@ -171,6 +208,7 @@ class Emitter {
     if (value) this._gpuVersion += 1;
   }
 
+  /** Creates emission state; bursts default the continuous rate to zero. */
   constructor(
     options: Partial<EmitterOptions> = {},
   ) {
@@ -178,6 +216,7 @@ class Emitter {
     this.initialValues = options.initialValues ?? {};
 
     this.bursts = acceptMultiple(options.bursts) ?? [];
+    this.normalizeBurstTimes();
     this.rate = options.rate ?? (this.bursts.length > 0 ? 0 : 50);
     this.rateOverDistance = options.rateOverDistance ?? 0;
 
@@ -189,7 +228,6 @@ class Emitter {
     this.updateLOD = options.updateLOD;
     this.useUpdateLOD = options.useUpdateLOD ?? Boolean(this.updateLOD);
     this.countLOD = options.countLOD;
-    this.emitGPU = (options as Partial<EmitterOptions> & { emitGPU?: GPUEmitterUpdate }).emitGPU;
     this._lodHelper = new LODHelper(this.updateLOD);
     this._countLODHelper = new LODHelper(this.countLOD);
   }
@@ -198,6 +236,7 @@ class Emitter {
     * CONTROLS
   */
 
+  /** Clears timed bursts, movement credit, LOD state, and per-context emission clocks. */
   public reset(): void {
     this.bursts.forEach((burst) => {
       burst.fired = false;
@@ -208,15 +247,19 @@ class Emitter {
     this._countLODHelper.reset();
   }
 
+  /** Whether the current source and emission configuration support GPU-native births. */
   get supportsGPUEmission(): boolean {
     return this.getGPUEmissionSupport().supported;
   }
 
+  /** Returns feature and incompatibility details for GPU-native emission. */
   getGPUEmissionSupport(): GPUEmissionSupportReport {
     return getGPUEmitterSupport(this);
   }
 
+  /** Synchronizes runtime values and invalidates structural GPU changes. */
   syncGPUConfiguration(): void {
+    this.normalizeBurstTimes();
     this._lodHelper.configure(this.updateLOD);
     this._countLODHelper.configure(this.countLOD);
     this._gpuParameters.sync();
@@ -228,6 +271,7 @@ class Emitter {
     const geometry = this.source.geometry;
     const structureSignature = [
       this.source.source,
+      this.source.version,
       geometry.type,
       geometry.getAttribute('position')?.count ?? 0,
       getGeometryAttributeVersion(geometry.getAttribute('position')),
@@ -246,7 +290,6 @@ class Emitter {
       this.tags?.length ?? 0,
       this.tagSelection,
       this.initialValues.rotation === undefined ? 'aligned-rotation' : 'explicit-rotation',
-      this.emitGPU ? 'custom' : 'built-in',
     ].join('|');
     if (
       this._gpuStructureSignature
@@ -254,74 +297,109 @@ class Emitter {
         structureSignature !== this._gpuStructureSignature
         || this.source !== this._gpuSource
         || geometry !== this._gpuGeometry
-        || this.emitGPU !== this._gpuEmitGPU
       )
     ) this._gpuVersion += 1;
 
     this._gpuStructureSignature = structureSignature;
     this._gpuSource = this.source;
     this._gpuGeometry = geometry;
-    this._gpuEmitGPU = this.emitGPU;
   }
 
-  createBuiltInGPUUpdate(): GPUEmitterUpdate | undefined {
-    if (!this.supportsBuiltInGPUEmission()) return undefined;
-
-    const geometry = this.source.geometry as THREE.BoxGeometry | THREE.SphereGeometry;
-    const parameters = geometry.parameters as {
-      width?: number;
-      height?: number;
-      depth?: number;
-      radius?: number;
-    };
-    const shapeType = this.source.geometry.type;
-    const shapeTime = float(0);
-    const width = this._gpuParameters.number('shape.width', () => parameters.width, shapeTime, 1);
-    const height = this._gpuParameters.number('shape.height', () => parameters.height, shapeTime, 1);
-    const depth = this._gpuParameters.number('shape.depth', () => parameters.depth, shapeTime, 1);
-    const radius = this._gpuParameters.number('shape.radius', () => parameters.radius, shapeTime, 1);
-    const useAnalyticVolume = this.source.source === EmissionSource.Volume
-      && (shapeType === 'BoxGeometry' || shapeType === 'SphereGeometry');
-    const samplingTable = useAnalyticVolume ? undefined : this.createLocalGPUSamplingTable();
-    const sampledPositions = samplingTable
-      ? uniformArray(samplingTable.map((sample) => sample.position), 'vec3')
+  /** @internal Builds the standard TSL birth writer used by ParticleSystem. */
+  createBuiltInGPUUpdate(): GPUEmitterUpdate {
+    const volumeSampling = this.source.source === EmissionSource.Volume
+      ? this.getGPUVolumeSampling()
       : undefined;
-    const sampledNormals = samplingTable
-      ? uniformArray(samplingTable.map((sample) => sample.normal), 'vec3')
+    const sampledVectors = volumeSampling
+      ? storage(volumeSampling.vectors, 'vec4', volumeSampling.count * 3) as PackedFloatStorage
+      : undefined;
+    const geometrySampling = this.source.source === EmissionSource.Volume
+      ? undefined
+      : this.getGPUGeometrySampling();
+    const geometryVectors = geometrySampling
+      ? storage(
+        geometrySampling.vectors,
+        'vec4',
+        geometrySampling.vertexCount * 2,
+      ) as PackedFloatStorage
+      : undefined;
+    const geometryTriangles = geometrySampling
+      ? storage(
+        geometrySampling.triangles,
+        'uvec4',
+        Math.max(geometrySampling.triangleCount * 2, 1),
+      ) as PackedUintStorage
       : undefined;
     return (context) => {
-      const particle = context.output.storage.loadParticle();
+      const particle = context.output.storage.createParticle(undefined, true);
       const runtime = context.emitterRuntime;
       if (!runtime) return;
       const requested = runtime.requestCount();
 
       const initializeParticle = (claimIndex: Node<'uint'>) => {
-        const seed = instanceIndex.add(uint(context.emitterIndex * 4099));
-        const randomBoxPosition = vec3(
-          hash(seed).sub(0.5).mul(width),
-          hash(seed.add(17)).sub(0.5).mul(height),
-          hash(seed.add(31)).sub(0.5).mul(depth),
-        );
-        const randomDirection = vec3(
-          hash(seed).mul(2).sub(1),
-          hash(seed.add(17)).mul(2).sub(1),
-          hash(seed.add(31)).mul(2).sub(1),
-        ).normalize();
-        const randomRadius = pow(hash(seed.add(47)), float(1 / 3)).mul(radius);
-        const randomSpherePosition = randomDirection.mul(randomRadius);
-        const sampleIndex = int(hash(seed.add(43)).mul(256).floor());
-        const sampledPosition: Node<'vec3'> = sampledPositions
-          ? sampledPositions.element(sampleIndex) as unknown as Node<'vec3'>
-          : shapeType === 'SphereGeometry'
-            ? randomSpherePosition
-            : randomBoxPosition;
+        const seed = instanceIndex.add(particle.generation.mul(65537))
+          .add(uint(context.emitterIndex * 4099));
+        let sampledPosition: Node<'vec3'>;
+        let sampledNormal: Node<'vec3'>;
+        if (this.source.source === EmissionSource.Vertices && geometrySampling) {
+          const vertexIndex = int(hash(seed.add(43)).mul(geometrySampling.vertexCount).floor());
+          sampledPosition = geometryVectors!.element(vertexIndex).xyz as Node<'vec3'>;
+          sampledNormal = geometryVectors!.element(
+            vertexIndex.add(geometrySampling.vertexCount),
+          ).xyz.normalize() as Node<'vec3'>;
+        } else if (this.source.source === EmissionSource.Surface && geometrySampling) {
+          const selectorIndex = int(hash(seed.add(43)).mul(geometrySampling.triangleCount).floor());
+          const selector = geometryTriangles!.element(selectorIndex.mul(2));
+          const selectorThreshold = geometryTriangles!.element(selectorIndex.mul(2).add(1)).x;
+          const triangleIndex = uint(hash(seed.add(61)).mul(0xffffffff)).lessThan(selectorThreshold).select(
+            uint(selectorIndex),
+            selector.w,
+          );
+          const triangle = geometryTriangles!.element(triangleIndex.mul(2));
+          const point0 = geometryVectors!.element(triangle.x).xyz;
+          const point1 = geometryVectors!.element(triangle.y).xyz;
+          const point2 = geometryVectors!.element(triangle.z).xyz;
+          const root = sqrt(hash(seed.add(47)));
+          const weight0 = float(1).sub(root);
+          const weight1 = root.mul(float(1).sub(hash(seed.add(53))));
+          const weight2 = root.sub(weight1);
+          sampledPosition = point0.mul(weight0).add(point1.mul(weight1)).add(point2.mul(weight2)) as Node<'vec3'>;
+          sampledNormal = geometryVectors!.element(triangle.x.add(geometrySampling.vertexCount)).xyz.mul(weight0)
+            .add(geometryVectors!.element(triangle.y.add(geometrySampling.vertexCount)).xyz.mul(weight1))
+            .add(geometryVectors!.element(triangle.z.add(geometrySampling.vertexCount)).xyz.mul(weight2))
+            .normalize() as Node<'vec3'>;
+        } else {
+          const sampleIndex = int(hash(seed.add(43)).mul(volumeSampling!.count).floor());
+          const sample = sampledVectors!.element(sampleIndex);
+          const z = hash(seed.add(47)).mul(2).sub(1);
+          const angle = hash(seed.add(53)).mul(Math.PI * 2);
+          const radial = sqrt(float(1).sub(z.mul(z)));
+          const direction = vec3(cos(angle).mul(radial), sin(angle).mul(radial), z);
+          sampledPosition = sample.xyz.add(direction.mul(hash(seed.add(59)).mul(sample.w))) as Node<'vec3'>;
+          const normalOffset = int(volumeSampling!.count).add(sampleIndex.mul(2));
+          const neighborRecord = sampledVectors!.element(normalOffset.add(1));
+          const anchorNormal = sampledVectors!.element(normalOffset).xyz;
+          const blendedNormal = vec3(0).toVar('volumeSampleNormal');
+          const totalWeight = float(0).toVar('volumeSampleNormalWeight');
+          [sampleIndex, int(neighborRecord.x), int(neighborRecord.y), int(neighborRecord.z)]
+            .forEach((neighborIndex) => {
+              const neighborPosition = sampledVectors!.element(neighborIndex).xyz;
+              const delta = sampledPosition.sub(neighborPosition);
+              const weight = float(1).div(delta.dot(delta).max(float(1e-8)));
+              blendedNormal.addAssign(
+                sampledVectors!.element(
+                  int(volumeSampling!.count).add(neighborIndex.mul(2)),
+                ).xyz.mul(weight),
+              );
+              totalWeight.addAssign(weight);
+            });
+          sampledNormal = blendedNormal.length().greaterThan(float(Number.EPSILON)).select(
+            blendedNormal.div(totalWeight.max(float(Number.EPSILON))).normalize(),
+            anchorNormal,
+          ) as Node<'vec3'>;
+        }
         const localPosition = transformPointGPU(sampledPosition, this._gpuSourceMatrix);
-        const normal: Node<'vec3'> = sampledNormals
-          ? transformDirectionGPU(
-            sampledNormals.element(sampleIndex) as unknown as Node<'vec3'>,
-            this._gpuSourceMatrix,
-          ).normalize()
-          : transformDirectionGPU(sampledPosition.normalize(), this._gpuSourceMatrix).normalize();
+        const normal = transformDirectionGPU(sampledNormal, this._gpuSourceMatrix).normalize();
         const time = context.resolveEmissionTime?.(claimIndex)
           ?? context.elapsedTimeNode.div(float(Math.max(context.system.duration, Number.EPSILON)));
         const initialPosition = this._gpuParameters.vector(
@@ -490,8 +568,14 @@ class Emitter {
         particle.time.assign(float(0));
         particle.realtime.assign(float(0));
         const tagMasks = context.tagMasks ?? [];
-        if (this.tagSelection === TagSelectionMethod.Random && tagMasks.length > 0) {
-          const selectedTag = int(hash(seed.add(137)).mul(tagMasks.length).floor());
+        if (
+          (this.tagSelection === TagSelectionMethod.Random
+            || this.tagSelection === TagSelectionMethod.Distribute)
+          && tagMasks.length > 0
+        ) {
+          const selectedTag = this.tagSelection === TagSelectionMethod.Random
+            ? int(hash(seed.add(137)).mul(tagMasks.length).floor())
+            : int(claimIndex.mod(tagMasks.length));
           const tagMask = tagMasks.reduce<Node<'uint'>>((result, value, index) => (
             selectedTag.equal(index).select(uint(value), result) as Node<'uint'>
           ), uint(0));
@@ -526,6 +610,7 @@ class Emitter {
     };
   }
 
+  /** @internal Prepares request counts for the built-in GPU birth graph. */
   prepareBuiltInGPUEmission(context: GPUEmitterUpdateContext): void {
     const runtime = context.emitterRuntime;
     if (!runtime) return;
@@ -534,7 +619,7 @@ class Emitter {
     const duration = context.durationNode ?? float(Math.max(context.system.duration, Number.EPSILON));
     const normalizedTime = context.normalizedTimeNode
       ?? elapsedTime.div(duration.max(float(Number.EPSILON)));
-    const requestCount = uint(0).toVar('emitterRequestCount');
+    const requestCount = runtime.pendingRequestCount().toVar('emitterRequestCount');
     const shouldUpdate = uint(1).toVar('emitterShouldUpdate');
     const lodCreditScale = 1_000_000;
     if (this.useUpdateLOD) {
@@ -555,12 +640,16 @@ class Emitter {
 
     If(shouldUpdate.notEqual(uint(0)), () => {
       If(resetContext, () => {
+        requestCount.assign(uint(0));
+        runtime.setPendingRequestCount(0);
         runtime.identity.x.assign(uint(1));
         runtime.timing.x.assign(elapsedTime);
         runtime.timing.y.assign(elapsedTime);
         runtime.timing.z.assign(float(0));
         runtime.distance.xyz.assign(context.emitterPositionNode ?? vec3(0, 0, 0));
-        runtime.burstState.z.assign(uint(0));
+        for (let wordIndex = 0; wordIndex < Math.ceil(this.bursts.length / 32); wordIndex += 1) {
+          runtime.firedBurstWord(wordIndex).assign(uint(0));
+        }
       }).Else(() => {
         const rate = this._gpuParameters.number(
           'rate', () => this.rate, normalizedTime, 0, uint(context.emitterIndex * 4099),
@@ -602,8 +691,9 @@ class Emitter {
       }
 
       this.bursts.forEach((burst, burstIndex) => {
-        const bit = shiftLeft(uint(1), uint(burstIndex));
-        const hasFired = bitAnd(runtime.burstState.z, bit).notEqual(uint(0));
+        const burstWord = runtime.firedBurstWord(Math.floor(burstIndex / 32));
+        const bit = shiftLeft(uint(1), uint(burstIndex % 32));
+        const hasFired = bitAnd(burstWord, bit).notEqual(uint(0));
         const burstTime = this._gpuParameters.number(
           `burst.${burstIndex}.time`, () => this.bursts[burstIndex]?.time, normalizedTime, 0,
         );
@@ -617,7 +707,7 @@ class Emitter {
               uint(context.emitterIndex * 4099 + burstIndex * 131),
             ).mul(this._gpuCountLODScale).floor(),
           ));
-          runtime.burstState.z.assign(bitOr(runtime.burstState.z, bit));
+          burstWord.assign(bitOr(burstWord, bit));
         });
       });
     });
@@ -637,54 +727,146 @@ class Emitter {
       : 1;
   }
 
-  private createLocalGPUSamplingTable(): Array<{ position: THREE.Vector3; normal: THREE.Vector3 }> {
-    const position = this.source.position.clone();
-    const quaternion = this.source.quaternion.clone();
-    const scale = this.source.scale.clone();
-    this.source.position.set(0, 0, 0);
-    this.source.quaternion.identity();
-    this.source.scale.set(1, 1, 1);
-    this.source.updateMatrixWorld(true);
-    const samples = Array.from({ length: 256 }, () => this.source.getPoint());
-    this.source.position.copy(position);
-    this.source.quaternion.copy(quaternion);
-    this.source.scale.copy(scale);
-    this.source.updateMatrixWorld(true);
-    return samples;
+  private getGPUVolumeSampling(): NonNullable<Emitter['_gpuVolumeSampling']> {
+    const geometry = this.source.geometry;
+    const samples = this.source.getVolumeSamples();
+    const signature = [
+      this.source.version,
+      samples.length,
+      getGeometryAttributeVersion(geometry.getAttribute('position')),
+      geometry.index?.version ?? 0,
+    ].join(':');
+    if (this._gpuVolumeSampling?.signature === signature) return this._gpuVolumeSampling;
+
+    this._gpuVolumeSampling?.vectors.dispose();
+    // Positions, normals, and neighbor records share one vec4 storage binding.
+    const vectors = new Float32Array(samples.length * 12);
+    samples.forEach((sample, index) => {
+      const positionOffset = index * 4;
+      const normalOffset = samples.length * 4 + index * 8;
+      vectors.set(
+        [sample.position.x, sample.position.y, sample.position.z, sample.radius],
+        positionOffset,
+      );
+      const neighbors = Array.from({ length: 3 }, (_, neighborIndex) => (
+        sample.neighbors?.[neighborIndex] ?? index
+      ));
+      vectors.set([sample.normal.x, sample.normal.y, sample.normal.z, 0], normalOffset);
+      vectors.set([...neighbors, 0], normalOffset + 4);
+    });
+    this._gpuVolumeSampling = {
+      signature,
+      vectors: new StorageBufferAttribute(vectors, 4),
+      count: samples.length,
+    };
+    return this._gpuVolumeSampling;
   }
 
-  supportsBuiltInGPUEmission(): boolean {
-    if (this.emitGPU) return true;
-    if (
-      this.source.source !== EmissionSource.Volume
-      && this.source.source !== EmissionSource.Surface
-      && this.source.source !== EmissionSource.Vertices
-    ) return false;
-    if (
-      this.source.geometry.type !== 'BoxGeometry'
-      && this.source.geometry.type !== 'SphereGeometry'
-      && this.source.geometry.type !== 'ConeGeometry'
-      && this.source.geometry.type !== 'TorusGeometry'
-    ) return false;
-    if (!this.bursts.every((burst) => Number.isFinite(burst.time))) return false;
-    if (this.bursts.length > 32) return false;
-    if (this.tags?.length && this.tagSelection === TagSelectionMethod.Distribute) return false;
-    return true;
+  private getGPUGeometrySampling(): NonNullable<Emitter['_gpuGeometrySampling']> {
+    const geometry = this.source.geometry;
+    const position = geometry.getAttribute('position');
+    const normal = geometry.getAttribute('normal');
+    const signature = [
+      this.source.version,
+      position.count,
+      getGeometryAttributeVersion(position),
+      getGeometryAttributeVersion(normal),
+      geometry.index?.count ?? 0,
+      geometry.index?.version ?? 0,
+    ].join(':');
+    if (this._gpuGeometrySampling?.signature === signature) return this._gpuGeometrySampling;
+
+    this._gpuGeometrySampling?.vectors.dispose();
+    this._gpuGeometrySampling?.triangles.dispose();
+
+    // Position and normal regions share one vec4 storage binding. Triangle
+    // indices remain uint storage because TSL storage bindings are homogeneous.
+    const vectors = new Float32Array(position.count * 8);
+    for (let index = 0; index < position.count; index += 1) {
+      const positionOffset = index * 4;
+      const normalOffset = (position.count + index) * 4;
+      vectors[positionOffset] = position.getX(index);
+      vectors[positionOffset + 1] = position.getY(index);
+      vectors[positionOffset + 2] = position.getZ(index);
+      vectors[normalOffset] = normal?.getX(index) ?? 0;
+      vectors[normalOffset + 1] = normal?.getY(index) ?? 1;
+      vectors[normalOffset + 2] = normal?.getZ(index) ?? 0;
+    }
+
+    const triangleCount = geometry.index
+      ? Math.floor(geometry.index.count / 3)
+      : Math.floor(position.count / 3);
+    // Two uvec4 records per triangle keep vertex indices and alias metadata in
+    // one storage binding: [a,b,c,alias], [probabilityThreshold,0,0,0].
+    const triangles = new Uint32Array(Math.max(triangleCount * 2, 1) * 4);
+    const triangleAreas = new Float32Array(Math.max(triangleCount, 1));
+    const point0 = new THREE.Vector3();
+    const point1 = new THREE.Vector3();
+    const point2 = new THREE.Vector3();
+    const triangle = new THREE.Triangle();
+    for (let triangleIndex = 0; triangleIndex < triangleCount; triangleIndex += 1) {
+      const offset = triangleIndex * 8;
+      triangles[offset] = geometry.index?.getX(triangleIndex * 3) ?? triangleIndex * 3;
+      triangles[offset + 1] = geometry.index?.getX(triangleIndex * 3 + 1) ?? triangleIndex * 3 + 1;
+      triangles[offset + 2] = geometry.index?.getX(triangleIndex * 3 + 2) ?? triangleIndex * 3 + 2;
+      point0.fromBufferAttribute(position, triangles[offset]);
+      point1.fromBufferAttribute(position, triangles[offset + 1]);
+      point2.fromBufferAttribute(position, triangles[offset + 2]);
+      triangleAreas[triangleIndex] = triangle.set(point0, point1, point2).getArea();
+    }
+
+    // Walker's alias table gives area-weighted triangle selection in O(1) on the GPU.
+    const totalArea = triangleAreas.reduce((sum, area) => sum + area, 0);
+    if (triangleCount > 0 && totalArea > 0) {
+      const scaledAreas = Array.from(
+        triangleAreas.subarray(0, triangleCount),
+        (area) => area * triangleCount / totalArea,
+      );
+      const small: number[] = [];
+      const large: number[] = [];
+      scaledAreas.forEach((area, index) => (area < 1 ? small : large).push(index));
+      while (small.length > 0 && large.length > 0) {
+        const smallIndex = small.pop()!;
+        const largeIndex = large.pop()!;
+        triangles[smallIndex * 8 + 3] = largeIndex;
+        triangles[smallIndex * 8 + 4] = Math.round(scaledAreas[smallIndex] * 0xffffffff);
+        scaledAreas[largeIndex] -= 1 - scaledAreas[smallIndex];
+        (scaledAreas[largeIndex] < 1 ? small : large).push(largeIndex);
+      }
+      [...small, ...large].forEach((index) => {
+        triangles[index * 8 + 3] = index;
+        triangles[index * 8 + 4] = 0xffffffff;
+      });
+    } else {
+      triangles[4] = 0xffffffff;
+    }
+
+    this._gpuGeometrySampling = {
+      signature,
+      vectors: new StorageBufferAttribute(vectors, 4),
+      triangles: new StorageBufferAttribute(triangles, 4),
+      vertexCount: position.count,
+      triangleCount,
+    };
+    return this._gpuGeometrySampling;
   }
 
   /*
     * SIMULATION
   */
 
+  /** Attaches the source shape to the particle system. */
   setup(particleSystem: ParticleSystem) {
     particleSystem.add(this.source);
   }
 
+  /** Emits births for the supplied simulation context and returns the newly created particles. */
   update(
     particles: Particle[],
     context: Partial<EmissionContext>,
     particleSystem: ParticleSystem,
   ): Particle[] {
+    this.normalizeBurstTimes();
     if (
       this.useUpdateLOD
       && !this._lodHelper.shouldUpdate(Math.sqrt(particleSystem.cameraDistanceSq))
@@ -769,6 +951,14 @@ class Emitter {
     });
 
     return spawned;
+  }
+
+  private normalizeBurstTimes(): void {
+    this.bursts.forEach((burst) => {
+      burst.time = Number.isNaN(burst.time)
+        ? 0
+        : THREE.MathUtils.clamp(burst.time, 0, 1);
+    });
   }
 
   clearContext(key: string) {
@@ -974,7 +1164,9 @@ function getDynamicStructure(value: unknown): string {
   return typeof value === 'object' ? 'node' : typeof value;
 }
 
-function getGeometryAttributeVersion(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined): number {
+function getGeometryAttributeVersion(
+  attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined
+): number {
   if (!attribute) return 0;
   return 'version' in attribute ? attribute.version : attribute.data.version;
 }

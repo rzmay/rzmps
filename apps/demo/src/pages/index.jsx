@@ -3,24 +3,17 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import * as THREE from 'three';
-import {
-  AmbientLightNode,
-  DirectionalLightNode,
-  HemisphereLightNode,
-  PointLightNode,
-  RectAreaLightNode,
-  SpotLightNode,
-  WebGPURenderer,
-} from 'three/webgpu';
-import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
+import { createWebGPURenderer } from '../rendering/createWebGPURenderer';
 import CameraControls from '../components/CameraControls';
 import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
 import particlePresets from '../presets/particles';
+import { experimentalExamples } from '../../../../examples/experimental';
 import scenePresets from '../presets/scenes';
 import BenchmarkPage from './BenchmarkPage';
+import LandingLayout from '../components/LandingLayout';
 
 const RENDERER_MODES = ['webgl', 'webgpu'];
-const GPU_FLUID_PRESETS = new Set(['Gas Volume', 'FLIP Fluid']);
+const GPU_FLUID_PRESETS = new Set(experimentalExamples.map(({ title }) => title));
 const PARTICLE_PRESET_NAMES = Object.keys(particlePresets);
 const SCENE_PRESET_NAMES = Object.keys(scenePresets);
 
@@ -70,24 +63,9 @@ function setQueryParam(name, value) {
   window.history.replaceState({}, '', url);
 }
 
-async function createWebGPURenderer(defaultProps) {
-  const renderer = new WebGPURenderer(defaultProps);
-
-  RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init());
-
-  renderer.library.addLight(AmbientLightNode, THREE.AmbientLight);
-  renderer.library.addLight(DirectionalLightNode, THREE.DirectionalLight);
-  renderer.library.addLight(HemisphereLightNode, THREE.HemisphereLight);
-  renderer.library.addLight(PointLightNode, THREE.PointLight);
-  renderer.library.addLight(RectAreaLightNode, THREE.RectAreaLight);
-  renderer.library.addLight(SpotLightNode, THREE.SpotLight);
-
-  await renderer.init();
-
-  return renderer;
-}
 
 function DemoScene({
+  statsParent,
   onCodeChange,
   onMetadataChange,
   onParticleCountChange,
@@ -101,7 +79,7 @@ function DemoScene({
 }) {
   return (
     <>
-      <Stats />
+      <Stats parent={statsParent} className="demo-stats" />
       <CameraControls />
       <ParticleSystemDisplay
         initialPreset={particlePreset}
@@ -154,6 +132,7 @@ function PresetAttribution({ metadata }) {
       </div>
 
       <div className="preset-attribution-sources">
+        <a href="/docs/">Documentation</a>
         {metadata.particle?.sourceUrl && (
           <a href={metadata.particle.sourceUrl} target="_blank" rel="noreferrer">
             Particle source
@@ -170,6 +149,7 @@ function PresetAttribution({ metadata }) {
 }
 
 function DemoPage() {
+  const demoRef = useRef(null);
   const [code, setCode] = useState('');
   const particleCountRef = useRef(null);
   const [showCode, setShowCode] = useState(false);
@@ -182,15 +162,7 @@ function DemoPage() {
     getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire')
   ));
   const [scenePreset, setScenePreset] = useState(() => (
-    getQueryParam(
-      'scene',
-      SCENE_PRESET_NAMES,
-      getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire') === 'FLIP Fluid'
-        ? 'Fluid Teapot'
-        : getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire') === 'Gas Volume'
-          ? 'Gas Flow'
-          : 'Checkerboard',
-    )
+    getQueryParam('scene', SCENE_PRESET_NAMES, 'Checkerboard')
   ));
   const [metadata, setMetadata] = useState(() => ({
     particle: getPresetMetadata(particlePresets, particlePreset),
@@ -209,13 +181,6 @@ function DemoPage() {
       setRendererMode('webgpu');
     }
     setParticlePreset(name);
-    if (name === 'FLIP Fluid') {
-      setQueryParam('scene', 'Fluid Teapot');
-      setScenePreset('Fluid Teapot');
-    } else if (name === 'Gas Volume') {
-      setQueryParam('scene', 'Gas Flow');
-      setScenePreset('Gas Flow');
-    }
   }, []);
 
   const handleSceneChange = useCallback((name) => {
@@ -250,37 +215,40 @@ function DemoPage() {
   }, []);
 
   return (
-    <div className="demo-shell">
-      <Canvas
-        key={rendererMode}
-        gl={rendererMode === 'webgpu' ? createWebGPURenderer : undefined}
-        onCreated={({ gl }) => gl.setClearColor('#202020')}
-        shadows
-      >
-        <DemoScene
-          onCodeChange={setCode}
-          onMetadataChange={setMetadata}
-          onParticleCountChange={handleParticleCountChange}
-          onPresetChange={handlePresetChange}
-          onRendererChange={handleRendererChange}
-          onSceneChange={handleSceneChange}
-          onShowCodeChange={setShowCode}
-          particlePreset={particlePreset}
-          rendererMode={rendererMode}
-          scenePreset={scenePreset}
-        />
-      </Canvas>
+    <LandingLayout>
+      <div className="demo-shell" ref={demoRef}>
+        <Canvas
+          key={rendererMode}
+          gl={rendererMode === 'webgpu' ? createWebGPURenderer : undefined}
+          onCreated={({ gl }) => gl.setClearColor('#202020')}
+          shadows
+        >
+          <DemoScene
+            statsParent={demoRef}
+            onCodeChange={setCode}
+            onMetadataChange={setMetadata}
+            onParticleCountChange={handleParticleCountChange}
+            onPresetChange={handlePresetChange}
+            onRendererChange={handleRendererChange}
+            onSceneChange={handleSceneChange}
+            onShowCodeChange={setShowCode}
+            particlePreset={particlePreset}
+            rendererMode={rendererMode}
+            scenePreset={scenePreset}
+          />
+        </Canvas>
 
-      <div ref={particleCountRef} className="particle-count-monitor">0 particles</div>
+        <div ref={particleCountRef} className="particle-count-monitor">0 particles</div>
 
-      <PresetAttribution metadata={metadata} />
+        <PresetAttribution metadata={metadata} />
 
-      {showCode && (
-        <pre className="code-panel">
-          <code>{code}</code>
-        </pre>
-      )}
-    </div>
+        {showCode && (
+          <pre className="code-panel">
+            <code>{code}</code>
+          </pre>
+        )}
+      </div>
+    </LandingLayout>
   );
 }
 

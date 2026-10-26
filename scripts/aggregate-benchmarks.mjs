@@ -7,6 +7,7 @@ import {
   dirname,
   resolve,
 } from 'node:path';
+import { validateBenchmark, assertComparable } from './benchmark-payload.mjs';
 
 const [
   outputPath,
@@ -55,21 +56,10 @@ function aggregateResult(results) {
 const payloads = inputPaths.map((inputPath) => JSON.parse(
   readFileSync(resolve(inputPath), 'utf8'),
 ));
+validateBenchmark(payloads[0]);
+for (const payload of payloads.slice(1)) assertComparable(payloads[0], payload);
 
 const resultNames = payloads[0].results.map((result) => result.name);
-
-for (const payload of payloads) {
-  const names = payload.results.map((result) => result.name);
-
-  if (
-    names.length !== resultNames.length
-    || names.some((name, index) => name !== resultNames[index])
-  ) {
-    throw new Error(
-      'Cannot aggregate benchmark payloads with different case ordering.',
-    );
-  }
-}
 
 const resultMaps = payloads.map((payload) => new Map(
   payload.results.map((result) => [result.name, result]),

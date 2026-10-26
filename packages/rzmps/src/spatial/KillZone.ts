@@ -16,6 +16,7 @@ type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
 // Super simple implementation -- just a spatial effect whose modifier calls particle.kill()
 // Exists mainly as a shortcut rather than any sophisticated implementation
+/** Volume that expires matching particles through the normal lifecycle rather than directly splicing the population. */
 class KillZone extends SpatialEffect {
   static readonly GPU_SPATIAL_TYPE: GPUSpatialEffectType = {
     key: 'rzmps.kill-zone.v1',

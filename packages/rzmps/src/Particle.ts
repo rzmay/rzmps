@@ -30,6 +30,7 @@ export interface ParticleNoiseValues {
   noise4d: number;
 }
 
+/** Mutable particle state with separate birth and cached permanent values. */
 class Particle {
   position: THREE.Vector3;
 

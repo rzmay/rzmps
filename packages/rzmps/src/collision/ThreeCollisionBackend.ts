@@ -7,24 +7,34 @@ import type {
   CollisionHit,
   CollisionQuery,
 } from '../interfaces/ICollisionBackend';
-import ParticleSystem from '../ParticleSystem';
-import { TRAIL_RENDERER_USER_DATA_KEY } from '../renderers/TrailRenderer';
-import { SPRITE_RENDERER_USER_DATA_KEY } from '../renderers/SpriteRenderer';
+import { isIgnoredCollisionObject } from './CollisionSceneUtils';
 
 export interface ThreeCollisionBackendOptions {
+  /** Explicit scene subtree to scan; omission uses the owning particle system scene. */
   world?: THREE.Object3D;
+  /** Explicit static collision membership; supplying an empty list deliberately excludes all static objects. */
   staticObjects?: THREE.Object3D[];
+  /** Explicit dynamic collision membership; supplying a list bypasses automatic membership selection. */
   dynamicObjects?: THREE.Object3D[];
 
+  /** Seconds without movement before automatic objects become static. Defaults to 2. */
   staticAfter?: number;
+  /** Dynamic octree rebuild fraction; reducing it trades freshness for CPU cost. Defaults to 1. */
   timeQuality?: number;
+  /** Scene membership scan fraction; defaults to timeQuality. */
   refreshQuality?: number;
+  /** Respects mesh material face sidedness when querying contact geometry. Defaults to true. */
   respectMaterialSide?: boolean;
+  /** Overrides the underlying triangle octree maximum subdivision level; null keeps its default. */
   maxLevel?: number | null;
+  /** Overrides the underlying triangle octree leaf capacity; null keeps its default. */
   trianglesPerLeaf?: number | null;
 
+  /** Selects collision candidates without itself classifying static versus dynamic. */
   objectFilter?: (object: THREE.Object3D) => boolean;
+  /** Selects explicitly classified static candidates during scene discovery. */
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
+  /** Selects explicitly classified dynamic candidates during scene discovery. */
   dynamicObjectFilter?: (object: THREE.Object3D) => boolean;
 }
 
@@ -52,6 +62,7 @@ type MembershipChanges = {
   dynamicChanged: boolean;
 };
 
+/** Triangle collision backend with separate static and dynamic octrees and optional automatic scene membership. */
 class ThreeCollisionBackend implements ICollisionBackend {
   readonly supportsCPU = true;
   readonly supportsGPU = false;
@@ -364,27 +375,7 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
     this.world.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
-      if (object instanceof ParticleSystem) return;
-
-      // Ideally, we ignore all helpers here.
-      // Good god, what a mess
-      if (object instanceof THREE.BoxHelper) return;
-      if (object instanceof THREE.Box3Helper) return;
-      if (object instanceof THREE.AxesHelper) return;
-      if (object instanceof THREE.GridHelper) return;
-      if (object instanceof THREE.ArrowHelper) return;
-      if (object instanceof THREE.PlaneHelper) return;
-      if (object instanceof THREE.CameraHelper) return;
-      if (object instanceof THREE.SkeletonHelper) return;
-      if (object instanceof THREE.PolarGridHelper) return;
-      if (object instanceof THREE.DirectionalLightHelper) return;
-      if (object instanceof THREE.HemisphereLightHelper) return;
-      if (object instanceof THREE.SpotLightHelper) return;
-      if (object instanceof THREE.PointLightHelper) return;
-
-      // Check for renderer object
-      if (object.userData[TRAIL_RENDERER_USER_DATA_KEY]) return;
-      if (object.userData[SPRITE_RENDERER_USER_DATA_KEY]) return;
+      if (isIgnoredCollisionObject(object)) return;
 
       if (
         this.objectFilter
@@ -700,7 +691,9 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
 export default ThreeCollisionBackend;
 
-function attributeVersion(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined): number {
+function attributeVersion(
+  attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined
+): number {
   if (!attribute) return -1;
   return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
 }

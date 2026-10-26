@@ -11,34 +11,54 @@ import { TrailTextureMode } from '../enums/TrailTextureMode';
 import defaultTex from '../assets/textures/default.png';
 import { WebGPURenderer } from 'three/webgpu';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
+import type { GPUParticleReadbackField } from '../gpu/SelectiveReadback';
 
 export const TRAIL_RENDERER_USER_DATA_KEY = "__rzmps_trailRenderer";
 
 export interface TrailRendererOptions extends RendererOptions {
+  /** Particle mode keeps one history per particle; Ribbon mode connects particles into shared strands. */
   mode: TrailMode | `${TrailMode}`;
+  /** Trail texture or URL; defaults to the material map or the built-in sprite texture. */
   texture: string | THREE.Texture;
+  /** Controls stretching versus tiling along the generated trail. */
   textureMode: TrailTextureMode | `${TrailTextureMode}`;
 
+  /** Fraction of particles selected by stable particle ID; zero hides all trails. */
   ratio: number;
+  /** Seconds each trail point survives, independently of the source particle lifetime. */
   lifetime: DynamicValue<number>;
+  /** Distance a source must move before adding a trail vertex; smaller values increase geometry cost. */
   minimumVertexDistance: number;
+  /** Removes a trail when its particle dies; false lets remaining points expire naturally. Defaults to true. */
   dieWithParticles: boolean;
+  /** Number of shared strands in Ribbon mode. Defaults to 1. */
   ribbonCount: number;
 
+  /** Base width, evaluated using particle lifetime. */
   width: DynamicValue<number>;
+  /** Width multiplier along normalized trail length. */
   widthOverTrail: DynamicValue<number>;
 
+  /** Multiplies trail width by particle size. Defaults to false. */
   sizeAffectsWidth: boolean;
+  /** Scales trail point survival by particle size. Defaults to false. */
   sizeAffectsLifetime: boolean;
 
+  /** Multiplies trail color by particle color. Defaults to true. */
   inheritParticleColor: boolean;
+  /** Color multiplier based on source particle age. */
   colorOverLifetime: DynamicValue<THREE.Color>;
+  /** Color multiplier along normalized trail length. */
   colorOverTrail: DynamicValue<THREE.Color>;
 
+  /** Custom material; omission creates a transparent double-sided MeshStandardMaterial with depth writing disabled. */
   material: THREE.Material;
+  /** Construction options for the default material; ignored when material is supplied. */
   materialOptions: THREE.MeshStandardMaterialParameters;
 
+  /** Enables trail shadow casting when supported by scene lighting. */
   castShadow: boolean;
+  /** Enables shadows on trail geometry when supported by the material. */
   receiveShadow: boolean;
 }
 
@@ -69,6 +89,7 @@ type RenderPoint = {
   particleId: string;
 }
 
+/** Builds particle trails or ribbons; trail lifetime and vertex spacing control persistence and geometry costs. */
 class TrailRenderer extends Renderer {
   mode: TrailMode = TrailMode.Particle;
 
@@ -198,7 +219,17 @@ class TrailRenderer extends Renderer {
     system: ParticleSystem,
     deltaTime = 0,
   ): void {
-    this.updateGPUFromSelectiveReadback(buffers, system, deltaTime);
+    const fields: GPUParticleReadbackField[] = ['position', 'time', 'realtime'];
+    if (this.mode === TrailMode.Particle) fields.push('lifetime');
+    if (this.sizeAffectsWidth || this.sizeAffectsLifetime) fields.push('scale');
+    if (this.inheritParticleColor) fields.push('color', 'alpha');
+    this.updateCPUFromGPU(
+      buffers,
+      system,
+      deltaTime,
+      buffers.count,
+      fields,
+    );
   }
 
   _update(particles: Particle[], system: ParticleSystem, deltaTime: number): void {

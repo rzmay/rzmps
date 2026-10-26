@@ -9,8 +9,8 @@ import { closestPointToTriangle } from 'three-mesh-bvh/src/webgpu/tsl/fns.js';
 import { wgslTagFn } from 'three-mesh-bvh/src/webgpu/nodes/WGSLTagFnNode.js';
 
 export interface BVHComputeDataLike {
-  storage: Record<string, any>;
-  getShapecastFn(options: Record<string, unknown>): (...args: any[]) => Node;
+  storage: Record<string, unknown>;
+  getShapecastFn(options: Record<string, unknown>): (...args: unknown[]) => Node;
 }
 
 export const capsuleQueryStruct = new StructTypeNode({
@@ -29,6 +29,7 @@ export const capsuleHitStruct = new StructTypeNode({
   capsulePoint: 'vec3f',
   normal: 'vec3f',
   distanceSq: 'float',
+  fraction: 'float',
   side: 'float',
   objectIndex: 'uint',
 }, 'RZMPSCapsuleHit');
@@ -151,15 +152,42 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
             }
           }
 
-          if (bestDistanceSq <= capsule.radius * capsule.radius &&
-              (!result.found || bestDistanceSq < result.distanceSq)) {
+          if (bestDistanceSq <= capsule.radius * capsule.radius) {
+            // Distance to a triangle is convex along the segment. Bisect between
+            // the start and closest point to find the first sphere contact.
+            var fraction = 0.0;
+            if (startDistanceSq > capsule.radius * capsule.radius && segmentLengthSq > 1e-12) {
+              var lower = 0.0;
+              var upper = clamp(dot(capsulePoint - capsule.start, segment) / segmentLengthSq, 0.0, 1.0);
+              for (var iteration = 0u; iteration < 12u; iteration++) {
+                let middle = (lower + upper) * 0.5;
+                let center = capsule.start + segment * middle;
+                let bary = ${closestPointToTriangle}(center, a, b, c);
+                let point = bary.x * a + bary.y * b + bary.z * c;
+                let distanceSq = dot(center - point, center - point);
+                if (distanceSq > capsule.radius * capsule.radius) { lower = middle; }
+                else { upper = middle; }
+              }
+              fraction = upper;
+            }
+            capsulePoint = capsule.start + segment * fraction;
+            let bary = ${closestPointToTriangle}(capsulePoint, a, b, c);
+            trianglePoint = bary.x * a + bary.y * b + bary.z * c;
+            bestDistanceSq = dot(capsulePoint - trianglePoint, capsulePoint - trianglePoint);
+            if (result.found && (fraction > result.fraction ||
+                (fraction == result.fraction && bestDistanceSq >= result.distanceSq))) {
+              continue;
+            }
             let delta = capsulePoint - trianglePoint;
             let fallbackNormal = select(vec3f(0.0, 1.0, 0.0), normalize(rawNormal), normalLengthSq > 1e-12);
-            result.normal = select(fallbackNormal, normalize(delta), bestDistanceSq > 1e-12);
+            let startSide = sign(dot(capsule.start - trianglePoint, fallbackNormal));
+            let startNormal = fallbackNormal * select(1.0, startSide, abs(startSide) > 0.0);
+            result.normal = select(startNormal, normalize(delta), bestDistanceSq > 1e-12);
             result.point = trianglePoint;
             result.capsulePoint = capsulePoint;
             result.distanceSq = bestDistanceSq;
-            result.side = select(1.0, sign(dot(delta, fallbackNormal)), bestDistanceSq > 1e-12);
+            result.fraction = fraction;
+            result.side = select(startSide, sign(dot(delta, fallbackNormal)), bestDistanceSq > 1e-12);
             result.found = true;
             didHit = true;
           }
@@ -230,6 +258,7 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
       result.capsulePoint = vec3f(0.0);
       result.normal = vec3f(0.0, 1.0, 0.0);
       result.distanceSq = 3.402823466e+38;
+      result.fraction = 1.0;
       result.side = 1.0;
       result.objectIndex = 0u;
       result.found = ${shapecast}(shape, &result);

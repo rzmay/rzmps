@@ -1,0 +1,23 @@
+# One static deployment: demo at / and VitePress documentation at /docs/.
+services:
+  - type: web
+    runtime: static
+    name: rzmps
+    branch: develop
+    # Omit rootDir: Render must use the repository root for npm workspace linking.
+    buildCommand: npm ci && npm run site:build
+    staticPublishPath: dist
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
+      - key: CI
+        value: "true"
+    routes:
+      - type: rewrite
+        source: /docs
+        destination: /docs/index.html
+      - type: rewrite
+        source: /docs/
+        destination: /docs/index.html

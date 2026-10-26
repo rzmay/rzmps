@@ -50,15 +50,18 @@ export type SpatialEffectFeatherUpdate = (
   particle: Particle,
   deltaTime: number,
   particleSystem: ParticleSystem,
+  /** Transition distance used to attenuate the modifier near the boundary. */
   feather: number,
 ) => void;
 
 export type SpatialEffectModifier = SpatialEffectUpdate | SpatialEffectFeatherUpdate;
 
 export type SpatialEffectGPUUpdate = (
+  /** Shader-node particle view; mutate fields through TSL assignment methods. */
   particle: GPUParticleLike,
   deltaTime: Node<'float'>,
   context: GPUParticleUpdateContext,
+  /** Inclusion and feather strength from zero through one. */
   strength: Node<'float'>,
 ) => void;
 
@@ -90,21 +93,37 @@ export type SpatialEffectTest = (
 ) => boolean;
 
 export interface SpatialEffectOptions {
+  /** Local position of the effect volume. */
   position: THREE.Vector3;
+  /** Local scale of the effect volume. */
   scale: THREE.Vector3;
+  /** Volume geometry used for inclusion tests; transforms are applied in world space. */
   geometry: THREE.BufferGeometry;
+  /** Applies the modifier outside rather than inside the selected volume. */
   inverted: boolean;
+  /** Restricts the effect to particles with a matching tag. */
   tags: StrictMultiple<Tag>;
+  /** Additional predicate for candidate particles. */
   condition: (particle: Particle) => boolean;
+  /** Custom inclusion predicate replacing the geometry test. */
   test: SpatialEffectTest;
+  /** Numeric execution phase shared with modules. */
   priority: number | Priority;
+  /** World-space transition distance outside the volume. */
   feather: number;
+  /** Maps the normalized boundary transition to modifier strength. */
   featherEasing: SpatialEffectFeatherEasing;
+  /** Enables built-in feather application for supported modifiers. */
   automaticFeather: boolean;
+  /** TSL modifier required for the effect to run during GPU simulation. */
   modifyGPU: SpatialEffectGPUUpdate | null;
+  /** TSL equivalent of a custom CPU condition. */
   conditionGPU: SpatialEffectGPUCondition | null;
+  /** TSL inclusion callback returning influence from zero through one. */
   testGPU: SpatialEffectGPUTest | null;
+  /** Samples per axis for a custom geometry's baked GPU influence field. */
   bakedFieldResolution: number;
+  /** Declares whether transforms, vertices, or neither can change after construction. */
   updatePolicy: SpatialEffectUpdatePolicy;
 }
 
@@ -113,11 +132,8 @@ type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
 type ConeGeometryArgs = ConstructorParameters<typeof THREE.ConeGeometry>;
 type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
+/** Scene-space modifier volume, discovered by particle systems or collected by specialized modules. */
 class SpatialEffect extends THREE.Object3D {
-  private static readonly _doubleSidedMaterial = new THREE.MeshBasicMaterial(
-    { side: THREE.DoubleSide },
-  );
-
   static readonly GPU_INFLUENCE_FIELDS: GPUSpatialParameterField[] = [
     { name: 'inverseRow0', type: 'vec4' },
     { name: 'inverseRow1', type: 'vec4' },
@@ -275,14 +291,15 @@ class SpatialEffect extends THREE.Object3D {
   private readonly _test?: SpatialEffectTest;
   private readonly _hasCustomCondition: boolean;
   private readonly _hasCustomFeatherEasing: boolean;
+  private readonly _hasCustomTest: boolean;
   private _geometry?: THREE.BufferGeometry;
   private _bvh?: MeshBVH;
   private _bvhGeometry?: THREE.BufferGeometry;
   private _bvhTopologyKey = '';
   private _bvhPositionVersion = -1;
-  private _mesh: THREE.Mesh;
   private localParticlePosition = new THREE.Vector3();
   private worldEffectPosition = new THREE.Vector3();
+  private geometryBoundsSize = new THREE.Vector3();
   private closestPointInfo?: HitPointInfo;
   bakedFieldResolution: number;
   updatePolicy: SpatialEffectUpdatePolicy;
@@ -338,7 +355,6 @@ class SpatialEffect extends THREE.Object3D {
     this._bvhPositionVersion = -1;
     this._bakedFieldTexture = undefined;
     this._bakedFieldGeometry = undefined;
-    this._mesh.geometry = value ?? new THREE.BufferGeometry();
   }
 
   get geometry(): THREE.BufferGeometry | undefined {
@@ -352,10 +368,6 @@ class SpatialEffect extends THREE.Object3D {
     super();
     const resolvedOptions = options ?? {};
 
-    this._mesh = new THREE.Mesh(
-      new THREE.BufferGeometry(),
-      SpatialEffect._doubleSidedMaterial,
-    );
     if (modify && resolvedOptions.automaticFeather === false) {
       this._modifyFeather = modify as SpatialEffectFeatherUpdate;
     } else {
@@ -369,6 +381,7 @@ class SpatialEffect extends THREE.Object3D {
     this.tags = acceptMultiple(resolvedOptions.tags);
     this._hasCustomCondition = resolvedOptions.condition !== undefined;
     this._hasCustomFeatherEasing = resolvedOptions.featherEasing !== undefined;
+    this._hasCustomTest = resolvedOptions.test !== undefined || resolvedOptions.testGPU !== undefined;
     this.condition = resolvedOptions.condition ?? (() => true);
     this.conditionGPU = resolvedOptions.conditionGPU ?? undefined;
     this.priority = resolvedOptions.priority ?? this.priority;
@@ -431,6 +444,7 @@ class SpatialEffect extends THREE.Object3D {
       || this._modifyParticle !== SpatialEffect.prototype._modifyParticle;
   }
 
+  /** Whether the effect has all callbacks and geometry needed by GPU simulation. */
   get supportsGPU(): boolean {
     return this.modifyGPU !== SpatialEffect.GPU_UNSUPPORTED
       && (!this._hasCustomCondition || this.conditionGPU !== undefined)
@@ -439,6 +453,11 @@ class SpatialEffect extends THREE.Object3D {
 
   get supportsParameterizedGPUInfluence(): boolean {
     return this.supportsGPU && !this._hasCustomCondition && !this._hasCustomFeatherEasing;
+  }
+
+  /** Whether the effect uses the geometry-backed built-in containment test. */
+  get usesBuiltInTest(): boolean {
+    return !this._hasCustomTest;
   }
 
   protected canBatchGPUInfluence(): boolean {
@@ -537,7 +556,7 @@ class SpatialEffect extends THREE.Object3D {
     if (updateMatrix) this.updateWorldMatrix(true, false);
     this.worldToLocal(this.localParticlePosition);
 
-    const contains = isPointInMesh(this.localParticlePosition, this._mesh);
+    const contains = this.containsLocalPosition(this.localParticlePosition);
     return this.inverted ? !contains : contains;
   }
 
@@ -567,30 +586,13 @@ class SpatialEffect extends THREE.Object3D {
       return this.easeFeather(1 - distance / this.feather);
     }
 
-    const contains = isPointInMesh(position, this._mesh);
+    const contains = this.containsLocalPosition(position);
 
     if (contains) return this.inverted ? 0 : 1;
     if (this.inverted) return 1;
     if (this.feather <= 0) return 0;
 
-    const positionAttribute = this.geometry.getAttribute('position');
-    const topologyKey = `${positionAttribute?.count ?? 0}:${this.geometry.index?.count ?? 0}:${attributeVersion(this.geometry.index)}`;
-    const positionVersion = attributeVersion(positionAttribute);
-    if (!this._bvh || this._bvhGeometry !== this.geometry || this._bvhTopologyKey !== topologyKey) {
-      this._bvh = new MeshBVH(this.geometry);
-      this._bvhGeometry = this.geometry;
-      this._bvhTopologyKey = topologyKey;
-      this._bvhPositionVersion = positionVersion;
-    } else if (
-      this.updatePolicy !== SpatialEffectUpdatePolicy.Static
-      && this.updatePolicy !== SpatialEffectUpdatePolicy.TransformDynamic
-      && this._bvhPositionVersion !== positionVersion
-    ) {
-      this._bvh.refit();
-      this._bvhPositionVersion = positionVersion;
-    }
-
-    const hit = this._bvh.closestPointToPoint(
+    const hit = this.getCurrentBVH().closestPointToPoint(
       position,
       this.closestPointInfo,
       0,
@@ -603,13 +605,45 @@ class SpatialEffect extends THREE.Object3D {
     return this.easeFeather(1 - hit.distance / this.feather);
   }
 
+  private containsLocalPosition(position: THREE.Vector3): boolean {
+    if (!this.geometry) return false;
+    if (!this.geometry.boundingBox) this.geometry.computeBoundingBox();
+    const diagonal = this.geometry.boundingBox?.getSize(this.geometryBoundsSize).length() ?? 0;
+    return isPointInMesh(position, this.getCurrentBVH(), diagonal);
+  }
+
+  private getCurrentBVH(): MeshBVH {
+    const geometry = this.geometry;
+    if (!geometry) throw new Error('A spatial effect without geometry has no BVH.');
+    const positionAttribute = geometry.getAttribute('position');
+    const topologyKey =
+      `${positionAttribute?.count ?? 0}:${geometry.index?.count ?? 0}:${attributeVersion(geometry.index)}`;
+    const positionVersion = attributeVersion(positionAttribute);
+    if (!this._bvh || this._bvhGeometry !== geometry || this._bvhTopologyKey !== topologyKey) {
+      // Collider geometry can also be packed by a GPU collision backend. Keep
+      // its triangle order intact when constructing this independent CPU index.
+      this._bvh = new MeshBVH(geometry, { indirect: true });
+      this._bvhGeometry = geometry;
+      this._bvhTopologyKey = topologyKey;
+      this._bvhPositionVersion = positionVersion;
+    } else if (
+      this.updatePolicy !== SpatialEffectUpdatePolicy.Static
+      && this.updatePolicy !== SpatialEffectUpdatePolicy.TransformDynamic
+      && this._bvhPositionVersion !== positionVersion
+    ) {
+      this._bvh.refit();
+      this._bvhPositionVersion = positionVersion;
+    }
+    return this._bvh;
+  }
+
   testGPU(
     particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
   ): Node<'float'> {
     const rawStrength = this._testGPU
       ? this._testGPU(particle, context, this)
-      : this.bakedFieldGPU(particle, context);
+      : this.bakedFieldGPU(particle);
     const strength = this._hasCustomFeatherEasing
       ? this.easeFeatherGPU(rawStrength)
       : rawStrength;
@@ -624,13 +658,12 @@ class SpatialEffect extends THREE.Object3D {
 
   bakedFieldGPU(
     particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
   ): Node<'float'> {
     this.ensureBakedField();
 
     if (!this._bakedFieldTexture) return float(0);
 
-    const localPosition = this.getGPUParticleLocalPosition(particle, context.system);
+    const localPosition = this.getGPUParticleLocalPosition(particle);
     const uv = localPosition
       .sub(this._gpuBakedFieldMinNode)
       .div(this._gpuBakedFieldSizeNode)
@@ -644,11 +677,11 @@ class SpatialEffect extends THREE.Object3D {
 
     const { type } = this.geometry;
     if (type === 'SphereGeometry' || type === 'IcosahedronGeometry') {
-      return (particle, context) => this.sphereTestGPU(particle, context);
+      return (particle) => this.sphereTestGPU(particle);
     }
 
     if (type === 'BoxGeometry') {
-      return (particle, context) => this.boxTestGPU(particle, context);
+      return (particle) => this.boxTestGPU(particle);
     }
 
     return undefined;
@@ -656,13 +689,12 @@ class SpatialEffect extends THREE.Object3D {
 
   private sphereTestGPU(
     particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
   ): Node<'float'> {
     const bounds = this.getLocalBounds();
     const center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
     const radius = Math.max(size.x, size.y, size.z) * 0.5;
-    const localPosition = this.getGPUParticleLocalPosition(particle, context.system);
+    const localPosition = this.getGPUParticleLocalPosition(particle);
     const distance = localPosition.sub(vec3(center)).length();
     const inside = distance.lessThanEqual(float(radius));
 
@@ -682,12 +714,11 @@ class SpatialEffect extends THREE.Object3D {
 
   private boxTestGPU(
     particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
   ): Node<'float'> {
     const bounds = this.getLocalBounds();
     const center = bounds.getCenter(new THREE.Vector3());
     const halfSize = bounds.getSize(new THREE.Vector3()).multiplyScalar(0.5);
-    const localPosition = this.getGPUParticleLocalPosition(particle, context.system);
+    const localPosition = this.getGPUParticleLocalPosition(particle);
     const q = abs(localPosition.sub(vec3(center))).sub(vec3(halfSize));
     const outside = vec3(
       max(q.x, float(0)),
@@ -725,19 +756,25 @@ class SpatialEffect extends THREE.Object3D {
       ?? new THREE.Box3(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5));
   }
 
+  /** World-space influence bounds, including the feather region. */
+  getWorldBounds(target = new THREE.Box3()): THREE.Box3 {
+    this.updateWorldMatrix(true, false);
+    target.copy(this.getLocalBounds()).applyMatrix4(this.matrixWorld);
+    target.expandByScalar(Math.max(this.feather, Number.EPSILON));
+    return target;
+  }
+
   protected getGPUParticleWorldPosition(
     particle: GPUParticleLike,
-    _particleSystem: ParticleSystem,
   ): Node<'vec3'> {
     return transformPointGPU(particle.position, this._gpuSimulationToWorldNode);
   }
 
   protected getGPUParticleLocalPosition(
     particle: GPUParticleLike,
-    particleSystem: ParticleSystem,
   ): Node<'vec3'> {
     return transformPointGPU(
-      this.getGPUParticleWorldPosition(particle, particleSystem),
+      this.getGPUParticleWorldPosition(particle),
       this._gpuWorldToLocalNode,
     );
   }

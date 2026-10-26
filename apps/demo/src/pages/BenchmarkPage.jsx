@@ -26,6 +26,7 @@ import {
   DistortionOverLifetime,
   Emitter,
   EmissionShape,
+  EmissionSource,
   ForceOverLifetime,
   KillZone,
   LimitVelocityOverLifetime,
@@ -62,10 +63,10 @@ import {
   MaxCulling,
 } from '@rzmps/rzmps';
 import { Curve, NumberKeyframe } from 'curves';
-import createDopplerBullet from '../presets/particles/dopplerBullet';
-import createFireworks from '../presets/particles/fireworks';
-import createBoids from '../presets/particles/boids';
-import createSnow from '../presets/particles/snow';
+import createDopplerBullet from '../../../../examples/dopplerBullet.js';
+import createFireworks from '../../../../examples/fireworks.js';
+import createBoids from '../../../../examples/boids.js';
+import createSnow from '../../../../examples/snow.js';
 
 class NoopRenderer extends Renderer {
   setup() {}
@@ -124,6 +125,10 @@ async function createBenchmarkRenderer(defaultProps) {
   renderer.library.addLight(SpotLightNode, THREE.SpotLight);
 
   await renderer.init();
+
+  if (renderer.backend.isWebGPUBackend !== true) {
+    throw new Error('GPU benchmarks require a native WebGPU backend; Three.js selected its WebGL fallback.');
+  }
 
   return renderer;
 }
@@ -377,13 +382,20 @@ function BenchmarkScene({ onComplete, onProgress }) {
   const { scene, gl, camera } = useThree();
   const active = useRef(null);
   const starting = useRef(false);
+  const failed = useRef(false);
   const caseIndex = useRef(-1);
   const results = useRef([]);
   const lastFrame = useRef();
+  const fail = (error) => {
+    failed.current = true;
+    window.__RZMPS_BENCHMARK_DONE__ = true;
+    throw error;
+  };
   const durationMs = getNumberParam('durationMs', DEFAULT_DURATION_MS);
   const warmupMs = getNumberParam('warmupMs', DEFAULT_WARMUP_MS);
   const suite = getStringParam('suite');
   const caseFilter = getStringParam('case').toLowerCase();
+  const ciProfile = new URLSearchParams(window.location.search).get('profile') === 'ci';
 
   if (
     suite === 'milestone1'
@@ -691,9 +703,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 100 || system.__boidAffectorReadbackPromise) return;
-            system.__boidAffectorReadbackPromise = system.readbackGPUParticlesSelective(
-              system.createGPUSelectiveReadbackRequests(),
-            ).then((results) => { system.__boidAffectorReadback = results; });
+            system.__boidAffectorReadbackPromise = system.selectiveReadback()
+              .then((results) => { system.__boidAffectorReadback = results; });
           },
           validate: (system) => {
             const samples = system.__boidAffectorReadback;
@@ -748,9 +759,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
               && system.__movingSpatialBaseline
               && !system.__movingSpatialReadbackPromise
             ) {
-              system.__movingSpatialReadbackPromise = system.readbackGPUParticlesSelective(
-                system.createGPUSelectiveReadbackRequests(),
-              ).then((results) => { system.__movingSpatialReadback = results; });
+              system.__movingSpatialReadbackPromise = system.selectiveReadback()
+                .then((results) => { system.__movingSpatialReadback = results; });
             }
           },
           validate: (system) => {
@@ -808,9 +818,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system) => {
             if (!system._gpuBuffers || system.__automaticFeatherReadbackPromise) return;
-            system.__automaticFeatherReadbackPromise = system.readbackGPUParticlesSelective(
-              system.createGPUSelectiveReadbackRequests(2),
-            ).then((results) => { system.__automaticFeatherReadback = results; });
+            system.__automaticFeatherReadbackPromise = system.selectiveReadback(2)
+              .then((results) => { system.__automaticFeatherReadback = results; });
           },
           validate: (system) => {
             const samples = system.__automaticFeatherReadback;
@@ -862,9 +871,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
               || !system.isGPUProcessingActive
               || system.__emittingBoidsReadbackPromise
             ) return;
-            system.__emittingBoidsReadbackPromise = system.readbackGPUParticlesSelective(
-              system.createGPUSelectiveReadbackRequests(),
-            ).then((results) => { system.__emittingBoidsReadback = results; });
+            system.__emittingBoidsReadbackPromise = system.selectiveReadback()
+              .then((results) => { system.__emittingBoidsReadback = results; });
             const grid = system.modules.find((module) => module instanceof Boids)
               ?.getParticleSpatialGrid(system);
             system.__emittingBoidsGridPromise = grid?.readDiagnostics(system.sceneRenderer)
@@ -962,9 +970,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 250 || system.__boidCoordinateReadbackPromise) return;
-            system.__boidCoordinateReadbackPromise = system.readbackGPUParticlesSelective(
-              system.createGPUSelectiveReadbackRequests(1),
-            ).then((results) => { system.__boidCoordinateReadback = results; });
+            system.__boidCoordinateReadbackPromise = system.selectiveReadback(1)
+              .then((results) => { system.__boidCoordinateReadback = results; });
           },
           validate: (system) => {
             const velocity = system.__boidCoordinateReadback?.[0]?.particle.velocity;
@@ -1023,8 +1030,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 650 || system.__rzmpsCollisionReadbackPromise) return;
-            const requests = system.createGPUSelectiveReadbackRequests();
-            system.__rzmpsCollisionReadbackPromise = system.readbackGPUParticlesSelective(requests)
+            system.__rzmpsCollisionReadbackPromise = system.selectiveReadback()
               .then((results) => { system.__rzmpsCollisionReadback = results; });
           },
           validate: (system) => {
@@ -1489,13 +1495,23 @@ function BenchmarkScene({ onComplete, onProgress }) {
             system.__rzmpsSnowSwitchedBack
             && system.isGPUProcessingActive
             && elapsed > 2200
-            && !system.__rzmpsSnowReadbackPromise
           ) {
-            system.__rzmpsSnowReadbackPromise = system.readbackGPUParticlesSelective(
-              system.createGPUSelectiveReadbackRequests(32),
-            ).then((results) => { system.__rzmpsSnowReadback = results; });
+            // Chromium may cancel a map while the reset's retired GPU resources are released.
+            // Leave an empty observation unset so the benchmark retries it on the next frame.
+            if (!system.__rzmpsSnowReadback && !system.__rzmpsSnowReadbackPromise) {
+              system.__rzmpsSnowReadbackPromise = system.selectiveReadback(32)
+                .then((results) => {
+                  if (results.length > 0) system.__rzmpsSnowReadback = results;
+                })
+                .finally(() => { system.__rzmpsSnowReadbackPromise = undefined; });
+            }
             const renderBuffer = system._gpuRenderOutputBuffers;
-            if (renderBuffer && typeof system.sceneRenderer.getArrayBufferAsync === 'function') {
+            if (
+              renderBuffer
+              && !system.__rzmpsSnowRenderReadback
+              && !system.__rzmpsSnowRenderReadbackPromise
+              && typeof system.sceneRenderer.getArrayBufferAsync === 'function'
+            ) {
               system.__rzmpsSnowRenderReadbackPromise = Promise.all([
                 system.sceneRenderer.getArrayBufferAsync(renderBuffer.attributes.floatData),
                 system.sceneRenderer.getArrayBufferAsync(renderBuffer.attributes.uintData),
@@ -1505,7 +1521,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
                   uints: new Uint32Array(uintBuffer),
                   count: renderBuffer.count,
                 };
-              });
+              }).catch((error) => {
+                if (error?.name !== 'AbortError') throw error;
+              }).finally(() => { system.__rzmpsSnowRenderReadbackPromise = undefined; });
             }
           }
         },
@@ -1646,6 +1664,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     },
     {
       name: 'Heavy modules 10k noise+forces',
+      cpuOnly: true,
       particleCount: 10_000,
       create: () => ({
         modules: [
@@ -1669,6 +1688,53 @@ function BenchmarkScene({ onComplete, onProgress }) {
             scale: new THREE.Vector3(0.05, 0.05, 0.05),
             velocity: new THREE.Vector3(0.02, 0.04, 0),
             color: new THREE.Color(1, 0.65, 0.25),
+          },
+        }),
+      }),
+    },
+    {
+      name: 'Custom volume spawn churn 2k/sec',
+      particleCount: 10_000,
+      create: () => ({
+        initialParticleCount: 0,
+        maxParticles: 10_000,
+        emitters: new Emitter({
+          source: new EmissionShape({
+            geometry: new THREE.TorusGeometry(1, 0.3, 16, 32),
+            source: EmissionSource.Volume,
+            volumeSamples: 'auto',
+          }),
+          rate: 2_000,
+          radialSpeed: 1.5,
+          alignment: 1,
+          initialValues: {
+            lifetime: 5,
+            scale: new THREE.Vector3(0.05, 0.05, 0.05),
+            velocity: new THREE.Vector3(0.02, 0.04, 0),
+            color: new THREE.Color(1, 0.65, 0.25),
+          },
+        }),
+      }),
+      validate: (system) => {
+        const shape = system.emitters[0].source;
+        if (shape.resolvedVolumeSamples <= EmissionShape.MIN_AUTO_VOLUME_SAMPLES) {
+          throw new Error('Automatic custom-volume sampling did not scale above its minimum.');
+        }
+      },
+    },
+    {
+      name: 'Surface spawn churn 2k/sec',
+      particleCount: 10_000,
+      create: () => ({
+        initialParticleCount: 0,
+        maxParticles: 10_000,
+        emitters: new Emitter({
+          source: EmissionShape.Torus({ source: EmissionSource.Surface }, 1, 0.3, 16, 32),
+          rate: 2_000,
+          radialSpeed: 1.5,
+          initialValues: {
+            lifetime: 5,
+            scale: new THREE.Vector3(0.05, 0.05, 0.05),
           },
         }),
       }),
@@ -1715,9 +1781,12 @@ function BenchmarkScene({ onComplete, onProgress }) {
       create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
     },
     {
-      name: 'MeshRenderer 10k rendered',
-      particleCount: 10_000,
-      create: () => ({ renderer: new MeshRenderer({ maxParticles: 10_000 }) }),
+      name: ciProfile ? 'MeshRenderer 2k rendered (low-poly)' : 'MeshRenderer 10k rendered',
+      particleCount: ciProfile ? 2_000 : 10_000,
+      create: () => ({ renderer: new MeshRenderer({
+        maxParticles: ciProfile ? 2_000 : 10_000,
+        ...(ciProfile ? { geometry: new THREE.BoxGeometry(1, 1, 1) } : {}),
+      }) }),
     },
     {
       name: 'TrailRenderer 2k rendered',
@@ -1725,7 +1794,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       create: () => ({ renderer: new TrailRenderer({ texture: createParticleTexture() }) }),
     },
     ]);
-  }, [suite]);
+  }, [suite, ciProfile]);
   const cases = useMemo(() => (
     caseFilter
       ? allCases.filter(({ name }) => name.toLowerCase().includes(caseFilter))
@@ -1735,6 +1804,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
   const startNextCase = async () => {
     if (starting.current) return;
     starting.current = true;
+    window.__RZMPS_BENCHMARK_CASES__ = cases.map(entry => entry.name);
     if (active.current?.system) {
       active.current.system.destroy();
       active.current.sceneObjects?.forEach((object) => object.removeFromParent());
@@ -1804,12 +1874,15 @@ function BenchmarkScene({ onComplete, onProgress }) {
     lastFrame.current = undefined;
     onProgress(nextCase.name);
     starting.current = false;
+    window.__RZMPS_BENCHMARK_PROGRESS__ = { activeCase: nextCase.name, phase: 'warmup', completed: results.current.length };
   };
 
   useFrame(() => {
+    if (failed.current) return;
+
     if (!active.current) {
       void startNextCase().catch((error) => {
-        setTimeout(() => { throw error; });
+        setTimeout(() => fail(error));
       });
       return;
     }
@@ -1822,12 +1895,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
     const simulationDispatchesBefore = active.current.system.__rzmpsBenchmarkSimulationDispatches ?? 0;
     const renderOutputDispatchesBefore = active.current.system.__rzmpsBenchmarkRenderOutputDispatches ?? 0;
     active.current.beforeUpdate?.(active.current.system, frameStart - active.current.phaseStartedAt);
-      try {
-        active.current.system.update();
-      } catch (error) {
-        window.__RZMPS_BENCHMARK_DONE__ = true;
-        throw error;
-      }
+    try {
+      active.current.system.update();
+    } catch (error) {
+      fail(error);
+    }
     const simulationNode = active.current.system._gpuSimulationComputeCache?.node;
     if (simulationNode && !active.current.simulationNodes.has(simulationNode)) {
       active.current.simulationNodes.add(simulationNode);
@@ -1849,6 +1921,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
         active.current.phase = 'measure';
         active.current.phaseStartedAt = frameStart;
         lastFrame.current = frameStart;
+        window.__RZMPS_BENCHMARK_PROGRESS__.phase = 'measure';
       }
       return;
     }
@@ -1877,7 +1950,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     active.current.gpuActiveSamples.push(active.current.system.isGPUProcessingActive);
 
     if (active.current.requireGPU && !active.current.system.isGPUProcessingActive) {
-      throw new Error(`${active.current.name} did not activate GPU processing.`);
+      fail(new Error(`${active.current.name} did not activate GPU processing.`));
     }
 
     const heapBytes = performance.memory?.usedJSHeapSize;
@@ -1898,19 +1971,19 @@ function BenchmarkScene({ onComplete, onProgress }) {
         active.current.expectedDeathEvents
         && (active.current.system.__rzmpsBenchmarkDeathEvents ?? 0) < active.current.expectedDeathEvents
       ) {
-        throw new Error(
+        fail(new Error(
           `${active.current.name} dispatched ${active.current.system.__rzmpsBenchmarkDeathEvents ?? 0}`
           + ` GPU death events; expected ${active.current.expectedDeathEvents}.`,
-        );
+        ));
       }
       try {
         active.current.validate?.(active.current.system);
       } catch (error) {
-        window.__RZMPS_BENCHMARK_DONE__ = true;
-        throw error;
+        fail(error);
       }
       active.current.measuredDurationMs = elapsed;
       results.current.push(summarize(active.current));
+      window.__RZMPS_BENCHMARK_RESULTS__ = [...results.current];
       gl.info.reset();
       void startNextCase().catch((error) => {
         setTimeout(() => { throw error; });

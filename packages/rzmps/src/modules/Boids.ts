@@ -21,7 +21,6 @@ import ParticleSpatialGrid, {
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import type { Node } from 'three/webgpu';
 import { acos, cos, float, If, max, mix, sin, uint, vec3, vec4 } from 'three/tsl';
-import { SimulationSpace } from '../enums/SimulationSpace';
 
 const GPU_FALLOFF_MIN_DISTANCE = 1e-3;
 
@@ -74,6 +73,10 @@ export interface BoidsOptions extends Partial<ModuleOptions> {
   neighborRadius: DynamicValue<number>;
 }
 
+/**
+ * Flocking steering using spatial aggregates and tagged affectors; prepare once per system update before modifying
+ * particles.
+ */
 class Boids extends Module {
   static readonly BoidAffector = BoidAffector;
   static readonly BoidAffectorHelper = BoidAffectorHelper;
@@ -112,6 +115,7 @@ class Boids extends Module {
   private currentParticleAffectorInfluence = new THREE.Vector3();
   private particleIndices = new WeakMap<Particle, number>();
 
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(options: Partial<BoidsOptions> = {}) {
     const affectorFilter = options.affectorFilter;
     const spatialGridOptions = options.spatialGridOptions ?? {
@@ -237,8 +241,7 @@ class Boids extends Module {
       if (particleSystem.isGPUProcessingActive) effect.syncGPUTransform(particleSystem);
     });
 
-    // GPU Boids obtains individual neighbors from ParticleSpatialGrid. The CPU octree
-    // remains the aggregate approximation used only by CPU simulation.
+    // GPU and CPU use exact-radius queries over their respective spatial structures.
     if (particleSystem.isGPUProcessingActive) return;
 
     if (particleSystem.boundingBox.isEmpty()) particleSystem.updateBoundingBox();
@@ -309,22 +312,6 @@ class Boids extends Module {
       tagMask,
     });
 
-    // ParticleOctree can use coarser aggregate nodes when a boid has no nearby
-    // leaf samples. Preserve that behavior on GPU so sparse cohorts do not keep
-    // their shared emission direction until they happen to enter a populated cell.
-    If(count.equal(0), () => {
-      grid.forEachParticle((neighbor) => {
-        alignment.addAssign(neighbor.velocity);
-        cohesion.addAssign(neighbor.position);
-        const away = vec3(particle.position.sub(neighbor.position));
-        separation.addAssign(away.div(max(away.lengthSq(), float(Number.EPSILON))));
-        count.addAssign(1);
-      }, {
-        excludeIndex: particle.index,
-        tagMask,
-      });
-    });
-
     this.particleAffectors.forEach((rule, ruleIndex) => {
       const sourceTags = acceptMultiple(rule.sourceTags);
       const sourceMask = context.system.getGPURendererTagMask(sourceTags);
@@ -361,12 +348,6 @@ class Boids extends Module {
         }, {
           excludeIndex: particle.index,
           tagMask: sourceMask,
-        });
-        If(sourceCount.equal(0), () => {
-          grid.forEachParticle(addSource, {
-            excludeIndex: particle.index,
-            tagMask: sourceMask,
-          });
         });
       };
       if (targetMask === undefined) collect();
@@ -497,50 +478,36 @@ class Boids extends Module {
     this.separation.set(0, 0, 0);
     this.affector.set(0, 0, 0);
 
-    const node = this.octree?.locate(particle.position);
-    const nodes = node ? [node, ...node.neighbors] : [];
+    const octree = this.octree!;
+    const node = octree.locate(particle.position);
+    const nodes = [node, ...node.neighbors];
     const particleIndex = this.particleIndices.get(particle);
-    let totalWeight = 0;
+    let neighborCount = 0;
     let affectorTotalWeight = 0;
+
+    const neighborRadius = Math.max(
+      Number.EPSILON,
+      evaluateDynamicNumber(this.neighborRadius, particle.time, particle.id),
+    );
+    const neighbors = octree.particlesInRadius(
+      particle.position,
+      neighborRadius,
+      { excludeIndex: particleIndex, tags: this.tags },
+    );
+    neighbors.forEach((neighbor) => {
+      const distanceSquared = neighbor.position.distanceToSquared(particle.position);
+      this.alignment.add(neighbor.velocity);
+      this.cohesion.add(neighbor.position);
+      this.toNode.copy(particle.position).sub(neighbor.position);
+      this.separation.addScaledVector(
+        this.toNode,
+        1 / Math.max(distanceSquared, Number.EPSILON),
+      );
+      neighborCount += 1;
+    });
 
     nodes.forEach((sampleNode) => {
       const { aggregate } = sampleNode;
-
-      // Remove the current particle from sampled flocking averages without cloning aggregates.
-      const includesCurrentParticle = particleIndex !== undefined
-        && sampleNode.particleIndices.includes(particleIndex);
-      const sampleCount = includesCurrentParticle
-        ? aggregate.count - 1
-        : aggregate.count;
-
-      if (sampleCount > 0) {
-        this.sampleCenter.copy(aggregate.positionSum);
-        this.sampleVelocity.copy(aggregate.velocitySum);
-
-        if (includesCurrentParticle) {
-          this.sampleCenter.sub(particle.position);
-          this.sampleVelocity.sub(particle.velocity);
-        }
-
-        this.sampleCenter.divideScalar(sampleCount);
-        this.sampleVelocity.divideScalar(sampleCount);
-        this.sampleDirection.copy(this.sampleVelocity);
-        if (this.sampleDirection.lengthSq() > 0) this.sampleDirection.normalize();
-
-        this.toNode.copy(this.sampleCenter).sub(particle.position);
-        const distance = Math.max(this.toNode.length(), Number.EPSILON);
-        const weight = sampleCount / distance;
-
-        this.alignment.addScaledVector(this.sampleDirection, weight);
-        this.cohesion.addScaledVector(this.sampleCenter, weight);
-
-        this.toNode.multiplyScalar(-1);
-        if (this.toNode.lengthSq() > 0) {
-          this.separation.addScaledVector(this.toNode.normalize(), weight);
-        }
-
-        totalWeight += weight;
-      }
 
       // Particle affectors are stored by rule index and accepted per target particle.
       aggregate.particleAffectors.forEach((sourceAggregate, affectorIndex) => {
@@ -595,16 +562,16 @@ class Boids extends Module {
       });
     });
 
-    if (totalWeight > 0) {
-      this.alignment.divideScalar(totalWeight);
+    if (neighborCount > 0) {
+      this.alignment.divideScalar(neighborCount);
       if (this.alignment.lengthSq() > 0) this.alignment.normalize();
 
       this.cohesion
-        .divideScalar(totalWeight)
+        .divideScalar(neighborCount)
         .sub(particle.position);
       if (this.cohesion.lengthSq() > 0) this.cohesion.normalize();
 
-      this.separation.divideScalar(totalWeight);
+      this.separation.divideScalar(neighborCount);
       if (this.separation.lengthSq() > 0) this.separation.normalize();
     }
 

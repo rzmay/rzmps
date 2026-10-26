@@ -11,27 +11,42 @@ import { CollisionHit } from '../interfaces/ICollisionBackend';
 import type { CollisionListener } from '../modules/Collision';
 import type { ParticleListener } from '../ParticleSystem';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
+import type { GPUParticleReadbackField } from '../gpu/SelectiveReadback';
 
 const AUDIO_LISTENER_KEY = "__rzmps_audioListener";
 
 export interface AudioRendererOptions extends Partial<RendererOptions> {
+  /** Existing AudioListener; omission discovers or attaches a listener to the active camera. */
   listener: THREE.AudioListener;
 
+  /** Decoded buffers for continuous particle audio; playback chooses among supplied buffers. */
   sound: StrictMultiple<AudioBuffer>;
+  /** Decoded buffers played on eligible collision events. */
   onCollisionSound: StrictMultiple<AudioBuffer>;
+  /** Decoded buffers played on eligible particle births. */
   onSpawnSound: StrictMultiple<AudioBuffer>;
+  /** Decoded buffers played on eligible particle deaths. */
   onDeathSound: StrictMultiple<AudioBuffer>;
 
+  /** Additional predicate selecting particles for sound playback. */
   shouldPlay: (particle: Particle) => boolean;
 
+  /** Loops continuous sound clips; event cues use their own lifecycle playback behavior. */
   loop: boolean;
+  /** Maximum simultaneously managed positional clips; limits audio resource costs. */
   maxClips: number;
+  /** Fraction of eligible particles selected for continuous audio. */
   ratio: number;
+  /** Fraction of eligible collision events selected for contact audio. */
   collisionRatio: number;
 
+  /** Playback rate multiplier evaluated with normalized particle age. */
   pitch: DynamicValue<number>;
+  /** Gain multiplier evaluated with normalized particle age. */
   volume: DynamicValue<number>;
+  /** High-pass cutoff in Hz, evaluated with normalized particle age. */
   highPass: DynamicValue<number>;
+  /** Low-pass cutoff in Hz, evaluated with normalized particle age. */
   lowPass: DynamicValue<number>;
 
   sizeAffectsPitch: number;
@@ -58,8 +73,10 @@ export interface AudioRendererOptions extends Partial<RendererOptions> {
   impulseAffectsVolume: number;
   impulseAffectsHighPass: number;
   impulseAffectsLowPass: number;
+  /** Minimum collision impulse for contact playback. */
   impulseThreshold: number;
 
+  /** Strength of relative-velocity pitch shifting; zero disables the Doppler response. */
   dopplerEffect: number;
   gpuInterpolationRate: number;
 }
@@ -78,6 +95,7 @@ interface AudioFilters {
   lowPass?: BiquadFilterNode;
 }
 
+/** Positional particle audio and lifecycle cues; requires audio playback permission and scene camera context. */
 export default class AudioRenderer extends Renderer {
   listener?: THREE.AudioListener;
 
@@ -138,6 +156,7 @@ export default class AudioRenderer extends Renderer {
   private _cameraDepthRange: [number, number] = [0, 100];
   private _relativePositions = new Map<string, THREE.Vector3>();
   private _relativePosition = new THREE.Vector3();
+  private readonly _hasCustomShouldPlay: boolean;
 
   // Deltatime stored for doppler effect calculation
   private _deltaTime = 0;
@@ -163,6 +182,7 @@ export default class AudioRenderer extends Renderer {
       ? acceptMultiple(options.onDeathSound)
       : undefined;
 
+    this._hasCustomShouldPlay = options.shouldPlay !== undefined;
     this.shouldPlay = options.shouldPlay ?? this.shouldPlay;
 
     this.loop = options.loop ?? this.loop;
@@ -232,7 +252,23 @@ export default class AudioRenderer extends Renderer {
     this._advanceGPUAudio(deltaTime);
     const ratio = Math.max(this.ratio, 0.01);
     const sampleLimit = Math.ceil(Math.max(this.maxClips, 1) / ratio) * 2;
-    this.updateGPUFromSelectiveReadback(buffers, system, deltaTime, sampleLimit);
+    let fields: GPUParticleReadbackField[] | undefined;
+    if (!this._hasCustomShouldPlay) {
+      fields = ['position', 'velocity', 'speed', 'time'];
+      if (
+        this.sizeAffectsPitch > 0
+        || this.sizeAffectsVolume > 0
+        || this.sizeAffectsHighPass > 0
+        || this.sizeAffectsLowPass > 0
+      ) fields.push('scale');
+      if (
+        this.alphaAffectsPitch > 0
+        || this.alphaAffectsVolume > 0
+        || this.alphaAffectsHighPass > 0
+        || this.alphaAffectsLowPass > 0
+      ) fields.push('alpha');
+    }
+    this.updateCPUFromGPU(buffers, system, deltaTime, sampleLimit, fields);
   }
 
   private _updateCameraState(system: ParticleSystem): void {

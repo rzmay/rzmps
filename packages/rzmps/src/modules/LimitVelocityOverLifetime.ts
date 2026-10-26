@@ -8,16 +8,23 @@ import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
 
 export interface LimitVelocityOverLifetimeOptions extends Partial<ModuleOptions> {
+    /** Absolute per-axis velocity limits, sampled by normalized particle age. */
     limit: DynamicValue<THREE.Vector3>;
+    /** Fraction of excess velocity removed when over a limit, clamped from zero to one. */
     dampen: number;
+    /** Velocity decay per second, optionally multiplied by size or speed. */
     drag: DynamicValue<number>;
+    /** Scales drag by average particle scale. */
     multiplyDragBySize: boolean;
+    /** Scales drag by velocity magnitude. */
     multiplyDragByVelocity: boolean;
 }
 
+/** Permanently damps velocity toward per-axis limits and optionally applies timestep-scaled drag. */
 class LimitVelocityOverLifetime extends Module {
   private _gpuLimitStructureSignature = '';
 
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<LimitVelocityOverLifetimeOptions> = {}) {
 
     super((particle: Particle, deltaTime: number) => {

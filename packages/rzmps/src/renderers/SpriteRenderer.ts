@@ -25,7 +25,6 @@ import {
   modelWorldMatrix,
   positionLocal,
   sin,
-  uint,
   uniform,
   vec3,
   vec4,
@@ -36,6 +35,7 @@ export const SCENE_COLOR_DATA_USER_DATA_KEY = "__rzmps_sceneColorData";
 
 type SceneDepthData = {
   target: THREE.WebGLRenderTarget;
+  /** Selects lit or unlit sprite material; backend-specific implementations are chosen automatically. */
   material: THREE.MeshDepthMaterial;
   frame: number;
   rendering: boolean;
@@ -67,21 +67,38 @@ export const WEBGPU_SCENE_DEPTH_TEXTURE = new THREE.DepthTexture(
 );
 
 export interface SpriteRendererOptions extends RendererOptions {
+  /** Atlas animation frames per second; may vary with particle age. */
   fps: DynamicValue<number>;
+  /** Faces sprites toward the active camera.
+   * @defaultValue true */
   billboard: boolean;
+  /** Applies perspective size falloff.
+   * @defaultValue true */
   sizeAttenuation: boolean;
+  /** Atlas tile size; leave at zero to derive from grid dimensions. */
   tileSize: {x: number, y: number};
+  /** Atlas tile inset used to avoid adjacent-tile sampling. */
   tileMargin: {x: number, y: number};
+  /** Atlas columns and rows.
+   * @defaultValue { x: 1, y: 1 } */
   gridSize: {x: number, y: number};
+  /** Number of animation frames in the atlas.
+   * @defaultValue 1 */
   frames: number;
+  /** Offsets animation by a particle-ID-seeded frame selection. */
   randomStartFrame: boolean;
+  /** Opacity texture or URL, loaded during renderer setup. */
   alphaMap: string | THREE.Texture;
   material: SpriteMaterialType | `${SpriteMaterialType}`;
+  /** Material settings; transmission and soft intersections may require scene captures. */
   materialOptions: Partial<LitSpriteOptions | UnlitSpriteOptions>;
+  /** Allows sprite geometry to cast shadows when scene shadow rendering is enabled. */
   castShadow: boolean;
+  /** Intersection fade distance; zero disables depth-based soft particles. */
   softParticleDistance: number;
 }
 
+/** Billboard or oriented sprites with WebGL and WebGPU material paths, optional atlases, and soft intersections. */
 class SpriteRenderer extends Renderer {
   texture: THREE.Texture;
 

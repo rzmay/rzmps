@@ -11,11 +11,17 @@ import {
 } from '../helpers/noise';
 
 export interface NoiseOptions extends Partial<ModuleOptions> {
+    /** Number of noise layers; additional layers increase sampling work. Defaults to 1. */
     octaves: number;
+    /** Spatial frequency of the noise; larger values produce smaller features. Defaults to 1. */
     frequency: number;
+    /** Frequency multiplier between successive noise octaves. Defaults to 2. */
     lacunarity: number;
+    /** Amplitude multiplier between successive noise octaves. Defaults to 0.5. */
     persistence: number;
+    /** Noise temporal coordinate; custom callbacks can advance it explicitly. */
     time: number;
+    /** Spatial noise offset, independent of the particle position. */
     offset: THREE.Vector3;
 }
 
@@ -31,6 +37,10 @@ export type NoiseModuleGPUUpdate = (
   noise: GPUParticleNoiseValues,
 ) => void;
 
+/**
+ * Computes particle-position simplex noise for a callback or named particle.noise entry; octave count adds sampling
+ * cost.
+ */
 class NoiseModule extends Module {
     public octaves = 1;
 
@@ -47,6 +57,7 @@ class NoiseModule extends Module {
     public key: string;
     private _gpuNoiseSignature = '';
 
+    /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
     constructor(
       key: string,
       options?: Partial<NoiseOptions>,

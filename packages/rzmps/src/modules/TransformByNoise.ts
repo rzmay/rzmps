@@ -11,12 +11,20 @@ import type { Node } from 'three/webgpu';
 import { vec3 } from 'three/tsl';
 
 export interface TransformByNoiseOptions extends Partial<ModuleOptions>, NoiseOptions {
+    /** Per-axis noise force amplitude sampled by normalized age. */
     strength: DynamicValue<THREE.Vector3>;
+    /** Noise time advancement per second of particle age; zero keeps the noise time slice fixed. */
     scrollSpeed: DynamicValue<number>;
+    /** Attenuates noise strength when frequency exceeds one. */
     damping: boolean;
 }
 
+/**
+ * Adds three decorrelated noise channels to velocity using delta seconds; supply strength for the desired per-axis
+ * response.
+ */
 class TransformByNoise extends NoiseModule {
+    /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
     constructor(public options: Partial<TransformByNoiseOptions> = {}) {
       super((particle: Particle, deltaTime: number) => {
         const scrollSpeed = evaluateDynamicNumber(this.options.scrollSpeed ?? 0, particle.time, particle.id);

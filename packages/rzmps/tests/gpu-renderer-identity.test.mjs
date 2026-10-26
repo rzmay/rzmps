@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
+  createGPUParticleBufferState,
   LightRenderer,
+  MeshRenderer,
   Particle,
   TrailMode,
   TrailRenderer,
@@ -15,7 +17,50 @@ const rendererSystem = {
   sceneCamera: camera,
   useLiveCubemap: false,
   scene: undefined,
+  getGPURendererTagMask: () => undefined,
 };
+
+const meshMaterial = new THREE.MeshStandardMaterial();
+const meshRenderer = new MeshRenderer({
+  mesh: new THREE.Mesh(new THREE.ConeGeometry(), meshMaterial),
+  maxParticles: 4,
+});
+const meshParticle = new Particle({
+  position: new THREE.Vector3(3, 4, 5),
+  color: new THREE.Color(0.25, 0.5, 0.75),
+});
+const meshBuffers = createGPUParticleBufferState([meshParticle], 4);
+meshRenderer.updateGPU(meshBuffers, rendererSystem);
+assert.ok(meshMaterial.positionNode);
+assert.ok(meshMaterial.colorNode);
+
+meshRenderer.reset();
+assert.equal(meshMaterial.positionNode, null);
+assert.equal(meshMaterial.colorNode, null);
+assert.equal(meshMaterial.maskShadowNode, null);
+assert.ok(meshMaterial.opacityNode);
+meshRenderer.update([meshParticle], rendererSystem);
+assert.equal(meshMaterial.positionNode, null);
+assert.equal(meshMaterial.colorNode, null);
+assert.equal(meshMaterial.maskShadowNode, null);
+assert.ok(meshMaterial.opacityNode);
+const cpuInstanceMatrix = new THREE.Matrix4();
+const instanceColor = new THREE.Color();
+meshRenderer.instances.getMatrixAt(0, cpuInstanceMatrix);
+assert.deepEqual(new THREE.Vector3().setFromMatrixPosition(cpuInstanceMatrix).toArray(), [3, 4, 5]);
+meshRenderer.instances.getColorAt(0, instanceColor);
+assert.deepEqual(instanceColor.toArray(), meshParticle.color.toArray());
+
+meshRenderer.updateGPU(meshBuffers, rendererSystem);
+assert.ok(meshMaterial.positionNode);
+meshRenderer.instances.getColorAt(0, instanceColor);
+assert.deepEqual(instanceColor.toArray(), [1, 1, 1]);
+meshParticle.position.set(6, 7, 8);
+meshRenderer.reset();
+meshRenderer.update([meshParticle], rendererSystem);
+meshRenderer.instances.getMatrixAt(0, cpuInstanceMatrix);
+assert.equal(meshMaterial.positionNode, null);
+assert.deepEqual(new THREE.Vector3().setFromMatrixPosition(cpuInstanceMatrix).toArray(), [6, 7, 8]);
 
 const particleTrail = new TrailRenderer({
   texture: new THREE.Texture(),
@@ -69,11 +114,8 @@ let readbackCalls = 0;
 let requestedLimit = 0;
 const selectiveSystem = {
   cameraDistanceSq: 0,
-  createGPUSelectiveReadbackRequests(limit) {
+  selectiveReadback(limit) {
     requestedLimit = limit;
-    return [{ slot: 0, generation: 0 }];
-  },
-  readbackGPUParticlesSelective() {
     readbackCalls += 1;
     return new Promise((resolve) => { resolveReadback = resolve; });
   },
@@ -88,3 +130,4 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 particleTrail.destroy();
 ribbonTrail.destroy();
 lightRenderer.destroy();
+meshRenderer.destroy();

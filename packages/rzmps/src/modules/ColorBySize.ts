@@ -11,10 +11,16 @@ export type SizeRange = [number, number] | { min: number; max: number };
 export interface ColorBySizeOptions extends Partial<ModuleOptions> {
     color: ValueByParameter<THREE.Color>;
     alpha: ValueByParameter<number>;
+    /** Particle-size interval mapped to zero through one; values outside it are clamped. */
     sizeRange: SizeRange;
 }
 
+/**
+ * Multiplies color and alpha using particle size normalized over sizeRange; two-value parameter ranges interpolate
+ * rather than randomly sample.
+ */
 class ColorBySize extends Module {
+  /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<ColorBySizeOptions> = {}) {
 
     super((particle: Particle) => {
