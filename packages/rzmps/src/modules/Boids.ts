@@ -103,9 +103,6 @@ class Boids extends Module {
   private separation = new THREE.Vector3();
   private affector = new THREE.Vector3();
   private toNode = new THREE.Vector3();
-  private sampleCenter = new THREE.Vector3();
-  private sampleVelocity = new THREE.Vector3();
-  private sampleDirection = new THREE.Vector3();
   private desiredVelocity = new THREE.Vector3();
   private currentDirection = new THREE.Vector3();
   private steeringAxis = new THREE.Vector3();
