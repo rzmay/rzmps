@@ -28,7 +28,7 @@ jobs:
         run: npm ci
 
       - name: Install preview browser
-        run: npx puppeteer browsers install chrome --install-deps
+        run: npx puppeteer browsers install chrome
 
       - name: Run core tests
         run: npm test
