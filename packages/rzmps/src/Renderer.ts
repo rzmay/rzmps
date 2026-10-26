@@ -6,7 +6,7 @@ import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
 import type { DynamicUntimedValue } from './types/DynamicValue';
 import type { ValueByParameter } from './types/ValueByParameter';
-import { MathUtils } from 'three';
+import { MathUtils, Vector3 } from 'three';
 import seedrandom from 'seedrandom';
 import evaluateDynamicNumber from './helpers/evaluateDynamicNumber';
 import evaluateByParameterNumber from './helpers/evaluateByParameterNumber';
@@ -179,8 +179,9 @@ export default abstract class Renderer {
       }
     } else if (this.compensation === CompensationMode.Size && system.quality > 0 && system.quality < 1) {
       for (let i = 0; i < visible.length; i++) {
-        if (i < originalCount) visible[i] = visible[i].clone();
-        visible[i].scale.multiplyScalar(1 / Math.sqrt(system.quality));
+        visible[i] = visible[i].shallowClone(visible[i].id, {
+          scale: visible[i].scale.clone().multiplyScalar(1 / Math.sqrt(system.quality)),
+        });
       }
     }
 
@@ -188,8 +189,7 @@ export default abstract class Renderer {
   }
 
   private generateChild(parent: Particle, ordinal: number, radius: number, applyDistanceScaling: boolean): Particle {
-    const child = parent.clone();
-    child.id = `${parent.id}[${ordinal}]`;
+    const child = parent.shallowClone(`${parent.id}[${ordinal}]`, { position: new Vector3() });
     child.parent = parent;
 
     const random = seedrandom(child.id);
@@ -208,7 +208,8 @@ export default abstract class Renderer {
         if (options.radialFalloff) t = options.radialFalloff(t);
         return typeof value === 'number' || value === undefined ? value ?? 1 : evaluateByParameterNumber(value, t);
       };
-      child.scale.multiplyScalar(multiplier(options.scale, options.randomizeScale ?? 0, 'scale'));
+      const scale = multiplier(options.scale, options.randomizeScale ?? 0, 'scale');
+      if (scale !== 1) child.scale = parent.scale.clone().multiplyScalar(scale);
       child.alpha *= multiplier(options.alpha, options.randomizeAlpha ?? 0, 'alpha');
     }
 

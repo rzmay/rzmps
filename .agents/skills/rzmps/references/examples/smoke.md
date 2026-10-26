@@ -33,8 +33,8 @@ The 10-second loop sustains a plume while particles live for 4.5 seconds. The sm
         initialValues: {
           lifetime: 4.5,
           speed: 0.55,
-          scale: new THREE.Vector3(2.5, 2.5, 2.5),
-          color: [new THREE.Color('#4e4d4a'), new THREE.Color('#a7a097')],
+          scale: 2.5,
+          color: ['#4e4d4a', '#a7a097'],
           alpha: 0.55,
           velocity: new THREE.Vector3(0, 0.75, 0),
         },
@@ -53,11 +53,11 @@ The 10-second loop sustains a plume while particles live for 4.5 seconds. The sm
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#ffffff'),
+        color: '#ffffff',
         alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
@@ -84,6 +84,8 @@ The 10-second loop sustains a plume while particles live for 4.5 seconds. The sm
 
 A cone of radius 0.75 and height 1.2 provides a broad source. Rate 36 and lifetime 4.5 imply about 162 live particles at steady emission. Upward velocity 0.75 and radial speed 0.18 favor a column with modest spread. Scale 2.5 overlaps the low-opacity, alpha-0.55 sprites into a continuous volume.
 
+Uniform scale values and color strings use the standard input shortcuts.
+
 
 [Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/smoke.js#L23)
 
@@ -98,8 +100,8 @@ A cone of radius 0.75 and height 1.2 provides a broad source. Rate 36 and lifeti
         initialValues: {
           lifetime: 4.5,
           speed: 0.55,
-          scale: new THREE.Vector3(2.5, 2.5, 2.5),
-          color: [new THREE.Color('#4e4d4a'), new THREE.Color('#a7a097')],
+          scale: 2.5,
+          color: ['#4e4d4a', '#a7a097'],
           alpha: 0.55,
           velocity: new THREE.Vector3(0, 0.75, 0),
         },
@@ -129,11 +131,11 @@ Noise is stronger horizontally (0.65) than vertically (0.35), producing rolling 
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#ffffff'),
+        color: '#ffffff',
         alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({

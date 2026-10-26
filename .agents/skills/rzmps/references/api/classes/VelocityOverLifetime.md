@@ -8,7 +8,8 @@
 
 # Class: VelocityOverLifetime
 
-Adds age-dependent linear, orbital, and radial motion before integration without accumulating the transient velocity offset.
+Adds age-dependent linear, orbital, and radial motion before integration without accumulating the transient velocity
+offset.
 
 ## Extends
 
@@ -61,18 +62,8 @@ _modify: ModuleUpdate;
 ### condition
 
 ```ts
-condition: (particle) => boolean;
+condition: ModuleCondition;
 ```
-
-#### Parameters
-
-##### particle
-
-[`Particle`](Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 
@@ -259,9 +250,7 @@ spatialEffects: SpatialEffect[] = [];
 ### spatialGridOptions?
 
 ```ts
-readonly optional spatialGridOptions?:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
 #### Inherited from

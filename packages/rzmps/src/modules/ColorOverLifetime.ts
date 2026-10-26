@@ -1,3 +1,4 @@
+import type { ColorInput } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -6,11 +7,14 @@ import evaluateDynamicColor from '../helpers/evaluateDynamicColor';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 
 export interface ColorOverLifetimeOptions extends Partial<ModuleOptions> {
-    color?: DynamicValue<THREE.Color>;
+    color?: DynamicValue<ColorInput>;
     alpha?: DynamicValue<number>;
 }
 
-/** Multiplies color and alpha by normalized-age values in the transient render phase; original particle color is restored next update. */
+/**
+ * Multiplies color and alpha by normalized-age values in the transient render phase; original particle color is
+ * restored next update.
+ */
 class ColorOverLifetime extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: ColorOverLifetimeOptions = {}) {

@@ -1,3 +1,4 @@
+import type { Vector3Input } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -9,7 +10,7 @@ import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
 
 export interface LimitVelocityOverLifetimeOptions extends Partial<ModuleOptions> {
     /** Absolute per-axis velocity limits, sampled by normalized particle age. */
-    limit: DynamicValue<THREE.Vector3>;
+    limit: DynamicValue<Vector3Input>;
     /** Fraction of excess velocity removed when over a limit, clamped from zero to one. */
     dampen: number;
     /** Velocity decay per second, optionally multiplied by size or speed. */

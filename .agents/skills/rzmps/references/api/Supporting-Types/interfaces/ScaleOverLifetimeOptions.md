@@ -19,20 +19,10 @@
 ### condition?
 
 ```ts
-optional condition?: (particle) => boolean;
+optional condition?: ModuleCondition;
 ```
 
 Additional per-particle predicate, evaluated after tag matching.
-
-#### Parameters
-
-##### particle
-
-[`Particle`](../../classes/Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 
@@ -112,7 +102,10 @@ Configures and implicitly enables the managed CPU ParticleOctree.
 optional priority?: number;
 ```
 
-Execution phase: negative is permanent before movement, 0–1 is transient before movement, 1 or greater is transient after movement.
+Execution phase:
+negative is permanent before movement,
+0–1 is transient before movement,
+1 or greater is transient after movement.
 
 #### Inherited from
 
@@ -143,7 +136,7 @@ Constructors selecting scene effects for this module during prepare.
 ### scalarAcceleration
 
 ```ts
-scalarAcceleration: DynamicValue<Vector3>;
+scalarAcceleration: DynamicValue<Vector3Input>;
 ```
 
 ***
@@ -153,7 +146,7 @@ scalarAcceleration: DynamicValue<Vector3>;
 ### scalarVelocity
 
 ```ts
-scalarVelocity: DynamicValue<Vector3>;
+scalarVelocity: DynamicValue<Vector3Input>;
 ```
 
 ***
@@ -163,7 +156,7 @@ scalarVelocity: DynamicValue<Vector3>;
 ### scale
 
 ```ts
-scale: DynamicValue<Vector3>;
+scale: DynamicValue<Vector3Input>;
 ```
 
 ***
@@ -210,21 +203,19 @@ Explicit module effect collection; supplying an empty array suppresses automatic
 
 ***
 
-<a id="spatialgrid"></a>
+<a id="spatialgridoptions"></a>
 
-### spatialGrid?
+### spatialGridOptions?
 
 ```ts
-optional spatialGrid?:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
-Configures a system-owned grid or supplies an explicitly caller-owned grid.
+Configures and implicitly enables the managed GPU ParticleSpatialGrid.
 
 #### Inherited from
 
-[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`spatialGrid`](../../interfaces/ModuleOptions.md#spatialgrid)
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`spatialGridOptions`](../../interfaces/ModuleOptions.md#spatialgridoptions)
 
 ***
 

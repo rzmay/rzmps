@@ -32,6 +32,21 @@ Dynamic values are supported for numbers, vectors, and colors where the option
 type uses `DynamicValue<number>`, `DynamicValue<THREE.Vector3>`, or
 `DynamicValue<THREE.Color>`.
 
+Color inputs accept `THREE.Color`, hex numbers, and CSS color strings (the same values
+as `new THREE.Color(...)`). Uniform-axis inputs such as scale, scale velocity/acceleration,
+noise strength, and velocity limits also accept a number: `scale: 2` means
+`new THREE.Vector3(2, 2, 2)`. Positions and directional inputs still require vectors.
+These shortcuts work inside callbacks, ranges, and sets too, including GPU processing;
+particle state always contains `THREE.Color` and `THREE.Vector3` objects.
+
+```ts
+initialValues: {
+  color: new Set(["#ff8844", 0xffcc00]),
+  scale: [0.1, 0.5],
+}
+// Lifetime modifier: scale: (t) => 1 + t
+```
+
 The [curves](https://www.npmjs.com/package/curves) package was designed and
 built to streamline functional values by defining and evaluating eased curves,
 similar to Unity's AnimationCurves with modifiers akin to Blender's FCurve

@@ -8,7 +8,8 @@
 
 # Class: Boids
 
-Flocking steering using spatial aggregates and tagged affectors; prepare once per system update before modifying particles.
+Flocking steering using spatial aggregates and tagged affectors; prepare once per system update before modifying
+particles.
 
 ## Extends
 
@@ -101,18 +102,8 @@ cohesionWeight: DynamicValue<number>;
 ### condition
 
 ```ts
-condition: (particle) => boolean;
+condition: ModuleCondition;
 ```
-
-#### Parameters
-
-##### particle
-
-[`Particle`](Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 
@@ -215,10 +206,10 @@ optional octree?: ParticleOctree<BoidAggregate>;
 ### octreeAggregator
 
 ```ts
-readonly octreeAggregator: OctreeAggregator<unknown>;
+readonly octreeAggregator: OctreeAggregator<BoidAggregate>;
 ```
 
-#### Inherited from
+#### Overrides
 
 [`Module`](Module.md).[`octreeAggregator`](Module.md#octreeaggregator)
 
@@ -229,10 +220,10 @@ readonly octreeAggregator: OctreeAggregator<unknown>;
 ### octreeOptions
 
 ```ts
-octreeOptions: OctreeConfig;
+readonly octreeOptions: Partial<OctreeConfig>;
 ```
 
-#### Overrides
+#### Inherited from
 
 [`Module`](Module.md).[`octreeOptions`](Module.md#octreeoptions)
 
@@ -324,27 +315,15 @@ spatialEffects: SpatialEffect[] = [];
 
 ***
 
-<a id="spatialgrid"></a>
-
-### spatialGrid?
-
-```ts
-optional spatialGrid?: ParticleSpatialGrid;
-```
-
-***
-
 <a id="spatialgridoptions"></a>
 
-### spatialGridOptions
+### spatialGridOptions?
 
 ```ts
-spatialGridOptions:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
-#### Overrides
+#### Inherited from
 
 [`Module`](Module.md).[`spatialGridOptions`](Module.md#spatialgridoptions)
 
@@ -607,7 +586,7 @@ Returns the managed CPU structure after prepare(), when enabled.
 ### getParticleSpatialGrid()
 
 ```ts
-getParticleSpatialGrid(particleSystem): ParticleSpatialGrid;
+getParticleSpatialGrid(particleSystem): ParticleSpatialGrid | undefined;
 ```
 
 Dependency hook used by function-defined and class-based GPU neighbor modules.
@@ -620,9 +599,9 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 #### Returns
 
-[`ParticleSpatialGrid`](ParticleSpatialGrid.md)
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md) \| `undefined`
 
-#### Overrides
+#### Inherited from
 
 [`Module`](Module.md).[`getParticleSpatialGrid`](Module.md#getparticlespatialgrid)
 

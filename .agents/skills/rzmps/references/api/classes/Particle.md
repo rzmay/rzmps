@@ -8,7 +8,7 @@
 
 # Class: Particle
 
-Mutable particle state with separate birth and cached permanent values; do not share mutable values between particles.
+Mutable particle state with separate birth and cached permanent values.
 
 ## Constructors
 
@@ -386,6 +386,8 @@ cacheValues(values): void;
 clone(): Particle;
 ```
 
+Copies current state with independent vectors, color, tags, and birth snapshot.
+
 #### Returns
 
 `Particle`
@@ -466,6 +468,34 @@ restore(): void;
 #### Returns
 
 `void`
+
+***
+
+<a id="shallowclone"></a>
+
+### shallowClone()
+
+```ts
+shallowClone(id, overrides?): Particle;
+```
+
+Creates a render-only view without running the constructor or cloning attributes.
+Unspecified references, including simulation snapshots, remain shared and must be treated as read-only.
+Override objects are used directly; clone() still provides independent particle attributes.
+
+#### Parameters
+
+##### id
+
+`string`
+
+##### overrides?
+
+`Partial`\<[`ParticleOptions`](../Supporting-Types/interfaces/ParticleOptions.md)\> = `{}`
+
+#### Returns
+
+`Particle`
 
 ***
 

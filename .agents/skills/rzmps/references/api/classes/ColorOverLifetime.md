@@ -8,7 +8,8 @@
 
 # Class: ColorOverLifetime
 
-Multiplies color and alpha by normalized-age values in the transient render phase; original particle color is restored next update.
+Multiplies color and alpha by normalized-age values in the transient render phase; original particle color is
+restored next update.
 
 ## Extends
 
@@ -61,18 +62,8 @@ _modify: ModuleUpdate;
 ### condition
 
 ```ts
-condition: (particle) => boolean;
+condition: ModuleCondition;
 ```
-
-#### Parameters
-
-##### particle
-
-[`Particle`](Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 
@@ -259,9 +250,7 @@ spatialEffects: SpatialEffect[] = [];
 ### spatialGridOptions?
 
 ```ts
-readonly optional spatialGridOptions?:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
 #### Inherited from

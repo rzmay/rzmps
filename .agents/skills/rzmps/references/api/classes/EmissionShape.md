@@ -246,7 +246,7 @@ Reports whether this geometry exposes the attributes required by GPU emission.
 getPoint(overrideSource?): object;
 ```
 
-Samples position and normal in parent space; volume rejection falls back to surface sampling after a bounded number of attempts.
+Samples position and normal in parent space; falls back to surface sampling after too many attempts.
 
 #### Parameters
 

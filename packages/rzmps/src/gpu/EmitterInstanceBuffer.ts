@@ -130,7 +130,10 @@ export class GPUEmitterInstanceRuntime {
   }
 
   addRequestCount(value: Node<'uint'> | number): void {
-    atomicAdd(this.counter(EmitterRuntimeCounter.RequestedParticles), typeof value === 'number' ? uint(value) : value);
+    atomicAdd(this.counter(EmitterRuntimeCounter.RequestedParticles), typeof value === 'number'
+      ? uint(value)
+      : value
+    );
   }
 
   reserveRequestCount(value: Node<'uint'> | number): Node<'uint'> {

@@ -8,7 +8,7 @@
 
 # Class: MeshRenderer
 
-Instances shared mesh geometry and material across particles; geometry complexity multiplies by visible population.
+Instances shared mesh geometry and material across particles; geometry complexity multiplies by population.
 
 ## Extends
 

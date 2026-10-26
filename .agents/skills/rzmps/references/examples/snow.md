@@ -34,8 +34,8 @@ The snow is positioned five units above the origin. A 10-second loop with prewar
         initialValues: {
           lifetime: 16,
           speed: 1,
-          scale: new THREE.Vector3(0.25, 0.25, 0.25),
-          color: new THREE.Color('#e9f7ff'),
+          scale: 0.25,
+          color: '#e9f7ff',
           alpha: 0.9,
           velocity: new THREE.Vector3(0, -0.35, 0),
         },
@@ -99,8 +99,8 @@ A 30×0.1×30 box distributes snow across a wide area. Rate 70 can sustain about
         initialValues: {
           lifetime: 16,
           speed: 1,
-          scale: new THREE.Vector3(0.25, 0.25, 0.25),
-          color: new THREE.Color('#e9f7ff'),
+          scale: 0.25,
+          color: '#e9f7ff',
           alpha: 0.9,
           velocity: new THREE.Vector3(0, -0.35, 0),
         },

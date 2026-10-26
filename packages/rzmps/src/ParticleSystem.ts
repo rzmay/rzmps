@@ -35,7 +35,6 @@ import {
   GPUCollisionEventBufferState,
   GPUEventBufferState,
   type GPUEventReadbackBatch,
-  type GPUEventWriter,
 } from './gpu/EventBuffer';
 import {
   GPUSelectiveReadbackState,
@@ -584,7 +583,7 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _simulationSpace: SimulationSpace = SimulationSpace.Local;
-  /** Coordinate space of particle state; assigning a new space converts existing particles and propagates to subsystems. */
+  /** Coordinate space of particle state; assigning a new space converts particles and propagates to subsystems. */
   get simulationSpace(): SimulationSpace {
     return this._simulationSpace;
   }
@@ -624,7 +623,7 @@ class ParticleSystem extends THREE.Object3D {
   /** Active renderer captured by the context object during rendering. */
   get sceneRenderer() { return this._renderer; }
   private _cameraDistanceSq = Number.MAX_SAFE_INTEGER;
-  /** Squared camera distance used for component LOD; explicit advancement refreshes it without skipping system steps. */
+  /** Squared camera distance used for component LOD; explicit advancement refreshes it without skipping steps. */
   get cameraDistanceSq(): number { return this._cameraDistanceSq; }
 
   private deltaTime = 0;
@@ -1833,7 +1832,10 @@ class ParticleSystem extends THREE.Object3D {
               velocity: input.options.inheritVelocity,
               scale: input.options.inheritScale,
             },
-            resolveParentParticle: (claimIndex) => parentBuffers.storage.createParticle(resolveParentSlot(claimIndex), true),
+            resolveParentParticle: (claimIndex) => parentBuffers.storage.createParticle(
+              resolveParentSlot(claimIndex),
+              true
+            ),
             resolveEmissionTime: (claimIndex) => {
               const parentSlot = resolveParentSlot(claimIndex);
               if (input.options.inheritLifetime > 0) {
@@ -2420,7 +2422,8 @@ class ParticleSystem extends THREE.Object3D {
   private _getGPUSpatialRegistrySignature(): string {
     const registry = this._gpuSpatialRegistry;
     if (!registry || registry.records.length <= 0) return 'spatial:none';
-    return `spatial:${registry.version}:${registry.signature}:${registry.records.map((record) => record.effect.version).join(',')}`;
+    const records = registry.records.map((record) => record.effect.version).join(',');
+    return `spatial:${registry.version}:${registry.signature}:${records}`;
   }
 
   private _getGPUModifierSignature(modifier: Module | SpatialEffect): string {
@@ -3002,6 +3005,7 @@ class ParticleSystem extends THREE.Object3D {
     this._gpuTagRegistry.clear();
     this._gpuTagOverflow = false;
 
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let root: ParticleSystem = this;
     while (root._subSystemParent) root = root._subSystemParent;
 
@@ -4068,7 +4072,7 @@ class ParticleSystem extends THREE.Object3D {
   */
 
   // Start emitting
-  /** Starts or restarts emission from time zero, resets emitter contexts, and clears pause/end flags; existing particles are retained. */
+  /** Starts or restarts emission from time zero; existing particles are retained. */
   public start(children: boolean = true): void {
     const now = Date.now();
 
@@ -4100,8 +4104,7 @@ class ParticleSystem extends THREE.Object3D {
     this._prewarm();
   }
 
-  // Pause emission and simulation
-  /** Freezes emission and simulation while playing; propagates to owned subsystems and optionally independent child systems. */
+  /** Freezes emission and simulation while playing; propagates to subsystems and optionally child systems. */
   public pause(children: boolean = true): void {
     if (!this._playing || this._paused) return;
     this._paused = true;
@@ -4113,8 +4116,7 @@ class ParticleSystem extends THREE.Object3D {
     if (children) this._iterateChildren((child) => child.pause(false));
   }
 
-  // Stop emission and optionally clear particles
-  /** Stops emission and resets prewarm state. Retained particles continue updating; clearParticles chooses whether to remove them immediately. */
+  /** Stops emission and resets prewarm state. clearParticles chooses whether to remove them immediately. */
   public stop(clearParticles: boolean, children: boolean = true): void {
     this._playing = false;
     this._paused = false;
@@ -4151,8 +4153,7 @@ class ParticleSystem extends THREE.Object3D {
     if (children) this._iterateChildren((child) => child.reset(false));
   }
 
-  // Clear particles
-  /** Clears particles and renderer contents without destroying the system; optionally includes independent child systems. */
+  /** Clears particles and renderer contents; optionally includes independent child systems. */
   public clearParticles(children: boolean = true): void {
     const gpuRenderer = isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined;
     this._gpuLifecycleGeneration += 1;
@@ -4373,7 +4374,7 @@ class ParticleSystem extends THREE.Object3D {
     this.getRendererParent().add(object);
   }
 
-  /** Transfers a child to this parent, resets its local transform, and shares simulation space. Continuous emission defaults on unless an event trigger is selected. */
+  /** Adds a system to this system as a subsystem, using this system's particles as its emission points. */
   public addSubSystem(subSystem: ParticleSystem, options: Partial<SubSystemOptions>): this {
     // No adding recursive self
     if (subSystem === this) return this;

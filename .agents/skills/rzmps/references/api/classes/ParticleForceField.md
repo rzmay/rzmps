@@ -567,7 +567,7 @@ get version(): number;
 ### bakedFieldGPU()
 
 ```ts
-bakedFieldGPU(particle, context): Node<"float">;
+bakedFieldGPU(particle): Node<"float">;
 ```
 
 #### Parameters
@@ -575,10 +575,6 @@ bakedFieldGPU(particle, context): Node<"float">;
 ##### particle
 
 [`GPUParticleLike`](../interfaces/GPUParticleLike.md)
-
-##### context
-
-[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
 
 #### Returns
 

@@ -14,7 +14,10 @@ export interface RotationBySizeOptions extends Partial<ModuleOptions> {
     sizeRange: SizeRange;
 }
 
-/** Adds angular channels using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Adds angular channels using particle size normalized over sizeRange; two-value parameter ranges interpolate rather
+ * than randomly sample.
+ */
 class RotationBySize extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<RotationBySizeOptions> = {}) {

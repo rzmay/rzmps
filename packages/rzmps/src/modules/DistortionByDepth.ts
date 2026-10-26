@@ -13,7 +13,10 @@ export interface DistortionByDepthOptions extends Partial<ModuleOptions> {
   depthRange?: [number, number];
 }
 
-/** Multiplies distortion strength using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies distortion strength using distance from the captured camera, normalized over depthRange; two-value
+ * parameter ranges interpolate rather than randomly sample.
+ */
 class DistortionByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');

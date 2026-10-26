@@ -47,7 +47,7 @@ Artistic render-only copies, generated before LOD children.
 ### colorOverLifetime
 
 ```ts
-colorOverLifetime: DynamicValue<Color>;
+colorOverLifetime: DynamicValue<ColorRepresentation>;
 ```
 
 Color multiplier based on source particle age.
@@ -59,7 +59,7 @@ Color multiplier based on source particle age.
 ### colorOverTrail
 
 ```ts
-colorOverTrail: DynamicValue<Color>;
+colorOverTrail: DynamicValue<ColorRepresentation>;
 ```
 
 Color multiplier along normalized trail length.

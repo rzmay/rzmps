@@ -12,7 +12,10 @@ export interface MassBySizeOptions extends Partial<ModuleOptions> {
     sizeRange?: SizeRange;
 }
 
-/** Multiplies particle mass using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies particle mass using particle size normalized over sizeRange; two-value parameter ranges interpolate
+ * rather than randomly sample.
+ */
 class MassBySize extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<MassBySizeOptions> = {}) {

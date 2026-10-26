@@ -1,3 +1,4 @@
+import type { ColorInput } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -9,14 +10,17 @@ import evaluateByParameterColor from '../helpers/evaluateByParameterColor';
 import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
 
 export interface ColorByDepthOptions extends Partial<ModuleOptions> {
-  color: ValueByParameter<THREE.Color>;
+  color: ValueByParameter<ColorInput>;
   alpha: ValueByParameter<number>;
 
   /** Camera-distance interval mapped to zero through one; omitted endpoints use camera near/far when available. */
   depthRange?: [number, number];
 }
 
-/** Multiplies color and alpha using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies color and alpha using distance from the captured camera, normalized over depthRange; two-value parameter
+ * ranges interpolate rather than randomly sample.
+ */
 class ColorByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');

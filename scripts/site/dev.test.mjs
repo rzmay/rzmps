@@ -5,6 +5,66 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { startSiteDev } from './dev.mjs';
+import { createServer } from 'node:net';
+
+test('an occupied demo port selects another port and keeps docs HMR on the public port', { timeout: 60000 }, async () => {
+  const occupied = createServer();
+  await new Promise(resolve => occupied.listen(0, '0.0.0.0', resolve));
+  const requestedPort = occupied.address().port;
+  let site;
+  try {
+    site = await startSiteDev({ port: requestedPort, host: '127.0.0.1', prebundle: false });
+    const actualPort = site.demo.httpServer.address().port;
+    assert.notEqual(actualPort, requestedPort);
+    assert.equal(occupied.listening, true);
+    assert.equal(site.docs.config.server.hmr.clientPort, actualPort);
+    const origin = `http://127.0.0.1:${actualPort}`;
+    assert.equal((await fetch(origin + '/')).status, 200);
+    assert.equal((await fetch(origin + '/docs/')).status, 200);
+  } finally {
+    await site?.close();
+    await new Promise((resolve, reject) => occupied.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+test('the demo serves requests while previews are prepared, before docs start', { timeout: 60000 }, async () => {
+  let demoServer;
+  const site = await startSiteDev({
+    port: 0, host: '127.0.0.1', prebundle: false,
+    prepareDocs: async demo => {
+      demoServer = demo;
+      const origin = `http://127.0.0.1:${demo.httpServer.address().port}`;
+      const response = await fetch(origin + '/');
+      assert.equal(response.status, 200);
+      assert.match(await response.text(), /src\/index\.jsx/);
+      const pending = await fetch(origin + '/docs/');
+      assert.equal(pending.status, 503);
+      assert.equal(pending.headers.get('retry-after'), '5');
+      assert.match(await pending.text(), /Documentation is starting/);
+    },
+  });
+  try {
+    assert.equal(site.demo, demoServer);
+    const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;
+    const response = await fetch(origin + '/docs/');
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /vitepress/);
+  } finally { await site.close(); }
+});
+
+test('preview preparation failure closes the listening demo', { timeout: 60000 }, async () => {
+  let demoServer;
+  const failure = new Error('Preview generation failed');
+  await assert.rejects(startSiteDev({
+    port: 0, host: '127.0.0.1', prebundle: false,
+    prepareDocs: async demo => {
+      demoServer = demo.httpServer;
+      assert.equal(demoServer.listening, true);
+      throw failure;
+    },
+  }), error => error === failure);
+  assert.equal(demoServer.listening, false);
+});
 
 test('combined development serves the demo at root and proxies only docs paths', { timeout: 60000 }, async () => {
   const site = await startSiteDev({ port: 0, host: '127.0.0.1', prebundle: false });

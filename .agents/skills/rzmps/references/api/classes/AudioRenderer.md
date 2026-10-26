@@ -8,7 +8,7 @@
 
 # Class: AudioRenderer
 
-Positional particle audio and lifecycle cues; requires browser audio playback permission and scene camera context.
+Positional particle audio and lifecycle cues; requires audio playback permission and scene camera context.
 
 ## Extends
 

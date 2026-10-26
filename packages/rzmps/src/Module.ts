@@ -26,6 +26,13 @@ export type ModuleUpdate = (
   octree?: ParticleOctree<unknown>,
 ) => void;
 
+export type ModuleCondition = (
+  particle: Particle,
+  deltaTime: number,
+  particleSystem?: ParticleSystem,
+  octree?: ParticleOctree<unknown>,
+) => boolean;
+
 export type ModuleGPUUpdate = (
   /** Shader-node particle view; mutate fields through TSL assignment methods. */
   particle: GPUParticleLike,
@@ -47,14 +54,18 @@ export type SpatialEffectConstructor<T extends SpatialEffect = SpatialEffect> = 
 
 export interface ModuleOptions {
   // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
-  /** Execution phase: negative is permanent before movement, 0–1 is transient before movement, 1 or greater is transient after movement. */
+  /** Execution phase:
+   * negative is permanent before movement,
+   * 0–1 is transient before movement,
+   * 1 or greater is transient after movement.
+  */
   priority: number | Priority;
 
   /** Restricts processing to particles sharing a selected tag; omission accepts every tag. */
 
   tags: StrictMultiple<Tag>;
   /** Additional per-particle predicate, evaluated after tag matching. */
-  condition: (particle: Particle) => boolean;
+  condition: ModuleCondition;
   /** Optional TSL condition callback for GPU processing. */
   conditionGPU: ModuleGPUCondition | null;
   /** TSL modifier used when GPU processing is active. */
@@ -73,8 +84,8 @@ export interface ModuleOptions {
   octreeAggregator: OctreeAggregator<unknown>;
   /** Enables a managed GPU ParticleSpatialGrid with default options. */
   useSpatialGrid: boolean;
-  /** Configures a system-owned grid or supplies an explicitly caller-owned grid. */
-  spatialGrid: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
+  /** Configures and implicitly enables the managed GPU ParticleSpatialGrid. */
+  spatialGridOptions: Partial<ParticleSpatialGridOptions>;
 }
 
 /** Per-particle modifier with priority phases, tag filtering, and a once-per-update preparation hook. */
@@ -94,7 +105,7 @@ export default class Module {
   public dependents: Module[] = [];
 
   tags?: Tag[];
-  condition: (particle: Particle) => boolean;
+  condition: ModuleCondition;
   conditionGPU?: ModuleGPUCondition;
   private readonly _hasCustomCondition: boolean;
   spatialEffects: SpatialEffect[] = [];
@@ -106,8 +117,8 @@ export default class Module {
   readonly octreeOptions: Partial<OctreeConfig>;
   readonly octreeAggregator: OctreeAggregator<unknown>;
   readonly useSpatialGrid: boolean;
-  readonly spatialGridOptions?: ParticleSpatialGrid | Partial<ParticleSpatialGridOptions>;
-  protected particleSpatialGrid?: ParticleSpatialGrid;
+  spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
+  protected spatialGrid?: ParticleSpatialGrid;
 
   priority = Priority.Permanent;
   modifyGPU: ModuleGPUUpdate;
@@ -145,8 +156,8 @@ export default class Module {
     this.useOctree = options.useOctree ?? options.octreeOptions !== undefined;
     this.octreeOptions = options.octreeOptions ?? {};
     this.octreeAggregator = options.octreeAggregator ?? createDefaultOctreeAggregator();
-    this.useSpatialGrid = options.useSpatialGrid ?? options.spatialGrid !== undefined;
-    this.spatialGridOptions = options.spatialGrid;
+    this.useSpatialGrid = options.useSpatialGrid ?? options.spatialGridOptions !== undefined;
+    this.spatialGridOptions = options.spatialGridOptions;
   }
 
   /** Whether both modification and any custom condition have GPU implementations. */
@@ -175,12 +186,11 @@ export default class Module {
     particles.filter((p) => (
       p.alive
       && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
-      && this.condition(p)
+      && this.condition(p, deltaTime, particleSystem, this.octree)
     ))
       .forEach((p) => this._modify(p, deltaTime, particleSystem, this.octree));
   }
 
-  // Process into array including self and dependents
   /** Flattens dependents before this module; priority sorting still determines execution phases. */
   public withDependents(): Module[] {
     // Run dependents before this
@@ -190,9 +200,8 @@ export default class Module {
     ]
   }
 
-  // Optional preparation hook called once-per-update rather than per particle
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   /** Prepares shared work once per system update; the base implementation collects matching spatial effects. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public prepare(particleSystem: ParticleSystem, deltaTime: number) {
     this.prepareSpatialEffects(particleSystem);
     if (!this.useOctree || particleSystem.isGPUProcessingActive) return;
@@ -205,13 +214,14 @@ export default class Module {
 
     if (!this.octree) {
       this.octree = new ParticleOctree(
-        { ...this.octreeOptions, bounds: bounds?.clone() },
+        { tags: this.tags, ...this.octreeOptions, bounds: bounds?.clone() },
         this.octreeAggregator,
       );
     } else if (!this.octreeOptions.bounds && bounds) {
       this.octree.setBounds(bounds);
     }
-    this.octree.rebuild(particleSystem.particles, this.tags);
+    this.octree.tags = this.octreeOptions.tags ?? this.tags;
+    this.octree.rebuild(particleSystem.particles);
   }
 
   /** Returns the managed CPU structure after prepare(), when enabled. */
@@ -222,17 +232,16 @@ export default class Module {
   /** Dependency hook used by function-defined and class-based GPU neighbor modules. */
   public getParticleSpatialGrid(particleSystem: ParticleSystem): ParticleSpatialGrid | undefined {
     if (!this.useSpatialGrid) return undefined;
-    this.particleSpatialGrid ??= particleSystem.acquireParticleSpatialGrid(
+    this.spatialGrid ??= particleSystem.acquireParticleSpatialGrid(
       this.spatialGridOptions ?? {},
     );
-    return this.particleSpatialGrid;
+    return this.spatialGrid;
   }
 
-  // Optional clean up hook for modules that require it
   /** Releases managed CPU and GPU spatial acceleration references. */
   public cleanup() {
     this.octree = undefined;
-    this.particleSpatialGrid = undefined;
+    this.spatialGrid = undefined;
   }
 
   protected prepareSpatialEffects(particleSystem: ParticleSystem): void {

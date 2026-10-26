@@ -8,7 +8,8 @@
 
 # Class: TransformByNoise
 
-Adds three decorrelated noise channels to velocity using delta seconds; supply strength for the desired per-axis response.
+Adds three decorrelated noise channels to velocity using delta seconds; supply strength for the desired per-axis
+response.
 
 ## Extends
 
@@ -61,18 +62,8 @@ _modify: ModuleUpdate;
 ### condition
 
 ```ts
-condition: (particle) => boolean;
+condition: ModuleCondition;
 ```
-
-#### Parameters
-
-##### particle
-
-[`Particle`](Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 
@@ -343,9 +334,7 @@ spatialEffects: SpatialEffect[] = [];
 ### spatialGridOptions?
 
 ```ts
-readonly optional spatialGridOptions?:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
 #### Inherited from

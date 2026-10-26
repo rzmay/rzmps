@@ -1,3 +1,6 @@
+import type { ColorInput, Vector3Input } from '../types/ValueInput';
+import acceptColor from './acceptColor';
+import acceptVector3 from './acceptVector3';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import { float, int, mix, uniformArray, vec3 } from 'three/tsl';
@@ -28,14 +31,14 @@ export function evaluateByParameterNumberGPU(
 }
 
 export function evaluateByParameterVectorGPU(
-  value: ValueByParameter<THREE.Vector3> | undefined,
+  value: ValueByParameter<Vector3Input> | undefined,
   parameter: Node<'float'>,
   fallback = new THREE.Vector3(),
 ): Node<'vec3'> {
   if (value === undefined) return vec3(fallback).mul(parameter);
   if (isTSLNode(value)) return value as Node<'vec3'>;
   if (typeof value === 'function') return sampleParameterVectorGPU(value, parameter);
-  if (value instanceof THREE.Vector3) return vec3(value).mul(parameter);
+  if (value instanceof THREE.Vector3 || typeof value === 'number') return vec3(acceptVector3(value)).mul(parameter);
   if (Array.isArray(value)) {
     return mix(
       resolveParameterVectorEndpointGPU(value[0], parameter, fallback),
@@ -47,14 +50,17 @@ export function evaluateByParameterVectorGPU(
 }
 
 export function evaluateByParameterColorGPU(
-  value: ValueByParameter<THREE.Color> | undefined,
+  value: ValueByParameter<ColorInput> | undefined,
   parameter: Node<'float'>,
   fallback = new THREE.Color(),
 ): Node<'vec3'> {
   if (value === undefined) return vec3(fallback.r, fallback.g, fallback.b).mul(parameter);
   if (isTSLNode(value)) return value as Node<'vec3'>;
   if (typeof value === 'function') return sampleParameterColorGPU(value, parameter);
-  if (value instanceof THREE.Color) return vec3(value.r, value.g, value.b).mul(parameter);
+  if (value instanceof THREE.Color || typeof value === 'string' || typeof value === 'number') {
+    const color = acceptColor(value);
+    return vec3(color.r, color.g, color.b).mul(parameter);
+  }
   if (Array.isArray(value)) {
     return mix(
       resolveParameterColorEndpointGPU(value[0], parameter, fallback),
@@ -79,27 +85,30 @@ function resolveParameterNumberEndpointGPU(
 }
 
 function resolveParameterVectorEndpointGPU(
-  value: ValueByParameter<THREE.Vector3> | undefined,
+  value: ValueByParameter<Vector3Input> | undefined,
   parameter: Node<'float'>,
   fallback = new THREE.Vector3(),
 ): Node<'vec3'> {
   if (value === undefined) return vec3(fallback);
   if (isTSLNode(value)) return value as Node<'vec3'>;
   if (typeof value === 'function') return sampleParameterVectorGPU(value, parameter);
-  if (value instanceof THREE.Vector3) return vec3(value);
+  if (value instanceof THREE.Vector3 || typeof value === 'number') return vec3(acceptVector3(value));
   if (Array.isArray(value)) return evaluateByParameterVectorGPU(value, parameter, fallback);
   throw new Error('GPU parameter vectors must be constants or [constant, constant] ranges.');
 }
 
 function resolveParameterColorEndpointGPU(
-  value: ValueByParameter<THREE.Color> | undefined,
+  value: ValueByParameter<ColorInput> | undefined,
   parameter: Node<'float'>,
   fallback = new THREE.Color(),
 ): Node<'vec3'> {
   if (value === undefined) return vec3(fallback.r, fallback.g, fallback.b);
   if (isTSLNode(value)) return value as Node<'vec3'>;
   if (typeof value === 'function') return sampleParameterColorGPU(value, parameter);
-  if (value instanceof THREE.Color) return vec3(value.r, value.g, value.b);
+  if (value instanceof THREE.Color || typeof value === 'string' || typeof value === 'number') {
+    const color = acceptColor(value);
+    return vec3(color.r, color.g, color.b);
+  }
   if (Array.isArray(value)) return evaluateByParameterColorGPU(value, parameter, fallback);
   throw new Error('GPU parameter colors must be constants or [constant, constant] ranges.');
 }
@@ -115,7 +124,7 @@ function sampleParameterNumberGPU(
 }
 
 function sampleParameterVectorGPU(
-  value: ValueByParameter<THREE.Vector3>,
+  value: ValueByParameter<Vector3Input>,
   parameter: Node<'float'>,
 ): Node<'vec3'> {
   return sampleVectorArrayGPU(
@@ -125,7 +134,7 @@ function sampleParameterVectorGPU(
 }
 
 function sampleParameterColorGPU(
-  value: ValueByParameter<THREE.Color>,
+  value: ValueByParameter<ColorInput>,
   parameter: Node<'float'>,
 ): Node<'vec3'> {
   const samples = sampleParameterValue(value, evaluateByParameterColor)
@@ -133,9 +142,9 @@ function sampleParameterColorGPU(
   return sampleVectorArrayGPU(samples, parameter);
 }
 
-function sampleParameterValue<T>(
-  value: ValueByParameter<T>,
-  evaluate: (value: ValueByParameter<T>, parameter: number) => T,
+function sampleParameterValue<T, Input = T>(
+  value: ValueByParameter<Input>,
+  evaluate: (value: ValueByParameter<Input>, parameter: number) => T,
 ): T[] {
   const resolution = Math.max(2, Math.floor(ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION));
   return Array.from({ length: resolution }, (_unused, index) => {

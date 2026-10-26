@@ -74,6 +74,7 @@ Start with Renderer, then represent particles as sprites, meshes, trails, lights
 - [TrailRenderer](classes/TrailRenderer.md)
 - [LightRenderer](classes/LightRenderer.md)
 - [AudioRenderer](classes/AudioRenderer.md)
+- [DecalRenderer](classes/DecalRenderer.md)
 
 ## Spatial Effects
 
@@ -127,6 +128,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [ColorBySizeOptions](Supporting-Types/interfaces/ColorBySizeOptions.md)
 - [ColorBySpeedOptions](Supporting-Types/interfaces/ColorBySpeedOptions.md)
 - [ColorOverLifetimeOptions](Supporting-Types/interfaces/ColorOverLifetimeOptions.md)
+- [DecalRendererOptions](interfaces/DecalRendererOptions.md)
 - [DistortionByDepthOptions](Supporting-Types/interfaces/DistortionByDepthOptions.md)
 - [DistortionBySizeOptions](Supporting-Types/interfaces/DistortionBySizeOptions.md)
 - [DistortionBySpeedOptions](Supporting-Types/interfaces/DistortionBySpeedOptions.md)
@@ -220,6 +222,9 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [BoidParticleAffectorAggregate](Supporting-Types/type-aliases/BoidParticleAffectorAggregate.md)
 - [CollisionHit](interfaces/CollisionHit.md)
 - [CollisionQuery](interfaces/CollisionQuery.md)
+- [ColorInput](type-aliases/ColorInput.md)
+- [DecalDirectionSampler](type-aliases/DecalDirectionSampler.md)
+- [DecalHitSelection](type-aliases/DecalHitSelection.md)
 - [EmissionContext](interfaces/EmissionContext.md)
 - [GPUAllocationDiagnostics](interfaces/GPUAllocationDiagnostics.md)
 - [GPUCollisionEventNodeRecord](Supporting-Types/interfaces/GPUCollisionEventNodeRecord.md)
@@ -259,6 +264,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [GPUSystemScheduleNode](interfaces/GPUSystemScheduleNode.md)
 - [ICollisionBackend](interfaces/ICollisionBackend.md)
 - [InitialParticleValues](Supporting-Types/interfaces/InitialParticleValues.md)
+- [ModuleCondition](type-aliases/ModuleCondition.md)
 - [ModuleGPUCondition](type-aliases/ModuleGPUCondition.md)
 - [ModuleOctreeAggregate](interfaces/ModuleOctreeAggregate.md)
 - [Multiple](Supporting-Types/type-aliases/Multiple.md)
@@ -284,6 +290,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [StrictMultiple](Supporting-Types/type-aliases/StrictMultiple.md)
 - [Tag](Supporting-Types/type-aliases/Tag.md)
 - [ThreeGPUCollisionBackendStats](interfaces/ThreeGPUCollisionBackendStats.md)
+- [Vector3Input](type-aliases/Vector3Input.md)
 - [VolumeSample](interfaces/VolumeSample.md)
 - [VolumeSampleCount](type-aliases/VolumeSampleCount.md)
 

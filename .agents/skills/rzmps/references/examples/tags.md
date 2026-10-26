@@ -36,8 +36,8 @@ The 10-second loop shares emission and zero-gravity integration between cubes an
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.1, 0.1, 0.1),
-            new THREE.Vector3(0.25, 0.25, 0.25),
+            0.1,
+            0.25,
           ],
           alpha: 1,
         },
@@ -56,7 +56,7 @@ The 10-second loop shares emission and zero-gravity integration between cubes an
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
         tags: 'spheres'
       }),
@@ -90,7 +90,7 @@ The 10-second loop shares emission and zero-gravity integration between cubes an
 
 ## Emitters
 
-The emitter assigns spheres and cubes with tagSelection distribute, alternating groups instead of giving every particle both tags. Rate 12 means roughly six per second in each group. Scale 0.1–0.25 and a discrete four-color Set vary appearance while keeping particle motion comparable.
+The emitter assigns spheres and cubes with tagSelection distribute instead of giving every particle both tags. CPU emission alternates births; GPU emission selects by buffer slot modulo the number of tags, without a shared emission counter. Slots retain that selection when reused, so the live mix depends on which slots are occupied. Rate 12 yields roughly six per second in each group as the population fills. Scale 0.1–0.25 and a discrete four-color Set vary appearance while keeping particle motion comparable.
 
 
 [Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/tags.js#L31)
@@ -107,8 +107,8 @@ The emitter assigns spheres and cubes with tagSelection distribute, alternating 
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.1, 0.1, 0.1),
-            new THREE.Vector3(0.25, 0.25, 0.25),
+            0.1,
+            0.25,
           ],
           alpha: 1,
         },
@@ -137,7 +137,7 @@ Only cubes receive rotation and cubic alpha fade. Only spheres receive growth fr
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
         tags: 'spheres'
       }),

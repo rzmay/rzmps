@@ -8,7 +8,8 @@
 
 # Class: SpeedByDepth
 
-Multiplies scalar integration speed using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample.
+Multiplies scalar integration speed using distance from the captured camera, normalized over depthRange; two-value
+parameter ranges interpolate rather than randomly sample.
 
 ## Extends
 
@@ -71,18 +72,8 @@ cameraPosition: Vector3;
 ### condition
 
 ```ts
-condition: (particle) => boolean;
+condition: ModuleCondition;
 ```
-
-#### Parameters
-
-##### particle
-
-[`Particle`](Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 
@@ -279,9 +270,7 @@ spatialEffects: SpatialEffect[] = [];
 ### spatialGridOptions?
 
 ```ts
-readonly optional spatialGridOptions?:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
 #### Inherited from

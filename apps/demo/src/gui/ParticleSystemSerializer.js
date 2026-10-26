@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
     AudioRenderer,
+    DecalRenderer,
     Boids,
     Collision,
     EmissionSource,
@@ -250,6 +251,41 @@ export class ParticleSystemSerializer {
     }
 
     serializeRenderer(renderer) {
+        if (renderer instanceof DecalRenderer) {
+            const material = `new THREE.${renderer.material.type}(${this.serializeMaterialOptions(renderer.material, true)})`;
+            const options = {
+                direction: renderer.direction,
+                hitSelection: renderer.hitSelection,
+                maxHits: renderer.maxHits,
+                maxDistance: renderer.maxDistance,
+                depth: renderer.depth,
+                offset: renderer.offset,
+                size: renderer.size,
+                color: renderer.color,
+                lifetime: renderer.lifetime,
+                opacity: renderer.opacity,
+                inheritColor: renderer.inheritColor,
+                inheritScale: renderer.inheritScale,
+                inheritAlpha: renderer.inheritAlpha,
+                distanceAffectsOpacity: renderer.distanceAffectsOpacity,
+                distanceAffectsSize: renderer.distanceAffectsSize,
+                maxDecals: renderer.maxDecals,
+                onSpawn: renderer.onSpawn,
+                onCollision: renderer.onCollision,
+                onDeath: renderer.onDeath,
+                continuousRate: renderer.continuousRate,
+                ratio: renderer.ratio,
+                ...this.getLODOptions(renderer, true, true),
+                tags: renderer.tags,
+            };
+            // Built-in selectors need their public name, not their method source text.
+            for (const name of ['Nearest', 'Farthest', 'All']) {
+                if (options.hitSelection === DecalRenderer[name]) {
+                    options.hitSelection = this.rawCode(`DecalRenderer.${name}`);
+                }
+            }
+            return `new DecalRenderer(${material}, ${this.serializeValue(options)})`;
+        }
         if (renderer instanceof AudioRenderer) {
             const options = {
                 loop: renderer.loop,
@@ -414,14 +450,23 @@ export class ParticleSystemSerializer {
         return `new THREE.Mesh(${geometryExpression}, ${materialExpression})`;
     }
 
-    serializeMaterialOptions(material) {
+    serializeMaterialOptions(material, loadTextures = false) {
         if (!material) {
             return '{}';
         }
 
         const options = {};
 
-        if (material.map) {
+        if (loadTextures) {
+            for (const key of ['map', 'alphaMap', 'normalMap']) {
+                const texture = material[key];
+                if (!texture) continue;
+                options[key] = this.rawCode(
+                    `Object.assign(new THREE.TextureLoader().load(${this.serializeTexture(texture)}), { colorSpace: ${this.serializeValue(texture.colorSpace)} })`,
+                );
+            }
+            if (material.normalMap) options.normalScale = material.normalScale;
+        } else if (material.map) {
             options.map = this.rawCode(this.serializeTexture(material.map));
         }
 
@@ -543,8 +588,9 @@ export class ParticleSystemSerializer {
             );
         }
 
-        if (renderer instanceof TrailRenderer) {
-            return Boolean(this.textureReference(this.textureSource(renderer.material?.map)));
+        if (renderer instanceof TrailRenderer || renderer instanceof DecalRenderer) {
+            return ['map', 'alphaMap', 'normalMap'].some(key =>
+                Boolean(this.textureReference(this.textureSource(renderer.material?.[key]))));
         }
 
         return false;

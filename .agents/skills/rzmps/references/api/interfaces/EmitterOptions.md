@@ -36,7 +36,8 @@ Amount of initial rotation alignment to source direction.
 bursts: Multiple<SpawnBurst>;
 ```
 
-Timed particle batches within an emission cycle. Supplying bursts changes the default continuous rate to zero.
+Timed particle batches within an emission cycle.
+Supplying bursts changes the default continuous rate to zero.
 
 ***
 

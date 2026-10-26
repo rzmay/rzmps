@@ -8,7 +8,8 @@
 
 # Class: NoiseModule
 
-Computes particle-position simplex noise for a callback or named particle.noise entry; octave count adds sampling cost.
+Computes particle-position simplex noise for a callback or named particle.noise entry; octave count adds sampling
+cost.
 
 ## Extends
 
@@ -95,18 +96,8 @@ _modify: ModuleUpdate;
 ### condition
 
 ```ts
-condition: (particle) => boolean;
+condition: ModuleCondition;
 ```
-
-#### Parameters
-
-##### particle
-
-[`Particle`](Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 
@@ -343,9 +334,7 @@ spatialEffects: SpatialEffect[] = [];
 ### spatialGridOptions?
 
 ```ts
-readonly optional spatialGridOptions?:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
 #### Inherited from

@@ -8,7 +8,8 @@
 
 # Class: Collision
 
-Predicts contacts before movement at priority -0.01; bounce, damping, impulses, and lifecycle callbacks use the selected backend.
+Predicts contacts before movement at priority -0.01; bounce, damping, impulses, and lifecycle callbacks use the
+selected backend.
 
 ## Extends
 
@@ -81,18 +82,8 @@ bounce: DynamicValue<number> = 1;
 ### condition
 
 ```ts
-condition: (particle) => boolean;
+condition: ModuleCondition;
 ```
-
-#### Parameters
-
-##### particle
-
-[`Particle`](Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 
@@ -319,9 +310,7 @@ spatialEffects: SpatialEffect[] = [];
 ### spatialGridOptions?
 
 ```ts
-readonly optional spatialGridOptions?:
-  | ParticleSpatialGrid
-| Partial<ParticleSpatialGridOptions>;
+optional spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
 ```
 
 #### Inherited from

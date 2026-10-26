@@ -56,7 +56,8 @@ export interface EmitterOptions {
     initialValues: Partial<InitialParticleValues>;
     /** Geometry and sampling rule used to place particles. Defaults to a sphere. */
     source: EmissionShape;
-    /** Timed particle batches within an emission cycle. Supplying bursts changes the default continuous rate to zero. */
+    /** Timed particle batches within an emission cycle.
+     * Supplying bursts changes the default continuous rate to zero. */
     bursts: Multiple<SpawnBurst>;
     /** Continuous particles per second. Defaults to 50 without bursts, otherwise 0. */
     rate: DynamicValue<number>;
@@ -556,7 +557,7 @@ class Emitter {
         ) {
           const selectedTag = this.tagSelection === TagSelectionMethod.Random
             ? int(hash(seed.add(137)).mul(tagMasks.length).floor())
-            : int(claimIndex.mod(tagMasks.length));
+            : int(particle.index.mod(tagMasks.length));
           const tagMask = tagMasks.reduce<Node<'uint'>>((result, value, index) => (
             selectedTag.equal(index).select(uint(value), result) as Node<'uint'>
           ), uint(0));
@@ -1124,7 +1125,9 @@ function getDynamicStructure(value: unknown): string {
   return typeof value === 'object' ? 'node' : typeof value;
 }
 
-function getGeometryAttributeVersion(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined): number {
+function getGeometryAttributeVersion(
+  attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined
+): number {
   if (!attribute) return 0;
   return 'version' in attribute ? attribute.version : attribute.data.version;
 }

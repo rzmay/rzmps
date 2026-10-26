@@ -36,12 +36,12 @@ The system caps simulation at 50000 particles and loops over 10 seconds. Its sin
         initialValues: {
           lifetime: [2.5, 5],
           speed: [0.6, 1.8],
-          scale: new THREE.Vector3(0.08, 0.08, 0.08),
+          scale: 0.08,
           color: new Set([
-            new THREE.Color('#57d6ff'),
-            new THREE.Color('#fff176'),
-            new THREE.Color('#ff6fb1'),
-            new THREE.Color('#8aff8a'),
+            '#57d6ff',
+            '#fff176',
+            '#ff6fb1',
+            '#8aff8a',
           ]),
           alpha: 0.85,
         },
@@ -53,13 +53,13 @@ The system caps simulation at 50000 particles and loops over 10 seconds. Its sin
         linear: new THREE.Vector3(0, 0.35, 0),
       }),
       new TransformByNoise({
-        strength: new THREE.Vector3(2.5, 2.5, 2.5),
+        strength: 2.5,
         frequency: 2.2,
       }),
       new ScaleOverLifetime({
         scale: (time) => {
           const size = ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25)));
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
@@ -94,12 +94,12 @@ Rate 1800 with lifetime 2.5–5 sustains roughly 6750 simulated particles at ful
         initialValues: {
           lifetime: [2.5, 5],
           speed: [0.6, 1.8],
-          scale: new THREE.Vector3(0.08, 0.08, 0.08),
+          scale: 0.08,
           color: new Set([
-            new THREE.Color('#57d6ff'),
-            new THREE.Color('#fff176'),
-            new THREE.Color('#ff6fb1'),
-            new THREE.Color('#8aff8a'),
+            '#57d6ff',
+            '#fff176',
+            '#ff6fb1',
+            '#8aff8a',
           ]),
           alpha: 0.85,
         },
@@ -121,13 +121,13 @@ Velocity, noise, scale, and alpha modules update every surviving particle each s
         linear: new THREE.Vector3(0, 0.35, 0),
       }),
       new TransformByNoise({
-        strength: new THREE.Vector3(2.5, 2.5, 2.5),
+        strength: 2.5,
         frequency: 2.2,
       }),
       new ScaleOverLifetime({
         scale: (time) => {
           const size = ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25)));
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({

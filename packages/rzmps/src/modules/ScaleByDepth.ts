@@ -1,3 +1,4 @@
+import type { Vector3Input } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -8,14 +9,17 @@ import { uniform } from 'three/tsl';
 import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 
 export interface ScaleByDepthOptions extends Partial<ModuleOptions> {
-  scale: ValueByParameter<THREE.Vector3>;
-  scalarVelocity: ValueByParameter<THREE.Vector3>;
-  scalarAcceleration: ValueByParameter<THREE.Vector3>;
+  scale: ValueByParameter<Vector3Input>;
+  scalarVelocity: ValueByParameter<Vector3Input>;
+  scalarAcceleration: ValueByParameter<Vector3Input>;
   /** Camera-distance interval mapped to zero through one; omitted endpoints use camera near/far when available. */
   depthRange?: [number, number]
 }
 
-/** Multiplies scale and adds scalar channels using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies scale and adds scalar channels using distance from the captured camera, normalized over depthRange; two-
+ * value parameter ranges interpolate rather than randomly sample.
+ */
 class ScaleByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');

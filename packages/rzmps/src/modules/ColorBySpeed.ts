@@ -1,3 +1,4 @@
+import type { ColorInput } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -9,13 +10,16 @@ import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
 export type SpeedRange = [number, number] | { min: number; max: number };
 
 export interface ColorBySpeedOptions extends Partial<ModuleOptions> {
-    color: ValueByParameter<THREE.Color>;
+    color: ValueByParameter<ColorInput>;
     alpha: ValueByParameter<number>;
     /** Velocity-magnitude interval mapped to zero through one; values outside it are clamped. */
     speedRange: SpeedRange;
 }
 
-/** Multiplies color and alpha using velocity magnitude normalized over speedRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies color and alpha using velocity magnitude normalized over speedRange; two-value parameter ranges
+ * interpolate rather than randomly sample.
+ */
 class ColorBySpeed extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<ColorBySpeedOptions> = {}) {

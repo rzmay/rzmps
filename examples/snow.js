@@ -31,8 +31,8 @@ export default async function createSnow() {
         initialValues: {
           lifetime: 16,
           speed: 1,
-          scale: new THREE.Vector3(0.25, 0.25, 0.25),
-          color: new THREE.Color('#e9f7ff'),
+          scale: 0.25,
+          color: '#e9f7ff',
           alpha: 0.9,
           velocity: new THREE.Vector3(0, -0.35, 0),
         },

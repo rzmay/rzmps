@@ -36,8 +36,8 @@ A 10-second loop keeps emission continuous, while zero gravity isolates instance
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.4, 0.4, 0.4),
-            new THREE.Vector3(1.0, 1.0, 1.0),
+            0.4,
+            1.0,
           ],
           alpha: 1,
         },
@@ -85,8 +85,8 @@ Rate 12 and mean lifetime 6 imply roughly 72 simultaneous cubes. The discrete co
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.4, 0.4, 0.4),
-            new THREE.Vector3(1.0, 1.0, 1.0),
+            0.4,
+            1.0,
           ],
           alpha: 1,
         },

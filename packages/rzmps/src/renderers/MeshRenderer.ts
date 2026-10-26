@@ -33,7 +33,7 @@ export interface MeshRendererOptions extends RendererOptions {
     receiveShadow: boolean,
 }
 
-/** Instances shared mesh geometry and material across particles; geometry complexity multiplies by visible population. */
+/** Instances shared mesh geometry and material across particles; geometry complexity multiplies by population. */
 class MeshRenderer extends Renderer {
     mesh: THREE.Mesh;
 

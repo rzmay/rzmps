@@ -428,7 +428,7 @@ static GPU_SELECTIVE_READBACK_POOL_SIZE: number = 8;
 get cameraDistanceSq(): number;
 ```
 
-Squared camera distance used for component LOD; explicit advancement refreshes it without skipping system steps.
+Squared camera distance used for component LOD; explicit advancement refreshes it without skipping steps.
 
 ##### Returns
 
@@ -980,7 +980,7 @@ Active renderer captured by the context object during rendering.
 get simulationSpace(): SimulationSpace;
 ```
 
-Coordinate space of particle state; assigning a new space converts existing particles and propagates to subsystems.
+Coordinate space of particle state; assigning a new space converts particles and propagates to subsystems.
 
 ##### Returns
 
@@ -1171,7 +1171,7 @@ Adds an explicit generic effect; avoid adding the same effect more than once.
 addSubSystem(subSystem, options): this;
 ```
 
-Transfers a child to this parent, resets its local transform, and shares simulation space. Continuous emission defaults on unless an event trigger is selected.
+Adds a system to this system as a subsystem, using this system's particles as its emission points.
 
 #### Parameters
 
@@ -1236,7 +1236,7 @@ Finite systems can naturally end, including their configured end behavior.
 clearParticles(children?): void;
 ```
 
-Clears particles and renderer contents without destroying the system; optionally includes independent child systems.
+Clears particles and renderer contents; optionally includes independent child systems.
 
 #### Parameters
 
@@ -1467,7 +1467,7 @@ Registers a synchronous listener for emitter births.
 pause(children?): void;
 ```
 
-Freezes emission and simulation while playing; propagates to owned subsystems and optionally independent child systems.
+Freezes emission and simulation while playing; propagates to subsystems and optionally child systems.
 
 #### Parameters
 
@@ -1716,7 +1716,7 @@ readonly [`GPUParticleReadbackField`](../type-aliases/GPUParticleReadbackField.m
 start(children?): void;
 ```
 
-Starts or restarts emission from time zero, resets emitter contexts, and clears pause/end flags; existing particles are retained.
+Starts or restarts emission from time zero; existing particles are retained.
 
 #### Parameters
 
@@ -1738,7 +1738,7 @@ Starts or restarts emission from time zero, resets emitter contexts, and clears 
 stop(clearParticles, children?): void;
 ```
 
-Stops emission and resets prewarm state. Retained particles continue updating; clearParticles chooses whether to remove them immediately.
+Stops emission and resets prewarm state. clearParticles chooses whether to remove them immediately.
 
 #### Parameters
 

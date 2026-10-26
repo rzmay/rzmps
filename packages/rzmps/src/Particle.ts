@@ -30,7 +30,7 @@ export interface ParticleNoiseValues {
   noise4d: number;
 }
 
-/** Mutable particle state with separate birth and cached permanent values; do not share mutable values between particles. */
+/** Mutable particle state with separate birth and cached permanent values. */
 class Particle {
   position: THREE.Vector3;
 
@@ -171,11 +171,9 @@ class Particle {
     this.alive = false;
   }
 
+  /** Copies current state with independent vectors, color, tags, and birth snapshot. */
   clone(): Particle {
-    const particle = new Particle({
-      ...this.snapshot(),
-      tags: this.tags ? [...this.tags] : undefined,
-    });
+    const particle = new Particle(this);
 
     particle.startTime = this.startTime;
     particle.time = this.time;
@@ -188,6 +186,15 @@ class Particle {
     particle.data = { ...this.data };
 
     return particle;
+  }
+
+  /**
+   * Creates a render-only view without running the constructor or cloning attributes.
+   * Unspecified references, including simulation snapshots, remain shared and must be treated as read-only.
+   * Override objects are used directly; clone() still provides independent particle attributes.
+   */
+  shallowClone(id: string, overrides: Partial<ParticleOptions> = {}): Particle {
+    return Object.assign(Object.create(Object.getPrototypeOf(this)), this, overrides, { id });
   }
 
   lerp(target: Particle | ParticleCachedValues, alpha: number): this {
@@ -250,10 +257,9 @@ class Particle {
   }
 
   private createValues(): ParticleStartValues {
-    return {
-      ...this.writeValues(),
-      tags: this.tags ? [...this.tags] : undefined,
-    };
+    const values = this.writeValues<ParticleStartValues>();
+    values.tags = this.tags ? [...this.tags] : undefined;
+    return values;
   }
 
   private writeValues<T extends ParticleCachedValues>(target?: T): T {

@@ -446,11 +446,10 @@ apps/docs/.vitepress/cache/
 /previews/
 .puppeteer/
 apps/docs/.vitepress/.temp/
-# The root preview workspace is ignored; public documentation previews are committed.
 /dist/
 
 # Documentation and runtime artifacts rebuilt from canonical docs and source.
-# Keep .agents/ and reviewed public/previews/ assets committed.
+# Keep .agents/ committed for skill installation directly from GitHub.
 /apps/docs/api/
 /apps/docs/guides/index.md
 /apps/docs/examples/index.md
@@ -459,6 +458,7 @@ apps/docs/.vitepress/.temp/
 /apps/docs/public/llms.txt
 /apps/docs/public/llms-full.txt
 /apps/docs/public/favicon.png
+/apps/docs/public/previews/
 /examples/index.js
 /packages/rzmps/AGENTS.md
 

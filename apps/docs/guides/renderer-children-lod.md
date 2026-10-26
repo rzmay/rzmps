@@ -52,7 +52,18 @@ The particle system owns compensation spacing. CPU views share a shallow `Partic
 
 ## Identity and backend behavior
 
-CPU particles expose `id`, `isChild`, `parent`, and `root`. Simulated particles have a null parent and are their own root. Child IDs derive from the immediate parent's identity and child ordinal. The base renderer uses `Particle.clone()` for each visual child. Child IDs use namespaced strings such as `root[0]`, `root[1]`, and `root[0][0]`. Artistic and LOD children share one ordinal sequence per parent; a root's LOD children follow its artistic children. Timeless seeded evaluation keeps counts and offsets stable across updates. Trails use the same stable child IDs to preserve independent histories.
+CPU particles expose `id`, `isChild`, `parent`, and `root`. Simulated particles have a null parent and are their own root. Child IDs derive from the immediate parent's identity and child ordinal. The base renderer uses `Particle.shallowClone(id, overrides)` for each visual child. Inherited vectors, colors, tags, custom data, and simulation snapshots are shared read-only. Each child owns its position; artistic scale modifiers and size compensation copy scale before modifying it. LOD children share their immediate parent’s scale and color. Child IDs use namespaced strings such as `root[0]`, `root[1]`, and `root[0][0]`. Artistic and LOD children share one ordinal sequence per parent; a root's LOD children follow its artistic children. Timeless seeded evaluation keeps counts and offsets stable across updates. Trails use the same stable child IDs to preserve independent histories.
+
+Use `shallowClone` for a read-only view with selected replacements. Override vectors and colors are used directly, while unspecified references remain shared:
+
+```ts
+const view = particle.shallowClone('visual-copy', {
+  position: particle.position.clone().add(offset),
+  alpha: particle.alpha * 0.5,
+});
+```
+
+`shallowClone` preserves the particle prototype and skips constructor work, ID generation, and new simulation snapshots. Renderers and custom consumers must avoid mutating shared attributes. Use `clone()` when independent mutable particle attributes are required.
 
 GPU simulation contexts expose a computed slot/generation identity. Expanded render contexts resolve child identities and immediate/root views through one compact parent-index/ordinal mapping, with at most two hierarchy lookups. On GPU, guard dynamic parent access with `isChild`; original render slots resolve their parent view to themselves because shader-side null references do not exist. Simulation contexts have a null parent.
 

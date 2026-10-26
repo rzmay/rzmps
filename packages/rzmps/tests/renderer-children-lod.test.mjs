@@ -33,7 +33,11 @@ for (const p of renderer.output.slice(1)) {
   assert.ok(p.position.distanceTo(root.position) <= 2);
   assert.ok(p.scale.distanceTo(new THREE.Vector3(1.6, 2.4, 3.2)) < 1e-12);
   assert.ok(Math.abs(p.alpha - 0.56) < 1e-12);
-  p.velocity.x = 100;
+  assert.equal(p.velocity, root.velocity);
+  assert.equal(p.color, root.color);
+  assert.equal(p.rotation, root.rotation);
+  assert.notEqual(p.position, root.position);
+  assert.notEqual(p.scale, root.scale);
 }
 assert.equal(root.velocity.x, 0);
 root.time = 0.9;
@@ -78,7 +82,7 @@ assert.deepEqual(compensated.output.map(p => p.id), [
 assert.equal(compensated.output.filter(p => p.parent?.isChild).length, 2);
 for (const p of compensated.output.slice(3)) {
   assert.equal(p.root, root);
-  assert.deepEqual(p.scale.toArray(), p.parent.scale.toArray());
+  assert.equal(p.scale, p.parent.scale);
   assert.equal(p.alpha, p.parent.alpha);
 }
 s.quality = 0.4;
@@ -95,8 +99,14 @@ const size = new Capture({ compensation: CompensationMode.Size });
 size.update([root], s);
 assert.deepEqual(size.output[0].scale.toArray(), [4, 6, 8]);
 assert.deepEqual(root.scale.toArray(), [2, 3, 4]);
+const sizedChildren = new Capture({ children: { count: 2 }, compensation: CompensationMode.Size });
+sizedChildren.update([root], s);
+for (const p of sizedChildren.output) assert.deepEqual(p.scale.toArray(), [4, 6, 8]);
+assert.deepEqual(root.scale.toArray(), [2, 3, 4]);
+assert.equal(sizedChildren.output[0].parent, null);
+assert.equal(sizedChildren.output[1].parent, root);
 
-// Visual children use ordinary independent clones and retain deterministic identity.
+// Visual children share inherited attributes and own only their modified vectors.
 s.quality = 1;
 const cloned = new Capture({ children: { count: 2, radius: 1 } });
 const source = new Particle({ lifetime: 100, tags: ['original'] });
@@ -104,10 +114,13 @@ source.id = 'source';
 cloned.update([source], s);
 const firstChild = cloned.output[1];
 assert.equal(firstChild.id, 'source[0]');
-firstChild.velocity.x = 99;
-firstChild.tags[0] = 'changed';
-assert.equal(source.velocity.x, 0);
-assert.equal(source.tags[0], 'original');
+assert.equal(firstChild.velocity, source.velocity);
+assert.equal(firstChild.tags, source.tags);
+assert.equal(firstChild.color, source.color);
+assert.equal(firstChild.scale, source.scale);
+assert.notEqual(firstChild.position, source.position);
+firstChild.position.x = 99;
+assert.equal(source.position.x, 0);
 source.position.x = 7;
 source.alpha = 0.25;
 cloned.update([source], s);

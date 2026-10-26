@@ -69,7 +69,7 @@ children: RendererChildrenOptions;
 ### colorOverLifetime
 
 ```ts
-colorOverLifetime: DynamicValue<Color>;
+colorOverLifetime: DynamicValue<ColorRepresentation>;
 ```
 
 ***
@@ -79,7 +79,7 @@ colorOverLifetime: DynamicValue<Color>;
 ### colorOverTrail
 
 ```ts
-colorOverTrail: DynamicValue<Color>;
+colorOverTrail: DynamicValue<ColorRepresentation>;
 ```
 
 ***
