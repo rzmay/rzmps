@@ -118,6 +118,7 @@ export type { LiveCubemapOptions } from './renderers/LiveCubemap';
 // Modules
 export { default as Module } from './Module';
 export type {
+  ModuleCondition,
   ModuleGPUCondition,
   ModuleGPUUpdate,
   ModuleOctreeAggregate,

@@ -27,6 +27,13 @@ export type ModuleUpdate = (
   octree?: ParticleOctree<unknown>,
 ) => void;
 
+export type ModuleCondition = (
+  particle: Particle,
+  deltaTime: number,
+  particleSystem?: ParticleSystem,
+  octree?: ParticleOctree<unknown>,
+) => boolean;
+
 export type ModuleGPUUpdate = (
   /** Shader-node particle view; mutate fields through TSL assignment methods. */
   particle: GPUParticleLike,
@@ -59,7 +66,7 @@ export interface ModuleOptions {
 
   tags: StrictMultiple<Tag>;
   /** Additional per-particle predicate, evaluated after tag matching. */
-  condition: (particle: Particle) => boolean;
+  condition: ModuleCondition;
   /** Optional TSL condition callback for GPU processing. */
   conditionGPU: ModuleGPUCondition | null;
   /** Enables distance-based module update skipping. */
@@ -103,7 +110,7 @@ export default class Module {
   public dependents: Module[] = [];
 
   tags?: Tag[];
-  condition: (particle: Particle) => boolean;
+  condition: ModuleCondition;
   conditionGPU?: ModuleGPUCondition;
   private readonly _hasCustomCondition: boolean;
   useUpdateLOD: boolean;
@@ -193,7 +200,7 @@ export default class Module {
     particles.filter((p) => (
       p.alive
       && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
-      && this.condition(p)
+      && this.condition(p, deltaTime, particleSystem, this.octree)
     ))
       .forEach((p) => this._modify(p, deltaTime, particleSystem, this.octree));
   }

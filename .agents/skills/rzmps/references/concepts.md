@@ -783,6 +783,13 @@ const sparksOnly = new Module((particle) => {
 });
 ```
 
+The exported `ModuleCondition` type receives the same arguments as `ModuleUpdate`:
+`(particle, deltaTime, particleSystem?, octree?)`, and returns a boolean. The system and managed
+octree are optional, just as they are for the update callback. Conditions run after alive and tag
+filtering and receive the same frame delta and context as the update. Existing particle-only
+predicates still work. On GPU, `ModuleGPUCondition` matches `ModuleGPUUpdate`'s arguments and
+returns a TSL boolean node.
+
 For performance-sensitive modules, avoid allocating objects inside the per
 particle callback. Reuse vectors and colors outside the callback when possible.
 

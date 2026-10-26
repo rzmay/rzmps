@@ -2,6 +2,15 @@ import { Color, Vector3 } from 'three';
 import { vec3 } from 'three/tsl';
 import { Emitter, ColorBySpeed, ScaleByDepth, TransformByNoise, DecalRenderer } from '../build/index.mjs';
 import { MeshBasicMaterial } from 'three';
+import type {
+  ModuleCondition, ModuleGPUCondition, ModuleUpdate, ModuleGPUUpdate,
+} from '../build/index.mjs';
+
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Expect<T extends true> = T;
+export type CPUConditionArguments = Expect<Equal<Parameters<ModuleCondition>, Parameters<ModuleUpdate>>>;
+export type GPUConditionArguments = Expect<Equal<Parameters<ModuleGPUCondition>, Parameters<ModuleGPUUpdate>>>;
+export type CPUConditionResult = Expect<Equal<ReturnType<ModuleCondition>, boolean>>;
 
 new Emitter({
   initialValues: {
