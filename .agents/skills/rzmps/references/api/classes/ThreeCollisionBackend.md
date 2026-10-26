@@ -278,6 +278,28 @@ invalidateGeometry(object?): void;
 
 ***
 
+<a id="raycast"></a>
+
+### raycast()
+
+```ts
+raycast(raycaster): Intersection<Object3D<Object3DEventMap>>[];
+```
+
+Raycasts current collision membership, preserving explicit lists and object filters.
+
+#### Parameters
+
+##### raycaster
+
+`Raycaster`
+
+#### Returns
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+***
+
 <a id="update"></a>
 
 ### update()

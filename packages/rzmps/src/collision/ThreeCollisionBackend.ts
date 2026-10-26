@@ -215,6 +215,14 @@ class ThreeCollisionBackend implements ICollisionBackend {
     }
   }
 
+  /** Raycasts current collision membership, preserving explicit lists and object filters. */
+  raycast(raycaster: THREE.Raycaster): THREE.Intersection[] {
+    return raycaster.intersectObjects(
+      Array.from(this.trackedObjects.values(), ({ object }) => object),
+      false,
+    );
+  }
+
   collide(query: CollisionQuery): CollisionHit | null {
     const capsule = new Capsule(
       query.start.clone(),
@@ -432,6 +440,7 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
       root.traverse((object) => {
         if (!(object instanceof THREE.Mesh)) return;
+        if (isIgnoredCollisionObject(object)) return;
 
         if (
           this.objectFilter

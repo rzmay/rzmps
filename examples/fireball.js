@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   ColorOverLifetime,
+  DecalRenderer,
   Emitter,
   EmissionShape,
   ForceOverLifetime,
@@ -15,11 +16,15 @@ import {
 } from '@rzmps/rzmps';
 import fireballSprite from '../apps/demo/src/assets/images/fireball_tile_5x4_n20.png?url';
 import warpNormal from '../apps/demo/src/assets/images/warp_norm.jpg?url';
+import scorchTexture from '../apps/demo/src/assets/images/scorch.png?url';
 import { Easing } from 'eaz';
 
 export default async function createFireball() {
   const textureLoader = new THREE.TextureLoader();
   const heatDistortion = textureLoader.load(warpNormal);
+  const scorchMap = textureLoader.load(scorchTexture);
+  scorchMap.colorSpace = THREE.SRGBColorSpace;
+  const scorchMaterial = new THREE.MeshBasicMaterial({ map: scorchMap });
 
   // #region docs:system:1
   const fireball = new ParticleSystem({
@@ -84,6 +89,21 @@ export default async function createFireball() {
           decay: 2,
         },
       }),
+      new DecalRenderer(scorchMaterial, {
+        onSpawn: false,
+        continuousRate: 4,
+        direction: (particle) => DecalRenderer.Radial(24)(particle),
+        maxDistance: 3,
+        depth: 0.06,
+        size: 2.5,
+        inheritColor: 0,
+        inheritScale: 0,
+        inheritAlpha: 0,
+        lifetime: 8,
+        opacity: (t) => 0.035 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+          * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
+        maxDecals: 128,
+      }),
     ],
     // #endregion docs:renderers:1
   });
@@ -100,6 +120,10 @@ export default async function createFireball() {
     ratio: 0.55,
   });
 
+  fireball.addEventListener('destroyed', () => {
+    scorchMaterial.dispose();
+    scorchMap.dispose();
+  });
   fireball.name = 'Fireball';
   fireball.position.set(0, 0, 0);
 
@@ -181,7 +205,7 @@ function createHeatDistortion(alphaMap, distortionMap) {
 export const metadata = {
   "id": "fireball",
   "title": "Fireball",
-  "description": "Showcases burst emission, animated sprite growth, particle lights, and inherited heat-distortion particles.",
+  "description": "Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks.",
   "tags": [
     "fireball"
   ],
