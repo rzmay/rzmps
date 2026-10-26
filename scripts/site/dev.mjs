@@ -6,15 +6,17 @@ import { createServer as createDemoServer } from 'vite';
 import { createServer as createDocsServer } from 'vitepress';
 
 const root = path.resolve(import.meta.dirname, '../..');
-async function availablePort() {
+async function reservePort() {
   const socket = createServer();
   await new Promise((resolve, reject) => {
     socket.once('error', reject);
     socket.listen(0, '127.0.0.1', resolve);
   });
   const port = socket.address().port;
-  await new Promise((resolve, reject) => socket.close(error => error ? reject(error) : resolve()));
-  return port;
+  return {
+    port,
+    release: () => new Promise((resolve, reject) => socket.close(error => error ? reject(error) : resolve())),
+  };
 }
 
 export async function startSiteDev({
@@ -34,11 +36,13 @@ export async function startSiteDev({
       config.server.preTransformRequests = false;
     },
   }];
-  let docs, demo, restartPromise;
+  let docs, demo, restartPromise, releaseDocsPort;
   let closing = false;
   try {
     // A private ephemeral port prevents two apps from competing for the public entry port.
-    const docsPort = await availablePort();
+    const reservation = await reservePort();
+    const docsPort = reservation.port;
+    releaseDocsPort = reservation.release;
     async function createDocs() {
       const server = await createDocsServer(docsDirectory, {
         host: '127.0.0.1', port: docsPort, strictPort: true,
@@ -62,7 +66,6 @@ export async function startSiteDev({
       } catch (error) { await server.close(); throw error; }
     }
     const target = `http://127.0.0.1:${docsPort}`;
-    if (!port) port = await availablePort();
     demo = await createDemoServer({
       root: path.join(root, 'apps/demo'),
       configFile: path.join(root, 'apps/demo/vite.config.mjs'),
@@ -88,11 +91,16 @@ export async function startSiteDev({
         },
       }],
       server: {
-        host, port, strictPort: true,
+        host, port, strictPort: false,
         proxy: { '^/docs(?:/|\\?|$)': { target, ws: true } },
       },
     });
     await demo.listen();
+    // Vite may select another port when the requested one is already occupied.
+    port = demo.httpServer.address().port;
+    // Prevent demo port fallback from taking the private docs port.
+    await releaseDocsPort();
+    releaseDocsPort = undefined;
     await prepareDocs(demo);
     docs = await createDocs();
     const close = async () => {
@@ -103,6 +111,7 @@ export async function startSiteDev({
     };
     return { demo, get docs() { return docs; }, close };
   } catch (error) {
+    await releaseDocsPort?.();
     await demo?.close();
     await docs?.close();
     throw error;
@@ -117,8 +126,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exit(0);
   });
   site = await startSiteDev({
-    prepareDocs: async () => {
-      console.log('Demo: http://localhost:5173/ — Generating documentation previews…');
+    prepareDocs: async (demo) => {
+      console.log(`Demo: http://localhost:${demo.httpServer.address().port}/ — Generating documentation previews…`);
       await new Promise((resolve, reject) => {
         previewProcess = spawn('npm', ['run', 'docs:previews'], { cwd: root, stdio: 'inherit' });
         previewProcess.once('error', reject);
@@ -130,5 +139,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       });
     },
   });
-  console.log('Documentation: http://localhost:5173/docs/');
+  console.log(`Documentation: http://localhost:${site.demo.httpServer.address().port}/docs/`);
 }
