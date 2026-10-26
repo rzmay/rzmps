@@ -8,10 +8,10 @@ import {
 
 export default async function createSpheres() {
   const colors = new Set([
-    new THREE.Color('#ff3333'),
-    new THREE.Color('#33ff66'),
-    new THREE.Color('#ffdd22'),
-    new THREE.Color('#3388ff'),
+    '#ff3333',
+    '#33ff66',
+    '#ffdd22',
+    '#3388ff',
   ]);
 
   // #region docs:system:1
@@ -31,8 +31,8 @@ export default async function createSpheres() {
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.1, 0.1, 0.1),
-            new THREE.Vector3(0.25, 0.25, 0.25),
+            0.1,
+            0.25,
           ],
           alpha: 1,
         },

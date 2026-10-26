@@ -62,13 +62,13 @@ export default async function createFireworks() {
         initialValues: {
           lifetime: 2,
           velocity: new THREE.Vector3(0, 8.5, 0),
-          scale: new THREE.Vector3(0.5, 0.5, 0.5),
+          scale: 0.5,
           color: new Set([
-            new THREE.Color('#ff4d6d'),
-            new THREE.Color('#ffe14b'),
-            new THREE.Color('#3eff3b'),
-            new THREE.Color('#f786ff'),
-            new THREE.Color('#11dfff'),
+            '#ff4d6d',
+            '#ffe14b',
+            '#3eff3b',
+            '#f786ff',
+            '#11dfff',
           ]),
         },
       }),
@@ -112,8 +112,8 @@ export default async function createFireworks() {
         initialValues: {
           lifetime: 4.5,
           speed: 0.55,
-          scale: new THREE.Vector3(0.75, 0.75, 0.75),
-          color: [new THREE.Color('#4e4d4a'), new THREE.Color('#a7a097')],
+          scale: 0.75,
+          color: ['#4e4d4a', '#a7a097'],
           alpha: 0.1,
           velocity: new THREE.Vector3(0, 0.75, 0),
         },
@@ -134,11 +134,11 @@ export default async function createFireworks() {
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#ffffff'),
+        color: '#ffffff',
         alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
       new RotationOverLifetime({
@@ -179,8 +179,8 @@ export default async function createFireworks() {
         radialSpeed: [4.5, 12],
         initialValues: {
           lifetime: [0.75, 1.35],
-          scale: [new THREE.Vector3(0.5, 0.5, 0.5), new THREE.Vector3(1, 1, 1)],
-          color: new THREE.Color('#ffffff')
+          scale: [0.5, 1],
+          color: '#ffffff'
         },
       }),
     ],
@@ -188,7 +188,7 @@ export default async function createFireworks() {
     // #region docs:modules:3
     modules: [
       new ColorOverLifetime({
-        color: new THREE.Color('#ffffff'),
+        color: '#ffffff',
         alpha: (time) => Math.max(0, 1 - time),
       }),
     ],

@@ -11,10 +11,10 @@ import { Easing } from 'eaz';
 
 export default async function createCubes() {
   const colors = new Set([
-    new THREE.Color('#ff3333'),
-    new THREE.Color('#33ff66'),
-    new THREE.Color('#ffdd22'),
-    new THREE.Color('#3388ff'),
+    '#ff3333',
+    '#33ff66',
+    '#ffdd22',
+    '#3388ff',
   ]);
 
   // #region docs:system:1
@@ -36,8 +36,8 @@ export default async function createCubes() {
           speed: 1,
           color: colors,
           scale: [
-            new THREE.Vector3(0.4, 0.4, 0.4),
-            new THREE.Vector3(1.0, 1.0, 1.0),
+            0.4,
+            1.0,
           ],
           alpha: 1,
         },

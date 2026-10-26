@@ -23,6 +23,8 @@ The 10-second loop schedules a continuous flame; individual flame particles last
 
 A cone surface spreads the base of the flame. At 90 particles per second and a 1.35-second lifetime, the main population is roughly 122 sprites before culling. Upward velocity 2.2 and radial speed 0.2 make vertical flow dominate the horizontal spread; the 2.5-unit scale lets adjacent sprites overlap.
 
+Uniform scale values and color strings use the standard input shortcuts.
+
 <ExampleCode region="emitters" />
 
 ## Modules

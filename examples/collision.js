@@ -24,11 +24,11 @@ export default async function createCollision() {
         radialSpeed: [1, 5],
         initialValues: {
           lifetime: 8,
-          scale: new THREE.Vector3(0.125, 0.125, 0.125),
+          scale: 0.125,
           mass: 1,
           color: [
-            new THREE.Color('#ff6633'),
-            new THREE.Color('#ffd166'),
+            '#ff6633',
+            '#ffd166',
           ],
         },
       }),

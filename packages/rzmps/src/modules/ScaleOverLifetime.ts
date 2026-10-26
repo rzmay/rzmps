@@ -1,3 +1,4 @@
+import type { Vector3Input } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -5,9 +6,9 @@ import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
 
 export interface ScaleOverLifetimeOptions extends Partial<ModuleOptions> {
-    scale: DynamicValue<THREE.Vector3>;
-    scalarVelocity: DynamicValue<THREE.Vector3>;
-    scalarAcceleration: DynamicValue<THREE.Vector3>;
+    scale: DynamicValue<Vector3Input>;
+    scalarVelocity: DynamicValue<Vector3Input>;
+    scalarAcceleration: DynamicValue<Vector3Input>;
 }
 
 /** Multiplies scale and adds scalar channels in the transient render phase using normalized particle age. */

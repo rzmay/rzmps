@@ -39,19 +39,19 @@ The system is offset to z=-6, with a 14-second loop and prewarm at 30 fps in the
           lifetime: [7, 12],
           speed: 1,
           velocity: new THREE.Vector3(0.01, 0.02, 0.3),
-          scale: new THREE.Vector3(0.02, 0.02, 0.02),
+          scale: 0.02,
         },
       }),
     ],
 
     modules: [
       new ColorByDepth({
-        color: [new THREE.Color('#fff7db'), new THREE.Color('#84d7ff')],
+        color: ['#fff7db', '#84d7ff'],
         alpha: [1, 0.5],
         depthRange,
       }),
       new ScaleByDepth({
-        scale: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(2, 2, 2)],
+        scale: [1, 2],
         depthRange,
       }),
       new RotationByDepth({
@@ -105,7 +105,7 @@ A 20×10×20 box emits 200 particles per second with lifetimes 7–12 seconds. R
           lifetime: [7, 12],
           speed: 1,
           velocity: new THREE.Vector3(0.01, 0.02, 0.3),
-          scale: new THREE.Vector3(0.02, 0.02, 0.02),
+          scale: 0.02,
         },
       }),
     ],
@@ -122,12 +122,12 @@ All five modules share depthRange [5, 24]. Distant particles shift from warm whi
 ```js
     modules: [
       new ColorByDepth({
-        color: [new THREE.Color('#fff7db'), new THREE.Color('#84d7ff')],
+        color: ['#fff7db', '#84d7ff'],
         alpha: [1, 0.5],
         depthRange,
       }),
       new ScaleByDepth({
-        scale: [new THREE.Vector3(1, 1, 1), new THREE.Vector3(2, 2, 2)],
+        scale: [1, 2],
         depthRange,
       }),
       new RotationByDepth({

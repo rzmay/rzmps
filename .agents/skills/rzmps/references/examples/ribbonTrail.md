@@ -30,7 +30,7 @@ The 4-second loop supplies a continuous ribbon field. Each particle lasts one se
         radialSpeed: 5,
         initialValues: {
           lifetime: 1,
-          scale: new THREE.Vector3(0.12, 0.12, 0.12),
+          scale: 0.12,
         },
       }),
     ],
@@ -72,7 +72,7 @@ The torus source emits 50 particles per second with radial speed 5. A short one-
         radialSpeed: 5,
         initialValues: {
           lifetime: 1,
-          scale: new THREE.Vector3(0.12, 0.12, 0.12),
+          scale: 0.12,
         },
       }),
     ],
@@ -98,7 +98,7 @@ No module array is supplied here; the system therefore uses its empty module def
         radialSpeed: 5,
         initialValues: {
           lifetime: 1,
-          scale: new THREE.Vector3(0.12, 0.12, 0.12),
+          scale: 0.12,
         },
       }),
     ],

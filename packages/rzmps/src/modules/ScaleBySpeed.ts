@@ -1,3 +1,4 @@
+import type { Vector3Input } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -7,9 +8,9 @@ import type { Node } from 'three/webgpu';
 import { SpeedRange } from './ColorBySpeed';
 
 export interface ScaleBySpeedOptions extends Partial<ModuleOptions> {
-    scale: ValueByParameter<THREE.Vector3>;
-    scalarVelocity: ValueByParameter<THREE.Vector3>;
-    scalarAcceleration: ValueByParameter<THREE.Vector3>;
+    scale: ValueByParameter<Vector3Input>;
+    scalarVelocity: ValueByParameter<Vector3Input>;
+    scalarAcceleration: ValueByParameter<Vector3Input>;
     /** Velocity-magnitude interval mapped to zero through one; values outside it are clamped. */
     speedRange?: SpeedRange;
 }

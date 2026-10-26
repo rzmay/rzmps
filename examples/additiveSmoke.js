@@ -30,8 +30,8 @@ export default async function createAdditiveSmoke() {
         initialValues: {
           lifetime: 4.5,
           speed: 0.55,
-          scale: new THREE.Vector3(2.5, 2.5, 2.5),
-          color: [new THREE.Color('#343230'), new THREE.Color('#79746e')],
+          scale: 2.5,
+          color: ['#343230', '#79746e'],
           alpha: 0.35,
           velocity: new THREE.Vector3(0, 0.75, 0),
         },
@@ -52,11 +52,11 @@ export default async function createAdditiveSmoke() {
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#ffffff'),
+        color: '#ffffff',
         alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({

@@ -146,7 +146,7 @@ Constructors selecting scene effects for this module during prepare.
 ### scalarAcceleration
 
 ```ts
-scalarAcceleration: DynamicValue<Vector3>;
+scalarAcceleration: DynamicValue<Vector3Input>;
 ```
 
 ***
@@ -156,7 +156,7 @@ scalarAcceleration: DynamicValue<Vector3>;
 ### scalarVelocity
 
 ```ts
-scalarVelocity: DynamicValue<Vector3>;
+scalarVelocity: DynamicValue<Vector3Input>;
 ```
 
 ***
@@ -166,7 +166,7 @@ scalarVelocity: DynamicValue<Vector3>;
 ### scale
 
 ```ts
-scale: DynamicValue<Vector3>;
+scale: DynamicValue<Vector3Input>;
 ```
 
 ***
