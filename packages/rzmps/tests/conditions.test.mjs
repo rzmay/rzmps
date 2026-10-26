@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {
   Module,
   Particle,
+  ParticleSystem,
   SpatialEffect,
 } from '../build/index.mjs';
 
@@ -12,6 +13,49 @@ const createSystem = (scene = new THREE.Scene()) => ({
   cameraDistanceSq: 0,
   updateWorldMatrix() {},
 });
+
+{
+  const system = new ParticleSystem({ emitters: [], renderers: [], modules: [], gpuProcessing: false });
+  const accepted = new Particle({ tags: ['included'] });
+  const rejected = new Particle({ tags: ['included'], position: new THREE.Vector3(1, 0, 0) });
+  const excluded = new Particle({ tags: ['excluded'] });
+  const dead = new Particle({ tags: ['included'] });
+  dead.alive = false;
+  system.particles.push(accepted, rejected, excluded, dead);
+  const conditionCalls = [];
+  const updateCalls = [];
+  const module = new Module((...args) => updateCalls.push(args), {
+    tags: 'included',
+    useOctree: true,
+    condition: (...args) => {
+      conditionCalls.push(args);
+      const [particle, deltaTime, owner, octree] = args;
+      assert.equal(deltaTime, 0.125);
+      assert.equal(owner, system);
+      assert.equal(octree, module.getParticleOctree());
+      return octree.particlesInRadius(particle.position, 0.5).includes(accepted);
+    },
+  });
+  module.prepare(system, 0.125);
+  module.modify(system.particles, 0.125, system);
+  assert.deepEqual(conditionCalls.map(args => args[0]), [accepted, rejected]);
+  assert.equal(updateCalls.length, 1);
+  assert.deepEqual(updateCalls[0], conditionCalls[0]);
+  module.cleanup();
+  system.destroy();
+}
+
+{
+  let conditionArgs;
+  let updateArgs;
+  const particle = new Particle();
+  const module = new Module((...args) => { updateArgs = args; }, {
+    condition: (...args) => { conditionArgs = args; return true; },
+  });
+  module.modify([particle], 0.25);
+  assert.deepEqual(conditionArgs, [particle, 0.25, undefined, undefined]);
+  assert.deepEqual(updateArgs, conditionArgs);
+}
 
 {
   const accepted = new Particle({

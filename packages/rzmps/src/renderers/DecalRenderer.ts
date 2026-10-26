@@ -26,7 +26,7 @@ export type DecalHitSelection = (
 ) => THREE.Intersection[];
 
 export interface DecalRendererOptions extends Partial<RendererOptions> {
-  /** World-space ray direction(s); defaults to downward. Particle state remains in simulation space. */
+  /** World-space search direction(s); defaults down. Collision searches use the opposite contact normal. */
   direction: THREE.Vector3 | DecalDirectionSampler;
   /** Defaults to Nearest. Receives all candidates and the optional maxHits unchanged. */
   hitSelection: DecalHitSelection;
@@ -294,7 +294,7 @@ export default class DecalRenderer extends Renderer {
 
     // A known contact already identifies the surface; only search when it is unavailable.
     const hit = contact && this.contactHit(contact, origin, system);
-    const hits = hit ? [hit] : this.findHits(particle, origin, system);
+    const hits = hit ? [hit] : this.findHits(particle, origin, system, contact);
 
     // Custom selectors receive every candidate. Enforce an explicit cap after validation.
     const selected = this.hitSelection(hits, particle, this.maxHits);
@@ -329,8 +329,17 @@ export default class DecalRenderer extends Renderer {
       face: { a: 0, b: 0, c: 0, materialIndex: 0, normal } };
   }
 
-  private findHits(particle: Particle, origin: THREE.Vector3, system: ParticleSystem): THREE.Intersection[] {
-    const sampled = typeof this.direction === 'function' ? this.direction(particle) : this.direction;
+  private findHits(
+    particle: Particle, origin: THREE.Vector3, system: ParticleSystem, contact?: CollisionHit,
+  ): THREE.Intersection[] {
+    let contactDirection: THREE.Vector3 | undefined;
+    if (contact?.normal instanceof THREE.Vector3
+      && Number.isFinite(contact.normal.lengthSq()) && contact.normal.lengthSq() > 0) {
+      contactDirection = contact.normal.clone().negate();
+      if (system.simulationSpace === 'local') contactDirection.transformDirection(system.matrixWorld);
+    }
+    const sampled = contactDirection
+      ?? (typeof this.direction === 'function' ? this.direction(particle) : this.direction);
     const directions = Array.isArray(sampled) ? sampled : [sampled];
     const backend = system.modules.flatMap((module) => module.withDependents())
       .find((module) => module instanceof Collision)?.backend;

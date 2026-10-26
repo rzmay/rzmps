@@ -25,7 +25,7 @@ npm run benchmark:export -- /tmp/rzmps-benchmark.json
 
 The default run uses a headless, uncapped browser at 1280×720. Set \`RZMPS_BENCHMARK_DURATION_MS\` and \`RZMPS_BENCHMARK_WARMUP_MS\` to change measurement windows. Use \`npm run benchmark:run -- --vsync\` for browser frame pacing or \`--headed\` to view the run.
 
-Average update time measures \`ParticleSystem.update()\`; frame time includes the render loop. The 1% low FPS is the reciprocal of the average of the slowest 1% of measured frames. P99 frame time is reported separately. Spawn churn grows its population during the measurement, so check the simulated particle range as well as the target count.
+Average update time measures \`ParticleSystem.update()\`; frame time includes the render loop. The 1% low FPS is the reciprocal of the average of the slowest 1% of measured frames. P99 frame time is reported separately. The Particles column shows the measured population, with a minimum–maximum range for workloads such as spawn churn that change population during measurement.
 
 ## Pull Request Comparisons
 

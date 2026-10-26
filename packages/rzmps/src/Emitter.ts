@@ -575,7 +575,7 @@ class Emitter {
         ) {
           const selectedTag = this.tagSelection === TagSelectionMethod.Random
             ? int(hash(seed.add(137)).mul(tagMasks.length).floor())
-            : int(claimIndex.mod(tagMasks.length));
+            : int(particle.index.mod(tagMasks.length));
           const tagMask = tagMasks.reduce<Node<'uint'>>((result, value, index) => (
             selectedTag.equal(index).select(uint(value), result) as Node<'uint'>
           ), uint(0));

@@ -17,7 +17,7 @@ const profile = process.env.RZMPS_BENCHMARK_PROFILE ?? 'default';
 if (!['default', 'ci'].includes(profile)) throw new Error('Unknown benchmark profile');
 const durationMs = Number(process.env.RZMPS_BENCHMARK_DURATION_MS ?? 4000);
 const warmupMs = Number(process.env.RZMPS_BENCHMARK_WARMUP_MS ?? 1000);
-const timeoutMs = Number(process.env.RZMPS_BENCHMARK_TIMEOUT_MS ?? 180_000);
+const timeoutMs = Number(process.env.RZMPS_BENCHMARK_TIMEOUT_MS ?? 300_000);
 const openBrowser = values.open || values.headed;
 const useVsync = values.vsync;
 const pacingMode = useVsync ? 'vsync' : 'uncapped';
@@ -238,9 +238,9 @@ async function runBenchmark() {
     results.forEach((result) => {
       console.log([
         result.name,
-        `${result.particles.toLocaleString()} particles`,
-        `${result.minSimulatedParticles.toLocaleString()}-${result.maxSimulatedParticles.toLocaleString()} simulated`,
-        `cap ${result.maxParticlesLimit.toLocaleString()}`,
+        result.minSimulatedParticles === result.maxSimulatedParticles
+          ? `${result.maxSimulatedParticles.toLocaleString()} particles`
+          : `${result.minSimulatedParticles.toLocaleString()}–${result.maxSimulatedParticles.toLocaleString()} particles`,
         `update LOD ${result.updateLODEnabled ? 'on' : 'off'}`,
         `count LOD ${result.countLODEnabled ? 'on' : 'off'}`,
         `renderer ${result.rendererType ?? 'unknown'}`,

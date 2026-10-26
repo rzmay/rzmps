@@ -272,6 +272,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [GPUSystemScheduleNode](interfaces/GPUSystemScheduleNode.md)
 - [ICollisionBackend](interfaces/ICollisionBackend.md)
 - [InitialParticleValues](Supporting-Types/interfaces/InitialParticleValues.md)
+- [ModuleCondition](type-aliases/ModuleCondition.md)
 - [ModuleGPUCondition](type-aliases/ModuleGPUCondition.md)
 - [ModuleOctreeAggregate](interfaces/ModuleOctreeAggregate.md)
 - [Multiple](Supporting-Types/type-aliases/Multiple.md)

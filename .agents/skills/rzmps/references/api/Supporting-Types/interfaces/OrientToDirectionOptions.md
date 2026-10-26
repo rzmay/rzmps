@@ -31,20 +31,10 @@ Model-space forward axis mapped onto velocity; defaults to positive Y.
 ### condition?
 
 ```ts
-optional condition?: (particle) => boolean;
+optional condition?: ModuleCondition;
 ```
 
 Additional per-particle predicate, evaluated after tag matching.
-
-#### Parameters
-
-##### particle
-
-[`Particle`](../../classes/Particle.md)
-
-#### Returns
-
-`boolean`
 
 #### Inherited from
 

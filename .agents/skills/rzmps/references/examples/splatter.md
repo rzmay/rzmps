@@ -13,7 +13,7 @@ Preset by [rzmay](https://github.com/rzmay).
 
 ## Particle System Configuration
 
-An eight-second loop throws paintballs from height 3.5 under gravity. The source particles disappear on impact, while their paint stays on the surface for 90 seconds. Use Checkerboard for a clear floor or a collision scene to catch paint on several surfaces. The factory owns and disposes its splatter color/alpha map, normal map, and template material when the root system is destroyed.
+An eight-second loop throws paintballs from height 3.5 under gravity. The source particles disappear on impact, while their paint stays on the surface for 90 seconds. Use Checkerboard for a clear floor or a collision scene to catch paint on several surfaces. Known mesh contacts place decals directly; backends without mesh identity search opposite the collision normal so walls receive paint as well as floors. The factory owns and disposes its splatter color/alpha map, normal map, and template material when the root system is destroyed.
 
 
 [Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/splatter.js#L27)
@@ -52,8 +52,7 @@ An eight-second loop throws paintballs from height 3.5 under gravity. The source
       new DecalRenderer(paint, {
         onSpawn: false,
         onCollision: true,
-        // Backends without mesh identity use a downward search for the landing surface.
-        direction: new THREE.Vector3(0, -1, 0),
+        // Backends without mesh identity search opposite the collision normal, including on walls.
         maxDistance: 1,
         depth: 0.08,
         size: 5,
@@ -128,8 +127,7 @@ The balls reuse the Spheres preset's lit circular sprites and spherical normals,
       new DecalRenderer(paint, {
         onSpawn: false,
         onCollision: true,
-        // Backends without mesh identity use a downward search for the landing surface.
-        direction: new THREE.Vector3(0, -1, 0),
+        // Backends without mesh identity search opposite the collision normal, including on walls.
         maxDistance: 1,
         depth: 0.08,
         size: 5,

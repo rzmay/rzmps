@@ -172,14 +172,9 @@ const environmentRows = [
 
 const systemRows = results.map((result) => [
   result.name,
-  formatInteger(result.particles),
-  `${formatInteger(result.minSimulatedParticles)}-${formatInteger(result.maxSimulatedParticles)
-  }`,
-  formatInteger(result.maxParticlesLimit),
-  result.rendererType ?? 'unknown',
-  result.gpuProcessingRequested
-    ? `forced (${formatInteger(result.gpuActiveFrames)}/${formatInteger(result.gpuMeasuredFrames)})`
-    : 'off',
+  result.minSimulatedParticles === result.maxSimulatedParticles
+    ? formatInteger(result.maxSimulatedParticles)
+    : `${formatInteger(result.minSimulatedParticles)}–${formatInteger(result.maxSimulatedParticles)}`,
   formatInteger(result.frames),
   formatNumber(result.avgFps),
   formatNumber(result.onePercentLowFps),
@@ -215,11 +210,7 @@ const block = [
   markdownTable(
     [
       'Case',
-      'Target Particles',
-      'Simulated Particles',
-      'Particle Cap',
-      'Renderer',
-      'GPU',
+      'Particles',
       'Rendered Frames',
       'Avg FPS',
       '1% Low FPS',

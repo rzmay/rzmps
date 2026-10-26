@@ -15,20 +15,10 @@
 ### condition
 
 ```ts
-condition: (particle) => boolean;
+condition: ModuleCondition;
 ```
 
 Additional per-particle predicate, evaluated after tag matching.
-
-#### Parameters
-
-##### particle
-
-[`Particle`](../classes/Particle.md)
-
-#### Returns
-
-`boolean`
 
 ***
 
