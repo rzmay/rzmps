@@ -89,40 +89,40 @@ FPS and frame time are measured in an uncapped browser render loop by default. `
 | Memory | 24.0GB system, 16.0GB browser hint |
 | GPU/WebGL | ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version) (Google Inc. (Apple)) |
 
-| Case | Particles | Renderer | GPU | Rendered Frames | Avg FPS | 1% Low FPS | Avg Frame | P99 Frame | Max Frame | Avg Update | P95 Update | Max JS Heap |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Baseline 10k simulation only [CPU] | 10,000 | WebGPURenderer | off | 1,516 | 378.9 | 233.6 | 2.64ms | 3.90ms | 5.40ms | 2.37ms | 3.20ms | 69.5MB |
-| Baseline 10k simulation only [GPU] | 10,000 | WebGPURenderer | forced (525/525) | 525 | 131.2 | 21.1 | 7.62ms | 46.00ms | 47.80ms | 6.88ms | 36.70ms | 319.4MB |
-| Baseline 50k simulation only [CPU] | 50,000 | WebGPURenderer | off | 234 | 58.5 | 52.8 | 17.10ms | 18.80ms | 19.20ms | 16.48ms | 17.80ms | 164.6MB |
-| Baseline 50k simulation only [GPU] | 50,000 | WebGPURenderer | forced (55/55) | 55 | 13.6 | 4.3 | 73.49ms | 232.50ms | 232.50ms | 67.49ms | 198.70ms | 837.0MB |
-| Fused modules 10k simulation only [CPU] | 10,000 | WebGPURenderer | off | 569 | 142.1 | 102.7 | 7.04ms | 8.80ms | 10.80ms | 6.75ms | 7.70ms | 643.3MB |
-| Fused modules 10k simulation only [GPU] | 10,000 | WebGPURenderer | forced (310/310) | 310 | 77.2 | 19.8 | 12.95ms | 48.80ms | 52.20ms | 11.74ms | 39.40ms | 269.6MB |
-| Heavy modules 10k [CPU] | 10,000 | WebGPURenderer | off | 277 | 69.0 | 40.7 | 14.49ms | 23.70ms | 26.00ms | 14.10ms | 18.10ms | 231.3MB |
-| Heavy modules 10k [GPU] | 10,000 | WebGPURenderer | forced (483/483) | 483 | 120.2 | 21.0 | 8.32ms | 46.00ms | 51.20ms | 7.54ms | 37.90ms | 270.9MB |
-| Spatial kill zones 10k [CPU] | 9,634–9,869 | WebGPURenderer | off | 99 | 24.7 | 21.9 | 40.53ms | 45.60ms | 45.60ms | 40.08ms | 44.00ms | 166.9MB |
-| Spatial kill zones 10k [GPU] | 9,774–9,878 | WebGPURenderer | forced (302/302) | 302 | 75.5 | 19.1 | 13.25ms | 50.40ms | 55.30ms | 11.95ms | 39.50ms | 287.0MB |
-| Typical VFX 5k sprite [CPU] | 5,000 | WebGPURenderer | off | 478 | 119.3 | 65.5 | 8.38ms | 14.60ms | 15.80ms | 7.76ms | 8.90ms | 191.3MB |
-| Typical VFX 5k sprite [GPU] | 5,000 | WebGPURenderer | forced (3,155/3,155) | 3,155 | 788.6 | 48.7 | 1.27ms | 19.10ms | 27.70ms | 0.93ms | 0.60ms | 218.8MB |
-| Heavy modules 10k noise+forces [CPU] | 10,000 | WebGPURenderer | off | 511 | 127.6 | 80.6 | 7.83ms | 8.90ms | 15.90ms | 7.49ms | 8.20ms | 235.9MB |
-| Spawn churn 2k/sec simulation only [CPU] | 1,995–9,100 | WebGPURenderer | off | 2,592 | 647.8 | 232.8 | 1.54ms | 4.10ms | 4.90ms | 1.37ms | 3.10ms | 175.5MB |
-| Spawn churn 2k/sec simulation only [GPU] | 1,547–9,578 | WebGPURenderer | forced (16,242/16,242) | 16,242 | 4060.5 | 385.4 | 0.25ms | 0.70ms | 10.70ms | 0.11ms | 0.20ms | 175.5MB |
-| Custom volume spawn churn 2k/sec [CPU] | 1,995–8,986 | WebGPURenderer | off | 2,938 | 734.2 | 193.8 | 1.36ms | 3.00ms | 11.50ms | 1.22ms | 2.40ms | 92.1MB |
-| Custom volume spawn churn 2k/sec [GPU] | 1,560–9,562 | WebGPURenderer | forced (17,903/17,903) | 17,903 | 4475.8 | 726.1 | 0.22ms | 0.40ms | 9.90ms | 0.11ms | 0.20ms | 95.5MB |
-| Surface spawn churn 2k/sec [CPU] | 1,994–8,939 | WebGPURenderer | off | 3,181 | 795.2 | 353.6 | 1.26ms | 2.60ms | 3.10ms | 1.14ms | 2.20ms | 94.7MB |
-| Surface spawn churn 2k/sec [GPU] | 1,519–9,522 | WebGPURenderer | forced (17,359/17,359) | 17,359 | 4339.5 | 496.7 | 0.23ms | 0.50ms | 10.00ms | 0.11ms | 0.20ms | 95.0MB |
-| Renderer tag filtering 10k x4 noop [CPU] | 10,000 | WebGPURenderer | off | 1,226 | 306.5 | 205.4 | 3.26ms | 4.50ms | 5.90ms | 2.98ms | 3.60ms | 101.1MB |
-| Renderer tag filtering 10k x4 noop [GPU] | 10,000 | WebGPURenderer | forced (211/211) | 211 | 52.4 | 18.9 | 19.09ms | 50.30ms | 55.00ms | 17.30ms | 42.60ms | 303.8MB |
-| Renderer count LOD compensate 10k noop [CPU] | 10,000 | WebGPURenderer | off | 1,328 | 331.8 | 249.1 | 3.01ms | 3.90ms | 4.30ms | 2.73ms | 3.30ms | 206.7MB |
-| Renderer count LOD compensate 10k noop [GPU] | 10,000 | WebGPURenderer | forced (213/213) | 213 | 53.2 | 19.2 | 18.78ms | 51.30ms | 52.80ms | 17.14ms | 41.30ms | 303.4MB |
-| SpriteRenderer 5k rendered [CPU] | 5,000 | WebGPURenderer | off | 1,978 | 494.3 | 346.0 | 2.02ms | 2.70ms | 3.30ms | 1.55ms | 1.90ms | 225.3MB |
-| SpriteRenderer 5k rendered [GPU] | 5,000 | WebGPURenderer | forced (3,270/3,270) | 3,270 | 815.5 | 48.5 | 1.23ms | 19.90ms | 24.40ms | 0.88ms | 0.50ms | 294.3MB |
-| SpriteRenderer 10k rendered [CPU] | 10,000 | WebGPURenderer | off | 950 | 237.4 | 109.8 | 4.21ms | 5.30ms | 11.70ms | 3.59ms | 4.10ms | 202.6MB |
-| SpriteRenderer 10k rendered [GPU] | 10,000 | WebGPURenderer | forced (185/185) | 185 | 46.1 | 18.1 | 21.67ms | 55.10ms | 55.50ms | 19.54ms | 44.10ms | 314.9MB |
-| SpriteRenderer 50k rendered [CPU] | 50,000 | WebGPURenderer | off | 153 | 38.2 | 35.7 | 26.19ms | 27.90ms | 28.20ms | 25.09ms | 26.30ms | 231.4MB |
-| SpriteRenderer 50k rendered [GPU] | 50,000 | WebGPURenderer | forced (39/39) | 39 | 9.5 | 3.5 | 104.83ms | 288.10ms | 288.10ms | 97.29ms | 249.30ms | 971.0MB |
-| MeshRenderer 10k rendered [CPU] | 10,000 | WebGPURenderer | off | 853 | 213.2 | 154.9 | 4.69ms | 6.30ms | 7.00ms | 4.07ms | 5.00ms | 331.4MB |
-| MeshRenderer 10k rendered [GPU] | 10,000 | WebGPURenderer | forced (1,065/1,065) | 1,065 | 265.2 | 20.6 | 3.77ms | 45.80ms | 54.00ms | 1.89ms | 3.70ms | 837.3MB |
-| TrailRenderer 2k rendered [CPU] | 2,000 | WebGPURenderer | off | 724 | 181.0 | 69.5 | 5.53ms | 12.20ms | 21.10ms | 2.93ms | 4.00ms | 207.9MB |
-| TrailRenderer 2k rendered [GPU] | 2,000 | WebGPURenderer | forced (424/424) | 424 | 105.9 | 46.5 | 9.44ms | 19.10ms | 26.60ms | 2.28ms | 9.20ms | 259.0MB |
+| Case | Particles | Rendered Frames | Avg FPS | 1% Low FPS | Avg Frame | P99 Frame | Max Frame | Avg Update | P95 Update | Max JS Heap |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Baseline 10k simulation only [CPU] | 10,000 | 1,516 | 378.9 | 233.6 | 2.64ms | 3.90ms | 5.40ms | 2.37ms | 3.20ms | 69.5MB |
+| Baseline 10k simulation only [GPU] | 10,000 | 525 | 131.2 | 21.1 | 7.62ms | 46.00ms | 47.80ms | 6.88ms | 36.70ms | 319.4MB |
+| Baseline 50k simulation only [CPU] | 50,000 | 234 | 58.5 | 52.8 | 17.10ms | 18.80ms | 19.20ms | 16.48ms | 17.80ms | 164.6MB |
+| Baseline 50k simulation only [GPU] | 50,000 | 55 | 13.6 | 4.3 | 73.49ms | 232.50ms | 232.50ms | 67.49ms | 198.70ms | 837.0MB |
+| Fused modules 10k simulation only [CPU] | 10,000 | 569 | 142.1 | 102.7 | 7.04ms | 8.80ms | 10.80ms | 6.75ms | 7.70ms | 643.3MB |
+| Fused modules 10k simulation only [GPU] | 10,000 | 310 | 77.2 | 19.8 | 12.95ms | 48.80ms | 52.20ms | 11.74ms | 39.40ms | 269.6MB |
+| Heavy modules 10k [CPU] | 10,000 | 277 | 69.0 | 40.7 | 14.49ms | 23.70ms | 26.00ms | 14.10ms | 18.10ms | 231.3MB |
+| Heavy modules 10k [GPU] | 10,000 | 483 | 120.2 | 21.0 | 8.32ms | 46.00ms | 51.20ms | 7.54ms | 37.90ms | 270.9MB |
+| Spatial kill zones 10k [CPU] | 9,634–9,869 | 99 | 24.7 | 21.9 | 40.53ms | 45.60ms | 45.60ms | 40.08ms | 44.00ms | 166.9MB |
+| Spatial kill zones 10k [GPU] | 9,774–9,878 | 302 | 75.5 | 19.1 | 13.25ms | 50.40ms | 55.30ms | 11.95ms | 39.50ms | 287.0MB |
+| Typical VFX 5k sprite [CPU] | 5,000 | 478 | 119.3 | 65.5 | 8.38ms | 14.60ms | 15.80ms | 7.76ms | 8.90ms | 191.3MB |
+| Typical VFX 5k sprite [GPU] | 5,000 | 3,155 | 788.6 | 48.7 | 1.27ms | 19.10ms | 27.70ms | 0.93ms | 0.60ms | 218.8MB |
+| Heavy modules 10k noise+forces [CPU] | 10,000 | 511 | 127.6 | 80.6 | 7.83ms | 8.90ms | 15.90ms | 7.49ms | 8.20ms | 235.9MB |
+| Spawn churn 2k/sec simulation only [CPU] | 1,995–9,100 | 2,592 | 647.8 | 232.8 | 1.54ms | 4.10ms | 4.90ms | 1.37ms | 3.10ms | 175.5MB |
+| Spawn churn 2k/sec simulation only [GPU] | 1,547–9,578 | 16,242 | 4060.5 | 385.4 | 0.25ms | 0.70ms | 10.70ms | 0.11ms | 0.20ms | 175.5MB |
+| Custom volume spawn churn 2k/sec [CPU] | 1,995–8,986 | 2,938 | 734.2 | 193.8 | 1.36ms | 3.00ms | 11.50ms | 1.22ms | 2.40ms | 92.1MB |
+| Custom volume spawn churn 2k/sec [GPU] | 1,560–9,562 | 17,903 | 4475.8 | 726.1 | 0.22ms | 0.40ms | 9.90ms | 0.11ms | 0.20ms | 95.5MB |
+| Surface spawn churn 2k/sec [CPU] | 1,994–8,939 | 3,181 | 795.2 | 353.6 | 1.26ms | 2.60ms | 3.10ms | 1.14ms | 2.20ms | 94.7MB |
+| Surface spawn churn 2k/sec [GPU] | 1,519–9,522 | 17,359 | 4339.5 | 496.7 | 0.23ms | 0.50ms | 10.00ms | 0.11ms | 0.20ms | 95.0MB |
+| Renderer tag filtering 10k x4 noop [CPU] | 10,000 | 1,226 | 306.5 | 205.4 | 3.26ms | 4.50ms | 5.90ms | 2.98ms | 3.60ms | 101.1MB |
+| Renderer tag filtering 10k x4 noop [GPU] | 10,000 | 211 | 52.4 | 18.9 | 19.09ms | 50.30ms | 55.00ms | 17.30ms | 42.60ms | 303.8MB |
+| Renderer count LOD compensate 10k noop [CPU] | 10,000 | 1,328 | 331.8 | 249.1 | 3.01ms | 3.90ms | 4.30ms | 2.73ms | 3.30ms | 206.7MB |
+| Renderer count LOD compensate 10k noop [GPU] | 10,000 | 213 | 53.2 | 19.2 | 18.78ms | 51.30ms | 52.80ms | 17.14ms | 41.30ms | 303.4MB |
+| SpriteRenderer 5k rendered [CPU] | 5,000 | 1,978 | 494.3 | 346.0 | 2.02ms | 2.70ms | 3.30ms | 1.55ms | 1.90ms | 225.3MB |
+| SpriteRenderer 5k rendered [GPU] | 5,000 | 3,270 | 815.5 | 48.5 | 1.23ms | 19.90ms | 24.40ms | 0.88ms | 0.50ms | 294.3MB |
+| SpriteRenderer 10k rendered [CPU] | 10,000 | 950 | 237.4 | 109.8 | 4.21ms | 5.30ms | 11.70ms | 3.59ms | 4.10ms | 202.6MB |
+| SpriteRenderer 10k rendered [GPU] | 10,000 | 185 | 46.1 | 18.1 | 21.67ms | 55.10ms | 55.50ms | 19.54ms | 44.10ms | 314.9MB |
+| SpriteRenderer 50k rendered [CPU] | 50,000 | 153 | 38.2 | 35.7 | 26.19ms | 27.90ms | 28.20ms | 25.09ms | 26.30ms | 231.4MB |
+| SpriteRenderer 50k rendered [GPU] | 50,000 | 39 | 9.5 | 3.5 | 104.83ms | 288.10ms | 288.10ms | 97.29ms | 249.30ms | 971.0MB |
+| MeshRenderer 10k rendered [CPU] | 10,000 | 853 | 213.2 | 154.9 | 4.69ms | 6.30ms | 7.00ms | 4.07ms | 5.00ms | 331.4MB |
+| MeshRenderer 10k rendered [GPU] | 10,000 | 1,065 | 265.2 | 20.6 | 3.77ms | 45.80ms | 54.00ms | 1.89ms | 3.70ms | 837.3MB |
+| TrailRenderer 2k rendered [CPU] | 2,000 | 724 | 181.0 | 69.5 | 5.53ms | 12.20ms | 21.10ms | 2.93ms | 4.00ms | 207.9MB |
+| TrailRenderer 2k rendered [GPU] | 2,000 | 424 | 105.9 | 46.5 | 9.44ms | 19.10ms | 26.60ms | 2.28ms | 9.20ms | 259.0MB |
 
 <!-- RZMPS_BENCHMARKS_END -->
