@@ -15,6 +15,7 @@ jobs:
       - run: npm ci
       - run: npx puppeteer browsers install chrome
       - run: npm run build:modules
+      - run: node --test tests/visual/gpu-tags.test.mjs
       - run: node --test tests/visual/docs-generation.test.mjs
       - run: npm run site:build
       - run: npm run site:browser-check
