@@ -8,7 +8,8 @@
 
 # Class: ColorOverLifetime
 
-Multiplies color and alpha by normalized-age values in the transient render phase; original particle color is restored next update.
+Multiplies color and alpha by normalized-age values in the transient render phase; original particle color is
+restored next update.
 
 ## Extends
 

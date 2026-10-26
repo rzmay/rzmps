@@ -8,7 +8,8 @@
 
 # Class: VelocityBySize
 
-Adds linear motion channels using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample.
+Adds linear motion channels using particle size normalized over sizeRange; two-value parameter ranges interpolate
+rather than randomly sample.
 
 ## Extends
 

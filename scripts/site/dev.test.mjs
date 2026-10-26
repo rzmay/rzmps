@@ -6,6 +6,45 @@ import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { startSiteDev } from './dev.mjs';
 
+test('the demo serves requests while previews are prepared, before docs start', { timeout: 60000 }, async () => {
+  let demoServer;
+  const site = await startSiteDev({
+    port: 0, host: '127.0.0.1', prebundle: false,
+    prepareDocs: async demo => {
+      demoServer = demo;
+      const origin = `http://127.0.0.1:${demo.httpServer.address().port}`;
+      const response = await fetch(origin + '/');
+      assert.equal(response.status, 200);
+      assert.match(await response.text(), /src\/index\.jsx/);
+      const pending = await fetch(origin + '/docs/');
+      assert.equal(pending.status, 503);
+      assert.equal(pending.headers.get('retry-after'), '5');
+      assert.match(await pending.text(), /Documentation is starting/);
+    },
+  });
+  try {
+    assert.equal(site.demo, demoServer);
+    const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;
+    const response = await fetch(origin + '/docs/');
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /vitepress/);
+  } finally { await site.close(); }
+});
+
+test('preview preparation failure closes the listening demo', { timeout: 60000 }, async () => {
+  let demoServer;
+  const failure = new Error('Preview generation failed');
+  await assert.rejects(startSiteDev({
+    port: 0, host: '127.0.0.1', prebundle: false,
+    prepareDocs: async demo => {
+      demoServer = demo.httpServer;
+      assert.equal(demoServer.listening, true);
+      throw failure;
+    },
+  }), error => error === failure);
+  assert.equal(demoServer.listening, false);
+});
+
 test('combined development serves the demo at root and proxies only docs paths', { timeout: 60000 }, async () => {
   const site = await startSiteDev({ port: 0, host: '127.0.0.1', prebundle: false });
   const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;

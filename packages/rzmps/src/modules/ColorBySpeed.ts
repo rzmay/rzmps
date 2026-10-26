@@ -15,7 +15,10 @@ export interface ColorBySpeedOptions extends Partial<ModuleOptions> {
     speedRange: SpeedRange;
 }
 
-/** Multiplies color and alpha using velocity magnitude normalized over speedRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies color and alpha using velocity magnitude normalized over speedRange; two-value parameter ranges
+ * interpolate rather than randomly sample.
+ */
 class ColorBySpeed extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<ColorBySpeedOptions> = {}) {

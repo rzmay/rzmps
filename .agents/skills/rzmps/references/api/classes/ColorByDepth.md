@@ -8,7 +8,8 @@
 
 # Class: ColorByDepth
 
-Multiplies color and alpha using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample.
+Multiplies color and alpha using distance from the captured camera, normalized over depthRange; two-value parameter
+ranges interpolate rather than randomly sample.
 
 ## Extends
 

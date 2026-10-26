@@ -7,7 +7,10 @@ export interface DistortionOverLifetimeOptions extends Partial<ModuleOptions> {
     distortionStrength: DynamicValue<number>;
 }
 
-/** Applies a transient distortion multiplier by normalized age; requires a renderer material that consumes distortionStrength. */
+/**
+ * Applies a transient distortion multiplier by normalized age; requires a renderer material that consumes
+ * distortionStrength.
+ */
 class DistortionOverLifetime extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<DistortionOverLifetimeOptions> = {}) {

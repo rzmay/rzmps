@@ -8,7 +8,8 @@
 
 # Class: NoiseModule
 
-Computes particle-position simplex noise for a callback or named particle.noise entry; octave count adds sampling cost.
+Computes particle-position simplex noise for a callback or named particle.noise entry; octave count adds sampling
+cost.
 
 ## Extends
 

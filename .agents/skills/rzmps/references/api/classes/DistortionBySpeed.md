@@ -8,7 +8,8 @@
 
 # Class: DistortionBySpeed
 
-Multiplies distortion strength using velocity magnitude normalized over speedRange; two-value parameter ranges interpolate rather than randomly sample.
+Multiplies distortion strength using velocity magnitude normalized over speedRange; two-value parameter ranges
+interpolate rather than randomly sample.
 
 ## Extends
 

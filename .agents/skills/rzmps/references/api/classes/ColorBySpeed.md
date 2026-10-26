@@ -8,7 +8,8 @@
 
 # Class: ColorBySpeed
 
-Multiplies color and alpha using velocity magnitude normalized over speedRange; two-value parameter ranges interpolate rather than randomly sample.
+Multiplies color and alpha using velocity magnitude normalized over speedRange; two-value parameter ranges
+interpolate rather than randomly sample.
 
 ## Extends
 

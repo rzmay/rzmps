@@ -8,7 +8,8 @@
 
 # Class: TransformByNoise
 
-Adds three decorrelated noise channels to velocity using delta seconds; supply strength for the desired per-axis response.
+Adds three decorrelated noise channels to velocity using delta seconds; supply strength for the desired per-axis
+response.
 
 ## Extends
 

@@ -7,7 +7,9 @@ export interface SpeedOverLifetimeOptions extends Partial<ModuleOptions> {
     speed: DynamicValue<number>;
 }
 
-/** Transiently multiplies the scalar integration speed before movement; does not permanently replace particle velocity. */
+/**
+ * Transiently multiplies the scalar integration speed before movement; does not permanently replace particle velocity.
+ */
 class SpeedOverLifetime extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<SpeedOverLifetimeOptions> = {}) {

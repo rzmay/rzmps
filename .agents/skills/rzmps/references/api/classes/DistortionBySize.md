@@ -8,7 +8,8 @@
 
 # Class: DistortionBySize
 
-Multiplies distortion strength using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample.
+Multiplies distortion strength using particle size normalized over sizeRange; two-value parameter ranges interpolate
+rather than randomly sample.
 
 ## Extends
 

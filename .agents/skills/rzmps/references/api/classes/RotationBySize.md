@@ -8,7 +8,8 @@
 
 # Class: RotationBySize
 
-Adds angular channels using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample.
+Adds angular channels using particle size normalized over sizeRange; two-value parameter ranges interpolate rather
+than randomly sample.
 
 ## Extends
 

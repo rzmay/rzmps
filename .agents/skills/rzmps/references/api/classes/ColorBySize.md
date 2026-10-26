@@ -8,7 +8,8 @@
 
 # Class: ColorBySize
 
-Multiplies color and alpha using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample.
+Multiplies color and alpha using particle size normalized over sizeRange; two-value parameter ranges interpolate
+rather than randomly sample.
 
 ## Extends
 

@@ -14,7 +14,10 @@ export interface ScaleBySpeedOptions extends Partial<ModuleOptions> {
     speedRange?: SpeedRange;
 }
 
-/** Multiplies scale and adds scalar channels using velocity magnitude normalized over speedRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies scale and adds scalar channels using velocity magnitude normalized over speedRange; two-value parameter
+ * ranges interpolate rather than randomly sample.
+ */
 class ScaleBySpeed extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<ScaleBySpeedOptions> = {}) {

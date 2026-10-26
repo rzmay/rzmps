@@ -8,20 +8,24 @@ import { root, discoverExamples } from '../../scripts/docs/examples.mjs';
 import { previewDirectory, validatePreviews } from '../../scripts/docs/preview-manifest.mjs';
 
 const run = promisify(execFile);
-test('docs:generate repairs missing and stale real previews, then reuses current captures', { timeout: 300000 }, async () => {
+test('docs checks repair missing and stale real previews, then generation reuses current captures', { timeout: 300000 }, async () => {
+  const generate = () => run('npm', ['run', 'docs:generate'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
+  // A clean checkout has no previews until the first generation.
+  await generate();
   const manifestFile = path.join(previewDirectory, 'manifest.json');
   const manifest = await fs.readFile(manifestFile);
   const affected = ['fire', 'smoke'];
   const originals = await Promise.all(affected.map(id => fs.readFile(path.join(previewDirectory, id + '.png'))));
   const unchanged = path.join(previewDirectory, 'fireworks.png');
   const before = await fs.stat(unchanged);
-  const generate = () => run('npm', ['run', 'docs:generate'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
   try {
     await fs.unlink(path.join(previewDirectory, 'fire.png'));
     const stale = JSON.parse(manifest);
     stale.examples.smoke.inputHash = 'outdated-source';
     await fs.writeFile(manifestFile, JSON.stringify(stale));
-    const repaired = await generate();
+    const repaired = await run('npm', ['run', 'docs:generate', '--', '--check'], {
+      cwd: root, maxBuffer: 8 * 1024 * 1024,
+    });
     assert.equal((repaired.stdout.match(/Captured 1 webgl frames/g) || []).length, 2);
     validatePreviews(discoverExamples());
     for (const id of affected) {
@@ -34,7 +38,7 @@ test('docs:generate repairs missing and stale real previews, then reuses current
     assert.doesNotMatch(reused.stdout, /Captured \d+|> .*build:modules/);
     assert.equal((reused.stdout.match(/preview is current/g) || []).length, discoverExamples().length);
   } finally {
-    // The integration test must not change committed rendering artifacts.
+    // Restore the local preview cache after the repair checks.
     for (const [index, id] of affected.entries()) await fs.writeFile(path.join(previewDirectory, id + '.png'), originals[index]);
     await fs.writeFile(manifestFile, manifest);
   }

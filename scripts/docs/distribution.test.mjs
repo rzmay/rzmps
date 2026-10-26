@@ -20,10 +20,11 @@ test('canonical documentation controls skill metadata, workflow, and portable re
   assert.doesNotMatch(changed,/\]\(\.\.\/api\//);
   assert.throws(()=>generateSkill(source.replace('<!-- skill:instructions:end -->','')),/Missing canonical skill region/);
 });
-test('only rebuildable artifacts are ignored; installable skill, authored guides, and previews stay tracked',()=>{
+test('rebuildable artifacts including previews are ignored; installable skill and authored guides stay tracked',()=>{
   const root=path.resolve(import.meta.dirname,'../..');
-  const artifacts=buildArtifacts.map(file=>file.endsWith('/')?file+'index.md':file);
-  const retained=['.agents/skills/rzmps/SKILL.md','.agents/skills/rzmps/references/api.md','apps/docs/guides/concepts.md','apps/docs/examples/fire.md','apps/docs/public/previews/fire.png','README.md'];
+  const artifacts=[...buildArtifacts.map(file=>file.endsWith('/')?file+'index.md':file),
+    'apps/docs/public/previews/fire.png','apps/docs/public/previews/manifest.json'];
+  const retained=['.agents/skills/rzmps/SKILL.md','.agents/skills/rzmps/references/api.md','apps/docs/guides/concepts.md','apps/docs/examples/fire.md','README.md'];
   const ignored=execFileSync('git',['check-ignore','--no-index','--stdin'],{cwd:root,input:[...artifacts,...retained].join('\n')+'\n',encoding:'utf8'}).trim().split('\n');
   assert.deepEqual(ignored.sort(),artifacts.sort());
 });

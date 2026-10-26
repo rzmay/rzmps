@@ -8,7 +8,8 @@
 
 # Class: Collision
 
-Predicts contacts before movement at priority -0.01; bounce, damping, impulses, and lifecycle callbacks use the selected backend.
+Predicts contacts before movement at priority -0.01; bounce, damping, impulses, and lifecycle callbacks use the
+selected backend.
 
 ## Extends
 

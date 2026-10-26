@@ -8,7 +8,8 @@
 
 # Class: Boids
 
-Flocking steering using spatial aggregates and tagged affectors; prepare once per system update before modifying particles.
+Flocking steering using spatial aggregates and tagged affectors; prepare once per system update before modifying
+particles.
 
 ## Extends
 

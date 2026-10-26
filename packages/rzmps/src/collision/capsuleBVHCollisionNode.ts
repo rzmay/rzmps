@@ -9,8 +9,8 @@ import { closestPointToTriangle } from 'three-mesh-bvh/src/webgpu/tsl/fns.js';
 import { wgslTagFn } from 'three-mesh-bvh/src/webgpu/nodes/WGSLTagFnNode.js';
 
 export interface BVHComputeDataLike {
-  storage: Record<string, any>;
-  getShapecastFn(options: Record<string, unknown>): (...args: any[]) => Node;
+  storage: Record<string, unknown>;
+  getShapecastFn(options: Record<string, unknown>): (...args: unknown[]) => Node;
 }
 
 export const capsuleQueryStruct = new StructTypeNode({

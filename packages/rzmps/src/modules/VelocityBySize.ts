@@ -14,7 +14,10 @@ export interface VelocityBySizeOptions extends Partial<ModuleOptions> {
     sizeRange: SizeRange;
 }
 
-/** Adds linear motion channels using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Adds linear motion channels using particle size normalized over sizeRange; two-value parameter ranges interpolate
+ * rather than randomly sample.
+ */
 class VelocityBySize extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<VelocityBySizeOptions> = {}) {

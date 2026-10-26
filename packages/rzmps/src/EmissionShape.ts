@@ -6,7 +6,6 @@ import { EmissionSource } from './enums/EmissionSource';
 import { getGPUEmissionShapeSupport, type GPUEmissionSupportReport } from './gpu/Emission';
 import isPointInMesh, {
   countDistinctRayHits,
-  POINT_IN_MESH_DIRECTIONS,
 } from './helpers/isPointInMesh';
 
 /** Fixed table size or a logarithmic estimate derived from a small ray probe pass. */
@@ -220,7 +219,7 @@ class EmissionShape extends THREE.Object3D {
         .normalize();
     }
 
-    /** Samples position and normal in parent space; volume rejection falls back to surface sampling after a bounded number of attempts. */
+    /** Samples position and normal in parent space; falls back to surface sampling after too many attempts. */
     getPoint(overrideSource?: EmissionSource): { position: THREE.Vector3, normal: THREE.Vector3 } {
       switch (overrideSource ?? this.source) {
         case EmissionSource.Vertices:
@@ -310,8 +309,6 @@ class EmissionShape extends THREE.Object3D {
       const bvh = new MeshBVH(samplingGeometry);
       const boundsSize = bounds.getSize(new THREE.Vector3());
       const boundsDiagonal = Math.max(boundsSize.length(), Number.EPSILON);
-      const rayDirection = POINT_IN_MESH_DIRECTIONS[0];
-      const negativeRayDirection = rayDirection.clone().negate();
       const candidate = new THREE.Vector3();
       // Rotate the Halton set per bake to retain even coverage without fixing
       // every geometry to the same sequence alignment.

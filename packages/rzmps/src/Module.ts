@@ -48,7 +48,11 @@ export type SpatialEffectConstructor<T extends SpatialEffect = SpatialEffect> = 
 
 export interface ModuleOptions {
   // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
-  /** Execution phase: negative is permanent before movement, 0–1 is transient before movement, 1 or greater is transient after movement. */
+  /** Execution phase:
+   * negative is permanent before movement,
+   * 0–1 is transient before movement,
+   * 1 or greater is transient after movement.
+  */
   priority: number | Priority;
 
   /** Restricts processing to particles sharing a selected tag; omission accepts every tag. */
@@ -204,9 +208,8 @@ export default class Module {
     ]
   }
 
-  // Optional preparation hook called once-per-update rather than per particle
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   /** Prepares shared work once per system update; the base implementation collects matching spatial effects. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public prepare(particleSystem: ParticleSystem, deltaTime: number) {
     this.prepareSpatialEffects(particleSystem);
     if (!this.useOctree || particleSystem.isGPUProcessingActive) return;

@@ -15,7 +15,10 @@ export interface ColorBySizeOptions extends Partial<ModuleOptions> {
     sizeRange: SizeRange;
 }
 
-/** Multiplies color and alpha using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies color and alpha using particle size normalized over sizeRange; two-value parameter ranges interpolate
+ * rather than randomly sample.
+ */
 class ColorBySize extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<ColorBySizeOptions> = {}) {

@@ -8,7 +8,8 @@
 
 # Class: VelocityOverLifetime
 
-Adds age-dependent linear, orbital, and radial motion before integration without accumulating the transient velocity offset.
+Adds age-dependent linear, orbital, and radial motion before integration without accumulating the transient velocity
+offset.
 
 ## Extends
 

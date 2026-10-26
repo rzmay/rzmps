@@ -37,7 +37,10 @@ export type NoiseModuleGPUUpdate = (
   noise: GPUParticleNoiseValues,
 ) => void;
 
-/** Computes particle-position simplex noise for a callback or named particle.noise entry; octave count adds sampling cost. */
+/**
+ * Computes particle-position simplex noise for a callback or named particle.noise entry; octave count adds sampling
+ * cost.
+ */
 class NoiseModule extends Module {
     public octaves = 1;
 

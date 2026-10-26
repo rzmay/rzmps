@@ -8,7 +8,8 @@
 
 # Class: MassBySize
 
-Multiplies particle mass using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample.
+Multiplies particle mass using particle size normalized over sizeRange; two-value parameter ranges interpolate
+rather than randomly sample.
 
 ## Extends
 

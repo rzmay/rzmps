@@ -44,7 +44,10 @@ export interface CollisionOptions extends Partial<ModuleOptions> {
   onCollision?: CollisionListener;
 }
 
-/** Predicts contacts before movement at priority -0.01; bounce, damping, impulses, and lifecycle callbacks use the selected backend. */
+/**
+ * Predicts contacts before movement at priority -0.01; bounce, damping, impulses, and lifecycle callbacks use the
+ * selected backend.
+ */
 class Collision extends Module {
   private _backend?: ICollisionBackend;
 

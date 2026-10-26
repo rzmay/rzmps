@@ -13,7 +13,10 @@ export interface SpeedByDepthOptions extends Partial<ModuleOptions> {
   depthRange?: [number, number];
 }
 
-/** Multiplies scalar integration speed using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies scalar integration speed using distance from the captured camera, normalized over depthRange; two-value
+ * parameter ranges interpolate rather than randomly sample.
+ */
 class SpeedByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');
