@@ -16,6 +16,7 @@ export default async function createFlipFluid() {
       new THREE.Vector3(3, 4, 3),
     ),
     boundsPadding: 0,
+    maxBounds: 16,
     automaticPadding: true,
     velocityPaddingLookahead: 0.15,
     spatialGridOptions: {

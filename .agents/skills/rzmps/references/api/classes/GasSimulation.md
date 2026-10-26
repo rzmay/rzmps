@@ -278,6 +278,20 @@ externalForce: Vector3;
 
 ***
 
+<a id="maxbounds"></a>
+
+### maxBounds
+
+```ts
+maxBounds: number;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`maxBounds`](FluidSimulation.md#maxbounds)
+
+***
+
 <a id="maxvelocity"></a>
 
 ### maxVelocity
@@ -594,6 +608,16 @@ temperatureOverLifetime: DynamicValue<number>;
 
 ```ts
 temperatureRange: [number, number];
+```
+
+***
+
+<a id="turbulencestrength"></a>
+
+### turbulenceStrength
+
+```ts
+turbulenceStrength: number;
 ```
 
 ***

@@ -158,6 +158,23 @@ externalForce: Vector3;
 
 ***
 
+<a id="maxbounds"></a>
+
+### maxBounds
+
+```ts
+maxBounds: number;
+```
+
+Maximum domain side length in simulation units. Infinity leaves growth unlimited.
+Power-of-two grids round this limit down. Escaped particles are not confined by it.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`maxBounds`](FluidSimulationOptions.md#maxbounds)
+
+***
+
 <a id="maxvelocity"></a>
 
 ### maxVelocity
@@ -481,6 +498,18 @@ temperatureRange: [number, number];
 
 ***
 
+<a id="turbulencestrength"></a>
+
+### turbulenceStrength
+
+```ts
+turbulenceStrength: number;
+```
+
+Independent animated noise acceleration in simulation units per second squared.
+
+***
+
 <a id="updatelod"></a>
 
 ### updateLOD?
@@ -574,6 +603,8 @@ velocitySourceStrength: number;
 ```ts
 vorticityStrength: number;
 ```
+
+Curl-confinement strength; restores small-scale rotation lost to advection.
 
 ***
 

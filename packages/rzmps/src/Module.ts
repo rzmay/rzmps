@@ -222,13 +222,14 @@ export default class Module {
 
     if (!this.octree) {
       this.octree = new ParticleOctree(
-        { ...this.octreeOptions, bounds: bounds?.clone() },
+        { tags: this.tags, ...this.octreeOptions, bounds: bounds?.clone() },
         this.octreeAggregator,
       );
     } else if (!this.octreeOptions.bounds && bounds) {
       this.octree.setBounds(bounds);
     }
-    this.octree.rebuild(particleSystem.particles, this.tags);
+    this.octree.tags = this.octreeOptions.tags ?? this.tags;
+    this.octree.rebuild(particleSystem.particles);
   }
 
   /** Returns the managed CPU structure after prepare(), when enabled. */

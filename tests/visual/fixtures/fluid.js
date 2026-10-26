@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
-import { Fn, float, storage, vec3, vec4 } from 'three/tsl';
+import { Fn, If, float, instanceIndex, storage, uint, vec3, vec4 } from 'three/tsl';
 import { experimentalExamples } from '../../../examples/experimental/index.js';
 import createScene from '../../../apps/demo/src/presets/scenes/fluidTeapot.js';
 import createCheckerboard from '../../../apps/demo/src/presets/scenes/checkerboard.js';
@@ -62,8 +62,49 @@ window.runFrames = async (frames, dt = 1 / 60) => {
       peak = Math.max(peak, values[i]);
       heat += values[i + 1];
     }
-    field = { sum, peak, heat };
+    const velocities = new Float32Array(await renderer.getArrayBufferAsync(flip.velocityCurrentAttribute));
+    let energy = 0, coolEnergy = 0, coolDensity = 0;
+    for (let i = 0; i < values.length; i += 4) {
+      const speedSq = velocities[i] ** 2 + velocities[i + 1] ** 2 + velocities[i + 2] ** 2;
+      energy += speedSq * values[i];
+      if (values[i + 1] / Math.max(values[i], 1e-6) < 0.25) {
+        coolEnergy += speedSq * values[i];
+        coolDensity += values[i];
+      }
+    }
+    field = { sum, peak, heat, rmsSpeed: Math.sqrt(energy / Math.max(sum, 1e-6)),
+      coolSpeed: Math.sqrt(coolEnergy / Math.max(coolDensity, 1e-6)), coolDensity };
   }
   return { count: particles.filter((p) => p.valid).length, min, max, speed, newbornSpeed, inContainer, field };
+};
+window.moveParticle = (position, velocity = [0, 0, 0]) => {
+  const buffers = system._gpuBuffers;
+  renderer.compute(Fn(() => {
+    const particle = buffers.storage.createParticle(undefined, true);
+    If(instanceIndex.equal(uint(0)), () => {
+      particle.position.assign(vec3(...position));
+      particle.velocity.assign(vec3(...velocity));
+      buffers.storage.storeParticle(particle);
+    });
+  })().compute(buffers.count));
+};
+window.seedGas = (kind = 'rotating') => {
+  flip.automaticPadding = false;
+  flip.externalForce.set(0, 0, 0);
+  flip.buoyancy = 0;
+  flip.weight = 0;
+  flip.turbulenceStrength = 0;
+  flip.velocityDissipation = 0;
+  renderer.compute(Fn(() => {
+    const center = flip.cellCenter(flip.cellCoordinate(instanceIndex));
+    const radius = center.length();
+    const density = radius.lessThan(1.25).select(1, 0);
+    const spin = float(1).sub(radius.div(2)).max(0);
+    const velocity = kind === 'uniform' ? vec3(0.3, 0, 0)
+      : vec3(center.y.negate(), center.x, 0).mul(spin);
+    flip.densityCurrent.element(instanceIndex).assign(vec4(density, 0, 0, 0));
+    flip.colorCurrent.element(instanceIndex).assign(vec4(density, density, density, 0));
+    flip.velocityCurrent.element(instanceIndex).assign(vec4(velocity, 0));
+  })().compute(flip.cellCount));
 };
 window.ready = true;

@@ -12,6 +12,7 @@ export default async function createGasNiagaraBurst() {
     velocityDissipation: 0.8,
     buoyancy: 3.5,
     scalarDiffusion: 0,
+    turbulenceStrength: 0,
     temperatureOverLifetime: 1,
     bounds: new THREE.Box3(new THREE.Vector3(-3, -1, -3), new THREE.Vector3(3, 4, 3)),
     automaticPadding: false,

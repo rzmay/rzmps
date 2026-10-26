@@ -216,10 +216,10 @@ optional octree?: ParticleOctree<BoidAggregate>;
 ### octreeAggregator
 
 ```ts
-readonly octreeAggregator: OctreeAggregator<unknown>;
+readonly octreeAggregator: OctreeAggregator<BoidAggregate>;
 ```
 
-#### Inherited from
+#### Overrides
 
 [`Module`](Module.md).[`octreeAggregator`](Module.md#octreeaggregator)
 
@@ -230,10 +230,10 @@ readonly octreeAggregator: OctreeAggregator<unknown>;
 ### octreeOptions
 
 ```ts
-octreeOptions: OctreeConfig;
+readonly octreeOptions: Partial<OctreeConfig>;
 ```
 
-#### Overrides
+#### Inherited from
 
 [`Module`](Module.md).[`octreeOptions`](Module.md#octreeoptions)
 
@@ -662,7 +662,7 @@ Returns the managed CPU structure after prepare(), when enabled.
 ### getParticleSpatialGrid()
 
 ```ts
-getParticleSpatialGrid(particleSystem): ParticleSpatialGrid;
+getParticleSpatialGrid(particleSystem): ParticleSpatialGrid | undefined;
 ```
 
 Dependency hook used by function-defined and class-based GPU neighbor modules.
@@ -675,9 +675,9 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 #### Returns
 
-[`ParticleSpatialGrid`](ParticleSpatialGrid.md)
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md) \| `undefined`
 
-#### Overrides
+#### Inherited from
 
 [`Module`](Module.md).[`getParticleSpatialGrid`](Module.md#getparticlespatialgrid)
 

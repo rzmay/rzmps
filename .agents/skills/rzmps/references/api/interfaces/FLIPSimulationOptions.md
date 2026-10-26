@@ -134,6 +134,23 @@ externalForce: Vector3;
 
 ***
 
+<a id="maxbounds"></a>
+
+### maxBounds
+
+```ts
+maxBounds: number;
+```
+
+Maximum domain side length in simulation units. Infinity leaves growth unlimited.
+Power-of-two grids round this limit down. Escaped particles are not confined by it.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`maxBounds`](FluidSimulationOptions.md#maxbounds)
+
+***
+
 <a id="maxvelocity"></a>
 
 ### maxVelocity

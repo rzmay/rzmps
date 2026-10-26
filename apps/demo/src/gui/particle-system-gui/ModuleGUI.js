@@ -114,7 +114,7 @@ export class ModuleGUI extends GUIEditorBase {
                     'velocityCurrentAttribute', 'velocityNextAttribute',
                     'pressureCurrentAttribute', 'pressureNextAttribute', 'divergenceAttribute',
                     'velocityCurrent', 'velocityNext', 'pressureCurrent', 'pressureNext',
-                    'divergence', 'density', 'colorField', 'densityAttributeA',
+                    'divergence', 'curl', 'density', 'colorField', 'densityAttributeA',
                     'densityAttributeB', 'colorAttributeA', 'colorAttributeB',
                     'visualDensityAttribute', 'visualColorAttribute', 'visualDensity', 'visualColor',
                     'solid', 'solidAttribute', 'solidNode',

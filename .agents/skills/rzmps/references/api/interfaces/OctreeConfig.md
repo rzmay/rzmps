@@ -76,6 +76,18 @@ Bounds quantization increment; zero disables quantization.
 
 ***
 
+<a id="tags"></a>
+
+### tags?
+
+```ts
+optional tags?: Multiple<string>;
+```
+
+Default rebuild filter; omission or an empty selection includes every tag.
+
+***
+
 <a id="timequality"></a>
 
 ### timeQuality

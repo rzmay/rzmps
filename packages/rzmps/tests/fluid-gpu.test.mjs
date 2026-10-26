@@ -16,6 +16,18 @@ const gas = new GasSimulation({
 const flip = new FLIPSimulation({
   spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 4 },
 });
+const boundedFlip = new FLIPSimulation({
+  maxBounds: 20,
+  bounds: new THREE.Box3(new THREE.Vector3(-32, -32, -32), new THREE.Vector3(32, 32, 32)),
+  spatialGridOptions: { autoExpand: true },
+});
+assert.deepEqual(boundedFlip.bounds.min.toArray(), [-8, -8, -8]);
+assert.deepEqual(boundedFlip.bounds.max.toArray(), [8, 8, 8]);
+assert.equal(boundedFlip.spatialGridOptions.autoExpand, false);
+assert.equal(flip.maxBounds, Infinity);
+assert.equal(gas.turbulenceStrength, 0);
+assert.throws(() => new FLIPSimulation({ maxBounds: 0 }), /maxBounds/);
+boundedFlip.cleanup();
 const shrinkingGas = new GasSimulation({
   spatialGridOptions: { shrinkDelay: 180 },
 });

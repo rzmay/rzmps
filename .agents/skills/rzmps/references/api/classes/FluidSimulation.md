@@ -195,6 +195,16 @@ externalForce: Vector3;
 
 ***
 
+<a id="maxbounds"></a>
+
+### maxBounds
+
+```ts
+maxBounds: number;
+```
+
+***
+
 <a id="maxvelocity"></a>
 
 ### maxVelocity

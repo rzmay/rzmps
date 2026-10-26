@@ -5,7 +5,7 @@ import createGasVolume from './gasVolume.js';
 export default async function createGasBlenderSmoke() {
   // Blender's smoke study compares vorticity 0 and 0.2; Dissolve is optional:
   // https://docs.blender.org/manual/en/latest/physics/fluid/type/domain/settings.html
-  // This uses RZMPS's turbulence control as an approximation, not Mantaflow's units.
+  // Curl confinement is shared in principle, but coefficients are not Mantaflow units.
   const system = await createGasVolume({
     densityDissipation: 0,
     colorDissipation: 0,
@@ -15,6 +15,7 @@ export default async function createGasBlenderSmoke() {
     weight: 0,
     scalarDiffusion: 0,
     vorticityStrength: 0.2,
+    turbulenceStrength: 0,
     temperatureColor: undefined,
     temperatureOverLifetime: 1,
     bounds: new THREE.Box3(new THREE.Vector3(-3, -1, -3), new THREE.Vector3(3, 4, 3)),

@@ -37,7 +37,10 @@ export interface GasSimulationOptions extends FluidSimulationOptions {
   scalarDiffusion: number;
   temperatureColor: ValueByParameter<THREE.Color> | undefined;
   temperatureRange: [number, number];
+  /** Curl-confinement strength; restores small-scale rotation lost to advection. */
   vorticityStrength: number;
+  /** Independent animated noise acceleration in simulation units per second squared. */
+  turbulenceStrength: number;
   noiseFrequency: number;
   noiseSpeed: number;
   noiseOctaves: number;
@@ -61,6 +64,7 @@ class GasSimulation extends FluidSimulation {
   temperatureColor?: ValueByParameter<THREE.Color>;
   temperatureRange: [number, number];
   vorticityStrength: number;
+  turbulenceStrength: number;
   noiseFrequency: number;
   noiseSpeed: number;
   noiseOctaves: number;
@@ -102,6 +106,11 @@ class GasSimulation extends FluidSimulation {
   private readonly colorDissipationNode = uniform(0) as FloatUniform;
   private readonly velocityDissipationNode = uniform(0) as FloatUniform;
   private readonly scalarDiffusionNode = uniform(0) as FloatUniform;
+  private curlAttribute!: StorageBufferAttribute;
+  private curl!: Vec4Storage;
+  private curlNode?: ComputeNode;
+  private confinementNode?: ComputeNode;
+  private readonly vorticityNode = uniform(0) as FloatUniform;
 
   constructor(options: Partial<GasSimulationOptions> = {}) {
     super({
@@ -123,6 +132,7 @@ class GasSimulation extends FluidSimulation {
     this.temperatureColor = options.temperatureColor;
     this.temperatureRange = [...(options.temperatureRange ?? [0, 1])];
     this.vorticityStrength = Math.max(0, options.vorticityStrength ?? 0);
+    this.turbulenceStrength = Math.max(0, options.turbulenceStrength ?? 0);
     this.noiseFrequency = Math.max(0, options.noiseFrequency ?? 0.75);
     this.noiseSpeed = options.noiseSpeed ?? 0.2;
     this.noiseOctaves = Math.max(1, Math.floor(options.noiseOctaves ?? 2));
@@ -161,7 +171,7 @@ class GasSimulation extends FluidSimulation {
     const cacheKey = [grid.resourceVersion, context.buffers.version, tagMask,
       this.buoyancy, this.weight, this.velocitySourceStrength, this.sourceStrength,
       this.sourceTemperature, Boolean(this.temperatureOverLifetime), this.temperatureRange.join(','),
-      Boolean(this.temperatureColor), this.vorticityStrength, this.noiseFrequency,
+      Boolean(this.temperatureColor), this.turbulenceStrength, this.noiseFrequency,
       this.noiseSpeed, this.noiseOctaves].join('|');
     if (cacheKey !== this.gpuCacheKey) {
       this.gpuCacheKey = cacheKey;
@@ -199,7 +209,7 @@ class GasSimulation extends FluidSimulation {
         generateGPUParticleNoise4D(center, { ...noiseSettings, offset: new THREE.Vector3(17.1, 31.7, 47.3) }, noiseTime),
         generateGPUParticleNoise4D(center, { ...noiseSettings, offset: new THREE.Vector3(59.7, 11.3, 23.9) }, noiseTime),
         generateGPUParticleNoise4D(center, { ...noiseSettings, offset: new THREE.Vector3(37.5, 71.9, 5.7) }, noiseTime),
-      ).mul(2).sub(1).mul(this.vorticityStrength);
+      ).mul(2).sub(1).mul(this.turbulenceStrength);
       const velocityRetention = pow(float(Math.E), dt.mul(this.velocityDissipationNode).mul(-1));
       const advected = vec3(previous)
         .mul(velocityRetention)
@@ -234,6 +244,7 @@ class GasSimulation extends FluidSimulation {
     this.velocitySourceNode = velocitySources;
     renderer.compute(velocitySources);
 
+    this.applyVorticity(context, renderer);
     this.solveProjection(renderer, this.velocityNext, this.velocityCurrent, false, this.solid);
 
     const densityCurrent = this.densityCurrent;
@@ -267,21 +278,22 @@ class GasSimulation extends FluidSimulation {
           ),
         )),
       );
-      const boundaryFade = clamp(edgeDistance.div(2), 0, 1);
+      // An absorbing edge layer with a decay rate, not a per-frame multiplier.
+      const boundaryRetention = pow(clamp(edgeDistance.div(2), 0, 1), dt.mul(60));
       const densityRetention = pow(float(Math.E), dt.mul(this.densityDissipationNode).mul(-1));
       const temperatureRetention = pow(float(Math.E), dt.mul(this.temperatureDissipationNode).mul(-1));
       const colorRetention = pow(float(Math.E), dt.mul(this.colorDissipationNode).mul(-1));
       const rawDensity = max(float(0), mixedDensity.x
-        .mul(densityRetention).mul(boundaryFade));
+        .mul(densityRetention).mul(boundaryRetention));
       const keep = rawDensity.greaterThanEqual(this.densityCutoffNode);
       const density = keep.select(rawDensity, float(0));
       const temperature = keep.select(
         max(float(0), mixedDensity.y
-          .mul(densityRetention).mul(temperatureRetention).mul(boundaryFade)),
+          .mul(densityRetention).mul(temperatureRetention).mul(boundaryRetention)),
         float(0),
       );
       const color = keep.select(
-        vec3(mixedColor.xyz).mul(colorRetention).mul(boundaryFade),
+        vec3(mixedColor.xyz).mul(colorRetention).mul(boundaryRetention),
         vec3(0),
       );
       densityNext.element(instanceIndex).assign(
@@ -481,6 +493,8 @@ class GasSimulation extends FluidSimulation {
     this.visualOutputNodes = new WeakMap();
     this.maximaNodes = new WeakMap();
     this.maximaResetNode = undefined;
+    this.curlNode = undefined;
+    this.confinementNode = undefined;
   }
 
   private remapFields(renderer: ParticleSpatialGridRenderer): void {
@@ -518,6 +532,8 @@ class GasSimulation extends FluidSimulation {
   }
 
   private allocateGasFields(): void {
+    this.curlAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
+    this.curl = storage(this.curlAttribute, 'vec4', this.cellCount) as Vec4Storage;
     this.densityAttributeA = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
     this.densityAttributeB = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
     this.colorAttributeA = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
@@ -547,6 +563,7 @@ class GasSimulation extends FluidSimulation {
       this.visualDensityAttribute,
       this.visualColorAttribute,
       this.maximaAttribute,
+      this.curlAttribute,
     ].forEach((attribute) => attribute?.dispose());
   }
 
@@ -561,12 +578,54 @@ class GasSimulation extends FluidSimulation {
   }
 
   private syncSimulationUniforms(): void {
+    this.vorticityNode.value = Math.max(0, this.vorticityStrength);
     this.densityDissipationNode.value = Math.max(0, this.densityDissipation);
     this.densityCutoffNode.value = Math.max(0, this.densityCutoff);
     this.temperatureDissipationNode.value = Math.max(0, this.temperatureDissipation);
     this.colorDissipationNode.value = Math.max(0, this.colorDissipation);
     this.velocityDissipationNode.value = Math.max(0, this.velocityDissipation);
     this.scalarDiffusionNode.value = Math.max(0, this.scalarDiffusion);
+  }
+
+  private applyVorticity(context: GPUParticleUpdateContext, renderer: ParticleSpatialGridRenderer): void {
+    if (!(this.vorticityNode.value > 0)) return;
+    const sample = (field: Vec4Storage, coordinate: Node<'ivec3'>, x: number, y: number, z: number) => (
+      field.element(this.cellIndex(ivec3(clamp(
+        vec3(coordinate.add(ivec3(x, y, z))), vec3(0), vec3(this.resolution - 1),
+      ))))
+    );
+    const curl = this.curlNode ?? Fn(() => {
+      const coordinate = this.cellCoordinate(instanceIndex);
+      const dx = sample(this.velocityNext, coordinate, 1, 0, 0).xyz
+        .sub(sample(this.velocityNext, coordinate, -1, 0, 0).xyz);
+      const dy = sample(this.velocityNext, coordinate, 0, 1, 0).xyz
+        .sub(sample(this.velocityNext, coordinate, 0, -1, 0).xyz);
+      const dz = sample(this.velocityNext, coordinate, 0, 0, 1).xyz
+        .sub(sample(this.velocityNext, coordinate, 0, 0, -1).xyz);
+      const rotation = vec3(dy.z.sub(dz.y), dz.x.sub(dx.z), dx.y.sub(dy.x))
+        .mul(0.5).div(this.cellSizeNode).toVar('gasCurl');
+      this.curl.element(instanceIndex).assign(this.isSolid().select(vec4(0), vec4(rotation, rotation.length())));
+    })().compute(this.cellCount);
+    this.curlNode = curl;
+    renderer.compute(curl);
+    const confinement = this.confinementNode ?? Fn(() => {
+      const coordinate = this.cellCoordinate(instanceIndex);
+      const gradient = vec3(
+        sample(this.curl, coordinate, 1, 0, 0).w.sub(sample(this.curl, coordinate, -1, 0, 0).w),
+        sample(this.curl, coordinate, 0, 1, 0).w.sub(sample(this.curl, coordinate, 0, -1, 0).w),
+        sample(this.curl, coordinate, 0, 0, 1).w.sub(sample(this.curl, coordinate, 0, 0, -1).w),
+      ).toVar('gasCurlGradient');
+      const normal = gradient.div(gradient.length().max(1e-6));
+      // Fedkiw et al.: epsilon * h * (normalized grad |curl u|) cross curl u.
+      const force = normal.cross(this.curl.element(instanceIndex).xyz)
+        .mul(this.vorticityNode).mul(this.cellSizeNode);
+      const velocity = this.velocityNext.element(instanceIndex);
+      velocity.assign(this.isSolid().select(vec4(0), vec4(
+        this.clampVelocity(velocity.xyz.add(force.mul(context.deltaTimeNode))), 0,
+      )));
+    })().compute(this.cellCount);
+    this.confinementNode = confinement;
+    renderer.compute(confinement);
   }
 
   private splatRadius(scale: Node<'vec3'>): Node<'float'> {

@@ -247,6 +247,7 @@ export class ParticleSystemSerializer {
             return `new GasSimulation(${this.serializeValue({
                 bounds: module.autoBounds ? undefined : module.bounds,
                 boundsPadding: module.boundsPadding,
+                maxBounds: Number.isFinite(module.maxBounds) ? module.maxBounds : undefined,
                 automaticPadding: module.automaticPadding,
                 showGridHelper: module.showGridHelper,
                 spatialGridOptions: module.spatialGridOptions,
@@ -268,6 +269,7 @@ export class ParticleSystemSerializer {
                 temperatureColor: module.temperatureColor,
                 temperatureRange: module.temperatureRange,
                 vorticityStrength: module.vorticityStrength,
+                turbulenceStrength: module.turbulenceStrength,
                 noiseFrequency: module.noiseFrequency,
                 noiseSpeed: module.noiseSpeed,
                 noiseOctaves: module.noiseOctaves,
@@ -280,6 +282,7 @@ export class ParticleSystemSerializer {
             return `new FLIPSimulation(${this.serializeValue({
                 bounds: module.autoBounds ? undefined : module.bounds,
                 boundsPadding: module.boundsPadding,
+                maxBounds: Number.isFinite(module.maxBounds) ? module.maxBounds : undefined,
                 automaticPadding: module.automaticPadding,
                 showGridHelper: module.showGridHelper,
                 spatialGridOptions: module.spatialGridOptions,

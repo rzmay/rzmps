@@ -313,6 +313,9 @@ class FLIPSimulation extends FluidSimulation {
   private gridToParticleGPU(particle: GPUParticleLike, context: GPUParticleUpdateContext): void {
     const picSample = this.sampleField(particle.position, this.velocityCurrent);
     const beforeSample = this.sampleField(particle.position, this.velocityBefore!, true);
+    const inside = particle.position.greaterThanEqual(this.boundsMinNode).all()
+      .and(particle.position.lessThan(this.boundsMinNode.add(this.cellSizeNode.mul(this.resolution))).all())
+      .and(beforeSample.w.greaterThan(1e-6));
     const picVelocity = vec3(picSample.xyz).div(max(picSample.w, float(1e-6)));
     const before = vec3(beforeSample.xyz).div(max(beforeSample.w, float(1e-6)));
     const flipVelocity = vec3(particle.velocity).add(picVelocity.sub(before));
@@ -323,8 +326,10 @@ class FLIPSimulation extends FluidSimulation {
     );
     const gravityStep = context.gravityNode.mul(context.deltaTimeNode.mul(gravityModifier));
     // The system integrator adds gravity immediately before moving particles.
-    particle.velocity.assign(velocity.sub(gravityStep));
-    if (this.advectParticlesEnabled) particle.position.addAssign(velocity.mul(context.deltaTimeNode));
+    If(inside, () => {
+      particle.velocity.assign(velocity.sub(gravityStep));
+      if (this.advectParticlesEnabled) particle.position.addAssign(velocity.mul(context.deltaTimeNode));
+    });
   }
 
   protected override readAutomaticPadding(
