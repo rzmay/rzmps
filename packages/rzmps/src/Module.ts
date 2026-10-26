@@ -291,6 +291,20 @@ export default class Module {
     void _grid;
   }
 
+  /** Persistent GPU constraint after integration and transient commit, before death events and allocation accounting.
+   * The system applies this module's tags and GPU condition to the final particle state. */
+  public finalizeGPU(
+    _particle: GPUParticleLike,
+    _deltaTime: Node<'float'>,
+    _context: GPUParticleUpdateContext,
+    _grid?: ParticleSpatialGrid,
+  ): void {
+    void _particle;
+    void _deltaTime;
+    void _context;
+    void _grid;
+  }
+
   // Optional clean up hook for modules that require it
   /** Releases managed CPU and GPU spatial acceleration references. */
   public cleanup() {

@@ -1,6 +1,6 @@
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
-import { FluidSimulation } from '@rzmps/rzmps';
+import { FluidSimulation, FluidBoundsPolicy } from '@rzmps/rzmps';
 
 export class ModuleGUI extends GUIEditorBase {
     buildModulesFolder(root, system = this.system) {
@@ -57,6 +57,7 @@ export class ModuleGUI extends GUIEditorBase {
                 'useSpatialGrid',
                 'spatialGridOptions',
                 'advectionMethod',
+                'boundsPolicy', 'capOrigin', 'boundsReconcileKey',
                 'advectionAttributes',
                 'pressureProjection',
                 'velocityAdvected', 'densityAdvected', 'colorAdvected',
@@ -159,8 +160,12 @@ export class ModuleGUI extends GUIEditorBase {
                 }));
         }
         if (candidate instanceof FluidSimulation && 'advectionMethod' in candidate) {
-            folder.add(candidate, 'advectionMethod', ['semiLagrangian', 'macCormack'])
+            folder.add(candidate, 'advectionMethod', ['SemiLagrangian', 'MacCormack'])
                 .name('Advection Method').onChange(() => this.emitCode());
+        }
+        if (candidate instanceof FluidSimulation) {
+            folder.add(candidate, 'boundsPolicy', Object.values(FluidBoundsPolicy))
+                .name('Bounds Policy').onChange(() => this.emitCode());
         }
         if (candidate.useSpatialGrid) {
             const quality = folder.addFolder('Spatial Grid Options');

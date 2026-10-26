@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
-import { Fn, If, float, instanceIndex, max, min, mix, storage, uint, uniform, vec3, vec4 } from 'three/tsl';
+import { Fn, If, clamp, float, floor, instanceIndex, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4 } from 'three/tsl';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
 import Collision from './Collision';
@@ -109,6 +109,7 @@ class FLIPSimulation extends FluidSimulation {
     grid?: ParticleSpatialGrid,
   ): void {
     if (!grid) throw new Error('FLIPSimulation requires a GPU spatial grid.');
+    super.computeGPU(context, renderer, grid);
     this.picRatioNode.value = THREE.MathUtils.clamp(this.picRatio, 0, 1);
     this.ensureGridResolution(renderer, grid);
     this.refreshBounds(grid, renderer);
@@ -136,7 +137,12 @@ class FLIPSimulation extends FluidSimulation {
       const momentumBefore = vec3(0).toVar('flipMomentumBefore');
       const totalMass = float(0).toVar('flipMass');
       const totalVolume = float(0).toVar('flipVolume');
+      const fluidCell = float(0).toVar('flipFluidCell');
       grid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
+        const halfCell = this.cellSizeNode.mul(0.5);
+        const containsMarker = particle.position.greaterThanEqual(center.sub(halfCell)).all()
+          .and(particle.position.lessThan(center.add(halfCell)).all());
+        fluidCell.assign(max(fluidCell, containsMarker.select(1, 0)));
         const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(radius)));
         const mass = max(particle.mass, float(0)).mul(weight);
         const gravityModifier = this.gpuParameters.number(
@@ -154,7 +160,9 @@ class FLIPSimulation extends FluidSimulation {
           .mul(particle.mass.greaterThan(0).select(1, 0)));
       }, { tagMask });
       this.velocityCurrent.element(instanceIndex).assign(
-        vec4(momentum.div(max(totalMass, float(1e-6))), totalMass.greaterThan(1e-6).select(1, 0)),
+        // Packed occupancy: 2 contains a marker, 1 is velocity support, 0 is empty.
+        vec4(momentum.div(max(totalMass, float(1e-6))),
+          totalMass.greaterThan(1e-6).select(fluidCell.add(1), 0)),
       );
       this.velocityBefore!.element(instanceIndex).assign(
         vec4(
@@ -172,6 +180,11 @@ class FLIPSimulation extends FluidSimulation {
 
     const force = this.forceNodeCompute ?? Fn(() => {
       const velocity = vec3(this.velocityCurrent.element(instanceIndex).xyz);
+      // Mask after gather to stay within its eight-storage-buffer budget.
+      // Both transfer fields must exclude the same solid donors.
+      If(this.isSolid(), () => {
+        this.velocityBefore!.element(instanceIndex).assign(vec4(0));
+      });
       this.velocityNext.element(instanceIndex).assign(this.isSolid().select(
         vec4(0),
         vec4(
@@ -210,7 +223,7 @@ class FLIPSimulation extends FluidSimulation {
       const separation = this.separationNode ?? Fn(() => {
         const particle = context.buffers.storage.createParticle(undefined, true);
         const separatedPosition = particle.position.toVar('flipSeparatedPosition');
-        If(particle.alive.notEqual(uint(0)), () => {
+        If(particle.alive.notEqual(uint(0)).and(this.isInsideCap(particle.position)), () => {
           const diameter = max(
             particle.scale.x.abs(),
             max(particle.scale.y.abs(), particle.scale.z.abs()),
@@ -315,6 +328,13 @@ class FLIPSimulation extends FluidSimulation {
     });
   }
 
+  protected override pressureCellActive(
+    field: { element(index: Node | number): Node<'vec4'> },
+    index: Node<'uint'>,
+  ): Node<'bool'> {
+    return field.element(index).w.greaterThan(1.5);
+  }
+
   protected override targetDivergence(index: Node<'uint'>): Node<'float'> {
     // Relax excess marker density without creating a tensile force at free surfaces.
     return this.velocityBefore!.element(index).w.sub(1).clamp(0, 1).mul(3);
@@ -329,8 +349,8 @@ class FLIPSimulation extends FluidSimulation {
   }
 
   private gridToParticleGPU(particle: GPUParticleLike, context: GPUParticleUpdateContext): void {
-    const picSample = this.sampleField(particle.position, this.velocityCurrent);
-    const beforeSample = this.sampleField(particle.position, this.velocityBefore!, true);
+    const picSample = this.sampleTransferField(particle.position, this.velocityCurrent);
+    const beforeSample = this.sampleTransferField(particle.position, this.velocityBefore!);
     const inside = particle.position.greaterThanEqual(this.boundsMinNode).all()
       .and(particle.position.lessThan(this.boundsMinNode.add(this.cellSizeNode.mul(this.resolution))).all())
       .and(beforeSample.w.greaterThan(1e-6));
@@ -348,6 +368,34 @@ class FLIPSimulation extends FluidSimulation {
       particle.velocity.assign(velocity.sub(gravityStep));
       if (this.advectParticlesEnabled) particle.position.addAssign(velocity.mul(context.deltaTimeNode));
     });
+  }
+
+  private sampleTransferField(
+    position: Node<'vec3'>,
+    field: { element(index: Node | number): Node<'vec4'> },
+  ): Node<'vec4'> {
+    const gridPosition = vec3(position.sub(this.boundsMinNode).div(this.cellSizeNode).sub(0.5));
+    const base = floor(gridPosition);
+    const ratio = clamp(gridPosition.sub(base), vec3(0), vec3(1));
+    const result = vec4(0).toVar();
+    for (let z = 0; z <= 1; z += 1) {
+      for (let y = 0; y <= 1; y += 1) {
+        for (let x = 0; x <= 1; x += 1) {
+          const index = this.cellIndex(ivec3(clamp(
+            base.add(vec3(x, y, z)), vec3(0), vec3(this.resolution - 1),
+          )));
+          // FLIP deltas require identical donors before and after projection.
+          // Density in the before field is not an interpolation weight.
+          const valid = this.velocityBefore!.element(index).w.greaterThan(0)
+            .and(this.velocityCurrent.element(index).w.greaterThan(0));
+          const weight = (x ? ratio.x : float(1).sub(ratio.x))
+            .mul(y ? ratio.y : float(1).sub(ratio.y))
+            .mul(z ? ratio.z : float(1).sub(ratio.z));
+          result.addAssign(valid.select(vec4(field.element(index).xyz, 1).mul(weight), vec4(0)));
+        }
+      }
+    }
+    return result;
   }
 
   protected override readAutomaticPadding(

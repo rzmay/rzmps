@@ -1,6 +1,6 @@
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
-import { FluidSimulation } from '@rzmps/rzmps';
+import { FluidSimulation, FluidBoundsPolicy } from '@rzmps/rzmps';
 
 export class ModuleGUI extends GUIEditorBase {
     buildModulesFolder(root, system = this.system) {
@@ -42,6 +42,7 @@ export class ModuleGUI extends GUIEditorBase {
         }
         else {
             const hidden = new Set([
+                'boundsPolicy', 'capOrigin', 'boundsReconcileKey',
                 'modify',
                 'noiseGenerator',
                 'dependents',
@@ -114,6 +115,10 @@ export class ModuleGUI extends GUIEditorBase {
                     'pendingPreviousBounds', 'pressureProjection',
                     'lastBoundsRead', 'boundsReadPending',
                 ].forEach((key) => hidden.add(key));
+            }
+            if (candidate instanceof FluidSimulation) {
+                folder.add(candidate, 'boundsPolicy', Object.values(FluidBoundsPolicy))
+                    .name('Bounds Policy').onChange(() => this.emitCode());
             }
             Object.keys(candidate)
                 .filter((key) => (

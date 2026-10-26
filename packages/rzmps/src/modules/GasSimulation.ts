@@ -19,7 +19,7 @@ type AtomicUintStorage = { element(index: Node | number): Node<'uint'> };
 type FloatUniform = Node<'float'> & { value: number };
 
 export interface GasSimulationOptions extends FluidSimulationOptions {
-  /** Defaults to semiLagrangian. macCormack enables experimental bounded higher-order transport. */
+  /** Defaults to SemiLagrangian. MacCormack enables experimental bounded higher-order transport. */
   advectionMethod: AdvectionMethod | `${AdvectionMethod}`;
   /** Exponential density decay rate in inverse seconds. Zero preserves density. */
   densityDissipation: number;
@@ -172,11 +172,12 @@ class GasSimulation extends FluidSimulation {
     grid?: ParticleSpatialGrid,
   ): void {
     if (!grid) throw new Error('GasSimulation requires a GPU spatial grid.');
-    if (!['semiLagrangian', 'macCormack'].includes(this.advectionMethod)) {
+    if (!Object.values(AdvectionMethod).includes(this.advectionMethod as AdvectionMethod)) {
       throw new RangeError('Unknown gas advectionMethod.');
     }
+    super.computeGPU(context, renderer, grid);
     this.ensureGridResolution(renderer, grid);
-    if (this.advectionMethod === 'macCormack') this.ensureAdvectionFields();
+    if (this.advectionMethod === AdvectionMethod.MacCormack) this.ensureAdvectionFields();
     this.syncSimulationUniforms();
     this.refreshBounds(grid, renderer);
     this.remapFields(renderer);
@@ -201,7 +202,7 @@ class GasSimulation extends FluidSimulation {
       this.outputNodes = new WeakMap();
     }
 
-    if (this.advectionMethod === 'macCormack') {
+    if (this.advectionMethod === AdvectionMethod.MacCormack) {
       this.predictAdvection(this.velocityCurrent, this.velocityAdvected, context, renderer);
     }
     const velocity = this.velocityNodes.get(this.densityCurrent) ?? Fn(() => {
@@ -267,7 +268,7 @@ class GasSimulation extends FluidSimulation {
     const colorCurrent = this.colorCurrent;
     const densityNext = this.densityNext;
     const colorNext = this.colorNext;
-    if (this.advectionMethod === 'macCormack') {
+    if (this.advectionMethod === AdvectionMethod.MacCormack) {
       this.predictAdvection(densityCurrent, this.densityAdvected, context, renderer);
       this.predictAdvection(colorCurrent, this.colorAdvected, context, renderer);
     }
@@ -276,7 +277,7 @@ class GasSimulation extends FluidSimulation {
       const center = this.cellCenter(coordinate);
       let previousDensity = this.advectField(densityCurrent, this.densityAdvected, center, dt);
       let previousColor = this.advectField(colorCurrent, this.colorAdvected, center, dt);
-      if (this.advectionMethod === 'macCormack') {
+      if (this.advectionMethod === AdvectionMethod.MacCormack) {
         [previousDensity, previousColor] = this.limitSpecificFields(
           previousDensity, previousColor, densityCurrent, colorCurrent,
           center.sub(this.sampleVelocity(center).mul(dt)),
@@ -286,16 +287,12 @@ class GasSimulation extends FluidSimulation {
       const mixedDensity = mix(previousDensity, this.neighborAverage(densityCurrent, coordinate), diffusion);
       const mixedColor = mix(previousColor, this.neighborAverage(colorCurrent, coordinate), diffusion);
       const gridCoordinate = vec3(coordinate);
-      const edgeDistance = min(
-        min(gridCoordinate.x, gridCoordinate.y),
-        min(gridCoordinate.z, min(
-          float(this.resolution - 1).sub(gridCoordinate.x),
-          min(
-            float(this.resolution - 1).sub(gridCoordinate.y),
-            float(this.resolution - 1).sub(gridCoordinate.z),
-          ),
-        )),
-      );
+      const edgeDistances = (['x', 'y', 'z'] as const).flatMap((axis) => [
+        this.closedMinNode[axis].greaterThan(0).select(float(this.resolution), gridCoordinate[axis]),
+        this.closedMaxNode[axis].greaterThan(0).select(float(this.resolution),
+          float(this.resolution - 1).sub(gridCoordinate[axis])),
+      ]);
+      const edgeDistance = edgeDistances.reduce((distance, value) => min(distance, value));
       // An absorbing edge layer with a decay rate, not a per-frame multiplier.
       const boundaryRetention = pow(clamp(edgeDistance.div(2), 0, 1), dt.mul(60));
       const densityRetention = pow(float(Math.E), dt.mul(this.densityDissipationNode).mul(-1));
@@ -595,6 +592,7 @@ class GasSimulation extends FluidSimulation {
   private getPressureProjection(): GasPressureProjection {
     this.pressureProjection ??= new GasPressureProjection(
       this.resolution, this.cellSizeNode, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
+      this.closedMinNode, this.closedMaxNode,
     );
     return this.pressureProjection;
   }
@@ -709,7 +707,7 @@ class GasSimulation extends FluidSimulation {
     const backtrace = center.sub(displacement);
     const blocked = this.isSolid(this.cellIndex(this.worldToCell(backtrace)));
     const firstOrder = blocked.select(source.element(instanceIndex), this.sampleField(backtrace, source));
-    if (this.advectionMethod === 'semiLagrangian') return firstOrder as Node<'vec4'>;
+    if (this.advectionMethod === AdvectionMethod.SemiLagrangian) return firstOrder as Node<'vec4'>;
 
     const reversePosition = center.add(displacement);
     const reversed = this.sampleField(reversePosition, predicted);
@@ -905,6 +903,8 @@ class GasPressureProjection {
     private readonly solid: FloatStorage,
     private readonly pressure: FloatStorage,
     private readonly divergence: FloatStorage,
+    private readonly closedMin: Node<'vec3'>,
+    private readonly closedMax: Node<'vec3'>,
   ) {
     this.faceCount = (n + 1) ** 3;
     this.attribute = new StorageBufferAttribute(new Float32Array(this.faceCount * 4), 4);
@@ -933,7 +933,10 @@ class GasPressureProjection {
   }
 
   private occupied(coordinate: Node<'ivec3'>): Node<'bool'> {
-    return this.inside(coordinate).and(this.solid.element(this.cell(coordinate)).greaterThanEqual(0.5));
+    const wall = (['x', 'y', 'z'] as const).map((axis) => float(coordinate[axis]).lessThan(0)
+      .and(this.closedMin[axis].greaterThan(0)).or(float(coordinate[axis]).greaterThanEqual(this.n)
+        .and(this.closedMax[axis].greaterThan(0)))).reduce((a, b) => a.or(b));
+    return wall.or(this.inside(coordinate).and(this.solid.element(this.cell(coordinate)).greaterThanEqual(0.5)));
   }
 
   private axis(axis: number): Node<'ivec3'> {

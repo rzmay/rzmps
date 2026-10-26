@@ -354,3 +354,23 @@ window.seedFLIPPair = (distance = 0, sizes = [0.1, 0.1], wallContact = false) =>
 window.readLivePositions = async () => (await system.selectiveReadback(16000, ['position']))
   .filter(({ particle }) => particle.alive).map(({ particle }) => particle.position.toArray());
 window.ready = true;
+window.seedUniformGas = () => {
+  window.seedGasSource(0, 0);
+  renderer.compute(Fn(() => {
+    flip.densityCurrent.element(instanceIndex).assign(vec4(0.5, 0.25, 0, 0));
+    flip.colorCurrent.element(instanceIndex).assign(vec4(0.1, 0.2, 0.4, 0));
+    flip.velocityCurrent.element(instanceIndex).assign(vec4(0.3, 0, 0, 0));
+  })().compute(flip.cellCount));
+  flip.pressureProjection?.invalidate();
+};
+window.gasCapFlux = async () => {
+  const values = new Float32Array(await renderer.getArrayBufferAsync(flip.pressureProjection.attribute));
+  const n = flip.resolution, side = n + 1;
+  let flux = 0;
+  for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) for (const edge of [0, n]) {
+    for (const [axis, c] of [[0, [edge, a, b]], [1, [a, edge, b]], [2, [a, b, edge]]]) {
+      flux = Math.max(flux, Math.abs(values[4 * (c[0] + side * (c[1] + side * c[2])) + axis]));
+    }
+  }
+  return flux;
+};

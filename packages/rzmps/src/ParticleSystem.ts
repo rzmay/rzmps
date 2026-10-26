@@ -1177,6 +1177,7 @@ class ParticleSystem extends THREE.Object3D {
       context,
       fusedPermanentModifiers,
       transientPreMovementModifiers,
+      modules.filter((module) => module.finalizeGPU !== Module.prototype.finalizeGPU),
     );
     this._scheduleGPUAllocationReadback(allocationBuffer, sceneRenderer);
     if (eventBuffer && !this._hasGPUNativeSubSystemConsumers()) {
@@ -1955,6 +1956,7 @@ class ParticleSystem extends THREE.Object3D {
     context: GPUParticleUpdateContext,
     permanentModifiers: Array<Module | SpatialEffect>,
     transientPreMovementModifiers: Array<Module | SpatialEffect>,
+    finalizers: Module[] = [],
   ): void {
     const buffers = context.buffers;
     if (!buffers.count) return;
@@ -1964,6 +1966,7 @@ class ParticleSystem extends THREE.Object3D {
       context,
       permanentModifiers,
       transientPreMovementModifiers,
+      finalizers,
     );
 
     this.sceneRenderer.compute(computeNode);
@@ -2166,6 +2169,7 @@ class ParticleSystem extends THREE.Object3D {
     context: GPUParticleUpdateContext,
     permanentModifiers: Array<Module | SpatialEffect>,
     transientPreMovementModifiers: Array<Module | SpatialEffect>,
+    finalizers: Module[],
   ): ComputeNode {
     const buffers = context.buffers;
     const cacheKey = [
@@ -2177,6 +2181,7 @@ class ParticleSystem extends THREE.Object3D {
       this._getGPUSpatialRegistrySignature(),
       `permanent:${this._getGPUModifierListSignature(permanentModifiers)}`,
       `transient:${this._getGPUModifierListSignature(transientPreMovementModifiers)}`,
+      `finalizers:${this._getGPUModifierListSignature(finalizers)}`,
     ].join('|');
 
     const cached = this._gpuSimulationComputeCaches.get(cacheKey);
@@ -2204,6 +2209,9 @@ class ParticleSystem extends THREE.Object3D {
         if (base) {
           this._commitGPUTransientParticle(particle, base);
         }
+
+        finalizers.forEach((module) => this._applyGPUModifier(module, particle, context, true));
+        context.allocationWriter?.recordActive(particle);
 
         If(wasAlive.notEqual(uint(0)).and(particle.alive.equal(uint(0))), () => {
           context.eventWriter?.emitDeath(particle);
@@ -2455,7 +2463,6 @@ class ParticleSystem extends THREE.Object3D {
       particle.alive.assign(uint(0));
     });
 
-    context.allocationWriter?.recordActive(particle);
   }
 
   private _scheduleGPUAllocationReadback(
@@ -2614,6 +2621,7 @@ class ParticleSystem extends THREE.Object3D {
     modifier: Module | SpatialEffect,
     particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
+    finalize = false,
   ): void {
     const alive = particle.alive.notEqual(uint(0));
 
@@ -2621,12 +2629,8 @@ class ParticleSystem extends THREE.Object3D {
       const tagMask = this._getGPUTagMask(modifier.tags);
       const spatialGrid = modifier.getParticleSpatialGrid(this);
       const modifyParticle = () => {
-        modifier.modifyGPU(
-          particle,
-          context.deltaTimeNode,
-          context,
-          spatialGrid,
-        );
+        if (finalize) modifier.finalizeGPU(particle, context.deltaTimeNode, context, spatialGrid);
+        else modifier.modifyGPU(particle, context.deltaTimeNode, context, spatialGrid);
       };
       const modifySelectedParticle = modifier.conditionGPU
         ? () => If(

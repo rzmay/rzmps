@@ -99,6 +99,7 @@ export type {
 export { EmissionSource } from './enums/EmissionSource';
 export { TagSelectionMethod } from './enums/TagSelectionMethod';
 export { AdvectionMethod } from './enums/AdvectionMethod';
+export { FluidBoundsPolicy } from './enums/FluidBoundsPolicy';
 
 // Renderers
 export { default as Renderer } from './Renderer';

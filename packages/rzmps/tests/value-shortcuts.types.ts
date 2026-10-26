@@ -13,7 +13,7 @@ export type GPUConditionArguments = Expect<Equal<Parameters<ModuleGPUCondition>,
 export type CPUConditionResult = Expect<Equal<ReturnType<ModuleCondition>, boolean>>;
 
 new GasSimulation({ advectionMethod: AdvectionMethod.MacCormack });
-new GasSimulation({ advectionMethod: 'semiLagrangian' });
+new GasSimulation({ advectionMethod: 'SemiLagrangian' });
 new GasSimulation({
   // @ts-expect-error Only supported advection enum values and their strings are accepted.
   advectionMethod: 'unsupported',

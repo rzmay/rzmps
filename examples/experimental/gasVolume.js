@@ -15,7 +15,6 @@ import {
 export default async function createGasVolume(simulationOptions = {}) {
   // #region docs:modules:1
   const gas = new GasSimulation({
-    advectionMethod: 'macCormack',
     pressureIterations: 16,
     externalForce: new THREE.Vector3(0, 0.05, 0),
     densityDissipation: 0.9,

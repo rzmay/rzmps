@@ -37,7 +37,7 @@ test('fluid runtime changes and bounded gas transport preserve numerical invaria
     console.log('Gas face projection:', JSON.stringify(projection));
 
     const translated = {};
-    for (const method of ['semiLagrangian', 'macCormack']) {
+    for (const method of ['SemiLagrangian', 'MacCormack']) {
       await open();
       await page.evaluate(method => {
         window.seedGas('gaussian');
@@ -57,14 +57,14 @@ test('fluid runtime changes and bounded gas transport preserve numerical invaria
       assert.ok(after.field.maxTemperatureError < 1e-5, 'specific temperature must travel with density');
       translated[method] = after.field;
     }
-    assert.ok(translated.macCormack.gaussianError < translated.semiLagrangian.gaussianError * 0.7,
+    assert.ok(translated.MacCormack.gaussianError < translated.SemiLagrangian.gaussianError * 0.7,
       'higher-order transport must reduce error, not merely increase motion');
     console.log('Translated Gaussian:', JSON.stringify(translated));
 
     await open();
     await page.evaluate(() => {
       window.seedGas('mixed');
-      window.debugFluid.flip.advectionMethod = 'macCormack';
+      window.debugFluid.flip.advectionMethod = 'MacCormack';
       window.debugFluid.flip.vorticityStrength = 0;
     });
     const mixed = await page.evaluate(() => window.runFrames(120));
@@ -72,7 +72,7 @@ test('fluid runtime changes and bounded gas transport preserve numerical invaria
     assert.ok(mixed.field.maxTemperature <= 1.00001, 'mixed source temperatures cannot overshoot after dividing heat by density');
     assert.ok(mixed.field.maxColor <= 1.00001, 'density-weighted colors must stay within donor color bounds');
 
-    for (const method of ['semiLagrangian', 'macCormack']) {
+    for (const method of ['SemiLagrangian', 'MacCormack']) {
       await open();
       await page.evaluate(method => {
         window.addGasWall();
@@ -121,11 +121,11 @@ test('fluid runtime changes and bounded gas transport preserve numerical invaria
     assert.equal(applied.side, 32);
     await page.evaluate(() => {
       const gas = window.debugFluid.flip;
-      gas.advectionMethod = 'semiLagrangian';
+      gas.advectionMethod = 'SemiLagrangian';
       gas.setSpatialGridOptions({ brickSubdivisions: 2, cellSubdivisions: 3 });
     });
     await page.evaluate(() => window.runFrames(2));
-    await page.evaluate(() => { window.debugFluid.flip.advectionMethod = 'macCormack'; });
+    await page.evaluate(() => { window.debugFluid.flip.advectionMethod = 'MacCormack'; });
     const rebuilt = await page.evaluate(() => window.runFrames(2));
     assert.equal(await page.evaluate(() => window.debugFluid.flip.resolution), 32);
     assert.equal(rebuilt.field.nonfinite, 0, 'quality rebuilds and method changes must discard obsolete cached passes');

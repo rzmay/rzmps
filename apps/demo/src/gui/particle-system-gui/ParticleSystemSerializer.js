@@ -248,6 +248,7 @@ export class ParticleSystemSerializer {
         if (module instanceof GasSimulation) {
             return `new GasSimulation(${this.serializeValue({
                 advectionMethod: module.advectionMethod,
+                boundsPolicy: module.boundsPolicy,
                 bounds: module.autoBounds ? undefined : module.bounds,
                 boundsPadding: module.boundsPadding,
                 maxBounds: Number.isFinite(module.maxBounds) ? module.maxBounds : undefined,
@@ -286,6 +287,7 @@ export class ParticleSystemSerializer {
                 bounds: module.autoBounds ? undefined : module.bounds,
                 boundsPadding: module.boundsPadding,
                 maxBounds: Number.isFinite(module.maxBounds) ? module.maxBounds : undefined,
+                boundsPolicy: module.boundsPolicy,
                 automaticPadding: module.automaticPadding,
                 showGridHelper: module.showGridHelper,
                 spatialGridOptions: module.spatialGridOptions,

@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
-import { Fn, clamp, float, floor, instanceIndex, int, ivec3, max, mix, storage, uint, uniform, vec3, vec4 } from 'three/tsl';
+import { Fn, If, clamp, float, floor, instanceIndex, int, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4 } from 'three/tsl';
 import Module, { type ModuleOptions } from '../Module';
 import type ParticleSystem from '../ParticleSystem';
-import type { GPUParticleUpdateContext } from '../gpu/Particle';
+import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import ParticleSpatialGrid, { type ParticleSpatialGridOptions, type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
 import FluidCollider from '../spatial/FluidCollider';
 import ThreeGPUCollisionBackend from '../collision/ThreeGPUCollisionBackend';
+import { FluidBoundsPolicy } from '../enums/FluidBoundsPolicy';
 
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
 type FloatStorage = { element(index: Node | number): Node<'float'> };
@@ -22,6 +23,8 @@ export interface FluidSimulationOptions extends Partial<ModuleOptions> {
   /** Maximum domain side length in simulation units. Infinity leaves growth unlimited.
    * Power-of-two grids round this limit down. Escaped particles are not confined by it. */
   maxBounds: number;
+  /** Behavior at the finite maxBounds cap, not at intermediate adaptive grid edges. Defaults to Ballistic. */
+  boundsPolicy: FluidBoundsPolicy | `${FluidBoundsPolicy}`;
   /** Fluid-owned growth applied between updates. GPU hash auto-expansion is disabled. */
   automaticPadding: boolean;
   showGridHelper: boolean;
@@ -40,6 +43,7 @@ abstract class FluidSimulation extends Module {
   maxVelocity: number;
   boundsPadding: number;
   maxBounds: number;
+  boundsPolicy: FluidBoundsPolicy | `${FluidBoundsPolicy}`;
   automaticPadding: boolean;
   showGridHelper: boolean;
   readonly autoBounds: boolean;
@@ -49,6 +53,15 @@ abstract class FluidSimulation extends Module {
   protected readonly cellSizeNode: UniformNode<number, 'float'>;
   protected readonly forceNode: UniformNode<THREE.Vector3, 'vec3'>;
   protected readonly maxVelocityNode: UniformNode<number, 'float'>;
+  protected readonly closedMinNode = uniform(new THREE.Vector3()) as UniformNode<THREE.Vector3, 'vec3'>;
+  protected readonly closedMaxNode = uniform(new THREE.Vector3()) as UniformNode<THREE.Vector3, 'vec3'>;
+  private readonly capMinNode = uniform(new THREE.Vector3()) as UniformNode<THREE.Vector3, 'vec3'>;
+  private readonly capMaxNode = uniform(new THREE.Vector3()) as UniformNode<THREE.Vector3, 'vec3'>;
+  private readonly capEnabledNode = uniform(0) as UniformNode<number, 'float'>;
+  private readonly boundsPolicyNode = uniform(0) as UniformNode<number, 'float'>;
+  private readonly capOrigin = new THREE.Vector3();
+  private boundsReconcileKey = '';
+  private boundsReconcileNode?: ComputeNode;
   protected velocityCurrentAttribute!: StorageBufferAttribute;
   protected velocityNextAttribute!: StorageBufferAttribute;
   protected pressureCurrentAttribute!: StorageBufferAttribute;
@@ -137,6 +150,8 @@ abstract class FluidSimulation extends Module {
     this.maxVelocity = Math.max(0, options.maxVelocity ?? 20);
     this.boundsPadding = Math.max(0, options.boundsPadding ?? 0.25);
     this.maxBounds = maxBounds;
+    this.boundsPolicy = options.boundsPolicy ?? FluidBoundsPolicy.Ballistic;
+    this.bounds.getCenter(this.capOrigin);
     this.automaticPadding = automaticPadding;
     this.showGridHelper = options.showGridHelper ?? false;
     this.cellSize = this.bounds.getSize(new THREE.Vector3()).x / resolution;
@@ -144,6 +159,7 @@ abstract class FluidSimulation extends Module {
     this.cellSizeNode = uniform(this.cellSize) as UniformNode<number, 'float'>;
     this.forceNode = uniform(this.externalForce) as UniformNode<THREE.Vector3, 'vec3'>;
     this.maxVelocityNode = uniform(this.maxVelocity) as UniformNode<number, 'float'>;
+    this.syncBoundsPolicy();
     this.allocateGridFields();
   }
 
@@ -154,10 +170,91 @@ abstract class FluidSimulation extends Module {
     super.prepare(particleSystem, dt);
     const grid = this.getParticleSpatialGrid(particleSystem);
     if (grid) this.synchronizeGridBounds(grid);
+    this.syncBoundsPolicy();
     this.updateParticleCollisionBackend();
     this.updateBoundsHelper(particleSystem);
     this.forceNode.value.copy(this.externalForce);
     this.maxVelocityNode.value = this.maxVelocity;
+  }
+
+  private syncBoundsPolicy(): void {
+    const index = Object.values(FluidBoundsPolicy).indexOf(this.boundsPolicy as FluidBoundsPolicy);
+    if (index < 0) throw new RangeError('Unknown fluid boundsPolicy.');
+    this.boundsPolicyNode.value = index;
+    const finite = Number.isFinite(this.maxBounds);
+    if (!(this.maxBounds > 0)) throw new RangeError('maxBounds must be positive.');
+    this.capEnabledNode.value = finite ? 1 : 0;
+    const half = finite ? 2 ** Math.floor(Math.log2(this.maxBounds)) * 0.5 : 1;
+    this.capMinNode.value.copy(this.capOrigin).addScalar(-half);
+    this.capMaxNode.value.copy(this.capOrigin).addScalar(half);
+    const closed = finite && this.boundsPolicy === FluidBoundsPolicy.Contain;
+    for (const axis of ['x', 'y', 'z'] as const) {
+      this.closedMinNode.value[axis] = closed && this.bounds.min[axis] <= this.capMinNode.value[axis] + 1e-6 ? 1 : 0;
+      this.closedMaxNode.value[axis] = closed && this.bounds.max[axis] >= this.capMaxNode.value[axis] - 1e-6 ? 1 : 0;
+    }
+  }
+
+  protected isInsideCap(position: Node<'vec3'>): Node<'bool'> {
+    return this.capEnabledNode.lessThan(0.5).or(position.greaterThanEqual(this.capMinNode).all()
+      .and(position.lessThan(this.capMaxNode).all()));
+  }
+
+  public override finalizeGPU(particle: GPUParticleLike): void {
+    If(this.capEnabledNode.greaterThan(0.5), () => {
+      If(this.boundsPolicyNode.equal(1).and(this.isInsideCap(particle.position).not()), () => {
+        particle.alive.assign(uint(0));
+      });
+      If(this.boundsPolicyNode.equal(2), () => {
+        const epsilon = float(1e-5);
+        const half = this.capMaxNode.sub(this.capMinNode).x.mul(0.5);
+        const radius = min(max(particle.scale.x.abs(), max(particle.scale.y.abs(), particle.scale.z.abs()))
+          .mul(0.5), max(half.sub(epsilon), float(0)));
+        const lower = this.capMinNode.add(radius).add(epsilon);
+        const upper = this.capMaxNode.sub(radius).sub(epsilon);
+        for (const axis of ['x', 'y', 'z'] as const) {
+          const outward = particle.position[axis].lessThan(lower[axis]).and(particle.velocity[axis].lessThan(0))
+            .or(particle.position[axis].greaterThan(upper[axis]).and(particle.velocity[axis].greaterThan(0)));
+          particle.velocity[axis].assign(outward.select(float(0), particle.velocity[axis]));
+        }
+        particle.position.assign(clamp(particle.position, lower, upper));
+      });
+    });
+  }
+
+  public override computeGPU(
+    context: GPUParticleUpdateContext,
+    renderer: ParticleSpatialGridRenderer,
+    grid?: ParticleSpatialGrid,
+  ): void {
+    if (!grid || !Number.isFinite(this.maxBounds) || this.boundsPolicy === FluidBoundsPolicy.Ballistic) return;
+    const tagMask = context.system.getGPUFilterTagMask(this.tags);
+    const key = [context.buffers.version, context.eventWriter?.version, context.eventWriter?.capacity,
+      context.buffers.count, this.version, tagMask].join('|');
+    if (key !== this.boundsReconcileKey) {
+      this.boundsReconcileKey = key;
+      this.boundsReconcileNode = Fn(() => {
+        const particle = context.buffers.storage.createParticle(undefined, true);
+        const selected = particle.alive.notEqual(uint(0)).and(tagMask === undefined
+          ? uint(1).equal(1) : particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)));
+        If(selected, () => {
+          const reconcile = () => {
+            this.finalizeGPU(particle);
+            If(particle.alive.equal(uint(0)), () => { context.eventWriter?.emitDeath(particle); });
+            context.buffers.storage.storeParticle(particle);
+          };
+          if (this.conditionGPU) If(this.conditionGPU(particle, context.deltaTimeNode, context, grid), reconcile);
+          else reconcile();
+        });
+      })().compute(context.buffers.count);
+    }
+    renderer.compute(this.boundsReconcileNode!);
+    grid.rebuild(renderer, context.buffers, {});
+  }
+
+  protected isClosedNeighbor(coordinate: Node<'ivec3'>): Node<'bool'> {
+    return (['x', 'y', 'z'] as const).map((axis) => float(coordinate[axis]).lessThan(0)
+      .and(this.closedMinNode[axis].greaterThan(0)).or(float(coordinate[axis]).greaterThanEqual(this.resolution)
+        .and(this.closedMaxNode[axis].greaterThan(0)))).reduce((a, b) => a.or(b));
   }
 
   protected cellIndex(coordinate: Node<'ivec3'>): Node<'uint'> {
@@ -308,7 +405,8 @@ abstract class FluidSimulation extends Module {
 
     const solidNode = this.solidNode ?? Fn(() => {
       const center = this.cellCenter(this.cellCoordinate(instanceIndex));
-      const occupied = float(0).toVar('fluidSolidCell');
+      const occupied = this.capEnabledNode.greaterThan(0.5).and(this.boundsPolicyNode.equal(2))
+        .and(this.isInsideCap(center).not()).select(float(1), float(0)).toVar('fluidSolidCell');
       colliders.forEach((collider) => {
         occupied.assign(max(occupied, collider.testPositionGPU(center, context)));
       });
@@ -324,6 +422,10 @@ abstract class FluidSimulation extends Module {
 
   protected targetDivergence(_index: Node<'uint'>): Node<'float'> {
     return float(0);
+  }
+
+  protected pressureCellActive(field: Vec4Storage, index: Node<'uint'>): Node<'bool'> {
+    return field.element(index).w.greaterThan(0);
   }
 
   protected solveProjection(
@@ -344,7 +446,7 @@ abstract class FluidSimulation extends Module {
         ? solid.element(instanceIndex).lessThan(0.5)
         : float(1).greaterThan(0);
       const active = (useOccupancy
-        ? input.element(instanceIndex).w.greaterThan(0)
+        ? this.pressureCellActive(input, instanceIndex)
         : float(1).greaterThan(0)).and(fluidCell);
       const left = this.velocityAt(input, coordinate, -1, 0, 0, useOccupancy, solid).x;
       const right = this.velocityAt(input, coordinate, 1, 0, 0, useOccupancy, solid).x;
@@ -373,7 +475,7 @@ abstract class FluidSimulation extends Module {
           ? solid.element(instanceIndex).lessThan(0.5)
           : float(1).greaterThan(0);
         const active = (useOccupancy
-          ? input.element(instanceIndex).w.greaterThan(0)
+          ? this.pressureCellActive(input, instanceIndex)
           : float(1).greaterThan(0)).and(fluidCell);
         const sum = this.pressureAt(source, coordinate, -1, 0, 0, useOccupancy ? input : undefined, solid)
           .add(this.pressureAt(source, coordinate, 1, 0, 0, useOccupancy ? input : undefined, solid))
@@ -431,9 +533,9 @@ abstract class FluidSimulation extends Module {
     const neighborValue = field.element(this.cellIndex(ivec3(clamp(
       vec3(neighbor), vec3(0), vec3(this.resolution - 1),
     ))));
-    const solidNeighbor = solid ? inside.and(solid.element(this.cellIndex(ivec3(clamp(
+    const solidNeighbor = (solid ? inside.and(solid.element(this.cellIndex(ivec3(clamp(
       vec3(neighbor), vec3(0), vec3(this.resolution - 1),
-    )))).greaterThanEqual(0.5)) : inside.and(false);
+    )))).greaterThanEqual(0.5)) : inside.and(false)).or(this.isClosedNeighbor(neighbor));
     const center = field.element(this.cellIndex(coordinate)).xyz;
     const valid = useOccupancy ? inside.and(neighborValue.w.greaterThan(0)) : inside;
     // Reflect the normal component at solid faces so divergence includes wall
@@ -456,10 +558,11 @@ abstract class FluidSimulation extends Module {
       .and(vec3(neighbor).lessThan(vec3(this.resolution)).all());
     const clamped = ivec3(clamp(vec3(neighbor), vec3(0), vec3(this.resolution - 1)));
     const index = this.cellIndex(clamped);
-    const solidNeighbor = solid ? solid.element(index).greaterThanEqual(0.5) : inside.not();
-    const valid = (occupancy ? inside.and(occupancy.element(index).w.greaterThan(0)) : inside)
+    const solidNeighbor = (solid ? inside.and(solid.element(index).greaterThanEqual(0.5)) : inside.not())
+      .or(this.isClosedNeighbor(neighbor));
+    const valid = (occupancy ? inside.and(this.pressureCellActive(occupancy, index)) : inside)
       .and(solidNeighbor.not());
-    const boundaryValue = inside.and(solidNeighbor)
+    const boundaryValue = solidNeighbor
       .select(field.element(this.cellIndex(coordinate)), float(0));
     return valid.select(field.element(index), boundaryValue) as Node<'float'>;
   }
@@ -573,6 +676,8 @@ abstract class FluidSimulation extends Module {
     this.pendingBounds = undefined;
     this.boundsReadPending = false;
     this.lastBoundsRead = 0;
+    this.boundsReconcileNode = undefined;
+    this.boundsReconcileKey = '';
     super.cleanup();
     this.particleCollisionBackend.destroy();
     if (this._boundsHelper) {

@@ -46,7 +46,7 @@ export default function createGasFlow(scene) {
   addBoxCollider(root, [0.38, 1.9, 3.2], [1.55, 2.2, 0], accentMaterial, 'Right Baffle', 0.24);
 
   const sphereCollider = FluidCollider.Sphere({
-    position: new THREE.Vector3(0, 1.75, 0),
+    position: new THREE.Vector3(0, 2.2, 0),
   }, 0.62, 24, 16);
   sphereCollider.name = 'Gas Splitter Collider';
   const sphere = new THREE.Mesh(
