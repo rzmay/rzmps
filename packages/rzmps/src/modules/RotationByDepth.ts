@@ -15,7 +15,10 @@ export interface RotationByDepthOptions extends Partial<ModuleOptions> {
   depthRange?: [number, number];
 }
 
-/** Adds angular channels using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Adds angular channels using distance from the captured camera, normalized over depthRange; two-value parameter
+ * ranges interpolate rather than randomly sample.
+ */
 class RotationByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');

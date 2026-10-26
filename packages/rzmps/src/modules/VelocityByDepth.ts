@@ -15,7 +15,10 @@ export interface VelocityByDepthOptions extends Partial<ModuleOptions> {
   depthRange?: [number, number];
 }
 
-/** Adds linear motion channels using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Adds linear motion channels using distance from the captured camera, normalized over depthRange; two-value parameter
+ * ranges interpolate rather than randomly sample.
+ */
 class VelocityByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');

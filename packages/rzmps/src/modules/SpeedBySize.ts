@@ -12,7 +12,10 @@ export interface SpeedBySizeOptions extends Partial<ModuleOptions> {
     sizeRange?: SizeRange;
 }
 
-/** Multiplies scalar integration speed using particle size normalized over sizeRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies scalar integration speed using particle size normalized over sizeRange; two-value parameter ranges
+ * interpolate rather than randomly sample.
+ */
 class SpeedBySize extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(public options: Partial<SpeedBySizeOptions> = {}) {

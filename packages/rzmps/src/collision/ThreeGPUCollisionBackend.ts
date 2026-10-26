@@ -129,6 +129,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   // ICollisionBackend's CPU query is synchronous, while this backend only exposes
   // TSL query nodes. A CPU MeshBVH backend could be added separately; replacing the
   // octree would trade its inexpensive scene rebuilds for faster triangle queries.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   collide(_query: CollisionQuery): null {
     return null;
   }

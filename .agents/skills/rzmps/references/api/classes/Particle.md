@@ -8,7 +8,7 @@
 
 # Class: Particle
 
-Mutable particle state with separate birth and cached permanent values; do not share mutable values between particles.
+Mutable particle state with separate birth and cached permanent values.
 
 ## Constructors
 

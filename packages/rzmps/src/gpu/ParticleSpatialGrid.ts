@@ -24,7 +24,6 @@ import {
   min,
   storage,
   uint,
-  uvec4,
   vec3,
   vec4,
 } from 'three/tsl';

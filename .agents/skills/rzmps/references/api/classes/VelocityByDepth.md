@@ -8,7 +8,8 @@
 
 # Class: VelocityByDepth
 
-Adds linear motion channels using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample.
+Adds linear motion channels using distance from the captured camera, normalized over depthRange; two-value parameter
+ranges interpolate rather than randomly sample.
 
 ## Extends
 

@@ -8,7 +8,8 @@
 
 # Class: SpeedByDepth
 
-Multiplies scalar integration speed using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample.
+Multiplies scalar integration speed using distance from the captured camera, normalized over depthRange; two-value
+parameter ranges interpolate rather than randomly sample.
 
 ## Extends
 

@@ -25,7 +25,6 @@ import {
   modelWorldMatrix,
   positionLocal,
   sin,
-  uint,
   uniform,
   vec3,
   vec4,

@@ -691,7 +691,9 @@ class ThreeCollisionBackend implements ICollisionBackend {
 
 export default ThreeCollisionBackend;
 
-function attributeVersion(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined): number {
+function attributeVersion(
+  attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined
+): number {
   if (!attribute) return -1;
   return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
 }

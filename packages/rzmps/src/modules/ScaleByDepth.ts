@@ -15,7 +15,10 @@ export interface ScaleByDepthOptions extends Partial<ModuleOptions> {
   depthRange?: [number, number]
 }
 
-/** Multiplies scale and adds scalar channels using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies scale and adds scalar channels using distance from the captured camera, normalized over depthRange; two-
+ * value parameter ranges interpolate rather than randomly sample.
+ */
 class ScaleByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');

@@ -8,7 +8,8 @@
 
 # Class: MassOverLifetime
 
-Multiplies mass in the configured module phase, permanent by default; size multiplication defaults on and repeated updates can accumulate.
+Multiplies mass in the configured module phase, permanent by default; size multiplication defaults on and repeated
+updates can accumulate.
 
 ## Extends
 

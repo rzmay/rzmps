@@ -95,7 +95,7 @@ interface AudioFilters {
   lowPass?: BiquadFilterNode;
 }
 
-/** Positional particle audio and lifecycle cues; requires browser audio playback permission and scene camera context. */
+/** Positional particle audio and lifecycle cues; requires audio playback permission and scene camera context. */
 export default class AudioRenderer extends Renderer {
   listener?: THREE.AudioListener;
 

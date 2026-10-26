@@ -19,7 +19,10 @@ export interface TransformByNoiseOptions extends Partial<ModuleOptions>, NoiseOp
     damping: boolean;
 }
 
-/** Adds three decorrelated noise channels to velocity using delta seconds; supply strength for the desired per-axis response. */
+/**
+ * Adds three decorrelated noise channels to velocity using delta seconds; supply strength for the desired per-axis
+ * response.
+ */
 class TransformByNoise extends NoiseModule {
     /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
     constructor(public options: Partial<TransformByNoiseOptions> = {}) {

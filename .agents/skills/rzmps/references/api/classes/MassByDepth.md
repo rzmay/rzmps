@@ -8,7 +8,8 @@
 
 # Class: MassByDepth
 
-Multiplies particle mass using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample.
+Multiplies particle mass using distance from the captured camera, normalized over depthRange; two-value parameter
+ranges interpolate rather than randomly sample.
 
 ## Extends
 

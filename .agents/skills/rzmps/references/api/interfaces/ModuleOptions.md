@@ -88,7 +88,10 @@ Configures and implicitly enables the managed CPU ParticleOctree.
 priority: number;
 ```
 
-Execution phase: negative is permanent before movement, 0–1 is transient before movement, 1 or greater is transient after movement.
+Execution phase:
+negative is permanent before movement,
+0–1 is transient before movement,
+1 or greater is transient after movement.
 
 ***
 

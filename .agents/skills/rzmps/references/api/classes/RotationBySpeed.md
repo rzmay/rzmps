@@ -8,7 +8,8 @@
 
 # Class: RotationBySpeed
 
-Adds angular channels using velocity magnitude normalized over speedRange; two-value parameter ranges interpolate rather than randomly sample.
+Adds angular channels using velocity magnitude normalized over speedRange; two-value parameter ranges interpolate
+rather than randomly sample.
 
 ## Extends
 

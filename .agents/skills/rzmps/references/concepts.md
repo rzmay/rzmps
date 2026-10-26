@@ -275,6 +275,21 @@ cd rzmps
 npm install
 ```
 
+Run the demo and documentation together, with package watchers:
+
+```bash
+npm run dev
+```
+
+The command generates the documentation sources and builds the packages, then serves
+the demo at `http://localhost:5173/`. Preview images are generated while the demo is
+available. Documentation starts at `http://localhost:5173/docs/` once previews finish.
+During preview generation, documentation requests return a temporary 503 response.
+
+Use `npm run docs:dev` for the same startup sequence without package watchers.
+`npm run docs:generate` still generates both documentation sources and previews;
+`npm run docs:generate -- --skip-previews` defers previews to `npm run docs:previews`.
+
 Build the core package:
 
 ```bash

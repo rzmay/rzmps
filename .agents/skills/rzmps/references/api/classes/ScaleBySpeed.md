@@ -8,7 +8,8 @@
 
 # Class: ScaleBySpeed
 
-Multiplies scale and adds scalar channels using velocity magnitude normalized over speedRange; two-value parameter ranges interpolate rather than randomly sample.
+Multiplies scale and adds scalar channels using velocity magnitude normalized over speedRange; two-value parameter
+ranges interpolate rather than randomly sample.
 
 ## Extends
 

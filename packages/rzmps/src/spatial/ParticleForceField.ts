@@ -18,7 +18,7 @@ import {
   evaluateDynamicNumberGPU,
   evaluateDynamicVectorGPU,
 } from '../helpers/evaluateDynamicGPU';
-import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
+import type { GPUParticleLike } from '../gpu/Particle';
 import type { GPUSpatialEffectType } from '../gpu/SpatialEffectRegistry';
 
 export interface ForceFieldOptions extends SpatialEffectOptions {
@@ -343,7 +343,7 @@ class ParticleForceField extends SpatialEffect {
           particle.index,
         );
         const falloff = this.radialFalloff
-          ? this.getFalloffGPU(particle, context)
+          ? this.getFalloffGPU(particle)
           : float(1);
         const mass = particle.mass.greaterThan(float(0)).select(
           particle.mass,
@@ -395,7 +395,6 @@ class ParticleForceField extends SpatialEffect {
 
   writeStaticGPUParameters(target: Float32Array, offset: number, system: ParticleSystem): void {
     this.writeGPUInfluenceParameters(target, offset, system);
-    offset += SpatialEffect.GPU_INFLUENCE_ALIGNED_SIZE;
     const center = this.getWorldPosition(new THREE.Vector3());
     if (system.simulationSpace === 'local') {
       system.updateWorldMatrix(true, false);
@@ -411,23 +410,24 @@ class ParticleForceField extends SpatialEffect {
       direction.applyQuaternion(inverseSystemRotation);
       rotationAxis.applyQuaternion(inverseSystemRotation);
     }
-    target[offset] = center.x;
-    target[offset + 1] = center.y;
-    target[offset + 2] = center.z;
-    target[offset + 3] = 0;
-    target[offset + 4] = direction.x;
-    target[offset + 5] = direction.y;
-    target[offset + 6] = direction.z;
-    target[offset + 7] = 0;
-    target[offset + 8] = rotationAxis.x;
-    target[offset + 9] = rotationAxis.y;
-    target[offset + 10] = rotationAxis.z;
-    target[offset + 11] = 0;
-    target[offset + 12] = typeof this.gravity === 'number' ? this.gravity : 0;
-    target[offset + 13] = typeof this.rotationSpeed === 'number' ? this.rotationSpeed : 0;
-    target[offset + 14] = typeof this.rotationAttraction === 'number' ? this.rotationAttraction : 0;
-    target[offset + 15] = typeof this.drag === 'number' ? this.drag : 0;
-    target[offset + 16] = typeof this.multiplier === 'number' ? this.multiplier : 1;
+    const slot = offset + SpatialEffect.GPU_INFLUENCE_ALIGNED_SIZE
+    target[slot] = center.x;
+    target[slot + 1] = center.y;
+    target[slot + 2] = center.z;
+    target[slot + 3] = 0;
+    target[slot + 4] = direction.x;
+    target[slot + 5] = direction.y;
+    target[slot + 6] = direction.z;
+    target[slot + 7] = 0;
+    target[slot + 8] = rotationAxis.x;
+    target[slot + 9] = rotationAxis.y;
+    target[slot + 10] = rotationAxis.z;
+    target[slot + 11] = 0;
+    target[slot + 12] = typeof this.gravity === 'number' ? this.gravity : 0;
+    target[slot + 13] = typeof this.rotationSpeed === 'number' ? this.rotationSpeed : 0;
+    target[slot + 14] = typeof this.rotationAttraction === 'number' ? this.rotationAttraction : 0;
+    target[slot + 15] = typeof this.drag === 'number' ? this.drag : 0;
+    target[slot + 16] = typeof this.multiplier === 'number' ? this.multiplier : 1;
   }
 
   protected override _modifyParticle(
@@ -526,7 +526,6 @@ class ParticleForceField extends SpatialEffect {
 
   private getFalloffGPU(
     particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
   ): Node<'float'> {
     const bounds = this.getLocalBounds();
     const size = bounds.getSize(new THREE.Vector3());
@@ -534,7 +533,7 @@ class ParticleForceField extends SpatialEffect {
 
     if (radius <= 0) return float(0);
 
-    const localPosition = this.getGPUParticleLocalPosition(particle, context.system);
+    const localPosition = this.getGPUParticleLocalPosition(particle);
     const ratio = localPosition.length().div(float(radius)).clamp(0, 1);
 
     return this.inverted

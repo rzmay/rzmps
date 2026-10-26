@@ -164,11 +164,21 @@ export class GPUParticleContext implements GPUParticleLike {
     this.rotation = materializeLocals ? vectors.rotation.toVar('particleRotation') : vectors.rotation;
     this.scale = materializeLocals ? vectors.scale.toVar('particleScale') : vectors.scale;
     this.velocity = materializeLocals ? vectors.velocity.toVar('particleVelocity') : vectors.velocity;
-    this.angularVelocity = materializeLocals ? vectors.angularVelocity.toVar('particleAngularVelocity') : vectors.angularVelocity;
-    this.scalarVelocity = materializeLocals ? vectors.scalarVelocity.toVar('particleScalarVelocity') : vectors.scalarVelocity;
-    this.acceleration = materializeLocals ? vectors.acceleration.toVar('particleAcceleration') : vectors.acceleration;
-    this.angularAcceleration = materializeLocals ? vectors.angularAcceleration.toVar('particleAngularAcceleration') : vectors.angularAcceleration;
-    this.scalarAcceleration = materializeLocals ? vectors.scalarAcceleration.toVar('particleScalarAcceleration') : vectors.scalarAcceleration;
+    this.angularVelocity = materializeLocals
+      ? vectors.angularVelocity.toVar('particleAngularVelocity')
+      : vectors.angularVelocity;
+    this.scalarVelocity = materializeLocals
+      ? vectors.scalarVelocity.toVar('particleScalarVelocity')
+      : vectors.scalarVelocity;
+    this.acceleration = materializeLocals
+      ? vectors.acceleration.toVar('particleAcceleration')
+      : vectors.acceleration;
+    this.angularAcceleration = materializeLocals
+      ? vectors.angularAcceleration.toVar('particleAngularAcceleration')
+      : vectors.angularAcceleration;
+    this.scalarAcceleration = materializeLocals
+      ? vectors.scalarAcceleration.toVar('particleScalarAcceleration')
+      : vectors.scalarAcceleration;
     this.color = materializeLocals ? vectors.color.toVar('particleColor') : vectors.color;
 
     this.speed = materializeLocals ? scalars.speed.toVar('particleSpeed') : scalars.speed;
@@ -599,12 +609,22 @@ export class GPUParticleBufferState {
     generationForParticle?: (particle: Particle, index: number) => number,
   ): void {
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.PositionSpeed, particle.position, particle.speed);
-    writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.OrbitCenterAlpha, particle.orbitCenter, particle.alpha);
+    writeVectorAndScalar(
+      this.floatData, index, ParticleFloatSlot.OrbitCenterAlpha, particle.orbitCenter, particle.alpha
+    );
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.RotationMass, particle.rotation, particle.mass);
-    writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.ScaleDistortion, particle.scale, particle.distortionStrength);
-    writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.VelocityLifetime, particle.velocity, particle.lifetime);
-    writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.AngularVelocityTime, particle.angularVelocity, particle.time);
-    writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.ScalarVelocityRealtime, particle.scalarVelocity, particle.realtime);
+    writeVectorAndScalar(
+      this.floatData, index, ParticleFloatSlot.ScaleDistortion, particle.scale, particle.distortionStrength
+    );
+    writeVectorAndScalar(
+      this.floatData, index, ParticleFloatSlot.VelocityLifetime, particle.velocity, particle.lifetime
+    );
+    writeVectorAndScalar(
+      this.floatData, index, ParticleFloatSlot.AngularVelocityTime, particle.angularVelocity, particle.time
+    );
+    writeVectorAndScalar(
+      this.floatData, index, ParticleFloatSlot.ScalarVelocityRealtime, particle.scalarVelocity, particle.realtime
+    );
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.Acceleration, particle.acceleration, 0);
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.AngularAcceleration, particle.angularAcceleration, 0);
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.ScalarAcceleration, particle.scalarAcceleration, 0);
@@ -709,7 +729,11 @@ function createAttributes(floatData: Float32Array, uintData: Uint32Array): GPUPa
   };
 }
 
-function renderFloatElement(floatStorage: PackedFloatStorage, slot: number, index: Node<'uint'> = instanceIndex): Node<'vec4'> {
+function renderFloatElement(
+  floatStorage: PackedFloatStorage,
+  slot: number,
+  index: Node<'uint'> = instanceIndex
+): Node<'vec4'> {
   return floatStorage.element(index.mul(RENDER_FLOAT_SLOT_COUNT).add(slot));
 }
 

@@ -164,7 +164,7 @@ function createParameterBinding(
     return {
       getter: emptyGetter,
       source,
-      node: (parameter) => sampleUniformArray(samplesNode, samples.length, parameter, kind),
+      node: (parameter) => sampleUniformArray(samplesNode, samples.length, parameter),
       update: (next) => {
         if (typeof next !== 'function') return false;
         return updateSamples(samples, sampleByKind(kind, next));
@@ -236,7 +236,7 @@ function createDynamicBinding(
     return {
       getter: emptyGetter,
       source,
-      node: (time) => sampleUniformArray(samplesNode, samples.length, time, kind),
+      node: (time) => sampleUniformArray(samplesNode, samples.length, time),
       update: (next) => {
         if (typeof next !== 'function') return false;
         return updateSamples(samples, sampleByKind(kind, next));
@@ -304,7 +304,6 @@ function sampleUniformArray(
   samplesNode: ReturnType<typeof uniformArray>,
   resolution: number,
   time: Node<'float'>,
-  kind: DynamicKind,
 ): Node {
   const samplePosition = time.clamp(0, 1).mul(resolution - 1);
   const lowerPosition = samplePosition.floor();

@@ -616,7 +616,8 @@ class SpatialEffect extends THREE.Object3D {
     const geometry = this.geometry;
     if (!geometry) throw new Error('A spatial effect without geometry has no BVH.');
     const positionAttribute = geometry.getAttribute('position');
-    const topologyKey = `${positionAttribute?.count ?? 0}:${geometry.index?.count ?? 0}:${attributeVersion(geometry.index)}`;
+    const topologyKey =
+      `${positionAttribute?.count ?? 0}:${geometry.index?.count ?? 0}:${attributeVersion(geometry.index)}`;
     const positionVersion = attributeVersion(positionAttribute);
     if (!this._bvh || this._bvhGeometry !== geometry || this._bvhTopologyKey !== topologyKey) {
       this._bvh = new MeshBVH(geometry);
@@ -640,7 +641,7 @@ class SpatialEffect extends THREE.Object3D {
   ): Node<'float'> {
     const rawStrength = this._testGPU
       ? this._testGPU(particle, context, this)
-      : this.bakedFieldGPU(particle, context);
+      : this.bakedFieldGPU(particle);
     const strength = this._hasCustomFeatherEasing
       ? this.easeFeatherGPU(rawStrength)
       : rawStrength;
@@ -655,13 +656,12 @@ class SpatialEffect extends THREE.Object3D {
 
   bakedFieldGPU(
     particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
   ): Node<'float'> {
     this.ensureBakedField();
 
     if (!this._bakedFieldTexture) return float(0);
 
-    const localPosition = this.getGPUParticleLocalPosition(particle, context.system);
+    const localPosition = this.getGPUParticleLocalPosition(particle);
     const uv = localPosition
       .sub(this._gpuBakedFieldMinNode)
       .div(this._gpuBakedFieldSizeNode)
@@ -675,11 +675,11 @@ class SpatialEffect extends THREE.Object3D {
 
     const { type } = this.geometry;
     if (type === 'SphereGeometry' || type === 'IcosahedronGeometry') {
-      return (particle, context) => this.sphereTestGPU(particle, context);
+      return (particle) => this.sphereTestGPU(particle);
     }
 
     if (type === 'BoxGeometry') {
-      return (particle, context) => this.boxTestGPU(particle, context);
+      return (particle) => this.boxTestGPU(particle);
     }
 
     return undefined;
@@ -687,13 +687,12 @@ class SpatialEffect extends THREE.Object3D {
 
   private sphereTestGPU(
     particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
   ): Node<'float'> {
     const bounds = this.getLocalBounds();
     const center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
     const radius = Math.max(size.x, size.y, size.z) * 0.5;
-    const localPosition = this.getGPUParticleLocalPosition(particle, context.system);
+    const localPosition = this.getGPUParticleLocalPosition(particle);
     const distance = localPosition.sub(vec3(center)).length();
     const inside = distance.lessThanEqual(float(radius));
 
@@ -713,12 +712,11 @@ class SpatialEffect extends THREE.Object3D {
 
   private boxTestGPU(
     particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
   ): Node<'float'> {
     const bounds = this.getLocalBounds();
     const center = bounds.getCenter(new THREE.Vector3());
     const halfSize = bounds.getSize(new THREE.Vector3()).multiplyScalar(0.5);
-    const localPosition = this.getGPUParticleLocalPosition(particle, context.system);
+    const localPosition = this.getGPUParticleLocalPosition(particle);
     const q = abs(localPosition.sub(vec3(center))).sub(vec3(halfSize));
     const outside = vec3(
       max(q.x, float(0)),
@@ -766,17 +764,15 @@ class SpatialEffect extends THREE.Object3D {
 
   protected getGPUParticleWorldPosition(
     particle: GPUParticleLike,
-    _particleSystem: ParticleSystem,
   ): Node<'vec3'> {
     return transformPointGPU(particle.position, this._gpuSimulationToWorldNode);
   }
 
   protected getGPUParticleLocalPosition(
     particle: GPUParticleLike,
-    particleSystem: ParticleSystem,
   ): Node<'vec3'> {
     return transformPointGPU(
-      this.getGPUParticleWorldPosition(particle, particleSystem),
+      this.getGPUParticleWorldPosition(particle),
       this._gpuWorldToLocalNode,
     );
   }

@@ -21,7 +21,6 @@ import ParticleSpatialGrid, {
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import type { Node } from 'three/webgpu';
 import { acos, cos, float, If, max, mix, sin, uint, vec3, vec4 } from 'three/tsl';
-import { SimulationSpace } from '../enums/SimulationSpace';
 
 const GPU_FALLOFF_MIN_DISTANCE = 1e-3;
 
@@ -75,7 +74,10 @@ export interface BoidsOptions extends Partial<ModuleOptions> {
   neighborRadius: DynamicValue<number>;
 }
 
-/** Flocking steering using spatial aggregates and tagged affectors; prepare once per system update before modifying particles. */
+/**
+ * Flocking steering using spatial aggregates and tagged affectors; prepare once per system update before modifying
+ * particles.
+ */
 class Boids extends Module {
   static readonly BoidAffector = BoidAffector;
   static readonly BoidAffectorHelper = BoidAffectorHelper;
@@ -119,14 +121,6 @@ class Boids extends Module {
   /** Creates the modifier with its built-in priority and optional filtering/LOD settings. */
   constructor(options: Partial<BoidsOptions> = {}) {
     const affectorFilter = options.affectorFilter;
-    const {
-      octreeOptions: _octreeOptions,
-      spatialGrid: _spatialGrid,
-      grid: _grid,
-      useOctree: _useOctree,
-      useSpatialGrid: _useSpatialGrid,
-      ...moduleOptions
-    } = options;
 
     super((particle, deltaTime) => {
       if (!this.octree) return;
@@ -184,7 +178,7 @@ class Boids extends Module {
       );
       particle.velocity.copy(this.currentDirection.normalize().multiplyScalar(speed));
     }, {
-      ...moduleOptions,
+      ...options,
       priority: options.priority ?? Module.Priority.Permanent,
       modifyGPU: (particle, deltaTime, context) => this.modifyBoidGPU(
         particle,

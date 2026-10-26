@@ -13,7 +13,10 @@ export interface MassByDepthOptions extends Partial<ModuleOptions> {
   depthRange?: [number, number];
 }
 
-/** Multiplies particle mass using distance from the captured camera, normalized over depthRange; two-value parameter ranges interpolate rather than randomly sample. */
+/**
+ * Multiplies particle mass using distance from the captured camera, normalized over depthRange; two-value parameter
+ * ranges interpolate rather than randomly sample.
+ */
 class MassByDepth extends Module {
   cameraPosition: THREE.Vector3 = new THREE.Vector3();
   private readonly _gpuCameraPosition = uniform(this.cameraPosition, 'vec3');

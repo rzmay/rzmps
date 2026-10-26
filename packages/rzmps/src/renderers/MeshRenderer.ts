@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { attribute, float, uint } from 'three/tsl';
+import { attribute } from 'three/tsl';
 import type { Node } from 'three/webgpu';
 import { cos, positionLocal, sin, vec3 } from 'three/tsl';
 import Renderer, { type RendererOptions } from '../Renderer';
@@ -33,7 +33,7 @@ export interface MeshRendererOptions extends RendererOptions {
     receiveShadow: boolean,
 }
 
-/** Instances shared mesh geometry and material across particles; geometry complexity multiplies by visible population. */
+/** Instances shared mesh geometry and material across particles; geometry complexity multiplies by population. */
 class MeshRenderer extends Renderer {
     mesh: THREE.Mesh;
 
