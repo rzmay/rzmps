@@ -68,6 +68,8 @@ const decals = new DecalRenderer(material, {
 });
 ```
 
+`color` accepts `ColorInput` values (Three.js colors, CSS strings, or numeric hex values). `size` accepts `Vector3Input`: a number for uniform width/height or a vector for separate X/Y dimensions; Z is ignored because `depth` controls clipping. Both support callbacks, ranges, and sets without modifying caller-owned values.
+
 `size`, `color`, and `lifetime` use the existing CPU `DynamicValue` helpers and are sampled once at source particle age. Geometry never resizes after creation. Nonpositive or nonfinite lifetime/size creates nothing. Lifetime is in seconds; its default is eight. `opacity` is evaluated on normalized **decal age** from zero to one, with a stable source seed for random ranges. It multiplies the template material opacity and snapshotted alpha. CPU evaluation does not accept TSL nodes.
 
 `inheritColor`, `inheritScale`, and `inheritAlpha` default to 1 and follow subsystem math: base multiplied by `lerp(1, particleValue, amount)`, component-wise for color and nonuniform scale. Zero and negative amounts retain the base value, matching subsystem handling. Half blends halfway, and one inherits fully. The material color, configured color, and inherited particle color multiply together. Each decal's material fades independently.

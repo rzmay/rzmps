@@ -1,3 +1,4 @@
+import type { ColorInput } from '../types/ValueInput';
 import * as THREE from 'three';
 import seedrandom from 'seedrandom';
 import Renderer, { type RendererOptions } from '../Renderer';
@@ -47,9 +48,9 @@ export interface TrailRendererOptions extends RendererOptions {
   /** Multiplies trail color by particle color. Defaults to true. */
   inheritParticleColor: boolean;
   /** Color multiplier based on source particle age. */
-  colorOverLifetime: DynamicValue<THREE.Color>;
+  colorOverLifetime: DynamicValue<ColorInput>;
   /** Color multiplier along normalized trail length. */
-  colorOverTrail: DynamicValue<THREE.Color>;
+  colorOverTrail: DynamicValue<ColorInput>;
 
   /** Custom material; omission creates a transparent double-sided MeshStandardMaterial with depth writing disabled. */
   material: THREE.Material;
@@ -115,12 +116,12 @@ class TrailRenderer extends Renderer {
 
   inheritParticleColor = true;
 
-  colorOverLifetime: DynamicValue<THREE.Color> =
+  colorOverLifetime: DynamicValue<ColorInput> =
     new THREE.Color(0xffffff);
 
   widthOverTrail: DynamicValue<number> = 1;
 
-  colorOverTrail: DynamicValue<THREE.Color> =
+  colorOverTrail: DynamicValue<ColorInput> =
     new THREE.Color(0xffffff);
 
   geometry: THREE.BufferGeometry;

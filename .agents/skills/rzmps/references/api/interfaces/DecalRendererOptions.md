@@ -19,7 +19,7 @@
 ### color
 
 ```ts
-color: DynamicValue<Color>;
+color: DynamicValue<ColorRepresentation>;
 ```
 
 Tint multiplied with material color at creation. Default white.
@@ -289,10 +289,10 @@ Fraction of particles that project decals, selected consistently by particle ID.
 ### size
 
 ```ts
-size: DynamicValue<number>;
+size: DynamicValue<Vector3Input>;
 ```
 
-Width/height before nonuniform particle-scale inheritance, sampled at creation. Default 1.
+Width/height from X/Y before particle-scale inheritance; a number sets both. Default 1. Z is ignored.
 
 ***
 

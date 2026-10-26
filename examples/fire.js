@@ -45,8 +45,8 @@ export default async function createFire() {
         initialValues: {
           lifetime: 1.35,
           speed: 1.2,
-          scale: new THREE.Vector3(2.5, 2.5, 2.5),
-          color: [new THREE.Color('#ff9c88'), new THREE.Color('#ffd47f')],
+          scale: 2.5,
+          color: ['#ff9c88', '#ffd47f'],
           alpha: 0.95,
           velocity: new THREE.Vector3(0, 2.2, 0),
         },
@@ -59,7 +59,7 @@ export default async function createFire() {
         linear: new THREE.Vector3(0, 0.25, 0),
       }),
       new TransformByNoise({
-        strength: new THREE.Vector3(2.1, 2.1, 2.1),
+        strength: 2.1,
         frequency: 1.35,
       }),
       new ForceOverLifetime({
@@ -68,11 +68,11 @@ export default async function createFire() {
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (1.3 + (0.2 - 1.3) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#ffffff'),
+        color: '#ffffff',
         alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
@@ -98,7 +98,7 @@ export default async function createFire() {
         brightness: 1.8,
         rangeMultiplier: 3,
         lightOptions: {
-          color: new THREE.Color('#ffb570'),
+          color: '#ffb570',
           intensity: 1,
           distance: 8,
           decay: 2,
@@ -164,9 +164,9 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
         radialSpeed: 1,
         initialValues: {
           lifetime: options.lifetime,
-          scale: new THREE.Vector3(options.scale, options.scale, options.scale),
+          scale: options.scale,
           velocity: new THREE.Vector3(0, options.velocity, 0),
-          color: new THREE.Color('#ffffff'),
+          color: '#ffffff',
           rotation: [
             new THREE.Vector3(-Math.PI, 0, 0),
             new THREE.Vector3(Math.PI, 0, 0),
@@ -187,7 +187,7 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time) * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)));
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({

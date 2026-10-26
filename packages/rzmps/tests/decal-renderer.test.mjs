@@ -18,6 +18,27 @@ const mark = (floor) => floor.children.find((child) => child.userData[DECAL_REND
 const bounds = (mesh) => new THREE.Box3().setFromBufferAttribute(mesh.geometry.getAttribute('position'));
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-5, `${a} != ${b}`);
 
+test('color shortcuts and per-axis sizes support dynamic inputs without mutating them', () => {
+  for (const color of ['red', 0xff0000, () => new Set(['red']), ['red', 0xff0000]]) {
+    const size = new THREE.Vector3(2, 3, 99);
+    const { system, floor } = fixture({ color, size: () => size, distanceAffectsSize: 0.5 });
+    system._notifySpawn(source());
+    const decal = mark(floor);
+    assert.ok(decal.material.color.equals(new THREE.Color('red')));
+    const dimensions = bounds(decal).getSize(new THREE.Vector3());
+    near(dimensions.x, 1.5);
+    near(dimensions.y, 2.25);
+    assert.deepEqual(size.toArray(), [2, 3, 99]);
+    system.destroy();
+  }
+  for (const size of [new THREE.Vector3(0, 1, 1), new THREE.Vector3(1, NaN, 1)]) {
+    const { renderer, system } = fixture({ size });
+    system._notifySpawn(source());
+    assert.equal(renderer.count, 0);
+    system.destroy();
+  }
+});
+
 test('ratio selects the same particles for events and continuous placement', () => {
   const { renderer, system } = fixture({ ratio: 0.5, onDeath: true, continuousRate: 2 });
   const selected = source(), excluded = source();

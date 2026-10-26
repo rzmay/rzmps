@@ -335,6 +335,8 @@ const decals = new DecalRenderer(material, {
 });
 ```
 
+`color` accepts `ColorInput` values (Three.js colors, CSS strings, or numeric hex values). `size` accepts `Vector3Input`: a number for uniform width/height or a vector for separate X/Y dimensions; Z is ignored because `depth` controls clipping. Both support callbacks, ranges, and sets without modifying caller-owned values.
+
 `size`, `color`, and `lifetime` use the existing CPU `DynamicValue` helpers and are sampled once at source particle age. Geometry never resizes after creation. Nonpositive or nonfinite lifetime/size creates nothing. Lifetime is in seconds; its default is eight. `opacity` is evaluated on normalized **decal age** from zero to one, with a stable source seed for random ranges. It multiplies the template material opacity and snapshotted alpha. CPU evaluation does not accept TSL nodes.
 
 `inheritColor`, `inheritScale`, and `inheritAlpha` default to 1 and follow subsystem math: base multiplied by `lerp(1, particleValue, amount)`, component-wise for color and nonuniform scale. Zero and negative amounts retain the base value, matching subsystem handling. Half blends halfway, and one inherits fully. The material color, configured color, and inherited particle color multiply together. Each decal's material fades independently.
@@ -500,6 +502,21 @@ Lifetime-module callbacks receive normalized particle age, from `0` to `1`. Emit
 Dynamic values are supported for numbers, vectors, and colors where the option
 type uses `DynamicValue<number>`, `DynamicValue<THREE.Vector3>`, or
 `DynamicValue<THREE.Color>`.
+
+Color inputs accept `THREE.Color`, hex numbers, and CSS color strings (the same values
+as `new THREE.Color(...)`). Uniform-axis inputs such as scale, scale velocity/acceleration,
+noise strength, and velocity limits also accept a number: `scale: 2` means
+`new THREE.Vector3(2, 2, 2)`. Positions and directional inputs still require vectors.
+These shortcuts work inside callbacks, ranges, and sets too, including GPU processing;
+particle state always contains `THREE.Color` and `THREE.Vector3` objects.
+
+```ts
+initialValues: {
+  color: new Set(["#ff8844", 0xffcc00]),
+  scale: [0.1, 0.5],
+}
+// Lifetime modifier: scale: (t) => 1 + t
+```
 
 The [curves](https://www.npmjs.com/package/curves) package was designed and
 built to streamline functional values by defining and evaluating eased curves,

@@ -85,7 +85,7 @@ Velocity decay per second, optionally multiplied by size or speed.
 ### limit
 
 ```ts
-limit: DynamicValue<Vector3>;
+limit: DynamicValue<Vector3Input>;
 ```
 
 Absolute per-axis velocity limits, sampled by normalized particle age.

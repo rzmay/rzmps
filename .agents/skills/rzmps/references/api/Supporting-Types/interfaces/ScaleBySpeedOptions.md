@@ -146,7 +146,7 @@ Constructors selecting scene effects for this module during prepare.
 ### scalarAcceleration
 
 ```ts
-scalarAcceleration: ValueByParameter<Vector3>;
+scalarAcceleration: ValueByParameter<Vector3Input>;
 ```
 
 ***
@@ -156,7 +156,7 @@ scalarAcceleration: ValueByParameter<Vector3>;
 ### scalarVelocity
 
 ```ts
-scalarVelocity: ValueByParameter<Vector3>;
+scalarVelocity: ValueByParameter<Vector3Input>;
 ```
 
 ***
@@ -166,7 +166,7 @@ scalarVelocity: ValueByParameter<Vector3>;
 ### scale
 
 ```ts
-scale: ValueByParameter<Vector3>;
+scale: ValueByParameter<Vector3Input>;
 ```
 
 ***

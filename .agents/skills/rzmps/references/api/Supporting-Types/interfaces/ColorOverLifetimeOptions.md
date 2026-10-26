@@ -29,7 +29,7 @@ optional alpha?: DynamicValue<number>;
 ### color?
 
 ```ts
-optional color?: DynamicValue<Color>;
+optional color?: DynamicValue<ColorRepresentation>;
 ```
 
 ***

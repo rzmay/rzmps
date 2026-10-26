@@ -60,8 +60,8 @@ export default async function createDopplerBullet() {
             new THREE.Vector3(-0.38, -0.16, -31),
             new THREE.Vector3(0.38, 0.16, -36),
           ],
-          scale: new THREE.Vector3(0.22, 0.22, 0.22),
-          color: new THREE.Color('#d7c091'),
+          scale: 0.22,
+          color: '#d7c091',
           alpha: 1,
           mass: 1,
         },
@@ -190,14 +190,14 @@ function createSmokeWake() {
         initialValues: {
           lifetime: [0.55, 0.95],
           scale: [
-            new THREE.Vector3(0.18, 0.18, 0.18),
-            new THREE.Vector3(0.34, 0.34, 0.34),
+            0.18,
+            0.34,
           ],
           velocity: [
             new THREE.Vector3(-0.18, 0.02, -0.25),
             new THREE.Vector3(0.18, 0.35, 0.25),
           ],
-          color: [new THREE.Color('#9a9fa4'), new THREE.Color('#d8d0c0')],
+          color: ['#9a9fa4', '#d8d0c0'],
           alpha: 0.1,
         },
       }),
@@ -216,11 +216,11 @@ function createSmokeWake() {
         scale: (time) => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.85 + 2.35 * Easing.cubic.out(t);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#d0c8bc'),
+        color: '#d0c8bc',
         alpha: (time) => fadeInOut(time, 0.18, 0.65),
       }),
       new RotationOverLifetime({
@@ -260,14 +260,14 @@ function createHeatWake(alphaMap, distortionMap) {
         initialValues: {
           lifetime: [0.5, 0.85],
           scale: [
-            new THREE.Vector3(0.9, 0.9, 0.9),
-            new THREE.Vector3(1.45, 1.45, 1.45),
+            0.9,
+            1.45,
           ],
           velocity: [
             new THREE.Vector3(-0.04, 0.02, 0.25),
             new THREE.Vector3(0.04, 0.16, 0.65),
           ],
-          color: new THREE.Color('#ffffff'),
+          color: '#ffffff',
         },
       }),
     ],
@@ -278,7 +278,7 @@ function createHeatWake(alphaMap, distortionMap) {
         scale: (time) => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.45 + 1.75 * Easing.cubic.out(t);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new DistortionOverLifetime({
@@ -324,14 +324,14 @@ function createMuzzleFlash(texture) {
         initialValues: {
           lifetime: [0.22, 0.36],
           scale: [
-            new THREE.Vector3(1.0, 1.0, 1.0),
-            new THREE.Vector3(1.8, 1.8, 1.8),
+            1.0,
+            1.8,
           ],
           velocity: [
             new THREE.Vector3(-0.35, -0.12, -0.2),
             new THREE.Vector3(0.35, 0.32, 0.8),
           ],
-          color: [new THREE.Color('#ffffff'), new THREE.Color('#ffd07a')],
+          color: ['#ffffff', '#ffd07a'],
           alpha: 1,
           rotation: [
             new THREE.Vector3(-Math.PI, 0, 0),
@@ -347,7 +347,7 @@ function createMuzzleFlash(texture) {
         scale: (time) => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = (0.32 + 1.45 * Easing.cubic.out(t)) * (1 - 0.35 * Easing.cubic.in(t));
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
@@ -395,8 +395,8 @@ function createSpawnShockwave(alphaMap, distortionMap) {
         radialSpeed: 2.6,
         initialValues: {
           lifetime: 0.55,
-          scale: new THREE.Vector3(2.0, 2.0, 2.0),
-          color: new THREE.Color('#ffffff'),
+          scale: 2.0,
+          color: '#ffffff',
         },
       }),
     ],
@@ -407,7 +407,7 @@ function createSpawnShockwave(alphaMap, distortionMap) {
         scale: (time) => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.28 + 4.5 * Easing.cubic.out(t);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new DistortionOverLifetime({
@@ -444,7 +444,7 @@ function createBulletMesh() {
 
 function bulletMaterial() {
   return new THREE.MeshStandardMaterial({
-    color: new THREE.Color('#c99a4c'),
+    color: '#c99a4c',
     metalness: 1,
     roughness: 0.22,
   });

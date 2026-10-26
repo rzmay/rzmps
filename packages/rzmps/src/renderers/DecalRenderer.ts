@@ -4,6 +4,7 @@ import Renderer, { type RendererOptions } from '../Renderer';
 import type Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { DynamicValue } from '../types/DynamicValue';
+import type { ColorInput, Vector3Input } from '../types/ValueInput';
 import type { CollisionHit } from '../interfaces/ICollisionBackend';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
 import type { GPUParticleReadbackField } from '../gpu/SelectiveReadback';
@@ -12,6 +13,7 @@ import ThreeCollisionBackend from '../collision/ThreeCollisionBackend';
 import { isIgnoredCollisionObject } from '../collision/CollisionSceneUtils';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import evaluateDynamicColor from '../helpers/evaluateDynamicColor';
+import evaluateDynamicVector3 from '../helpers/evaluateDynamicVector3';
 import tagsIntersect from '../helpers/tagsIntersect';
 import particleRatio from '../helpers/particleRatio';
 import { PARTICLE_RENDERER_OBJECT_KEY } from './LiveCubemap';
@@ -36,10 +38,10 @@ export interface DecalRendererOptions extends Partial<RendererOptions> {
   depth: number;
   /** World-space displacement of generated vertices along the outward normal. Default 0.001. */
   offset: number;
-  /** Width/height before nonuniform particle-scale inheritance, sampled at creation. Default 1. */
-  size: DynamicValue<number>;
+  /** Width/height from X/Y before particle-scale inheritance; a number sets both. Default 1. Z is ignored. */
+  size: DynamicValue<Vector3Input>;
   /** Tint multiplied with material color at creation. Default white. */
-  color: DynamicValue<THREE.Color>;
+  color: DynamicValue<ColorInput>;
   /** Seconds, sampled at creation; nonpositive/nonfinite values produce no decal. Default 8. */
   lifetime: DynamicValue<number>;
   /** Evaluated at normalized decal age, independently of source lifetime. Default 1. */
@@ -106,8 +108,8 @@ export default class DecalRenderer extends Renderer {
   maxDistance = 2;
   depth = 0.1;
   offset = 0.001;
-  size: DynamicValue<number> = 1;
-  color: DynamicValue<THREE.Color> = new THREE.Color(0xffffff);
+  size: DynamicValue<Vector3Input> = 1;
+  color: DynamicValue<ColorInput> = new THREE.Color(0xffffff);
   lifetime: DynamicValue<number> = 8;
   opacity: DynamicValue<number> = 1;
   inheritColor = 1;
@@ -362,12 +364,13 @@ export default class DecalRenderer extends Renderer {
   private create(particle: Particle, hit: THREE.Intersection): void {
     // Sample creation-time properties before the source can be recycled.
     const lifetime = evaluateDynamicNumber(this.lifetime, particle.time, particle.id);
-    const size = evaluateDynamicNumber(this.size, particle.time, particle.id);
-    if (!Number.isFinite(lifetime) || lifetime <= 0 || !Number.isFinite(size) || size <= 0) return;
+    const size = evaluateDynamicVector3(this.size, particle.time, particle.id).clone();
+    if (!Number.isFinite(lifetime) || lifetime <= 0
+      || ![size.x, size.y].every((value) => Number.isFinite(value) && value > 0)) return;
 
     const proximity = 1 - THREE.MathUtils.clamp(hit.distance / this.maxDistance, 0, 1);
     const geometry = this.createGeometry(particle, hit,
-      size * THREE.MathUtils.lerp(1, proximity, this.distanceAffectsSize));
+      size.multiplyScalar(THREE.MathUtils.lerp(1, proximity, this.distanceAffectsSize)));
     if (!geometry) return;
 
     // Each mark owns its material so color inheritance and fading remain independent.
@@ -387,7 +390,11 @@ export default class DecalRenderer extends Renderer {
     hit.object.add(mesh);
   }
 
-  private createGeometry(particle: Particle, hit: THREE.Intersection, size: number): THREE.BufferGeometry | undefined {
+  private createGeometry(
+    particle: Particle,
+    hit: THREE.Intersection,
+    size: THREE.Vector3
+  ): THREE.BufferGeometry | undefined {
     const target = hit.object as THREE.Mesh;
     target.updateWorldMatrix(true, false);
     if (Math.abs(target.matrixWorld.determinant()) < Number.EPSILON) return;
@@ -401,7 +408,7 @@ export default class DecalRenderer extends Renderer {
 
     const scale = new THREE.Vector3(1, 1, 1);
     if (this.inheritScale > 0) scale.lerp(particle.scale, this.inheritScale);
-    scale.multiplyScalar(size);
+    scale.multiply(size);
     const dimensions = new THREE.Vector3(Math.abs(scale.x), Math.abs(scale.y), this.depth);
     if (![dimensions.x, dimensions.y].every((value) => Number.isFinite(value) && value > 0)) return;
 

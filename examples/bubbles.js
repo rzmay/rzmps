@@ -71,16 +71,16 @@ export default async function createBubbles() {
           lifetime: [7, 12],
 
           scale: [
-            new THREE.Vector3(0.25, 0.25, 0.25),
-            new THREE.Vector3(1, 1, 1),
+            0.25,
+            1,
           ],
 
           mass: 0.25,
 
           color: [
-            new THREE.Color('#bdefff'),
-            new THREE.Color('#d8c8ff'),
-            new THREE.Color('#bfffe4'),
+            '#bdefff',
+            '#d8c8ff',
+            '#bfffe4',
           ],
         },
       }),
@@ -102,7 +102,7 @@ export default async function createBubbles() {
       }),
 
       new ScaleOverLifetime({
-        scale: (time) => new THREE.Vector3(1, 1, 1).multiplyScalar(Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1))),
+        scale: (time) => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)),
       }),
 
       new DistortionBySize({

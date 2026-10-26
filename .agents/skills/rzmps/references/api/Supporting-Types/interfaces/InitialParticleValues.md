@@ -55,7 +55,7 @@ angularVelocity: DynamicValue<Vector3>;
 ### color
 
 ```ts
-color: DynamicValue<Color>;
+color: DynamicValue<ColorRepresentation>;
 ```
 
 ***
@@ -117,7 +117,7 @@ rotation: DynamicValue<Vector3>;
 ### scalarAcceleration
 
 ```ts
-scalarAcceleration: DynamicValue<Vector3>;
+scalarAcceleration: DynamicValue<Vector3Input>;
 ```
 
 ***
@@ -127,7 +127,7 @@ scalarAcceleration: DynamicValue<Vector3>;
 ### scalarVelocity
 
 ```ts
-scalarVelocity: DynamicValue<Vector3>;
+scalarVelocity: DynamicValue<Vector3Input>;
 ```
 
 ***
@@ -137,7 +137,7 @@ scalarVelocity: DynamicValue<Vector3>;
 ### scale
 
 ```ts
-scale: DynamicValue<Vector3>;
+scale: DynamicValue<Vector3Input>;
 ```
 
 ***

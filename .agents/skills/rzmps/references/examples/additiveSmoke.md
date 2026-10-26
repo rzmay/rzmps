@@ -33,8 +33,8 @@ A 10-second loop and 4.5-second particle lifetime maintain a slow plume. Gravity
         initialValues: {
           lifetime: 4.5,
           speed: 0.55,
-          scale: new THREE.Vector3(2.5, 2.5, 2.5),
-          color: [new THREE.Color('#343230'), new THREE.Color('#79746e')],
+          scale: 2.5,
+          color: ['#343230', '#79746e'],
           alpha: 0.35,
           velocity: new THREE.Vector3(0, 0.75, 0),
         },
@@ -53,11 +53,11 @@ A 10-second loop and 4.5-second particle lifetime maintain a slow plume. Gravity
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#ffffff'),
+        color: '#ffffff',
         alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
@@ -99,8 +99,8 @@ The cone source emits 36 particles per second, giving roughly 162 live particles
         initialValues: {
           lifetime: 4.5,
           speed: 0.55,
-          scale: new THREE.Vector3(2.5, 2.5, 2.5),
-          color: [new THREE.Color('#343230'), new THREE.Color('#79746e')],
+          scale: 2.5,
+          color: ['#343230', '#79746e'],
           alpha: 0.35,
           velocity: new THREE.Vector3(0, 0.75, 0),
         },
@@ -130,11 +130,11 @@ Low-frequency noise (0.8) moves the smoke in broad curls, with less vertical tha
       new ScaleOverLifetime({
         scale: (time) => {
           const size = (0.35 + (1.8 - 0.35) * time);
-          return new THREE.Vector3(size, size, size);
+          return size;
         },
       }),
       new ColorOverLifetime({
-        color: new THREE.Color('#ffffff'),
+        color: '#ffffff',
         alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({

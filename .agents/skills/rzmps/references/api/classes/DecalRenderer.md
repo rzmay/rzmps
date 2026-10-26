@@ -49,7 +49,7 @@ new DecalRenderer(material, options?): DecalRenderer;
 ### color
 
 ```ts
-color: DynamicValue<Color>;
+color: DynamicValue<ColorRepresentation>;
 ```
 
 ***
@@ -291,7 +291,7 @@ ratio: number = 1;
 ### size
 
 ```ts
-size: DynamicValue<number> = 1;
+size: DynamicValue<Vector3Input> = 1;
 ```
 
 ***

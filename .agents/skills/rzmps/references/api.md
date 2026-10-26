@@ -220,6 +220,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [BoidParticleAffectorAggregate](api/Supporting-Types/type-aliases/BoidParticleAffectorAggregate.md)
 - [CollisionHit](api/interfaces/CollisionHit.md)
 - [CollisionQuery](api/interfaces/CollisionQuery.md)
+- [ColorInput](api/type-aliases/ColorInput.md)
 - [DecalDirectionSampler](api/type-aliases/DecalDirectionSampler.md)
 - [DecalHitSelection](api/type-aliases/DecalHitSelection.md)
 - [EmissionContext](api/interfaces/EmissionContext.md)
@@ -286,6 +287,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [StrictMultiple](api/Supporting-Types/type-aliases/StrictMultiple.md)
 - [Tag](api/Supporting-Types/type-aliases/Tag.md)
 - [ThreeGPUCollisionBackendStats](api/interfaces/ThreeGPUCollisionBackendStats.md)
+- [Vector3Input](api/type-aliases/Vector3Input.md)
 - [VolumeSample](api/interfaces/VolumeSample.md)
 - [VolumeSampleCount](api/type-aliases/VolumeSampleCount.md)
 

@@ -311,7 +311,7 @@ Configures a system-owned grid or supplies an explicitly caller-owned grid.
 ### strength
 
 ```ts
-strength: DynamicValue<Vector3>;
+strength: DynamicValue<Vector3Input>;
 ```
 
 Per-axis noise force amplitude sampled by normalized age.

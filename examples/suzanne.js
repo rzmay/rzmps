@@ -46,8 +46,8 @@ export default async function createSuzanne() {
         initialValues: {
           lifetime: 2.2,
           speed: 0,
-          scale: new THREE.Vector3(0.1125, 0.1125, 0.1125),
-          color: new THREE.Color('#70d6ff'),
+          scale: 0.1125,
+          color: '#70d6ff',
           alpha: 0.85,
           velocity: new THREE.Vector3(0, 0, 0),
         },
@@ -57,7 +57,7 @@ export default async function createSuzanne() {
     // #region docs:modules:1
     modules: [
       new ColorOverLifetime({
-        color: new THREE.Color('#70d6ff'),
+        color: '#70d6ff',
         alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
     ],
