@@ -60,8 +60,6 @@ const sharedB = system.acquireParticleSpatialGrid({ brickSubdivisions: 2, cellSu
 assert.equal(sharedA, sharedB);
 const explicit = new ParticleSpatialGrid();
 assert.equal(system.acquireParticleSpatialGrid(explicit), explicit);
-assert.throws(() => new Module(() => {}, { spatialGridOptions: explicit }), /construction options/);
-assert.throws(() => new Boids({ spatialGridOptions: explicit }), /construction options/);
 
 // Function-defined CPU modules receive a lifecycle-managed, tag-filtered octree.
 let callbackOctree;

@@ -188,6 +188,44 @@ test('collision contact bypasses sampling and respects simulation-space transfor
   }
 });
 
+test('wall collisions use the contact normal with and without mesh identity in either simulation space', () => {
+  for (const simulationSpace of ['world', 'local']) {
+    for (const knownTarget of [true, false]) {
+      const { system, renderer, floor: wall, scene } = fixture({
+        onSpawn: false, onCollision: true,
+        direction: () => { throw Error('Collision must not use the downward sampler'); },
+      });
+      wall.rotation.set(0, Math.PI / 2, 0);
+      system.simulationSpace = simulationSpace;
+      system.position.set(2, 3, 4);
+      system.rotation.z = 0.4;
+      system.scale.set(2, 3, 1);
+      scene.updateMatrixWorld(true);
+      const p = source();
+      p.position.set(0.5, 0, 0);
+      const point = new THREE.Vector3();
+      const normal = new THREE.Vector3(3, 0, 0);
+      if (simulationSpace === 'local') {
+        const inverse = system.matrixWorld.clone().invert();
+        p.position.applyMatrix4(inverse);
+        point.applyMatrix4(inverse);
+        normal.transformDirection(inverse);
+      }
+      const originalNormal = normal.clone();
+      system.notifyCollision(p, {
+        point, normal, impulse: new THREE.Vector3(), object: knownTarget ? wall : undefined,
+      });
+      assert.equal(renderer.count, 1, `${simulationSpace}, target known: ${knownTarget}`);
+      const worldBounds = bounds(mark(wall)).applyMatrix4(wall.matrixWorld);
+      near(worldBounds.getCenter(new THREE.Vector3()).x, 0.001);
+      near(worldBounds.getSize(new THREE.Vector3()).y, 1);
+      near(worldBounds.getSize(new THREE.Vector3()).z, 1);
+      assert.ok(normal.equals(originalNormal), 'projection must not mutate the collision normal');
+      system.destroy();
+    }
+  }
+});
+
 test('death and contact-without-target use bounded fallback; depth is independent of ray range', () => {
   for (const depth of [0.01, 4]) {
     const { system, renderer } = fixture({ onSpawn: false, onDeath: true, onCollision: true, maxDistance: 0.5, depth });

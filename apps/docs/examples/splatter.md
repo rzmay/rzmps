@@ -15,7 +15,7 @@ Matte, multicolored paintballs leave long-lived splatters matching their color a
 
 ## Particle System Configuration
 
-An eight-second loop throws paintballs from height 3.5 under gravity. The source particles disappear on impact, while their paint stays on the surface for 90 seconds. Use Checkerboard for a clear floor or a collision scene to catch paint on several surfaces. The factory owns and disposes its splatter color/alpha map, normal map, and template material when the root system is destroyed.
+An eight-second loop throws paintballs from height 3.5 under gravity. The source particles disappear on impact, while their paint stays on the surface for 90 seconds. Use Checkerboard for a clear floor or a collision scene to catch paint on several surfaces. Known mesh contacts place decals directly; backends without mesh identity search opposite the collision normal so walls receive paint as well as floors. The factory owns and disposes its splatter color/alpha map, normal map, and template material when the root system is destroyed.
 
 <ExampleCode region="system" />
 

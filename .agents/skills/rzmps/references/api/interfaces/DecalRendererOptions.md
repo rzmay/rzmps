@@ -98,7 +98,7 @@ direction:
   | DecalDirectionSampler;
 ```
 
-World-space ray direction(s); defaults to downward. Particle state remains in simulation space.
+World-space search direction(s); defaults down. Collision searches use the opposite contact normal.
 
 ***
 

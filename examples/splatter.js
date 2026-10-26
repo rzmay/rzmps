@@ -62,8 +62,7 @@ export default async function createSplatter() {
       new DecalRenderer(paint, {
         onSpawn: false,
         onCollision: true,
-        // Backends without mesh identity use a downward search for the landing surface.
-        direction: new THREE.Vector3(0, -1, 0),
+        // Backends without mesh identity search opposite the collision normal, including on walls.
         maxDistance: 1,
         depth: 0.08,
         size: 5,
