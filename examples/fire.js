@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   ColorOverLifetime,
+  DecalRenderer,
   Emitter,
   EmissionShape,
   EmissionSource,
@@ -18,11 +19,15 @@ import {
 } from '@rzmps/rzmps';
 import fireSprite from '../apps/demo/src/assets/images/fire_tile_8x4_n32.png?url';
 import warpNormal from '../apps/demo/src/assets/images/warp_norm.jpg?url';
+import scorchTexture from '../apps/demo/src/assets/images/scorch.png?url';
 import { Easing } from 'eaz';
 
 export default async function createFire() {
   const textureLoader = new THREE.TextureLoader();
   const heatDistortion = textureLoader.load(warpNormal);
+  const scorchMap = textureLoader.load(scorchTexture);
+  scorchMap.colorSpace = THREE.SRGBColorSpace;
+  const scorchMaterial = new THREE.MeshBasicMaterial({ map: scorchMap });
 
   // #region docs:system:1
   const fire = new ParticleSystem({
@@ -99,6 +104,21 @@ export default async function createFire() {
           decay: 2,
         },
       }),
+      new DecalRenderer(scorchMaterial, {
+        onSpawn: false,
+        continuousRate: 1.5,
+        direction: (particle) => DecalRenderer.Radial(24)(particle),
+        maxDistance: 3,
+        depth: 0.06,
+        size: 2.5,
+        inheritColor: 0,
+        inheritScale: 0,
+        inheritAlpha: 0,
+        lifetime: 8,
+        opacity: (t) => 0.035 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+          * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
+        maxDecals: 384,
+      }),
     ],
     // #endregion docs:renderers:1
   });
@@ -119,6 +139,10 @@ export default async function createFire() {
     ratio: 0.5,
   });
 
+  fire.addEventListener('destroyed', () => {
+    scorchMaterial.dispose();
+    scorchMap.dispose();
+  });
   fire.name = 'Fire';
   fire.position.set(0, 0, 0);
 
@@ -199,7 +223,7 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
 export const metadata = {
   "id": "fire",
   "title": "Fire",
-  "description": "Sprite-sheet animation, soft particles, particle lights, and a heat-distortion subsystem.",
+  "description": "Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces.",
   "tags": [
     "fire"
   ],

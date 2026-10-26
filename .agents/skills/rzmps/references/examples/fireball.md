@@ -3,7 +3,7 @@
 
 # Fireball
 
-Showcases burst emission, animated sprite growth, particle lights, and inherited heat-distortion particles.
+Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks.
 
 [View live example](https://rzmps.rzmay.com/?preset=Fireball)
 
@@ -13,10 +13,10 @@ Preset by [rzmay](https://github.com/rzmay).
 
 ## Particle System Configuration
 
-A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 seconds, leaving a quiet gap before the next burst. A spawn-triggered distortion subsystem has independent lifetime and scale, with velocity inheritance 0.5 so the heat wave can partially follow the source particle.
+A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 seconds, leaving a quiet gap before the next burst. A spawn-triggered distortion subsystem has independent lifetime and scale, with velocity inheritance 0.5 so the heat wave can partially follow the source particle. The same fireball particles continuously project faint scorch marks onto nearby scene meshes; use Checkerboard to see them accumulate on the floor.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L25)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L30)
 
 ```js
   const fireball = new ParticleSystem({
@@ -76,12 +76,27 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
           decay: 2,
         },
       }),
+      new DecalRenderer(scorchMaterial, {
+        onSpawn: false,
+        continuousRate: 4,
+        direction: (particle) => DecalRenderer.Radial(24)(particle),
+        maxDistance: 3,
+        depth: 0.06,
+        size: 2.5,
+        inheritColor: 0,
+        inheritScale: 0,
+        inheritAlpha: 0,
+        lifetime: 8,
+        opacity: (t) => 0.035 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+          * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
+        maxDecals: 128,
+      }),
     ],
   });
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L113)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L137)
 
 ```js
   return new ParticleSystem({
@@ -150,7 +165,7 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
 The main emitter has no continuous rate: five particles burst at time zero from a radius-0.2 sphere. Their 2.5-unit scale overlaps into one explosion. The secondary burst creates five larger distortion particles lasting 0.5 seconds; radial speed 2 spreads their silhouette beyond the visible flame.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L29)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L34)
 
 ```js
     emitters: [
@@ -175,7 +190,7 @@ The main emitter has no continuous rate: five particles burst at time zero from 
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L117)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L141)
 
 ```js
     emitters: [
@@ -203,7 +218,7 @@ The main emitter has no continuous rate: five particles burst at time zero from 
 The main scale multiplier grows from 0.35 to 1.8, making the explosion expand rather than drift. Cubic alpha decay holds brightness until late in life. Secondary upward force and noise stop the heat wave looking like a rigid expanding disc, while its cubic growth and alpha envelope independently remove the distortion.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L50)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L55)
 
 ```js
     modules: [
@@ -221,7 +236,7 @@ The main scale multiplier grows from 0.35 to 1.8, making the explosion expand ra
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L136)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L160)
 
 ```js
     modules: [
@@ -253,10 +268,10 @@ The main scale multiplier grows from 0.35 to 1.8, making the explosion expand ra
 
 ## Renderers
 
-The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft intersections blend the explosion against geometry. Up to 18 particle lights at brightness 5 illuminate the environment briefly. The distortion material uses transmission 1, opacity 0.3, and strength 0.05; its low opacity keeps the background readable.
+The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft intersections blend the explosion against geometry. Up to 18 particle lights at brightness 5 illuminate the environment briefly. The distortion material uses transmission 1, opacity 0.3, and strength 0.05; its low opacity keeps the background readable. A DecalRenderer uses the supplied scorch texture and twenty-four spherical rays to select the nearest surface within three units. Continuous rate 4 gives each short-lived particle projection opportunities at ages 0.25 and 0.5 seconds. Marks have a fixed 2.5-unit footprint, independent of sprite growth, color, and alpha. Each mark lives eight seconds, fades in over 0.08 seconds to a peak opacity of 0.035, then fades out over its final 3.2 seconds. Overlapping bursts build up the burn gradually. Capacity 128 bounds persistent geometry, and the factory disposes the scorch material and texture on destruction.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L64)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L69)
 
 ```js
     renderers: [
@@ -282,11 +297,26 @@ The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft in
           decay: 2,
         },
       }),
+      new DecalRenderer(scorchMaterial, {
+        onSpawn: false,
+        continuousRate: 4,
+        direction: (particle) => DecalRenderer.Radial(24)(particle),
+        maxDistance: 3,
+        depth: 0.06,
+        size: 2.5,
+        inheritColor: 0,
+        inheritScale: 0,
+        inheritAlpha: 0,
+        lifetime: 8,
+        opacity: (t) => 0.035 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+          * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
+        maxDecals: 128,
+      }),
     ],
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L162)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L186)
 
 ```js
     renderers: [

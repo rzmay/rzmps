@@ -9,8 +9,8 @@
 - [Metal Balls](examples/./collisionSubEmitters.md) — Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces. Preset by [rzmay](https://github.com/rzmay).
 - [Cube Instances](examples/./cubes.md) — Instanced mesh rendering with randomized cube particles and simple lifetime rotation and fade-out. Preset by [rzmay](https://github.com/rzmay).
 - [Doppler Bullet](examples/./dopplerBullet.md) — Doppler effect on a fast bullet particle, with smoke, faint trails, spawn blast effects, and distortion wake subsystems. Preset by [rzmay](https://github.com/rzmay).
-- [Fire](examples/./fire.md) — Sprite-sheet animation, soft particles, particle lights, and a heat-distortion subsystem. Preset by [rzmay](https://github.com/rzmay).
-- [Fireball](examples/./fireball.md) — Showcases burst emission, animated sprite growth, particle lights, and inherited heat-distortion particles. Preset by [rzmay](https://github.com/rzmay).
+- [Fire](examples/./fire.md) — Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces. Preset by [rzmay](https://github.com/rzmay).
+- [Fireball](examples/./fireball.md) — Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks. Preset by [rzmay](https://github.com/rzmay).
 - [Fireworks](examples/./fireworks.md) — Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks. Preset by [rzmay](https://github.com/rzmay).
 - [LOD Stress Test](examples/./lodStress.md) — Emitter and renderer LOD controls under a dense particle load. Preset by [rzmay](https://github.com/rzmay).
 - [Particle Trail](examples/./particleTrail.md) — Per-particle trail rendering with inherited color and alpha over moving particles. Preset by [rzmay](https://github.com/rzmay).
@@ -18,6 +18,7 @@
 - [Smoke](examples/./smoke.md) — Lit smoke sprites with soft particles and lifetime scale/color shaping. Preset by [rzmay](https://github.com/rzmay).
 - [Snow](examples/./snow.md) — Depth-based fading, noise-driven motion, warmup, and broad low-cost emission. Preset by [rzmay](https://github.com/rzmay).
 - [Spheres](examples/./spheres.md) — Lit sprite particles with spherical normals for a 3D effect. Preset by [rzmay](https://github.com/rzmay).
+- [Splatter](examples/./splatter.md) — Matte, multicolored paintballs leave long-lived splatters matching their color and size, with randomized surface rotation. Select a scene with collision geometry, such as Checkerboard. Preset by [rzmay](https://github.com/rzmay).
 - [Stylized Depth](examples/./stylizedDepth.md) — Depth-based color, scale, speed, rotation, and velocity modules for stylized perspective effects. Preset by [rzmay](https://github.com/rzmay).
 - [Suzanne](examples/./suzanne.md) — Mesh-surface emission from a model with lit sprite rendering. Preset by [rzmay](https://github.com/rzmay).
 - [Suzanne Instances](examples/./suzanneInstances.md) — Mesh instancing with Suzanne particles and randomized transforms. Preset by [rzmay](https://github.com/rzmay).

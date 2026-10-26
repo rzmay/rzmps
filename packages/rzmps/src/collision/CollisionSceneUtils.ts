@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import ParticleSystem from '../ParticleSystem';
+import { DECAL_RENDERER_USER_DATA_KEY } from '../renderers/DecalRenderer';
+import { PARTICLE_RENDERER_OBJECT_KEY } from '../renderers/LiveCubemap';
 import { TRAIL_RENDERER_USER_DATA_KEY } from '../renderers/TrailRenderer';
 import { SPRITE_RENDERER_USER_DATA_KEY } from '../renderers/SpriteRenderer';
 
@@ -20,6 +22,7 @@ const IGNORED_COLLISION_OBJECT_TYPES = [
 ] as Array<new (...args: never[]) => THREE.Object3D>;
 
 const IGNORED_COLLISION_USER_DATA_KEYS = [
+  PARTICLE_RENDERER_OBJECT_KEY,
   TRAIL_RENDERER_USER_DATA_KEY,
   SPRITE_RENDERER_USER_DATA_KEY,
 ];
@@ -27,7 +30,9 @@ const IGNORED_COLLISION_USER_DATA_KEYS = [
 export function isIgnoredCollisionObject(object: THREE.Object3D): boolean {
   // Keep ParticleSystem as a live binding: collision modules participate in its
   // import cycle, so capturing it in the eager constructor array can store undefined.
-  return object instanceof ParticleSystem
+  // Read the decal key lazily: DecalRenderer also consumes these collision filters.
+  return Boolean(object.userData[DECAL_RENDERER_USER_DATA_KEY])
+    || object instanceof ParticleSystem
     || IGNORED_COLLISION_OBJECT_TYPES.some((Type) => object instanceof Type)
     || IGNORED_COLLISION_USER_DATA_KEYS.some((key) => Boolean(object.userData[key]));
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AudioRenderer, SpriteRenderer, LightRenderer, MeshRenderer, TrailRenderer, TrailMode, TrailTextureMode } from '@rzmps/rzmps';
+import { AudioRenderer, DecalRenderer, SpriteRenderer, LightRenderer, MeshRenderer, TrailRenderer, TrailMode, TrailTextureMode } from '@rzmps/rzmps';
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
 
@@ -45,6 +45,17 @@ export class RendererGUI extends GUIEditorBase {
             this.buildMeshRenderer(folder, renderer);
         } else if (renderer instanceof TrailRenderer) {
             this.buildTrailRenderer(folder, renderer);
+        } else if (renderer instanceof DecalRenderer) {
+            // Only edit configuration. Renderer internals include the owning system/scene.
+            for (const key of [
+                'direction', 'hitSelection', 'maxHits', 'maxDistance',
+                'depth', 'offset', 'size', 'color',
+                'lifetime', 'opacity', 'inheritColor', 'inheritScale',
+                'inheritAlpha', 'distanceAffectsOpacity', 'distanceAffectsSize', 'maxDecals',
+                'onSpawn', 'onCollision', 'onDeath', 'continuousRate', 'ratio',
+            ]) {
+                this.addValue(folder, renderer, key, this.prettyName(key));
+            }
         } else if (renderer instanceof AudioRenderer) {
             this.buildAudioRenderer(folder, renderer);
         } else {

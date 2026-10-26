@@ -74,6 +74,7 @@ Start with Renderer, then represent particles as sprites, meshes, trails, lights
 - [TrailRenderer](api/classes/TrailRenderer.md)
 - [LightRenderer](api/classes/LightRenderer.md)
 - [AudioRenderer](api/classes/AudioRenderer.md)
+- [DecalRenderer](api/classes/DecalRenderer.md)
 
 ## Spatial Effects
 
@@ -127,6 +128,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [ColorBySizeOptions](api/Supporting-Types/interfaces/ColorBySizeOptions.md)
 - [ColorBySpeedOptions](api/Supporting-Types/interfaces/ColorBySpeedOptions.md)
 - [ColorOverLifetimeOptions](api/Supporting-Types/interfaces/ColorOverLifetimeOptions.md)
+- [DecalRendererOptions](api/interfaces/DecalRendererOptions.md)
 - [DistortionByDepthOptions](api/Supporting-Types/interfaces/DistortionByDepthOptions.md)
 - [DistortionBySizeOptions](api/Supporting-Types/interfaces/DistortionBySizeOptions.md)
 - [DistortionBySpeedOptions](api/Supporting-Types/interfaces/DistortionBySpeedOptions.md)
@@ -218,6 +220,8 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [BoidParticleAffectorAggregate](api/Supporting-Types/type-aliases/BoidParticleAffectorAggregate.md)
 - [CollisionHit](api/interfaces/CollisionHit.md)
 - [CollisionQuery](api/interfaces/CollisionQuery.md)
+- [DecalDirectionSampler](api/type-aliases/DecalDirectionSampler.md)
+- [DecalHitSelection](api/type-aliases/DecalHitSelection.md)
 - [EmissionContext](api/interfaces/EmissionContext.md)
 - [GPUAllocationDiagnostics](api/interfaces/GPUAllocationDiagnostics.md)
 - [GPUCollisionEventNodeRecord](api/Supporting-Types/interfaces/GPUCollisionEventNodeRecord.md)
