@@ -179,6 +179,9 @@ class Boids extends Module {
       particle.velocity.copy(this.currentDirection.normalize().multiplyScalar(speed));
     }, {
       ...options,
+      // Boids owns its octree aggregates and GPU grid rather than the base module's managed structures.
+      useOctree: false,
+      useSpatialGrid: false,
       priority: options.priority ?? Module.Priority.Permanent,
       modifyGPU: (particle, deltaTime, context) => this.modifyBoidGPU(
         particle,
