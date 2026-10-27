@@ -17,7 +17,8 @@ import {
   type PackedUintStorage,
 } from './Storage';
 
-export type GPUParticleReadbackField = GPUParticleVectorField | GPUParticleScalarField;
+export type GPUParticleReadbackField = GPUParticleVectorField | GPUParticleScalarField | 'materialCopy' |
+  'materialCopyU' | 'materialCopyV';
 
 /** One slot/generation selection and the minimal fields to transfer to CPU memory. */
 export interface GPUSelectiveReadbackRequest {
@@ -42,7 +43,7 @@ const READBACK_FIELDS: readonly GPUParticleReadbackField[] = [
   'position', 'orbitCenter', 'rotation', 'scale', 'velocity',
   'angularVelocity', 'scalarVelocity', 'acceleration', 'angularAcceleration',
   'scalarAcceleration', 'color', 'speed', 'alpha', 'mass',
-  'distortionStrength', 'lifetime', 'time', 'realtime',
+  'distortionStrength', 'lifetime', 'time', 'realtime', 'materialCopy', 'materialCopyU', 'materialCopyV',
 ];
 
 const VECTOR_FIELDS = new Set<GPUParticleReadbackField>([
@@ -235,6 +236,7 @@ export class GPUSelectiveReadbackState {
     field: GPUParticleReadbackField,
   ): Node<'vec4'> {
     const value = particle[field];
+    if (field.startsWith('materialCopy')) return (value as Node<'vec4'> | undefined) ?? vec4(0);
     return VECTOR_FIELDS.has(field)
       ? vec4(value as Node<'vec3'>, 0)
       : vec4(value as Node<'float'>, 0, 0, 0);
@@ -246,7 +248,9 @@ export class GPUSelectiveReadbackState {
     data: Float32Array,
     offset: number,
   ): void {
-    if (field === 'color') {
+    if (field.startsWith('materialCopy')) {
+      (particle[field as 'materialCopy'] as THREE.Vector4).fromArray(data, offset);
+    } else if (field === 'color') {
       particle.color.setRGB(data[offset], data[offset + 1], data[offset + 2]);
     } else if (VECTOR_FIELDS.has(field)) {
       (particle[field] as THREE.Vector3).set(data[offset], data[offset + 1], data[offset + 2]);

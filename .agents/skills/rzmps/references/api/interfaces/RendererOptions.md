@@ -45,6 +45,28 @@ Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+***
+
 <a id="tags"></a>
 
 ### tags

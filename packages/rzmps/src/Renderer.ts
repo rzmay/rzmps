@@ -1,3 +1,5 @@
+import Appearance from './material-copy/Appearance';
+import { MaterialCopyRegistry, MaterialCopySampleMode, type MaterialTarget } from './material-copy/Surface';
 import Particle from './Particle';
 import ParticleSystem from './ParticleSystem';
 import type { StrictMultiple } from './types/Multiple';
@@ -37,6 +39,9 @@ export interface RendererChildrenOptions {
 }
 
 export interface RendererOptions {
+  /** Optional surface whose appearance multiplies this renderer's configured appearance. */
+  materialTarget?: MaterialTarget;
+  materialCopySampleMode?: MaterialCopySampleMode;
   /** Filters the simulated population by tag before rendering. */
   tags: StrictMultiple<Tag>;
   /** Artistic render-only copies, generated before LOD children. */
@@ -47,6 +52,42 @@ export interface RendererOptions {
 
 /** Base renderer that filters particles and applies renderer LOD before delegating to a backend-compatible view. */
 export default abstract class Renderer {
+  materialTarget?: MaterialTarget;
+  materialCopySampleMode: MaterialCopySampleMode;
+  protected appearance?: Appearance;
+  private _materialCopyRequested = false;
+
+  /** @internal Enables copying within the owning system registry without adding GPU storage bindings. */
+  public enableMaterialCopy(registry?: MaterialCopyRegistry): void {
+    if (!this.supportsMaterialCopy) return;
+    this._materialCopyRequested = true;
+    if (!registry || this.appearance?.registry === registry) return;
+
+    this.appearance?.dispose();
+    this.appearance = new Appearance(registry);
+    this.onMaterialCopyChange();
+    this.needsUpdate = true;
+  }
+
+  /** Renderer-specific translation retains the destination shader and rendering settings. */
+  public copyMaterial(source: MaterialTarget | undefined): this {
+    this.materialTarget = source;
+    if (source) this.enableMaterialCopy();
+    return this;
+  }
+
+  /** Custom renderer subclasses opt in by implementing onMaterialCopyChange. */
+  get supportsMaterialCopy(): boolean {
+    return this.onMaterialCopyChange !== Renderer.prototype.onMaterialCopyChange;
+  }
+
+  protected onMaterialCopyChange(): void { }
+
+  protected disposeMaterialCopy(): void {
+    this.appearance?.dispose();
+    this.appearance = undefined;
+  }
+
   tags?: Tag[];
   children: RendererChildrenOptions;
   compensation: CompensationMode | `${CompensationMode}`;
@@ -83,6 +124,8 @@ export default abstract class Renderer {
 
   /** Configures particle filtering, artistic children, and LOD compensation. */
   constructor(options: Partial<RendererOptions> = {}) {
+    this.materialTarget = options.materialTarget;
+    this.materialCopySampleMode = options.materialCopySampleMode ?? MaterialCopySampleMode.UVPatch;
     this.tags = acceptMultiple(options.tags);
     this.children = options.children ?? {};
     this.compensation = options.compensation ?? CompensationMode.None;
@@ -152,6 +195,11 @@ export default abstract class Renderer {
     system: ParticleSystem,
     deltaTime: number = 0,
   ): void {
+    if (this._materialCopyRequested || this.materialTarget || particles.some(p => p.materialCopy.x > 0)) {
+      this.enableMaterialCopy(system.materialCopyRegistry);
+    }
+    this.appearance?.sync(this.materialTarget, this.materialCopySampleMode, system.sceneRenderer);
+
     this._usesGPUChildren = false;
     const visible = system.quality === 0 ? [] : particles.filter(particle => (
       !this.tags || tagsIntersect(this.tags, particle.tags ?? [])
@@ -233,6 +281,9 @@ export default abstract class Renderer {
     system: ParticleSystem,
     deltaTime: number = 0,
   ): void {
+    if (this._materialCopyRequested || this.materialTarget) this.enableMaterialCopy(system.materialCopyRegistry);
+    this.appearance?.sync(this.materialTarget, this.materialCopySampleMode, system.sceneRenderer);
+
     if (!this.supportsGPUInput) throw new Error('This particle renderer does not support GPU particle buffers.');
     this._usesGPUChildren = !this.updateGPUUsesCPUReadback;
     // Readback implementations expand once through the CPU update entry point.

@@ -29,7 +29,8 @@ new GPUParticleContext(
    tagMask,
    generation,
    materializeLocals?,
-   lodPriority?
+   lodPriority?,
+   appearance?
 ): GPUParticleContext;
 ```
 
@@ -66,6 +67,10 @@ new GPUParticleContext(
 ##### lodPriority?
 
 `Node`\<`"uint"`\> = `...`
+
+##### appearance?
+
+`Node`\<`"vec4"`\>[] = `...`
 
 #### Returns
 
@@ -238,6 +243,48 @@ readonly mass: Node<"float">;
 #### Implementation of
 
 [`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`mass`](../interfaces/GPUParticleLike.md#mass)
+
+***
+
+<a id="materialcopy"></a>
+
+### materialCopy
+
+```ts
+readonly materialCopy: Node<"vec4">;
+```
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`materialCopy`](../interfaces/GPUParticleLike.md#materialcopy)
+
+***
+
+<a id="materialcopyu"></a>
+
+### materialCopyU
+
+```ts
+readonly materialCopyU: Node<"vec4">;
+```
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`materialCopyU`](../interfaces/GPUParticleLike.md#materialcopyu)
+
+***
+
+<a id="materialcopyv"></a>
+
+### materialCopyV
+
+```ts
+readonly materialCopyV: Node<"vec4">;
+```
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`materialCopyV`](../interfaces/GPUParticleLike.md#materialcopyv)
 
 ***
 

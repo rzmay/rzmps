@@ -13,6 +13,7 @@
 - [Fireball](examples/./fireball.md) — Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks. Preset by [rzmay](https://github.com/rzmay).
 - [Fireworks](examples/./fireworks.md) — Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks. Preset by [rzmay](https://github.com/rzmay).
 - [LOD Stress Test](examples/./lodStress.md) — Unified LOD with density compensation under a dense simulation load. Preset by [rzmay](https://github.com/rzmay).
+- [Material Copy](examples/./materialCopy.md) — Metal ball impacts emit fragments that inherit the collided surface material and UV footprint. Preset by [rzmay](https://github.com/rzmay).
 - [Particle Trail](examples/./particleTrail.md) — Per-particle trail rendering with inherited color and alpha over moving particles. Preset by [rzmay](https://github.com/rzmay).
 - [Ribbon Trail](examples/./ribbonTrail.md) — Ribbon trail rendering for continuous streaks with lifetime fading. Preset by [rzmay](https://github.com/rzmay).
 - [Smoke](examples/./smoke.md) — Lit smoke sprites with soft particles and lifetime scale/color shaping. Preset by [rzmay](https://github.com/rzmay).

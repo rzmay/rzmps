@@ -120,6 +120,36 @@ lightOptions: PointLightOptions;
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCopySampleMode`](../../interfaces/RendererOptions.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialTarget`](../../interfaces/RendererOptions.md#materialtarget)
+
+***
+
 <a id="randomdistribution"></a>
 
 ### randomDistribution

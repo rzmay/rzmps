@@ -41,6 +41,9 @@ export interface GPUCollisionEventNodeRecord {
   position: Node<'vec3'>;
   normal: Node<'vec3'>;
   impulse: Node<'vec3'>;
+  materialCopy: Node<'vec4'>;
+  materialCopyU: Node<'vec4'>;
+  materialCopyV: Node<'vec4'>;
 }
 
 // This per-slot collision cache intentionally differs from the append-only event
@@ -54,7 +57,7 @@ export class GPUCollisionEventWriter {
     private readonly frameSequence: Node<'uint'>,
   ) {
     this.version = state.version;
-    this.storage = storage(state.attribute, 'vec4', state.capacity * 4) as PackedFloatStorage;
+    this.storage = storage(state.attribute, 'vec4', state.capacity * 7) as PackedFloatStorage;
   }
 
   emit(
@@ -63,16 +66,22 @@ export class GPUCollisionEventWriter {
     position: Node<'vec3'>,
     normal: Node<'vec3'>,
     impulse: Node<'vec3'>,
+    materialCopy: Node<'vec4'> = vec4(0),
+    materialCopyU: Node<'vec4'> = vec4(0),
+    materialCopyV: Node<'vec4'> = vec4(0),
   ): void {
-    const base = particle.index.mul(4);
+    const base = particle.index.mul(7);
     this.storage.element(base).assign(vec4(point, float(this.frameSequence)));
     this.storage.element(base.add(1)).assign(vec4(position, 0));
     this.storage.element(base.add(2)).assign(vec4(normal, 0));
     this.storage.element(base.add(3)).assign(vec4(impulse, 0));
+    this.storage.element(base.add(4)).assign(materialCopy);
+    this.storage.element(base.add(5)).assign(materialCopyU);
+    this.storage.element(base.add(6)).assign(materialCopyV);
   }
 
   load(index: Node<'uint'>): GPUCollisionEventNodeRecord {
-    const base = index.mul(4);
+    const base = index.mul(7);
     const point = this.storage.element(base);
     return {
       active: point.w.equal(float(this.frameSequence)),
@@ -80,11 +89,14 @@ export class GPUCollisionEventWriter {
       position: this.storage.element(base.add(1)).xyz,
       normal: this.storage.element(base.add(2)).xyz,
       impulse: this.storage.element(base.add(3)).xyz,
+      materialCopy: this.storage.element(base.add(4)),
+      materialCopyU: this.storage.element(base.add(5)),
+      materialCopyV: this.storage.element(base.add(6)),
     };
   }
 
   clear(index: Node<'uint'>): void {
-    this.storage.element(index.mul(4)).w.assign(0);
+    this.storage.element(index.mul(7)).w.assign(0);
   }
 }
 
@@ -98,7 +110,7 @@ export class GPUCollisionEventBufferState {
     this.capacity = Math.max(1, capacity);
     this.version = GPUCollisionEventBufferState.nextVersion;
     GPUCollisionEventBufferState.nextVersion += 1;
-    this.attribute = new StorageBufferAttribute(new Float32Array(this.capacity * 4 * 4), 4);
+    this.attribute = new StorageBufferAttribute(new Float32Array(this.capacity * 7 * 4), 4);
   }
 
   initialize(renderer: GPUStorageBufferRenderer): void {
@@ -137,6 +149,12 @@ enum EventFloatSlot {
   CollisionNormal,
   CollisionImpulse,
   Metadata,
+  MaterialCopy,
+  MaterialCopyU,
+  MaterialCopyV,
+  CollisionMaterialCopy,
+  CollisionMaterialCopyU,
+  CollisionMaterialCopyV,
 }
 
 export const GPU_EVENT_FLOAT_SLOT_COUNT = Object.keys(EventFloatSlot).filter(key => isNaN(Number(key))).length;
@@ -170,6 +188,9 @@ export interface GPUEventNodeRecord {
   collisionPoint: Node<'vec3'>;
   collisionNormal: Node<'vec3'>;
   collisionImpulse: Node<'vec3'>;
+  materialCopy: Node<'vec4'>;
+  materialCopyU: Node<'vec4'>;
+  materialCopyV: Node<'vec4'>;
 }
 
 /** Shader-side random-access reader used to consume an already populated stream. */
@@ -230,6 +251,9 @@ export class GPUEventReader {
         angularAcceleration: this.eventFloatStorage.element(base.add(EventFloatSlot.AngularAcceleration)).xyz,
         scalarAcceleration: this.eventFloatStorage.element(base.add(EventFloatSlot.ScalarAcceleration)).xyz,
         color: this.eventFloatStorage.element(base.add(EventFloatSlot.Color)).xyz,
+        materialCopy: this.eventFloatStorage.element(base.add(EventFloatSlot.MaterialCopy)),
+        materialCopyU: this.eventFloatStorage.element(base.add(EventFloatSlot.MaterialCopyU)),
+        materialCopyV: this.eventFloatStorage.element(base.add(EventFloatSlot.MaterialCopyV)),
         speed: positionSpeed.w,
         alpha: orbitCenterAlpha.w,
         mass: rotationMass.w,
@@ -245,6 +269,9 @@ export class GPUEventReader {
       collisionPoint: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionPoint)).xyz,
       collisionNormal: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionNormal)).xyz,
       collisionImpulse: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionImpulse)).xyz,
+      materialCopy: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionMaterialCopy)),
+      materialCopyU: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionMaterialCopyU)),
+      materialCopyV: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionMaterialCopyV)),
     };
   }
 }
@@ -280,8 +307,10 @@ export class GPUEventWriter {
     point: Node<'vec3'>,
     normal: Node<'vec3'>,
     impulse: Node<'vec3'>,
+    materialCopy: Node<'vec4'> = vec4(0), materialCopyU: Node<'vec4'> = vec4(0), materialCopyV: Node<'vec4'> = vec4(0),
   ): void {
-    this.emitParticleEvent(GPUEventType.Collision, particle, point, normal, impulse);
+    this.emitParticleEvent(GPUEventType.Collision, particle, point, normal, impulse, materialCopy,
+      materialCopyU, materialCopyV);
   }
 
   private emitParticleEvent(
@@ -290,6 +319,7 @@ export class GPUEventWriter {
     collisionPoint?: Node<'vec3'>,
     collisionNormal?: Node<'vec3'>,
     collisionImpulse?: Node<'vec3'>,
+    materialCopy?: Node<'vec4'>, materialCopyU?: Node<'vec4'>, materialCopyV?: Node<'vec4'>,
   ): void {
     const eventIndex = atomicAdd(
       this.counterStorage.element(uint(EventCounter.Count)),
@@ -305,6 +335,13 @@ export class GPUEventWriter {
         bitcastUintToFloat(particle.tagMask),
       ));
       this.writeParticleSnapshot(eventIndex, particle);
+      const appearance = [particle.materialCopy, particle.materialCopyU, particle.materialCopyV];
+      const surface = [materialCopy, materialCopyU, materialCopyV];
+      appearance.forEach((value, row) => {
+        this.eventFloatStorage.element(base.add(EventFloatSlot.MaterialCopy + row)).assign(value ?? vec4(0));
+        this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionMaterialCopy + row))
+          .assign(surface[row] ?? vec4(0));
+      });
       if (collisionPoint && collisionNormal && collisionImpulse) {
         this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionPoint)).assign(vec4(collisionPoint, 0));
         this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionNormal)).assign(vec4(collisionNormal, 0));
@@ -398,6 +435,7 @@ export class GPUEventBufferState {
   async readback(
     renderer: GPUReadbackRenderer,
     identityForEvent: (slot: number, generation: number) => Particle | undefined,
+    materialForSource?: (id: number) => THREE.Material | undefined,
   ): Promise<GPUEventReadbackBatch> {
     const sequence = this.sequence;
     const [counterBuffer, floatBuffer] = await Promise.all([
@@ -450,6 +488,14 @@ export class GPUEventBufferState {
         particle,
         collision: type === GPUEventType.Collision
           ? {
+            materialSourceId: eventFloatData[packedOffset(index, EventFloatSlot.CollisionMaterialCopy)],
+            material: materialForSource?.(eventFloatData[packedOffset(index, EventFloatSlot.CollisionMaterialCopy)]),
+            surface: {
+              uv: new THREE.Vector2(eventFloatData[packedOffset(index, EventFloatSlot.CollisionMaterialCopy) + 1],
+                eventFloatData[packedOffset(index, EventFloatSlot.CollisionMaterialCopy) + 2]),
+              u: readNewVector(eventFloatData, index, EventFloatSlot.CollisionMaterialCopyU),
+              v: readNewVector(eventFloatData, index, EventFloatSlot.CollisionMaterialCopyV),
+            },
             point: readNewVector(eventFloatData, index, EventFloatSlot.CollisionPoint),
             normal: readNewVector(eventFloatData, index, EventFloatSlot.CollisionNormal),
             impulse: readNewVector(eventFloatData, index, EventFloatSlot.CollisionImpulse),
@@ -500,6 +546,9 @@ function readParticleSnapshot(array: Float32Array, index: number, particle: Part
   particle.lifetime = readScalar(array, index, EventFloatSlot.VelocityLifetime);
   particle.time = readScalar(array, index, EventFloatSlot.AngularVelocityTime);
   particle.realtime = readScalar(array, index, EventFloatSlot.ScalarVelocityRealtime);
+  particle.materialCopy.fromArray(array, packedOffset(index, EventFloatSlot.MaterialCopy));
+  particle.materialCopyU.fromArray(array, packedOffset(index, EventFloatSlot.MaterialCopyU));
+  particle.materialCopyV.fromArray(array, packedOffset(index, EventFloatSlot.MaterialCopyV));
   particle.cache();
 }
 

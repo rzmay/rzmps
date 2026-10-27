@@ -39,6 +39,12 @@
     },
     "fireball": {
       "scene": "Checkerboard"
+    },
+    "materialCopy": {
+      "scene": "UV Debug Surfaces",
+      "warmup": 150,
+      "camera-position": "7,6,10",
+      "camera-target": "0,1,0"
     }
   }
 }

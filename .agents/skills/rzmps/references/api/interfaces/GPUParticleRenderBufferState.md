@@ -52,6 +52,16 @@ count: number = 0;
 
 ***
 
+<a id="floatstride"></a>
+
+### floatStride
+
+```ts
+readonly floatStride: number;
+```
+
+***
+
 <a id="instancecountnode"></a>
 
 ### instanceCountNode?

@@ -50,6 +50,36 @@ generation: Node<"uint">;
 
 ***
 
+<a id="materialcopy"></a>
+
+### materialCopy
+
+```ts
+materialCopy: Node<"vec4">;
+```
+
+***
+
+<a id="materialcopyu"></a>
+
+### materialCopyU
+
+```ts
+materialCopyU: Node<"vec4">;
+```
+
+***
+
+<a id="materialcopyv"></a>
+
+### materialCopyV
+
+```ts
+materialCopyV: Node<"vec4">;
+```
+
+***
+
 <a id="particle"></a>
 
 ### particle

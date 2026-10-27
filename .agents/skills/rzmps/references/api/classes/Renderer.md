@@ -67,6 +67,26 @@ compensation:
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode
+
+```ts
+materialCopySampleMode: MaterialCopySampleMode;
+```
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+***
+
 <a id="tags"></a>
 
 ### tags?
@@ -151,6 +171,24 @@ Whether this renderer can consume GPU particle buffers without a selective CPU r
 
 ***
 
+<a id="supportsmaterialcopy"></a>
+
+### supportsMaterialCopy
+
+#### Get Signature
+
+```ts
+get supportsMaterialCopy(): boolean;
+```
+
+Custom renderer subclasses opt in by implementing onMaterialCopyChange.
+
+##### Returns
+
+`boolean`
+
+***
+
 <a id="version"></a>
 
 ### version
@@ -180,6 +218,28 @@ Removes displayed particles while retaining resources for reuse.
 #### Returns
 
 `void`
+
+***
+
+<a id="copymaterial"></a>
+
+### copyMaterial()
+
+```ts
+copyMaterial(source): this;
+```
+
+Renderer-specific translation retains the destination shader and rendering settings.
+
+#### Parameters
+
+##### source
+
+[`MaterialTarget`](../type-aliases/MaterialTarget.md) \| `undefined`
+
+#### Returns
+
+`this`
 
 ***
 

@@ -27,6 +27,7 @@
     "site:preview": "node scripts/site/serve.mjs",
     "site:check": "node scripts/docs/generate.mjs --check && node --test scripts/site/site.test.mjs scripts/site/dev.test.mjs",
     "site:browser-check": "node scripts/site/browser-check.mjs",
+    "benchmark:atlas": "npm run build --workspace @rzmps/rzmps && node scripts/benchmark/textureAtlas.mjs",
     "benchmark:lod": "npm run build --workspace @rzmps/rzmps && node packages/rzmps/tests/benchmark-lod.mjs"
   },
   "devDependencies": {

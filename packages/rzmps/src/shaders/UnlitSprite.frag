@@ -2,6 +2,7 @@ uniform sampler2D pointTexture;
 uniform sampler2D alphaMap;
 uniform bool hasAlphaMap;
 uniform vec2 gridSize;
+uniform float atlasInset;
 uniform int n_frames;
 
 uniform float transmission;
@@ -36,6 +37,7 @@ flat in int fragFrame;
 
 vec2 sprite_coord(vec2 coord, int frame)
 {
+    coord = coord * (1.0 - 2.0 * atlasInset) + atlasInset;
     float f_frame =
         mod(float(frame), float(n_frames));
 

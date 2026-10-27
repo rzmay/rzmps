@@ -1,3 +1,4 @@
+import type Appearance from '../material-copy/Appearance';
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
@@ -30,6 +31,7 @@ type WebGPUUnlitSpriteOptions = UnlitSpriteOptions & {
   sceneDepthTexture: THREE.DepthTexture;
   spriteDataNode: Node<'vec4'>;
   colorNode: Node<'vec3'>;
+  materialCopyNodes: ReturnType<Appearance['nodes']>;
 };
 
 type TSLMatrix4Node = {
@@ -43,6 +45,7 @@ const WebGPUUnlitSprite = (
 ) => {
   const {
     gridSize,
+    atlasInset = 0,
     frames,
     alphaMap,
     softParticles,
@@ -54,6 +57,7 @@ const WebGPUUnlitSprite = (
     distortionStrength,
     spriteDataNode,
     colorNode,
+    materialCopyNodes,
     ...materialOptions
   } = options;
   const finalDistortionStrength = distortionStrength ?? (distortionMap ? 1 : 0);
@@ -70,7 +74,7 @@ const WebGPUUnlitSprite = (
   const spriteData = spriteDataNode ?? attribute('instanceSpriteData', 'vec4');
   const spriteUv = spritesheetUV(
     vec2(gridSize?.x ?? 1, gridSize?.y ?? 1),
-    uv(),
+    uv().mul(1 - 2 * atlasInset).add(atlasInset),
     spriteData.x,
   );
 
@@ -99,10 +103,12 @@ const WebGPUUnlitSprite = (
     opacity = opacity.mul(fade);
   }
 
+  if (materialCopyNodes) opacity = opacity.mul(materialCopyNodes.alpha);
   const finalAlpha = opacity.clamp(0, 1).toVar();
 
   material.name = 'RZMPS WebGPU Unlit Sprite';
   material.colorNode = colorNode ? spriteColor.rgb.mul(colorNode) : spriteColor.rgb;
+  if (materialCopyNodes) material.colorNode = material.colorNode.mul(materialCopyNodes.color);
   material.opacityNode = finalAlpha;
   material.alphaTest = 0.001;
 

@@ -178,6 +178,36 @@ Seconds, sampled at creation; nonpositive/nonfinite values produce no decal. Def
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialCopySampleMode`](RendererOptions.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialTarget`](RendererOptions.md#materialtarget)
+
+***
+
 <a id="maxdecals"></a>
 
 ### maxDecals

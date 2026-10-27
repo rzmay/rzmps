@@ -213,7 +213,7 @@ const buffers = createGPUParticleBufferState([particle], 4);
 
 assert.equal(buffers.count, 1);
 assert.equal(buffers.capacity, 4);
-assert.equal(buffers.attributes.floatData.count, 44);
+assert.equal(buffers.attributes.floatData.count, buffers.capacity * buffers.floatStride / 4);
 assert.equal(buffers.attributes.floatData.array[0], 1);
 assert.equal(buffers.attributes.floatData.array[1], 2);
 assert.equal(buffers.attributes.floatData.array[2], 3);
@@ -875,7 +875,7 @@ compactRenderSystem.deltaTime = 1 / 60;
 compactRenderSystem._processParticles();
 
 assert.equal(renderDispatches, 2);
-assert.equal(receivedRenderBuffer.attributes.floatData.count, receivedRenderBuffer.capacity * 4);
+assert.equal(receivedRenderBuffer.attributes.floatData.count, receivedRenderBuffer.capacity * receivedRenderBuffer.floatStride / 4);
 
 ParticleSystem.GPU_READBACK_RATE = previousReadbackRate;
 

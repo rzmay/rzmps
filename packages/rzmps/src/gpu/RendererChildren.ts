@@ -168,6 +168,9 @@ export default class GPURendererChildren {
       target.rotation.assign(source.rotation);
       target.scale.assign(source.scale);
       target.color.assign(source.color);
+      target.materialCopy.assign(source.materialCopy!);
+      target.materialCopyU.assign(source.materialCopyU!);
+      target.materialCopyV.assign(source.materialCopyV!);
       target.alpha.assign(source.alpha);
       target.distortionStrength.assign(source.distortionStrength);
       target.realtime.assign(source.realtime);

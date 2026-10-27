@@ -20,6 +20,7 @@
 - [GPUEmitterInstanceRuntime](classes/GPUEmitterInstanceRuntime.md)
 - [GPUEventReader](classes/GPUEventReader.md)
 - [GPUEventWriter](classes/GPUEventWriter.md)
+- [MaterialCopyRegistry](classes/MaterialCopyRegistry.md)
 
 ## Interfaces
 
@@ -74,6 +75,7 @@
 
 ## Type Aliases
 
+- [AtlasRenderer](type-aliases/AtlasRenderer.md)
 - [BoidAggregate](type-aliases/BoidAggregate.md)
 - [BoidParticleAffectorAggregate](type-aliases/BoidParticleAffectorAggregate.md)
 - [GPUParticleScalarNodes](type-aliases/GPUParticleScalarNodes.md)

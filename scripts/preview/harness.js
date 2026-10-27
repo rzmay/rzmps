@@ -62,7 +62,7 @@ async function capture(options) {
       if (!factory) throw new Error(`Unknown scene ${options.scene}`);
       sceneHandle=await factory(scene,renderer,camera);
     }
-    system = await example.create();
+    system = await example.create(options.exampleOptions);
     getSceneParticleRoot(scene).add(system);
     scene.userData.__rzmps_configureParticleSystem?.(system);
     // Avoid built-in prewarm; the CLI specifies the exact initial step count.

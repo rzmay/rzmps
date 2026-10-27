@@ -7,6 +7,7 @@ import {
   max,
   sqrt,
   vec3,
+  vec4,
 } from 'three/tsl';
 
 import Module, { type ModuleOptions } from '../Module';
@@ -136,6 +137,9 @@ class Collision extends Module {
       }
     }
 
+    if (this._backend instanceof ThreeGPUCollisionBackend) {
+      this._backend.materialRegistry = system.materialCopyRegistry;
+    }
     this._backend?.setGPUProcessingActive?.(system.isGPUProcessingActive);
     this._backend?.update?.(deltaTime);
   }
@@ -217,6 +221,9 @@ class Collision extends Module {
         this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
         this.gpuDirectionToSimulationSpace(worldNormal, context.system).normalize(),
         this.gpuDirectionToSimulationSpace(impulse, context.system),
+        vec4(float(hit.get('sourceId') as Node<'uint'>), hit.get('hitUV') as Node<'vec2'>, 0),
+        vec4(hit.get('gradientU') as Node<'vec3'>, 0),
+        vec4(hit.get('gradientV') as Node<'vec3'>, 0),
       );
     });
   }

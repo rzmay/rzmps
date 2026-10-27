@@ -11,5 +11,8 @@
 ```ts
 type GPUParticleReadbackField =
   | GPUParticleVectorField
-  | GPUParticleScalarField;
+  | GPUParticleScalarField
+  | "materialCopy"
+  | "materialCopyU"
+  | "materialCopyV";
 ```

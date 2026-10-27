@@ -28,7 +28,9 @@ new SpriteRenderer(texture?, options?): SpriteRenderer;
 
 ##### texture?
 
-`string` \| `Texture`\<`unknown`, `TextureEventMap`\> = `defaultTex`
+  \| `string`
+  \| `Texture`\<`unknown`, `TextureEventMap`\>
+  \| (`string` \| `Texture`\<`unknown`, `TextureEventMap`\>)[] = `defaultTex`
 
 ##### options?
 
@@ -136,6 +138,34 @@ gridSize: Vector2;
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode
+
+```ts
+materialCopySampleMode: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialCopySampleMode`](Renderer.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialTarget`](Renderer.md#materialtarget)
+
+***
+
 <a id="materialtype"></a>
 
 ### materialType
@@ -196,6 +226,28 @@ optional tags?: string[];
 
 ```ts
 texture: Texture;
+```
+
+***
+
+<a id="textureatlas"></a>
+
+### textureAtlas?
+
+```ts
+readonly optional textureAtlas?: TextureAtlas;
+```
+
+Optional GPU atlas created from a texture list; invalidate dynamic sources here.
+
+***
+
+<a id="textureindex"></a>
+
+### textureIndex?
+
+```ts
+optional textureIndex?: DynamicValue<number>;
 ```
 
 ***
@@ -301,9 +353,7 @@ set needsUpdate(value): void;
 
 #### Inherited from
 
-```ts
-Renderer.needsUpdate
-```
+[`Renderer`](Renderer.md).[`needsUpdate`](Renderer.md#needsupdate)
 
 ***
 
@@ -348,6 +398,28 @@ Whether this renderer can consume GPU particle buffers without a selective CPU r
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`supportsGPUInput`](Renderer.md#supportsgpuinput)
+
+***
+
+<a id="supportsmaterialcopy"></a>
+
+### supportsMaterialCopy
+
+#### Get Signature
+
+```ts
+get supportsMaterialCopy(): boolean;
+```
+
+Custom renderer subclasses opt in by implementing onMaterialCopyChange.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`supportsMaterialCopy`](Renderer.md#supportsmaterialcopy)
 
 ***
 
@@ -418,6 +490,32 @@ Removes displayed particles while retaining resources for reuse.
 #### Overrides
 
 [`Renderer`](Renderer.md).[`clear`](Renderer.md#clear)
+
+***
+
+<a id="copymaterial"></a>
+
+### copyMaterial()
+
+```ts
+copyMaterial(source): this;
+```
+
+Renderer-specific translation retains the destination shader and rendering settings.
+
+#### Parameters
+
+##### source
+
+[`MaterialTarget`](../type-aliases/MaterialTarget.md) \| `undefined`
+
+#### Returns
+
+`this`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`copyMaterial`](Renderer.md#copymaterial)
 
 ***
 

@@ -20,6 +20,16 @@ optional backendData?: unknown;
 
 ***
 
+<a id="faceindex"></a>
+
+### faceIndex?
+
+```ts
+optional faceIndex?: number;
+```
+
+***
+
 <a id="impulse"></a>
 
 ### impulse
@@ -27,6 +37,38 @@ optional backendData?: unknown;
 ```ts
 impulse: Vector3;
 ```
+
+***
+
+<a id="material"></a>
+
+### material?
+
+```ts
+optional material?: Material<MaterialEventMap>;
+```
+
+***
+
+<a id="materialindex"></a>
+
+### materialIndex?
+
+```ts
+optional materialIndex?: number;
+```
+
+***
+
+<a id="materialsourceid"></a>
+
+### materialSourceId?
+
+```ts
+optional materialSourceId?: number;
+```
+
+Stable appearance snapshot shared by CPU and GPU collision events.
 
 ***
 
@@ -67,3 +109,15 @@ point: Vector3;
 ```ts
 optional position?: Vector3;
 ```
+
+***
+
+<a id="surface"></a>
+
+### surface?
+
+```ts
+optional surface?: SurfacePatch;
+```
+
+UV coordinates and world-space gradients of the representative contact triangle.

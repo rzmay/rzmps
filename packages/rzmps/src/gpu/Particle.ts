@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { StorageBufferAttribute, IndirectStorageBufferAttribute, type ComputeNode } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
-import { float, uint, uvec2, Fn, instanceIndex, storage } from 'three/tsl';
+import { vec4, float, uint, uvec2, Fn, instanceIndex, storage } from 'three/tsl';
 import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { GPUAllocationWriter } from './AllocationBuffer';
@@ -57,6 +57,9 @@ enum ParticleFloatSlot {
   AngularAcceleration,
   ScalarAcceleration,
   Color,
+  MaterialCopy,
+  MaterialCopyU,
+  MaterialCopyV,
 }
 
 enum ParticleRenderFloatSlot {
@@ -64,6 +67,9 @@ enum ParticleRenderFloatSlot {
   RotationDistortion,
   ScaleRealtime,
   ColorTime,
+  MaterialCopy,
+  MaterialCopyU,
+  MaterialCopyV,
 }
 
 const FLOAT_SLOT_COUNT = enumValueCount(ParticleFloatSlot);
@@ -97,6 +103,9 @@ export interface GPUParticleUpdateContext {
 }
 
 export interface GPUParticleLike {
+  readonly materialCopy?: Node<'vec4'>;
+  readonly materialCopyU?: Node<'vec4'>;
+  readonly materialCopyV?: Node<'vec4'>;
   readonly id: Node<'uvec2'>;
   readonly isChild: Node<'bool'>;
   readonly parent: GPUParticleLike | null;
@@ -129,6 +138,9 @@ export interface GPUParticleLike {
 
 /** Shader-node view of one particle; unlike Particle, this is not a CPU value object. */
 export class GPUParticleContext implements GPUParticleLike {
+  readonly materialCopy: Node<'vec4'>;
+  readonly materialCopyU: Node<'vec4'>;
+  readonly materialCopyV: Node<'vec4'>;
   readonly index: Node<'uint'>;
 
   readonly position: Node<'vec3'>;
@@ -184,7 +196,11 @@ export class GPUParticleContext implements GPUParticleLike {
     generation: Node<'uint'>,
     materializeLocals = false,
     lodPriority: Node<'uint'> = uint(0),
+    appearance: Node<'vec4'>[] = [vec4(0), vec4(0), vec4(0)],
   ) {
+    this.materialCopy = materializeLocals ? appearance[0].toVar() : appearance[0];
+    this.materialCopyU = materializeLocals ? appearance[1].toVar() : appearance[1];
+    this.materialCopyV = materializeLocals ? appearance[2].toVar() : appearance[2];
     this.lodPriority = materializeLocals ? lodPriority.toVar('lodPriority') : lodPriority;
     this.index = index;
     this.position = materializeLocals ? vectors.position.toVar('particlePosition') : vectors.position;
@@ -280,6 +296,9 @@ export class GPUParticleStorage {
       state.z,
       materializeLocals,
       state.w,
+      [this.floatElement(ParticleFloatSlot.MaterialCopy, index),
+        this.floatElement(ParticleFloatSlot.MaterialCopyU, index),
+        this.floatElement(ParticleFloatSlot.MaterialCopyV, index)],
     );
   }
 
@@ -314,10 +333,16 @@ export class GPUParticleStorage {
     state.y.assign(particle.tagMask);
     state.z.assign(particle.generation);
     state.w.assign(particle.lodPriority);
+    this.floatElement(ParticleFloatSlot.MaterialCopy, particle.index).assign(particle.materialCopy ?? vec4(0));
+    this.floatElement(ParticleFloatSlot.MaterialCopyU, particle.index).assign(particle.materialCopyU ?? vec4(0));
+    this.floatElement(ParticleFloatSlot.MaterialCopyV, particle.index).assign(particle.materialCopyV ?? vec4(0));
   }
 }
 
 export class GPUParticleRenderContext {
+  get materialCopy(): Node<'vec4'> { return this.owner?.appearance(this.index, 0) ?? vec4(0); }
+  get materialCopyU(): Node<'vec4'> { return this.owner?.appearance(this.index, 1) ?? vec4(0); }
+  get materialCopyV(): Node<'vec4'> { return this.owner?.appearance(this.index, 2) ?? vec4(0); }
   readonly index: Node<'uint'>;
   readonly position: Node<'vec3'>;
   readonly rotation: Node<'vec3'>;
@@ -382,6 +407,9 @@ export class GPUParticleRenderContext {
 
 /** Accesses the compact particle attributes consumed by renderer compute/material nodes. */
 export class GPUParticleRenderStorage {
+  appearance(index: Node<'uint'>, row: number): Node<'vec4'> {
+    return renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.MaterialCopy + row, index);
+  }
   hierarchy?: {
     mapping: { element(index: Node | number): Node<'uvec2'> };
     originalCount: Node<'uint'>;
@@ -474,11 +502,15 @@ export class GPUParticleRenderStorage {
     state.y.assign(particle.tagMask);
     state.z.assign(particle.generation);
     state.w.assign(particle.lodPriority);
+    this.appearance(particle.index, 0).assign(particle.materialCopy ?? vec4(0));
+    this.appearance(particle.index, 1).assign(particle.materialCopyU ?? vec4(0));
+    this.appearance(particle.index, 2).assign(particle.materialCopyV ?? vec4(0));
   }
 }
 
 /** Owns the canonical simulation attributes and their CPU synchronization paths. */
 export class GPUParticleBufferState {
+  readonly floatStride = FLOAT_SLOT_COUNT * 4;
   count = 0;
   capacity: number;
   version = 0;
@@ -662,6 +694,9 @@ export class GPUParticleBufferState {
       particle.realtime = readScalar(this.floatData, index, ParticleFloatSlot.ScalarVelocityRealtime);
       particle.alive = readState(this.uintData, index) !== 0;
       particle.lodPriority = this.uintData[stateOffset(index) + 3] / 4294967296;
+      particle.materialCopy.fromArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopy));
+      particle.materialCopyU.fromArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopyU));
+      particle.materialCopyV.fromArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopyV));
       particle.cache();
     }
   }
@@ -724,6 +759,9 @@ export class GPUParticleBufferState {
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.AngularAcceleration, particle.angularAcceleration, 0);
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.ScalarAcceleration, particle.scalarAcceleration, 0);
     writeColor(this.floatData, index, ParticleFloatSlot.Color, particle.color);
+    particle.materialCopy.toArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopy));
+    particle.materialCopyU.toArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopyU));
+    particle.materialCopyV.toArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopyV));
 
     writeState(
       this.uintData,
@@ -738,6 +776,7 @@ export class GPUParticleBufferState {
 
 /** Owns compact render-only attributes produced from the canonical simulation buffer. */
 export class GPUParticleRenderBufferState {
+  readonly floatStride = RENDER_FLOAT_SLOT_COUNT * 4;
   /** Actual GPU-produced visual range, including original simulation slots. */
   instanceCountNode?: Node<'uint'>;
   private indirect?: IndirectStorageBufferAttribute;

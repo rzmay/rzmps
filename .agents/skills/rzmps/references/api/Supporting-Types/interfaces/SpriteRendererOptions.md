@@ -165,6 +165,20 @@ material:
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCopySampleMode`](../../interfaces/RendererOptions.md#materialcopysamplemode)
+
+***
+
 <a id="materialoptions"></a>
 
 ### materialOptions
@@ -176,6 +190,22 @@ materialOptions: Partial<
 ```
 
 Material settings; transmission and soft intersections may require scene captures.
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialTarget`](../../interfaces/RendererOptions.md#materialtarget)
 
 ***
 
@@ -234,6 +264,18 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](../../interfaces/RendererOptions.md).[`tags`](../../interfaces/RendererOptions.md#tags)
+
+***
+
+<a id="textureindex"></a>
+
+### textureIndex?
+
+```ts
+optional textureIndex?: DynamicValue<number>;
+```
+
+Texture-list index; omission chooses a stable random entry for each particle.
 
 ***
 

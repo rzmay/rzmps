@@ -230,6 +230,54 @@ get lodPriorityValue(): Node<"float">;
 
 ***
 
+<a id="materialcopy"></a>
+
+### materialCopy
+
+#### Get Signature
+
+```ts
+get materialCopy(): Node<"vec4">;
+```
+
+##### Returns
+
+`Node`\<`"vec4"`\>
+
+***
+
+<a id="materialcopyu"></a>
+
+### materialCopyU
+
+#### Get Signature
+
+```ts
+get materialCopyU(): Node<"vec4">;
+```
+
+##### Returns
+
+`Node`\<`"vec4"`\>
+
+***
+
+<a id="materialcopyv"></a>
+
+### materialCopyV
+
+#### Get Signature
+
+```ts
+get materialCopyV(): Node<"vec4">;
+```
+
+##### Returns
+
+`Node`\<`"vec4"`\>
+
+***
+
 <a id="parent"></a>
 
 ### parent

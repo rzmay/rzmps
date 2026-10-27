@@ -23,6 +23,8 @@ function classSection(name, source) {
   if (source === './Module' || source?.startsWith('./modules/')) return 'Modules';
   if (source === './Renderer' || (source?.startsWith('./renderers/') && name !== 'LiveCubemap')) return 'Renderers';
   if (source?.startsWith('./gpu/')) return 'GPU Infrastructure';
+  if (name === 'MaterialCopyRegistry' || source?.startsWith('./material-copy/')) return 'Helpers';
+  if (name === 'TextureAtlas') return 'Helpers';
   if (name.endsWith('Helper') || name === 'LiveCubemap' || source?.startsWith('./helpers/') || source?.startsWith('./collision/')) return 'Helpers';
   if (source === './SpatialEffect' || source?.startsWith('./spatial/')) return 'Spatial Effects';
   throw new Error(`API class needs a navigation section: ${name} (${source})`);

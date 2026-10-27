@@ -154,6 +154,40 @@ mass: number = 1;
 
 ***
 
+<a id="materialcopy"></a>
+
+### materialCopy
+
+```ts
+materialCopy: Vector4;
+```
+
+Material source ID, impact UV, and sampling mode. Zero source uses renderer defaults.
+
+***
+
+<a id="materialcopyu"></a>
+
+### materialCopyU
+
+```ts
+materialCopyU: Vector4;
+```
+
+UV gradient rows, transformed into particle-local coordinates at birth.
+
+***
+
+<a id="materialcopyv"></a>
+
+### materialCopyV
+
+```ts
+materialCopyV: Vector4;
+```
+
+***
+
 <a id="noise"></a>
 
 ### noise

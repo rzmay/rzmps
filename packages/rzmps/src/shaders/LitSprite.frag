@@ -26,6 +26,7 @@ uniform bool hasDistortionMap;
 uniform float distortionStrength;
 
 uniform vec2 gridSize;
+uniform float atlasInset;
 uniform int n_frames;
 
 uniform sampler2D envMap;
@@ -92,6 +93,7 @@ vec2 rotate_vector(vec2 value, float rotation)
 
 vec2 sprite_coord(vec2 coord, int frame)
 {
+    coord = coord * (1.0 - 2.0 * atlasInset) + atlasInset;
     float f_frame = mod(float(frame), float(n_frames));
 
     return vec2(

@@ -11,7 +11,7 @@ export function parseOptions(args) {
   const names = [
     'example', 'backend', 'frames', 'interval', 'warmup', 'delta-time',
     'width', 'height', 'output', 'seed', 'scene',
-    'camera-position', 'camera-target', 'camera-fov',
+    'camera-position', 'camera-target', 'camera-fov', 'example-options',
   ];
   const { values } = parseArgs({
     args,
@@ -25,7 +25,11 @@ export function parseOptions(args) {
     }
     return components.map(Number);
   }
+  const exampleOptions = values['example-options'] === undefined ? undefined : JSON.parse(values['example-options']);
+  if (exampleOptions !== undefined && (!exampleOptions || Array.isArray(exampleOptions)
+    || typeof exampleOptions !== 'object')) throw new Error('--example-options must be a JSON object');
   const options = {
+    ...(exampleOptions === undefined ? {} : { exampleOptions }),
     example: values.example ?? 'fire',
     backend: values.backend ?? 'webgl',
     frames: Number(values.frames ?? 6),

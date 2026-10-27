@@ -153,7 +153,11 @@ initialize(renderer): void;
 ### readback()
 
 ```ts
-readback(renderer, identityForEvent): Promise<GPUEventReadbackBatch>;
+readback(
+   renderer,
+   identityForEvent,
+   materialForSource?
+): Promise<GPUEventReadbackBatch>;
 ```
 
 #### Parameters
@@ -165,6 +169,10 @@ readback(renderer, identityForEvent): Promise<GPUEventReadbackBatch>;
 ##### identityForEvent
 
 (`slot`, `generation`) => [`Particle`](Particle.md) \| `undefined`
+
+##### materialForSource?
+
+(`id`) => `Material`\<`MaterialEventMap`\> \| `undefined`
 
 #### Returns
 

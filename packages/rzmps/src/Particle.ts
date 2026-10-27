@@ -32,6 +32,12 @@ export interface ParticleNoiseValues {
 
 /** Mutable particle state with separate birth and cached permanent values. */
 class Particle {
+  /** Material source ID, impact UV, and sampling mode. Zero source uses renderer defaults. */
+  materialCopy = new THREE.Vector4();
+  /** UV gradient rows, transformed into particle-local coordinates at birth. */
+  materialCopyU = new THREE.Vector4();
+  materialCopyV = new THREE.Vector4();
+
   position: THREE.Vector3;
 
   orbitCenter: THREE.Vector3;
@@ -181,6 +187,9 @@ class Particle {
     particle.alive = this.alive;
     particle.id = this.id;
     particle.lodPriority = this.lodPriority;
+    particle.materialCopy.copy(this.materialCopy);
+    particle.materialCopyU.copy(this.materialCopyU);
+    particle.materialCopyV.copy(this.materialCopyV);
     particle.parent = this.parent;
     particle.noise = { ...this.noise };
     particle.data = { ...this.data };

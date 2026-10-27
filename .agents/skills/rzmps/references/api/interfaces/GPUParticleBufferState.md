@@ -52,6 +52,16 @@ count: number = 0;
 
 ***
 
+<a id="floatstride"></a>
+
+### floatStride
+
+```ts
+readonly floatStride: number;
+```
+
+***
+
 <a id="particle"></a>
 
 ### particle

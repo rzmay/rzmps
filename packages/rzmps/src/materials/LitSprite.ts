@@ -21,6 +21,7 @@ const LitSprite = (
 ) => {
   const {
     gridSize,
+    atlasInset = 0,
     frames,
     alphaMap,
     normalMap,
@@ -44,10 +45,10 @@ const LitSprite = (
   return new THREE.ShaderMaterial({
     vertexShader: litSpriteVert,
     fragmentShader: litSpriteFrag,
-    uniforms: THREE.UniformsUtils.merge([
-      THREE.UniformsLib.lights,
-      {
+    uniforms: {
+      ...THREE.UniformsUtils.clone(THREE.UniformsLib.lights),
         pointTexture: { value: texture },
+        atlasInset: { value: atlasInset },
 
         gridSize: { value: gridSize ?? { x: 1, y: 1 } },
         n_frames: { value: frames ?? 1 },
@@ -95,8 +96,7 @@ const LitSprite = (
         depthResolution: { value: new THREE.Vector2() },
         depthCameraNear: { value: 0.1 },
         depthCameraFar: { value: 2000 },
-      },
-    ]),
+    },
 
     depthTest: true,
     depthWrite: false,

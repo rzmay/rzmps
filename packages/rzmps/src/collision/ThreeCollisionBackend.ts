@@ -1,3 +1,4 @@
+import { surfacePatch } from '../material-copy/Surface';
 import * as THREE from 'three';
 import { Octree } from 'three/examples/jsm/math/Octree.js';
 import { Capsule } from 'three/examples/jsm/math/Capsule.js';
@@ -66,6 +67,11 @@ type MembershipChanges = {
 class ThreeCollisionBackend implements ICollisionBackend {
   readonly supportsCPU = true;
   readonly supportsGPU = false;
+  private readonly triangleSources = new WeakMap<THREE.Triangle, {
+    object: THREE.Mesh; materialIndex: number; faceIndex: number;
+    a: THREE.Vector3; b: THREE.Vector3; c: THREE.Vector3;
+    uv?: THREE.Vector2[];
+  }>();
   staticOctree = new Octree();
   dynamicOctree = new Octree();
 
@@ -230,8 +236,8 @@ class ThreeCollisionBackend implements ICollisionBackend {
       Math.max(query.radius, Number.EPSILON),
     );
 
-    const staticHit = this.staticOctree.capsuleIntersect(capsule);
-    const dynamicHit = this.dynamicOctree.capsuleIntersect(capsule);
+    const staticHit = this.capsuleContact(this.staticOctree, capsule);
+    const dynamicHit = this.capsuleContact(this.dynamicOctree, capsule);
 
     if (!staticHit && !dynamicHit) return null;
 
@@ -268,12 +274,35 @@ class ThreeCollisionBackend implements ICollisionBackend {
       .multiplyScalar(query.particle.mass)
       .multiplyScalar(Math.max(0, -query.velocity.dot(normal)));
 
+    const contact = staticHit && dynamicHit ? (staticHit.weight >= dynamicHit.weight ? staticHit
+      : dynamicHit) : staticHit || dynamicHit;
+    const source = contact ? this.triangleSources.get(contact.triangle) : undefined;
+    const material = source ? (Array.isArray(source.object.material) ? source.object.material[source
+      .materialIndex] : source.object.material) : undefined;
+    const contactPoint = contact ? contact.triangle.closestPointToPoint(contact.point, new THREE.Vector3()) : point;
     return {
-      point,
-      normal,
-      position,
-      impulse,
+      point: contactPoint, normal, position, impulse,
+      object: source?.object, material, materialIndex: source?.materialIndex, faceIndex: source?.faceIndex,
+      surface: source?.uv ? surfacePatch(contactPoint, source.a, source.b, source.c, source.uv[0],
+        source.uv[1], source.uv[2]) : undefined,
     };
+  }
+
+  /** Preserves Octree's sequential push-out while retaining the strongest contributing triangle. */
+  private capsuleContact(tree: Octree, capsule: Capsule) {
+    const working = capsule.clone(); const triangles: THREE.Triangle[] = [];
+    tree.getCapsuleTriangles(working, triangles);
+    let contact: { triangle: THREE.Triangle; point: THREE.Vector3; weight: number } | undefined;
+    for (const triangle of triangles) {
+      const hit = tree.triangleCapsuleIntersect(working, triangle);
+      if (!hit) continue;
+      if (!contact || hit.depth > contact.weight) contact = { triangle, point: hit.point.clone(), weight: hit.depth };
+      working.translate(hit.normal.clone().multiplyScalar(hit.depth));
+    }
+    if (!contact) return false;
+    const delta = working.getCenter(new THREE.Vector3()).sub(capsule.getCenter(new THREE.Vector3()));
+    const depth = delta.length();
+    return { ...contact, normal: delta.normalize(), depth };
   }
 
   private initialize(): void {
@@ -635,15 +664,22 @@ class ThreeCollisionBackend implements ICollisionBackend {
       ? this.getMaterialSide(object, geometry, vertexStart)
       : THREE.FrontSide;
 
+    const uv = geometry.getAttribute('uv');
+    const metadata = { object, materialIndex: this.getMaterialIndexForVertex(geometry, vertexStart),
+      faceIndex: vertexStart / 3,
+      a, b, c, uv: uv ? [0, 1, 2].map(i => new THREE.Vector2(uv.getX(vertexStart + i),
+        uv.getY(vertexStart + i))) : undefined };
+    const add = (triangle: THREE.Triangle) => { this.triangleSources.set(triangle,
+      metadata); octree.addTriangle(triangle); };
     if (side === THREE.BackSide) {
-      octree.addTriangle(new THREE.Triangle(c, b, a));
+      add(new THREE.Triangle(c, b, a));
       return 1;
     }
 
-    octree.addTriangle(new THREE.Triangle(a, b, c));
+    add(new THREE.Triangle(a, b, c));
 
     if (side === THREE.DoubleSide) {
-      octree.addTriangle(new THREE.Triangle(c, b, a));
+      add(new THREE.Triangle(c, b, a));
       return 2;
     }
 

@@ -222,3 +222,8 @@ export * as Textures from './Textures';
 
 export { CompensationMode } from './Renderer';
 export type { RendererChildrenOptions } from './Renderer';
+
+export { default as TextureAtlas } from './TextureAtlas';
+export type { TextureAtlasOptions } from './TextureAtlas';
+export { MaterialCopySampleMode } from './material-copy/Surface';
+export type { MaterialTarget, SurfacePatch } from './material-copy/Surface';

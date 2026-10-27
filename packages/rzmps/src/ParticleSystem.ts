@@ -1,3 +1,4 @@
+import { MaterialCopyRegistry, MaterialCopySampleMode, targetMaterial } from './material-copy/Surface';
 import * as THREE from 'three';
 import Particle, { type ParticleCachedValues } from './Particle';
 import Emitter, { type EmissionContext } from './Emitter';
@@ -18,7 +19,7 @@ import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
 import { WebGPURenderer, type ComputeNode, type Node, StorageBufferAttribute } from 'three/webgpu';
-import { float, Fn, hash, If, instanceIndex, Loop, mix, pow, storage, uint, uniform } from 'three/tsl';
+import { vec2, vec4, float, Fn, hash, If, instanceIndex, Loop, mix, pow, storage, uint, uniform } from 'three/tsl';
 import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } from './renderers/LiveCubemap';
 import LODHelper, { type LODSettings } from './LODHelper';
 import {
@@ -131,6 +132,8 @@ export interface ParticleSystemOptions {
 
 /** Parent-event emission and inheritance; child systems share their parent simulation clock. */
 export interface SubSystemOptions {
+  /** Captures the collided surface for particles emitted by each collision run. */
+  copyCollisionMaterial?: boolean;
   /** Predicate or switch selecting whether a parent particle may trigger child emission. */
   shouldEmit: boolean | ((particle: Particle) => boolean);
   /** Fraction of eligible parent particles selected for subsystem emission. */
@@ -264,6 +267,13 @@ class ParticleSystem extends THREE.Object3D {
   modules: Module[] = [];
   spatialEffects: SpatialEffect[] = [];
   renderers: Renderer[] = [];
+  private _materialCopyRegistry?: MaterialCopyRegistry;
+  /** @internal Appearance snapshots are shared only within this owned subsystem tree. */
+  get materialCopyRegistry(): MaterialCopyRegistry {
+    if (this._subSystemParent) return this._subSystemParent.materialCopyRegistry;
+    return this._materialCopyRegistry ??= new MaterialCopyRegistry();
+  }
+
   subSystems = new Map<ParticleSystem, SubSystemOptions>();
   boundingBox = new THREE.Box3();
 
@@ -1923,6 +1933,16 @@ class ParticleSystem extends THREE.Object3D {
                 float(input.options.inheritLifetime),
               ).add(impulseDuration);
 
+              const contactDelta = context.simulationToWorldNode.mul(vec4(
+                event.particle.position.sub(event.collisionPoint), 0,
+              )).xyz;
+              const contactUV = event.materialCopy.yz.add(vec2(
+                event.materialCopyU.xyz.dot(contactDelta), event.materialCopyV.xyz.dot(contactDelta),
+              ));
+              const surfaceBinding = input.options.copyCollisionMaterial && input.options.emitOnCollision
+                ? event.type.equal(uint(GPUEventType.Collision)).select(
+                  vec4(event.materialCopy.x, contactUV, event.materialCopy.w), vec4(0),
+                ) : vec4(0);
               runs.storeParticle(instanceIndex, {
                 ...event.particle,
                 alive: uint(1),
@@ -1932,6 +1952,9 @@ class ParticleSystem extends THREE.Object3D {
                 acceleration: event.collisionPoint,
                 angularAcceleration: event.collisionNormal,
                 scalarAcceleration: event.collisionImpulse,
+                materialCopy: surfaceBinding,
+                materialCopyU: input.options.copyCollisionMaterial ? event.materialCopyU : vec4(0),
+                materialCopyV: input.options.copyCollisionMaterial ? event.materialCopyV : vec4(0),
               });
             });
           });
@@ -1994,6 +2017,7 @@ class ParticleSystem extends THREE.Object3D {
             emitterRuntime: globalRuntime,
             tagMasks: this._getGPUEmitterTagMasks(emitter),
             inheritance: {
+              material: input.options.copyCollisionMaterial,
               color: input.options.inheritColor,
               alpha: input.options.inheritAlpha,
               mass: input.options.inheritMass,
@@ -2241,7 +2265,7 @@ class ParticleSystem extends THREE.Object3D {
           particle,
           event.point,
           event.normal,
-          event.impulse,
+          event.impulse, event.materialCopy, event.materialCopyU, event.materialCopyV,
         );
         marker.clear(particle.index);
       });
@@ -2626,6 +2650,9 @@ class ParticleSystem extends THREE.Object3D {
       tagMask: particle.tagMask.toVar('baseTagMask'),
       generation: particle.generation.toVar('baseGeneration'),
       lodPriority: particle.lodPriority,
+      materialCopy: particle.materialCopy,
+      materialCopyU: particle.materialCopyU,
+      materialCopyV: particle.materialCopyV,
     };
   }
 
@@ -3124,6 +3151,7 @@ class ParticleSystem extends THREE.Object3D {
       options.emitOnDeath,
       options.emitOnSpawn,
       options.emitOnCollision,
+      options.copyCollisionMaterial,
       options.ratio,
       options.inheritScale,
       options.inheritLifetime,
@@ -3299,9 +3327,11 @@ class ParticleSystem extends THREE.Object3D {
 
     const sequence = buffer.sequence;
     const lifecycleGeneration = this._gpuLifecycleGeneration;
+    const materialRegistry = this.materialCopyRegistry;
     const readback = buffer.readback(
       renderer,
       (slot, generation) => this._getGPUParticleIdentity(slot, generation) ?? this.particles[slot],
+      id => materialRegistry.sources[id],
     );
     this._gpuEventReadbacksPending += 1;
     void (async () => {
@@ -3792,6 +3822,8 @@ class ParticleSystem extends THREE.Object3D {
 
   private _updateSubSystems() {
     this.subSystems.forEach((options, subSystem) => {
+      if (options.copyCollisionMaterial) subSystem.renderers.forEach(renderer => renderer
+        .enableMaterialCopy(this.materialCopyRegistry));
       if (subSystem._canUpdateAsGPUSubSystem(this, options)) {
         subSystem._updateAsGPUSubSystem(this, options, this.deltaTime);
       } else {
@@ -3948,7 +3980,10 @@ class ParticleSystem extends THREE.Object3D {
             tags: run.particle.tags,
           }, this);
 
-          newParticles.forEach((particle) => this._notifySpawn(particle));
+          newParticles.forEach((particle) => {
+            if (options.copyCollisionMaterial && run.collision) this._copyCollisionAppearance(particle, run.collision);
+            this._notifySpawn(particle);
+          });
         } else {
           emitter.clearContext(run.id);
         }
@@ -3958,6 +3993,35 @@ class ParticleSystem extends THREE.Object3D {
         this._emissionRuns.splice(i, 1);
       }
     }
+  }
+
+  private _copyCollisionAppearance(particle: Particle, hit: CollisionHit): void {
+    const material = hit.material ?? (hit.object instanceof THREE.Mesh
+      ? (Array.isArray(hit.object.material) ? hit.object.material[hit.materialIndex ?? 0] : hit.object
+        .material) : undefined);
+    const id = hit.materialSourceId ?? this.materialCopyRegistry.register(material);
+    if (!id) return;
+
+    const surface = hit.surface;
+    if (!surface) {
+      particle.materialCopy.set(id, 0.5, 0.5, MaterialCopySampleMode.Texture);
+      return;
+    }
+
+    // Freeze the contact chart in the fragment's birth-local frame.
+    this.updateWorldMatrix(true, false);
+    const local = new THREE.Matrix4().compose(particle.position,
+      new THREE.Quaternion().setFromEuler(new THREE.Euler().setFromVector3(particle.rotation)), particle.scale);
+    const world = this.simulationSpace === SimulationSpace.Local ? this.matrixWorld.clone().multiply(local) : local;
+    const origin = this.simulationSpace === SimulationSpace.Local ? this.localToWorld(hit.point.clone()) : hit.point;
+    const position = new THREE.Vector3().setFromMatrixPosition(world);
+    const delta = position.sub(origin);
+    particle.materialCopy.set(id, surface.uv.x + surface.u.dot(delta), surface.uv.y + surface.v.dot(delta), 0);
+
+    const e = world.elements;
+    const axis = (i: number) => new THREE.Vector3(e[i], e[i + 1], e[i + 2]);
+    particle.materialCopyU.set(surface.u.dot(axis(0)), surface.u.dot(axis(4)), surface.u.dot(axis(8)), 0);
+    particle.materialCopyV.set(surface.v.dot(axis(0)), surface.v.dot(axis(4)), surface.v.dot(axis(8)), 0);
   }
 
   private _canEmitForParticle(particle: Particle, options: SubSystemOptions): boolean {
@@ -4002,8 +4066,16 @@ class ParticleSystem extends THREE.Object3D {
 
       duration,
 
-      // If a collision was passed in, pass it to the context
-      collision,
+      // Snapshot the source once for this run; subsequent impacts cannot change it.
+      collision: collision ? { ...collision, point: collision.point.clone(), normal: collision.normal.clone(),
+        impulse: collision.impulse.clone(),
+        materialSourceId: options.copyCollisionMaterial
+          ? collision.materialSourceId ?? this.materialCopyRegistry.register(
+            collision.material ?? (collision.object instanceof THREE.Mesh ? targetMaterial(collision.object)
+              : undefined),
+          ) : undefined,
+        surface: collision.surface ? { uv: collision.surface.uv.clone(), u: collision.surface.u.clone(),
+          v: collision.surface.v.clone() } : undefined } : undefined,
 
       // Pass particle info -- clone so reference doesn't get destroyed
       particle: {
@@ -4248,6 +4320,8 @@ class ParticleSystem extends THREE.Object3D {
 
     this.removeFromParent();
     this.cleanup();
+    this._materialCopyRegistry?.dispose();
+    this._materialCopyRegistry = undefined;
     this.dispatchEvent({ type: 'destroyed' } as unknown as Parameters<typeof this.dispatchEvent>[0]);
   }
 
@@ -4391,6 +4465,7 @@ class ParticleSystem extends THREE.Object3D {
     const emitContinuous = options.emitContinuous ?? !(emitOnCollision || emitOnDeath || emitOnSpawn);
 
     this.subSystems.set(subSystem, {
+      copyCollisionMaterial: options.copyCollisionMaterial ?? false,
       shouldEmit: options.shouldEmit ?? true,
       ratio: THREE.MathUtils.clamp(options.ratio ?? 1, 0, 1),
       emitContinuous,
@@ -4514,6 +4589,8 @@ class ParticleSystem extends THREE.Object3D {
   private _dispatchGPUSpawnEvent(particle: Particle): void {
     this._spawnListeners.forEach((listener) => listener(particle));
     this.subSystems.forEach((options, subSystem) => {
+      if (options.copyCollisionMaterial) subSystem.renderers.forEach(renderer => renderer
+        .enableMaterialCopy(this.materialCopyRegistry));
       if (subSystem._canUpdateAsGPUSubSystem(this, options)) return;
       if (options.emitOnSpawn && this._canEmitForParticle(particle, options)) {
         subSystem._startEmissionRunAtParticle(particle, options);
@@ -4528,6 +4605,8 @@ class ParticleSystem extends THREE.Object3D {
       .forEach((module) => module.notifyGPUCollision(particle, collision));
     this._collisionListeners.forEach((listener) => listener(particle, collision));
     this.subSystems.forEach((options, subSystem) => {
+      if (options.copyCollisionMaterial) subSystem.renderers.forEach(renderer => renderer
+        .enableMaterialCopy(this.materialCopyRegistry));
       if (subSystem._canUpdateAsGPUSubSystem(this, options)) return;
       if (
         options.emitOnCollision

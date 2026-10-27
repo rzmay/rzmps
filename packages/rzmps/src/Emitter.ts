@@ -1,3 +1,4 @@
+import rotateRenderedParticle from './helpers/rotateParticleGPU';
 import * as THREE from 'three';
 import { StorageBufferAttribute, type Node } from 'three/webgpu';
 import EmissionShape from './EmissionShape';
@@ -35,6 +36,7 @@ import {
   uint,
   uniform,
   vec3,
+  vec2,
   vec4,
 } from 'three/tsl';
 import {
@@ -129,6 +131,7 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
     alignmentDirection?: Node<'vec3'>;
   };
   inheritance?: {
+    material?: boolean;
     color: number;
     alpha: number;
     mass: number;
@@ -527,6 +530,20 @@ class Emitter {
           ? parent.velocity.mul(inheritance.velocity)
           : vec3(0, 0, 0);
 
+        const sourceCopy = inheritance?.material ? parent?.materialCopy ?? vec4(0) : vec4(0);
+        const sourceU = inheritance?.material ? parent?.materialCopyU ?? vec4(0) : vec4(0);
+        const sourceV = inheritance?.material ? parent?.materialCopyV ?? vec4(0) : vec4(0);
+        const toWorldOffset = (offset: Node<'vec3'>) => context.system.simulationSpace === 'local'
+          ? transformDirectionGPU(offset, context.simulationToWorldNode) : offset;
+        const localScale = initialScale.mul(impulseEffects?.scale ?? float(1));
+        const axisX = toWorldOffset(rotateRenderedParticle(vec3(localScale.x, 0, 0), initialRotation));
+        const axisY = toWorldOffset(rotateRenderedParticle(vec3(0, localScale.y, 0), initialRotation));
+        const axisZ = toWorldOffset(rotateRenderedParticle(vec3(0, 0, localScale.z), initialRotation));
+        const delta = parent ? toWorldOffset(emissionPosition.sub(parent.position)) : vec3(0);
+        particle.materialCopy.assign(vec4(sourceCopy.x, sourceCopy.yz.add(vec2(sourceU.xyz.dot(delta),
+          sourceV.xyz.dot(delta))), sourceCopy.w));
+        particle.materialCopyU.assign(vec4(sourceU.xyz.dot(axisX), sourceU.xyz.dot(axisY), sourceU.xyz.dot(axisZ), 0));
+        particle.materialCopyV.assign(vec4(sourceV.xyz.dot(axisX), sourceV.xyz.dot(axisY), sourceV.xyz.dot(axisZ), 0));
         particle.position.assign(emissionPosition);
         particle.orbitCenter.assign(vec3(0, 0, 0));
         particle.rotation.assign(initialRotation);

@@ -28,6 +28,16 @@ alphaMap: Texture;
 
 ***
 
+<a id="atlasinset"></a>
+
+### atlasInset?
+
+```ts
+optional atlasInset?: number;
+```
+
+***
+
 <a id="distortionmap"></a>
 
 ### distortionMap

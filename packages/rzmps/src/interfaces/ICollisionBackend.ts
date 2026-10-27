@@ -1,3 +1,4 @@
+import type { SurfacePatch } from '../material-copy/Surface';
 import * as THREE from 'three';
 import Particle from '../Particle';
 
@@ -20,6 +21,13 @@ export interface CollisionHit {
   // If omitted, Collision falls back to point + normal * radius
   position?: THREE.Vector3;
   object?: THREE.Object3D;
+  material?: THREE.Material;
+  materialIndex?: number;
+  faceIndex?: number;
+  /** UV coordinates and world-space gradients of the representative contact triangle. */
+  surface?: SurfacePatch;
+  /** Stable appearance snapshot shared by CPU and GPU collision events. */
+  materialSourceId?: number;
   backendData?: unknown;
 }
 

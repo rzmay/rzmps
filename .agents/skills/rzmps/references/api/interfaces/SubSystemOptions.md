@@ -12,6 +12,18 @@ Parent-event emission and inheritance; child systems share their parent simulati
 
 ## Properties
 
+<a id="copycollisionmaterial"></a>
+
+### copyCollisionMaterial?
+
+```ts
+optional copyCollisionMaterial?: boolean;
+```
+
+Captures the collided surface for particles emitted by each collision run.
+
+***
+
 <a id="emitcontinuous"></a>
 
 ### emitContinuous

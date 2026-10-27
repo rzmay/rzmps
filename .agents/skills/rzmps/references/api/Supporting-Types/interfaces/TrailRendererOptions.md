@@ -134,6 +134,20 @@ Custom material; omission creates a transparent double-sided MeshStandardMateria
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCopySampleMode`](../../interfaces/RendererOptions.md#materialcopysamplemode)
+
+***
+
 <a id="materialoptions"></a>
 
 ### materialOptions
@@ -143,6 +157,22 @@ materialOptions: MeshStandardMaterialParameters;
 ```
 
 Construction options for the default material; ignored when material is supplied.
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialTarget`](../../interfaces/RendererOptions.md#materialtarget)
 
 ***
 
