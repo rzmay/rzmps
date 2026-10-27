@@ -28,12 +28,24 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-    for (const preset of ['Snow', 'LOD Stress Test', 'Fireworks']) {
+    for (const preset of ['Snow', 'LOD Stress Test', 'Fireworks', 'Fire']) {
       await page.goto(`${origin}/?preset=${encodeURIComponent(preset)}`, { waitUntil: 'networkidle0' });
       await page.waitForSelector('.psgui-renderers', { timeout: 15000 });
       const folders = await page.$$eval('.lil-gui .lil-title', elements => elements.map(element => element.textContent));
       assert.ok(folders.includes('LOD'), `${preset}: population LOD controls`);
       assert.ok(folders.includes('Renderer Children'), `${preset}: renderer children controls`);
+      if (preset === 'Snow') {
+        await page.waitForFunction(() => /[\d,]+ simulated \([\d,]+ rendered\)/.test(
+          document.querySelector('.particle-count-monitor')?.textContent ?? '',
+        ));
+        const counts = await page.$eval('.particle-count-monitor', element => (
+          element.textContent.match(/[\d,]+/g).map(value => Number(value.replaceAll(',', '')))
+        ));
+        assert.equal(counts[1], counts[0] * 3, 'Snow rendered total includes its two children per particle');
+      } else if (preset === 'Fire') {
+        const text = await page.$eval('.particle-count-monitor', element => element.textContent);
+        assert.doesNotMatch(text, /rendered|children/, 'No child line when there are no children');
+      }
       const toggled = await page.evaluate((preset) => {
         const title = [...document.querySelectorAll('.lil-gui .lil-title')].find(element => element.textContent === 'LOD');
         const checkbox = title.closest('.lil-gui').querySelector('input[type="checkbox"]');

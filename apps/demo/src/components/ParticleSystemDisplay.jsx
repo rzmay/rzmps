@@ -12,6 +12,7 @@ function collectSystemStats(system, visited = new Set()) {
   if (!system || visited.has(system)) {
     return {
       particles: 0,
+      children: 0,
       allocated: 0,
       activeSlots: 0,
     };
@@ -21,6 +22,7 @@ function collectSystemStats(system, visited = new Set()) {
 
   const stats = {
     particles: system.liveParticleCount ?? system.particles?.filter((particle) => particle.alive).length ?? 0,
+    children: system.renderers?.reduce((count, renderer) => count + renderer.renderedChildCount, 0) ?? 0,
     allocated: system.isGPUProcessingActive ? (system.gpuBufferStats?.allocated ?? 0) : 0,
     activeSlots: system.isGPUProcessingActive ? (system.gpuBufferStats?.activeSlots ?? 0) : 0,
   };
@@ -28,6 +30,7 @@ function collectSystemStats(system, visited = new Set()) {
   system.subSystems?.forEach((_options, subSystem) => {
     const childStats = collectSystemStats(subSystem, visited);
     stats.particles += childStats.particles;
+    stats.children += childStats.children;
     stats.allocated += childStats.allocated;
     stats.activeSlots += childStats.activeSlots;
   });

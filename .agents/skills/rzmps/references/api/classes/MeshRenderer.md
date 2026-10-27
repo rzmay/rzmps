@@ -174,6 +174,28 @@ Renderer.needsUpdate
 
 ***
 
+<a id="renderedchildcount"></a>
+
+### renderedChildCount
+
+#### Get Signature
+
+```ts
+get renderedChildCount(): number;
+```
+
+Additional visual particles; GPU diagnostics refresh asynchronously when requested.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`renderedChildCount`](Renderer.md#renderedchildcount)
+
+***
+
 <a id="supportsgpuinput"></a>
 
 ### supportsGPUInput

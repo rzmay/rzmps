@@ -57,7 +57,14 @@ export default abstract class Renderer {
   private _version = 0;
   private _gpuConfigurationSignature = '';
   private _gpuParameterVersion = 0;
+  private _renderedChildCount = 0;
+  private _usesGPUChildren = false;
   protected readonly gpuParameters = new GPUDynamicParameterStore();
+
+  /** Additional visual particles; GPU diagnostics refresh asynchronously when requested. */
+  get renderedChildCount(): number {
+    return this._usesGPUChildren ? this._gpuChildren.childCount : this._renderedChildCount;
+  }
 
   get version(): number {
     return this._version;
@@ -145,6 +152,7 @@ export default abstract class Renderer {
     system: ParticleSystem,
     deltaTime: number = 0,
   ): void {
+    this._usesGPUChildren = false;
     const visible = system.quality === 0 ? [] : particles.filter(particle => (
       !this.tags || tagsIntersect(this.tags, particle.tags ?? [])
     ));
@@ -170,7 +178,7 @@ export default abstract class Renderer {
       for (let i = 0; i < population; i++) {
         const parent = visible[i];
         const firstChild = childCounts[i] ?? 0;
-        const selected = seedrandom(`${parent.id}[${firstChild + full}]`).quick() < additional - full;
+        const selected = seedrandom.tychei(`${parent.id}[${firstChild + full}]`).quick() < additional - full;
         const count = full + (selected ? 1 : 0);
         const radius = system.getParticleSpacing(parent.root, particles);
         for (let child = 0; child < count; child++) {
@@ -185,6 +193,7 @@ export default abstract class Renderer {
       }
     }
 
+    this._renderedChildCount = visible.length - originalCount;
     this._update(visible, system, deltaTime);
   }
 
@@ -192,7 +201,7 @@ export default abstract class Renderer {
     const child = parent.shallowClone(`${parent.id}[${ordinal}]`, { position: new Vector3() });
     child.parent = parent;
 
-    const random = seedrandom(child.id);
+    const random = seedrandom.tychei(child.id);
     const distance = Math.cbrt(random.quick());
     child.position.setFromSphericalCoords(
       distance * radius,
@@ -202,15 +211,17 @@ export default abstract class Renderer {
 
     if (applyDistanceScaling) {
       const options = this.children;
-      const multiplier = (value: ValueByParameter<number> | undefined, amount: number, stream: string) => {
-        const variation = seedrandom(`${child.id}:${stream}`).quick() - 0.5;
+      // Fixed draws keep scale and alpha independent of which options are enabled.
+      const scaleVariation = random.quick() - 0.5;
+      const alphaVariation = random.quick() - 0.5;
+      const multiplier = (value: ValueByParameter<number> | undefined, amount: number, variation: number) => {
         let t = MathUtils.clamp((radius > 0 ? distance : 0) + amount * variation, 0, 1);
         if (options.radialFalloff) t = options.radialFalloff(t);
         return typeof value === 'number' || value === undefined ? value ?? 1 : evaluateByParameterNumber(value, t);
       };
-      const scale = multiplier(options.scale, options.randomizeScale ?? 0, 'scale');
+      const scale = multiplier(options.scale, options.randomizeScale ?? 0, scaleVariation);
       if (scale !== 1) child.scale = parent.scale.clone().multiplyScalar(scale);
-      child.alpha *= multiplier(options.alpha, options.randomizeAlpha ?? 0, 'alpha');
+      child.alpha *= multiplier(options.alpha, options.randomizeAlpha ?? 0, alphaVariation);
     }
 
     return child;
@@ -223,6 +234,7 @@ export default abstract class Renderer {
     deltaTime: number = 0,
   ): void {
     if (!this.supportsGPUInput) throw new Error('This particle renderer does not support GPU particle buffers.');
+    this._usesGPUChildren = !this.updateGPUUsesCPUReadback;
     // Readback implementations expand once through the CPU update entry point.
     const visual = this.updateGPUUsesCPUReadback ? buffers : this._gpuChildren.prepare(
       buffers,
@@ -303,6 +315,8 @@ export default abstract class Renderer {
 
   /** Restores transient backend state while retaining reusable rendering resources. */
   public reset(): void {
+    this._renderedChildCount = 0;
+    this._usesGPUChildren = false;
     this.cancelGPUSelectiveReadback();
     this._gpuChildren.reset();
   }

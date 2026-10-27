@@ -42,6 +42,32 @@ export default class GPURendererChildren {
   private readonly parameters = new GPUDynamicParameterStore();
   private options: RendererChildrenOptions = {};
   private readonly quality = uniform(1, 'float');
+  private enabled = false;
+  private lastChildCount = 0;
+  private countReadbackPending = false;
+  private lastCountReadbackTime = -Infinity;
+
+  /** Polls only the small counters buffer, and only when diagnostics are requested. */
+  get childCount(): number {
+    if (!this.enabled) return 0;
+    const now = performance.now();
+    const counters = this.counters;
+    if (counters && this.renderer && !this.countReadbackPending && now - this.lastCountReadbackTime >= 250) {
+      this.countReadbackPending = true;
+      this.lastCountReadbackTime = now;
+      const available = this.output!.capacity - this.input!.count;
+      void this.renderer.getArrayBufferAsync(counters).then(buffer => {
+        if (this.counters !== counters) return;
+        const counts = new Uint32Array(buffer);
+        this.lastChildCount = Math.min(counts[0] + counts[1], available);
+      }).catch(() => {
+        // Diagnostics must not interrupt rendering during a reset or backend switch.
+      }).finally(() => {
+        if (this.counters === counters) this.countReadbackPending = false;
+      });
+    }
+    return this.lastChildCount;
+  }
 
   prepare(
     input: GPUParticleBufferState | GPUParticleRenderBufferState,
@@ -51,6 +77,7 @@ export default class GPURendererChildren {
     version: number,
     tagMask?: number,
   ): GPUParticleBufferState | GPUParticleRenderBufferState {
+    this.enabled = false;
     if (system.quality <= 0) return input;
     const mode = compensation === 'children' && system.quality >= 1 ? 'none' : compensation;
     if ((!options.count || options.count === 0) && mode !== 'children') return input;
@@ -99,6 +126,7 @@ export default class GPURendererChildren {
       this.key = key;
     }
     this.nodes.forEach(node => renderer.compute(node));
+    this.enabled = true;
     return this.output;
   }
 
@@ -228,6 +256,10 @@ export default class GPURendererChildren {
   }
 
   reset(): void {
+    this.enabled = false;
+    this.lastChildCount = 0;
+    this.countReadbackPending = false;
+    this.lastCountReadbackTime = -Infinity;
     this.nodes.forEach(node => node.dispose());
     this.nodes = [];
     this.key = '';

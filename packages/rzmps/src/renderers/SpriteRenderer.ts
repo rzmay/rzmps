@@ -928,7 +928,7 @@ class SpriteRenderer extends Renderer {
   private getParticleFrame(particle: Particle): number {
     return (
       this.randomStartFrame
-        ? Math.floor(seedrandom(particle.id).quick() * this.frames)
+        ? Math.floor(seedrandom.tychei(particle.id).quick() * this.frames)
         : 0
     ) + (
       Math.floor(

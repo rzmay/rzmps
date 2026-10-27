@@ -1268,6 +1268,8 @@ Increasing quality allows ordinary emission to restore density. Finite bursts ma
 
 The base `Renderer` expands its visual population before passing it to a renderer implementation. Each child inherits its immediate parent's attributes; only its position, scale, and alpha receive artistic modifiers. Children never enter `system.particles`, run modules, collide, or cause lifecycle events.
 
+`renderer.renderedChildCount` reports additional artistic and LOD children. CPU counts update each frame. Reading this property during native GPU processing requests asynchronous diagnostics from the small counters buffer, at most four times per second; it does not read particle data back. The demo adds rendered and child totals to its particle counter only when children are present.
+
 `count` is a timeless dynamic number: constants, ranges, and sets use deterministic per-parent selection. Counts are floored and clamped to nonnegative integers. They do not depend on age. A `[1, 3]` range normally produces one or two children. Zero is the default.
 
 `radius` is the maximum spherical displacement, in particle simulation coordinates. Offsets remain fixed relative to the parent's position and do not rotate with its orientation. The default radius is zero.

@@ -25,6 +25,7 @@ const s = system();
 const renderer = new Capture({ children: { count: 3, radius: 2, scale: 0.8, alpha: 0.7 } });
 renderer.update([root], s);
 assert.equal(renderer.output.length, 4);
+assert.equal(renderer.renderedChildCount, 3);
 const first = renderer.output.slice(1).map(p => ({ id: p.id, position: p.position.toArray() }));
 for (const p of renderer.output.slice(1)) {
   assert.equal(p.parent, root);
@@ -62,6 +63,31 @@ radial.update([root], s);
 assert.deepEqual(radial.output[1].position.toArray(), root.position.toArray());
 assert.deepEqual(radial.output[1].scale.toArray(), root.scale.toArray());
 
+// Variation settings do not shift another property's deterministic random draws.
+const varied = new Capture({ children: {
+  count: 20, radius: 2, scale: [0.2, 1], alpha: [0.2, 1], randomizeScale: 0.6, randomizeAlpha: 0.8,
+} });
+const childValues = () => varied.output.slice(1).map(p => ({
+  id: p.id, position: p.position.toArray(), scale: p.scale.toArray(), alpha: p.alpha,
+}));
+varied.update([root], s);
+const variedValues = childValues();
+varied.children.randomizeScale = 0;
+varied.update([root], s);
+const withoutScaleVariation = childValues();
+assert.deepEqual(withoutScaleVariation.map(p => p.alpha), variedValues.map(p => p.alpha));
+assert.deepEqual(withoutScaleVariation.map(p => p.position), variedValues.map(p => p.position));
+assert.notDeepEqual(withoutScaleVariation.map(p => p.scale), variedValues.map(p => p.scale));
+varied.children.randomizeScale = 0.6;
+varied.children.randomizeAlpha = 0;
+varied.update([root], s);
+const withoutAlphaVariation = childValues();
+assert.deepEqual(withoutAlphaVariation.map(p => p.scale), variedValues.map(p => p.scale));
+assert.notDeepEqual(withoutAlphaVariation.map(p => p.alpha), variedValues.map(p => p.alpha));
+varied.children.randomizeAlpha = 0.8;
+varied.update([root], s);
+assert.deepEqual(childValues(), variedValues);
+
 const variable = new Capture({ children: { count: [0, 6] } });
 const parents = Array.from({ length: 200 }, (_, i) => { const p = new Particle(); p.id = `p${i}`; return p; });
 variable.update(parents, s);
@@ -75,6 +101,7 @@ s.quality = 0.5;
 const compensated = new Capture({ children: { count: 2, radius: 0.5, scale: 0.6, alpha: 0.4 }, compensation: CompensationMode.Children });
 compensated.update([root], s);
 assert.equal(compensated.output.length, 6);
+assert.equal(compensated.renderedChildCount, 5);
 assert.equal(new Set(compensated.output.map(p => p.id)).size, 6);
 assert.deepEqual(compensated.output.map(p => p.id), [
   'root', 'root[0]', 'root[1]', 'root[2]', 'root[0][0]', 'root[1][0]',
@@ -94,6 +121,7 @@ for (const p of compensated.output) assert.ok(lowQualityIDs.has(p.id));
 s.quality = 0;
 compensated.update([root], s);
 assert.equal(compensated.output.length, 0);
+assert.equal(compensated.renderedChildCount, 0);
 s.quality = 0.25;
 const size = new Capture({ compensation: CompensationMode.Size });
 size.update([root], s);
@@ -237,6 +265,19 @@ const constantGPU = new GPUCapture({ children: { count: float(100) } });
 constantGPU.updateGPU(buffers, gpuSystem);
 assert.ok(constantGPU.buffers.capacity >= buffers.count * 101);
 assert.notEqual(constantGPU.buffers, buffers);
+let childCounterReads = 0;
+gpuSystem._renderer.getArrayBufferAsync = async () => {
+  childCounterReads++;
+  return new Uint32Array([4, 3, 0, 0]).buffer;
+};
+assert.equal(childCounterReads, 0, 'Rendering alone does not request child diagnostics');
+assert.equal(constantGPU.renderedChildCount, 0, 'GPU count is asynchronous');
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(constantGPU.renderedChildCount, 7, 'Count includes artistic and LOD children');
+assert.equal(childCounterReads, 1, 'Repeated reads reuse throttled diagnostics');
+constantGPU.children.count = 0;
+constantGPU.updateGPU(buffers, gpuSystem);
+assert.equal(constantGPU.renderedChildCount, 0, 'Disabling children hides the cached GPU count immediately');
 constantGPU.reset();
 const opaqueGPU = new GPUCapture({ children: { count: Fn(() => float(100))() } });
 opaqueGPU.updateGPU(buffers, gpuSystem);

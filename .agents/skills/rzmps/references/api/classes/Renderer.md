@@ -115,6 +115,24 @@ set needsUpdate(value): void;
 
 ***
 
+<a id="renderedchildcount"></a>
+
+### renderedChildCount
+
+#### Get Signature
+
+```ts
+get renderedChildCount(): number;
+```
+
+Additional visual particles; GPU diagnostics refresh asynchronously when requested.
+
+##### Returns
+
+`number`
+
+***
+
 <a id="supportsgpuinput"></a>
 
 ### supportsGPUInput

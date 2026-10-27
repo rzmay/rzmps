@@ -70,7 +70,7 @@ export default async function createSnow() {
     renderers: [
       new SpriteRenderer(Textures.Default, {
         material: 'lit',
-        children: { count: 2, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
+        children: { count: 5, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
         alphaMap: snowflakeAlpha,
         materialOptions: {
           normalLighting: 0.25,

@@ -840,7 +840,7 @@ class TrailRenderer extends Renderer {
       return true;
     }
 
-    const random = seedrandom(id).quick();
+    const random = seedrandom.tychei(id).quick();
     return random < ratio;
   }
 
