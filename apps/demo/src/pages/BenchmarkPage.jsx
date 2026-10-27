@@ -71,7 +71,7 @@ import createSnow from '../../../../examples/snow.js';
 class NoopRenderer extends Renderer {
   setup() {}
   _update() {}
-  updateGPU() {}
+  _updateGPU() {}
   destroy() {}
   clear() {}
 }
@@ -213,6 +213,7 @@ function createSystem({
   renderer = new NoopRenderer(),
   gpuProcessing = false,
   maxCullingMode = MaxCulling.New,
+  lod,
 }) {
   const system = new ParticleSystem({
     emitters,
@@ -224,7 +225,7 @@ function createSystem({
     looping: false,
     maxParticles,
     maxCullingMode,
-    useUpdateLOD: false,
+    lod,
   });
 
   for (let i = 0; i < initialParticleCount; i += 1) {
@@ -336,10 +337,8 @@ function summarize({
     maxSimulatedParticles: Math.max(...particleSamples),
     finalSimulatedParticles: system.particles.length,
     maxParticlesLimit: system.maxParticles,
-    updateLODEnabled: system.useUpdateLOD
-      || system.modules.some((module) => module.useUpdateLOD)
-      || system.renderers.some((renderer) => renderer.useUpdateLOD),
-    countLODEnabled: system.renderers.some((renderer) => Boolean(renderer.countLOD)),
+    lodEnabled: Boolean(system.lod),
+    quality: system.quality,
     frames: frameSamples.length,
     avgFps: frameSamples.length / (measuredDurationMs / 1000),
     onePercentLowFps: 1000 / slowestOnePercentFrameMs,
@@ -1752,17 +1751,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }),
     },
     {
-      name: 'Renderer count LOD compensate 10k noop',
+      name: 'Population LOD size compensation 10k noop',
       particleCount: 10_000,
       create: () => ({
-        renderer: new NoopRenderer({
-          countLOD: {
-            distance: 1,
-            quality: 0.5,
-            maxLevel: 1,
-          },
-          compensateSize: true,
-        }),
+        lod: { distance: 1, quality: 0.5, maxLevel: 1 },
+        renderer: new NoopRenderer({ compensation: 'size' }),
       }),
     },
     {

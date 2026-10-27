@@ -6,7 +6,7 @@ export const guideSections = [
   { text: 'Getting Started', description: 'Build an effect, then extend it with your own behavior.', pages: ['first-particle-system', 'first-module', 'first-spatial-effect'] },
   { text: 'GPU Processing', description: 'Port custom behavior to GPU compute and understand the GPU execution model.', pages: ['first-gpu-module', 'first-gpu-spatial-effect', 'gpu-processing'] },
   { text: 'Core Concepts', description: 'Understand how systems and their components work together.', pages: ['concepts', 'dynamic-values', 'module-priority', 'spatial-effects'] },
-  { text: 'Feature Guides', description: 'Apply individual features to an existing particle system.', pages: ['tags', 'subsystems', 'collision-and-physics', 'decals', 'particle-octree'] },
+  { text: 'Feature Guides', description: 'Apply individual features to an existing particle system.', pages: ['renderer-children-lod', 'tags', 'subsystems', 'collision-and-physics', 'decals', 'particle-octree'] },
   { text: 'Project Guides', description: 'Set up local development, measure performance, validate effects, and use coding assistants.', pages: ['development', 'benchmarks', 'compatibility', 'ai-coding-assistants'] },
 ];
 

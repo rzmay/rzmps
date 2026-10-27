@@ -94,7 +94,9 @@ class LightRenderer extends Renderer {
       system.addRendererObject(this.lightContainer);
     }
 
-    updateGPU(
+    protected get updateGPUUsesCPUReadback(): boolean { return true; }
+
+    protected _updateGPU(
       buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
       system: ParticleSystem,
       deltaTime = 0,

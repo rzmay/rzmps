@@ -196,7 +196,9 @@ export default class DecalRenderer extends Renderer {
     this._update(particles, system, deltaTime);
   }
 
-  override updateGPU(
+  protected get updateGPUUsesCPUReadback(): boolean { return true; }
+
+  protected override _updateGPU(
     buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem, deltaTime = 0,
   ): void {

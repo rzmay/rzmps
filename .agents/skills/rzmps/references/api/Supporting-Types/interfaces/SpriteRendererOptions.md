@@ -56,41 +56,39 @@ Allows sprite geometry to cast shadows when scene shadow rendering is enabled.
 
 ***
 
-<a id="compensatesize"></a>
+<a id="children"></a>
 
-### compensateSize
-
-```ts
-compensateSize: boolean;
-```
-
-Temporarily enlarges retained particles when count LOD reduces visibility.
-
-#### Default Value
+### children
 
 ```ts
-false
+children: RendererChildrenOptions;
 ```
+
+Artistic render-only copies, generated before LOD children.
 
 #### Inherited from
 
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`compensateSize`](../../interfaces/RendererOptions.md#compensatesize)
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`children`](../../interfaces/RendererOptions.md#children)
 
 ***
 
-<a id="countlod"></a>
+<a id="compensation"></a>
 
-### countLOD
+### compensation
 
 ```ts
-countLOD: Partial<LODSettings>;
+compensation:
+  | "none"
+  | "children"
+  | "size"
+  | CompensationMode;
 ```
 
-Reduces the number of rendered particles with distance without deleting simulated particles.
+Visual approximation for population removed by system LOD. Defaults to none.
 
 #### Inherited from
 
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`countLOD`](../../interfaces/RendererOptions.md#countlod)
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`compensation`](../../interfaces/RendererOptions.md#compensation)
 
 ***
 
@@ -284,35 +282,3 @@ x: number;
 ```ts
 y: number;
 ```
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD
-
-```ts
-updateLOD: Partial<LODSettings>;
-```
-
-Distance-based renderer update quality.
-
-#### Inherited from
-
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`updateLOD`](../../interfaces/RendererOptions.md#updatelod)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-Enables distance-based renderer update skipping.
-
-#### Inherited from
-
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`useUpdateLOD`](../../interfaces/RendererOptions.md#useupdatelod)

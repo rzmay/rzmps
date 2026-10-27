@@ -54,16 +54,6 @@ bursts: SpawnBurst[];
 
 ***
 
-<a id="countlod"></a>
-
-### countLOD?
-
-```ts
-optional countLOD?: Partial<LODSettings>;
-```
-
-***
-
 <a id="initialvalues"></a>
 
 ### initialValues
@@ -130,26 +120,6 @@ optional tags?: string[];
 
 ```ts
 tagSelection: TagSelectionMethod = TagSelectionMethod.All;
-```
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
 ```
 
 ## Accessors
@@ -352,17 +322,17 @@ Emits births for the supplied simulation context and returns the newly created p
 
 ***
 
-<a id="updategpulod"></a>
+<a id="updategpuquality"></a>
 
-### updateGPULOD()
+### updateGPUQuality()
 
 ```ts
-updateGPULOD(cameraDistance): void;
+updateGPUQuality(quality): void;
 ```
 
 #### Parameters
 
-##### cameraDistance
+##### quality
 
 `number`
 

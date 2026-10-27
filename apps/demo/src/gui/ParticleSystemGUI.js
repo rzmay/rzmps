@@ -154,8 +154,8 @@ export class ParticleSystemGUI {
         return this.rendererGUI.buildRenderersFolder(...args);
     }
 
-    buildUpdateLOD(...args) {
-        return this.emitterGUI.buildUpdateLOD(...args);
+    buildLOD(...args) {
+        return this.emitterGUI.buildLOD(...args);
     }
 
     addObject(...args) {
@@ -449,9 +449,9 @@ export class ParticleSystemGUI {
             },
         };
         folder.add(gpuStatus, 'active').name('GPU Status').disable().listen();
-        const updateLODFolder = folder.addFolder('Update LOD');
-        updateLODFolder.close();
-        this.buildUpdateLOD(updateLODFolder, system);
+        const lodFolder = folder.addFolder('LOD');
+        lodFolder.close();
+        this.buildLOD(lodFolder, system);
         folder.add(system, 'useLiveCubemap').name('Live Cubemap');
         folder.add(system.liveCubemap, 'fps', 1, 120, 1).name('Live Cubemap FPS');
         folder.add(system.liveCubemap, 'resolutionScale', 0.05, 1, 0.01).name('Live Cubemap Scale');

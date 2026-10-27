@@ -75,9 +75,7 @@ export class GPUEmitterInstanceRuntime {
       : index.mul(state.uintSlotCount);
     this.uintOffset = uintIndex;
     this.timing = floatStorage.element(
-      typeof floatIndex === 'number'
-        ? floatIndex + EmitterFloatSlot.Timing
-        : floatIndex.add(EmitterFloatSlot.Timing)
+      typeof floatIndex === 'number' ? floatIndex + EmitterFloatSlot.Timing : floatIndex.add(EmitterFloatSlot.Timing),
     );
     this.distance = floatStorage.element(
       typeof floatIndex === 'number'
@@ -85,14 +83,10 @@ export class GPUEmitterInstanceRuntime {
         : floatIndex.add(EmitterFloatSlot.LastDistancePositionDuration),
     );
     this.identity = uintStorage.element(
-      typeof uintIndex === 'number'
-        ? uintIndex + EmitterUintSlot.Identity
-        : uintIndex.add(EmitterUintSlot.Identity)
+      typeof uintIndex === 'number' ? uintIndex + EmitterUintSlot.Identity : uintIndex.add(EmitterUintSlot.Identity),
     );
     this.burstState = uintStorage.element(
-      typeof uintIndex === 'number'
-        ? uintIndex + EmitterUintSlot.State
-        : uintIndex.add(EmitterUintSlot.State)
+      typeof uintIndex === 'number' ? uintIndex + EmitterUintSlot.State : uintIndex.add(EmitterUintSlot.State),
     );
     this.counters = state.runtimeCounterStorage;
     this.counterOffset = typeof index === 'number'
@@ -127,9 +121,9 @@ export class GPUEmitterInstanceRuntime {
   // Multiple invocations may update these counters concurrently. Atomic store,
   // add, and load make reset, reservation, and observation race-free on the GPU.
   resetRequestCount(value: Node<'uint'> | number): void {
-    atomicStore(this.counter(EmitterRuntimeCounter.RequestedParticles), typeof value === 'number'
-      ? uint(value)
-      : value
+    atomicStore(
+      this.counter(EmitterRuntimeCounter.RequestedParticles),
+      typeof value === 'number' ? uint(value) : value,
     );
     atomicStore(this.counter(EmitterRuntimeCounter.ClaimedRequests), uint(0));
     atomicStore(this.counter(EmitterRuntimeCounter.ClaimedReplacements), uint(0));
@@ -143,9 +137,9 @@ export class GPUEmitterInstanceRuntime {
   }
 
   reserveRequestCount(value: Node<'uint'> | number): Node<'uint'> {
-    return atomicAdd(this.counter(EmitterRuntimeCounter.RequestedParticles), typeof value === 'number'
-      ? uint(value)
-      : value
+    return atomicAdd(
+      this.counter(EmitterRuntimeCounter.RequestedParticles),
+      typeof value === 'number' ? uint(value) : value,
     );
   }
 

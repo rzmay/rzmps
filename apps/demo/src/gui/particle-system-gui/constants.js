@@ -39,7 +39,7 @@ import {
 
 export const AUDIO_BUFFER_SOURCE_KEY = '__rzmpsAudioBufferSource';
 export const RAW_CODE = Symbol('rawCode');
-export const LOD_GUI_KEYS = new Set(['useUpdateLOD', 'updateLOD', 'countLOD', 'compensateSize']);
+export const LOD_GUI_KEYS = new Set(['lod', 'children', 'compensation']);
 
 export const INITIAL_VALUE_DEFAULTS = {
     lifetime: () => 1,

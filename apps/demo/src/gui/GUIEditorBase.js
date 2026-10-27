@@ -21,6 +21,5 @@ export class GUIEditorBase {
     addTextureUpload(...args) { return this.host.valueEditor.addTextureUpload(...args); }
     addAudioUpload(...args) { return this.host.valueEditor.addAudioUpload(...args); }
 
-    buildUpdateLOD(...args) { return this.host.emitterGUI.buildUpdateLOD(...args); }
-    buildCountLOD(...args) { return this.host.emitterGUI.buildCountLOD(...args); }
+    buildLOD(...args) { return this.host.emitterGUI.buildLOD(...args); }
 }

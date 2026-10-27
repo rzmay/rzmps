@@ -29,13 +29,13 @@ export class RendererGUI extends GUIEditorBase {
 
     buildRenderer(folder, renderer, system = this.system) {
         this.addTags(folder, renderer);
-        const updateLODFolder = folder.addFolder('Update LOD');
-        updateLODFolder.close();
-        this.buildUpdateLOD(updateLODFolder, renderer);
+        folder.add(renderer, 'compensation', ['none', 'size', 'children']).name('LOD Compensation');
+        const children = folder.addFolder('Renderer Children');
+        renderer.children ??= {};
+        const defaults = { count: 0, radius: 0, scale: 1, alpha: 1, randomizeScale: 0, randomizeAlpha: 0 };
+        for (const [key, value] of Object.entries(defaults)) renderer.children[key] ??= value;
+        this.addObject(children, renderer.children);
 
-        const countLODFolder = folder.addFolder('Count LOD');
-        countLODFolder.close();
-        this.buildCountLOD(countLODFolder, renderer, true);
 
         if (renderer instanceof SpriteRenderer) {
             this.buildSpriteRenderer(folder, renderer);

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   ColorOverLifetime,
+  CompensationMode,
   Emitter,
   EmissionShape,
   NoiseModule,
@@ -13,15 +14,7 @@ import {
 } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-const moduleUpdateLOD = {
-  distance: 10,
-  quality: 0.5,
-  falloff: 1,
-  maxLevel: 1,
-  continuous: true,
-};
-
-const countLOD = {
+const lod = {
   distance: 10,
   quality: 0.7,
   falloff: 1,
@@ -36,6 +29,7 @@ export default async function createLODStress() {
     looping: true,
     maxParticles: 50000,
     simulationSpeed: 1,
+    lod,
     gravity: new THREE.Vector3(0, 0, 0),
     gravityModifier: 0,
 
@@ -45,7 +39,6 @@ export default async function createLODStress() {
         source: EmissionShape.Sphere(0.7, 24, 12),
         rate: 1800,
         radialSpeed: 1.8,
-        countLOD,
         initialValues: {
           lifetime: [2.5, 5],
           speed: [0.6, 1.8],
@@ -66,14 +59,10 @@ export default async function createLODStress() {
     modules: [
       new VelocityOverLifetime({
         linear: new THREE.Vector3(0, 0.35, 0),
-        useUpdateLOD: true,
-        updateLOD: moduleUpdateLOD,
       }),
       new TransformByNoise({
         strength: 2.5,
         frequency: 2.2,
-        useUpdateLOD: true,
-        updateLOD: moduleUpdateLOD,
       }),
       new ScaleOverLifetime({
         scale: (time) => {
@@ -92,8 +81,7 @@ export default async function createLODStress() {
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
         softParticleDistance: 1,
-        countLOD,
-        compensateSize: true,
+        compensation: CompensationMode.Children,
       }),
     ],
     // #endregion docs:renderers:1
@@ -112,7 +100,7 @@ createLODStress.author = "rzmay";
 export const metadata = {
   "id": "lodStress",
   "title": "LOD Stress Test",
-  "description": "Emitter and renderer LOD controls under a dense particle load.",
+  "description": "Unified LOD with density compensation under a dense simulation load.",
   "tags": [
     "lodStress"
   ],

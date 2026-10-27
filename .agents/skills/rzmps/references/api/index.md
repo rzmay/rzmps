@@ -154,6 +154,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [ParticleSpatialGridOptions](interfaces/ParticleSpatialGridOptions.md)
 - [ParticleSpatialGridQueryOptions](interfaces/ParticleSpatialGridQueryOptions.md)
 - [PointLightOptions](Supporting-Types/interfaces/PointLightOptions.md)
+- [RendererChildrenOptions](interfaces/RendererChildrenOptions.md)
 - [RotationByDepthOptions](Supporting-Types/interfaces/RotationByDepthOptions.md)
 - [RotationBySizeOptions](Supporting-Types/interfaces/RotationBySizeOptions.md)
 - [RotationBySpeedOptions](Supporting-Types/interfaces/RotationBySpeedOptions.md)
@@ -185,6 +186,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 ### Enums
 
 - [CollisionGeometryUpdatePolicy](enumerations/CollisionGeometryUpdatePolicy.md)
+- [CompensationMode](enumerations/CompensationMode.md)
 - [EmissionSource](enumerations/EmissionSource.md)
 - [EndBehavior](enumerations/EndBehavior.md)
 - [GPUEventType](enumerations/GPUEventType.md)

@@ -90,6 +90,16 @@ readonly generation: Node<"uint">;
 
 ***
 
+<a id="id"></a>
+
+### id
+
+```ts
+readonly id: Node<"uvec2">;
+```
+
+***
+
 <a id="index"></a>
 
 ### index
@@ -100,12 +110,32 @@ readonly index: Node<"uint">;
 
 ***
 
+<a id="ischild"></a>
+
+### isChild
+
+```ts
+readonly isChild: Node<"bool">;
+```
+
+***
+
 <a id="lifetime"></a>
 
 ### lifetime
 
 ```ts
 readonly lifetime: Node<"float">;
+```
+
+***
+
+<a id="lodpriority"></a>
+
+### lodPriority
+
+```ts
+readonly lodPriority: Node<"uint">;
 ```
 
 ***
@@ -130,6 +160,16 @@ readonly orbitCenter: Node<"vec3">;
 
 ***
 
+<a id="parent"></a>
+
+### parent
+
+```ts
+readonly parent: GPUParticleLike | null;
+```
+
+***
+
 <a id="position"></a>
 
 ### position
@@ -146,6 +186,16 @@ readonly position: Node<"vec3">;
 
 ```ts
 readonly realtime: Node<"float">;
+```
+
+***
+
+<a id="root"></a>
+
+### root
+
+```ts
+readonly root: GPUParticleLike;
 ```
 
 ***

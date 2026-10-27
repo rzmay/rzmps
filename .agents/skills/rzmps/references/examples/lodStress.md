@@ -3,7 +3,7 @@
 
 # LOD Stress Test
 
-Emitter and renderer LOD controls under a dense particle load.
+Unified population LOD with density compensation.
 
 [View live example](https://rzmps.rzmay.com/?preset=LOD%20Stress%20Test)
 
@@ -13,10 +13,10 @@ Preset by [rzmay](https://github.com/rzmay).
 
 ## Particle System Configuration
 
-The system caps population at 50000, loops over 10 seconds, and disables gravity. This is a stress example: the cap protects against unbounded accumulation while emission and rendering LOD can reduce the actual population and visible count at distance.
+The system caps simulation at 50000 particles and loops over 10 seconds. Its single `lod` setting scales emission and permanently removes particles above the current birth-priority threshold as the camera moves away. Survivors run every simulation step. Moving closer replenishes the population through ordinary emission.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/lodStress.js#L34)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/lodStress.js#L27)
 
 ```js
   const system = new ParticleSystem({
@@ -24,6 +24,7 @@ The system caps population at 50000, loops over 10 seconds, and disables gravity
     looping: true,
     maxParticles: 50000,
     simulationSpeed: 1,
+    lod,
     gravity: new THREE.Vector3(0, 0, 0),
     gravityModifier: 0,
 
@@ -32,7 +33,6 @@ The system caps population at 50000, loops over 10 seconds, and disables gravity
         source: EmissionShape.Sphere(0.7, 24, 12),
         rate: 1800,
         radialSpeed: 1.8,
-        countLOD,
         initialValues: {
           lifetime: [2.5, 5],
           speed: [0.6, 1.8],
@@ -51,14 +51,10 @@ The system caps population at 50000, loops over 10 seconds, and disables gravity
     modules: [
       new VelocityOverLifetime({
         linear: new THREE.Vector3(0, 0.35, 0),
-        useUpdateLOD: true,
-        updateLOD: moduleUpdateLOD,
       }),
       new TransformByNoise({
         strength: 2.5,
         frequency: 2.2,
-        useUpdateLOD: true,
-        updateLOD: moduleUpdateLOD,
       }),
       new ScaleOverLifetime({
         scale: (time) => {
@@ -75,8 +71,7 @@ The system caps population at 50000, loops over 10 seconds, and disables gravity
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
         softParticleDistance: 1,
-        countLOD,
-        compensateSize: true,
+        compensation: CompensationMode.Children,
       }),
     ],
   });
@@ -85,10 +80,10 @@ The system caps population at 50000, loops over 10 seconds, and disables gravity
 
 ## Emitters
 
-Rate 1800 with lifetime 2.5–5 would sustain roughly 6750 particles at full emission before culling. Small scale 0.08 avoids filling the screen with giant billboards. Shared countLOD starts at distance 10 with quality 0.7 and up to five levels, reducing emission workload as the camera moves away.
+Rate 1800 with lifetime 2.5–5 sustains roughly 6750 simulated particles at full quality. System LOD begins at distance 10, with quality 0.7 and up to five levels. Emitters allocate only the reduced population; each new particle receives an eligible LOD priority.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/lodStress.js#L43)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/lodStress.js#L37)
 
 ```js
     emitters: [
@@ -96,7 +91,6 @@ Rate 1800 with lifetime 2.5–5 would sustain roughly 6750 particles at full emi
         source: EmissionShape.Sphere(0.7, 24, 12),
         rate: 1800,
         radialSpeed: 1.8,
-        countLOD,
         initialValues: {
           lifetime: [2.5, 5],
           speed: [0.6, 1.8],
@@ -116,23 +110,19 @@ Rate 1800 with lifetime 2.5–5 would sustain roughly 6750 particles at full emi
 
 ## Modules
 
-Velocity and noise use update LOD at distance 10 with quality 0.5 and one level, reducing those module updates away from the camera. Scale and alpha lifetime curves remain present to hide abrupt births and deaths. Noise strength 2.5 and frequency 2.2 make skipped motion updates visible when inspecting quality tradeoffs.
+Velocity, noise, scale, and alpha modules update every surviving particle each step. Noise strength 2.5 and frequency 2.2 exercise simulation work that population LOD can eliminate without motion stutter.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/lodStress.js#L66)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/lodStress.js#L59)
 
 ```js
     modules: [
       new VelocityOverLifetime({
         linear: new THREE.Vector3(0, 0.35, 0),
-        useUpdateLOD: true,
-        updateLOD: moduleUpdateLOD,
       }),
       new TransformByNoise({
         strength: 2.5,
         frequency: 2.2,
-        useUpdateLOD: true,
-        updateLOD: moduleUpdateLOD,
       }),
       new ScaleOverLifetime({
         scale: (time) => {
@@ -149,18 +139,17 @@ Velocity and noise use update LOD at distance 10 with quality 0.5 and one level,
 
 ## Renderers
 
-The lit Circle sprite renderer uses the same countLOD settings as the emitter. compensateSize true enlarges retained sprites to recover some coverage when fewer are drawn. This trades individual particle fidelity for apparent density. Soft-particle distance 1 reduces geometric intersections during camera movement.
+The lit Circle renderer has artistic children disabled. `CompensationMode.Children` adds density copies only when system LOD reduces quality. Automatic local spacing estimates spread compensation copies; they inherit their immediate parent’s scale and opacity. All children remain outside simulation. Soft-particle distance 1 reduces intersections.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/lodStress.js#L91)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/lodStress.js#L80)
 
 ```js
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: 'lit',
         softParticleDistance: 1,
-        countLOD,
-        compensateSize: true,
+        compensation: CompensationMode.Children,
       }),
     ],
 ```

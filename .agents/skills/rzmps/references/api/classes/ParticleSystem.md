@@ -144,6 +144,16 @@ liveCubemap: LiveCubemap;
 
 ***
 
+<a id="lod"></a>
+
+### lod?
+
+```ts
+optional lod?: Partial<LODSettings>;
+```
+
+***
+
 <a id="looping"></a>
 
 ### looping
@@ -184,6 +194,18 @@ modules: Module[] = [];
 
 ***
 
+<a id="particleoctree"></a>
+
+### particleOctree?
+
+```ts
+optional particleOctree?: ParticleOctree<unknown>;
+```
+
+System-owned CPU spatial data, created lazily for density compensation.
+
+***
+
 <a id="particles"></a>
 
 ### particles
@@ -211,6 +233,18 @@ prewarm: boolean;
 ```ts
 prewarmFPS: number;
 ```
+
+***
+
+<a id="quality"></a>
+
+### quality
+
+```ts
+quality: number = 1;
+```
+
+Central population quality shared by emitters and renderers.
 
 ***
 
@@ -294,16 +328,6 @@ subSystems: Map<ParticleSystem, SubSystemOptions>;
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-***
-
 <a id="uselivecubemap"></a>
 
 ### useLiveCubemap
@@ -320,16 +344,6 @@ useLiveCubemap: boolean;
 
 ```ts
 useSpatialEffects: boolean;
-```
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
 ```
 
 ***
@@ -597,6 +611,27 @@ pending: number;
 
 ***
 
+<a id="gpuparticlebuffers"></a>
+
+### gpuParticleBuffers
+
+#### Get Signature
+
+```ts
+get gpuParticleBuffers():
+  | GPUParticleBufferState
+  | undefined;
+```
+
+Canonical GPU storage for renderer preprocessing and managed spatial queries.
+
+##### Returns
+
+  \| [`GPUParticleBufferState`](../interfaces/GPUParticleBufferState.md)
+  \| `undefined`
+
+***
+
 <a id="gpuprocessing"></a>
 
 ### gpuProcessing
@@ -607,7 +642,7 @@ pending: number;
 get gpuProcessing(): boolean;
 ```
 
-Whether GPU simulation is requested; actual activation also depends on renderer and components.
+Whether GPU simulation is requested; activation depends on renderer and components.
 
 ##### Returns
 
@@ -842,6 +877,24 @@ Whether the system is emitting; pause is a separate flag.
 ##### Returns
 
 `boolean`
+
+***
+
+<a id="renderframetoken"></a>
+
+### renderFrameToken
+
+#### Get Signature
+
+```ts
+get renderFrameToken(): object;
+```
+
+Shared per-step cache key for renderer spatial preprocessing.
+
+##### Returns
+
+`object`
 
 ***
 
@@ -1169,7 +1222,7 @@ Seconds per step, before simulationSpeed. Defaults to 1 / 60.
 Reuses prewarm's simulation path, including emission, lifecycle events, modules,
 spatial effects, and owned subsystems. Paused, destroyed, and parent-owned
 systems do not advance. Does not start playback or perform implicit prewarm.
-Camera distance and update LOD do not skip explicit steps. Live cubemap
+Camera distance does not skip explicit steps; population LOD still applies. Live cubemap
 capture is deferred to normal updates; render the scene after advancing.
 Finite systems can naturally end, including their configured end behavior.
 
@@ -1268,6 +1321,49 @@ getGPURendererTagMask(tags): number | undefined;
 #### Returns
 
 `number` \| `undefined`
+
+***
+
+<a id="getparticlespacing"></a>
+
+### getParticleSpacing()
+
+```ts
+getParticleSpacing(particle, population?): number;
+```
+
+Stable per-root local spacing shared by all CPU renderer views.
+
+#### Parameters
+
+##### particle
+
+[`Particle`](Particle.md)
+
+##### population?
+
+[`Particle`](Particle.md)[] = `...`
+
+#### Returns
+
+`number`
+
+***
+
+<a id="getparticlespacinggpu"></a>
+
+### getParticleSpacingGPU()
+
+```ts
+getParticleSpacingGPU(): PackedFloatStorage;
+```
+
+System-owned GPU spacing pass; all native renderers share its output.
+Values are keyed by simulation slot generation and never read back to CPU.
+
+#### Returns
+
+[`PackedFloatStorage`](../Supporting-Types/type-aliases/PackedFloatStorage.md)
 
 ***
 
@@ -1668,7 +1764,7 @@ Stops emission and resets prewarm state. clearParticles chooses whether to remov
 update(): void;
 ```
 
-Advances from wall-clock time, respecting pause, simulation distance, and update LOD.
+Advances from wall-clock time, respecting pause, simulation distance, and population LOD.
 
 #### Returns
 

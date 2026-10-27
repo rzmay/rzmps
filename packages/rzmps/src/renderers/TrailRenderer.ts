@@ -215,7 +215,9 @@ class TrailRenderer extends Renderer {
     };
   }
 
-  updateGPU(
+  protected get updateGPUUsesCPUReadback(): boolean { return true; }
+
+  protected _updateGPU(
     buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
     deltaTime = 0,
@@ -838,7 +840,7 @@ class TrailRenderer extends Renderer {
       return true;
     }
 
-    const random = seedrandom(id).quick();
+    const random = seedrandom.tychei(id).quick();
     return random < ratio;
   }
 

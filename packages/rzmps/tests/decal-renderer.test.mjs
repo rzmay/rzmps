@@ -472,6 +472,7 @@ test('continuous projections work through simulation, pause, stop and reset', ()
 
 test('GPU continuous mode uses updateCPUFromGPU without a rate cap or double-aging decals', async () => {
   const { renderer, system, floor } = fixture({ onSpawn: false, continuousRate: 20, lifetime: 2, opacity: t => 1 - t });
+  assert.equal(renderer.supportsGPUInput, true, 'the protected GPU hook must enable native input dispatch');
   const p = source(); system._notifySpawn(p);
   const requests = [];
   system.selectiveReadback = async (limit, fields) => {

@@ -150,6 +150,7 @@ export class GPUSelectiveReadbackState {
       const generation = stateData[stateOffset + 2] ?? request.generation;
       const tagMask = stateData[stateOffset + 1] ?? 0;
       particle.alive = (stateData[stateOffset] ?? 0) !== 0;
+      particle.lodPriority = (stateData[stateOffset + 3] ?? 0) / 4294967296;
       this.fields.forEach((field, fieldIndex) => {
         this.readField(particle, field, floatData, (index * this.fields.length + fieldIndex) * 4);
       });
@@ -204,7 +205,7 @@ export class GPUSelectiveReadbackState {
             particle.alive,
             particle.tagMask,
             particle.generation,
-            0,
+            particle.lodPriority,
           ));
           this.fields.forEach((field, fieldIndex) => {
             output.element(instanceIndex.mul(fieldCount).add(fieldIndex))

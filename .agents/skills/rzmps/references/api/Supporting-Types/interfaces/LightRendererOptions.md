@@ -34,25 +34,39 @@ brightness: DynamicValue<number>;
 
 ***
 
-<a id="compensatesize"></a>
+<a id="children"></a>
 
-### compensateSize
-
-```ts
-compensateSize: boolean;
-```
-
-Temporarily enlarges retained particles when count LOD reduces visibility.
-
-#### Default Value
+### children
 
 ```ts
-false
+children: RendererChildrenOptions;
 ```
+
+Artistic render-only copies, generated before LOD children.
 
 #### Inherited from
 
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`compensateSize`](../../interfaces/RendererOptions.md#compensatesize)
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`children`](../../interfaces/RendererOptions.md#children)
+
+***
+
+<a id="compensation"></a>
+
+### compensation
+
+```ts
+compensation:
+  | "none"
+  | "children"
+  | "size"
+  | CompensationMode;
+```
+
+Visual approximation for population removed by system LOD. Defaults to none.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`compensation`](../../interfaces/RendererOptions.md#compensation)
 
 ***
 
@@ -63,22 +77,6 @@ false
 ```ts
 count: number;
 ```
-
-***
-
-<a id="countlod"></a>
-
-### countLOD
-
-```ts
-countLOD: Partial<LODSettings>;
-```
-
-Reduces the number of rendered particles with distance without deleting simulated particles.
-
-#### Inherited from
-
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`countLOD`](../../interfaces/RendererOptions.md#countlod)
 
 ***
 
@@ -175,35 +173,3 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](../../interfaces/RendererOptions.md).[`tags`](../../interfaces/RendererOptions.md#tags)
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD
-
-```ts
-updateLOD: Partial<LODSettings>;
-```
-
-Distance-based renderer update quality.
-
-#### Inherited from
-
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`updateLOD`](../../interfaces/RendererOptions.md#updatelod)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-Enables distance-based renderer update skipping.
-
-#### Inherited from
-
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`useUpdateLOD`](../../interfaces/RendererOptions.md#useupdatelod)

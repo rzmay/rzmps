@@ -293,20 +293,6 @@ optional tags?: string[];
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-#### Inherited from
-
-[`Module`](Module.md).[`updateLOD`](Module.md#updatelod)
-
-***
-
 <a id="useoctree"></a>
 
 ### useOctree
@@ -332,20 +318,6 @@ readonly useSpatialGrid: boolean;
 #### Inherited from
 
 [`Module`](Module.md).[`useSpatialGrid`](Module.md#usespatialgrid)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-#### Inherited from
-
-[`Module`](Module.md).[`useUpdateLOD`](Module.md#useupdatelod)
 
 ***
 
@@ -557,7 +529,7 @@ modify(
 ): void;
 ```
 
-Applies tag, condition, and LOD selection before invoking the particle callback.
+Applies tag and condition selection before invoking the particle callback.
 
 #### Parameters
 

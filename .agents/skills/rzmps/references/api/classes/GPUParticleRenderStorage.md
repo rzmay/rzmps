@@ -34,6 +34,50 @@ new GPUParticleRenderStorage(attributes, capacity): GPUParticleRenderStorage;
 
 `GPUParticleRenderStorage`
 
+## Properties
+
+<a id="hierarchy"></a>
+
+### hierarchy?
+
+```ts
+optional hierarchy?: object;
+```
+
+#### lodStart
+
+```ts
+lodStart: Node<"uint">;
+```
+
+#### mapping
+
+```ts
+mapping: object;
+```
+
+##### mapping.element()
+
+```ts
+element(index): Node<"uvec2">;
+```
+
+###### Parameters
+
+###### index
+
+`number` \| `Node`
+
+###### Returns
+
+`Node`\<`"uvec2"`\>
+
+#### originalCount
+
+```ts
+originalCount: Node<"uint">;
+```
+
 ## Methods
 
 <a id="createparticle"></a>
@@ -113,6 +157,46 @@ createVectorNodes(index?): Pick<GPUParticleVectorNodes, "position" | "rotation" 
 #### Returns
 
 `Pick`\<[`GPUParticleVectorNodes`](../Supporting-Types/type-aliases/GPUParticleVectorNodes.md), `"position"` \| `"rotation"` \| `"scale"` \| `"color"`\>
+
+***
+
+<a id="identity"></a>
+
+### identity()
+
+```ts
+identity(index): Node<"uvec2">;
+```
+
+#### Parameters
+
+##### index
+
+`Node`\<`"uint"`\>
+
+#### Returns
+
+`Node`\<`"uvec2"`\>
+
+***
+
+<a id="parentindex"></a>
+
+### parentIndex()
+
+```ts
+parentIndex(index): Node<"uint">;
+```
+
+#### Parameters
+
+##### index
+
+`Node`\<`"uint"`\>
+
+#### Returns
+
+`Node`\<`"uint"`\>
 
 ***
 

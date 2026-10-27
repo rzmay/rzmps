@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { StorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute, IndirectStorageBufferAttribute, type ComputeNode } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
-import { instanceIndex, storage } from 'three/tsl';
+import { float, uint, uvec2, Fn, instanceIndex, storage } from 'three/tsl';
 import Particle from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { GPUAllocationWriter } from './AllocationBuffer';
@@ -97,6 +97,10 @@ export interface GPUParticleUpdateContext {
 }
 
 export interface GPUParticleLike {
+  readonly id: Node<'uvec2'>;
+  readonly isChild: Node<'bool'>;
+  readonly parent: GPUParticleLike | null;
+  readonly root: GPUParticleLike;
   readonly index: Node<'uint'>;
   readonly position: Node<'vec3'>;
   readonly orbitCenter: Node<'vec3'>;
@@ -120,6 +124,7 @@ export interface GPUParticleLike {
   readonly alive: Node<'uint'>;
   readonly tagMask: Node<'uint'>;
   readonly generation: Node<'uint'>;
+  readonly lodPriority: Node<'uint'>;
 }
 
 /** Shader-node view of one particle; unlike Particle, this is not a CPU value object. */
@@ -148,6 +153,27 @@ export class GPUParticleContext implements GPUParticleLike {
   readonly alive: Node<'uint'>;
   readonly tagMask: Node<'uint'>;
   readonly generation: Node<'uint'>;
+  readonly lodPriority: Node<'uint'>;
+
+  get id(): Node<'uvec2'> {
+    return uvec2(this.index, this.generation);
+  }
+
+  get isChild(): Node<'bool'> {
+    return uint(0).equal(uint(1));
+  }
+
+  get parent(): null {
+    return null;
+  }
+
+  get root(): GPUParticleContext {
+    return this;
+  }
+
+  get lodPriorityValue(): Node<'float'> {
+    return float(this.lodPriority).div(4294967296);
+  }
 
   constructor(
     index: Node<'uint'>,
@@ -157,7 +183,9 @@ export class GPUParticleContext implements GPUParticleLike {
     tagMask: Node<'uint'>,
     generation: Node<'uint'>,
     materializeLocals = false,
+    lodPriority: Node<'uint'> = uint(0),
   ) {
+    this.lodPriority = materializeLocals ? lodPriority.toVar('lodPriority') : lodPriority;
     this.index = index;
     this.position = materializeLocals ? vectors.position.toVar('particlePosition') : vectors.position;
     this.orbitCenter = materializeLocals ? vectors.orbitCenter.toVar('particleOrbitCenter') : vectors.orbitCenter;
@@ -170,9 +198,7 @@ export class GPUParticleContext implements GPUParticleLike {
     this.scalarVelocity = materializeLocals
       ? vectors.scalarVelocity.toVar('particleScalarVelocity')
       : vectors.scalarVelocity;
-    this.acceleration = materializeLocals
-      ? vectors.acceleration.toVar('particleAcceleration')
-      : vectors.acceleration;
+    this.acceleration = materializeLocals ? vectors.acceleration.toVar('particleAcceleration') : vectors.acceleration;
     this.angularAcceleration = materializeLocals
       ? vectors.angularAcceleration.toVar('particleAngularAcceleration')
       : vectors.angularAcceleration;
@@ -253,6 +279,7 @@ export class GPUParticleStorage {
       state.y,
       state.z,
       materializeLocals,
+      state.w,
     );
   }
 
@@ -286,6 +313,7 @@ export class GPUParticleStorage {
     state.x.assign(particle.alive);
     state.y.assign(particle.tagMask);
     state.z.assign(particle.generation);
+    state.w.assign(particle.lodPriority);
   }
 }
 
@@ -302,12 +330,14 @@ export class GPUParticleRenderContext {
   readonly alive: Node<'uint'>;
   readonly tagMask: Node<'uint'>;
   readonly generation: Node<'uint'>;
+  readonly lodPriority: Node<'uint'>;
 
   constructor(
     index: Node<'uint'>,
     vectors: Pick<GPUParticleVectorNodes, 'position' | 'rotation' | 'scale' | 'color'>,
     scalars: Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'>,
     state: Node<'uvec4'>,
+    private readonly owner?: GPUParticleRenderStorage,
   ) {
     this.index = index;
     this.position = vectors.position;
@@ -321,11 +351,68 @@ export class GPUParticleRenderContext {
     this.alive = state.x;
     this.tagMask = state.y;
     this.generation = state.z;
+    this.lodPriority = state.w;
   }
+
+  get id(): Node<'uvec2'> {
+    return this.owner?.identity(this.index) ?? uvec2(this.index, this.generation);
+  }
+
+  get isChild(): Node<'bool'> {
+    return this.owner?.hierarchy
+      ? this.index.greaterThanEqual(this.owner.hierarchy.originalCount)
+      : uint(0).equal(uint(1));
+  }
+
+  get parent(): GPUParticleRenderContext {
+    return this.owner?.createParticle(this.owner.parentIndex(this.index)) ?? this;
+  }
+
+  get root(): GPUParticleRenderContext {
+    if (!this.owner) return this;
+    const parent = this.owner.parentIndex(this.index);
+    return this.owner.createParticle(this.owner.parentIndex(parent));
+  }
+
+  get lodPriorityValue(): Node<'float'> {
+    return float(this.lodPriority).div(4294967296);
+  }
+
 }
 
 /** Accesses the compact particle attributes consumed by renderer compute/material nodes. */
 export class GPUParticleRenderStorage {
+  hierarchy?: {
+    mapping: { element(index: Node | number): Node<'uvec2'> };
+    originalCount: Node<'uint'>;
+    lodStart: Node<'uint'>;
+  };
+
+  parentIndex(index: Node<'uint'>): Node<'uint'> {
+    if (!this.hierarchy) return index;
+    const { mapping, originalCount } = this.hierarchy;
+    const mappingIndex = index.greaterThanEqual(originalCount).select(index, originalCount).sub(originalCount);
+    const entry = mapping.element(mappingIndex);
+    return index.greaterThanEqual(originalCount).select(entry.x, index) as Node<'uint'>;
+  }
+
+  identity(index: Node<'uint'>): Node<'uvec2'> {
+    if (!this.hierarchy) return uvec2(index, this.createStateNode(index).z);
+    const { mapping, originalCount, lodStart } = this.hierarchy;
+    const parent = this.parentIndex(index);
+    const root = this.parentIndex(parent);
+    const rootId = uvec2(root, this.createStateNode(root).z);
+    const derive = (id: Node<'uvec2'>, at: Node<'uint'>) => {
+      const mappingIndex = at.greaterThanEqual(originalCount).select(at, originalCount).sub(originalCount);
+      const ordinal = mapping.element(mappingIndex).y;
+      const stage = at.lessThan(lodStart).select(uint(0x72656e64), uint(0x6c6f6421));
+      const mixed = ordinal.add(1).mul(uint(2246822519)).bitXor(stage);
+      return uvec2(id.x.bitXor(mixed).mul(uint(3266489917)), id.y.bitXor(mixed).mul(uint(668265263)));
+    };
+    const parentId = parent.greaterThanEqual(originalCount).select(derive(rootId, parent), rootId) as Node<'uvec2'>;
+    return index.greaterThanEqual(originalCount).select(derive(parentId, index), rootId) as Node<'uvec2'>;
+  }
+
   private readonly floatStorage: PackedFloatStorage;
   private readonly uintStorage: PackedUintStorage;
 
@@ -366,6 +453,7 @@ export class GPUParticleRenderStorage {
       this.createVectorNodes(index),
       this.createScalarNodes(index),
       this.createStateNode(index),
+      this,
     );
   }
 
@@ -385,6 +473,7 @@ export class GPUParticleRenderStorage {
     state.x.assign(particle.alive);
     state.y.assign(particle.tagMask);
     state.z.assign(particle.generation);
+    state.w.assign(particle.lodPriority);
   }
 }
 
@@ -572,6 +661,7 @@ export class GPUParticleBufferState {
       particle.time = readScalar(this.floatData, index, ParticleFloatSlot.AngularVelocityTime);
       particle.realtime = readScalar(this.floatData, index, ParticleFloatSlot.ScalarVelocityRealtime);
       particle.alive = readState(this.uintData, index) !== 0;
+      particle.lodPriority = this.uintData[stateOffset(index) + 3] / 4294967296;
       particle.cache();
     }
   }
@@ -610,20 +700,25 @@ export class GPUParticleBufferState {
   ): void {
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.PositionSpeed, particle.position, particle.speed);
     writeVectorAndScalar(
-      this.floatData, index, ParticleFloatSlot.OrbitCenterAlpha, particle.orbitCenter, particle.alpha
+      this.floatData, index, ParticleFloatSlot.OrbitCenterAlpha,
+      particle.orbitCenter, particle.alpha,
     );
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.RotationMass, particle.rotation, particle.mass);
     writeVectorAndScalar(
-      this.floatData, index, ParticleFloatSlot.ScaleDistortion, particle.scale, particle.distortionStrength
+      this.floatData, index, ParticleFloatSlot.ScaleDistortion,
+      particle.scale, particle.distortionStrength,
     );
     writeVectorAndScalar(
-      this.floatData, index, ParticleFloatSlot.VelocityLifetime, particle.velocity, particle.lifetime
+      this.floatData, index, ParticleFloatSlot.VelocityLifetime,
+      particle.velocity, particle.lifetime,
     );
     writeVectorAndScalar(
-      this.floatData, index, ParticleFloatSlot.AngularVelocityTime, particle.angularVelocity, particle.time
+      this.floatData, index, ParticleFloatSlot.AngularVelocityTime,
+      particle.angularVelocity, particle.time,
     );
     writeVectorAndScalar(
-      this.floatData, index, ParticleFloatSlot.ScalarVelocityRealtime, particle.scalarVelocity, particle.realtime
+      this.floatData, index, ParticleFloatSlot.ScalarVelocityRealtime,
+      particle.scalarVelocity, particle.realtime,
     );
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.Acceleration, particle.acceleration, 0);
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.AngularAcceleration, particle.angularAcceleration, 0);
@@ -636,12 +731,51 @@ export class GPUParticleBufferState {
       particle.alive ? 1 : 0,
       tagMaskForParticle?.(particle) ?? 0,
       generationForParticle?.(particle, index) ?? 0,
+      particle.lodPriority,
     );
   }
 }
 
 /** Owns compact render-only attributes produced from the canonical simulation buffer. */
 export class GPUParticleRenderBufferState {
+  /** Actual GPU-produced visual range, including original simulation slots. */
+  instanceCountNode?: Node<'uint'>;
+  private indirect?: IndirectStorageBufferAttribute;
+  private indirectCompute?: ComputeNode;
+  private indirectIndexCount = -1;
+  private indirectRangeNode?: Node<'uint'>;
+
+  /** Binds an accurate GPU-only draw range after expansion. */
+  bindIndirect(
+    geometry: THREE.BufferGeometry,
+    renderer: GPUStorageBufferRenderer & { compute(node: ComputeNode): void },
+  ): void {
+    if (!this.instanceCountNode) {
+      geometry.indirect = null;
+      return;
+    }
+    const indexCount = geometry.index?.count ?? geometry.getAttribute('position').count;
+    if (!this.indirect) {
+      this.indirect = new IndirectStorageBufferAttribute(new Uint32Array([indexCount, 0, 0, 0, 0]), 1);
+    }
+    if (this.indirectIndexCount !== indexCount) {
+      this.indirect.array[0] = indexCount;
+      this.indirect.needsUpdate = true;
+      this.indirectIndexCount = indexCount;
+    }
+    if (!this.indirectCompute || this.indirectRangeNode !== this.instanceCountNode) {
+      this.indirectCompute?.dispose();
+      const args = storage(this.indirect, 'uint', 5);
+      const range = this.instanceCountNode;
+      this.indirectCompute = Fn(() => {
+        args.element(1).assign(range);
+      })().compute(1).setName('rzmps.children.indirect');
+      this.indirectRangeNode = range;
+    }
+    renderer.compute(this.indirectCompute!);
+    geometry.indirect = this.indirect;
+  }
+
   count = 0;
   capacity: number;
   version = 0;
@@ -690,6 +824,8 @@ export class GPUParticleRenderBufferState {
   }
 
   dispose(renderer?: GPUStorageBufferRenderer): void {
+    this.indirectCompute?.dispose();
+    if (this.indirect) destroyGPUStorageAttribute(renderer, this.indirect);
     destroyGPUStorageAttribute(renderer, this.attributes.floatData);
     destroyGPUStorageAttribute(renderer, this.attributes.uintData);
   }
@@ -732,7 +868,7 @@ function createAttributes(floatData: Float32Array, uintData: Uint32Array): GPUPa
 function renderFloatElement(
   floatStorage: PackedFloatStorage,
   slot: number,
-  index: Node<'uint'> = instanceIndex
+  index: Node<'uint'> = instanceIndex,
 ): Node<'vec4'> {
   return floatStorage.element(index.mul(RENDER_FLOAT_SLOT_COUNT).add(slot));
 }
@@ -767,12 +903,19 @@ function writeColor(array: Float32Array, index: number, slot: number, color: THR
   array[offset + 3] = 0;
 }
 
-function writeState(array: Uint32Array, index: number, alive: number, tagMask: number, generation: number): void {
+function writeState(
+  array: Uint32Array,
+  index: number,
+  alive: number,
+  tagMask: number,
+  generation: number,
+  lodPriority = 0,
+): void {
   const offset = stateOffset(index);
   array[offset] = alive;
   array[offset + 1] = tagMask >>> 0;
   array[offset + 2] = generation >>> 0;
-  array[offset + 3] = 0;
+  array[offset + 3] = Math.floor(lodPriority * 4294967296) >>> 0;
 }
 
 function readVector(array: Float32Array, index: number, slot: number, vector: THREE.Vector3): void {

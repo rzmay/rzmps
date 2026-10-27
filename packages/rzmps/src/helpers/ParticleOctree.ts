@@ -156,6 +156,34 @@ class ParticleOctree<TAggregate> {
     return [...this.nodes];
   }
 
+  /** Estimates local separation from a bounded sample of the leaf and its neighbors.
+   * Isolated particles fall back to their visual extent. No neighbor array is allocated.
+   */
+  estimateSpacing(particle: Particle): number {
+    const fallback = Math.max(particle.scale.length() * 0.5, 0.001);
+    const leaf = this.locate(particle.position);
+    let nearestSquared = (fallback * 8) ** 2;
+    let found = false;
+    let inspected = 0;
+    const sample = (node: OctreeNode<TAggregate>) => {
+      const indices = node.particleIndices;
+      const stride = Math.max(1, Math.floor(indices.length / 16));
+      for (let i = 0; i < indices.length && inspected < 64; i += stride) {
+        const other = this.particles[indices[i]];
+        inspected++;
+        if (!other.alive || other.id === particle.id) continue;
+        const distance = other.position.distanceToSquared(particle.position);
+        if (distance < nearestSquared) { nearestSquared = distance; found = true; }
+      }
+    };
+    sample(leaf);
+    for (const neighbor of leaf.neighbors) {
+      if (inspected >= 64) break;
+      sample(neighbor);
+    }
+    return found ? Math.sqrt(nearestSquared) * 0.5 : fallback;
+  }
+
   /** Returns particles inside an exact radius after pruning nonintersecting octree nodes. */
   particlesInRadius(
     position: THREE.Vector3,

@@ -8,55 +8,23 @@ export interface LODSettings {
 
 export type LODSettingsOptions = LODSettings;
 
-/** Distance-based quality selection with update credit; reuse an instance to preserve skip cadence. */
+/** Distance-based particle population quality. */
 export default class LODHelper {
   distance = 10;
   quality = 0.5;
   maxLevel = 4;
   falloff = 1.5;
   continuous = false;
-  private _updateCredit = 1;
-
   constructor(options: Partial<LODSettings> = {}) {
     this.configure(options);
   }
 
   configure(options: Partial<LODSettings> = {}): void {
     this.distance = Math.max(options.distance ?? 10, 0);
-    this.quality = Math.min(Math.max(options.quality ?? 0.5, 0.01), 1);
+    this.quality = Math.min(Math.max(options.quality ?? 0.5, 0), 1);
     this.maxLevel = Math.max(Math.floor(options.maxLevel ?? 4), 0);
     this.falloff = Math.max(options.falloff ?? 1.5, 1);
     this.continuous = options.continuous ?? false;
-  }
-
-  shouldUpdate(distance: number): boolean {
-    const result = LODHelper.resolveUpdate(this.getScale(distance), this._updateCredit);
-    this._updateCredit = result.nextCredit;
-
-    return result.update;
-  }
-
-  reset(): void {
-    this._updateCredit = 1;
-  }
-
-  private static resolveUpdate(
-    multiplier: number,
-    previousCredit: number,
-  ): { update: boolean; nextCredit: number } {
-    if (multiplier >= 1) return { update: true, nextCredit: 0 };
-
-    if (previousCredit >= 1) {
-      return {
-        update: true,
-        nextCredit: previousCredit - 1 + Math.max(multiplier, 0),
-      };
-    }
-
-    return {
-      update: false,
-      nextCredit: previousCredit + Math.max(multiplier, 0),
-    };
   }
 
   getScale(distance: number): number {

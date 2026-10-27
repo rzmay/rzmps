@@ -116,6 +116,29 @@ timeQuality: number;
 
 ## Methods
 
+<a id="estimatespacing"></a>
+
+### estimateSpacing()
+
+```ts
+estimateSpacing(particle): number;
+```
+
+Estimates local separation from a bounded sample of the leaf and its neighbors.
+Isolated particles fall back to their visual extent. No neighbor array is allocated.
+
+#### Parameters
+
+##### particle
+
+[`Particle`](Particle.md)
+
+#### Returns
+
+`number`
+
+***
+
 <a id="getnodes"></a>
 
 ### getNodes()

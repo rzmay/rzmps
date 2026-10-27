@@ -241,8 +241,8 @@ async function runBenchmark() {
         result.minSimulatedParticles === result.maxSimulatedParticles
           ? `${result.maxSimulatedParticles.toLocaleString()} particles`
           : `${result.minSimulatedParticles.toLocaleString()}–${result.maxSimulatedParticles.toLocaleString()} particles`,
-        `update LOD ${result.updateLODEnabled ? 'on' : 'off'}`,
-        `count LOD ${result.countLODEnabled ? 'on' : 'off'}`,
+        `cap ${result.maxParticlesLimit.toLocaleString()}`,
+        `LOD ${result.lodEnabled ? 'on' : 'off'}`,
         `renderer ${result.rendererType ?? 'unknown'}`,
         `gpu ${result.gpuProcessingRequested ? 'forced' : 'off'}`,
         `gpu active ${result.gpuActiveFrames ?? 0}/${result.gpuMeasuredFrames ?? 0}`,

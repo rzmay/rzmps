@@ -21,7 +21,7 @@ The snow is positioned five units above the origin. A 10-second loop with prewar
 
 ## Emitters
 
-A 30×0.1×30 box distributes snow across a wide area. Rate 200 can sustain about 3200 particles at full lifetime, so the 0.25-unit flakes remain individually small. Radial speed is zero and initial vertical velocity is -0.35, avoiding an outward blast from the box.
+A 30×0.1×30 box distributes snow across a wide area. Rate 70 can sustain about 1120 simulated particles and 3360 visual instances at full lifetime, so the 0.25-unit flakes remain individually small. Radial speed is zero and initial vertical velocity is -0.35, avoiding an outward blast from the box.
 
 <ExampleCode region="emitters" />
 
@@ -33,7 +33,9 @@ Horizontal noise strength 0.28 and vertical strength 0.02 create drifting flakes
 
 ## Renderers
 
-The snowflake alpha texture provides detail using one lit billboard per particle. Normal lighting 0.25 and spherical normals 0.1 keep shading subtle instead of making flakes look like balls. This is less geometric work than individually modeled snowflakes at the same population.
+The snowflake alpha texture provides detail using lit billboards with artistic children per simulated particle. Normal lighting 0.25 and spherical normals 0.1 keep shading subtle instead of making flakes look like balls. This is less geometric work than individually modeled snowflakes at the same population.
 
 <ExampleCode region="renderers" />
 
+
+The emitter simulates 70 flakes per second. Two artistic renderer children per flake bring full-quality visual emission to 210 flakes per second. Their deterministic offsets span a 1.5-unit radius with radial size and alpha multipliers. LOD is disabled by default; these artistic children provide density without changing the simulated population.
