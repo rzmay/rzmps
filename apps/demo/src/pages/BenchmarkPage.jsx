@@ -71,7 +71,7 @@ import createSnow from '../../../../examples/snow.js';
 class NoopRenderer extends Renderer {
   setup() {}
   _update() {}
-  updateGPU() {}
+  _updateGPU() {}
   destroy() {}
   clear() {}
 }
