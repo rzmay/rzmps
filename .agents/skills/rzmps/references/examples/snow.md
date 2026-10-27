@@ -69,7 +69,7 @@ The snow is positioned five units above the origin. A 10-second loop with prewar
     renderers: [
       new SpriteRenderer(Textures.Default, {
         material: 'lit',
-        children: { count: 2, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
+        children: { count: 5, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
         alphaMap: snowflakeAlpha,
         materialOptions: {
           normalLighting: 0.25,
@@ -156,7 +156,7 @@ The snowflake alpha texture provides detail using lit billboards with artistic c
     renderers: [
       new SpriteRenderer(Textures.Default, {
         material: 'lit',
-        children: { count: 2, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
+        children: { count: 5, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
         alphaMap: snowflakeAlpha,
         materialOptions: {
           normalLighting: 0.25,
