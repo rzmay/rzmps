@@ -30,10 +30,10 @@
     "benchmark:lod": "npm run build --workspace @rzmps/rzmps && node packages/rzmps/tests/benchmark-lod.mjs"
   },
   "devDependencies": {
-    "skills": "^1.7.2",
-    "tsdown": "^0.23.0",
+    "skills": "^1.7.4",
+    "tsdown": "^0.23.2",
     "typedoc": "^0.28.20",
-    "typedoc-plugin-markdown": "^4.14.0",
+    "typedoc-plugin-markdown": "^4.14.1",
     "typedoc-plugin-missing-exports": "^4.1.4",
     "unrun": "^0.3.1",
     "vitepress": "^1.6.4",
