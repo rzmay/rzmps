@@ -1,5 +1,5 @@
 import { Node, StructNode, StructTypeNode } from 'three/webgpu';
-import { mat4, nodeObject } from 'three/tsl';
+import { bool, float, mat4, nodeObject } from 'three/tsl';
 // three-mesh-bvh 0.9.x omits declarations for these focused WebGPU exports.
 // @ts-expect-error incomplete upstream WebGPU declarations
 import { bvhNodeBoundsStruct } from 'three-mesh-bvh/src/webgpu/tsl/structs.js';
@@ -32,6 +32,7 @@ export const capsuleHitStruct = new StructTypeNode({
   fraction: 'float',
   side: 'float',
   objectIndex: 'uint',
+  wallDisplacement: 'vec3f',
 }, 'RZMPSCapsuleHit');
 
 class CapsuleQueryCallNode extends Node {
@@ -57,16 +58,29 @@ class CapsuleQueryCallNode extends Node {
 }
 
 /** Creates a world-space capsule shapecast over three-mesh-bvh's packed TLAS/BLAS. */
-export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
+export default function capsuleBVHCollisionNode(
+  data: BVHComputeDataLike,
+  motion?: { history: unknown; padding: Node<'float'> },
+) {
   const { index, attributes, transforms } = data.storage;
-  const toWorld = mat4().toVar(`rzmps_capsuleToWorld_${Math.random().toString(36).slice(2)}`);
+  const suffix = Math.random().toString(36).slice(2);
+  const boundsName = `rzmpsCapsuleBounds_${suffix}`;
+  const rangeName = `rzmpsCapsuleRange_${suffix}`;
+  const segmentName = `rzmpsClosestSegmentSegment_${suffix}`;
+  const transformName = `rzmpsCapsuleTransform_${suffix}`;
+  const resetName = `rzmpsCapsuleReset_${suffix}`;
+  const resultName = `rzmpsCapsuleResult_${suffix}`;
+  const queryName = `rzmpsQueryCapsule_${suffix}`;
+  const toWorld = mat4().toVar(`rzmps_capsuleToWorld_${suffix}`);
+  const inObject = bool(false).toVar();
+  const physicalRadius = float(0).toVar();
 
   const shapecast = data.getShapecastFn({
     name: `rzmps_CapsuleCast_${Math.random().toString(36).slice(2)}`,
     shapeStruct: capsuleQueryStruct,
     resultStruct: capsuleHitStruct,
     intersectsBoundsFn: wgslTagFn/* wgsl */`
-      fn rzmpsCapsuleBounds(
+      fn ${boundsName}(
         capsule: ${capsuleQueryStruct},
         bounds: ${bvhNodeBoundsStruct},
         result: ptr<function, ${capsuleHitStruct}>
@@ -80,14 +94,15 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
           abs(${toWorld}[0].xyz) * extent.x +
           abs(${toWorld}[1].xyz) * extent.y +
           abs(${toWorld}[2].xyz) * extent.z;
-        let capsuleMin = min(capsule.start, capsule.end) - capsule.radius;
-        let capsuleMax = max(capsule.start, capsule.end) + capsule.radius;
+        let padding = select(${motion?.padding ?? float(0)}, 0.0, ${inObject});
+        let capsuleMin = min(capsule.start, capsule.end) - capsule.radius - padding;
+        let capsuleMax = max(capsule.start, capsule.end) + capsule.radius + padding;
         return select(0u, 1u, all(capsuleMax >= worldCenter - worldExtent) &&
           all(capsuleMin <= worldCenter + worldExtent));
       }
     `,
     intersectRangeFn: wgslTagFn/* wgsl */`
-      fn rzmpsCapsuleRange(
+      fn ${rangeName}(
         capsule: ${capsuleQueryStruct},
         offset: u32,
         count: u32,
@@ -125,9 +140,9 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
           }
 
           // Segment-to-edge candidates handle edge and vertex contacts, including degenerate triangles.
-          let edgeAB = rzmpsClosestSegmentSegment(capsule.start, capsule.end, a, b);
-          let edgeBC = rzmpsClosestSegmentSegment(capsule.start, capsule.end, b, c);
-          let edgeCA = rzmpsClosestSegmentSegment(capsule.start, capsule.end, c, a);
+          let edgeAB = ${segmentName}(capsule.start, capsule.end, a, b);
+          let edgeBC = ${segmentName}(capsule.start, capsule.end, b, c);
+          let edgeCA = ${segmentName}(capsule.start, capsule.end, c, a);
           let dAB = dot(edgeAB[0] - edgeAB[1], edgeAB[0] - edgeAB[1]);
           let dBC = dot(edgeBC[0] - edgeBC[1], edgeBC[0] - edgeBC[1]);
           let dCA = dot(edgeCA[0] - edgeCA[1], edgeCA[0] - edgeCA[1]);
@@ -195,7 +210,7 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
         return didHit;
       }
 
-      fn rzmpsClosestSegmentSegment(
+      fn ${segmentName}(
         p1: vec3f, q1: vec3f, p2: vec3f, q2: vec3f
       ) -> mat2x3f {
         let d1 = q1 - p1;
@@ -226,13 +241,27 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
         return mat2x3f(p1 + d1 * s, p2 + d2 * t);
       }
     `,
-    transformShapeFn: wgslTagFn/* wgsl */`
-      fn rzmpsCapsuleTransform(shape: ptr<function, ${capsuleQueryStruct}>, objectIndex: u32) -> void {
+    transformShapeFn: motion ? wgslTagFn/* wgsl */`
+      fn ${transformName}(shape: ptr<function, ${capsuleQueryStruct}>, objectIndex: u32) -> void {
         ${toWorld} = ${transforms}[objectIndex].matrixWorld;
+        ${inObject} = true;
+        let offset = objectIndex * 9u;
+        let previousInverse = mat4x4f(
+          ${motion.history}[offset + 4u], ${motion.history}[offset + 5u],
+          ${motion.history}[offset + 6u], ${motion.history}[offset + 7u]
+        );
+        shape.start = (${toWorld} * previousInverse * vec4f(shape.start, 1.0)).xyz;
+        shape.radius = shape.radius + ${motion.history}[offset + 8u].x;
+      }
+    ` : wgslTagFn/* wgsl */`
+      fn ${transformName}(shape: ptr<function, ${capsuleQueryStruct}>, objectIndex: u32) -> void {
+        ${toWorld} = ${transforms}[objectIndex].matrixWorld;
+        ${inObject} = true;
       }
     `,
     resetShapeFn: wgslTagFn/* wgsl */`
-      fn rzmpsCapsuleReset(objectIndex: u32) -> void {
+      fn ${resetName}(objectIndex: u32) -> void {
+        ${inObject} = false;
         ${toWorld} = mat4x4f(
           1.0, 0.0, 0.0, 0.0,
           0.0, 1.0, 0.0, 0.0,
@@ -241,8 +270,21 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
         );
       }
     `,
-    transformResultFn: wgslTagFn/* wgsl */`
-      fn rzmpsCapsuleResult(result: ptr<function, ${capsuleHitStruct}>, objectIndex: u32) -> void {
+    transformResultFn: motion ? wgslTagFn/* wgsl */`
+      fn ${resultName}(result: ptr<function, ${capsuleHitStruct}>, objectIndex: u32) -> void {
+        result.objectIndex = objectIndex;
+        let offset = objectIndex * 9u;
+        let previousWorld = mat4x4f(
+          ${motion.history}[offset], ${motion.history}[offset + 1u],
+          ${motion.history}[offset + 2u], ${motion.history}[offset + 3u]
+        );
+        let localPoint = ${transforms}[objectIndex].inverseMatrixWorld * vec4f(result.point, 1.0);
+        result.wallDisplacement = result.point - (previousWorld * localPoint).xyz;
+        result.capsulePoint = result.point + result.normal * ${physicalRadius};
+        result.distanceSq = ${physicalRadius} * ${physicalRadius};
+      }
+    ` : wgslTagFn/* wgsl */`
+      fn ${resultName}(result: ptr<function, ${capsuleHitStruct}>, objectIndex: u32) -> void {
         result.objectIndex = objectIndex;
       }
     `,
@@ -251,7 +293,9 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
   // Allocate the pointer result in WGSL function scope. TSL variables use the
   // private address space, which cannot be passed to a ptr<function> parameter.
   const query = wgslTagFn/* wgsl */`
-    fn rzmpsQueryCapsule(shape: ${capsuleQueryStruct}) -> ${capsuleHitStruct} {
+    fn ${queryName}(shape: ${capsuleQueryStruct}) -> ${capsuleHitStruct} {
+      ${physicalRadius} = shape.radius;
+      ${inObject} = false;
       var result: ${capsuleHitStruct};
       result.found = false;
       result.point = vec3f(0.0);
@@ -261,6 +305,7 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
       result.fraction = 1.0;
       result.side = 1.0;
       result.objectIndex = 0u;
+      result.wallDisplacement = vec3f(0.0);
       result.found = ${shapecast}(shape, &result);
       return result;
     }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { float, uniform } from 'three/tsl';
+import { MeshPhysicalNodeMaterial } from 'three/webgpu';
 import * as THREE from 'three';
 import {
   FLIPSimulation,
@@ -13,6 +14,8 @@ import {
   ParticleSpatialGrid,
   ParticleSystem,
   VolumeRenderer,
+  SurfaceRenderer,
+  SpatialEffectUpdatePolicy,
   VolumeInterpolation,
   VolumeDensityMapping,
 } from '../build/index.mjs';
@@ -20,9 +23,61 @@ import {
 const gas = new GasSimulation({
   spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 3 },
 });
+const surfaceMaterial = new THREE.MeshStandardMaterial({ color: 'white', vertexColors: false });
+const surface = new SurfaceRenderer({ material: surfaceMaterial });
+assert(surface instanceof SurfaceRenderer);
+assert.equal(surface.supportsGPUInput, true);
+assert.equal(surface.voxelSize, 0.0625);
+assert.equal(surface.particleColors, true);
+assert.equal(surface.smoothingIterations, 3);
+assert.equal(surface.smoothingStrength, 1);
+assert.notEqual(surface.material, surfaceMaterial);
+assert.equal(surface.material.vertexColors, true);
+assert.equal(surfaceMaterial.vertexColors, false, 'surface rendering must not mutate a shared input material');
+assert.doesNotThrow(() => surface.update([], { quality: 1 }));
+assert.throws(() => surface.update([{}], { quality: 1 }), /native WebGPU/);
+for (const options of [{ voxelSize: 0 }, { particleRadiusScale: Infinity }, { isoLevel: 0 },
+  { maxActiveBricks: 0 }, { maxTriangles: 1 }, { bounds: new THREE.Box3() }]) {
+  assert.throws(() => new SurfaceRenderer(options), /finite positive/);
+}
+let sourceDisposed = false;
+for (const options of [{ smoothingIterations: -1 }, { smoothingIterations: 17 }, { smoothingIterations: 1.5 },
+  { smoothingStrength: -0.1 }, { smoothingStrength: 1.1 }, { smoothingStrength: NaN }]) {
+  assert.throws(() => new SurfaceRenderer(options), /smoothing/);
+}
+surfaceMaterial.addEventListener('dispose', () => { sourceDisposed = true; });
+surface.destroy();
+assert.equal(sourceDisposed, false);
+surfaceMaterial.dispose();
+const customMaterial = new MeshPhysicalNodeMaterial();
+customMaterial.fragmentNode = uniform(new THREE.Vector4(0.2, 0.4, 0.8, 1));
+const customSurface = new SurfaceRenderer({ material: customMaterial });
+assert.equal(customSurface.material.fragmentNode, customMaterial.fragmentNode,
+  'custom shading graphs must not be wrapped or replaced for vertex colors');
+customSurface.particleColors = false;
+customSurface.material = customMaterial;
+assert.equal(customSurface.material.vertexColors, false);
+assert.equal(customSurface.material.fragmentNode, customMaterial.fragmentNode);
+customSurface.destroy();
+customMaterial.dispose();
 const flip = new FLIPSimulation({
   spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 4 },
 });
+const spray = FLIPSimulation.SprayCondition();
+assert.equal(typeof spray, 'function');
+assert.equal(spray.spatialGridOptions.maxQuerySteps, 0);
+assert.equal(FLIPSimulation.SprayCondition({ maximumNeighbors: null }).spatialGridOptions, undefined);
+for (const options of [{ minimumSpeed: -1 }, { minimumAge: -1 }, { neighborRadius: 0 },
+  { maximumNeighbors: -1 }, { maximumNeighbors: 1.5 }, { minimumSpeed: Infinity }]) {
+  assert.throws(() => FLIPSimulation.SprayCondition(options), /SprayCondition/);
+}
+const predicateParent = new ParticleSystem({ emitters: [], renderers: [] });
+const predicateChild = new ParticleSystem({ emitters: [], renderers: [] });
+predicateParent.addSubSystem(predicateChild, { shouldEmit: () => true });
+assert.equal(predicateParent.getGPUEmissionSupport().supported, false);
+predicateParent.subSystems.get(predicateChild).shouldEmitGPU = spray;
+assert.equal(predicateParent.getGPUEmissionSupport().supported, true);
+predicateParent.destroy();
 const boundedFlip = new FLIPSimulation({
   maxBounds: 20,
   bounds: new THREE.Box3(new THREE.Vector3(-32, -32, -32), new THREE.Vector3(32, 32, 32)),
@@ -89,6 +144,27 @@ assert.equal(fluidCollider.gridOccupancy, true);
 assert.equal(fluidCollider.particleCollision, true);
 assert.equal(fluidCollider.surfaceThickness, 0);
 assert.ok(fluidCollider.getCollisionObject() instanceof THREE.Mesh);
+const policyFlip = new FLIPSimulation();
+const policyColliders = Object.values(SpatialEffectUpdatePolicy).map(updatePolicy => (
+  FluidCollider.Box({ updatePolicy }, 1, 1, 1)
+));
+policyFlip.spatialEffects = policyColliders;
+assert.deepEqual(policyColliders.map(collider => collider.canCacheGridOccupancy),
+  policyColliders.map(collider => [SpatialEffectUpdatePolicy.Static, SpatialEffectUpdatePolicy.TransformDynamic]
+    .includes(collider.updatePolicy)));
+const customOccupancy = FluidCollider.Box({ updatePolicy: SpatialEffectUpdatePolicy.Static,
+  testGPU: () => float(1) }, 1, 1, 1);
+assert.equal(customOccupancy.canCacheGridOccupancy, false);
+customOccupancy.geometry.dispose();
+policyFlip.updateParticleCollisionBackend();
+assert.equal(policyFlip.particleCollisionBackend.staticObjects.length, 1);
+assert.equal(policyFlip.particleCollisionBackend.dynamicObjects.length, 1);
+assert.equal(policyFlip.particleCollisionBackend.geometryDynamicObjects.length, 2);
+assert.deepEqual(policyFlip.particleCollisionBackend.dynamicObjects,
+  policyColliders.filter(c => c.updatePolicy === SpatialEffectUpdatePolicy.TransformDynamic)
+    .map(c => c.getCollisionObject()));
+policyFlip.cleanup();
+policyColliders.forEach(collider => collider.geometry.dispose());
 const occupancyOnlyCollider = FluidCollider.Box({ particleCollision: false }, 1, 1, 1);
 assert.equal(occupancyOnlyCollider.gridOccupancy, true);
 assert.equal(occupancyOnlyCollider.particleCollision, false);

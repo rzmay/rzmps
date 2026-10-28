@@ -223,3 +223,19 @@ shouldEmit: boolean | ((particle) => boolean);
 ```
 
 Predicate or switch selecting whether a parent particle may trigger child emission.
+
+***
+
+<a id="shouldemitgpu"></a>
+
+### shouldEmitGPU
+
+```ts
+shouldEmitGPU:
+  | SubSystemGPUCondition
+  | null;
+```
+
+GPU counterpart of shouldEmit. Replaces a CPU callback on GPU; false still disables emission.
+Event predicates receive the captured source state, not a potentially recycled live slot.
+CPU simulation continues to use shouldEmit. Defaults to null.

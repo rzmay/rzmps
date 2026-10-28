@@ -134,6 +134,18 @@ Mesh roots whose transforms and geometry are treated as immutable.
 
 ***
 
+<a id="sweptmotion"></a>
+
+### sweptMotion?
+
+```ts
+optional sweptMotion?: boolean;
+```
+
+Retains rigid transform history for explicit queryMovingCapsule calls. Defaults to false.
+
+***
+
 <a id="updatepolicy"></a>
 
 ### updatePolicy?

@@ -16,6 +16,7 @@ import {
     Textures,
     TrailRenderer,
     VolumeRenderer,
+    SurfaceRenderer,
 } from '@rzmps/rzmps';
 import { AUDIO_BUFFER_SOURCE_KEY, RAW_CODE } from './constants';
 
@@ -317,6 +318,19 @@ export class ParticleSystemSerializer {
     }
 
     serializeRenderer(renderer) {
+        if (renderer instanceof SurfaceRenderer) {
+            const materialOptions = this.serializeMaterialOptions(renderer.material, true);
+            const material = `new THREE.${renderer.material.type}(${materialOptions})`;
+            return `new SurfaceRenderer(${this.serializeValue({
+                material: this.rawCode(material), bounds: renderer.bounds, voxelSize: renderer.voxelSize,
+                particleRadiusScale: renderer.particleRadiusScale, isoLevel: renderer.isoLevel,
+                maxActiveBricks: renderer.maxActiveBricks, maxTriangles: renderer.maxTriangles,
+                smoothingIterations: renderer.smoothingIterations, smoothingStrength: renderer.smoothingStrength,
+                spatialGridOptions: renderer.spatialGridOptions, particleColors: renderer.particleColors,
+                castShadow: renderer.castShadow, receiveShadow: renderer.receiveShadow,
+                ...this.getLODOptions(renderer, true, true), tags: renderer.tags,
+            })})`;
+        }
         if (renderer instanceof DecalRenderer) {
             const material = `new THREE.${renderer.material.type}(${this.serializeMaterialOptions(renderer.material, true)})`;
             const options = {
@@ -595,6 +609,11 @@ export class ParticleSystemSerializer {
         if (material.metalness !== undefined) {
             options.metalness = material.metalness;
         }
+        for (const key of ['clearcoat', 'clearcoatRoughness', 'transmission', 'thickness', 'ior']) {
+            if (material[key] !== undefined) options[key] = material[key];
+        }
+        if (material.attenuationColor) options.attenuationColor = material.attenuationColor;
+        if (Number.isFinite(material.attenuationDistance)) options.attenuationDistance = material.attenuationDistance;
 
         if (material.emissive) {
             options.emissive = material.emissive;

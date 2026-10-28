@@ -1,8 +1,53 @@
 # Fluid Rendering Workbench
 
-These presets exercise GPU fluid solvers. Liquid surface construction is planned,
-not implemented. See the [surface construction plan](liquid-surface-construction.md)
+These presets exercise GPU fluid solvers. The FLIP demo now uses experimental GPU
+Surface Nets mesh construction. See the [surface construction notes](liquid-surface-construction.md)
 and [performance diagnostic](fluid-performance-diagnostic.md) for investigation and next steps.
+
+## Liquid Surfaces
+
+`SurfaceRenderer` reconstructs real triangles from GPU particle positions, scale,
+alpha and color, including transient changes and renderer children. It works
+independently of FLIP and does not change simulation motion or collisions.
+`voxelSize` controls reconstruction detail independently of solver grid quality;
+`particleRadiusScale` controls blending support and `isoLevel` controls erosion.
+Use `maxActiveBricks`, `maxTriangles` and `readSurfaceDiagnostics()` to check budgets.
+Reconstruction `bounds` are coverage, not walls; out-of-coverage kernels are
+reported as clipped particles. Native WebGPU particle processing is required.
+
+Particle-weighted vertex colors tint the renderer-owned material clone by default.
+A white material retains the particle palette; `particleColors: false` disables
+automatic modulation. Custom fragment graphs must explicitly consume the color
+attribute if they bypass Three's normal vertex-color path. The construction notes
+document that contract and the remaining material questions. Paired GPU smoothing
+is controlled by `smoothingIterations` (default 3) and `smoothingStrength` (default 1);
+zero disables smoothing. The FLIP preset passes a `MeshPhysicalMaterial` with
+water-like transmission, IOR and absorption. The teapot scene supplies studio
+reflections. Thickness remains a material constant, not measured fluid depth.
+
+The teapot demo starts with centered eight-unit solver bounds so it does not
+change from a coarse to a finer grid partway through filling. Liquid and gas
+share matched face-based pressure projection; liquid transfers before/after
+face velocities to markers. See the [settling investigation](../../tests/visual/fluid-study.md#liquid-lifecycle-and-settling-correction-october-28-2026)
+for restart fixes, packing measurements and remaining sub-grid boundary limits.
+
+The interactive preset now uses 3+4 subdivisions, a 32,000-particle budget and
+continuous emission with its existing 60-second lifetimes. Numerical fixtures
+retain a finite, 64-cell reference configuration unless `demoLiquid` is requested.
+In the Fluid Teapot scene, Scene Settings exposes a manual tip slider and an
+automatic tipping loop, enabled by default with a ten-second period and a 45-degree angle. The emitter
+and floor stay fixed while the vessel and its collider move together.
+The slider sets a target angle; Tip Speed limits motion to 30 degrees/second by default.
+FLIP also sweeps against rigid collider transform motion using its existing BVH.
+The demo surface coverage matches the sixteen-unit simulation cap, with larger
+meshing budgets for spilled liquid; simulation and mesh voxel sizes remain independent.
+Fast, isolated liquid markers emit a GPU spray subsystem using `spray_alpha.png`.
+These short-lived, fading sprites inherit liquid velocity and color without a second
+fluid solve. They are separate from the liquid surface; foam remains deferred.
+
+See [liquid quality and whitewater](liquid-quality-and-whitewater.md) for measured
+solver-versus-rendering costs, comparison-software findings, and proposed next
+steps for sparse liquid work, finer sampling, surface quality and secondary effects.
 
 ## Current Volume Rendering
 

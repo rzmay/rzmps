@@ -78,6 +78,7 @@ Start with Renderer, then represent particles as sprites, meshes, trails, lights
 - [LightRenderer](api/classes/LightRenderer.md)
 - [AudioRenderer](api/classes/AudioRenderer.md)
 - [DecalRenderer](api/classes/DecalRenderer.md)
+- [SurfaceRenderer](api/classes/SurfaceRenderer.md)
 - [VolumeRenderer](api/classes/VolumeRenderer.md)
 
 ## Spatial Effects
@@ -141,6 +142,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [DistortionOverLifetimeOptions](api/Supporting-Types/interfaces/DistortionOverLifetimeOptions.md)
 - [EmissionShapeFactoryOptions](api/type-aliases/EmissionShapeFactoryOptions.md)
 - [FLIPSimulationOptions](api/interfaces/FLIPSimulationOptions.md)
+- [FLIPSprayConditionOptions](api/interfaces/FLIPSprayConditionOptions.md)
 - [FluidColliderOptions](api/type-aliases/FluidColliderOptions.md)
 - [FluidSimulationOptions](api/interfaces/FluidSimulationOptions.md)
 - [ForceFieldOptions](api/interfaces/ForceFieldOptions.md)
@@ -178,6 +180,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [SpeedOverLifetimeOptions](api/Supporting-Types/interfaces/SpeedOverLifetimeOptions.md)
 - [SpriteRendererOptions](api/Supporting-Types/interfaces/SpriteRendererOptions.md)
 - [SubSystemOptions](api/interfaces/SubSystemOptions.md)
+- [SurfaceRendererOptions](api/interfaces/SurfaceRendererOptions.md)
 - [ThreeCollisionBackendOptions](api/interfaces/ThreeCollisionBackendOptions.md)
 - [ThreeGPUCollisionBackendOptions](api/interfaces/ThreeGPUCollisionBackendOptions.md)
 - [TrailRendererOptions](api/Supporting-Types/interfaces/TrailRendererOptions.md)
@@ -304,6 +307,8 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [SpawnBurst](api/type-aliases/SpawnBurst.md)
 - [SpeedRange](api/Supporting-Types/type-aliases/SpeedRange.md)
 - [StrictMultiple](api/Supporting-Types/type-aliases/StrictMultiple.md)
+- [SubSystemGPUCondition](api/type-aliases/SubSystemGPUCondition.md)
+- [SubSystemGPUContext](api/interfaces/SubSystemGPUContext.md)
 - [Tag](api/Supporting-Types/type-aliases/Tag.md)
 - [ThreeGPUCollisionBackendStats](api/interfaces/ThreeGPUCollisionBackendStats.md)
 - [Vector3Input](api/type-aliases/Vector3Input.md)

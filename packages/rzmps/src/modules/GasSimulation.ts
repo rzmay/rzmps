@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Storage3DTexture, StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
-  Fn, If, atomicMax, atomicStore, clamp, float, floatBitsToUint, floor, instanceIndex, int, ivec3,
+  Fn, If, atomicMax, atomicStore, clamp, float, floatBitsToUint, instanceIndex, int, ivec3,
   max, min, mix, pow, storage, textureStore, uint, uniform, vec3, vec4,
 } from 'three/tsl';
 import type { GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateContext } from '../gpu/Particle';
@@ -13,10 +13,10 @@ import type { ValueByParameter } from '../types/ValueByParameter';
 import type { DynamicValue } from '../types/DynamicValue';
 import FluidSimulation, { type FluidSimulationOptions } from './FluidSimulation';
 import SparseVolumeGrid from '../gpu/SparseVolumeGrid';
+import FluidPressureProjection from '../gpu/FluidPressureProjection';
 import { AdvectionMethod } from '../enums/AdvectionMethod';
 
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
-type FloatStorage = { element(index: Node | number): Node<'float'> };
 type AtomicUintStorage = { element(index: Node | number): Node<'uint'> };
 type FloatUniform = Node<'float'> & { value: number };
 
@@ -130,7 +130,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private densityAdvected!: Vec4Storage;
   private colorAdvected!: Vec4Storage;
   private advectionNodes = new WeakMap<object, ComputeNode>();
-  private pressureProjection?: GasPressureProjection;
+  private pressureProjection?: FluidPressureProjection;
 
   constructor(options: Partial<GasSimulationOptions> = {}) {
     super({
@@ -688,8 +688,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.advectionAttributes = [];
   }
 
-  private getPressureProjection(): GasPressureProjection {
-    this.pressureProjection ??= new GasPressureProjection(
+  private getPressureProjection(): FluidPressureProjection {
+    this.pressureProjection ??= new FluidPressureProjection(
       this.resolution, this.cellSizeNode, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
       this.closedMinNode, this.closedMaxNode, this.volumeGrid,
     );
@@ -983,206 +983,4 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
 // Gas transport uses staggered face fluxes so D, G and the pressure Laplacian
 // describe the same operator. Center velocities remain the force/source workspace.
-class GasPressureProjection {
-  readonly attribute: StorageBufferAttribute;
-  private readonly faces: Vec4Storage;
-  private readonly faceCount: number;
-  private initialized = false;
-  private builds = new WeakMap<object, ComputeNode>();
-  private centers = new WeakMap<object, ComputeNode>();
-  private divergenceNode?: ComputeNode;
-  private pressureNodes: ComputeNode[] = [];
-  private projectNode?: ComputeNode;
-  private clearFacesNode?: ComputeNode;
-
-  constructor(
-    private readonly n: number,
-    private readonly h: Node<'float'>,
-    private readonly maxVelocity: Node<'float'>,
-    private readonly solid: FloatStorage,
-    private readonly pressure: FloatStorage,
-    private readonly divergence: FloatStorage,
-    private readonly closedMin: Node<'vec3'>,
-    private readonly closedMax: Node<'vec3'>,
-    private readonly grid: SparseVolumeGrid,
-  ) {
-    this.faceCount = grid.capacity * (grid.brickSide + 1) ** 3 + 1;
-    this.attribute = new StorageBufferAttribute(new Float32Array(this.faceCount * 4), 4);
-    this.faces = storage(this.attribute, 'vec4', this.faceCount) as Vec4Storage;
-  }
-
-  invalidate(): void { this.initialized = false; }
-
-  dispose(): void { this.attribute.dispose(); }
-
-  private coordinate(index: Node<'uint'>, side: number): Node<'ivec3'> {
-    if (side === this.n) return this.grid.coordinate(index);
-    const b = this.grid.brickSide;
-    const slot = uint(min(float(index.div((b + 1) ** 3)), this.grid.capacity - 1));
-    const brick = uint(max(float(this.grid.slots.element(slot)), 1)).sub(1);
-    return this.grid.unpack(brick, 2 ** this.grid.brickSubdivisions).mul(b)
-      .add(this.grid.unpack(index.mod((b + 1) ** 3), b + 1)) as Node<'ivec3'>;
-  }
-
-  private face(coordinate: Node<'ivec3'>, axis: number): Node<'float'> {
-    const b = this.grid.brickSide;
-    const side = 2 ** this.grid.brickSubdivisions;
-    const brick = ivec3(clamp(floor(vec3(coordinate).div(b)), vec3(0), vec3(side - 1)));
-    const lowerBrick = ivec3(clamp(floor(vec3(coordinate.sub(this.axis(axis))).div(b)),
-      vec3(0), vec3(side - 1)));
-    const page = this.grid.pages.element(this.grid.flatten(brick, side));
-    const owner = ivec3(page.greaterThan(0).select(brick, lowerBrick));
-    const encoded = this.grid.pages.element(this.grid.flatten(owner, side));
-    const local = coordinate.sub(owner.mul(b));
-    const index = uint(max(float(encoded), 1)).sub(1).mul((b + 1) ** 3).add(this.grid.flatten(local, b + 1));
-    const address = encoded.greaterThan(0).select(index, uint(this.faceCount - 1));
-    return this.faces.element(address)[(['x', 'y', 'z'] as const)[axis]] as Node<'float'>;
-  }
-
-  private cell(coordinate: Node<'ivec3'>): Node<'uint'> {
-    return this.grid.index(ivec3(clamp(vec3(coordinate), vec3(0), vec3(this.n - 1))));
-  }
-
-  private compute(callback: (index: Node<'uint'>) => void, faces = false): ComputeNode {
-    return this.grid.compute(callback, faces);
-  }
-
-  private inside(coordinate: Node<'ivec3'>): Node<'bool'> {
-    return vec3(coordinate).greaterThanEqual(vec3(0)).all()
-      .and(vec3(coordinate).lessThan(vec3(this.n)).all());
-  }
-
-  private occupied(coordinate: Node<'ivec3'>): Node<'bool'> {
-    const wall = (['x', 'y', 'z'] as const).map((axis) => float(coordinate[axis]).lessThan(0)
-      .and(this.closedMin[axis].greaterThan(0)).or(float(coordinate[axis]).greaterThanEqual(this.n)
-        .and(this.closedMax[axis].greaterThan(0)))).reduce((a, b) => a.or(b));
-    return wall.or(this.inside(coordinate).and(this.solid.element(this.cell(coordinate)).greaterThanEqual(0.5)));
-  }
-
-  private axis(axis: number): Node<'ivec3'> {
-    return ivec3(axis === 0 ? 1 : 0, axis === 1 ? 1 : 0, axis === 2 ? 1 : 0);
-  }
-
-  private gradient(face: Node<'ivec3'>, axis: number): Node<'float'> {
-    const lower = face.sub(this.axis(axis));
-    const upper = face;
-    const boundary = this.inside(lower).and(this.inside(upper)).not();
-    const p0 = this.inside(lower).select(this.pressure.element(this.cell(lower)), float(0));
-    const p1 = this.inside(upper).select(this.pressure.element(this.cell(upper)), float(0));
-    return this.occupied(lower).or(this.occupied(upper)).select(
-      float(0), p1.sub(p0).mul(boundary.select(2, 1)).div(this.h),
-    );
-  }
-
-  private build(renderer: ParticleSpatialGridRenderer, input: Vec4Storage): void {
-    const node = this.builds.get(input) ?? this.compute(index => {
-      const face = this.coordinate(index, this.n + 1);
-      const components = (['x', 'y', 'z'] as const).map((component, axis) => {
-        const lower = face.sub(this.axis(axis));
-        const a = input.element(this.cell(lower))[component];
-        const b = input.element(this.cell(face))[component];
-        const average = this.inside(lower).and(this.inside(face)).select(a.add(b).mul(0.5),
-          this.inside(lower).select(a, b));
-        return this.occupied(lower).or(this.occupied(face)).select(float(0), average);
-      });
-      this.faces.element(index).assign(vec4(components[0], components[1], components[2], 0));
-    }, true);
-    this.builds.set(input, node);
-    renderer.compute(node);
-    this.initialized = true;
-  }
-
-  initialize(renderer: ParticleSpatialGridRenderer, input: Vec4Storage): void {
-    this.clearFacesNode ??= this.grid.compute(index => {
-      this.faces.element(index).assign(vec4(0));
-    }, true, true);
-    renderer.compute(this.clearFacesNode);
-    if (!this.initialized) this.build(renderer, input);
-  }
-
-  sample(position: Node<'vec3'>): Node<'vec3'> {
-    const values = (['x', 'y', 'z'] as const).map((_component, axis) => {
-      const offset = vec3(axis === 0 ? 0 : 0.5, axis === 1 ? 0 : 0.5, axis === 2 ? 0 : 0.5);
-      const coordinate = position.sub(offset);
-      const base = floor(coordinate);
-      const fraction = coordinate.sub(base);
-      const limits = vec3(axis === 0 ? this.n : this.n - 1,
-        axis === 1 ? this.n : this.n - 1, axis === 2 ? this.n : this.n - 1);
-      const at = (x: number, y: number, z: number) => this.face(
-        ivec3(clamp(base.add(vec3(x, y, z)), vec3(0), limits)), axis,
-      );
-      return mix(
-        mix(mix(at(0, 0, 0), at(1, 0, 0), fraction.x), mix(at(0, 1, 0), at(1, 1, 0), fraction.x), fraction.y),
-        mix(mix(at(0, 0, 1), at(1, 0, 1), fraction.x), mix(at(0, 1, 1), at(1, 1, 1), fraction.x), fraction.y),
-        fraction.z,
-      );
-    });
-    return vec3(values[0], values[1], values[2]);
-  }
-
-  solve(renderer: ParticleSpatialGridRenderer, input: Vec4Storage, output: Vec4Storage, iterations: number): void {
-    this.build(renderer, input);
-    this.divergenceNode ??= this.compute(index => {
-      const c = this.coordinate(index, this.n);
-      const divergence = this.face(c.add(ivec3(1, 0, 0)), 0).sub(this.face(c, 0))
-        .add(this.face(c.add(ivec3(0, 1, 0)), 1).sub(this.face(c, 1)))
-        .add(this.face(c.add(ivec3(0, 0, 1)), 2).sub(this.face(c, 2))).div(this.h);
-      this.divergence.element(index).assign(this.occupied(c).select(float(0), divergence));
-      this.pressure.element(index).assign(0);
-    });
-    renderer.compute(this.divergenceNode);
-
-    // Each color reads only the opposite color, with dispatch boundaries between
-    // updates. Solid faces are Neumann; open domain faces have zero pressure at h/2.
-    for (let parity = 0; parity < 2; parity += 1) {
-      this.pressureNodes[parity] ??= this.compute(index => {
-        const c = this.coordinate(index, this.n);
-        If(c.x.add(c.y).add(c.z).mod(2).equal(parity).and(this.occupied(c).not()), () => {
-          const sum = float(0).toVar();
-          const diagonal = float(0).toVar();
-          for (let axis = 0; axis < 3; axis += 1) {
-            for (const sign of [-1, 1]) {
-              const neighbor = c.add(this.axis(axis).mul(sign));
-              const weight = this.occupied(neighbor).select(0, this.inside(neighbor).select(1, 2));
-              diagonal.addAssign(weight);
-              sum.addAssign(this.inside(neighbor).select(
-                this.pressure.element(this.cell(neighbor)).mul(weight), float(0),
-              ));
-            }
-          }
-          this.pressure.element(index).assign(sum.sub(
-            this.divergence.element(index).mul(this.h.mul(this.h)),
-          ).div(max(diagonal, float(1))));
-        });
-      });
-    }
-    for (let iteration = 0; iteration < Math.max(0, Math.floor(iterations)); iteration += 1) {
-      renderer.compute(this.pressureNodes[0]);
-      renderer.compute(this.pressureNodes[1]);
-    }
-
-    this.projectNode ??= this.compute(index => {
-      const face = this.coordinate(index, this.n + 1);
-      const gradient = vec3(this.gradient(face, 0), this.gradient(face, 1), this.gradient(face, 2));
-      // Safety limits can leave residual divergence when active, as with the
-      // center-velocity limit. They are not part of the pressure operator.
-      this.faces.element(index).xyz.assign(clamp(
-        this.faces.element(index).xyz.sub(gradient), this.maxVelocity.negate(), this.maxVelocity,
-      ));
-    }, true);
-    renderer.compute(this.projectNode);
-
-    const centerNode = this.centers.get(input) ?? this.compute(index => {
-      const c = this.coordinate(index, this.n);
-      const gradient = vec3(...[0, 1, 2].map(axis => this.gradient(c, axis)
-        .add(this.gradient(c.add(this.axis(axis)), axis)).mul(0.5)) as [Node<'float'>, Node<'float'>, Node<'float'>]);
-      const velocity = input.element(index).xyz.sub(gradient);
-      const limited = velocity.mul(clamp(this.maxVelocity.div(max(velocity.length(), float(1e-6))), 0, 1));
-      output.element(index).assign(this.occupied(c).select(vec4(0), vec4(limited, 0)));
-    });
-    this.centers.set(input, centerNode);
-    renderer.compute(centerNode);
-  }
-}
-
 export default GasSimulation;

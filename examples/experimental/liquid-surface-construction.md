@@ -1,7 +1,155 @@
 # Liquid Surface Construction Plan
 
-Design only, not an implemented API. See [the workbench](README.md) for current volume controls
-and [the performance diagnostic](fluid-performance-diagnostic.md) for resolution and optimization findings.
+The first experimental GPU `SurfaceRenderer` is implemented. See [the workbench](README.md) for current controls
+and [the liquid quality notes](liquid-quality-and-whitewater.md) for resolution and optimization findings.
+
+## Implemented First Pass
+
+`SurfaceRenderer` reconstructs a compact-support isotropic density/color field
+from render-time GPU particles, then extracts indexed Surface Nets triangles.
+It is a renderer, not a FLIP module: ordinary GPU particles work too. The FLIP
+demo now uses it instead of sprites. Particle motion, pressure and collider
+occupancy are unchanged. No Obi proprietary or Blender GPL code was copied;
+the extraction kernels are written in TSL. The MIT [Surface Nets reference][surface-nets]
+was reviewed alongside the algorithm description.
+
+- Reconstruction shares `SparseVolumeGrid`/`SpatialGrid` with gas, including
+  compact active-brick dispatch. Unlike gas, it retains no advected field:
+  current render particles determine every frame's requested pages.
+- `ParticleSpatialGrid` supplies exact-radius neighbor queries. A private GPU
+  projection into its canonical particle layout indexes transient/child output
+  without changing the simulation's grid or positions. This extra GPU view uses
+  a full particle record for compatibility, not CPU readback or a new hash engine.
+  Generalizing the query helper to compact render storage can remove that copy
+  later if profiling warrants it.
+- Eight-cell bricks include allocation support for adjacent corner samples and
+  dual-cell connections. One vertex is stored per crossing cell; each crossing
+  primal edge owns one quad. Unsmoothed normals use the reconstructed field gradient.
+- Indirect GPU index counts select the drawn triangles. Ordinary updates never
+  read mesh counts/vertices back. `readSurfaceDiagnostics()` explicitly reads
+  counts, budget overflow, clipped-particle counts and effective bounds.
+- `voxelSize` (default 0.0625), `particleRadiusScale` (2.4), `isoLevel` (0.2),
+  `maxActiveBricks` (512) and `maxTriangles` (131072) are independent controls.
+  The material, shadow flags, particle-color toggle, tags, children and query-grid
+  options use renderer conventions. Both GUI paths and serialization are wired.
+- `smoothingIterations` (default 3, integer 0..16) and `smoothingStrength`
+  (default 1, range 0..1) apply paired Taubin Laplacian passes to connected
+  quad-edge neighbors on the GPU. A reverse pass reduces the shrinkage of plain
+  averaging; this is not exact volume conservation. Vertices stay in their
+  original dual cells, disconnected drops are not connected, and topology does
+  not change. Final normals are rebuilt from area-weighted incident triangles;
+  dye is re-sampled from the reconstructed field at the smoothed position.
+  Zero iterations or strength preserves the original reconstruction.
+- `bounds` is a reconstruction region in system space, not a physical wall.
+  It defaults to [-4,4] per axis. Its minimum snaps down to the voxel lattice;
+  coverage expands to a cube with a power-of-two cell count, at least eight and
+  at most 512 per axis. World voxel size remains fixed. This is intentionally a
+  bounded first pass rather than automatic whole-world surface coverage.
+  A particle whose full kernel plus the final sample margin is outside effective
+  coverage is omitted and reported as clipped, rather than generating a cut shell.
+  Increase bounds or voxel size explicitly when needed.
+- Budget overflow is observable but does not automatically grow GPU allocations.
+  Missing neighboring vertices are never referenced, and index counts clamp to
+  capacity. Overflow may therefore leave holes: raise the affected budget before
+  judging surface continuity. Buffer limits and GPU memory still apply.
+
+The kernel is `alpha * max(1 - squaredDistance / squaredRadius, 0)^3`, with
+radius equal to half the largest absolute render scale times `particleRadiusScale`.
+Zero alpha/size contributes nothing. Alpha changes reconstruction density, not
+per-vertex transparency. Material opacity remains a separate global control.
+Isolated drops below voxel resolution can disappear. Query-grid subdivisions
+affect query cost, not reconstruction voxel size; unbounded queries remain exact.
+Explicit positive `maxQuerySteps` trades away reconstruction accuracy.
+
+### Particle Colors And Custom Materials
+
+Color is accumulated alongside density using the same positive kernel weights,
+interpolated at edge crossings, normalized by crossing density and averaged at
+the Surface Nets vertex (or re-sampled after smoothing). This transfers particle colors in linear RGB and blends
+them where particles overlap. Vertex attributes are position, surface normal
+and RGBA color (alpha one). Color detail below the reconstruction scale is averaged;
+vertex colors cannot preserve an arbitrarily fine discontinuous dye pattern.
+
+The renderer clones a supplied material and owns/disposes the clone. The public
+`material` property edits that owned material; assigning another material clones
+it too. The original shared input is never changed or disposed. `particleColors`
+defaults to true and enables its `vertexColors` path: standard Three.js surface
+materials multiply particle color by their base color, textures and lighting.
+Use a white base color to retain the particle palette. Turning the flag off
+leaves color data available but disables this automatic material modulation.
+
+Custom node materials using Three's normal diffuse-color path also receive vertex
+colors. A custom `fragmentNode`, output shader or other replacement that bypasses
+that path must explicitly sample the `color` attribute (for example via TSL
+`attribute('color', 'vec4')` in a varying) and combine it with its shading. The
+renderer does not replace a user's color/fragment graph. Raw GLSL ShaderMaterial
+is subject to Three's native WebGPU material limitations, not automatically
+translated by this renderer. UVs, dye textures and a dedicated material-node API
+are not generated in this pass. Discuss those separately if custom materials
+need sharper-than-vertex color detail or a prescribed blend contract.
+GUI code export supports ordinary Three.js material parameters, not arbitrary
+custom shader/node graphs; keep those graphs in authored application code.
+
+### Water Material
+
+The FLIP preset passes an ordinary `THREE.MeshPhysicalMaterial` with transmission
+0.9, roughness 0.055, IOR 1.333, thickness 0.3 and pale-blue attenuation over
+distance 3. The teapot scene uses the existing studio HDR environment for
+reflections. These are rendering controls, not solver viscosity or density.
+The renderer injects no shader code, even for custom materials.
+
+Three.js handles physical-material lighting, transmission and depth testing.
+Thickness is a constant approximation; there is no measured front/back fluid
+depth or bespoke screen-space water pass. Standard transmission does not
+refract all transparent objects, including the translucent display teapot.
+For clear water retain alpha one and use transmission, not generic alpha blending.
+
+### Verification And Remaining Scope
+
+`node tests/visual/surface.test.mjs` exercises merged/separate colored drops,
+brick-edge continuity, triangle winding, finite unit normals, tags, source
+removal/reuse, alpha/scale/transient inputs, children, clipping, triangle budgets,
+material ownership, GUI/serialization and resource teardown. Smoothing checks
+cover disabled equivalence, disconnected/small-drop preservation, finite unit
+normals, triangle winding, budgeted topology and buffer teardown. The two-drop case
+has 1804 triangles, one connected component, no open edges and a red/blue blended
+join on an eight-storage-buffer device. Desktop/mobile captures are written to
+`/tmp/rzmps-surface-desktop.png` and `/tmp/rzmps-surface-mobile.png`.
+
+`node tests/visual/liquid-surface-review.mjs /tmp/rzmps-liquid-surface` captures
+the actual teapot fill after emission stops and records surface/update GPU timing
+and budget occupancy. These checks do not establish a physically improved spout
+or fix the pre-surface simulation findings below.
+
+Before smoothing and transmission, the first 16-second teapot run on Chromium / Apple Metal 3 produced 12,664 /
+28,204 / 25,468 triangles at 2 / 8 / 16 seconds. Resident bricks were 203 / 178 /
+188 of 512, with zero overflow and zero clipped particles at each checkpoint.
+The last thirty updates measured a median 1.02 ms of surface-stage GPU dispatch
+work and 5.84 ms for the whole update. These timestamp measurements exclude
+rasterization and are not an interactive FPS guarantee. Desktop/mobile captures
+show retained liquid after the 14-second emitter duration. The isotropic surface
+was visibly bumpy. Inflated rendering
+kernels may also extend beyond collider geometry even when marker collisions
+are correct; the surface does not currently clip against collider fields.
+
+Anisotropic kernels, automatic reconstruction bounds,
+manifold disambiguation of pathological Surface Nets saddle configurations,
+measured-thickness passes, UV generation and CPU mesh export remain deferred.
+The initial API is deliberately smaller than the proposed complete controls below.
+
+With four smoothing pairs, the two-drop regression retained its 1,804 triangles
+and closed topology; mean squared adjacent-normal difference fell from 0.03692
+to 0.03444 and enclosed volume changed from 0.27210 to 0.27300 (about +0.33%).
+The smoothed-water teapot review produced 12,648 / 27,524 / 25,720 triangles
+at 2 / 8 / 16 seconds, with no clipping or budget overflow. Its last thirty
+updates measured median surface compute 1.19 ms and whole-update compute 6.05 ms.
+These exclude rasterization, transmission and environment preparation costs.
+The review gives repeated dispatches unique timestamp keys so smoothing and
+pressure iterations are each counted rather than overwriting their query entries.
+Captures and metrics are in `/tmp/rzmps-liquid-smoothed-water`.
+Desktop/mobile canvas checks found 27,096 / 6,292 water-colored pixels, and an
+additional simulation step changed mesh positions. Counts vary with particle
+randomness and GPU scheduling; these are observations, not exact scene snapshots.
 
 ## API Inspiration
 
@@ -137,3 +285,4 @@ startup cost. Measure bake time separately from steady-state GPU frame time.
 [niagara]: https://dev.epicgames.com/documentation/en-us/unreal-engine/niagara-fluids-reference-in-unreal-engine
 [niagara-overview]: https://dev.epicgames.com/documentation/en-us/unreal-engine/fluid-simulation-in-unreal-engine---overview
 [unity]: https://docs.unity3d.com/Packages/com.unity.visualeffectgraph@17.0/manual/Operator-SampleTexture3D.html
+[surface-nets]: https://github.com/mikolalysenko/isosurface/blob/master/lib/surfacenets.js

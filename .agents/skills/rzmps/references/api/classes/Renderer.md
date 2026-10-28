@@ -14,6 +14,7 @@ Base renderer that filters particles and applies renderer LOD before delegating 
 
 - [`LightRenderer`](LightRenderer.md)
 - [`MeshRenderer`](MeshRenderer.md)
+- [`SurfaceRenderer`](SurfaceRenderer.md)
 - [`SpriteRenderer`](SpriteRenderer.md)
 - [`VolumeRenderer`](VolumeRenderer.md)
 - [`AudioRenderer`](AudioRenderer.md)

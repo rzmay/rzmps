@@ -5,6 +5,8 @@ export type {
   ParticleSystemGPUEmissionSupportReport,
   ParticleSystemOptions,
   SubSystemOptions,
+  SubSystemGPUCondition,
+  SubSystemGPUContext,
 } from './ParticleSystem';
 export { default as Particle } from './Particle';
 export {
@@ -106,6 +108,8 @@ export { default as Renderer } from './Renderer';
 export type { RendererOptions } from './Renderer';
 export { default as LightRenderer } from './renderers/LightRenderer';
 export { default as MeshRenderer } from './renderers/MeshRenderer';
+export { default as SurfaceRenderer } from './renderers/SurfaceRenderer';
+export type { SurfaceRendererOptions } from './renderers/SurfaceRenderer';
 export { default as SpriteRenderer } from './renderers/SpriteRenderer';
 export { default as VolumeRenderer } from './renderers/VolumeRenderer';
 export type { VolumeRendererOptions } from './renderers/VolumeRenderer';
@@ -224,7 +228,7 @@ export type { FluidSimulationOptions } from './modules/FluidSimulation';
 export { default as GasSimulation } from './modules/GasSimulation';
 export type { GasSimulationOptions } from './modules/GasSimulation';
 export { default as FLIPSimulation } from './modules/FLIPSimulation';
-export type { FLIPSimulationOptions } from './modules/FLIPSimulation';
+export type { FLIPSimulationOptions, FLIPSprayConditionOptions } from './modules/FLIPSimulation';
 export { default as ParticleSpatialGrid } from './gpu/ParticleSpatialGrid';
 export { default as SpatialGrid } from './gpu/SpatialGrid';
 export type {

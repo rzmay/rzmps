@@ -4,8 +4,9 @@ import {
   Fn, If, clamp, float, floor, instanceIndex, int, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4,
 } from 'three/tsl';
 import Module, { type ModuleOptions } from '../Module';
+import { SpatialEffectUpdatePolicy } from '../SpatialEffect';
 import type ParticleSystem from '../ParticleSystem';
-import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
+import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import ParticleSpatialGrid, {
   type ParticleSpatialGridOptions,
   type ParticleSpatialGridRenderer,
@@ -68,6 +69,7 @@ abstract class FluidSimulation extends Module {
   private readonly capOrigin = new THREE.Vector3();
   private boundsReconcileKey = '';
   private boundsReconcileNode?: ComputeNode;
+  private boundsReconcileBuffers?: GPUParticleBufferState;
   protected velocityCurrentAttribute!: StorageBufferAttribute;
   protected velocityNextAttribute!: StorageBufferAttribute;
   protected pressureCurrentAttribute!: StorageBufferAttribute;
@@ -85,17 +87,14 @@ abstract class FluidSimulation extends Module {
   private boundsGeneration = 0;
   private pendingBounds?: { grid: ParticleSpatialGrid; bounds: THREE.Box3 };
   private compactBoundsReadCount = 0;
-  private pressureNodes: ComputeNode[] = [];
-  private divergenceNode?: ComputeNode;
-  private projectionNodes = new WeakMap<object, ComputeNode>();
-  private projectionIterations = -1;
   private solidNode?: ComputeNode;
   private solidCacheKey = '';
+  private solidStateKey = '';
   private _boundsHelper?: THREE.Group;
   private _particleBoundsHelper?: THREE.Box3Helper;
   private _gridBoundsHelper?: THREE.Box3Helper;
   private _boundsHelperSystem?: ParticleSystem;
-  protected readonly particleCollisionBackend = new ThreeGPUCollisionBackend();
+  protected readonly particleCollisionBackend = new ThreeGPUCollisionBackend({ sweptMotion: true });
   private readonly particleCollisionThicknessNode = uniform(0) as UniformNode<number, 'float'>;
   protected particleCollisionThicknessValue = 0;
   private particleCollisionState = false;
@@ -177,7 +176,7 @@ abstract class FluidSimulation extends Module {
     const grid = this.getParticleSpatialGrid(particleSystem);
     if (grid) this.synchronizeGridBounds(grid);
     this.syncBoundsPolicy();
-    this.updateParticleCollisionBackend();
+    this.updateParticleCollisionBackend(particleSystem, dt);
     this.updateBoundsHelper(particleSystem);
     this.forceNode.value.copy(this.externalForce);
     this.maxVelocityNode.value = this.maxVelocity;
@@ -237,8 +236,9 @@ abstract class FluidSimulation extends Module {
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
     const key = [context.buffers.version, context.eventWriter?.version, context.eventWriter?.capacity,
       context.buffers.count, this.version, tagMask].join('|');
-    if (key !== this.boundsReconcileKey) {
+    if (key !== this.boundsReconcileKey || this.boundsReconcileBuffers !== context.buffers) {
       this.boundsReconcileKey = key;
+      this.boundsReconcileBuffers = context.buffers;
       this.boundsReconcileNode = Fn(() => {
         const particle = context.buffers.storage.createParticle(undefined, true);
         const selected = particle.alive.notEqual(uint(0)).and(tagMask === undefined
@@ -256,12 +256,6 @@ abstract class FluidSimulation extends Module {
     }
     renderer.compute(this.boundsReconcileNode!);
     grid.rebuild(renderer, context.buffers, {});
-  }
-
-  protected isClosedNeighbor(coordinate: Node<'ivec3'>): Node<'bool'> {
-    return (['x', 'y', 'z'] as const).map((axis) => float(coordinate[axis]).lessThan(0)
-      .and(this.closedMinNode[axis].greaterThan(0)).or(float(coordinate[axis]).greaterThanEqual(this.resolution)
-        .and(this.closedMaxNode[axis].greaterThan(0)))).reduce((a, b) => a.or(b));
   }
 
   protected cellIndex(coordinate: Node<'ivec3'>): Node<'uint'> {
@@ -389,11 +383,15 @@ abstract class FluidSimulation extends Module {
   }
 
   private resetGridNodes(): void {
-    this.pressureNodes = [];
-    this.divergenceNode = undefined;
-    this.projectionNodes = new WeakMap();
     this.solidNode = undefined;
     this.solidCacheKey = '';
+    this.solidStateKey = '';
+  }
+
+  protected get cacheSolidOccupancy(): boolean { return false; }
+
+  protected computeSolidCells(callback: (index: Node<'uint'>) => void): ComputeNode {
+    return this.computeCells(callback);
   }
 
   private disposeGridFields(): void {
@@ -416,14 +414,29 @@ abstract class FluidSimulation extends Module {
     ));
     colliders.forEach((collider) => collider.syncGPUTransform(context.system));
     const cacheKey = colliders
-      .map((collider) => `${collider.uuid}:${collider.version}`)
+      .map(collider => [collider.uuid, collider.version, collider.geometry?.uuid,
+        collider.bakedFieldResolution, collider.surfaceThickness, collider.inverted].join(':'))
       .join('|');
     if (cacheKey !== this.solidCacheKey) {
       this.solidCacheKey = cacheKey;
       this.solidNode = undefined;
+      this.solidStateKey = '';
     }
 
-    const solidNode = this.solidNode ?? this.computeCells(index => {
+    const stateKey = this.cacheSolidOccupancy ? [
+      this.bounds.min.toArray(), this.cellSize, this.resolution,
+      this.maxBounds, this.boundsPolicy, this.capOrigin.toArray(),
+      context.system.simulationSpace, context.system.matrixWorld.elements,
+      ...colliders.map(collider => [
+        collider.matrixWorld.elements, collider.surfaceThickness, collider.inverted,
+        collider.geometry?.uuid, attributeVersion(collider.geometry?.getAttribute('position')),
+        collider.geometry?.index?.version, collider.bakedFieldResolution,
+      ].join(',')),
+    ].join('|') : '';
+    const cacheable = this.cacheSolidOccupancy && colliders.every(collider => collider.canCacheGridOccupancy);
+    if (cacheable && this.solidNode && stateKey === this.solidStateKey) return;
+
+    const solidNode = this.solidNode ?? this.computeSolidCells(index => {
       const center = this.cellCenter(this.cellCoordinate(index));
       const occupied = this.capEnabledNode.greaterThan(0.5).and(this.boundsPolicyNode.equal(2))
         .and(this.isInsideCap(center).not()).select(float(1), float(0)).toVar('fluidSolidCell');
@@ -434,6 +447,7 @@ abstract class FluidSimulation extends Module {
     });
     this.solidNode = solidNode;
     renderer.compute(solidNode);
+    this.solidStateKey = stateKey;
   }
 
   protected isSolid(index: Node | number = instanceIndex): Node<'bool'> {
@@ -445,154 +459,11 @@ abstract class FluidSimulation extends Module {
     return float(0);
   }
 
-  protected pressureCellActive(field: Vec4Storage, index: Node<'uint'>): Node<'bool'> {
-    return field.element(index).w.greaterThan(0);
-  }
-
-  protected solveProjection(
+  protected abstract solveProjection(
     renderer: ParticleSpatialGridRenderer,
     input: Vec4Storage,
     output: Vec4Storage,
-    useOccupancy = false,
-    solid?: FloatStorage,
-  ): void {
-    const iterations = Math.max(0, Math.floor(this.pressureIterations));
-    if (iterations !== this.projectionIterations) {
-      this.projectionIterations = iterations;
-      this.projectionNodes = new WeakMap();
-    }
-    const divergence = this.divergenceNode ?? Fn(() => {
-      const coordinate = this.cellCoordinate(instanceIndex);
-      const fluidCell = solid
-        ? solid.element(instanceIndex).lessThan(0.5)
-        : float(1).greaterThan(0);
-      const active = (useOccupancy
-        ? this.pressureCellActive(input, instanceIndex)
-        : float(1).greaterThan(0)).and(fluidCell);
-      const left = this.velocityAt(input, coordinate, -1, 0, 0, useOccupancy, solid).x;
-      const right = this.velocityAt(input, coordinate, 1, 0, 0, useOccupancy, solid).x;
-      const down = this.velocityAt(input, coordinate, 0, -1, 0, useOccupancy, solid).y;
-      const up = this.velocityAt(input, coordinate, 0, 1, 0, useOccupancy, solid).y;
-      const back = this.velocityAt(input, coordinate, 0, 0, -1, useOccupancy, solid).z;
-      const front = this.velocityAt(input, coordinate, 0, 0, 1, useOccupancy, solid).z;
-      this.divergence.element(instanceIndex).assign(
-        active.select(
-          right.sub(left).add(up.sub(down)).add(front.sub(back)).mul(0.5).div(this.cellSizeNode)
-            .sub(this.targetDivergence(instanceIndex)),
-          float(0),
-        ),
-      );
-      this.pressureCurrent.element(instanceIndex).assign(0);
-    })().compute(this.cellCount);
-    this.divergenceNode = divergence;
-    renderer.compute(divergence);
-
-    for (let iteration = 0; iteration < iterations; iteration += 1) {
-      const source = iteration % 2 === 0 ? this.pressureCurrent : this.pressureNext;
-      const target = iteration % 2 === 0 ? this.pressureNext : this.pressureCurrent;
-      const node = this.pressureNodes[iteration] ?? Fn(() => {
-        const coordinate = this.cellCoordinate(instanceIndex);
-        const fluidCell = solid
-          ? solid.element(instanceIndex).lessThan(0.5)
-          : float(1).greaterThan(0);
-        const active = (useOccupancy
-          ? this.pressureCellActive(input, instanceIndex)
-          : float(1).greaterThan(0)).and(fluidCell);
-        const sum = this.pressureAt(source, coordinate, -1, 0, 0, useOccupancy ? input : undefined, solid)
-          .add(this.pressureAt(source, coordinate, 1, 0, 0, useOccupancy ? input : undefined, solid))
-          .add(this.pressureAt(source, coordinate, 0, -1, 0, useOccupancy ? input : undefined, solid))
-          .add(this.pressureAt(source, coordinate, 0, 1, 0, useOccupancy ? input : undefined, solid))
-          .add(this.pressureAt(source, coordinate, 0, 0, -1, useOccupancy ? input : undefined, solid))
-          .add(this.pressureAt(source, coordinate, 0, 0, 1, useOccupancy ? input : undefined, solid));
-        target.element(instanceIndex).assign(
-          active.select(
-            sum.sub(this.divergence.element(instanceIndex).mul(this.cellSizeNode.mul(this.cellSizeNode))).div(6),
-            float(0),
-          ),
-        );
-      })().compute(this.cellCount);
-      this.pressureNodes[iteration] = node;
-      renderer.compute(node);
-    }
-
-    const pressure = iterations % 2 === 0 ? this.pressureCurrent : this.pressureNext;
-    const project = this.projectionNodes.get(input) ?? Fn(() => {
-      const coordinate = this.cellCoordinate(instanceIndex);
-      const source = vec3(input.element(instanceIndex).xyz);
-      const fluidCell = solid
-        ? solid.element(instanceIndex).lessThan(0.5)
-        : float(1).greaterThan(0);
-      const active = (useOccupancy
-        ? input.element(instanceIndex).w.greaterThan(0)
-        : float(1).greaterThan(0)).and(fluidCell);
-      const gradient = vec3(
-        this.pressureAt(pressure, coordinate, 1, 0, 0, useOccupancy ? input : undefined, solid).sub(
-          this.pressureAt(pressure, coordinate, -1, 0, 0, useOccupancy ? input : undefined, solid),
-        ),
-        this.pressureAt(pressure, coordinate, 0, 1, 0, useOccupancy ? input : undefined, solid).sub(
-          this.pressureAt(pressure, coordinate, 0, -1, 0, useOccupancy ? input : undefined, solid),
-        ),
-        this.pressureAt(pressure, coordinate, 0, 0, 1, useOccupancy ? input : undefined, solid).sub(
-          this.pressureAt(pressure, coordinate, 0, 0, -1, useOccupancy ? input : undefined, solid),
-        ),
-      ).mul(0.5).div(this.cellSizeNode);
-      output.element(instanceIndex).assign(vec4(
-        active.select(this.clampVelocity(source.sub(gradient)), vec3(0)),
-        useOccupancy ? input.element(instanceIndex).w : float(0),
-      ));
-    })().compute(this.cellCount);
-    this.projectionNodes.set(input, project);
-    renderer.compute(project);
-  }
-
-  private velocityAt(
-    field: Vec4Storage,
-    coordinate: Node<'ivec3'>,
-    x: number,
-    y: number,
-    z: number,
-    useOccupancy = false,
-    solid?: FloatStorage,
-  ): Node<'vec3'> {
-    const neighbor = coordinate.add(ivec3(x, y, z));
-    const inside = vec3(neighbor).greaterThanEqual(vec3(0)).all()
-      .and(vec3(neighbor).lessThan(vec3(this.resolution)).all());
-    const neighborValue = field.element(this.cellIndex(ivec3(clamp(
-      vec3(neighbor), vec3(0), vec3(this.resolution - 1),
-    ))));
-    const solidNeighbor = (solid ? inside.and(solid.element(this.cellIndex(ivec3(clamp(
-      vec3(neighbor), vec3(0), vec3(this.resolution - 1),
-    )))).greaterThanEqual(0.5)) : inside.and(false)).or(this.isClosedNeighbor(neighbor));
-    const center = field.element(this.cellIndex(coordinate)).xyz;
-    const valid = useOccupancy ? inside.and(neighborValue.w.greaterThan(0)) : inside;
-    // Reflect the normal component at solid faces so divergence includes wall
-    // inflow and pressure can support gravity in a filled container.
-    const reflected = center.mul(vec3(x === 0 ? 1 : -1, y === 0 ? 1 : -1, z === 0 ? 1 : -1));
-    return solidNeighbor.select(reflected, valid.select(neighborValue.xyz, center)) as Node<'vec3'>;
-  }
-
-  private pressureAt(
-    field: FloatStorage,
-    coordinate: Node<'ivec3'>,
-    x: number,
-    y: number,
-    z: number,
-    occupancy?: Vec4Storage,
-    solid?: FloatStorage,
-  ): Node<'float'> {
-    const neighbor = coordinate.add(ivec3(x, y, z));
-    const inside = vec3(neighbor).greaterThanEqual(vec3(0)).all()
-      .and(vec3(neighbor).lessThan(vec3(this.resolution)).all());
-    const clamped = ivec3(clamp(vec3(neighbor), vec3(0), vec3(this.resolution - 1)));
-    const index = this.cellIndex(clamped);
-    const solidNeighbor = (solid ? inside.and(solid.element(index).greaterThanEqual(0.5)) : inside.not())
-      .or(this.isClosedNeighbor(neighbor));
-    const valid = (occupancy ? inside.and(this.pressureCellActive(occupancy, index)) : inside)
-      .and(solidNeighbor.not());
-    const boundaryValue = solidNeighbor
-      .select(field.element(this.cellIndex(coordinate)), float(0));
-    return valid.select(field.element(index), boundaryValue) as Node<'float'>;
-  }
+  ): void;
 
   private synchronizeGridBounds(grid: ParticleSpatialGrid): void {
     if (grid.autoExpand || !grid.cubicBounds || !grid.powerOfTwoBounds) {
@@ -712,6 +583,7 @@ abstract class FluidSimulation extends Module {
     this.lastBoundsRead = 0;
     this.boundsReconcileNode = undefined;
     this.boundsReconcileKey = '';
+    this.boundsReconcileBuffers = undefined;
     super.cleanup();
     this.particleCollisionBackend.destroy();
     if (this._boundsHelper) {
@@ -728,7 +600,7 @@ abstract class FluidSimulation extends Module {
     this.disposeGridFields();
   }
 
-  private updateParticleCollisionBackend(): void {
+  private updateParticleCollisionBackend(system?: ParticleSystem, dt?: number): void {
     if (!this.usesParticleColliderSweeps) return;
     const colliders = this.spatialEffects.filter((effect): effect is FluidCollider => (
       effect instanceof FluidCollider
@@ -744,10 +616,15 @@ abstract class FluidSimulation extends Module {
     const cacheKey = colliders
       .map((collider) => `${collider.uuid}:${collider.version}`)
       .join('|');
-    this.particleCollisionBackend.staticObjects = colliders.map((collider) => (
-      collider.getCollisionObject()
-    ));
-    this.particleCollisionBackend.update();
+    const objects = (policies: SpatialEffectUpdatePolicy[]) => colliders
+      .filter(collider => policies.includes(collider.updatePolicy))
+      .map(collider => collider.getCollisionObject());
+    this.particleCollisionBackend.staticObjects = objects([SpatialEffectUpdatePolicy.Static]);
+    this.particleCollisionBackend.dynamicObjects = objects([SpatialEffectUpdatePolicy.TransformDynamic]);
+    this.particleCollisionBackend.geometryDynamicObjects = objects([
+      SpatialEffectUpdatePolicy.Auto, SpatialEffectUpdatePolicy.GeometryDynamic,
+    ]);
+    this.particleCollisionBackend.update(dt, system?.renderFrameToken);
     const nextState = this.particleCollisionBackend.hasGeometry;
     if (nextState !== this.particleCollisionState || cacheKey !== this.particleCollisionCacheKey) {
       this.particleCollisionState = nextState;
@@ -802,3 +679,8 @@ abstract class FluidSimulation extends Module {
 }
 
 export default FluidSimulation;
+
+function attributeVersion(attribute?: THREE.BufferAttribute | THREE.InterleavedBufferAttribute): number {
+  if (!attribute) return -1;
+  return 'version' in attribute ? attribute.version : attribute.data.version;
+}

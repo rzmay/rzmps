@@ -186,6 +186,16 @@ readonly supportsGPU: true = true;
 
 ***
 
+<a id="sweptmotion"></a>
+
+### sweptMotion
+
+```ts
+readonly sweptMotion: boolean;
+```
+
+***
+
 <a id="updatepolicy"></a>
 
 ### updatePolicy
@@ -219,6 +229,38 @@ get hasGeometry(): boolean;
 ##### Returns
 
 `boolean`
+
+***
+
+<a id="hasmotion"></a>
+
+### hasMotion
+
+#### Get Signature
+
+```ts
+get hasMotion(): boolean;
+```
+
+##### Returns
+
+`boolean`
+
+***
+
+<a id="motionversion"></a>
+
+### motionVersion
+
+#### Get Signature
+
+```ts
+get motionVersion(): number;
+```
+
+##### Returns
+
+`number`
 
 ## Methods
 
@@ -322,6 +364,40 @@ Returns a TSL hit record for a swept capsule query.
 
 ***
 
+<a id="querymovingcapsule"></a>
+
+### queryMovingCapsule()
+
+```ts
+queryMovingCapsule(
+   start,
+   end,
+   radius
+): Node;
+```
+
+Relative-motion sweep against rigid walls. Ordinary queryCapsule remains a current-pose query.
+
+#### Parameters
+
+##### start
+
+`Node`\<`"vec3"`\>
+
+##### end
+
+`Node`\<`"vec3"`\>
+
+##### radius
+
+`Node`\<`"float"`\>
+
+#### Returns
+
+`Node`
+
+***
+
 <a id="setevaluatedgeometry"></a>
 
 ### setEvaluatedGeometry()
@@ -353,10 +429,20 @@ Supplies already-evaluated geometry without a GPU-to-CPU particle readback.
 ### update()
 
 ```ts
-update(): void;
+update(_deltaTime?, frameToken?): void;
 ```
 
 Detects membership, topology, transform, and vertex changes and updates acceleration data.
+
+#### Parameters
+
+##### \_deltaTime?
+
+`number`
+
+##### frameToken?
+
+`unknown`
 
 #### Returns
 

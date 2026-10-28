@@ -7,6 +7,7 @@ import {
 import SpatialGrid from './SpatialGrid';
 import type { ParticleSpatialGridOptions, ParticleSpatialGridRenderer } from './ParticleSpatialGrid';
 import type { GPUParticleRenderBufferState, GPUParticleUpdateContext } from './Particle';
+import { destroyGPUStorageAttribute } from './Particle';
 
 type UintStorage = { element(index: Node | number): Node<'uint'> };
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
@@ -46,6 +47,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
   private markNodes = new WeakMap<object, ComputeNode>();
   private particleNode?: ComputeNode;
   private particleKey = '';
+  private particleBuffers?: GPUParticleUpdateContext['buffers'];
   private snapshotNode?: ComputeNode;
   private readonly sourceTileSide: number;
   private readonly sourceMaskWords: number;
@@ -126,6 +128,39 @@ export default class SparseVolumeGrid extends SpatialGrid {
     // Three's runtime supports indirect attributes; its current declarations do not.
     node.dispatchSize = this.dispatchAttributes[(fresh ? 2 : 0) + (faces ? 1 : 0)] as unknown as number[];
     return node;
+  }
+
+  /** Compact brick execution with dense field addresses, including uniquely owned shared faces. */
+  computeDense(callback: (index: Node<'uint'>) => void, faces = false): ComputeNode {
+    return this.compute(index => {
+      const b = this.brickSide;
+      const size = faces ? (b + 1) ** 3 : this.cellsPerBrick;
+      const slot = uint(index.div(size));
+      const brick = this.unpack(this.slots.element(slot).sub(1), 2 ** this.brickSubdivisions);
+      const local = this.unpack(index.mod(size), faces ? b + 1 : b);
+      const coordinate = brick.mul(b).add(local);
+      if (!faces) {
+        callback(this.flatten(coordinate, this.cellsPerAxis));
+        return;
+      }
+      // The upper brick owns a shared face. At sparse edges, the lower brick
+      // supplies the otherwise missing face, including domain boundaries.
+      const owner = ivec3(min(vec3(coordinate.div(b)), vec3(2 ** this.brickSubdivisions - 1)));
+      const page = this.pages.element(this.flatten(owner, 2 ** this.brickSubdivisions));
+      const owns = page.equal(slot.add(1)).or(page.equal(0));
+      // At edges/corners more than one lower brick can touch a missing owner;
+      // only axis faces are used, but each dense vec4 still needs one writer.
+      const lower = ivec3(max(vec3(coordinate.sub(1).div(b)), vec3(0)));
+      const selected = uint(0).toVar();
+      for (const z of [0, 1]) for (const y of [0, 1]) for (const x of [0, 1]) {
+        const candidate = ivec3(x ? owner.x : lower.x, y ? owner.y : lower.y, z ? owner.z : lower.z);
+        const encoded = this.pages.element(this.flatten(candidate, 2 ** this.brickSubdivisions));
+        If(encoded.greaterThan(0), () => selected.assign(encoded));
+      }
+      If(owns.and(selected.equal(slot.add(1))), () => {
+        callback(this.flatten(coordinate, this.cellsPerAxis + 1));
+      });
+    }, faces);
   }
 
   /** Rebuilds GPU-only work lists after page assignments change. */
@@ -251,10 +286,10 @@ export default class SparseVolumeGrid extends SpatialGrid {
   }
 
   rebuild(
-    context: GPUParticleUpdateContext,
+    context: Pick<GPUParticleUpdateContext, 'buffers' | 'deltaTimeNode'>,
     renderer: ParticleSpatialGridRenderer,
-    density: Vec4Storage,
-    velocity: Vec4Storage,
+    density: Vec4Storage | undefined,
+    velocity: Vec4Storage | undefined,
     minimum: Node<'vec3'>,
     cellSize: Node<'float'>,
     cutoff: Node<'float'>,
@@ -271,30 +306,33 @@ export default class SparseVolumeGrid extends SpatialGrid {
       this.previousPages.element(instanceIndex).assign(this.pages.element(instanceIndex));
     })().compute(this.brickCount);
     renderer.compute(this.snapshotNode);
-    const mark = this.markNodes.get(density) ?? this.compute(index => {
-      If(density.element(index).x.greaterThanEqual(cutoff), () => {
-        const coordinate = vec3(this.coordinate(index)).add(0.5);
-        // Preserve emitted gas independently of the source particles, with transport/stencil halos.
-        const travel = velocity.element(index).xyz.length().mul(context.deltaTimeNode).div(cellSize);
-        this.request(coordinate, travel.add(3));
-      });
-    });
-    this.markNodes.set(density, mark);
-    if (previousBounds) {
-      const oldMin = vec3(previousBounds.min);
-      const oldSize = previousBounds.getSize(new THREE.Vector3()).x / this.cellsPerAxis;
-      renderer.compute(this.compute(index => {
+    if (density && velocity) {
+      const mark = this.markNodes.get(density) ?? this.compute(index => {
         If(density.element(index).x.greaterThanEqual(cutoff), () => {
-          const position = vec3(this.coordinate(index)).add(0.5).mul(oldSize).add(oldMin);
+          const coordinate = vec3(this.coordinate(index)).add(0.5);
+          // Preserve emitted gas independently of the source particles, with transport/stencil halos.
           const travel = velocity.element(index).xyz.length().mul(context.deltaTimeNode).div(cellSize);
-          this.request(position.sub(minimum).div(cellSize), travel.add(4));
+          this.request(coordinate, travel.add(3));
         });
-      }));
-    } else renderer.compute(mark);
+      });
+      this.markNodes.set(density, mark);
+      if (previousBounds) {
+        const oldMin = vec3(previousBounds.min);
+        const oldSize = previousBounds.getSize(new THREE.Vector3()).x / this.cellsPerAxis;
+        renderer.compute(this.compute(index => {
+          If(density.element(index).x.greaterThanEqual(cutoff), () => {
+            const position = vec3(this.coordinate(index)).add(0.5).mul(oldSize).add(oldMin);
+            const travel = velocity.element(index).xyz.length().mul(context.deltaTimeNode).div(cellSize);
+            this.request(position.sub(minimum).div(cellSize), travel.add(4));
+          });
+        }));
+      } else renderer.compute(mark);
+    }
 
-    const key = [context.buffers.version, context.buffers.count, tagMask].join('|');
-    if (key !== this.particleKey) {
+    const key = [context.buffers.version, tagMask].join('|');
+    if (key !== this.particleKey || this.particleBuffers !== context.buffers) {
       this.particleKey = key;
+      this.particleBuffers = context.buffers;
       this.particleNode = Fn(() => {
         const particle = context.buffers.storage.createParticle(undefined, true);
         const selected = tagMask === undefined ? particle.alive.notEqual(uint(0))
@@ -311,6 +349,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
         });
       })().compute(context.buffers.count);
     }
+    this.particleNode!.count = context.buffers.count;
     renderer.compute(this.particleNode!);
     this.allocateNode ??= Fn(() => { If(instanceIndex.equal(0), () => {
       this.counters.element(0).assign(0);
@@ -353,9 +392,12 @@ export default class SparseVolumeGrid extends SpatialGrid {
     this.copySourceMask(renderer);
   }
 
-  dispose(): void {
+  dispose(renderer?: ParticleSpatialGridRenderer): void {
     [this.pagesAttribute, this.previousPagesAttribute,
       this.requestsAttribute, this.diagnosticsAttribute,
-      ...this.dispatchAttributes].forEach(attribute => attribute.dispose());
+      ...this.dispatchAttributes].forEach(attribute => {
+      destroyGPUStorageAttribute(renderer, attribute);
+      attribute.dispose();
+    });
   }
 }

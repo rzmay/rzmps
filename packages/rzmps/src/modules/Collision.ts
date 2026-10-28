@@ -152,7 +152,8 @@ class Collision extends Module {
     }
 
     this._backend?.setGPUProcessingActive?.(system.isGPUProcessingActive);
-    this._backend?.update?.(deltaTime);
+    if (this._backend instanceof ThreeGPUCollisionBackend) this._backend.update(deltaTime, system.renderFrameToken);
+    else this._backend?.update?.(deltaTime);
   }
 
   public hasGPUCollisionBackend(): boolean {

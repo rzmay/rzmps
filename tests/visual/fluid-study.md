@@ -554,3 +554,92 @@ Desktop/mobile gas-flow captures at 2/5/10 seconds are in
 splitter and behind the opaque scene geometry, with no negative/nonfinite
 field samples. The final 30-second teapot regression measured zero
 near-coincident markers, 19.2% below half spacing, and median spacing 0.90.
+
+## Liquid Lifecycle And Settling Correction (October 28, 2026)
+
+Three related symptoms were investigated independently: a broken clear/restart,
+an initially porous/over-large liquid volume, and sustained circulation at rest.
+
+### Lifecycle
+
+`clearParticles()` disposes canonical particle buffers and visits each renderer
+with an empty CPU list before calling `clear()`. SurfaceRenderer rejected that
+empty visit, interrupting stop/reset. It now accepts empty clearing while still
+rejecting nonempty CPU reconstruction. FLIP's cached gather/transfer/separation
+graphs also keyed buffer versions but not buffer identity; new particle storage
+can reuse the same version. Caches now track buffer and query-grid identity.
+The general fluid cap-reconciliation graph also tracks buffer identity.
+
+### Pressure And Grid Scale
+
+The former liquid solver used centered divergence and gradient but an immediate
+six-neighbor pressure Laplacian. Composing those centered derivatives actually
+produces a two-cell-wide stencil, not that Laplacian. Consequently, even a
+converged pressure iteration did not guarantee divergence-free transferred flow;
+wall handling further amplified the mismatch.
+
+Gas's existing matched face-based projection is now a shared internal
+`FluidPressureProjection` supporting sparse gas and dense liquid layouts. Liquid
+adds air/fluid classification, zero air pressure, closed solid faces, its existing
+compression-only density correction, and before/after face snapshots. G2P uses
+component-staggered, valid-donor-normalized face samples for both FLIP deltas and
+PIC mixing. This supersedes the older collocated-liquid limitation above.
+Particle-to-grid gathering remains center-based with face reconstruction; this
+is not a claim of a complete direct-to-face P2G/APIC implementation.
+Liquid pressure iterations now mean full red/black sweeps, as they already did
+for gas, rather than the former single Jacobi sweep.
+
+This follows the staggered-grid transfer/projection principles in
+[Mueller's FLIP tutorial](https://matthias-research.github.io/pages/tenMinutePhysics/18-flip.pdf).
+[Houdini's FLIP documentation](https://www.sidefx.com/docs/houdini/nodes/dop/flipsolver)
+also distinguishes grid projection, positional separation and reseeding. Raising
+viscosity or adding a sleep threshold would conceal this error rather than fix
+the pressure operator. No sleeping, extra drag or sticky collider response was added.
+
+The teapot preset's off-center requested box became a 16-unit cube when cubed
+and then origin-centered. Automatic bounds later shrank to 8 units, changing cell
+size from 0.25 to 0.125 while the particle rest distance stayed fixed. Starting
+with centered [-4,4] bounds uses the eventual finer grid immediately; automatic
+padding, shrinking and the 16-unit cap remain supported. This removes the observed
+initial coarse-to-fine transition, not all possible adaptive-resolution changes.
+
+### Measurements And Limits
+
+A 30-second baseline retained 6,292 particles but had RMS speed 0.284,
+0.8% below half rest spacing, and median spacing 0.916. With face projection and
+the centered initial domain, repeated runs measured RMS speed 0.037-0.038,
+zero below-half-spacing particles, and median spacing about 0.982. The domain
+remained 8 units at all sampled times. After emission ended, the 95th-percentile
+liquid height changed by only about 0.006 units between seconds 16 and 30.
+This is a substantial reduction in churning, not exact mathematical rest.
+
+`flip-settling-review.mjs` now asserts these broad invariants and exercises
+stop(clear)/start, reset, and clear/start. Each restarted run emitted 892 live
+particles after two seconds, spread more than 2.5 units laterally and rebuilt
+over 13,000 triangles, with no browser errors or triangle-budget overflow.
+`flip-projection.test.mjs` checks a wall-bounded liquid column against the
+actual face-divergence/pressure residual and requires zero blocked-face flux.
+With 512 convergence sweeps for that numerical test, divergence RMS fell from
+0.266667 to 0.000923, with zero measured operator-residual error or blocked flux.
+This deliberately converged test does not change the demo's 28-iteration budget.
+
+The 30-second visual review captures 2/6/8/12/30-second checkpoints in
+`/tmp/rzmps-liquid-settling-corrected`. The settled mesh had 16,008 triangles,
+with no clipped particles or budget overflow. Its final thirty updates measured
+median GPU surface compute 1.19 ms and whole-update compute 5.85 ms, excluding
+rasterization/transmission. Desktop/mobile checks found 29,290 / 6,762 water-colored
+pixels and verified changing mesh positions on the next simulation step.
+
+Remaining limitations are binary/staircase solid occupancy, a binary free
+surface, finite pressure convergence and sub-grid marker rearrangement. Cut-cell
+wall fractions, a sub-cell liquid level set, or particle reseeding could improve
+those further, but are not part of this bounded corrective pass. The collision
+BVH, renderer kernel, separation settings, PIC ratio and gas tuning are unchanged.
+
+The broad regression's confinement ratio assertion assumed its original 64-cell
+gas grid, but the current demo uses 128 cells. An isolated comparison with the
+unmodified HEAD gas-projection class produced bit-identical speeds to the shared
+helper: 0.3309803 without confinement and 0.4530248 with confinement. The old
+1.5x assertion thus already failed at current demo quality. The numerical test
+now explicitly requests its reference 64-cell quality rather than weakening the
+assertion or changing gas behavior.

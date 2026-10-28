@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import SpatialEffect, {
+  SpatialEffectUpdatePolicy,
   type SpatialEffectModifier,
   type SpatialEffectOptions,
 } from '../SpatialEffect';
@@ -27,6 +28,14 @@ export default class FluidCollider extends SpatialEffect {
   gridOccupancy: boolean;
   particleCollision: boolean;
   private readonly collisionMesh: THREE.Mesh;
+  private readonly customOccupancy: boolean;
+
+  /** Whether unchanged geometry and transforms fully determine grid occupancy. @internal */
+  get canCacheGridOccupancy(): boolean {
+    return !this.customOccupancy && !this.conditionGPU
+      && (this.updatePolicy === SpatialEffectUpdatePolicy.Static
+        || this.updatePolicy === SpatialEffectUpdatePolicy.TransformDynamic);
+  }
 
   get surfaceThickness(): number { return this.feather; }
   set surfaceThickness(value: number) {
@@ -71,6 +80,8 @@ export default class FluidCollider extends SpatialEffect {
       feather: Math.max(0, options.surfaceThickness ?? 0),
     });
     this.gridOccupancy = options.gridOccupancy ?? true;
+    this.customOccupancy = options.test !== undefined || options.testGPU != null
+      || options.featherEasing !== undefined;
     this.particleCollision = options.particleCollision ?? true;
     this.collisionMesh = new THREE.Mesh(this.geometry, FluidCollider.collisionMaterial);
     this.collisionMesh.name = 'Fluid Collider GPU Geometry';

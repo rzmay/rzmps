@@ -130,10 +130,32 @@ export interface ParticleSystemOptions {
   liveCubemapIntensity: number;
 }
 
+/** Source-system context for a subsystem's GPU eligibility predicate. */
+export interface SubSystemGPUContext {
+  /** The parent system whose live particle or captured event is being tested. */
+  system: ParticleSystem;
+  childSystem: ParticleSystem;
+  /** Current parent-particle neighborhood, when requested by the predicate. */
+  spatialGrid?: ParticleSpatialGrid;
+  /** Undefined for continuous emission; captured GPUEventType for event emission. */
+  eventType?: Node<'uint'>;
+}
+
+/** TSL predicate; optional grid options request a fresh, system-managed parent query grid. */
+export type SubSystemGPUCondition = ((
+  particle: GPUParticleLike,
+  deltaTime: Node<'float'>,
+  context: SubSystemGPUContext,
+) => Node<'bool'>) & { spatialGridOptions?: Partial<ParticleSpatialGridOptions> };
+
 /** Parent-event emission and inheritance; child systems share their parent simulation clock. */
 export interface SubSystemOptions {
   /** Predicate or switch selecting whether a parent particle may trigger child emission. */
   shouldEmit: boolean | ((particle: Particle) => boolean);
+  /** GPU counterpart of shouldEmit. Replaces a CPU callback on GPU; false still disables emission.
+   * Event predicates receive the captured source state, not a potentially recycled live slot.
+   * CPU simulation continues to use shouldEmit. Defaults to null. */
+  shouldEmitGPU: SubSystemGPUCondition | null;
   /** Fraction of eligible parent particles selected for subsystem emission. */
   ratio: number;
   /** Emits while a parent particle remains alive, using an independent emission context. */
@@ -574,7 +596,7 @@ class ParticleSystem extends THREE.Object3D {
 
     this.subSystems.forEach((options, subSystem) => {
       const subReasons: string[] = [];
-      if (typeof options.shouldEmit === 'function') {
+      if (typeof options.shouldEmit === 'function' && !options.shouldEmitGPU) {
         subReasons.push('Subsystem shouldEmit function requires an explicit GPU predicate.');
       }
       if (
@@ -782,6 +804,12 @@ class ParticleSystem extends THREE.Object3D {
   private _gpuEmissionFinalizeComputeCache?: GPUComputeListCache;
   private _gpuContinuousSubSystemComputeCache?: GPUComputeListCache;
   private _gpuEventSubSystemComputeCache?: GPUComputeListCache;
+  private readonly _gpuSubSystemPredicates = new Map<string, {
+    key: string;
+    attribute: StorageBufferAttribute;
+    node?: ComputeNode;
+    storage: { element(index: Node | number): Node<'uint'> };
+  }>();
   private _gpuSimulationComputeCache?: GPUComputeCache;
   private readonly _gpuSimulationComputeCaches = new Map<string, GPUComputeCache>();
   private readonly _gpuModifierComputeCaches = new Map<string, GPUComputeCache>();
@@ -1774,6 +1802,7 @@ class ParticleSystem extends THREE.Object3D {
 
     const emitters = this.emitters;
     if (emitters.length === 0) return;
+    const predicate = this._computeGPUSubSystemPredicate(input, false);
 
     const contextCount = parentBuffers.capacity * emitters.length;
     const emitterInstances = this._acquireGPUEmitterInstances(
@@ -1784,10 +1813,11 @@ class ParticleSystem extends THREE.Object3D {
     );
     const cacheKey = [
       'continuous-subsystem',
-      `parent:${parentBuffers.version}:${parentBuffers.capacity}`,
+      `parent:${this._getObjectSignature(parentBuffers)}:${parentBuffers.version}:${parentBuffers.capacity}`,
       `child:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
       `options:${this._getSubSystemGPUOptionsSignature(input.options)}`,
+      `predicate:${predicate ? this._getObjectSignature(predicate) : 'none'}`,
       `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
 
@@ -1809,9 +1839,8 @@ class ParticleSystem extends THREE.Object3D {
           const ratioEligible = input.options.ratio >= 1
             ? uint(1).equal(uint(1))
             : hash(instanceIndex.add(parent.generation.mul(65537))).lessThanEqual(float(input.options.ratio));
-          const predicateEligible = typeof input.options.shouldEmit === 'boolean'
-            ? input.options.shouldEmit
-            : false;
+          const predicateEligible = predicate ? predicate.storage.element(instanceIndex).notEqual(0)
+            : input.options.shouldEmit === true;
           const eligible = parent.alive.notEqual(uint(0))
             .and(ratioEligible)
             .and(predicateEligible);
@@ -1909,6 +1938,7 @@ class ParticleSystem extends THREE.Object3D {
 
     const emitters = this.emitters;
     if (emitters.length === 0) return;
+    const predicate = this._computeGPUSubSystemPredicate(input, true);
 
     const runs = this._acquireGPUEmissionRuns(
       Math.min(eventBuffer.capacity, Math.max(this.maxParticles, 1)),
@@ -1924,11 +1954,12 @@ class ParticleSystem extends THREE.Object3D {
     const reader = eventBuffer.createReader();
     const cacheKey = [
       'event-subsystem',
-      `events:${eventBuffer.version}:${eventBuffer.capacity}`,
+      `events:${this._getObjectSignature(eventBuffer)}:${eventBuffer.version}:${eventBuffer.capacity}`,
       `runs:${runs.capacity}`,
       `child:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
       `options:${this._getSubSystemGPUOptionsSignature(input.options)}`,
+      `predicate:${predicate ? this._getObjectSignature(predicate) : 'none'}`,
       `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
 
@@ -1950,9 +1981,8 @@ class ParticleSystem extends THREE.Object3D {
             const ratioEligible = input.options.ratio >= 1
               ? uint(1).equal(uint(1))
               : hash(event.slot.add(event.generation.mul(65537))).lessThanEqual(float(input.options.ratio));
-            const predicateEligible = typeof input.options.shouldEmit === 'boolean'
-              ? input.options.shouldEmit
-              : false;
+            const predicateEligible = predicate ? predicate.storage.element(eventIndex).notEqual(0)
+              : input.options.shouldEmit === true;
             const impulseEligible = event.type.notEqual(uint(GPUEventType.Collision))
               .or(event.collisionImpulse.length().greaterThan(float(input.options.impulseThreshold)));
 
@@ -2082,6 +2112,60 @@ class ParticleSystem extends THREE.Object3D {
     }
 
     this._gpuEventSubSystemComputeCache.nodes.forEach((node) => renderer.compute(node));
+  }
+
+  private _computeGPUSubSystemPredicate(
+    input: GPUSubSystemFrameInput,
+    events: boolean,
+  ) {
+    const condition = input.options.shouldEmitGPU;
+    if (!condition) return undefined;
+    const renderer = this.sceneRenderer;
+    const buffers = input.parent._gpuBuffers;
+    const eventBuffer = events ? input.parent._gpuFrameEventBuffer : undefined;
+    if (!isWebGPURenderer(renderer) || !buffers || (events && !eventBuffer)) return undefined;
+    const count = eventBuffer?.capacity ?? buffers.capacity;
+    const phase = events ? 'event' : 'continuous';
+    let state = this._gpuSubSystemPredicates.get(phase);
+    if (!state || state.attribute.count !== count) {
+      state?.node?.dispose();
+      if (state) {
+        destroyGPUStorageAttribute(renderer, state.attribute);
+        state.attribute.dispose();
+      }
+      const attribute = new StorageBufferAttribute(new Uint32Array(count), 1);
+      state = { key: '', attribute, storage: storage(attribute, 'uint', count) };
+      this._gpuSubSystemPredicates.set(phase, state);
+    }
+    const grid = condition.spatialGridOptions
+      ? input.parent.acquireParticleSpatialGrid(condition.spatialGridOptions) : undefined;
+    // Parent integration/collision has already completed; its module query grid
+    // may still describe pre-movement positions, so rebuild before eligibility.
+    grid?.rebuild(renderer, buffers, {});
+    const key = [this._getObjectSignature(condition), this._getObjectSignature(buffers), buffers.version,
+      eventBuffer ? this._getObjectSignature(eventBuffer) : '', eventBuffer?.version,
+      grid ? this._getObjectSignature(grid) : '', grid?.resourceVersion,
+      input.options.shouldEmit === false].join('|');
+    if (key !== state.key) {
+      state.node?.dispose();
+      state.key = key;
+      const target = state.storage;
+      const reader = eventBuffer?.createReader();
+      state.node = Fn(() => {
+        target.element(instanceIndex).assign(0);
+        const eligible = reader ? instanceIndex.lessThan(reader.count())
+          : buffers.storage.createParticle(undefined, true).alive.notEqual(0);
+        If(eligible.and(input.options.shouldEmit !== false), () => {
+          const event = reader?.load(instanceIndex);
+          const particle = event?.particle ?? buffers.storage.createParticle(undefined, true);
+          target.element(instanceIndex).assign(condition(particle, input.parent._gpuDeltaTimeNode, {
+            system: input.parent, childSystem: this, spatialGrid: grid, eventType: event?.type,
+          }).select(1, 0));
+        });
+      })().compute(count);
+    }
+    renderer.compute(state.node!);
+    return state;
   }
 
   private _computeGPUSimulationPhase(
@@ -2532,6 +2616,13 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _disposeGPUComputeCaches(): void {
+    this._gpuSubSystemPredicates.forEach(state => {
+      state.node?.dispose();
+      destroyGPUStorageAttribute(isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined,
+        state.attribute);
+      state.attribute.dispose();
+    });
+    this._gpuSubSystemPredicates.clear();
     this._gpuLODCull?.node.dispose();
     this._gpuLODCull = undefined;
     this._gpuEmissionPrepareComputeCache?.nodes.forEach((node) => node.dispose?.());
@@ -2566,8 +2657,8 @@ class ParticleSystem extends THREE.Object3D {
     particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
   ): void {
-    const deltaTime = this._gpuDeltaTimeNode;
-    const gravity = this._gpuGravityNode;
+    const deltaTime = context.deltaTimeNode;
+    const gravity = context.gravityNode;
     const gravityModifier = this._gpuParameters.number(
       'gravityModifier.integrate',
       () => this.gravityModifier,
@@ -3157,7 +3248,7 @@ class ParticleSystem extends THREE.Object3D {
   private _canUpdateAsGPUSubSystem(parent: ParticleSystem, options: SubSystemOptions): boolean {
     if (!parent._gpuBuffers || !parent._isGPUProcessingActive) return false;
     if (!this.gpuProcessing || !isWebGPURenderer(this.sceneRenderer ?? parent.sceneRenderer)) return false;
-    if (typeof options.shouldEmit === 'function') return false;
+    if (typeof options.shouldEmit === 'function' && !options.shouldEmitGPU) return false;
     if (!this.emitters.length) return false;
 
     return options.emitContinuous
@@ -3186,6 +3277,7 @@ class ParticleSystem extends THREE.Object3D {
       options.impulseAffectsAlignment,
       options.impulseThreshold,
       String(options.shouldEmit),
+      options.shouldEmitGPU ? this._getObjectSignature(options.shouldEmitGPU) : 'none',
     ].join(':');
   }
 
@@ -4446,6 +4538,7 @@ class ParticleSystem extends THREE.Object3D {
 
     this.subSystems.set(subSystem, {
       shouldEmit: options.shouldEmit ?? true,
+      shouldEmitGPU: options.shouldEmitGPU ?? null,
       ratio: THREE.MathUtils.clamp(options.ratio ?? 1, 0, 1),
       emitContinuous,
       emitOnCollision,

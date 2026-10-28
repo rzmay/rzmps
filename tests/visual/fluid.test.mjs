@@ -96,7 +96,8 @@ test('fluid presets preserve scenes, the teapot fills, and reference gas fields 
     }
     const rotating = [];
     for (const strength of [0, 2]) {
-      await page.goto(`${origin}/@fs${fixture}?example=gasBlenderSmoke`, { waitUntil: 'networkidle0' });
+      // Keep this numerical comparison at its reference quality, independent of demo quality changes.
+      await page.goto(`${origin}/@fs${fixture}?example=gasBlenderSmoke&reviewGrid=2,4`, { waitUntil: 'networkidle0' });
       await page.waitForFunction(() => window.ready);
       await page.evaluate(() => window.runFrames(30));
       await page.evaluate(strength => {
@@ -108,6 +109,7 @@ test('fluid presets preserve scenes, the teapot fills, and reference gas fields 
       assert.equal(stats.field.heat, 0, 'the test must not depend on buoyancy');
       rotating.push(stats.field.rmsSpeed);
     }
+    console.log('Gas rotation without/with confinement:', JSON.stringify(rotating));
     assert.ok(rotating[1] > rotating[0] * 1.5,
       'curl confinement must preserve rotation without temperature, noise, or new particles');
     assert.deepEqual(errors, [], 'WebGPU passes and renderer changes must not produce browser errors');

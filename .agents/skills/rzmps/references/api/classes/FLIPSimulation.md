@@ -1103,3 +1103,28 @@ static padBoundsByDistance(bounds, distance): Box3;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`padBoundsByDistance`](FluidSimulation.md#padboundsbydistance)
+
+***
+
+<a id="spraycondition"></a>
+
+### SprayCondition()
+
+```ts
+static SprayCondition(options?): SubSystemGPUCondition;
+```
+
+Selects fast, sparsely surrounded source particles without sampling an Eulerian fluid field.
+Inspired by energy/air-entrainment source controls, not a complete whitewater model.
+Neighborhoods use current parent positions, even when testing a captured event.
+No FLIP module is required; this predicate also works on other GPU particle sources.
+
+#### Parameters
+
+##### options?
+
+[`FLIPSprayConditionOptions`](../interfaces/FLIPSprayConditionOptions.md) = `{}`
+
+#### Returns
+
+[`SubSystemGPUCondition`](../type-aliases/SubSystemGPUCondition.md)

@@ -78,6 +78,7 @@ Start with Renderer, then represent particles as sprites, meshes, trails, lights
 - [LightRenderer](classes/LightRenderer.md)
 - [AudioRenderer](classes/AudioRenderer.md)
 - [DecalRenderer](classes/DecalRenderer.md)
+- [SurfaceRenderer](classes/SurfaceRenderer.md)
 - [VolumeRenderer](classes/VolumeRenderer.md)
 
 ## Spatial Effects
@@ -141,6 +142,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [DistortionOverLifetimeOptions](Supporting-Types/interfaces/DistortionOverLifetimeOptions.md)
 - [EmissionShapeFactoryOptions](type-aliases/EmissionShapeFactoryOptions.md)
 - [FLIPSimulationOptions](interfaces/FLIPSimulationOptions.md)
+- [FLIPSprayConditionOptions](interfaces/FLIPSprayConditionOptions.md)
 - [FluidColliderOptions](type-aliases/FluidColliderOptions.md)
 - [FluidSimulationOptions](interfaces/FluidSimulationOptions.md)
 - [ForceFieldOptions](interfaces/ForceFieldOptions.md)
@@ -178,6 +180,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [SpeedOverLifetimeOptions](Supporting-Types/interfaces/SpeedOverLifetimeOptions.md)
 - [SpriteRendererOptions](Supporting-Types/interfaces/SpriteRendererOptions.md)
 - [SubSystemOptions](interfaces/SubSystemOptions.md)
+- [SurfaceRendererOptions](interfaces/SurfaceRendererOptions.md)
 - [ThreeCollisionBackendOptions](interfaces/ThreeCollisionBackendOptions.md)
 - [ThreeGPUCollisionBackendOptions](interfaces/ThreeGPUCollisionBackendOptions.md)
 - [TrailRendererOptions](Supporting-Types/interfaces/TrailRendererOptions.md)
@@ -304,6 +307,8 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [SpawnBurst](type-aliases/SpawnBurst.md)
 - [SpeedRange](Supporting-Types/type-aliases/SpeedRange.md)
 - [StrictMultiple](Supporting-Types/type-aliases/StrictMultiple.md)
+- [SubSystemGPUCondition](type-aliases/SubSystemGPUCondition.md)
+- [SubSystemGPUContext](interfaces/SubSystemGPUContext.md)
 - [Tag](Supporting-Types/type-aliases/Tag.md)
 - [ThreeGPUCollisionBackendStats](interfaces/ThreeGPUCollisionBackendStats.md)
 - [Vector3Input](type-aliases/Vector3Input.md)

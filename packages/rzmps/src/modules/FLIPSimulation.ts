@@ -3,10 +3,25 @@ import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgp
 import {
   Fn, If, clamp, float, floor, instanceIndex, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4,
 } from 'three/tsl';
-import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
+import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
 import Collision from './Collision';
+import FluidPressureProjection from '../gpu/FluidPressureProjection';
+import SparseVolumeGrid from '../gpu/SparseVolumeGrid';
 import FluidSimulation, { type FluidSimulationOptions } from './FluidSimulation';
+import type { SubSystemGPUCondition } from '../ParticleSystem';
+
+/** Lightweight spray-source gates; child emission rate, ratio and lifetime stay on the subsystem. */
+export interface FLIPSprayConditionOptions {
+  /** Minimum particle speed in simulation units/second, including its speed multiplier. Defaults to 1. */
+  minimumSpeed?: number;
+  /** Minimum source age in seconds, preventing immediate emission from newborn liquid. Defaults to 0.05. */
+  minimumAge?: number;
+  /** Maximum other live particles in the search sphere. Defaults to 8; null disables isolation filtering. */
+  maximumNeighbors?: number | null;
+  /** Search radius as a multiple of largest absolute particle scale. Defaults to 2. */
+  neighborRadius?: number;
+}
 
 export interface FLIPSimulationOptions extends FluidSimulationOptions {
   picRatio: number;
@@ -22,6 +37,48 @@ export interface FLIPSimulationOptions extends FluidSimulationOptions {
 }
 
 class FLIPSimulation extends FluidSimulation {
+  /** Selects fast, sparsely surrounded source particles without sampling an Eulerian fluid field.
+   * Inspired by energy/air-entrainment source controls, not a complete whitewater model.
+   * Neighborhoods use current parent positions, even when testing a captured event.
+   * No FLIP module is required; this predicate also works on other GPU particle sources. */
+  static SprayCondition(options: FLIPSprayConditionOptions = {}): SubSystemGPUCondition {
+    const minimumSpeed = options.minimumSpeed ?? 1;
+    const minimumAge = options.minimumAge ?? 0.05;
+    const maximumNeighbors = options.maximumNeighbors === undefined ? 8 : options.maximumNeighbors;
+    const neighborRadius = options.neighborRadius ?? 2;
+    if (!Number.isFinite(minimumSpeed) || minimumSpeed < 0
+      || !Number.isFinite(minimumAge) || minimumAge < 0
+      || !Number.isFinite(neighborRadius) || neighborRadius <= 0
+      || (maximumNeighbors !== null && (!Number.isInteger(maximumNeighbors) || maximumNeighbors < 0))) {
+      throw new RangeError('SprayCondition requires nonnegative speed/age/count and a finite positive radius.');
+    }
+    const condition: SubSystemGPUCondition = (particle, _dt, context) => {
+      const eligible = particle.velocity.length().mul(particle.speed.abs()).greaterThanEqual(minimumSpeed)
+        .and(particle.realtime.greaterThanEqual(minimumAge * 1000)).toVar();
+      if (maximumNeighbors !== null) {
+        const grid = context.spatialGrid;
+        if (!grid) throw new Error('SprayCondition isolation requires its managed parent spatial grid.');
+        If(eligible, () => {
+          const radius = max(particle.scale.x.abs(), max(particle.scale.y.abs(), particle.scale.z.abs()))
+            .mul(neighborRadius).max(1e-5);
+          const neighbors = uint(0).toVar();
+          grid.forEachParticleInRadius(particle.position, radius, neighbor => {
+            // Event slots may have been reused: exclude only the source identity.
+            If(neighbor.index.notEqual(particle.index).or(neighbor.generation.notEqual(particle.generation)), () => {
+              neighbors.addAssign(1);
+            });
+          });
+          eligible.assign(neighbors.lessThanEqual(maximumNeighbors));
+        });
+      }
+      return eligible;
+    };
+    if (maximumNeighbors !== null) condition.spatialGridOptions = {
+      brickSubdivisions: 3, cellSubdivisions: 1, maxQuerySteps: 0, timeQuality: 1,
+    };
+    return condition;
+  }
+
   picRatio: number;
   advectParticlesEnabled: boolean;
   velocityPaddingLookahead: number;
@@ -39,7 +96,15 @@ class FLIPSimulation extends FluidSimulation {
   private velocityBeforeAttribute?: StorageBufferAttribute;
   private velocityBefore?: { element(index: Node | number): Node<'vec4'> };
   private gatherCacheKey = '';
+  private gatherBuffers?: GPUParticleBufferState;
+  private gatherGrid?: ParticleSpatialGrid;
+  private pressureProjection?: FluidPressureProjection;
   private readonly picRatioNode = uniform(0);
+  private workGrid?: SparseVolumeGrid;
+  private clearFieldsNode?: ComputeNode;
+  private resetFields = true;
+  private movingWallsNode?: ComputeNode;
+  private movingWallsKey = '';
 
   constructor(options: Partial<FLIPSimulationOptions> = {}) {
     super({
@@ -115,24 +180,59 @@ class FLIPSimulation extends FluidSimulation {
     this.picRatioNode.value = THREE.MathUtils.clamp(this.picRatio, 0, 1);
     this.ensureGridResolution(renderer, grid);
     this.refreshBounds(grid, renderer);
-    this.computeSolidField(context, renderer);
+    this.computeMovingWalls(context, renderer, grid);
+    if (!this.workGrid || this.workGrid.brickSubdivisions !== grid.brickSubdivisions
+      || this.workGrid.cellSubdivisions !== grid.cellSubdivisions) {
+      this.onGridResolutionChanged();
+      this.workGrid = new SparseVolumeGrid({
+        brickSubdivisions: grid.brickSubdivisions, cellSubdivisions: grid.cellSubdivisions,
+      }, (2 ** grid.brickSubdivisions) ** 3);
+      this.workGrid.updateDispatch(renderer);
+    }
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
     if (!this.velocityBeforeAttribute) {
-      this.velocityBeforeAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
-      this.velocityBefore = storage(this.velocityBeforeAttribute, 'vec4', this.cellCount);
+      this.velocityCurrentAttribute.dispose();
+      this.velocityCurrentAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 8), 4);
+      const packed = storage(this.velocityCurrentAttribute, 'vec4', this.cellCount * 2);
+      this.velocityCurrent = packed;
+      this.velocityBeforeAttribute = this.velocityCurrentAttribute;
+      this.velocityBefore = { element: index => packed.element(
+        typeof index === 'number' ? index + this.cellCount : uint(index as Node<'uint'>).add(this.cellCount),
+      ) };
     }
+    const clearFields = (index: Node<'uint'>) => {
+      this.velocityCurrent.element(index).assign(vec4(0));
+      this.velocityNext.element(index).assign(vec4(0));
+      this.velocityBefore!.element(index).assign(vec4(0));
+      this.pressureCurrent.element(index).assign(0);
+      this.divergence.element(index).assign(0);
+    };
+    if (this.resetFields) {
+      renderer.compute(Fn(() => clearFields(instanceIndex))().compute(this.cellCount));
+      this.resetFields = false;
+    }
+    this.clearFieldsNode ??= this.computeCells(clearFields);
+    // Clear old addresses before page reassignment, including retired bricks.
+    renderer.compute(this.clearFieldsNode);
+    this.pressureProjection?.clearPreviousFaces(renderer);
+    this.workGrid.bounds.copy(this.bounds);
+    this.workGrid.rebuild(context, renderer, undefined, undefined,
+      this.boundsMinNode, this.cellSizeNode, float(0), tagMask);
+    this.computeSolidField(context, renderer);
 
     const cacheKey = [grid.resourceVersion, context.buffers.version, tagMask].join('|');
-    if (cacheKey !== this.gatherCacheKey) {
+    if (cacheKey !== this.gatherCacheKey || this.gatherBuffers !== context.buffers || this.gatherGrid !== grid) {
       this.gatherCacheKey = cacheKey;
+      this.gatherBuffers = context.buffers;
+      this.gatherGrid = grid;
       this.gatherNode = undefined;
       this.transferNode = undefined;
       this.separationNode = undefined;
       this.separationApplyNode = undefined;
     }
 
-    const gather = this.gatherNode ?? Fn(() => {
-      const coordinate = this.cellCoordinate(instanceIndex);
+    const gather = this.gatherNode ?? this.computeCells(index => {
+      const coordinate = this.cellCoordinate(index);
       const center = this.cellCenter(coordinate);
       const radius = this.cellSizeNode.mul(1.5);
       const momentum = vec3(0).toVar('flipMomentum');
@@ -161,43 +261,47 @@ class FLIPSimulation extends FluidSimulation {
         totalVolume.addAssign(spacing.mul(spacing).mul(spacing).mul(weight)
           .mul(particle.mass.greaterThan(0).select(1, 0)));
       }, { tagMask });
-      this.velocityCurrent.element(instanceIndex).assign(
+      // Marker centers undersample fine grids: reconstructed bulk support must
+      // not become zero-pressure air just because this cell has no marker center.
+      const volumeFraction = totalVolume.div(radius.mul(radius).mul(radius).mul(Math.PI / 3));
+      const liquid = fluidCell.greaterThan(0).or(volumeFraction.greaterThanEqual(0.5));
+      this.velocityCurrent.element(index).assign(
         // Packed occupancy: 2 contains a marker, 1 is velocity support, 0 is empty.
         vec4(momentum.div(max(totalMass, float(1e-6))),
-          totalMass.greaterThan(1e-6).select(fluidCell.add(1), 0)),
+          totalMass.greaterThan(1e-6).select(liquid.select(2, 1), 0)),
       );
-      this.velocityBefore!.element(instanceIndex).assign(
+      this.velocityBefore!.element(index).assign(
         vec4(
           momentumBefore.div(max(totalMass, float(1e-6))),
           totalMass.greaterThan(1e-6).select(
             // Integral of the radial cone kernel: pi * radius^3 / 3.
-            totalVolume.div(radius.mul(radius).mul(radius).mul(Math.PI / 3)).max(1e-6),
+            volumeFraction.max(1e-6),
             0,
           ),
         ),
       );
-    })().compute(this.cellCount);
+    });
     this.gatherNode = gather;
     renderer.compute(gather);
 
-    const force = this.forceNodeCompute ?? Fn(() => {
-      const velocity = vec3(this.velocityCurrent.element(instanceIndex).xyz);
+    const force = this.forceNodeCompute ?? this.computeCells(index => {
+      const velocity = vec3(this.velocityCurrent.element(index).xyz);
       // Mask after gather to stay within its eight-storage-buffer budget.
       // Both transfer fields must exclude the same solid donors.
-      If(this.isSolid(), () => {
-        this.velocityBefore!.element(instanceIndex).assign(vec4(0));
+      If(this.isSolid(index), () => {
+        this.velocityBefore!.element(index).assign(vec4(0));
       });
-      this.velocityNext.element(instanceIndex).assign(this.isSolid().select(
+      this.velocityNext.element(index).assign(this.isSolid(index).select(
         vec4(0),
         vec4(
           this.clampVelocity(velocity.add(this.forceNode.mul(context.deltaTimeNode))),
-          this.velocityCurrent.element(instanceIndex).w,
+          this.velocityCurrent.element(index).w,
         ),
       ));
-    })().compute(this.cellCount);
+    });
     this.forceNodeCompute = force;
     renderer.compute(force);
-    this.solveProjection(renderer, this.velocityNext, this.velocityCurrent, true, this.solid);
+    this.solveProjection(renderer, this.velocityNext, this.velocityCurrent);
 
     const transfer = this.transferNode ?? Fn(() => {
       const particle = context.buffers.storage.createParticle(undefined, true);
@@ -312,7 +416,14 @@ class FLIPSimulation extends FluidSimulation {
   }
 
   protected override onGridResolutionChanged(): void {
-    this.velocityBeforeAttribute?.dispose();
+    this.movingWallsNode = undefined;
+    this.movingWallsKey = '';
+    this.workGrid?.dispose();
+    this.workGrid = undefined;
+    this.clearFieldsNode = undefined;
+    this.resetFields = true;
+    this.pressureProjection?.dispose();
+    this.pressureProjection = undefined;
     this.velocityBeforeAttribute = undefined;
     this.velocityBefore = undefined;
     this.gatherNode = undefined;
@@ -321,20 +432,83 @@ class FLIPSimulation extends FluidSimulation {
     this.separationNode = undefined;
     this.separationApplyNode = undefined;
     this.gatherCacheKey = '';
+    this.gatherBuffers = undefined;
+    this.gatherGrid = undefined;
   }
 
+  protected override computeCells(callback: (index: Node<'uint'>) => void): ComputeNode {
+    return this.workGrid ? this.workGrid.computeDense(callback) : super.computeCells(callback);
+  }
+
+  protected override computeSolidCells(callback: (index: Node<'uint'>) => void): ComputeNode {
+    return Fn(() => callback(instanceIndex))().compute(this.cellCount);
+  }
+
+  protected override get cacheSolidOccupancy(): boolean { return true; }
+
   protected override onParticleColliderGeometryChanged(): void {
+    this.movingWallsNode = undefined;
     this.separationApplyNode = undefined;
     this.boundaryCollisions.forEach((collision) => {
       collision.radiusOffset = this.particleCollisionThicknessValue;
     });
   }
 
-  protected override pressureCellActive(
-    field: { element(index: Node | number): Node<'vec4'> },
-    index: Node<'uint'>,
-  ): Node<'bool'> {
-    return field.element(index).w.greaterThan(1.5);
+  private computeMovingWalls(
+    context: GPUParticleUpdateContext,
+    renderer: ParticleSpatialGridRenderer,
+    grid: ParticleSpatialGrid,
+  ): void {
+    const backend = this.particleCollisionBackend;
+    if (!backend.hasGeometry || !backend.hasMotion) return;
+    const tagMask = context.system.getGPUFilterTagMask(this.tags);
+    const key = [context.buffers.version, backend.motionVersion, tagMask].join('|');
+    if (key !== this.movingWallsKey || this.gatherBuffers !== context.buffers) this.movingWallsNode = undefined;
+    this.movingWallsKey = key;
+    this.movingWallsNode ??= Fn(() => {
+      const particle = context.buffers.storage.createParticle(undefined, true);
+      const selected = tagMask === undefined ? particle.alive.notEqual(0)
+        : particle.alive.notEqual(0).and(particle.tagMask.bitAnd(uint(tagMask)).notEqual(0));
+      If(selected.and(this.isInsideCap(particle.position)), () => {
+        const radius = max(particle.scale.x.abs(), max(particle.scale.y.abs(), particle.scale.z.abs()))
+          .mul(0.5).add(this.particleCollisionThickness);
+        const position = transformPointGPU(particle.position, context.simulationToWorldNode);
+        const hit = backend.queryMovingCapsule(position, position, radius);
+        const displacement = hit.get('wallDisplacement') as Node<'vec3'>;
+        If((hit.get('found') as Node<'bool'>).and(displacement.lengthSq().greaterThan(1e-12)), () => {
+          particle.position.assign(transformPointGPU(hit.get('capsulePoint') as Node<'vec3'>,
+            context.worldToSimulationNode));
+          const normal = context.worldToSimulationNode.mul(vec4(hit.get('normal') as Node<'vec3'>, 0))
+            .xyz.normalize();
+          const wallVelocity = context.worldToSimulationNode.mul(vec4(displacement, 0)).xyz
+            .div(context.deltaTimeNode.max(1e-6));
+          const approach = particle.velocity.mul(particle.speed).sub(wallVelocity).dot(normal).min(0);
+          If(particle.speed.abs().greaterThan(1e-6), () => {
+            particle.velocity.assign(this.clampVelocity(particle.velocity.sub(normal.mul(approach)
+              .div(particle.speed))));
+          });
+          context.buffers.storage.storeParticle(particle);
+        });
+      });
+    })().compute(context.buffers.count);
+    this.movingWallsNode.count = context.buffers.count;
+    renderer.compute(this.movingWallsNode);
+    // P2G and separation must query the corrected positions, not the old hash.
+    grid.rebuild(renderer, context.buffers, {});
+  }
+
+  protected override solveProjection(
+    renderer: ParticleSpatialGridRenderer,
+    input: { element(index: Node | number): Node<'vec4'> },
+    output: { element(index: Node | number): Node<'vec4'> },
+  ): void {
+    this.pressureProjection ??= new FluidPressureProjection(
+      this.resolution, this.cellSizeNode, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
+      this.closedMinNode, this.closedMaxNode, undefined, input, index => this.targetDivergence(index),
+      this.workGrid,
+    );
+    this.pressureProjection.captureBefore(renderer, this.velocityBefore!);
+    this.pressureProjection.solve(renderer, input, output, this.pressureIterations);
   }
 
   protected override targetDivergence(index: Node<'uint'>): Node<'float'> {
@@ -351,13 +525,13 @@ class FLIPSimulation extends FluidSimulation {
   }
 
   private gridToParticleGPU(particle: GPUParticleLike, context: GPUParticleUpdateContext): void {
-    const picSample = this.sampleTransferField(particle.position, this.velocityCurrent);
     const beforeSample = this.sampleTransferField(particle.position, this.velocityBefore!);
     const inside = particle.position.greaterThanEqual(this.boundsMinNode).all()
       .and(particle.position.lessThan(this.boundsMinNode.add(this.cellSizeNode.mul(this.resolution))).all())
       .and(beforeSample.w.greaterThan(1e-6));
-    const picVelocity = vec3(picSample.xyz).div(max(picSample.w, float(1e-6)));
-    const before = vec3(beforeSample.xyz).div(max(beforeSample.w, float(1e-6)));
+    const coordinate = particle.position.sub(this.boundsMinNode).div(this.cellSizeNode);
+    const picVelocity = this.pressureProjection!.sample(coordinate);
+    const before = this.pressureProjection!.sample(coordinate, true);
     const flipVelocity = vec3(particle.velocity).add(picVelocity.sub(before));
     const velocity = this.clampVelocity(mix(flipVelocity, picVelocity, this.picRatioNode));
     const gravityModifier = this.gpuParameters.number(

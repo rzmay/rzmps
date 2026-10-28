@@ -10,6 +10,7 @@
 
 ## Extended by
 
+- [`SurfaceRendererOptions`](SurfaceRendererOptions.md)
 - [`VolumeRendererOptions`](VolumeRendererOptions.md)
 - [`LightRendererOptions`](../Supporting-Types/interfaces/LightRendererOptions.md)
 - [`MeshRendererOptions`](../Supporting-Types/interfaces/MeshRendererOptions.md)

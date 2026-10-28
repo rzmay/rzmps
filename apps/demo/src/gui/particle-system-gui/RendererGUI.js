@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { AudioRenderer, DecalRenderer, SpriteRenderer, LightRenderer, MeshRenderer, TrailRenderer, TrailMode, TrailTextureMode } from '@rzmps/rzmps';
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
-import { VolumeRenderer, VolumeInterpolation, VolumeDensityMapping } from '@rzmps/rzmps';
+import { SurfaceRenderer, VolumeRenderer, VolumeInterpolation, VolumeDensityMapping } from '@rzmps/rzmps';
 
 export class RendererGUI extends GUIEditorBase {
     buildRenderersFolder(root, system = this.system) {
@@ -61,6 +61,22 @@ export class RendererGUI extends GUIEditorBase {
             for (const key of ['baseColor', 'opacity', 'threshold', 'range', 'densityRange', 'densityCurve',
                 'depthTest', 'jitter', 'renderOrder']) {
                 this.addValue(folder, renderer, key, this.prettyName(key));
+            }
+        } else if (renderer instanceof SurfaceRenderer) {
+            folder.add(renderer, 'smoothingIterations', 0, 16, 1).name('Smoothing Iterations');
+            folder.add(renderer, 'smoothingStrength', 0, 1, 0.01).name('Smoothing Strength');
+            for (const key of ['voxelSize', 'particleRadiusScale', 'isoLevel', 'maxActiveBricks', 'maxTriangles',
+                'bounds', 'particleColors', 'castShadow', 'receiveShadow']) {
+                this.addValue(folder, renderer, key, this.prettyName(key));
+            }
+            const grid = folder.addFolder('Spatial Grid Options');
+            for (const key of ['brickSubdivisions', 'cellSubdivisions', 'maxQuerySteps']) {
+                this.addValue(grid, renderer.spatialGridOptions, key, this.prettyName(key));
+            }
+            const material = folder.addFolder('Material');
+            for (const key of ['color', 'roughness', 'metalness', 'clearcoat', 'transmission', 'thickness', 'ior',
+                'attenuationColor', 'attenuationDistance', 'opacity', 'transparent', 'wireframe']) {
+                if (key in renderer.material) this.addValue(material, renderer.material, key, this.prettyName(key));
             }
         } else if (renderer instanceof SpriteRenderer) {
             this.buildSpriteRenderer(folder, renderer);

@@ -17,11 +17,13 @@ camera.position.set(5, 4, 6);
 camera.lookAt(0, 0.6, 0);
 const example = new URLSearchParams(location.search).get('example') ?? 'flipFluid';
 const gasScene = new URLSearchParams(location.search).get('scene') === 'gasFlow';
-await (example === 'flipFluid' ? createScene : gasScene ? createGasFlow : createCheckerboard)(scene);
+const sceneFactory = example === 'flipFluid' ? createScene : gasScene ? createGasFlow : createCheckerboard;
+const sceneLifecycle = await sceneFactory(scene);
 const fixedGas = new URLSearchParams(location.search).get('fixedGas') === 'true';
 const reviewAdvection = new URLSearchParams(location.search).get('reviewAdvection');
 const reviewGrid = new URLSearchParams(location.search).get('reviewGrid')?.split(',').map(Number);
 const reviewBricks = new URLSearchParams(location.search).get('reviewBricks');
+const reviewParticles = new URLSearchParams(location.search).get('reviewParticles');
 const system = await experimentalExamples.find(({ id }) => id === example).create({
   ...(reviewBricks ? { maxActiveBricks: Number(reviewBricks) } : {}),
   ...(reviewGrid ? { spatialGridOptions: {
@@ -35,9 +37,27 @@ const system = await experimentalExamples.find(({ id }) => id === example).creat
   automaticPadding: false,
   } : {}),
 });
+// Long-running numerical regressions keep their original finite source and quality;
+// demoLiquid explicitly exercises the current interactive preset instead.
+if (example === 'flipFluid' && !new URLSearchParams(location.search).has('demoLiquid')) {
+  for (const child of system.subSystems.keys()) {
+    system.removeSubSystem(child);
+    child.dispose();
+  }
+  sceneLifecycle.gui({ add(target, key) {
+    if (key === 'automaticTipping') target[key] = false;
+    return { name() { return this; }, listen() { return this; }, onChange() { return this; } };
+  } });
+  system.maxParticles = 8000;
+  system.duration = 14;
+  system.looping = false;
+  system.emitters[0].initialValues.lifetime = 60;
+  system.modules[0].setSpatialGridOptions({ brickSubdivisions: 2, cellSubdivisions: 4 });
+}
 if (reviewGrid) system.modules[0].setSpatialGridOptions({
   brickSubdivisions: reviewGrid[0], cellSubdivisions: reviewGrid[1],
 });
+if (reviewParticles) system.maxParticles = Number(reviewParticles);
 // Diagnostic reference: retain pool-wide launch/clear work without changing field operators.
 if (new URLSearchParams(location.search).get('reviewDispatch') === 'pool') {
   const gas = system.modules[0];
@@ -78,7 +98,16 @@ if (new URLSearchParams(location.search).has('sourceWall')) addGasWall();
 await renderer.renderAsync(scene, camera);
 system.advanceFrames(1, 1 / 60);
 const flip = system.modules[0];
-window.debugFluid = { renderer, scene, system, flip, camera, THREE,
+if (example === 'flipFluid' && new URLSearchParams(location.search).get('reviewLiquidWork') === 'dense') {
+  flip.workGrid.computeDense = (callback, faces = false) => Fn(() => callback(instanceIndex))()
+    .compute((flip.resolution + (faces ? 1 : 0)) ** 3);
+  flip.gatherCacheKey = '';
+  flip.forceNodeCompute = undefined;
+  flip.pressureProjection?.dispose();
+  flip.pressureProjection = undefined;
+  Object.defineProperty(flip, 'cacheSolidOccupancy', { get: () => false });
+}
+window.debugFluid = { renderer, scene, system, flip, camera, THREE, sceneLifecycle,
   gpu: { Fn, If, instanceIndex, storage, vec4, StorageBufferAttribute } };
 async function readField(attribute, channels = 4) {
   const values = new Float32Array(await renderer.getArrayBufferAsync(attribute));
@@ -152,6 +181,7 @@ window.probe = async (start, end, radius = 0.06) => {
 };
 window.runFrames = async (frames, dt = 1 / 60) => {
   for (let i = 0; i < frames; i++) {
+    sceneLifecycle?.update?.(dt);
     system.advanceFrames(1, dt);
     if (i % 60 === 0) await renderer.backend.device.queue.onSubmittedWorkDone();
   }
@@ -514,6 +544,26 @@ window.seedFLIPPair = (distance = 0, sizes = [0.1, 0.1], wallContact = false) =>
 window.readLivePositions = async () => (await system.selectiveReadback(16000, ['position']))
   .filter(({ particle }) => particle.alive).map(({ particle }) => particle.position.toArray());
 window.ready = true;
+window.testMovingFluidWall = async () => {
+  const colliders = [];
+  scene.traverse(object => { if (object instanceof FluidCollider) colliders.push(object); });
+  colliders.forEach(collider => collider.removeFromParent());
+  window.seedFLIPPair(0.3);
+  flip.particleSeparation = 0;
+  const wall = FluidCollider.Box({ updatePolicy: 'transform-dynamic', gridOccupancy: false }, 0.04, 4, 4);
+  wall.position.set(-1, system.getWorldPosition(new THREE.Vector3()).y + 3, 0);
+  scene.add(wall);
+  system.advanceFrames(1, 1 / 60);
+  const before = { ...flip.particleCollisionBackend.stats };
+  wall.position.x = 1;
+  system.advanceFrames(1, 1 / 60);
+  const moved = (await system.selectiveReadback(16000, ['position', 'velocity']))
+    .filter(({ particle }) => particle.alive).map(({ particle }) => ({
+      position: particle.position.toArray(), velocity: particle.velocity.toArray(),
+    }));
+  return { moved, motion: flip.particleCollisionBackend.hasMotion,
+    before, stats: { ...flip.particleCollisionBackend.stats } };
+};
 window.seedUniformGas = () => {
   activateDiagnosticGasDomain();
   window.seedGasSource(0, 0);

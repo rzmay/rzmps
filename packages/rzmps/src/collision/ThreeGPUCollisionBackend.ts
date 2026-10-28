@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
-import type { Node } from 'three/webgpu';
+import { StorageBufferAttribute, type Node } from 'three/webgpu';
+import { If, storage, uniform } from 'three/tsl';
 // Use the focused entry point so unrelated WebGPU helper exports cannot collide.
 // @ts-expect-error three-mesh-bvh does not publish declarations for deep imports.
 import { BVHComputeData } from 'three-mesh-bvh/src/webgpu/BVHComputeData.js';
@@ -39,6 +40,8 @@ export interface ThreeGPUCollisionBackendOptions {
   geometryDynamicObjectFilter?: (object: THREE.Object3D) => boolean;
   /** Default classification for meshes not selected by a more specific list or filter. */
   updatePolicy?: CollisionGeometryUpdatePolicy | `${CollisionGeometryUpdatePolicy}`;
+  /** Retains rigid transform history for explicit queryMovingCapsule calls. Defaults to false. */
+  sweptMotion?: boolean;
 }
 
 /** Runtime observability for rebuild cost, uploads, and update-policy tuning. */
@@ -74,6 +77,7 @@ type BVHComputeDataRuntime = BVHComputeData & {
   storage: Record<string, { proxyNode?: { value?: { array?: ArrayBufferView } } }>;
   updateTransforms(): void;
   dispose(): void;
+  structs: { transform: { getLength(): number } };
 };
 
 /** GPU-only collision geometry owner backed by three-mesh-bvh's packed TLAS and BLAS. */
@@ -90,6 +94,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   dynamicObjectFilter?: (object: THREE.Object3D) => boolean;
   geometryDynamicObjectFilter?: (object: THREE.Object3D) => boolean;
   updatePolicy: CollisionGeometryUpdatePolicy;
+  readonly sweptMotion: boolean;
 
   readonly stats: ThreeGPUCollisionBackendStats = {
     objects: 0,
@@ -107,6 +112,15 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   private data?: BVHComputeDataRuntime;
   private capsuleQuery?: ReturnType<typeof capsuleBVHCollisionNode>;
   private initialized = false;
+  private frameToken?: unknown;
+  private frameObjects = '';
+  private motionAttribute?: StorageBufferAttribute;
+  private movingQuery?: ReturnType<typeof capsuleBVHCollisionNode>;
+  private readonly motionPadding = uniform(0);
+  private _motionVersion = 0;
+
+  get hasMotion(): boolean { return this.motionPadding.value > 0; }
+  get motionVersion(): number { return this._motionVersion; }
 
   get hasGeometry(): boolean {
     return this.capsuleQuery !== undefined;
@@ -124,6 +138,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.geometryDynamicObjectFilter = options.geometryDynamicObjectFilter;
     this.updatePolicy = (options.updatePolicy as CollisionGeometryUpdatePolicy)
       ?? CollisionGeometryUpdatePolicy.Auto;
+    this.sweptMotion = options.sweptMotion ?? false;
   }
 
   // ICollisionBackend's CPU query is synchronous, while this backend only exposes
@@ -146,7 +161,15 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   }
 
   /** Detects membership, topology, transform, and vertex changes and updates acceleration data. */
-  update(): void {
+  update(_deltaTime?: number, frameToken?: unknown): void {
+    const objects = [this.world?.uuid, this.staticObjects?.map(object => object.uuid),
+      this.dynamicObjects?.map(object => object.uuid), this.geometryDynamicObjects?.map(object => object.uuid)]
+      .join('|');
+    if (frameToken !== undefined && frameToken === this.frameToken && objects === this.frameObjects
+      && this.invalidatedGeometry.size === 0) return;
+    this.frameToken = frameToken;
+    this.frameObjects = objects;
+    const previousTransforms = this.sweptMotion ? this.transformValues()?.slice() : undefined;
     const next = this.collectMeshes();
     let topologyChanged = !this.initialized || next.size !== this.tracked.size;
     const addedGeometries = new Set<THREE.BufferGeometry>();
@@ -216,7 +239,85 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
       this.stats.transformUpdates += 1;
       this.stats.uploadBytes += ThreeGPUCollisionBackend.storageByteLength(this.data, ['nodes', 'transforms']);
     }
+    if (this.sweptMotion) this.updateMotion(topologyChanged || changedGeometries.size > 0
+      ? undefined : previousTransforms);
     this.initialized = true;
+  }
+
+  /** Relative-motion sweep against rigid walls. Ordinary queryCapsule remains a current-pose query. */
+  queryMovingCapsule(start: Node<'vec3'>, end: Node<'vec3'>, radius: Node<'float'>): Node {
+    if (!this.movingQuery) throw new Error('Enable sweptMotion and update collision geometry before querying motion.');
+    const query = (CapsuleQuery(start, end, radius) as unknown as Node<'vec3'>).toVar();
+    const hit = (this.movingQuery(query) as unknown as Node<'vec3'>).toVar();
+    If(hit.get('found') as Node<'bool'>, () => {
+      // Conservative rotational padding can meet the far side of a thin wall.
+      // Resolve its current-pose overlap without changing the original contact side.
+      for (let pass = 0; pass < 2; pass++) {
+        const point = hit.get('capsulePoint') as Node<'vec3'>;
+        const contact = this.queryCapsule(point, point, radius);
+        If(contact.get('found') as Node<'bool'>, () => {
+          const normal = hit.get('normal') as Node<'vec3'>;
+          const contactNormal = contact.get('normal') as Node<'vec3'>;
+          const distance = (contact.get('distanceSq') as Node<'float'>).sqrt();
+          const aligned = normal.dot(contactNormal).greaterThanEqual(0);
+          const direction = aligned.select(contactNormal, normal);
+          const offset = aligned.select(radius.sub(distance).max(0), radius.add(distance));
+          point.addAssign(direction.mul(offset));
+          (hit.get('point') as Node<'vec3'>).assign(point.sub(normal.mul(radius)));
+        });
+      }
+    });
+    return hit;
+  }
+
+  private transformValues(): Float32Array | undefined {
+    const array = this.data?.storage.transforms?.proxyNode?.value?.array;
+    return array ? new Float32Array(array.buffer, array.byteOffset, array.byteLength / 4) : undefined;
+  }
+
+  private updateMotion(previous?: Float32Array): void {
+    const current = this.transformValues();
+    if (!current || !this.data) return;
+    const stride = this.data.structs.transform.getLength();
+    const count = current.length / stride;
+    if (this.motionAttribute?.count !== count * 9) {
+      this.motionAttribute?.dispose();
+      this.motionAttribute = new StorageBufferAttribute(new Float32Array(count * 36), 4);
+      this.movingQuery = capsuleBVHCollisionNode(this.data as unknown as Parameters<
+        typeof capsuleBVHCollisionNode
+      >[0], { history: storage(this.motionAttribute, 'vec4', count * 9), padding: this.motionPadding });
+      this._motionVersion++;
+    }
+    const history = this.motionAttribute.array as Float32Array;
+    const old = previous?.length === current.length ? previous : current;
+    const a = new THREE.Matrix4(), b = new THREE.Matrix4();
+    const positionA = new THREE.Vector3(), positionB = new THREE.Vector3();
+    const rotationA = new THREE.Quaternion(), rotationB = new THREE.Quaternion();
+    const scaleA = new THREE.Vector3(), scaleB = new THREE.Vector3();
+    let geometryRadius = 0;
+    this.tracked.forEach(({ geometry }) => {
+      if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+      const sphere = geometry.boundingSphere!;
+      geometryRadius = Math.max(geometryRadius, sphere.center.length() + sphere.radius);
+    });
+    let padding = 0;
+    for (let i = 0; i < count; i++) {
+      const offset = i * stride;
+      history.set(old.subarray(offset, offset + 32), i * 36);
+      history[i * 36 + 32] = 0;
+      if (old.subarray(offset, offset + 16).every((value, index) => value === current[offset + index])) continue;
+      a.fromArray(old, offset).decompose(positionA, rotationA, scaleA);
+      b.fromArray(current, offset).decompose(positionB, rotationB, scaleB);
+      const angle = rotationA.angleTo(rotationB);
+      const radius = geometryRadius * Math.max(scaleA.length(), scaleB.length());
+      // Bound the rotating path's deviation from its relative-motion chord.
+      const sagitta = radius * (1 - Math.cos(angle / 2));
+      history[i * 36 + 32] = sagitta;
+      padding = Math.max(padding, positionA.distanceTo(positionB) + 2 * radius * Math.sin(angle / 2)
+        + geometryRadius * scaleA.distanceTo(scaleB));
+    }
+    if (padding > 0 || this.motionPadding.value > 0 || !previous) this.motionAttribute.needsUpdate = true;
+    this.motionPadding.value = padding;
   }
 
   /** Returns a TSL hit record for a swept capsule query. */
@@ -364,6 +465,12 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.data?.dispose();
     this.data = undefined;
     this.capsuleQuery = undefined;
+    this.motionAttribute?.dispose();
+    this.motionAttribute = undefined;
+    this.movingQuery = undefined;
+    this.motionPadding.value = 0;
+    this.frameToken = undefined;
+    this._motionVersion++;
   }
 
   private static storageByteLength(data: BVHComputeDataRuntime, keys: string[]): number {

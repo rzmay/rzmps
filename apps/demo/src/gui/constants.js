@@ -32,6 +32,7 @@ import {
     Boids,
     SpriteRenderer,
     MeshRenderer,
+    SurfaceRenderer,
     LightRenderer,
     TrailRenderer,
     Collision,
@@ -108,6 +109,7 @@ export const DEFAULT_MODULE_FACTORIES = {
 export const DEFAULT_RENDERER_FACTORIES = {
     Sprite: () => new SpriteRenderer(),
     Mesh: () => new MeshRenderer(),
+    Surface: () => new SurfaceRenderer(),
     Light: () => new LightRenderer(),
     Trail: () => new TrailRenderer(),
 };

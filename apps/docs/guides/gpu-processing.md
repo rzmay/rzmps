@@ -109,6 +109,11 @@ from GPU buffers, so listeners and CPU audio/render views can lag simulation sli
 subsystems consume spawn, death, collision, and continuous emission on the GPU; update only the
 root system, as on CPU.
 
+Subsystem `shouldEmitGPU` predicates run in a separate eligibility pass and can request a
+managed parent spatial grid. Source selection therefore does not bind the neighbor-query
+buffers into each birth shader. See [subsystems](subsystems.md) for CPU/GPU selector pairing,
+event snapshots, current-neighborhood semantics and callback invalidation.
+
 Native subsystem births stay within WebGPU's default limit of eight compute-stage storage-buffer
 bindings. Parent and child particle state each use separate float and integer buffers. The
 remaining pass-specific bindings come from packed allocation state, the emitter-runtime fields
