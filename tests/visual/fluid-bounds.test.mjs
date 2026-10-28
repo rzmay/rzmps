@@ -18,7 +18,8 @@ test('fluid cap policies preserve adaptive escape, constrain crossings, and clos
     const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;
     const fixture = path.resolve(import.meta.dirname, 'fixtures/fluid.html');
     const open = async (example) => {
-      await page.goto(`${origin}/@fs${fixture}?example=${example}&fixedGas=true`, { waitUntil: 'networkidle0' });
+      await page.goto(`${origin}/@fs${fixture}?example=${example}&fixedGas=true&reviewGrid=2,4`,
+        { waitUntil: 'networkidle0' });
       await page.waitForFunction(() => window.ready).catch(error => {
         throw new Error(`${error.message}\n${errors.join('\n')}`);
       });

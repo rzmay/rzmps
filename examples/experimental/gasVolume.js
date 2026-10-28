@@ -39,7 +39,7 @@ export default async function createGasVolume(simulationOptions = {}) {
     noiseSpeed: 0.45,
     noiseOctaves: 2,
     spatialGridOptions: {
-      brickSubdivisions: 2,
+      brickSubdivisions: 3,
       cellSubdivisions: 4,
       powerOfTwoBounds: true,
       autoExpand: false,
@@ -57,8 +57,8 @@ export default async function createGasVolume(simulationOptions = {}) {
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.45, 18, 10),
-        rate: 55,
-        radialSpeed: 0.75,
+        rate: 300,
+        radialSpeed: 1.5,
         initialValues: {
           lifetime: 1.2,
           mass: 1,
@@ -88,7 +88,7 @@ export default async function createGasVolume(simulationOptions = {}) {
       }),
       new ScaleOverLifetime({
         scale: (time) => {
-          const size = 0.38 + (0.08 - 0.38) * time;
+          const size = 1 - 0.8 * time;
           return new THREE.Vector3(size, size, size);
         },
       }),
@@ -109,6 +109,8 @@ export default async function createGasVolume(simulationOptions = {}) {
         threshold: 0.025,
         range: 0.02,
         steps: 80,
+        noiseStrength: 2,
+        noiseContrast: 1.5,
       }),
     ],
     // #endregion docs:renderers:1

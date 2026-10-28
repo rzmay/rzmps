@@ -133,6 +133,55 @@ test('volume providers combine density/color with tags on WebGL and WebGPU', { t
       assert.equal(controls.empty.middle[0], 0);
       assert.ok(controls.filters.Nearest.middle[0] < controls.filters.Linear.middle[0]);
       assert.ok(controls.filters.Cubic.middle[0] > 5);
+      if (backend === 'webgpu') {
+        const mask = await page.evaluate(async () => {
+          const { red, volume, system } = window.volumeFixture;
+          volume.interpolation = 'Linear';
+          volume.densityMapping = 'Linear';
+          volume.opacity = 0.03;
+          red.density.data.fill(0.4);
+          red.density.version++;
+          const baseline = await window.renderVolume(['red']);
+          volume.noiseStrength = 1;
+          const first = await window.renderVolume(['red']);
+          volume.noiseStrength = 2;
+          const stronger = await window.renderVolume(['red']);
+          volume.noiseStrength = 1;
+          volume.update([], system, 3);
+          const animated = await window.renderVolume(['red']);
+          volume.noiseStrength = 0;
+          const restored = await window.renderVolume(['red']);
+          const powers = [];
+          for (const strength of [0.5, 1, 2, 4]) {
+            red.density.data.fill(0.4);
+            red.density.version++;
+            volume.noiseStrength = strength;
+            volume.noiseContrast = 0;
+            const masked = await window.renderVolume(['red']);
+            volume.noiseStrength = 0;
+            red.density.data.fill(0.4 * 0.5 ** strength);
+            red.density.version++;
+            const reference = await window.renderVolume(['red']);
+            powers.push({ strength, masked: masked.middle[0], reference: reference.middle[0] });
+          }
+          red.density.data.fill(0.4);
+          red.density.version++;
+          volume.noiseContrast = 1.5;
+          const disabled = await window.renderVolume(['red']);
+          volume.noiseContrast = 1;
+          return { baseline, first, stronger, animated, restored, disabled, powers,
+            unchanged: red.density.data.every(value => value > 0.39) };
+        });
+        assert(mask.first.middle[0] < mask.baseline.middle[0], 'noise mask should erode rendered density');
+        assert(mask.first.middle[0] > 0, 'the mask must preserve a visible volume');
+        assert(mask.stronger.middle[0] < mask.first.middle[0], 'higher mask powers should erode more density');
+        for (const power of mask.powers) assert.ok(Math.abs(power.masked - power.reference) <= 1,
+          `mask exponent must match density * pow(mask, strength): ${JSON.stringify(power)}`);
+        assert.notDeepEqual(mask.animated, mask.first, 'fourth-dimensional noise should animate');
+        assert.equal(mask.restored.middle[0], mask.baseline.middle[0], 'zero strength restores unmasked output');
+        assert.equal(mask.disabled.middle[0], mask.baseline.middle[0], 'zero strength bypasses contrast too');
+        assert.equal(mask.unchanged, true, 'render noise must not modify source fields');
+      }
       await page.setViewport({ width: 390, height: 844 });
       const mobilePixels = await page.evaluate(async () => {
         const { renderer, scene, camera, system, volume, red, blue } = window.volumeFixture;

@@ -11,6 +11,10 @@
 Sparse GPU particle spatial hash. The logical brick/cell resolution is fixed;
 storage scales with particle capacity rather than world volume.
 
+## Extends
+
+- [`SpatialGrid`](SpatialGrid.md)
+
 ## Constructors
 
 <a id="constructor"></a>
@@ -32,6 +36,10 @@ Creates a sparse grid whose storage grows with particle capacity, not world volu
 #### Returns
 
 `ParticleSpatialGrid`
+
+#### Overrides
+
+[`SpatialGrid`](SpatialGrid.md).[`constructor`](SpatialGrid.md#constructor)
 
 ## Properties
 
@@ -62,6 +70,10 @@ autoShrink: boolean;
 ```ts
 readonly bounds: Box3;
 ```
+
+#### Overrides
+
+[`SpatialGrid`](SpatialGrid.md).[`bounds`](SpatialGrid.md#bounds)
 
 ***
 
@@ -165,6 +177,12 @@ set brickSubdivisions(value): void;
 
 `void`
 
+#### Inherited from
+
+```ts
+SpatialGrid.brickSubdivisions
+```
+
 ***
 
 <a id="cellsperaxis"></a>
@@ -180,6 +198,10 @@ get cellsPerAxis(): number;
 ##### Returns
 
 `number`
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`cellsPerAxis`](SpatialGrid.md#cellsperaxis)
 
 ***
 
@@ -213,6 +235,12 @@ set cellSubdivisions(value): void;
 
 `void`
 
+#### Inherited from
+
+```ts
+SpatialGrid.cellSubdivisions
+```
+
 ***
 
 <a id="maxdepth"></a>
@@ -228,6 +256,10 @@ get maxDepth(): number;
 ##### Returns
 
 `number`
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`maxDepth`](SpatialGrid.md#maxdepth)
 
 ***
 
@@ -403,8 +435,6 @@ Largest live particle radius from the current GPU reduction.
 locate(position): Vector3;
 ```
 
-Returns the logical cell coordinate using the currently configured CPU-side bounds.
-
 #### Parameters
 
 ##### position
@@ -414,6 +444,10 @@ Returns the logical cell coordinate using the currently configured CPU-side boun
 #### Returns
 
 `Vector3`
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`locate`](SpatialGrid.md#locate)
 
 ***
 
@@ -660,6 +694,10 @@ static locate(
 
 `Vector3`
 
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`locate`](SpatialGrid.md#locate-1)
+
 ***
 
 <a id="normalizebounds"></a>
@@ -696,3 +734,7 @@ static normalizeBounds(
 #### Returns
 
 `Box3`
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`normalizeBounds`](SpatialGrid.md#normalizebounds)

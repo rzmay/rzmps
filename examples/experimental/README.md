@@ -48,6 +48,23 @@ scales field copies. These are visual approximations, not physical resampling.
 - `densityCurve`: existing `ValueByParameter<number>` convention, evaluated on
   range-normalized density and sampled into a 256-entry lookup texture. Zero
   density remains transparent even if the curve has a nonzero first value.
+- `noiseStrength`: nonnegative exponent on the procedural density mask. Zero
+  disables masking, one applies the mask directly, and larger values erode more.
+- `noiseContrast`: nonnegative sharpening around noise value 0.5, default one.
+  The mask is `pow(clamp((noise - 0.5) * noiseContrast + 0.5, 0, 1), noiseStrength)`.
+  Contrast is applied before the exponent. Both controls are runtime uniforms;
+  positive values are not capped by the API. Animated masking requires WebGPURenderer.
+- `adaptiveStepping`: opacity-aware ray step growth, now disabled by default to
+  favor visual detail. Scene-depth clipping remains enabled by default.
+
+The Gas Volume demo uses 3 brick plus 4 cell subdivisions, emits 300 particles per
+second at radial speed 1.5, and shrinks particles to 20% of their initial size.
+Its density mask defaults to strength 2 and contrast 1.5. Gas uses the library's
+default budget of 512 resident bricks, capped by logical brick count. Active/new
+brick lists drive GPU work independently of unused reserved capacity. The field
+buffers still reserve memory for the pool: lower `maxActiveBricks` explicitly for
+memory-constrained use. Cell subdivisions multiply per-brick memory eightfold.
+Changing the budget rebuilds the fields, and device buffer limits still apply.
 
 Blender inspires reconstruction selection. Niagara inspires cell-relative ray
 spacing, separate density gain, range, and curve mapping. Unity inspires the

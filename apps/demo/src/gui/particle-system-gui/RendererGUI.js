@@ -44,7 +44,20 @@ export class RendererGUI extends GUIEditorBase {
             folder.add(renderer, 'densityMapping', Object.values(VolumeDensityMapping)).name('Density Mapping');
             folder.add(renderer, 'stepSizeMultiplier', 0.1, 4, 0.1).name('Ray Step / Cell');
             folder.add(renderer, 'steps', 1, 512, 1).name('Maximum Ray Steps');
+            const marching = folder.addFolder('Ray Marching');
+            marching.add(renderer, 'adaptiveStepping').name('Opacity-Aware Steps');
+            marching.add(renderer, 'adaptiveStepThreshold', 0, 0.99, 0.01).name('Opacity Start');
+            marching.add(renderer, 'adaptiveStepFactor', 1, 16, 0.25).name('Maximum Step Factor');
+            marching.add(renderer, 'transmittanceThreshold', 0, 0.1, 0.001).name('Stop Transmittance');
+            marching.add(renderer, 'sceneDepthClipping').name('Scene Depth Clipping');
+            marching.add(renderer, 'sceneDepthBias', 0, 0.1, 0.001).name('Scene Depth Bias');
             folder.add(renderer, 'densityGain', 0, 10, 0.05).name('Density Gain');
+            const noise = folder.addFolder('Density Noise Mask');
+            noise.add(renderer, 'noiseStrength', 0, 8, 0.01).name('Strength');
+            noise.add(renderer, 'noiseContrast', 0, 8, 0.01).name('Contrast');
+            noise.add(renderer, 'noiseFrequency', 0, 20, 0.1).name('Frequency');
+            noise.add(renderer, 'noiseSpeed', -2, 2, 0.01).name('Animation Speed');
+            noise.add(renderer, 'noiseOctaves', 1, 4, 1).name('Octaves');
             for (const key of ['baseColor', 'opacity', 'threshold', 'range', 'densityRange', 'densityCurve',
                 'depthTest', 'jitter', 'renderOrder']) {
                 this.addValue(folder, renderer, key, this.prettyName(key));

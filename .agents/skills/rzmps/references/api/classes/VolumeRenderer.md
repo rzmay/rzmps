@@ -40,6 +40,36 @@ new VolumeRenderer(options?): VolumeRenderer;
 
 ## Properties
 
+<a id="adaptivestepfactor"></a>
+
+### adaptiveStepFactor
+
+```ts
+adaptiveStepFactor: number;
+```
+
+***
+
+<a id="adaptivestepping"></a>
+
+### adaptiveStepping
+
+```ts
+adaptiveStepping: boolean;
+```
+
+***
+
+<a id="adaptivestepthreshold"></a>
+
+### adaptiveStepThreshold
+
+```ts
+adaptiveStepThreshold: number;
+```
+
+***
+
 <a id="basecolor"></a>
 
 ### baseColor
@@ -199,6 +229,56 @@ jitter: boolean;
 
 ***
 
+<a id="noisecontrast"></a>
+
+### noiseContrast
+
+```ts
+noiseContrast: number;
+```
+
+***
+
+<a id="noisefrequency"></a>
+
+### noiseFrequency
+
+```ts
+noiseFrequency: number;
+```
+
+***
+
+<a id="noiseoctaves"></a>
+
+### noiseOctaves
+
+```ts
+noiseOctaves: number;
+```
+
+***
+
+<a id="noisespeed"></a>
+
+### noiseSpeed
+
+```ts
+noiseSpeed: number;
+```
+
+***
+
+<a id="noisestrength"></a>
+
+### noiseStrength
+
+```ts
+noiseStrength: number;
+```
+
+***
+
 <a id="opacity"></a>
 
 ### opacity
@@ -225,6 +305,26 @@ range: number;
 
 ```ts
 renderOrder: number;
+```
+
+***
+
+<a id="scenedepthbias"></a>
+
+### sceneDepthBias
+
+```ts
+sceneDepthBias: number;
+```
+
+***
+
+<a id="scenedepthclipping"></a>
+
+### sceneDepthClipping
+
+```ts
+sceneDepthClipping: boolean;
 ```
 
 ***
@@ -269,6 +369,16 @@ optional tags?: string[];
 
 ```ts
 threshold: number;
+```
+
+***
+
+<a id="transmittancethreshold"></a>
+
+### transmittanceThreshold
+
+```ts
+transmittanceThreshold: number;
 ```
 
 ## Accessors

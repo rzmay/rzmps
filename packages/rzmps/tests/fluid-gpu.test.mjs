@@ -41,6 +41,8 @@ const shrinkingGas = new GasSimulation({
 assert.equal(gas.supportsGPU, true);
 assert.equal(flip.supportsGPU, true);
 assert.equal(gas.resolution, 32);
+assert.equal(gas.maxActiveBricks, 512);
+assert.equal(gas.volumeGrid.capacity, 64, 'reservation is capped by logical brick count');
 assert.equal(flip.resolution, 64);
 assert.equal(gas.autoBounds, true);
 assert.equal(gas.automaticPadding, true);
@@ -135,6 +137,23 @@ volumeRenderer.destroy();
 assert.throws(() => new VolumeRenderer({ stepSizeMultiplier: 0 }), /stepSizeMultiplier/);
 assert.throws(() => new VolumeRenderer({ densityRange: [1, 0] }), /densityRange/);
 assert.throws(() => new VolumeRenderer({ interpolation: 'invalid' }), /interpolation/);
+assert.equal(volumeRenderer.adaptiveStepping, false);
+assert.equal(volumeRenderer.noiseContrast, 1);
+assert.equal(volumeRenderer.sceneDepthClipping, true);
+assert.equal(volumeRenderer.adaptiveStepFactor, 4);
+assert.equal(volumeRenderer.transmittanceThreshold, 0.01);
+for (const options of [
+  { adaptiveStepThreshold: 1 }, { adaptiveStepThreshold: -0.1 },
+  { adaptiveStepFactor: 0.5 }, { adaptiveStepFactor: Infinity },
+  { transmittanceThreshold: 1 }, { transmittanceThreshold: NaN }, { sceneDepthBias: -1 },
+]) assert.throws(() => new VolumeRenderer(options), /adaptive thresholds/);
+for (const options of [
+  { noiseStrength: -1 }, { noiseStrength: Infinity }, { noiseContrast: -1 }, { noiseContrast: NaN },
+]) assert.throws(() => new VolumeRenderer(options), /Volume noise/);
+const strongMask = new VolumeRenderer({ noiseStrength: 2, noiseContrast: 1.5 });
+assert.equal(strongMask.noiseStrength, 2);
+assert.equal(strongMask.noiseContrast, 1.5);
+strongMask.destroy();
 const copies = new VolumeRenderer({ children: { count: 2, radius: 0.2, scale: 0.8, alpha: 0.5 } });
 copies.setup(system);
 assert.equal(copies.layers.length, 3);

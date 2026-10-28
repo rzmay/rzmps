@@ -35,7 +35,26 @@ export class ModuleGUI extends GUIEditorBase {
         this.addTags(folder, module);
 
         const candidate = module;
-        if (candidate.options && typeof candidate.options === 'object') {
+        if (candidate instanceof FluidSimulation) {
+            const tuning = [
+                'pressureIterations', 'externalForce', 'maxVelocity', 'boundsPadding', 'maxBounds',
+                'automaticPadding', 'showGridHelper', 'picRatio', 'advectParticlesEnabled',
+                'velocityPaddingLookahead', 'collisionIterations', 'particleSeparation', 'particleSpacing',
+                'maxActiveBricks', 'densityDissipation', 'temperatureDissipation', 'colorDissipation',
+                'velocityDissipation', 'densityCutoff', 'buoyancy', 'weight', 'sourceStrength',
+                'velocitySourceStrength', 'sourceTemperature', 'temperatureOverLifetime', 'temperatureColor',
+                'temperatureRange', 'scalarDiffusion', 'vorticityStrength', 'turbulenceStrength',
+                'noiseFrequency', 'noiseSpeed', 'noiseOctaves',
+            ];
+            for (const key of tuning) {
+                if (key in candidate) this.addValue(folder, candidate, key, this.prettyName(key));
+            }
+            folder.add(candidate, 'boundsPolicy', Object.values(FluidBoundsPolicy))
+                .name('Bounds Policy').onChange(() => this.emitCode());
+            if ('advectionMethod' in candidate) {
+                folder.add(candidate, 'advectionMethod', ['SemiLagrangian', 'MacCormack']).name('Advection Method');
+            }
+        } else if (candidate.options && typeof candidate.options === 'object') {
             this.addObject(folder, candidate.options, new Set(['tags', 'useOctree', 'useSpatialGrid', ...LOD_GUI_KEYS]));
         }
         else {
@@ -110,34 +129,10 @@ export class ModuleGUI extends GUIEditorBase {
                 'tags',
                 ...LOD_GUI_KEYS,
             ]);
-            if (candidate instanceof FluidSimulation) {
-                [
-                    'bounds', 'particleBounds', 'automaticPaddingDistance', 'resolution', 'cellSize', 'cellCount', 'autoBounds',
-                    'spatialGridOptions', 'spatialGrid',
-                    'boundsMinNode', 'cellSizeNode', 'forceNode', 'maxVelocityNode',
-                    'velocityCurrentAttribute', 'velocityNextAttribute',
-                    'pressureCurrentAttribute', 'pressureNextAttribute', 'divergenceAttribute',
-                    'velocityCurrent', 'velocityNext', 'pressureCurrent', 'pressureNext',
-                    'divergence', 'curl', 'density', 'colorField', 'densityAttributeA',
-                    'densityAttributeB', 'colorAttributeA', 'colorAttributeB',
-                    'visualDensityAttribute', 'visualColorAttribute', 'visualDensity', 'visualColor',
-                    'solid', 'solidAttribute', 'solidNode',
-                    'densityCurrent', 'densityNext', 'colorCurrent', 'colorNext',
-                    'densityTexture', 'colorTexture', 'pressureNodes', 'divergenceNode',
-                    'projectionNodes', 'velocityNodes', 'sourceNodes', 'outputNodes',
-                    'gatherNode', 'forceNodeCompute', 'gpuCacheKey', 'gatherCacheKey',
-                    'visualCacheKey', 'visualDensityNode', 'visualColorNode', 'visualOutputNodes',
-                    'maxima', 'maximaAttribute', 'maximaNodes', 'maximaResetNode',
-                    'pendingPreviousBounds',
-                    'lastBoundsRead', 'boundsReadPending', 'boundsGeneration',
-                    'pendingBounds', 'projectionIterations',
-                ].forEach((key) => hidden.add(key));
-            }
             Object.keys(candidate)
                 .filter((key) => (
                     !key.startsWith('_')
                     && !hidden.has(key)
-                    && !(candidate instanceof FluidSimulation && /(Node|Nodes|Attribute|Attributes|Texture|Textures)$/.test(key))
                 ))
                 .forEach((key) => this.addValue(folder, candidate, key, this.prettyName(key)));
         }
@@ -160,10 +155,6 @@ export class ModuleGUI extends GUIEditorBase {
         if (candidate instanceof FluidSimulation && 'advectionMethod' in candidate) {
             folder.add(candidate, 'advectionMethod', ['SemiLagrangian', 'MacCormack'])
                 .name('Advection Method').onChange(() => this.emitCode());
-        }
-        if (candidate instanceof FluidSimulation) {
-            folder.add(candidate, 'boundsPolicy', Object.values(FluidBoundsPolicy))
-                .name('Bounds Policy').onChange(() => this.emitCode());
         }
         if (candidate.useSpatialGrid) {
             const quality = folder.addFolder('Spatial Grid Options');
@@ -192,6 +183,8 @@ export class ModuleGUI extends GUIEditorBase {
             ['powerOfTwoBounds', 'cubicBounds', 'centeredAtOrigin',
                 'autoExpand', 'autoShrink', 'shrinkDelay', 'expansionHysteresis',
                 'timeQuality', 'maxQuerySteps']
+                .filter(key => !(candidate instanceof FluidSimulation)
+                    || !['powerOfTwoBounds', 'cubicBounds', 'autoExpand'].includes(key))
                 .filter((key) => !(candidate instanceof FluidSimulation
                     && ['powerOfTwoBounds', 'cubicBounds', 'autoExpand'].includes(key)))
                 .forEach((key) => quality.add(settings, key).name(this.prettyName(key)).onChange((value) => {

@@ -303,6 +303,16 @@ externalForce: Vector3;
 
 ***
 
+<a id="maxactivebricks"></a>
+
+### maxActiveBricks
+
+```ts
+maxActiveBricks: number;
+```
+
+***
+
 <a id="maxbounds"></a>
 
 ### maxBounds
@@ -1081,6 +1091,38 @@ Prepares shared work once per system update; the base implementation collects ma
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`prepare`](FluidSimulation.md#prepare)
+
+***
+
+<a id="readgriddiagnostics"></a>
+
+### readGridDiagnostics()
+
+```ts
+readGridDiagnostics(renderer): Promise<{
+  activeBricks: number;
+  capacity: number;
+  logicalBricks: number;
+  overflowedBricks: number;
+}>;
+```
+
+Small asynchronous allocation readback, without transferring field values.
+
+#### Parameters
+
+##### renderer
+
+[`ParticleSpatialGridRenderer`](../Supporting-Types/interfaces/ParticleSpatialGridRenderer.md)
+
+#### Returns
+
+`Promise`\<\{
+  `activeBricks`: `number`;
+  `capacity`: `number`;
+  `logicalBricks`: `number`;
+  `overflowedBricks`: `number`;
+\}\>
 
 ***
 

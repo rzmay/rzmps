@@ -269,6 +269,17 @@ abstract class FluidSimulation extends Module {
       .add(coordinate.z.mul(this.resolution * this.resolution)));
   }
 
+  protected computeCells(callback: (index: Node<'uint'>) => void): ComputeNode {
+    return Fn(() => callback(instanceIndex))().compute(this.cellCount);
+  }
+
+  protected resizeGridFields(count: number): void {
+    this.disposeGridFields();
+    this.cellCount = count;
+    this.allocateGridFields();
+    this.resetGridNodes();
+  }
+
   protected cellCoordinate(index: Node<'uint'>): Node<'ivec3'> {
     return ivec3(
       int(index.mod(this.resolution)),
@@ -412,15 +423,15 @@ abstract class FluidSimulation extends Module {
       this.solidNode = undefined;
     }
 
-    const solidNode = this.solidNode ?? Fn(() => {
-      const center = this.cellCenter(this.cellCoordinate(instanceIndex));
+    const solidNode = this.solidNode ?? this.computeCells(index => {
+      const center = this.cellCenter(this.cellCoordinate(index));
       const occupied = this.capEnabledNode.greaterThan(0.5).and(this.boundsPolicyNode.equal(2))
         .and(this.isInsideCap(center).not()).select(float(1), float(0)).toVar('fluidSolidCell');
       colliders.forEach((collider) => {
         occupied.assign(max(occupied, collider.testPositionGPU(center, context)));
       });
-      this.solid.element(instanceIndex).assign(occupied.greaterThan(0).select(1, 0));
-    })().compute(this.cellCount);
+      this.solid.element(index).assign(occupied.greaterThan(0).select(1, 0));
+    });
     this.solidNode = solidNode;
     renderer.compute(solidNode);
   }

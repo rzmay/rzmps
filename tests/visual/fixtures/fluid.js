@@ -7,7 +7,7 @@ import createCheckerboard from '../../../apps/demo/src/presets/scenes/checkerboa
 import createGasFlow from '../../../apps/demo/src/presets/scenes/gasFlow.js';
 import { FluidCollider } from '@rzmps/rzmps';
 
-const renderer = new WebGPURenderer();
+const renderer = new WebGPURenderer({ trackTimestamp: new URLSearchParams(location.search).has('profile') });
 renderer.setSize(800, 600);
 document.body.append(renderer.domElement);
 await renderer.init();
@@ -21,7 +21,9 @@ await (example === 'flipFluid' ? createScene : gasScene ? createGasFlow : create
 const fixedGas = new URLSearchParams(location.search).get('fixedGas') === 'true';
 const reviewAdvection = new URLSearchParams(location.search).get('reviewAdvection');
 const reviewGrid = new URLSearchParams(location.search).get('reviewGrid')?.split(',').map(Number);
+const reviewBricks = new URLSearchParams(location.search).get('reviewBricks');
 const system = await experimentalExamples.find(({ id }) => id === example).create({
+  ...(reviewBricks ? { maxActiveBricks: Number(reviewBricks) } : {}),
   ...(reviewGrid ? { spatialGridOptions: {
     brickSubdivisions: reviewGrid[0], cellSubdivisions: reviewGrid[1],
   } } : {}),
@@ -36,13 +38,106 @@ const system = await experimentalExamples.find(({ id }) => id === example).creat
 if (reviewGrid) system.modules[0].setSpatialGridOptions({
   brickSubdivisions: reviewGrid[0], cellSubdivisions: reviewGrid[1],
 });
+// Diagnostic reference: retain pool-wide launch/clear work without changing field operators.
+if (new URLSearchParams(location.search).get('reviewDispatch') === 'pool') {
+  const gas = system.modules[0];
+  const configured = new WeakSet();
+  const configure = () => {
+    const grid = gas.volumeGrid;
+    if (!grid || configured.has(grid)) return;
+    configured.add(grid);
+    grid.compute = (callback, faces = false, fresh = false) => {
+      const size = faces ? (grid.brickSide + 1) ** 3 : grid.cellsPerBrick;
+      return Fn(() => {
+        const slot = instanceIndex.div(size);
+        const selected = grid.slots.element(slot).greaterThan(0);
+        If(fresh ? selected.and(grid.isNew(slot.mul(grid.cellsPerBrick))) : selected,
+          () => callback(instanceIndex));
+      })().compute(grid.capacity * size);
+    };
+  };
+  const ensure = gas.ensureGridResolution;
+  gas.ensureGridResolution = function (...args) { ensure.apply(this, args); configure(); };
+  configure();
+  gas.clearNewBricks = function (renderer) {
+    if (!this.clearNewNodes.length) {
+      for (const field of [this.velocityCurrent, this.velocityNext, this.densityCurrent, this.densityNext,
+        this.colorCurrent, this.colorNext, this.curl, this.visualDensity, this.visualColor]) {
+        this.clearNewNodes.push(this.volumeGrid.compute(index => { field.element(index).assign(vec4(0)); }, false, true));
+      }
+      for (const field of [this.pressureCurrent, this.pressureNext, this.divergence, this.solid]) {
+        this.clearNewNodes.push(this.volumeGrid.compute(index => { field.element(index).assign(0); }, false, true));
+      }
+    }
+    this.clearNewNodes.forEach(node => renderer.compute(node));
+  };
+}
 scene.userData.__rzmps_particleRoot.add(system);
 scene.updateMatrixWorld(true);
 if (new URLSearchParams(location.search).has('sourceWall')) addGasWall();
 await renderer.renderAsync(scene, camera);
 system.advanceFrames(1, 1 / 60);
 const flip = system.modules[0];
-window.debugFluid = { renderer, scene, system, flip, camera, THREE };
+window.debugFluid = { renderer, scene, system, flip, camera, THREE,
+  gpu: { Fn, If, instanceIndex, storage, vec4, StorageBufferAttribute } };
+async function readField(attribute, channels = 4) {
+  const values = new Float32Array(await renderer.getArrayBufferAsync(attribute));
+  const grid = flip.volumeGrid;
+  if (!grid) return values;
+  const pages = new Uint32Array(await renderer.getArrayBufferAsync(grid.pagesAttribute));
+  const n = flip.resolution, b = grid.brickSide, bricks = n / b;
+  const dense = new Float32Array(n ** 3 * channels);
+  for (let z = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const page = pages[Math.floor(x / b) + bricks * (Math.floor(y / b) + bricks * Math.floor(z / b))];
+    if (!page) continue;
+    const packed = (page - 1) * b ** 3 + x % b + b * (y % b + b * (z % b));
+    const index = x + n * (y + n * z);
+    dense.set(values.subarray(packed * channels, (packed + 1) * channels), index * channels);
+  }
+  return dense;
+}
+async function readFaces() {
+  const values = new Float32Array(await renderer.getArrayBufferAsync(flip.pressureProjection.attribute));
+  const grid = flip.volumeGrid;
+  if (!grid) return values;
+  const pages = new Uint32Array(await renderer.getArrayBufferAsync(grid.pagesAttribute));
+  const n = flip.resolution, side = n + 1, b = grid.brickSide, bricks = n / b, bs = b + 1;
+  const dense = new Float32Array(side ** 3 * 4);
+  const owner = c => c.map(value => Math.max(0, Math.min(bricks - 1, Math.floor(value / b))));
+  const pageAt = c => pages[c[0] + bricks * (c[1] + bricks * c[2])];
+  for (let z = 0; z <= n; z++) for (let y = 0; y <= n; y++) for (let x = 0; x <= n; x++) {
+    for (let axis = 0; axis < 3; axis++) {
+      const c = [x, y, z];
+      let brick = owner(c);
+      if (!pageAt(brick)) {
+        const lower = [...c];
+        lower[axis]--;
+        brick = owner(lower);
+      }
+      const page = pageAt(brick);
+      if (!page) continue;
+      const local = c.map((value, i) => value - brick[i] * b);
+      if (local.some(value => value < 0 || value > b)) continue;
+      const index = (page - 1) * bs ** 3 + local[0] + bs * (local[1] + bs * local[2]);
+      dense[4 * (x + side * (y + side * z)) + axis] = values[4 * index + axis];
+    }
+  }
+  return dense;
+}
+function activateDiagnosticGasDomain() {
+  if (!flip.volumeGrid) return;
+  const capacity = flip.volumeGrid.brickCount;
+  if (flip.maxActiveBricks !== capacity) {
+    flip.maxActiveBricks = capacity;
+    system.advanceFrames(1, 1 / 60);
+  }
+  const grid = flip.volumeGrid;
+  renderer.compute(Fn(() => {
+    grid.pages.element(instanceIndex).assign(instanceIndex.add(1));
+    grid.slots.element(instanceIndex).assign(instanceIndex.add(1));
+  })().compute(capacity));
+  grid.updateDispatch(renderer);
+}
 window.probe = async (start, end, radius = 0.06) => {
   const output = new StorageBufferAttribute(new Float32Array(12), 4);
   const target = storage(output, 'vec4', 3);
@@ -76,15 +171,16 @@ window.runFrames = async (frames, dt = 1 / 60) => {
   }
   let field;
   if (flip.densityCurrent) {
-    const values = new Float32Array(await renderer.getArrayBufferAsync(flip.densityCurrent.value));
-    let sum = 0, peak = 0, heat = 0;
+    const values = await readField(flip.densityCurrent.value);
+    let sum = 0, peak = 0, heat = 0, centroidX = 0;
     for (let i = 0; i < values.length; i += 4) {
       sum += values[i];
+      centroidX += values[i] * (flip.bounds.min.x + (i / 4 % flip.resolution + 0.5) * flip.cellSize);
       peak = Math.max(peak, values[i]);
       heat += values[i + 1];
     }
-    const velocities = new Float32Array(await renderer.getArrayBufferAsync(flip.velocityCurrentAttribute));
-    const colors = new Float32Array(await renderer.getArrayBufferAsync(flip.colorCurrent.value));
+    const velocities = await readField(flip.velocityCurrentAttribute);
+    const colors = await readField(flip.colorCurrent.value);
     let energy = 0, coolEnergy = 0, coolDensity = 0;
     let negative = 0, nonfinite = 0, maxColorError = 0, maxTemperatureError = 0;
     let minTemperature = Infinity, maxTemperature = -Infinity, maxColor = 0;
@@ -119,7 +215,8 @@ window.runFrames = async (frames, dt = 1 / 60) => {
         expectedSum += expected;
       }
     }
-    field = { sum, peak, heat, rmsSpeed: Math.sqrt(energy / Math.max(sum, 1e-6)),
+    field = { sum, peak, heat, centroidX: centroidX / Math.max(sum, 1e-6),
+      rmsSpeed: Math.sqrt(energy / Math.max(sum, 1e-6)),
       coolSpeed: Math.sqrt(coolEnergy / Math.max(coolDensity, 1e-6)), coolDensity,
       negative, nonfinite, minTemperature, maxTemperature, maxColor,
       maxColorError, maxTemperatureError, gaussianError: gaussianError / Math.max(expectedSum, 1e-6) };
@@ -139,6 +236,7 @@ window.moveParticle = (position, velocity = [0, 0, 0], slot = 0, speed) => {
   })().compute(buffers.count));
 };
 window.seedGas = (kind = 'rotating') => {
+  activateDiagnosticGasDomain();
   flip.pressureProjection?.invalidate();
   const gaussian = ['gaussian', 'wall', 'mixed'].includes(kind);
   window.gaussianTime = kind === 'gaussian' ? 0 : undefined;
@@ -154,8 +252,8 @@ window.seedGas = (kind = 'rotating') => {
     flip.temperatureDissipation = 0;
     flip.densityCutoff = 0;
   }
-  renderer.compute(Fn(() => {
-    const center = flip.cellCenter(flip.cellCoordinate(instanceIndex));
+  renderer.compute(flip.computeCells(index => {
+    const center = flip.cellCenter(flip.cellCoordinate(index));
     const radius = center.length();
     const density = gaussian ? radius.mul(radius).div(-2 * 0.35 ** 2).exp()
       .mul(kind === 'wall' ? center.x.lessThan(0.5).select(1, 0) : float(1))
@@ -164,13 +262,13 @@ window.seedGas = (kind = 'rotating') => {
     const velocity = kind === 'uniform' || gaussian ? vec3(0.3, 0, 0)
       : vec3(center.y.negate(), center.x, 0).mul(spin);
     const heat = kind === 'mixed' ? center.x.lessThan(0).select(1, 0) : float(0.8);
-    flip.densityCurrent.element(instanceIndex).assign(vec4(density, gaussian ? density.mul(heat) : float(0), 0, 0));
-    flip.colorCurrent.element(instanceIndex).assign(kind === 'mixed'
+    flip.densityCurrent.element(index).assign(vec4(density, gaussian ? density.mul(heat) : float(0), 0, 0));
+    flip.colorCurrent.element(index).assign(kind === 'mixed'
       ? vec4(density.mul(heat), 0, density.mul(float(1).sub(heat)), 0) : gaussian
       ? vec4(density.mul(0.2), density.mul(0.4), density.mul(0.8), 0)
       : vec4(density, density, density, 0));
-    flip.velocityCurrent.element(instanceIndex).assign(vec4(velocity, 0));
-  })().compute(flip.cellCount));
+    flip.velocityCurrent.element(index).assign(vec4(velocity, 0));
+  }));
 };
 function addGasWall() {
   const wall = FluidCollider.Box({}, 0.5, 20, 20);
@@ -209,18 +307,65 @@ window.seedGasSource = (remaining = 1, alpha = 1) => {
     particle.time.assign(1 - remaining);
     buffers.storage.storeParticle(particle);
   })().compute(buffers.count));
-  renderer.compute(Fn(() => {
-    flip.densityCurrent.element(instanceIndex).assign(vec4(0));
-    flip.colorCurrent.element(instanceIndex).assign(vec4(0));
-    flip.velocityCurrent.element(instanceIndex).assign(vec4(0));
-  })().compute(flip.cellCount));
+  renderer.compute(flip.computeCells(index => {
+    flip.densityCurrent.element(index).assign(vec4(0));
+    flip.colorCurrent.element(index).assign(vec4(0));
+    flip.velocityCurrent.element(index).assign(vec4(0));
+  }));
   flip.pressureProjection?.invalidate();
 };
+window.seedGasSourceSamples = samples => {
+  window.seedGasSource();
+  system.modules.filter(module => module.constructor.name === 'TransformByNoise')
+    .forEach(module => { module.options.strength = 0; });
+  system.modules.filter(module => module.constructor.name === 'ForceOverLifetime')
+    .forEach(module => { module.options.force = new THREE.Vector3(); });
+  const buffers = system._gpuBuffers;
+  renderer.compute(Fn(() => {
+    const particle = buffers.storage.createParticle(undefined, true);
+    particle.alive.assign(0);
+    samples.forEach((sample, slot) => {
+      If(instanceIndex.equal(slot), () => {
+        particle.alive.assign(1);
+        particle.position.assign(vec3(...sample.position));
+        particle.velocity.assign(vec3(...(sample.velocity ?? [0, 0, 0])));
+        particle.scale.assign(vec3(...sample.scale));
+        particle.color.assign(vec3(...sample.color));
+        particle.alpha.assign(sample.alpha);
+        particle.mass.assign(sample.mass ?? 1);
+        particle.tagMask.assign(uint(sample.tagMask ?? 0));
+        particle.lifetime.assign(1);
+        particle.realtime.assign(0);
+        particle.time.assign(0);
+        buffers.storage.storeParticle(particle);
+      });
+    });
+    buffers.storage.storeParticle(particle);
+  })().compute(buffers.count));
+};
+window.readGasSourceState = async () => {
+  const visual = new Float32Array(await renderer.getArrayBufferAsync(flip.visualAttribute));
+  return {
+    density: await readField(flip.densityCurrent.value),
+    color: await readField(flip.colorCurrent.value),
+    velocity: await readField(flip.velocityCurrentAttribute),
+    visual,
+  };
+};
+window.stopGasSources = () => {
+  system.emitters.forEach(emitter => { emitter.rate = emitter.rateOverDistance = 0; });
+  const buffers = system._gpuBuffers;
+  renderer.compute(Fn(() => {
+    const particle = buffers.storage.createParticle(undefined, true);
+    particle.alive.assign(uint(0));
+    buffers.storage.storeParticle(particle);
+  })().compute(buffers.count));
+};
 window.gasWallMetrics = async () => {
-  const values = new Float32Array(await renderer.getArrayBufferAsync(flip.densityCurrent.value));
-  const solid = new Float32Array(await renderer.getArrayBufferAsync(flip.solidAttribute));
+  const values = await readField(flip.densityCurrent.value);
+  const solid = await readField(flip.solidAttribute, 1);
   let leaked = 0, occupiedDensity = 0, solidCells = 0;
-  for (let index = 0; index < flip.cellCount; index++) {
+  for (let index = 0; index < flip.resolution ** 3; index++) {
     const x = flip.bounds.min.x + (index % flip.resolution + 0.5) * flip.cellSize;
     if (x > 1) leaked += values[index * 4];
     if (solid[index] > 0.5) {
@@ -230,19 +375,20 @@ window.gasWallMetrics = async () => {
   }
   return { leaked, occupiedDensity, solidCells };
 };
-window.projectGas = async (iterations, mode = 'smooth') => {
+window.projectGas = async (iterations, mode = 'smooth', fullDomain = true) => {
+  if (fullDomain) activateDiagnosticGasDomain();
   flip.pressureIterations = iterations;
-  const seed = Fn(() => {
-    const center = flip.cellCenter(flip.cellCoordinate(instanceIndex));
+  const seed = flip.computeCells(index => {
+    const center = flip.cellCenter(flip.cellCoordinate(index));
     const speed = mode === 'checkerboard'
-      ? flip.cellCoordinate(instanceIndex).x.mod(2).equal(0).select(1, -1)
+      ? flip.cellCoordinate(index).x.mod(2).equal(0).select(1, -1)
       : center.x.mul(mode === 'waves' ? Math.PI : Math.PI / 8).sin();
-    flip.velocityNext.element(instanceIndex).assign(vec4(speed, 0, 0, 0));
-  })().compute(flip.cellCount);
+    flip.velocityNext.element(index).assign(vec4(speed, 0, 0, 0));
+  });
   renderer.compute(seed);
   flip.solveProjection(renderer, flip.velocityNext, flip.velocityCurrent, false, flip.solid);
-  const input = new Float32Array(await renderer.getArrayBufferAsync(flip.velocityNextAttribute));
-  const output = new Float32Array(await renderer.getArrayBufferAsync(flip.velocityCurrentAttribute));
+  const input = await readField(flip.velocityNextAttribute);
+  const output = await readField(flip.velocityCurrentAttribute);
   const divergence = values => {
     let central = 0, forward = 0, count = 0;
     const n = flip.resolution, h = flip.cellSize;
@@ -262,17 +408,24 @@ window.projectGas = async (iterations, mode = 'smooth') => {
   };
   window.lastProjectionMetrics = { before: divergence(input), after: divergence(output) };
   if (flip.pressureProjection) {
-    const faces = new Float32Array(await renderer.getArrayBufferAsync(flip.pressureProjection.attribute));
-    const pressure = new Float32Array(await renderer.getArrayBufferAsync(flip.pressureCurrentAttribute));
-    const rhs = new Float32Array(await renderer.getArrayBufferAsync(flip.divergenceAttribute));
-    const solids = new Float32Array(await renderer.getArrayBufferAsync(flip.solidAttribute));
+    const faces = await readFaces();
+    const pressure = await readField(flip.pressureCurrentAttribute, 1);
+    const rhs = await readField(flip.divergenceAttribute, 1);
+    const solids = await readField(flip.solidAttribute, 1);
     const n = flip.resolution, h = flip.cellSize, side = n + 1;
+    const grid = flip.volumeGrid;
+    const pages = grid ? new Uint32Array(await renderer.getArrayBufferAsync(grid.pagesAttribute)) : undefined;
+    const active = (x, y, z) => {
+      if (!grid) return true;
+      const b = grid.brickSide, bricks = n / b;
+      return pages[Math.floor(x / b) + bricks * (Math.floor(y / b) + bricks * Math.floor(z / b))] > 0;
+    };
     const cell = (x, y, z) => x + n * (y + n * z);
     const face = (x, y, z, axis) => faces[4 * (x + side * (y + side * z)) + axis];
     let before = 0, after = 0, residualError = 0, blockedFlux = 0, count = 0;
     for (let z = 0; z < n; z++) for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
       const i = cell(x, y, z);
-      if (solids[i] >= 0.5) continue;
+      if (solids[i] >= 0.5 || !active(x, y, z)) continue;
       const projected = (face(x + 1, y, z, 0) - face(x, y, z, 0)
         + face(x, y + 1, z, 1) - face(x, y, z, 1)
         + face(x, y, z + 1, 2) - face(x, y, z, 2)) / h;
@@ -327,7 +480,7 @@ window.fluidPacking = async () => {
     }
     return closest;
   }).sort((a, b) => a - b);
-  const pressure = new Float32Array(await renderer.getArrayBufferAsync(flip.pressureCurrentAttribute));
+  const pressure = await readField(flip.pressureCurrentAttribute, 1);
   return { count: points.length, nearCoincident: ratios.filter(r => r < 0.1).length / points.length,
     compressed: ratios.filter(r => r < 0.5).length / points.length,
     medianSpacing: ratios[Math.floor(ratios.length / 2)],
@@ -362,16 +515,17 @@ window.readLivePositions = async () => (await system.selectiveReadback(16000, ['
   .filter(({ particle }) => particle.alive).map(({ particle }) => particle.position.toArray());
 window.ready = true;
 window.seedUniformGas = () => {
+  activateDiagnosticGasDomain();
   window.seedGasSource(0, 0);
-  renderer.compute(Fn(() => {
-    flip.densityCurrent.element(instanceIndex).assign(vec4(0.5, 0.25, 0, 0));
-    flip.colorCurrent.element(instanceIndex).assign(vec4(0.1, 0.2, 0.4, 0));
-    flip.velocityCurrent.element(instanceIndex).assign(vec4(0.3, 0, 0, 0));
-  })().compute(flip.cellCount));
+  renderer.compute(flip.computeCells(index => {
+    flip.densityCurrent.element(index).assign(vec4(0.5, 0.25, 0, 0));
+    flip.colorCurrent.element(index).assign(vec4(0.1, 0.2, 0.4, 0));
+    flip.velocityCurrent.element(index).assign(vec4(0.3, 0, 0, 0));
+  }));
   flip.pressureProjection?.invalidate();
 };
 window.gasCapFlux = async () => {
-  const values = new Float32Array(await renderer.getArrayBufferAsync(flip.pressureProjection.attribute));
+  const values = await readFaces();
   const n = flip.resolution, side = n + 1;
   let flux = 0;
   for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) for (const edge of [0, n]) {

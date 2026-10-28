@@ -14,6 +14,42 @@
 
 ## Properties
 
+<a id="adaptivestepfactor"></a>
+
+### adaptiveStepFactor
+
+```ts
+adaptiveStepFactor: number;
+```
+
+Maximum multiple of the base ray step. Defaults to four.
+
+***
+
+<a id="adaptivestepping"></a>
+
+### adaptiveStepping
+
+```ts
+adaptiveStepping: boolean;
+```
+
+Grow steps behind accumulated fog. Defaults to false to preserve fine visual detail.
+
+***
+
+<a id="adaptivestepthreshold"></a>
+
+### adaptiveStepThreshold
+
+```ts
+adaptiveStepThreshold: number;
+```
+
+Accumulated opacity at which step growth begins. Defaults to 0.5.
+
+***
+
 <a id="basecolor"></a>
 
 ### baseColor
@@ -189,6 +225,66 @@ jitter: boolean;
 
 ***
 
+<a id="noisecontrast"></a>
+
+### noiseContrast
+
+```ts
+noiseContrast: number;
+```
+
+Contrast around noise value 0.5, applied before the strength exponent. Defaults to one.
+
+***
+
+<a id="noisefrequency"></a>
+
+### noiseFrequency
+
+```ts
+noiseFrequency: number;
+```
+
+Noise frequency in simulation units, independent of field resolution.
+
+***
+
+<a id="noiseoctaves"></a>
+
+### noiseOctaves
+
+```ts
+noiseOctaves: number;
+```
+
+Fractal detail layers per ray sample. Defaults to one.
+
+***
+
+<a id="noisespeed"></a>
+
+### noiseSpeed
+
+```ts
+noiseSpeed: number;
+```
+
+Animation speed along the noise helper's fourth dimension.
+
+***
+
+<a id="noisestrength"></a>
+
+### noiseStrength
+
+```ts
+noiseStrength: number;
+```
+
+Exponent applied to the contrast-adjusted density mask. Zero disables masking. WebGPU only.
+
+***
+
 <a id="opacity"></a>
 
 ### opacity
@@ -218,6 +314,30 @@ range: number;
 ```ts
 renderOrder: number;
 ```
+
+***
+
+<a id="scenedepthbias"></a>
+
+### sceneDepthBias
+
+```ts
+sceneDepthBias: number;
+```
+
+View-space distance kept in front of opaque surfaces. Defaults to 0.001.
+
+***
+
+<a id="scenedepthclipping"></a>
+
+### sceneDepthClipping
+
+```ts
+sceneDepthClipping: boolean;
+```
+
+Clip rays against opaque scene depth on WebGPURenderer. Defaults to true; requires depthTest.
 
 ***
 
@@ -268,3 +388,15 @@ Filters the simulated population by tag before rendering.
 ```ts
 threshold: number;
 ```
+
+***
+
+<a id="transmittancethreshold"></a>
+
+### transmittanceThreshold
+
+```ts
+transmittanceThreshold: number;
+```
+
+Stop when remaining transmittance falls below this value. Zero disables termination. Defaults to 0.01.

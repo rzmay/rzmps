@@ -3,7 +3,9 @@ import { WebGPURenderer } from 'three/webgpu';
 import { Module, ParticleSystem, VolumeRenderer } from '@rzmps/rzmps';
 
 const gpu = new URLSearchParams(location.search).get('backend') === 'webgpu';
-const renderer = gpu ? new WebGPURenderer() : new THREE.WebGLRenderer();
+const renderer = gpu ? new WebGPURenderer({
+  reversedDepthBuffer: new URLSearchParams(location.search).has('reversed'),
+}) : new THREE.WebGLRenderer();
 renderer.setSize(480, 320);
 renderer.setPixelRatio(1);
 renderer.setClearColor(0);
@@ -53,6 +55,6 @@ window.renderVolume = async tags => {
     children: volume.renderedChildCount,
   };
 };
-window.volumeFixture = { red, blue, volume, system, renderer, scene, camera };
+window.volumeFixture = { red, blue, volume, system, renderer, scene, camera, THREE };
 await window.renderVolume();
 window.ready = true;

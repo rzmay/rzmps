@@ -111,6 +111,7 @@ Build advanced GPU extensions with particle-node views, buffers, selective readb
 - [GPUParticleRenderStorage](classes/GPUParticleRenderStorage.md)
 - [GPUParticleStorage](classes/GPUParticleStorage.md)
 - [GPUSpatialEffectRegistry](classes/GPUSpatialEffectRegistry.md)
+- [SpatialGrid](classes/SpatialGrid.md)
 
 ## Types
 

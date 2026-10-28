@@ -186,6 +186,18 @@ externalForce: Vector3;
 
 ***
 
+<a id="maxactivebricks"></a>
+
+### maxActiveBricks
+
+```ts
+maxActiveBricks: number;
+```
+
+Maximum resident gas bricks. Defaults to 512, capped by logical brick count. Lower to reduce reserved memory.
+
+***
+
 <a id="maxbounds"></a>
 
 ### maxBounds

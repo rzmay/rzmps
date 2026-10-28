@@ -48,17 +48,35 @@ try {
     if (process.env.GAS_ADVECTION) query.set('reviewAdvection', process.env.GAS_ADVECTION);
     await page.goto(`${origin}/@fs${fixture}?${query}`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.ready);
-    if (process.env.GAS_CHILDREN || process.env.GAS_INTERPOLATION) {
-      await page.evaluate(({ children, interpolation }) => {
+    const configuration = await page.evaluate(() => {
+      const { system, flip } = window.debugFluid;
+      const volume = system.renderers.find(renderer => renderer.constructor.name === 'VolumeRenderer');
+      const scale = system.modules.find(module => module.constructor.name === 'ScaleOverLifetime').options.scale;
+      return { rate: system.emitters[0].rate, radialSpeed: system.emitters[0].radialSpeed,
+        grid: [flip.spatialGridOptions.brickSubdivisions, flip.spatialGridOptions.cellSubdivisions],
+        noiseStrength: volume.noiseStrength, noiseContrast: volume.noiseContrast,
+        adaptiveStepping: volume.adaptiveStepping, scaleStart: scale(0).x, scaleEnd: scale(1).x };
+    });
+    if (configuration.rate !== 300 || configuration.radialSpeed !== 1.5
+      || configuration.grid.join(',') !== '3,4' || configuration.noiseStrength !== 2
+      || configuration.noiseContrast !== 1.5 || configuration.adaptiveStepping
+      || configuration.scaleStart <= configuration.scaleEnd) throw new Error('Gas preset configuration mismatch');
+    if (process.env.GAS_CHILDREN || process.env.GAS_INTERPOLATION || process.env.GAS_NOISE) {
+      await page.evaluate(({ children, interpolation, noise }) => {
         const volume = window.debugFluid.system.renderers.find(renderer => renderer.constructor.name === 'VolumeRenderer');
         if (children) {
           volume.generateChildren = true;
           volume.children = { count: children, radius: 0.15, scale: 1, alpha: 0.4 };
         }
         if (interpolation) volume.interpolation = interpolation;
-      }, { children: Number(process.env.GAS_CHILDREN ?? 0), interpolation: process.env.GAS_INTERPOLATION });
+        if (noise) volume.noiseStrength = noise;
+      }, {
+        children: Number(process.env.GAS_CHILDREN ?? 0),
+        interpolation: process.env.GAS_INTERPOLATION,
+        noise: Number(process.env.GAS_NOISE ?? 0),
+      });
     }
-    results[mode] = {};
+    results[mode] = { configuration };
     let previous = 0;
     for (const seconds of [2, 5, 10]) {
       const started = performance.now();
@@ -68,6 +86,13 @@ try {
         const { flip } = window.debugFluid;
         return { min: flip.bounds.min.toArray(), max: flip.bounds.max.toArray(), cellSize: flip.cellSize };
       });
+      stats.bricks = await page.evaluate(() => {
+        const { flip, renderer } = window.debugFluid;
+        return flip.readGridDiagnostics(renderer);
+      });
+      if (stats.bricks.overflowedBricks > 0) {
+        throw new Error(`${mode}/${seconds}s: gas preset exhausted its brick budget: ${JSON.stringify(stats.bricks)}`);
+      }
       stats.coloredPixels = await page.evaluate(countColoredPixels);
       if (stats.coloredPixels < 100) throw new Error(`${mode}: gas did not produce a visible colored volume`);
       results[mode][seconds] = stats;

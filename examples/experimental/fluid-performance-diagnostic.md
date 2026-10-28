@@ -1,11 +1,333 @@
 # Fluid Performance And Resolution Diagnostic
 
-Investigated 2026-10-28. This is a diagnostic and a proposed corrective scope,
-not a claim that sparse simulation or noise up-resolution has been implemented.
+## Current Status And Remaining Work
+
+Retained after the latest audit because there are still bounded, actionable
+performance improvements. The original corrective scope is substantially complete:
+grid graph caching, sparse gas storage, source-support masks, combined gathers,
+shared grid structure, procedural masking and GUI cleanup are implemented.
+Scene-depth clipping and optional opacity-aware stepping are implemented too.
+The historical proposals below are not an outstanding implementation checklist.
+The teapot investigation is tracked separately in the liquid surface plan.
+
+### Active Dispatch And Grouped Clears: Implemented
+
+Gas cell and face kernels now use compact active-slot lists, with separate fresh
+lists for initialization. GPU-written [indirect dispatch arguments][indirect]
+schedule one brick per workgroup-row, retaining stable pool addresses and all
+existing numerical operators. The small scheduling pass scans slots, not cells;
+there is no CPU count readback or CPU dispatch per brick. Cell/face padding is
+guarded independently, and zero occupied/new bricks produce zero-work dispatches.
+The first schedule is initialized before even an empty marking dispatch.
+
+Thirteen cell clears are grouped into two passes, with at most seven targets plus
+the existing metadata binding. A separate face clear also uses only fresh slots.
+All source, transport, pressure, collider, remapping, maxima and export cell work
+uses compact dispatch. Dense output-texture clearing remains dense by design.
+
+The default resident budget is now 512, capped by logical brick count; the demo
+uses this library default rather than a bespoke 384-brick override. This is a
+liberal reservation, not free memory: all pool field buffers remain allocated.
+Users can explicitly lower `maxActiveBricks` to save memory. Larger cell depths
+multiply per-brick memory eightfold; device storage-buffer limits still apply.
+Changing the budget continues to rebuild and clear simulation fields.
+
+Run `node tests/visual/gas-dispatch-review.mjs /tmp/rzmps-gas-dispatch` for the
+matched-input reference comparison. It uses one controlled moving, buoyant source,
+fixed side-16 bounds, 16 pressure iterations and eight active bricks. Pool-wide
+reference kernels use the same allocator/operators, with the old thirteen clears.
+The compact scheduling pass is present in both modes, so the reference slightly
+overstates the old total by that scheduling cost. Both modes record five startup
+updates, 55 warm updates and twelve timed updates. Native compute timestamps and
+queue-fenced wall times are reported separately. The frozen clear microbenchmark
+has no fresh pages and measures the steady-state skip/submission cost.
+
+First complete isolated run, Apple Metal 3 / Chromium WebGPU, steady medians:
+
+| Grid | Budget | Method | GPU Pool / Compact ms | Wall Pool / Compact ms |
+| --- | ---: | --- | ---: | ---: |
+| 2/4 | 32 | SemiLagrangian | 1.17 / 0.86 | 2.10 / 2.30 |
+| 2/4 | 64 | SemiLagrangian | 1.86 / 0.88 | 2.20 / 2.30 |
+| 3/4 | 64 | SemiLagrangian | 2.18 / 1.17 | 2.30 / 2.20 |
+| 3/4 | 512 | SemiLagrangian | 12.43 / 1.24 | 12.70 / 2.20 |
+| 2/4 | 64 | MacCormack | 2.13 / 1.19 | 2.50 / 2.30 |
+
+At 512 reserved bricks, unchanged-page cell clears fall from about 1.36 to
+0.09 ms queue-fenced. Compact dispatch largely removes the unused-capacity GPU
+penalty in this controlled scene; small-budget wall times do not consistently
+improve. Startup wall times still include graph/pipeline compilation and are not
+reliably improved. These are not frame-rate predictions for the full 300-source/
+second demo, other adapters, or densely occupied pools. Raw arrays and startup
+samples are in `/tmp/rzmps-gas-dispatch/metrics.json`.
+
+All five pairs preserve density, color, velocity and transient fields within
+1e-5 (every nonzero address is compared), with zero overflow. The sparse regression
+also checks noncontiguous slots, padded face kernels, immutable sentinel cells,
+empty pools, reclamation/reuse and pressure continuity. Eight storage bindings
+remain sufficient; no new buffer binding is required by cell/face consumers.
+
+Final preset review: `/tmp/rzmps-gas-active-dispatch/metrics.json` and desktop/
+mobile screenshots. Fixed and automatic bounds pass 2/5/10-second checks with
+zero overflow, negative density or nonfinite fields. Automatic bounds had 280
+active bricks at the startup checkpoint and 32-36 at later checkpoints. The
+60-second numerical/source/collision suites, FLIP cap-policy regressions, library
+tests, lint and documentation checks pass. These visual review timings are not
+the matched-input performance comparison above.
+
+### Remaining Candidate
+
+**Skip guaranteed-empty ray intervals.** The renderer still samples uniformly
+through empty portions of each volume box. A conservative visual-occupancy grid
+plus brick-boundary traversal could skip these intervals while retaining the
+current integration in nonempty regions. Include transient sources, provider
+transforms, filtering support and renderer children; solver residency alone is
+not a correct visual occupancy mask. This is a bounded renderer feature, but more
+involved than the completed dispatch/clear changes. It helps sparse views, not
+screen-filling fog, and needs image-equivalence tests.
+
+Pressure was the largest remaining individual solver stage in the last stage
+profile (about 1.22 ms at 3/4), but simply reducing iterations trades away
+convergence. Multigrid, fully sparse FLIP fields, AMR, source scatter, and temporal
+or reduced-resolution reconstruction are deliberately outside this small-pass
+recommendation. Collider caching and RNG replacement are not priorities given
+their previously measured/audited costs. The unmatched low-resolution source-mask
+comparison also remains a measurement follow-up, not a demonstrated regression.
+
+The active/new-slot and grouped-clear pass is complete. Reassess renderer cost
+on the current demo before selecting empty-space skipping or another solver pass.
+
+For current mask controls and preset defaults, see the
+[workbench guide](README.md#filtering-and-density-controls). Strength is now a
+mask exponent with separate contrast; opacity-aware marching defaults to off.
+The measurements below retain their historical workload and tuning.
+
+Investigated 2026-10-28. The correction-pass section describes implemented changes;
+the original diagnostic below it is retained as the measured historical baseline.
 See the [liquid surface plan](liquid-surface-construction.md) for meshing and
 the earlier teapot spout measurements.
+The later [gas-stage diagnostic](gas-stage-performance-diagnostic.md) profiles
+individual solver stages and records the now-implemented opacity-aware stepping
+and scene-depth clipping. Its current API/results supersede the proposals below.
 
-## Main Findings
+## Correction Pass
+
+The gas solver now uses GPU-resident sparse brick storage and sparse dispatches
+for velocity, staggered faces, pressure, collision, density, temperature and
+color. `ParticleSpatialGrid` remains its particle-neighbor index. Both it and the
+new field-grid helper inherit `SpatialGrid`, sharing the brick/cell coordinate
+structure, subdivision setters, locating and bounds normalization. Different
+payloads/build pipelines no longer imply unrelated grid layouts.
+
+Brick depth now has a real storage consequence for gas: increasing it adds more
+logical bricks, while cell depth increases the samples inside each resident
+brick. `maxActiveBricks` (now default 512) caps the resident pool. Requests come from
+live sources and existing gas with a transport/stencil halo. Empty bricks are
+reclaimed and reused; already emitted gas does not disappear when particles die.
+Missing pages sample zero, not a reflecting wall. Pressure and transport access
+neighboring bricks through the page table, including consistent shared-face
+fluxes. Explicit domain caps/colliders remain independent of allocation edges.
+
+Pool overflow is observable through `readGridDiagnostics(renderer)` and a warning;
+excess requested bricks cannot be simulated until the budget is raised. Increasing
+the budget or changing subdivision structure rebuilds and clears simulation fields,
+as previous resolution changes did. This is uniform-voxel sparse tiling, not AMR.
+The two exported volume textures remain dense RGBA16F for compatibility with
+general volume consumers; clearing/exporting them is still a resolution-dependent
+cost. Sparse storage does not yet imply a sparse ray marcher.
+
+The allocator marks direct-indexed brick requests on GPU, preserves existing page
+assignments, releases unused slots, and assigns free slots deterministically.
+The small coarse page table does not need a full radix sort: requests are already
+unique by address. No sort dependency was added without a benchmark proving it
+would improve this workload. A larger future brick population may justify scan/
+compaction and indirect dispatch; the current pool dispatch skips unused slots.
+
+`ParticleSpatialGrid` now caches its five build graphs and updates dispatch counts
+without rebuilding graphs for particle-count changes. Structural/configuration
+changes invalidate them. Hash heads and links share one allocation, reducing
+storage bindings. Sparse metadata is packed too, keeping kernels within WebGPU's
+standard eight-storage-buffer limit. Higher-order scalar transport uses separate
+density and color targets when necessary to stay within that limit.
+
+### Procedural Gas Mask
+
+`VolumeRenderer` exposes `noiseStrength` (zero by default), `noiseFrequency`,
+`noiseSpeed` and `noiseOctaves` (one by default, maximum four). It reuses
+`generateGPUParticleNoise4D`, the same MaterialX-based procedural helper used by
+GPU force noise. Validation caught an existing bug: MaterialX accepts `vec3`,
+so the old helper's `vec4` argument discarded time. The shared helper now blends
+spatially decorrelated 3D noise slices with a C2 temporal curve. This is evolving
+noise, not a claim of 4D simplex parity with the CPU helper. Spatial-only noise
+is unchanged; animated GPU forces now correctly respond to time as well.
+Animation follows simulation updates, not rendered-frame count.
+Strength zero compiles out noise entirely; zero-density
+samples skip its evaluation. No texture generation, upload, or new dependency
+is needed. At time zero, the spatial sample matches the previous GPU helper.
+
+This is optical-property perturbation: multiply sampled density by a bounded
+animated noise factor, then perform normal opacity integration. It is deliberately
+not wavelet turbulence or extra physics. Color is still normalized by the original
+density, preventing erosion from making RGB brighter or darker independently.
+No gas fields, particle values or collision geometry are changed by masking.
+It is intended for gas appearance, not liquid simulation. The original teapot
+discussion was about grid resolution only, not a suggested use of this mask.
+
+This first procedural path requires `WebGPURenderer` (including its GLSL backend),
+matching GPU gas use. Enabling it on the legacy `WebGLRenderer` throws explicitly;
+unmasked volumes continue to support both renderers. Noise frequency and animation
+are uniforms; enabling/disabling noise or changing octave count rebuilds the volume
+material. The GUI exposes all four controls, plus independent ray quality settings.
+
+### GUI Scope
+
+Fluid modules now use a tuning allowlist rather than enumerating readable fields.
+Pressure/source/transport/collision/bounds/quality settings remain editable, along
+with managed Spatial Grid Options. Fields, page tables, scratch arrays, textures,
+backend objects, counters, maxima, pending readbacks and cache keys are not controls.
+The volume renderer already used explicit controls; only noise tuning was added,
+not its source fields, bindings, meshes or caches. Both demo GUI implementations
+and volume serialization are updated.
+
+### Depth-Aware Rendering: Historical Proposal
+
+The proposed opacity-aware variant is distinct from scene-depth clipping:
+accumulated transmittance `T` falls as the ray traverses fog, so later samples
+contribute less to the final image. This is optical depth, not camera distance
+or a guarantee that the next region is dense. A dense front layer can be followed
+by empty space, a thin colored feature, or bright emission.
+
+For a later bounded experiment, keep fine steps at the visible front and grow
+them gradually as `T` falls, with a strict maximum step size. Integrate each
+sample using its actual segment length, for example
+`alpha = 1 - exp(-extinction * segmentLength)`, including the final short segment.
+Do not merely skip samples while keeping their old alpha. Terminate once the
+remaining transmittance is below an explicit error tolerance; any color-error
+bound also needs a bound on downstream radiance. Compare silhouettes, thin
+layers, changing colors and animated masks against a fine-step reference.
+Optical-depth adaptation can hide missed detail behind fog, but cannot guarantee
+that large steps resolve high-frequency procedural noise. It is not implemented.
+
+Unity HDRP's documented fog path instead uses a camera-frustum 3D lighting grid
+with screen-resolution/depth-slice budgets and optional reprojection. Its depth
+distribution and depth-aware reconstruction are not evidence that it uses this
+specific opacity-driven per-ray step-growth heuristic. These approaches should
+remain separate quality decisions in this library.
+
+There are three separate optimizations, with different risk and acceptance tests:
+
+1. **Clip the ray interval once using opaque scene depth.** The current WebGPU
+   march already tests each sample against opaque depth; it is not depth-blind.
+   Read the same depth snapshot once, convert to view-space Z using the camera's
+   depth convention, and transform the local ray origin/direction into view space.
+   Solve `tScene = (zScene - originView.z) / directionView.z`, then clamp the box
+   exit to `min(tBoxExit, tScene - bias)`. Derive sample count and opacity-distance
+   correction from this clipped interval, rather than spending samples and doing
+   matrix/depth comparisons until encountering the surface. Handle sky depth,
+   near-parallel rays, orthographic/reversed-depth cameras and camera-inside-volume
+   cases explicitly. An earlier opaque surface must never expose gas behind it.
+2. **Skip empty intervals with conservative volume occupancy.** Build a coarse
+   maximum-density/occupancy hierarchy from final visual density, not just source
+   particles or solver density. Traverse brick ray intervals using DDA; skip only
+   intervals guaranteed to contribute nothing. Include every tag-matched provider
+   and transformed renderer child. Erosion-only noise cannot fill empty space, so
+   the same zero-occupancy test remains conservative. A density mapping curve may
+   be nonmonotonic; do not incorrectly classify it using one arbitrary cutoff.
+3. **Reduce screen-space ray resolution and depth-aware upsample.** Render
+   premultiplied scattering/color and transmittance into a half-resolution target.
+   Use full-resolution opaque depth (and optionally normals) for bilateral
+   upsampling, rejecting taps that would place smoke across a geometry edge.
+   Store ray entry/exit and representative scattering depth where needed: an
+   ordinary color blur is not a valid depth-aware reconstruction. Start without
+   temporal history. Later reprojection would need motion, history rejection,
+   disocclusion handling and camera-cut resets. Thin objects, mixed foreground/
+   background pixels and multiple overlapping volumes are difficult cases.
+
+The first option is the smallest next renderer pass. The third needs extra render
+targets/compositing and must not be slipped in as a depth-test flag. Acceptance
+requires matching full-resolution reference images from high/low angles, with
+opaque thin walls, floor intersections, camera entry/exit and overlapping fields.
+Transparent surfaces that do not write depth require a separate ordering strategy;
+opaque-depth clipping cannot solve all transparent-volume compositing.
+
+For now none of these renderer changes is enabled. Use Maximum Ray Steps and Ray
+Step / Cell manually. A frozen-field quality matrix in the benchmark measures
+40/80/160/320 steps with noise off/on separately from solver updates, so increased
+simulation resolution is no longer conflated with more expensive ray integration.
+
+### Corrected Performance Results
+
+The final queue-fenced run is `/tmp/rzmps-fluid-sparse-final/metrics.json` with
+the same Apple/Metal 3 adapter, side-16 domains, 65 gas sources / 675 FLIP markers,
+and 16 / 28 pressure iterations as before. All cases had zero brick overflow.
+Values are short-run medians, not a sustained full-container frame-rate promise.
+
+| Solver | Brick/Cell Depth | Axis | Update ms | Resident / Logical Bricks | Buffers MiB |
+| --- | --- | --- | --- | --- | --- |
+| Gas | 2/4 | 64 | 2.18 | 8 / 64 | 22.41 |
+| Gas | 3/4 | 128 | 2.72 | 12 / 512 | 22.41 |
+| Gas | 2/5 | 128 | 13.63 | 8 / 64 | 177.56 |
+| FLIP | 2/4 | 64 | 2.72 | Dense fields | 16.34 |
+| FLIP | 3/4 | 128 | 11.30 | Dense fields | 128.34 |
+| FLIP | 2/5 | 128 | 11.58 | Dense fields | 128.34 |
+
+Gas's dense export textures still add 4 MiB at 64 or 32 MiB at 128. Buffer
+figures exclude them, as in the baseline. Particle-grid rebuild medians were
+approximately 0.12-0.15 ms. More brick subdivisions are now the practical path
+to finer gas cells without multiplying every resident brick's storage. More
+cell subdivisions still multiply cells per resident brick eightfold. Raising
+resident capacity also increases field-buffer allocation; it is a separate knob.
+These fixed-iteration comparisons do not prove equivalent pressure convergence.
+
+Frozen-field ray integration, gas 3/4 at 128, one noise octave, strength 0.7:
+
+| Maximum Steps | Noise Off ms | Animated Noise On ms |
+| --- | --- | --- |
+| 40 | 0.63 | 0.67 |
+| 80 | 1.15 | 1.24 |
+| 160 | 2.21 | 2.36 |
+| 320 | 4.24 | 4.71 |
+
+`stepSizeMultiplier` was held at 0.1 to make the step cap relevant. The field,
+camera, children and noise time were frozen during each render batch; pipeline
+warmup was excluded. The 64 and 2/5 cases showed similar render costs at the
+same step cap, despite very different solver update costs. This isolates the
+two quality axes more usefully than comparing combined frame times.
+
+For this plume, procedural noise adds about 0.09 ms at 80 steps after skipping
+empty samples; it is practical enough to use now. Higher octaves and screen-filling
+dense fog can cost much more, because more samples evaluate the helper. No fixed
+texture was benchmarked, so this is not evidence that procedural noise is faster
+than texture sampling. It removes texture-generation/upload complexity while
+meeting the measured use case. Higher ray quality remains a manual GUI decision.
+
+### Multiple Particle Grids And GPU Randomness
+
+`ParticleSystem` caches managed `ParticleSpatialGrid` instances by options.
+Modules with matching options reuse one grid; differing configurations can own
+separate grids and incur separate allocation/build work. Storage bindings are
+counted per shader, not cumulatively across all modules. A kernel referencing
+only its own grid does not bind every grid in the system. A kernel querying two
+distinct grids would bind both sets of resources and must respect the device's
+limit. Packing hash heads and links removes one binding per queried grid; it does
+not eliminate the other coordinate, bounds and particle-payload resources.
+
+GPU dynamic ranges, random sets, emission and renderer children already use
+Three's stateless `hash()` implementation: an integer PCG-style permutation with
+two multiplications, additions, shifts and XORs, followed by float conversion.
+Unlike the former CPU default generator, this creates no generator object,
+performs no string seeding and maintains no per-particle random-state buffer.
+No Tyche-i replacement was made: there is no analogous setup cost to remove,
+and adding mutable RNG state would add memory/dependency costs. This is a source
+audit, not a benchmark proving the current hash is optimal. Revisit only if
+profiling identifies random arithmetic, rather than noise or memory traffic,
+as a significant cost.
+
+Verification includes eight-buffer-limit validation, exact pressure residuals
+across sparse brick boundaries, source alpha/lifetime/collision, retained gas
+after source death, dissipation/reclamation/reuse, bounded higher-order transport,
+grid changes, a 60-second continuous plume, and WebGL/WebGPU volume regressions.
+
+## Historical Baseline Findings
 
 1. Brick and cell subdivisions currently contribute only their sum to the
    fluid resolution. `2/4` is 64 cubed; `3/4` and `2/5` are both 128 cubed.
@@ -264,3 +586,4 @@ color regressions. Sparse pressure, AMR and liquid meshing are separate passes.
 [webgpu-sort]: https://github.com/kishimisu/WebGPU-Radix-Sort
 [sort-manifest]: https://github.com/kishimisu/WebGPU-Radix-Sort/blob/main/package.json
 [wgpu-sort]: https://github.com/KeKsBoTer/wgpu_sort
+[indirect]: https://developer.mozilla.org/en-US/docs/Web/API/GPUComputePassEncoder/dispatchWorkgroupsIndirect

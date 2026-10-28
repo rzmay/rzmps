@@ -90,10 +90,27 @@ try {
         const grid = flip.spatialGrid;
         const requested = new URLSearchParams(location.search).get('reviewGrid').split(',').map(Number);
         if (flip.resolution !== 2 ** (requested[0] + requested[1])) throw new Error('Grid override was not applied');
-        const gridBytes = Object.values(grid).filter(value => value?.isStorageBufferAttribute)
+        const gridBytes = [...new Set(Object.values(grid).filter(value => value?.isStorageBufferAttribute))]
           .reduce((total, attribute) => total + attribute.array.byteLength, 0);
         const adapter = renderer.backend.device.adapterInfo;
+        const rayQuality = [];
+        if (flip.readGridDiagnostics) {
+          const volume = system.renderers.find(item => item.constructor.name === 'VolumeRenderer');
+          for (const steps of [40, 80, 160, 320]) for (const noiseStrength of [0, 0.7]) {
+            volume.steps = steps;
+            volume.stepSizeMultiplier = 0.1;
+            volume.noiseStrength = noiseStrength;
+            volume._update([], system);
+            for (let i = 0; i < 3; i++) await renderer.renderAsync(scene, camera);
+            await fence();
+            const t = performance.now();
+            for (let i = 0; i < 12; i++) await renderer.renderAsync(scene, camera);
+            await fence();
+            rayQuality.push({ steps, noiseStrength, ms: (performance.now() - t) / 12 });
+          }
+        }
         return { warmupMs, updateMs, updateSubmitMs, renderMs, gridMs, gridSubmitMs, bytes, gridBytes,
+          rayQuality, sparse: flip.readGridDiagnostics ? await flip.readGridDiagnostics(renderer) : null,
           count: particles.filter(({ particle }) => particle.alive).length,
           resolution: flip.resolution, cellSize: flip.cellSize, pressureIterations: flip.pressureIterations,
           min: flip.bounds.min.toArray(), max: flip.bounds.max.toArray(),

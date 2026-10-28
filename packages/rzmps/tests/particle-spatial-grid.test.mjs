@@ -6,6 +6,7 @@ import {
   Particle,
   ParticleOctree,
   ParticleSpatialGrid,
+  SpatialGrid,
   ParticleSystem,
 } from '../build/index.mjs';
 
@@ -37,6 +38,7 @@ const grid = new ParticleSpatialGrid({
 });
 assert.equal(grid.cellsPerAxis, 32);
 assert.equal(grid.maxDepth, 5);
+assert(grid instanceof SpatialGrid);
 assert.deepEqual(grid.locate(configuredBounds.min), new THREE.Vector3(0, 0, 0));
 assert.deepEqual(grid.locate(configuredBounds.max), new THREE.Vector3(31, 31, 31));
 const structuralVersion = grid.resourceVersion;
@@ -49,6 +51,24 @@ grid.setOptions({ brickSubdivisions: 1, cellSubdivisions: 3 });
 assert.equal(grid.maxDepth, 4);
 assert.equal(grid.cellsPerAxis, 16);
 grid.setOptions({ brickSubdivisions: 2, cellSubdivisions: 3 });
+
+const graphGrid = new ParticleSpatialGrid({ autoExpand: false });
+const submissions = [];
+const fakeRenderer = { compute: node => submissions.push(node) };
+const fakeBuffers = { capacity: 4, count: 2, version: 1, storage: {} };
+graphGrid.rebuild(fakeRenderer, fakeBuffers, {});
+const firstGraphs = submissions.splice(0);
+fakeBuffers.count = 3;
+graphGrid.rebuild(fakeRenderer, fakeBuffers, {});
+assert.deepEqual(submissions.splice(0), firstGraphs, 'particle-count edits should reuse build graphs');
+assert.equal(firstGraphs[1].count, 3);
+graphGrid.autoExpand = true;
+graphGrid.rebuild(fakeRenderer, fakeBuffers, {});
+assert.notEqual(submissions.splice(0)[0], firstGraphs[0], 'captured bounds options invalidate build graphs');
+graphGrid.cellSubdivisions = 2;
+graphGrid.rebuild(fakeRenderer, fakeBuffers, {});
+assert.notEqual(submissions.splice(0)[0], firstGraphs[0], 'structural edits invalidate build graphs');
+graphGrid.dispose();
 
 const centeredGrid = new ParticleSpatialGrid({ bounds: configuredBounds });
 assert.deepEqual(centeredGrid.bounds.getCenter(new THREE.Vector3()).toArray(), [0, 0, 0]);

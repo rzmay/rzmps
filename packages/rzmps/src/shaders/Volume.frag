@@ -16,6 +16,10 @@ uniform float stepSizeMultiplier;
 uniform float densityGain;
 uniform vec2 densityRange;
 uniform sampler2D densityCurve;
+uniform bool adaptiveStepping;
+uniform float adaptiveStepThreshold;
+uniform float adaptiveStepFactor;
+uniform float transmittanceThreshold;
 
 in vec3 vOrigin;
 in vec3 vDirection;
@@ -50,33 +54,33 @@ void main() {
 
   bounds.x = max(bounds.x, 0.0);
 
-  vec3 p = vOrigin + bounds.x * rayDir;
   float rayLength = max(bounds.y - bounds.x, 0.0);
   float worldLength = length(rayDir * boundsSize) * rayLength;
   float count = clamp(ceil(worldLength / (cellSize * stepSizeMultiplier)), 1.0, min(512.0, floor(steps)));
   float stepSize = rayLength / count;
-  vec3 step = rayDir * stepSize;
-  if (jitter) {
-    p += step * random(vec3(12.9898, 78.233, 37.719), frame);
-  }
+  float offset = jitter ? random(vec3(12.9898, 78.233, 37.719), frame) : 0.5;
+  float distanceAlongRay = bounds.x;
 
   vec4 color = vec4(0.0);
 
   for (int i = 0; i < 512; i++) {
-    if (float(i) >= count) break;
-    if (distance(p, vOrigin) > bounds.y) break;
+    if (float(i) >= floor(steps) || distanceAlongRay >= bounds.y) break;
+    float growth = adaptiveStepping
+      ? mix(1.0, adaptiveStepFactor, smoothstep(adaptiveStepThreshold, 1.0, color.a)) : 1.0;
+    float segment = min(stepSize * growth, bounds.y - distanceAlongRay);
+    vec3 p = vOrigin + rayDir * (distanceAlongRay + segment * offset);
 
     vec4 volume = sampleVolume(p);
     float d = volume.a;
-    float a = 1.0 - pow(1.0 - renderOpacity(d), worldLength / (count * referenceCellSize));
+    float a = 1.0 - pow(1.0 - renderOpacity(d), length(rayDir * boundsSize) * segment / referenceCellSize);
     vec3 sampleColor = volume.rgb;
 
     color.rgb += (1.0 - color.a) * a * sampleColor;
     color.a += (1.0 - color.a) * a;
 
-    if (color.a >= 0.95) break;
+    if (1.0 - color.a <= transmittanceThreshold) break;
 
-    p += step;
+    distanceAlongRay += segment;
   }
 
   if (color.a <= 0.0) discard;

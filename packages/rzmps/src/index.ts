@@ -226,6 +226,7 @@ export type { GasSimulationOptions } from './modules/GasSimulation';
 export { default as FLIPSimulation } from './modules/FLIPSimulation';
 export type { FLIPSimulationOptions } from './modules/FLIPSimulation';
 export { default as ParticleSpatialGrid } from './gpu/ParticleSpatialGrid';
+export { default as SpatialGrid } from './gpu/SpatialGrid';
 export type {
   ParticleSpatialGridOptions,
   ParticleSpatialGridDiagnostics,

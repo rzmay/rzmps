@@ -3,9 +3,11 @@ import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import {
   float,
+  floor,
+  fract,
+  mix,
   mx_fractal_noise_float,
   vec3,
-  vec4,
 } from 'three/tsl';
 
 export interface NoiseSettings {
@@ -52,12 +54,6 @@ export function generateGPUParticleNoise(
   time?: Node<'float'>,
 ): GPUParticleNoiseValues {
   const samplePosition = position.add(vec3(settings.offset).toVar()).mul(float(settings.frequency));
-  const samplePosition4d = vec4(
-    samplePosition.x,
-    samplePosition.y,
-    samplePosition.z,
-    time ?? float(settings.time),
-  );
   const amplitudeSum = getAmplitudeSum(settings);
   const normalizeNoise = (noise: Node<'float'>) => noise
     .div(float(amplitudeSum))
@@ -72,12 +68,7 @@ export function generateGPUParticleNoise(
       settings.lacunarity,
       settings.persistence,
     )),
-    noise4d: normalizeNoise(mx_fractal_noise_float(
-      samplePosition4d,
-      settings.octaves,
-      settings.lacunarity,
-      settings.persistence,
-    )),
+    noise4d: normalizeNoise(evolvingGPUNoise(samplePosition, settings, time ?? float(settings.time))),
   };
 }
 
@@ -87,24 +78,26 @@ export function generateGPUParticleNoise4D(
   time?: Node<'float'>,
 ): Node<'float'> {
   const samplePosition = position.add(vec3(settings.offset).toVar()).mul(float(settings.frequency));
-  const samplePosition4d = vec4(
-    samplePosition.x,
-    samplePosition.y,
-    samplePosition.z,
-    time ?? float(settings.time),
-  );
   const amplitudeSum = getAmplitudeSum(settings);
 
-  return mx_fractal_noise_float(
-    samplePosition4d,
-    settings.octaves,
-    settings.lacunarity,
-    settings.persistence,
-  )
+  return evolvingGPUNoise(samplePosition, settings, time ?? float(settings.time))
     .div(float(amplitudeSum))
     .mul(0.5)
     .add(0.5)
     .clamp(0, 1);
+}
+
+function evolvingGPUNoise(position: Node<'vec3'>, settings: NoiseSettings, time: Node<'float'>): Node<'float'> {
+  // MaterialX fractal noise is 3D: passing vec4 silently discards time. Blend
+  // spatially decorrelated slices with a C2 temporal curve instead of scrolling.
+  const slice = floor(time);
+  const t = fract(time);
+  const blend = t.mul(t).mul(t).mul(t.mul(t.mul(6).sub(15)).add(10));
+  const offset = vec3(19.193, 73.719, 41.317);
+  const sample = (index: Node<'float'>) => mx_fractal_noise_float(
+    position.add(offset.mul(index)), settings.octaves, settings.lacunarity, settings.persistence,
+  );
+  return mix(sample(slice), sample(slice.add(1)), blend) as Node<'float'>;
 }
 
 function getAmplitudeSum(settings: NoiseSettings): number {

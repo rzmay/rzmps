@@ -246,6 +246,7 @@ export class ParticleSystemSerializer {
 
         if (module instanceof GasSimulation) {
             return `new GasSimulation(${this.serializeValue({
+                maxActiveBricks: module.maxActiveBricks,
                 advectionMethod: module.advectionMethod,
                 boundsPolicy: module.boundsPolicy,
                 bounds: module.autoBounds ? undefined : module.bounds,
@@ -490,10 +491,21 @@ export class ParticleSystemSerializer {
                 jitter: renderer.jitter,
                 interpolation: renderer.interpolation,
                 stepSizeMultiplier: renderer.stepSizeMultiplier,
+                adaptiveStepping: renderer.adaptiveStepping,
+                adaptiveStepThreshold: renderer.adaptiveStepThreshold,
+                adaptiveStepFactor: renderer.adaptiveStepFactor,
+                transmittanceThreshold: renderer.transmittanceThreshold,
+                sceneDepthClipping: renderer.sceneDepthClipping,
+                sceneDepthBias: renderer.sceneDepthBias,
                 densityGain: renderer.densityGain,
                 densityMapping: renderer.densityMapping,
                 densityRange: renderer.densityRange,
                 densityCurve: renderer.densityCurve,
+                noiseStrength: renderer.noiseStrength,
+                noiseContrast: renderer.noiseContrast,
+                noiseFrequency: renderer.noiseFrequency,
+                noiseSpeed: renderer.noiseSpeed,
+                noiseOctaves: renderer.noiseOctaves,
                 ...this.getLODOptions(renderer, true, true),
                 tags: renderer.tags,
             })})`;
