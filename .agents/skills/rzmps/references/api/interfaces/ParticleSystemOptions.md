@@ -184,6 +184,18 @@ Legacy shorthand for cubemapSettings.resolutionScale.
 
 ***
 
+<a id="lod"></a>
+
+### lod
+
+```ts
+lod: Partial<LODSettings>;
+```
+
+Distance-based simulated population quality; omission disables LOD.
+
+***
+
 <a id="looping"></a>
 
 ### looping
@@ -389,18 +401,6 @@ Explicit generic spatial effects, combined with matching scene effects.
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD
-
-```ts
-updateLOD: Partial<LODSettings>;
-```
-
-Distance-based simulation update quality; skipped elapsed time is accumulated.
-
-***
-
 <a id="uselivecubemap"></a>
 
 ### useLiveCubemap
@@ -428,15 +428,3 @@ Enables generic spatial-effect processing.
 ```ts
 true
 ```
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-Enables distance-based update skipping; defaults to whether updateLOD is supplied.

@@ -26,6 +26,22 @@ Enables trail shadow casting when supported by scene lighting.
 
 ***
 
+<a id="children"></a>
+
+### children
+
+```ts
+children: RendererChildrenOptions;
+```
+
+Artistic render-only copies, generated before LOD children.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`children`](../../interfaces/RendererOptions.md#children)
+
+***
+
 <a id="coloroverlifetime"></a>
 
 ### colorOverLifetime
@@ -50,41 +66,23 @@ Color multiplier along normalized trail length.
 
 ***
 
-<a id="compensatesize"></a>
+<a id="compensation"></a>
 
-### compensateSize
-
-```ts
-compensateSize: boolean;
-```
-
-Temporarily enlarges retained particles when count LOD reduces visibility.
-
-#### Default Value
+### compensation
 
 ```ts
-false
+compensation:
+  | "none"
+  | "children"
+  | "size"
+  | CompensationMode;
 ```
+
+Visual approximation for population removed by system LOD. Defaults to none.
 
 #### Inherited from
 
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`compensateSize`](../../interfaces/RendererOptions.md#compensatesize)
-
-***
-
-<a id="countlod"></a>
-
-### countLOD
-
-```ts
-countLOD: Partial<LODSettings>;
-```
-
-Reduces the number of rendered particles with distance without deleting simulated particles.
-
-#### Inherited from
-
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`countLOD`](../../interfaces/RendererOptions.md#countlod)
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`compensation`](../../interfaces/RendererOptions.md#compensation)
 
 ***
 
@@ -97,6 +95,22 @@ dieWithParticles: boolean;
 ```
 
 Removes a trail when its particle dies; false lets remaining points expire naturally. Defaults to true.
+
+***
+
+<a id="generatechildren"></a>
+
+### generateChildren
+
+```ts
+generateChildren: boolean;
+```
+
+Enables artistic and LOD child generation. Defaults to true.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`generateChildren`](../../interfaces/RendererOptions.md#generatechildren)
 
 ***
 
@@ -274,38 +288,6 @@ textureMode:
 ```
 
 Controls stretching versus tiling along the generated trail.
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD
-
-```ts
-updateLOD: Partial<LODSettings>;
-```
-
-Distance-based renderer update quality.
-
-#### Inherited from
-
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`updateLOD`](../../interfaces/RendererOptions.md#updatelod)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-Enables distance-based renderer update skipping.
-
-#### Inherited from
-
-[`RendererOptions`](../../interfaces/RendererOptions.md).[`useUpdateLOD`](../../interfaces/RendererOptions.md#useupdatelod)
 
 ***
 

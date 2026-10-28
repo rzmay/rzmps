@@ -8,6 +8,7 @@ import type { GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateCo
 import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
 import { generateGPUParticleNoise4D } from '../helpers/noise';
 import type { VolumeField } from '../interfaces/VolumeField';
+import type { VolumeFieldProvider } from '../interfaces/VolumeFieldProvider';
 import type { ValueByParameter } from '../types/ValueByParameter';
 import type { DynamicValue } from '../types/DynamicValue';
 import FluidSimulation, { type FluidSimulationOptions } from './FluidSimulation';
@@ -50,7 +51,7 @@ export interface GasSimulationOptions extends FluidSimulationOptions {
   noiseOctaves: number;
 }
 
-class GasSimulation extends FluidSimulation {
+class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   advectionMethod: GasSimulationOptions['advectionMethod'];
   density: VolumeField;
   colorField: VolumeField;
@@ -166,6 +167,16 @@ class GasSimulation extends FluidSimulation {
     };
   }
 
+  /** Density field available to volume renderers and other field consumers. */
+  public getVolumeField(): VolumeField {
+    return this.density;
+  }
+
+  /** Color field corresponding to getVolumeField. */
+  public getVolumeColorField(): VolumeField {
+    return this.colorField;
+  }
+
   public override computeGPU(
     context: GPUParticleUpdateContext,
     renderer: ParticleSpatialGridRenderer,
@@ -222,8 +233,12 @@ class GasSimulation extends FluidSimulation {
         offset: new THREE.Vector3(),
       };
       const turbulence = vec3(
-        generateGPUParticleNoise4D(center, { ...noiseSettings, offset: new THREE.Vector3(17.1, 31.7, 47.3) }, noiseTime),
-        generateGPUParticleNoise4D(center, { ...noiseSettings, offset: new THREE.Vector3(59.7, 11.3, 23.9) }, noiseTime),
+        generateGPUParticleNoise4D(
+          center, { ...noiseSettings, offset: new THREE.Vector3(17.1, 31.7, 47.3) }, noiseTime,
+        ),
+        generateGPUParticleNoise4D(
+          center, { ...noiseSettings, offset: new THREE.Vector3(59.7, 11.3, 23.9) }, noiseTime,
+        ),
         generateGPUParticleNoise4D(center, { ...noiseSettings, offset: new THREE.Vector3(37.5, 71.9, 5.7) }, noiseTime),
       ).mul(2).sub(1).mul(this.turbulenceStrength);
       const velocityRetention = pow(float(Math.E), dt.mul(this.velocityDissipationNode).mul(-1));
@@ -384,7 +399,9 @@ class GasSimulation extends FluidSimulation {
         outputDensity.element(instanceIndex).y,
       );
       textureStore(this.densityTexture, vec3(coordinate), vec4(density, 0, 0, 1)).toWriteOnly();
-      textureStore(this.colorTexture, vec3(coordinate), vec4(normalized, density.greaterThan(0).select(1, 0))).toWriteOnly();
+      textureStore(
+        this.colorTexture, vec3(coordinate), vec4(normalized, density.greaterThan(0).select(1, 0)),
+      ).toWriteOnly();
     })().compute(this.cellCount);
     this.outputNodes.set(outputDensity, output);
     renderer.compute(output);
@@ -440,7 +457,8 @@ class GasSimulation extends FluidSimulation {
         const scalars = renderBuffers.storage.createScalarNodes(particle.index);
         const particleRadius = this.splatRadius(vectors.scale);
         const weight = max(float(0), float(1).sub(vectors.position.distance(center).div(particleRadius)));
-        const contribution = max(particle.mass, float(0)).mul(scalars.alpha).mul(weight).mul(this.sourceStrength).mul(context.deltaTimeNode);
+        const contribution = max(particle.mass, float(0)).mul(scalars.alpha)
+          .mul(weight).mul(this.sourceStrength).mul(context.deltaTimeNode);
         total.addAssign(vectors.color.mul(contribution));
       }, { tagMask });
       this.visualColor.element(instanceIndex).assign(vec4(total, 0));
@@ -784,8 +802,6 @@ class GasSimulation extends FluidSimulation {
 
   protected override async readAutomaticPadding(
     renderer: ParticleSpatialGridRenderer,
-    _grid: ParticleSpatialGrid,
-    _maxParticleSpeed: number,
   ): Promise<number> {
     const values = new Float32Array(await renderer.getArrayBufferAsync(this.maximaAttribute));
     const maximumDensity = Math.max(0, values[0] ?? 0);

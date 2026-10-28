@@ -325,22 +325,6 @@ Restricts processing to particles sharing a selected tag; omission accepts every
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-Module update quality settings; skipped callbacks do not accumulate their own delta.
-
-#### Inherited from
-
-[`ModuleOptions`](ModuleOptions.md).[`updateLOD`](ModuleOptions.md#updatelod)
-
-***
-
 <a id="useoctree"></a>
 
 ### useOctree?
@@ -370,19 +354,3 @@ Enables a managed GPU ParticleSpatialGrid with default options.
 #### Inherited from
 
 [`ModuleOptions`](ModuleOptions.md).[`useSpatialGrid`](ModuleOptions.md#usespatialgrid)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD?
-
-```ts
-optional useUpdateLOD?: boolean;
-```
-
-Enables distance-based module update skipping.
-
-#### Inherited from
-
-[`ModuleOptions`](ModuleOptions.md).[`useUpdateLOD`](ModuleOptions.md#useupdatelod)

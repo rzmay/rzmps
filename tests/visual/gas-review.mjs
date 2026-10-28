@@ -48,6 +48,16 @@ try {
     if (process.env.GAS_ADVECTION) query.set('reviewAdvection', process.env.GAS_ADVECTION);
     await page.goto(`${origin}/@fs${fixture}?${query}`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.ready);
+    if (process.env.GAS_CHILDREN || process.env.GAS_INTERPOLATION) {
+      await page.evaluate(({ children, interpolation }) => {
+        const volume = window.debugFluid.system.renderers.find(renderer => renderer.constructor.name === 'VolumeRenderer');
+        if (children) {
+          volume.generateChildren = true;
+          volume.children = { count: children, radius: 0.15, scale: 1, alpha: 0.4 };
+        }
+        if (interpolation) volume.interpolation = interpolation;
+      }, { children: Number(process.env.GAS_CHILDREN ?? 0), interpolation: process.env.GAS_INTERPOLATION });
+    }
     results[mode] = {};
     let previous = 0;
     for (const seconds of [2, 5, 10]) {

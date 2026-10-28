@@ -163,6 +163,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [ParticleSpatialGridOptions](interfaces/ParticleSpatialGridOptions.md)
 - [ParticleSpatialGridQueryOptions](interfaces/ParticleSpatialGridQueryOptions.md)
 - [PointLightOptions](Supporting-Types/interfaces/PointLightOptions.md)
+- [RendererChildrenOptions](interfaces/RendererChildrenOptions.md)
 - [RotationByDepthOptions](Supporting-Types/interfaces/RotationByDepthOptions.md)
 - [RotationBySizeOptions](Supporting-Types/interfaces/RotationBySizeOptions.md)
 - [RotationBySpeedOptions](Supporting-Types/interfaces/RotationBySpeedOptions.md)
@@ -196,8 +197,10 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 
 - [AdvectionMethod](enumerations/AdvectionMethod.md)
 - [CollisionGeometryUpdatePolicy](enumerations/CollisionGeometryUpdatePolicy.md)
+- [CompensationMode](enumerations/CompensationMode.md)
 - [EmissionSource](enumerations/EmissionSource.md)
 - [EndBehavior](enumerations/EndBehavior.md)
+- [FluidBoundsPolicy](enumerations/FluidBoundsPolicy.md)
 - [GPUEventType](enumerations/GPUEventType.md)
 - [MaxCulling](enumerations/MaxCulling.md)
 - [Priority](Supporting-Types/enumerations/Priority.md)
@@ -207,6 +210,8 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [TagSelectionMethod](enumerations/TagSelectionMethod.md)
 - [TrailMode](enumerations/TrailMode.md)
 - [TrailTextureMode](enumerations/TrailTextureMode.md)
+- [VolumeDensityMapping](enumerations/VolumeDensityMapping.md)
+- [VolumeInterpolation](enumerations/VolumeInterpolation.md)
 - [Weight](Supporting-Types/enumerations/Weight.md)
 
 ### Callbacks
@@ -302,6 +307,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [ThreeGPUCollisionBackendStats](interfaces/ThreeGPUCollisionBackendStats.md)
 - [Vector3Input](type-aliases/Vector3Input.md)
 - [VolumeField](interfaces/VolumeField.md)
+- [VolumeFieldProvider](interfaces/VolumeFieldProvider.md)
 - [VolumeSample](interfaces/VolumeSample.md)
 - [VolumeSampleCount](type-aliases/VolumeSampleCount.md)
 

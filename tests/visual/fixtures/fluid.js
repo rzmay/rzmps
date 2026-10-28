@@ -20,7 +20,11 @@ const gasScene = new URLSearchParams(location.search).get('scene') === 'gasFlow'
 await (example === 'flipFluid' ? createScene : gasScene ? createGasFlow : createCheckerboard)(scene);
 const fixedGas = new URLSearchParams(location.search).get('fixedGas') === 'true';
 const reviewAdvection = new URLSearchParams(location.search).get('reviewAdvection');
+const reviewGrid = new URLSearchParams(location.search).get('reviewGrid')?.split(',').map(Number);
 const system = await experimentalExamples.find(({ id }) => id === example).create({
+  ...(reviewGrid ? { spatialGridOptions: {
+    brickSubdivisions: reviewGrid[0], cellSubdivisions: reviewGrid[1],
+  } } : {}),
   ...(reviewAdvection ? { advectionMethod: reviewAdvection } : {}),
   ...(fixedGas ? {
   bounds: new THREE.Box3(new THREE.Vector3(-8, -8, -8), new THREE.Vector3(8, 8, 8)),
@@ -29,13 +33,16 @@ const system = await experimentalExamples.find(({ id }) => id === example).creat
   automaticPadding: false,
   } : {}),
 });
+if (reviewGrid) system.modules[0].setSpatialGridOptions({
+  brickSubdivisions: reviewGrid[0], cellSubdivisions: reviewGrid[1],
+});
 scene.userData.__rzmps_particleRoot.add(system);
 scene.updateMatrixWorld(true);
 if (new URLSearchParams(location.search).has('sourceWall')) addGasWall();
 await renderer.renderAsync(scene, camera);
 system.advanceFrames(1, 1 / 60);
 const flip = system.modules[0];
-window.debugFluid = { renderer, scene, system, flip, camera };
+window.debugFluid = { renderer, scene, system, flip, camera, THREE };
 window.probe = async (start, end, radius = 0.06) => {
   const output = new StorageBufferAttribute(new Float32Array(12), 4);
   const target = storage(output, 'vec4', 3);

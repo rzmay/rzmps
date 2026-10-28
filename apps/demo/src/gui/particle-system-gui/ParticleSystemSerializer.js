@@ -97,8 +97,7 @@ export class ParticleSystemSerializer {
             `  maxParticles: ${this.serializeValue(system.maxParticles)},`,
             `  maxCullingMode: ${this.serializeValue(system.maxCullingMode)},`,
             `  simulationDistance: ${this.serializeValue(system.simulationDistance)},`,
-            `  useUpdateLOD: ${this.serializeValue(system.useUpdateLOD)},`,
-            `  updateLOD: ${this.serializeValue(system.updateLOD)},`,
+            `  lod: ${this.serializeValue(system.lod)},`,
             `  useLiveCubemap: ${this.serializeValue(system.useLiveCubemap)},`,
             `  liveCubemapFPS: ${this.serializeValue(system.liveCubemap.fps)},`,
             `  liveCubemapResolutionScale: ${this.serializeValue(system.liveCubemap.resolutionScale)},`,
@@ -489,6 +488,12 @@ export class ParticleSystemSerializer {
                 renderOrder: renderer.renderOrder,
                 depthTest: renderer.depthTest,
                 jitter: renderer.jitter,
+                interpolation: renderer.interpolation,
+                stepSizeMultiplier: renderer.stepSizeMultiplier,
+                densityGain: renderer.densityGain,
+                densityMapping: renderer.densityMapping,
+                densityRange: renderer.densityRange,
+                densityCurve: renderer.densityCurve,
                 ...this.getLODOptions(renderer, true, true),
                 tags: renderer.tags,
             })})`;
@@ -498,16 +503,10 @@ export class ParticleSystemSerializer {
 
     getLODOptions(target, includeCount = false, includeSize = false) {
         const options = {};
-        if (target.updateLOD || target.useUpdateLOD) {
-            options.useUpdateLOD = target.useUpdateLOD;
-            options.updateLOD = target.updateLOD;
-        }
-        if (includeCount && target.countLOD) {
-            options.countLOD = target.countLOD;
-        }
-        if (includeSize && target.compensateSize) {
-            options.compensateSize = target.compensateSize;
-        }
+        if (target.lod) options.lod = target.lod;
+        if (target.children) options.children = target.children;
+        if (typeof target.generateChildren === 'boolean') options.generateChildren = target.generateChildren;
+        if (target.compensation && target.compensation !== 'none') options.compensation = target.compensation;
         return options;
     }
 

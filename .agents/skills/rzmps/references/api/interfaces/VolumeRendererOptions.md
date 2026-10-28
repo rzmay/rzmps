@@ -24,6 +24,22 @@ baseColor: ColorRepresentation;
 
 ***
 
+<a id="children"></a>
+
+### children
+
+```ts
+children: RendererChildrenOptions;
+```
+
+Artistic render-only copies, generated before LOD children.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`children`](RendererOptions.md#children)
+
+***
+
 <a id="colorfield"></a>
 
 ### colorField?
@@ -36,41 +52,76 @@ optional colorField?:
 
 ***
 
-<a id="compensatesize"></a>
+<a id="compensation"></a>
 
-### compensateSize
-
-```ts
-compensateSize: boolean;
-```
-
-Temporarily enlarges retained particles when count LOD reduces visibility.
-
-#### Default Value
+### compensation
 
 ```ts
-false
+compensation:
+  | "none"
+  | "children"
+  | "size"
+  | CompensationMode;
 ```
+
+Visual approximation for population removed by system LOD. Defaults to none.
 
 #### Inherited from
 
-[`RendererOptions`](RendererOptions.md).[`compensateSize`](RendererOptions.md#compensatesize)
+[`RendererOptions`](RendererOptions.md).[`compensation`](RendererOptions.md#compensation)
 
 ***
 
-<a id="countlod"></a>
+<a id="densitycurve"></a>
 
-### countLOD
+### densityCurve
 
 ```ts
-countLOD: Partial<LODSettings>;
+densityCurve: ValueByParameter<number>;
 ```
 
-Reduces the number of rendered particles with distance without deleting simulated particles.
+Opacity curve on normalized density. Uses the existing ValueByParameter convention.
 
-#### Inherited from
+***
 
-[`RendererOptions`](RendererOptions.md).[`countLOD`](RendererOptions.md#countlod)
+<a id="densitygain"></a>
+
+### densityGain
+
+```ts
+densityGain: number;
+```
+
+Render-only density multiplier. Defaults to one.
+
+***
+
+<a id="densitymapping"></a>
+
+### densityMapping
+
+```ts
+densityMapping:
+  | "Curve"
+  | "Linear"
+  | "None"
+  | "Smoothstep"
+  | VolumeDensityMapping;
+```
+
+Defaults to Smoothstep, which uses threshold/range.
+
+***
+
+<a id="densityrange"></a>
+
+### densityRange
+
+```ts
+densityRange: [number, number];
+```
+
+Density interval mapped to zero through one in Linear/Curve modes. Defaults to [0, 1].
 
 ***
 
@@ -96,6 +147,38 @@ optional field?:
 
 ***
 
+<a id="generatechildren"></a>
+
+### generateChildren
+
+```ts
+generateChildren: boolean;
+```
+
+Enables artistic and LOD child generation. Defaults to true.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`generateChildren`](RendererOptions.md#generatechildren)
+
+***
+
+<a id="interpolation"></a>
+
+### interpolation
+
+```ts
+interpolation:
+  | "Nearest"
+  | "Linear"
+  | "Cubic"
+  | VolumeInterpolation;
+```
+
+Voxel reconstruction, independent of simulation advection. Defaults to Linear.
+
+***
+
 <a id="jitter"></a>
 
 ### jitter
@@ -113,6 +196,8 @@ jitter: boolean;
 ```ts
 opacity: number;
 ```
+
+Opacity per cell of ray travel, after density mapping. Defaults to 0.25.
 
 ***
 
@@ -144,6 +229,20 @@ renderOrder: number;
 steps: number;
 ```
 
+Maximum samples per ray, clamped to 512. Defaults to 100.
+
+***
+
+<a id="stepsizemultiplier"></a>
+
+### stepSizeMultiplier
+
+```ts
+stepSizeMultiplier: number;
+```
+
+Cell-relative ray spacing. Smaller values take more samples, up to steps. Defaults to one.
+
 ***
 
 <a id="tags"></a>
@@ -169,35 +268,3 @@ Filters the simulated population by tag before rendering.
 ```ts
 threshold: number;
 ```
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD
-
-```ts
-updateLOD: Partial<LODSettings>;
-```
-
-Distance-based renderer update quality.
-
-#### Inherited from
-
-[`RendererOptions`](RendererOptions.md).[`updateLOD`](RendererOptions.md#updatelod)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-Enables distance-based renderer update skipping.
-
-#### Inherited from
-
-[`RendererOptions`](RendererOptions.md).[`useUpdateLOD`](RendererOptions.md#useupdatelod)

@@ -60,31 +60,35 @@ brightness: DynamicValue<number>;
 
 ***
 
-<a id="compensatesize"></a>
+<a id="children"></a>
 
-### compensateSize
+### children
 
 ```ts
-compensateSize: boolean;
+children: RendererChildrenOptions;
 ```
 
 #### Inherited from
 
-[`Renderer`](Renderer.md).[`compensateSize`](Renderer.md#compensatesize)
+[`Renderer`](Renderer.md).[`children`](Renderer.md#children)
 
 ***
 
-<a id="countlod"></a>
+<a id="compensation"></a>
 
-### countLOD?
+### compensation
 
 ```ts
-optional countLOD?: Partial<LODSettings>;
+compensation:
+  | "none"
+  | "children"
+  | "size"
+  | CompensationMode;
 ```
 
 #### Inherited from
 
-[`Renderer`](Renderer.md).[`countLOD`](Renderer.md#countlod)
+[`Renderer`](Renderer.md).[`compensation`](Renderer.md#compensation)
 
 ***
 
@@ -95,6 +99,20 @@ optional countLOD?: Partial<LODSettings>;
 ```ts
 decay: number;
 ```
+
+***
+
+<a id="generatechildren"></a>
+
+### generateChildren
+
+```ts
+generateChildren: boolean;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`generateChildren`](Renderer.md#generatechildren)
 
 ***
 
@@ -190,34 +208,6 @@ optional tags?: string[];
 
 [`Renderer`](Renderer.md).[`tags`](Renderer.md#tags)
 
-***
-
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-#### Inherited from
-
-[`Renderer`](Renderer.md).[`updateLOD`](Renderer.md#updatelod)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-#### Inherited from
-
-[`Renderer`](Renderer.md).[`useUpdateLOD`](Renderer.md#useupdatelod)
-
 ## Accessors
 
 <a id="count"></a>
@@ -297,6 +287,28 @@ set needsUpdate(value): void;
 ```ts
 Renderer.needsUpdate
 ```
+
+***
+
+<a id="renderedchildcount"></a>
+
+### renderedChildCount
+
+#### Get Signature
+
+```ts
+get renderedChildCount(): number;
+```
+
+Additional visual particles; GPU diagnostics refresh asynchronously when requested.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`renderedChildCount`](Renderer.md#renderedchildcount)
 
 ***
 
@@ -486,7 +498,7 @@ update(
 ): void;
 ```
 
-Filters particles, applies renderer LOD and temporary size compensation, then delegates to the view.
+Expands render-only children and compensation before delegating to the view.
 
 #### Parameters
 
@@ -524,7 +536,7 @@ updateGPU(
 ): void;
 ```
 
-Consumes GPU simulation or render-output storage without materializing CPU particles.
+Base-class GPU preprocessing; subclasses consume the resulting ordinary render view.
 
 #### Parameters
 
@@ -545,6 +557,6 @@ Consumes GPU simulation or render-output storage without materializing CPU parti
 
 `void`
 
-#### Overrides
+#### Inherited from
 
 [`Renderer`](Renderer.md).[`updateGPU`](Renderer.md#updategpu)

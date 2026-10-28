@@ -489,3 +489,68 @@ above, desktop/mobile gas captures, documentation generation/checks, and
 markers, 24.9% below half spacing, and median spacing 0.85 at 30 seconds; its
 60-second gas run had no negative/nonfinite field values. No general emission,
 timing, GPU collision-cache, or shared pressure-solver rewrite is included.
+
+## Cap Policies and Near-Wall Transfer Pass
+
+The public `FluidBoundsPolicy` values are `Ballistic`, `Kill`, and `Contain`,
+with TSDoc on each member. They apply only at a finite, power-of-two-rounded
+`maxBounds` cap, not at intermediate adaptive grid edges. Ballistic remains
+the default. Kill reconciles source markers before grid injection and after
+movement, and reports death once. Contain includes particle radius, preserves
+tangential velocity, closes reached cap faces in pressure projection, and
+disables their scalar absorbing layer. Once reached, a closed cap does not
+shrink away merely because its source particles occupy a smaller region.
+
+`AdvectionMethod` string values now match enum casing (`SemiLagrangian`,
+`MacCormack`); SemiLagrangian is the library and Gas Volume preset default.
+The gas-flow scene splitter was raised from y=1.75 to y=2.2, leaving more
+travel distance between the system root and the first source-killing surface.
+
+### FLIP Pressure Classification
+
+An isolated two-marker probe reproduced lateral acceleration without any
+swept collider hit. With gravity -5.2, dt=1/60, and 30 frames, one marker
+drifted approximately 0.115 simulation units laterally and reached lateral
+velocity 0.111. Disabling pressure or grid occupancy removed the drift.
+Normalizing current/previous transfer samples over the same valid donors
+alone did not remove it.
+
+The pressure domain incorrectly included the entire velocity interpolation
+support around a marker, including support cells cut by walls. Gather now
+distinguishes cells actually containing markers from velocity-only support.
+FLIP pressure solves only in the former while velocity interpolation retains
+the latter. The matched-donor transfer and solid-cell previous-velocity clear
+remain for consistency. The focused stationary/freefall regression then had
+unchanged lateral positions and lateral velocities near floating-point zero
+(approximately 1e-8), with gravity and pressure independently varied.
+
+The merged-build 15/30/50-second capture retained all 6,292 markers in the
+teapot. Near-coincident fractions were 0.032% / 0% / 0%, median spacing ratios
+0.90 / 0.89 / 0.92, and peak speeds 1.57 / 1.02 / 1.06. Artifacts:
+`/tmp/rzmps-flip-cap-pass`. This run does not overflow: it establishes resting
+packing and containment, not a complete visual validation of spillage.
+
+### Develop Merge Integration
+
+Develop moved renderer GPU implementation overrides from `updateGPU` to
+`_updateGPU`. VolumeRenderer still used the old hook, causing
+`supportsGPUInput` to be false and gas presets with transient visual modules
+to fall back to unsupported CPU processing. VolumeRenderer now implements
+the new hook; a package regression checks its GPU-input capability. Explicit
+CPU-mode rejection remains unchanged.
+
+Focused browser regressions cover cap crossing, one-shot deaths, open
+intermediate edges, closed gas flux, scalar retention, source alpha/lifetime,
+and near-wall transfer. The general window-return emission issue and late
+collision-topology cache issue above remain outside this pass. The shared
+collocated liquid pressure stencil is not replaced by a full MAC solver.
+
+Final merged-build verification: package build/type/runtime tests and all six
+fluid WebGPU suites pass. Run browser suites with `--test-concurrency=1`;
+the concurrent run timed out, while the sequential run completed in 122 seconds.
+Documentation generation/build/link checks and `git diff --check` pass.
+Desktop/mobile gas-flow captures at 2/5/10 seconds are in
+`/tmp/rzmps-gas-gap-pass`; the volume remains visible around the raised
+splitter and behind the opaque scene geometry, with no negative/nonfinite
+field samples. The final 30-second teapot regression measured zero
+near-coincident markers, 19.2% below half spacing, and median spacing 0.90.

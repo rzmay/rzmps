@@ -289,6 +289,43 @@ Releases GPU attributes owned by this grid. Explicitly shared grids remain calle
 
 ***
 
+<a id="estimatelocalspacingnode"></a>
+
+### estimateLocalSpacingNode()
+
+```ts
+estimateLocalSpacingNode(
+   position,
+   excludeIndex,
+   fallbackRadius
+): Node<"float">;
+```
+
+Bounded nearest-neighbor spacing for visual density compensation. Searches
+the containing cell first, so distant clusters cannot consume the query
+budget before the caller's own cluster. Sparse fallback uses visual size,
+never the size of the grid's accumulated world bounds.
+
+#### Parameters
+
+##### position
+
+`Node`\<`"vec3"`\>
+
+##### excludeIndex
+
+`Node`\<`"uint"`\>
+
+##### fallbackRadius
+
+`Node`\<`"float"`\>
+
+#### Returns
+
+`Node`\<`"float"`\>
+
+***
+
 <a id="foreachparticleinradius"></a>
 
 ### forEachParticleInRadius()
@@ -301,9 +338,6 @@ forEachParticleInRadius(
    options?
 ): void;
 ```
-
-Emits a shader-side exact-radius query. The callback receives a loaded particle
-and may read all particle attributes. No JavaScript particle array is created.
 
 #### Parameters
 
@@ -326,6 +360,22 @@ and may read all particle attributes. No JavaScript particle array is created.
 #### Returns
 
 `void`
+
+***
+
+<a id="getcellsizenode"></a>
+
+### getCellSizeNode()
+
+```ts
+getCellSizeNode(): Node<"vec3">;
+```
+
+GPU-resolved cell extent, including automatic bounds expansion.
+
+#### Returns
+
+`Node`\<`"vec3"`\>
 
 ***
 

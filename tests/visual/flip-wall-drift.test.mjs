@@ -21,7 +21,9 @@ test('off-grid FLIP markers near walls stay stationary or in vertical freefall',
     for (const gravity of [0, -5.2]) {
       for (const pressureIterations of [0, 28]) {
         await page.goto(`${origin}/@fs${fixture}`, { waitUntil: 'networkidle0' });
-        await page.waitForFunction(() => window.ready);
+        await page.waitForFunction(() => window.ready).catch(error => {
+          throw new Error(`${error.message}\n${errors.join('\n')}`);
+        });
         await page.evaluate(() => window.runFrames(2));
         const result = await page.evaluate(async ({ gravity, pressureIterations }) => {
           window.seedFLIPPair(0, [0.085, 0.085]);

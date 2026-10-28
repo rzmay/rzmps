@@ -195,6 +195,11 @@ function DemoPage() {
       const activeSlots = typeof stats === 'number' ? 0 : stats.activeSlots;
       const usage = allocated > 0 ? (count / allocated) * 100 : 0;
       const lines = [`${count.toLocaleString()} particles`];
+      const children = typeof stats === 'number' ? 0 : stats.children;
+
+      if (children > 0) {
+        lines[0] = `${count.toLocaleString()} simulated (${(count + children).toLocaleString()} rendered)`;
+      }
 
       if (allocated > 0) {
         lines.push(`${allocated.toLocaleString()} GPU slots, ${usage.toFixed(1)}% live`);

@@ -47,7 +47,7 @@ class CPUOnlyRenderer extends Renderer {
 class GPUCapableRenderer extends Renderer {
   setup() {}
   _update() {}
-  updateGPU() {}
+  _updateGPU() {}
   destroy() {}
   clear() {}
 }
@@ -456,11 +456,8 @@ const lodGPUEmitter = new Emitter({
   rate: 20,
   rateOverDistance: 2,
   bursts: [{ time: 0.5, count: 4 }],
-  updateLOD: { distance: 5, quality: 0.5 },
-  countLOD: { distance: 5, quality: 0.5 },
 });
-assert.ok(lodGPUEmitter.getGPUEmissionSupport().features.includes('updateLOD'));
-assert.ok(lodGPUEmitter.getGPUEmissionSupport().features.includes('countLOD'));
+assert.equal(lodGPUEmitter.supportsGPUEmission, true);
 
 const distributeTagsEmitter = new Emitter({
   tags: ['a', 'b'],
@@ -560,15 +557,14 @@ ParticleSystem.GPU_READBACK_RATE = previousBuiltInReadbackRate;
 
 const mutableRenderer = new SpriteRenderer(new THREE.Texture(), {
   gridSize: new THREE.Vector2(2, 2),
-  countLOD: { distance: 10, quality: 0.5 },
+  children: { count: 2, radius: 0.5 },
   materialOptions: { depthWrite: false },
 });
 mutableRenderer.syncGPUConfiguration();
 const initialRendererVersion = mutableRenderer.version;
-mutableRenderer.countLOD.quality = 0.25;
+mutableRenderer.children.radius = 0.25;
 mutableRenderer.syncGPUConfiguration();
-assert.equal(mutableRenderer.version, initialRendererVersion);
-assert.equal(mutableRenderer._countLODHelper.quality, 0.25);
+assert.ok(mutableRenderer.version > initialRendererVersion);
 mutableRenderer.gridSize.set(4, 2);
 mutableRenderer.syncGPUConfiguration();
 assert.ok(mutableRenderer.version > initialRendererVersion);
@@ -577,24 +573,10 @@ mutableRenderer.materialOptions.depthWrite = true;
 mutableRenderer.syncGPUConfiguration();
 assert.ok(mutableRenderer.version > gridRendererVersion);
 
-const mutableEmitterLOD = new Emitter({
-  updateLOD: { distance: 10, quality: 0.5 },
-  countLOD: { distance: 20, quality: 0.25 },
+const mutableSystemLOD = new ParticleSystem({ emitters: [], renderers: [], modules: [],
+  lod: { distance: 10, quality: 0.5 },
 });
-mutableEmitterLOD.updateLOD.distance = 30;
-mutableEmitterLOD.countLOD.quality = 0.75;
-mutableEmitterLOD.syncGPUConfiguration();
-assert.equal(mutableEmitterLOD._lodHelper.distance, 30);
-assert.equal(mutableEmitterLOD._countLODHelper.quality, 0.75);
-
-const mutableSystemLOD = new ParticleSystem({
-  emitters: [],
-  renderers: [],
-  modules: [],
-  useUpdateLOD: false,
-  updateLOD: { distance: 10, quality: 0.5 },
-});
-mutableSystemLOD.updateLOD.distance = 40;
+mutableSystemLOD.lod.distance = 40;
 mutableSystemLOD.update();
 assert.equal(mutableSystemLOD._lodHelper.distance, 40);
 

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AudioRenderer, DecalRenderer, SpriteRenderer, LightRenderer, MeshRenderer, TrailRenderer, TrailMode, TrailTextureMode } from '@rzmps/rzmps';
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
+import { VolumeRenderer, VolumeInterpolation, VolumeDensityMapping } from '@rzmps/rzmps';
 
 export class RendererGUI extends GUIEditorBase {
     buildRenderersFolder(root, system = this.system) {
@@ -29,15 +30,26 @@ export class RendererGUI extends GUIEditorBase {
 
     buildRenderer(folder, renderer, system = this.system) {
         this.addTags(folder, renderer);
-        const updateLODFolder = folder.addFolder('Update LOD');
-        updateLODFolder.close();
-        this.buildUpdateLOD(updateLODFolder, renderer);
+        folder.add(renderer, 'compensation', ['none', 'size', 'children']).name('LOD Compensation');
+        const children = folder.addFolder('Renderer Children');
+        children.add(renderer, 'generateChildren').name('Enabled');
+        renderer.children ??= {};
+        const defaults = { count: 0, radius: 0, scale: 1, alpha: 1, randomizeScale: 0, randomizeAlpha: 0 };
+        for (const [key, value] of Object.entries(defaults)) renderer.children[key] ??= value;
+        this.addObject(children, renderer.children);
 
-        const countLODFolder = folder.addFolder('Count LOD');
-        countLODFolder.close();
-        this.buildCountLOD(countLODFolder, renderer, true);
 
-        if (renderer instanceof SpriteRenderer) {
+        if (renderer instanceof VolumeRenderer) {
+            folder.add(renderer, 'interpolation', Object.values(VolumeInterpolation)).name('Interpolation');
+            folder.add(renderer, 'densityMapping', Object.values(VolumeDensityMapping)).name('Density Mapping');
+            folder.add(renderer, 'stepSizeMultiplier', 0.1, 4, 0.1).name('Ray Step / Cell');
+            folder.add(renderer, 'steps', 1, 512, 1).name('Maximum Ray Steps');
+            folder.add(renderer, 'densityGain', 0, 10, 0.05).name('Density Gain');
+            for (const key of ['baseColor', 'opacity', 'threshold', 'range', 'densityRange', 'densityCurve',
+                'depthTest', 'jitter', 'renderOrder']) {
+                this.addValue(folder, renderer, key, this.prettyName(key));
+            }
+        } else if (renderer instanceof SpriteRenderer) {
             this.buildSpriteRenderer(folder, renderer);
         } else if (renderer instanceof LightRenderer) {
             this.buildLightRenderer(folder, renderer);

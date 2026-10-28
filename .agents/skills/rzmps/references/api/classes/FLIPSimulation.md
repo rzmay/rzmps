@@ -134,6 +134,24 @@ boundsPadding: number;
 
 ***
 
+<a id="boundspolicy"></a>
+
+### boundsPolicy
+
+```ts
+boundsPolicy:
+  | "Ballistic"
+  | "Kill"
+  | "Contain"
+  | FluidBoundsPolicy;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`boundsPolicy`](FluidSimulation.md#boundspolicy)
+
+***
+
 <a id="cellsize"></a>
 
 ### cellSize
@@ -462,20 +480,6 @@ optional tags?: string[];
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`updateLOD`](FluidSimulation.md#updatelod)
-
-***
-
 <a id="useoctree"></a>
 
 ### useOctree
@@ -501,20 +505,6 @@ readonly useSpatialGrid: boolean;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`useSpatialGrid`](FluidSimulation.md#usespatialgrid)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`useUpdateLOD`](FluidSimulation.md#useupdatelod)
 
 ***
 
@@ -812,6 +802,33 @@ Optional GPU compute pass, scheduled after the spatial grid is built and before 
 
 ***
 
+<a id="finalizegpu"></a>
+
+### finalizeGPU()
+
+```ts
+finalizeGPU(particle): void;
+```
+
+Persistent GPU constraint after integration and transient commit, before death events and allocation accounting.
+The system applies this module's tags and GPU condition to the final particle state.
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`finalizeGPU`](FluidSimulation.md#finalizegpu)
+
+***
+
 <a id="getparticleoctree"></a>
 
 ### getParticleOctree()
@@ -870,7 +887,7 @@ modify(
 ): void;
 ```
 
-Applies tag, condition, and LOD selection before invoking the particle callback.
+Applies tag and condition selection before invoking the particle callback.
 
 #### Parameters
 

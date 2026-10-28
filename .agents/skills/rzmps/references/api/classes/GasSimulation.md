@@ -8,11 +8,15 @@
 
 # Class: GasSimulation
 
-Per-particle modifier with priority phases, tag filtering, and a once-per-update preparation hook.
+Supplies simulation-space volume fields independently of their production algorithm.
 
 ## Extends
 
 - [`FluidSimulation`](FluidSimulation.md)
+
+## Implements
+
+- [`VolumeFieldProvider`](../interfaces/VolumeFieldProvider.md)
 
 ## Constructors
 
@@ -60,8 +64,8 @@ _modify: ModuleUpdate;
 
 ```ts
 advectionMethod:
-  | "semiLagrangian"
-  | "macCormack"
+  | "SemiLagrangian"
+  | "MacCormack"
   | AdvectionMethod;
 ```
 
@@ -134,6 +138,24 @@ boundsPadding: number;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`boundsPadding`](FluidSimulation.md#boundspadding)
+
+***
+
+<a id="boundspolicy"></a>
+
+### boundsPolicy
+
+```ts
+boundsPolicy:
+  | "Ballistic"
+  | "Kill"
+  | "Contain"
+  | FluidBoundsPolicy;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`boundsPolicy`](FluidSimulation.md#boundspolicy)
 
 ***
 
@@ -625,20 +647,6 @@ turbulenceStrength: number;
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`updateLOD`](FluidSimulation.md#updatelod)
-
-***
-
 <a id="useoctree"></a>
 
 ### useOctree
@@ -664,20 +672,6 @@ readonly useSpatialGrid: boolean;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`useSpatialGrid`](FluidSimulation.md#usespatialgrid)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`useUpdateLOD`](FluidSimulation.md#useupdatelod)
 
 ***
 
@@ -909,6 +903,33 @@ Optional GPU compute pass, scheduled after the spatial grid is built and before 
 
 ***
 
+<a id="finalizegpu"></a>
+
+### finalizeGPU()
+
+```ts
+finalizeGPU(particle): void;
+```
+
+Persistent GPU constraint after integration and transient commit, before death events and allocation accounting.
+The system applies this module's tags and GPU condition to the final particle state.
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`finalizeGPU`](FluidSimulation.md#finalizegpu)
+
+***
+
 <a id="getparticleoctree"></a>
 
 ### getParticleOctree()
@@ -955,6 +976,46 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 ***
 
+<a id="getvolumecolorfield"></a>
+
+### getVolumeColorField()
+
+```ts
+getVolumeColorField(): VolumeField;
+```
+
+Color field corresponding to getVolumeField.
+
+#### Returns
+
+[`VolumeField`](../interfaces/VolumeField.md)
+
+#### Implementation of
+
+[`VolumeFieldProvider`](../interfaces/VolumeFieldProvider.md).[`getVolumeColorField`](../interfaces/VolumeFieldProvider.md#getvolumecolorfield)
+
+***
+
+<a id="getvolumefield"></a>
+
+### getVolumeField()
+
+```ts
+getVolumeField(): VolumeField;
+```
+
+Density field available to volume renderers and other field consumers.
+
+#### Returns
+
+[`VolumeField`](../interfaces/VolumeField.md)
+
+#### Implementation of
+
+[`VolumeFieldProvider`](../interfaces/VolumeFieldProvider.md).[`getVolumeField`](../interfaces/VolumeFieldProvider.md#getvolumefield)
+
+***
+
 <a id="modify"></a>
 
 ### modify()
@@ -967,7 +1028,7 @@ modify(
 ): void;
 ```
 
-Applies tag, condition, and LOD selection before invoking the particle callback.
+Applies tag and condition selection before invoking the particle callback.
 
 #### Parameters
 

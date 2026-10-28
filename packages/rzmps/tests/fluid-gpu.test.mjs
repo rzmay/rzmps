@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { float, uniform } from 'three/tsl';
 import * as THREE from 'three';
 import {
   FLIPSimulation,
   AdvectionMethod,
+  FluidBoundsPolicy,
   FluidCollider,
   GasSimulation,
+  Module,
   ParticleOctree,
   ParticleSpatialGrid,
   ParticleSystem,
   VolumeRenderer,
+  VolumeInterpolation,
+  VolumeDensityMapping,
 } from '../build/index.mjs';
 
 const gas = new GasSimulation({
@@ -54,6 +60,13 @@ assert.ok(gas.colorField.texture.isStorageTexture);
 assert.equal(gas.density.data, undefined);
 assert.equal(gas.scalarDiffusion, 0);
 assert.equal(gas.advectionMethod, 'SemiLagrangian');
+assert.equal(gas.boundsPolicy, FluidBoundsPolicy.Ballistic);
+assert.equal(flip.boundsPolicy, FluidBoundsPolicy.Ballistic);
+assert.deepEqual(Object.values(FluidBoundsPolicy), ['Ballistic', 'Kill', 'Contain']);
+const containedGas = new GasSimulation({ boundsPolicy: 'Contain', maxBounds: 16 });
+assert.deepEqual(containedGas.closedMaxNode.value.toArray(), [0, 0, 0], 'adaptive grid edges below the cap remain open');
+containedGas.cleanup();
+assert.throws(() => new GasSimulation({ boundsPolicy: 'Open' }), /boundsPolicy/);
 assert.equal(AdvectionMethod.SemiLagrangian, 'SemiLagrangian');
 assert.equal(AdvectionMethod.MacCormack, 'MacCormack');
 const higherOrderGas = new GasSimulation({ advectionMethod: AdvectionMethod.MacCormack });
@@ -103,6 +116,11 @@ assert.equal(shrinkingGas.getParticleSpatialGrid(system).shrinkDelay, 180);
 assert.ok(grid.bounds.equals(gas.bounds));
 
 const volumeRenderer = new VolumeRenderer();
+assert.equal(volumeRenderer.supportsGPUInput, true, 'volume fields must use the renderer GPU-input hook');
+assert.equal(volumeRenderer.webglMaterial.vertexShader,
+  readFileSync(new URL('../src/shaders/Volume.vert', import.meta.url), 'utf8'));
+assert.ok(!volumeRenderer.webglMaterial.fragmentShader.includes('/* VOLUME_FIELDS */'));
+assert.equal(volumeRenderer.generateChildren, true);
 volumeRenderer.setup(system);
 assert.equal(volumeRenderer.webglMaterial.side, THREE.FrontSide);
 assert.equal(volumeRenderer.webgpuMaterial.side, THREE.FrontSide);
@@ -113,6 +131,99 @@ assert.ok(volumeRenderer.webgpuMaterial.depthNode, 'volume depth must use ray en
 assert.ok(volumeRenderer.webgpuMaterial.fragmentNode, 'volume color and alpha come directly from the ray march');
 assert.equal(volumeRenderer.mesh.material, volumeRenderer.webgpuMaterial, 'GPU fields select a compatible first-frame material');
 volumeRenderer.destroy();
+
+assert.throws(() => new VolumeRenderer({ stepSizeMultiplier: 0 }), /stepSizeMultiplier/);
+assert.throws(() => new VolumeRenderer({ densityRange: [1, 0] }), /densityRange/);
+assert.throws(() => new VolumeRenderer({ interpolation: 'invalid' }), /interpolation/);
+const copies = new VolumeRenderer({ children: { count: 2, radius: 0.2, scale: 0.8, alpha: 0.5 } });
+copies.setup(system);
+assert.equal(copies.layers.length, 3);
+assert.equal(copies.renderedChildCount, 2);
+assert.equal(copies.layers[1].alpha.value, 0.5);
+assert.equal(copies.layers[1].scale.value, 0.8);
+assert.equal(copies.layers[0].density, copies.layers[1].density, 'copies reuse source texture bindings');
+const offsets = copies.layers.map(layer => layer.offset.value.toArray());
+copies.update([], system);
+assert.deepEqual(copies.layers.map(layer => layer.offset.value.toArray()), offsets);
+copies._gpuChildren.prepare = () => { throw new Error('Field children must not generate particle buffers'); };
+copies.updateGPU({}, system);
+copies.generateChildren = false;
+copies.update([], system);
+assert.equal(copies.layers.length, 1);
+assert.equal(copies.renderedChildCount, 0);
+copies.interpolation = VolumeInterpolation.Cubic;
+copies.densityMapping = VolumeDensityMapping.Curve;
+copies.densityCurve = t => t * t;
+copies.update([], system);
+assert.ok(copies.curveTexture.version > 0);
+copies.destroy();
+const uniformCount = uniform(1);
+const constantChildren = new VolumeRenderer({ children: { count: uniformCount, radius: 0,
+  scale: float(0.8), alpha: float(0.5) } });
+constantChildren.setup(system);
+assert.equal(constantChildren.layers.length, 2);
+assert.ok(Math.abs(constantChildren.layers[1].scale.value - 0.8) < 1e-6);
+assert.equal(constantChildren.layers[1].alpha.value, 0.5);
+uniformCount.value = 2;
+constantChildren.update([], system);
+assert.equal(constantChildren.layers.length, 3);
+constantChildren.destroy();
+
+// Discovery includes dependents, deduplicates shared instances, and does not rely on GasSimulation.
+class CustomVolume extends Module {
+  constructor(field, color) {
+    super(() => {});
+    this.field = field;
+    this.color = color;
+  }
+  getVolumeField() { return this.field; }
+  getVolumeColorField() { return this.color; }
+}
+class DerivedVolume extends CustomVolume {}
+const custom = new CustomVolume(gas.density, gas.colorField);
+const dependent = new DerivedVolume(gas.density);
+custom.dependents.push(dependent);
+const lookup = new ParticleSystem({ emitters: [], renderers: [], modules: [custom, dependent] });
+assert.deepEqual(lookup.getModules(CustomVolume), [dependent, custom]);
+assert.deepEqual(lookup.getModules(DerivedVolume), [dependent]);
+assert.deepEqual(lookup.getModules(['getVolumeField']), [dependent, custom]);
+assert.deepEqual(lookup.getModules(['getVolumeField', 'missing']), []);
+assert.deepEqual(lookup.getModules([]), [dependent, custom]);
+const capability = Symbol('capability');
+custom[capability] = true;
+assert.deepEqual(lookup.getModules([capability]), [custom]);
+assert.deepEqual(lookup.getModules(GasSimulation), []);
+assert.deepEqual(system.getModules(['getVolumeField']), [gas]);
+const customRenderer = new VolumeRenderer();
+assert.deepEqual(customRenderer.resolveFields(lookup), [
+  { field: gas.density, colorField: undefined },
+  { field: gas.density, colorField: gas.colorField },
+]);
+custom.tags = ['smoke'];
+dependent.tags = ['fire'];
+assert.deepEqual(lookup.getModules(CustomVolume, ['smoke']), [custom]);
+assert.deepEqual(lookup.getModules(['getVolumeField'], ['fire']), [dependent]);
+assert.deepEqual(lookup.getModules(['getVolumeField'], null), [dependent, custom]);
+assert.deepEqual(lookup.getModules(['getVolumeField'], []), []);
+dependent.tags = null;
+assert.deepEqual(lookup.getModules(CustomVolume, ['smoke']), [dependent, custom]);
+dependent.tags = undefined;
+assert.deepEqual(lookup.getModules(CustomVolume, ['smoke']), [dependent, custom]);
+customRenderer.tags = ['fire'];
+assert.deepEqual(customRenderer.resolveFields(lookup), [{ field: gas.density, colorField: undefined }]);
+customRenderer.tags = undefined;
+lookup.modules.reverse();
+lookup.removeModule(dependent);
+custom.dependents.length = 0;
+assert.deepEqual(lookup.getModules(['getVolumeField']), [custom], 'queries reflect runtime composition');
+assert.equal(customRenderer.resolveFields(lookup)[0].colorField, gas.colorField);
+customRenderer.field = () => undefined;
+assert.deepEqual(customRenderer.resolveFields(lookup), [], 'explicit callbacks retain control over visibility');
+customRenderer.field = gas.colorField;
+customRenderer.colorField = gas.density;
+assert.deepEqual(customRenderer.resolveFields(lookup), [{ field: gas.colorField, colorField: gas.density }]);
+customRenderer.destroy();
+lookup.destroy();
 fluidCollider.geometry.dispose();
 occupancyOnlyCollider.geometry.dispose();
 

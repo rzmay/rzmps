@@ -51,6 +51,23 @@ boundsPadding: number;
 
 ***
 
+<a id="boundspolicy"></a>
+
+### boundsPolicy
+
+```ts
+boundsPolicy:
+  | "Ballistic"
+  | "Kill"
+  | "Contain"
+  | FluidBoundsPolicy;
+```
+
+Behavior at the finite maxBounds cap, not intermediate adaptive edges. Defaults to Ballistic.
+Contain retains a reached cap instead of shrinking away closed field walls.
+
+***
+
 <a id="condition"></a>
 
 ### condition?
@@ -102,7 +119,7 @@ maxBounds: number;
 ```
 
 Maximum domain side length in simulation units. Infinity leaves growth unlimited.
-Power-of-two grids round this limit down. Escaped particles are not confined by it.
+Power-of-two grids round this limit down. Particle behavior is selected by boundsPolicy.
 
 ***
 
@@ -307,22 +324,6 @@ Restricts processing to particles sharing a selected tag; omission accepts every
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-Module update quality settings; skipped callbacks do not accumulate their own delta.
-
-#### Inherited from
-
-[`ModuleOptions`](ModuleOptions.md).[`updateLOD`](ModuleOptions.md#updatelod)
-
-***
-
 <a id="useoctree"></a>
 
 ### useOctree?
@@ -352,19 +353,3 @@ Enables a managed GPU ParticleSpatialGrid with default options.
 #### Inherited from
 
 [`ModuleOptions`](ModuleOptions.md).[`useSpatialGrid`](ModuleOptions.md#usespatialgrid)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD?
-
-```ts
-optional useUpdateLOD?: boolean;
-```
-
-Enables distance-based module update skipping.
-
-#### Inherited from
-
-[`ModuleOptions`](ModuleOptions.md).[`useUpdateLOD`](ModuleOptions.md#useupdatelod)

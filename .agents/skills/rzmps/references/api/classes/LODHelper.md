@@ -8,7 +8,7 @@
 
 # Class: LODHelper
 
-Distance-based quality selection with update credit; reuse an instance to preserve skip cadence.
+Distance-based particle population quality.
 
 ## Constructors
 
@@ -119,37 +119,3 @@ getScale(distance): number;
 #### Returns
 
 `number`
-
-***
-
-<a id="reset"></a>
-
-### reset()
-
-```ts
-reset(): void;
-```
-
-#### Returns
-
-`void`
-
-***
-
-<a id="shouldupdate"></a>
-
-### shouldUpdate()
-
-```ts
-shouldUpdate(distance): boolean;
-```
-
-#### Parameters
-
-##### distance
-
-`number`
-
-#### Returns
-
-`boolean`

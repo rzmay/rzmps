@@ -109,6 +109,20 @@ boundsPadding: number;
 
 ***
 
+<a id="boundspolicy"></a>
+
+### boundsPolicy
+
+```ts
+boundsPolicy:
+  | "Ballistic"
+  | "Kill"
+  | "Contain"
+  | FluidBoundsPolicy;
+```
+
+***
+
 <a id="cellsize"></a>
 
 ### cellSize
@@ -395,20 +409,6 @@ optional tags?: string[];
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-#### Inherited from
-
-[`Module`](Module.md).[`updateLOD`](Module.md#updatelod)
-
-***
-
 <a id="useoctree"></a>
 
 ### useOctree
@@ -434,20 +434,6 @@ readonly useSpatialGrid: boolean;
 #### Inherited from
 
 [`Module`](Module.md).[`useSpatialGrid`](Module.md#usespatialgrid)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-#### Inherited from
-
-[`Module`](Module.md).[`useUpdateLOD`](Module.md#useupdatelod)
 
 ***
 
@@ -607,9 +593,9 @@ Releases managed CPU and GPU spatial acceleration references.
 
 ```ts
 computeGPU(
-   _context,
-   _renderer,
-   _grid?
+   context,
+   renderer,
+   grid?
 ): void;
 ```
 
@@ -617,15 +603,15 @@ Optional GPU compute pass, scheduled after the spatial grid is built and before 
 
 #### Parameters
 
-##### \_context
+##### context
 
 [`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
 
-##### \_renderer
+##### renderer
 
 [`ParticleSpatialGridRenderer`](../Supporting-Types/interfaces/ParticleSpatialGridRenderer.md)
 
-##### \_grid?
+##### grid?
 
 [`ParticleSpatialGrid`](ParticleSpatialGrid.md)
 
@@ -633,9 +619,36 @@ Optional GPU compute pass, scheduled after the spatial grid is built and before 
 
 `void`
 
-#### Inherited from
+#### Overrides
 
 [`Module`](Module.md).[`computeGPU`](Module.md#computegpu)
+
+***
+
+<a id="finalizegpu"></a>
+
+### finalizeGPU()
+
+```ts
+finalizeGPU(particle): void;
+```
+
+Persistent GPU constraint after integration and transient commit, before death events and allocation accounting.
+The system applies this module's tags and GPU condition to the final particle state.
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+#### Returns
+
+`void`
+
+#### Overrides
+
+[`Module`](Module.md).[`finalizeGPU`](Module.md#finalizegpu)
 
 ***
 
@@ -697,7 +710,7 @@ modify(
 ): void;
 ```
 
-Applies tag, condition, and LOD selection before invoking the particle callback.
+Applies tag and condition selection before invoking the particle callback.
 
 #### Parameters
 

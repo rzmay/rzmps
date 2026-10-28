@@ -50,6 +50,20 @@ baseColor: Color;
 
 ***
 
+<a id="children"></a>
+
+### children
+
+```ts
+children: RendererChildrenOptions;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`children`](Renderer.md#children)
+
+***
+
 <a id="colorfield"></a>
 
 ### colorField?
@@ -62,31 +76,66 @@ optional colorField?:
 
 ***
 
-<a id="compensatesize"></a>
+<a id="compensation"></a>
 
-### compensateSize
+### compensation
 
 ```ts
-compensateSize: boolean;
+compensation:
+  | "none"
+  | "children"
+  | "size"
+  | CompensationMode;
 ```
 
 #### Inherited from
 
-[`Renderer`](Renderer.md).[`compensateSize`](Renderer.md#compensatesize)
+[`Renderer`](Renderer.md).[`compensation`](Renderer.md#compensation)
 
 ***
 
-<a id="countlod"></a>
+<a id="densitycurve"></a>
 
-### countLOD?
+### densityCurve
 
 ```ts
-optional countLOD?: Partial<LODSettings>;
+densityCurve: ValueByParameter<number>;
 ```
 
-#### Inherited from
+***
 
-[`Renderer`](Renderer.md).[`countLOD`](Renderer.md#countlod)
+<a id="densitygain"></a>
+
+### densityGain
+
+```ts
+densityGain: number;
+```
+
+***
+
+<a id="densitymapping"></a>
+
+### densityMapping
+
+```ts
+densityMapping:
+  | "Curve"
+  | "Linear"
+  | "None"
+  | "Smoothstep"
+  | VolumeDensityMapping;
+```
+
+***
+
+<a id="densityrange"></a>
+
+### densityRange
+
+```ts
+densityRange: [number, number];
+```
 
 ***
 
@@ -108,6 +157,34 @@ depthTest: boolean;
 optional field?:
   | VolumeField
   | (() => VolumeField | undefined);
+```
+
+***
+
+<a id="generatechildren"></a>
+
+### generateChildren
+
+```ts
+generateChildren: boolean;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`generateChildren`](Renderer.md#generatechildren)
+
+***
+
+<a id="interpolation"></a>
+
+### interpolation
+
+```ts
+interpolation:
+  | "Nearest"
+  | "Linear"
+  | "Cubic"
+  | VolumeInterpolation;
 ```
 
 ***
@@ -162,6 +239,16 @@ steps: number;
 
 ***
 
+<a id="stepsizemultiplier"></a>
+
+### stepSizeMultiplier
+
+```ts
+stepSizeMultiplier: number;
+```
+
+***
+
 <a id="tags"></a>
 
 ### tags?
@@ -183,34 +270,6 @@ optional tags?: string[];
 ```ts
 threshold: number;
 ```
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-#### Inherited from
-
-[`Renderer`](Renderer.md).[`updateLOD`](Renderer.md#updatelod)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-#### Inherited from
-
-[`Renderer`](Renderer.md).[`useUpdateLOD`](Renderer.md#useupdatelod)
 
 ## Accessors
 
@@ -259,6 +318,28 @@ set needsUpdate(value): void;
 ```ts
 Renderer.needsUpdate
 ```
+
+***
+
+<a id="renderedchildcount"></a>
+
+### renderedChildCount
+
+#### Get Signature
+
+```ts
+get renderedChildCount(): number;
+```
+
+Number of additional field copies, not additional simulated particles.
+
+##### Returns
+
+`number`
+
+#### Overrides
+
+[`Renderer`](Renderer.md).[`renderedChildCount`](Renderer.md#renderedchildcount)
 
 ***
 
@@ -422,7 +503,7 @@ update(
 ): void;
 ```
 
-Filters particles, applies renderer LOD and temporary size compensation, then delegates to the view.
+Expands render-only children and compensation before delegating to the view.
 
 #### Parameters
 
@@ -453,14 +534,18 @@ Filters particles, applies renderer LOD and temporary size compensation, then de
 ### updateGPU()
 
 ```ts
-updateGPU(_buffers, system): void;
+updateGPU(
+   buffers,
+   system,
+   deltaTime?
+): void;
 ```
 
-Consumes GPU simulation or render-output storage without materializing CPU particles.
+Base-class GPU preprocessing; subclasses consume the resulting ordinary render view.
 
 #### Parameters
 
-##### \_buffers
+##### buffers
 
   \| [`GPUParticleBufferState`](../interfaces/GPUParticleBufferState.md)
   \| [`GPUParticleRenderBufferState`](../interfaces/GPUParticleRenderBufferState.md)
@@ -469,10 +554,14 @@ Consumes GPU simulation or render-output storage without materializing CPU parti
 
 [`ParticleSystem`](ParticleSystem.md)
 
+##### deltaTime?
+
+`number` = `0`
+
 #### Returns
 
 `void`
 
-#### Overrides
+#### Inherited from
 
 [`Renderer`](Renderer.md).[`updateGPU`](Renderer.md#updategpu)

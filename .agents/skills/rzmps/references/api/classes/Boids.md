@@ -363,20 +363,6 @@ optional tags?: string[];
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-#### Inherited from
-
-[`Module`](Module.md).[`updateLOD`](Module.md#updatelod)
-
-***
-
 <a id="useoctree"></a>
 
 ### useOctree
@@ -402,20 +388,6 @@ readonly useSpatialGrid: boolean;
 #### Inherited from
 
 [`Module`](Module.md).[`useSpatialGrid`](Module.md#usespatialgrid)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD
-
-```ts
-useUpdateLOD: boolean;
-```
-
-#### Inherited from
-
-[`Module`](Module.md).[`useUpdateLOD`](Module.md#useupdatelod)
 
 ***
 
@@ -627,6 +599,50 @@ Optional GPU compute pass, scheduled after the spatial grid is built and before 
 
 ***
 
+<a id="finalizegpu"></a>
+
+### finalizeGPU()
+
+```ts
+finalizeGPU(
+   _particle,
+   _deltaTime,
+   _context,
+   _grid?
+): void;
+```
+
+Persistent GPU constraint after integration and transient commit, before death events and allocation accounting.
+The system applies this module's tags and GPU condition to the final particle state.
+
+#### Parameters
+
+##### \_particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+##### \_deltaTime
+
+`Node`\<`"float"`\>
+
+##### \_context
+
+[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+
+##### \_grid?
+
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Module`](Module.md).[`finalizeGPU`](Module.md#finalizegpu)
+
+***
+
 <a id="getparticleoctree"></a>
 
 ### getParticleOctree()
@@ -685,7 +701,7 @@ modify(
 ): void;
 ```
 
-Applies tag, condition, and LOD selection before invoking the particle callback.
+Applies tag and condition selection before invoking the particle callback.
 
 #### Parameters
 

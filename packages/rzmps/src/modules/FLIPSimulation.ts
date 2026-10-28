@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
-import { Fn, If, clamp, float, floor, instanceIndex, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4 } from 'three/tsl';
+import {
+  Fn, If, clamp, float, floor, instanceIndex, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4,
+} from 'three/tsl';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
 import Collision from './Collision';

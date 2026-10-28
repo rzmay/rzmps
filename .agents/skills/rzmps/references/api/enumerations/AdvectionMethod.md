@@ -8,6 +8,8 @@
 
 # Enumeration: AdvectionMethod
 
+Advection methods for transporting gas fields through the velocity grid.
+
 ## Enumeration Members
 
 <a id="maccormack"></a>
@@ -15,8 +17,10 @@
 ### MacCormack
 
 ```ts
-MacCormack: "macCormack";
+MacCormack: "MacCormack";
 ```
+
+Higher-order MacCormack advection with correction to limit numerical diffusion.
 
 ***
 
@@ -25,5 +29,7 @@ MacCormack: "macCormack";
 ### SemiLagrangian
 
 ```ts
-SemiLagrangian: "semiLagrangian";
+SemiLagrangian: "SemiLagrangian";
 ```
+
+First-order semi-Lagrangian advection, the default method.

@@ -163,6 +163,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [ParticleSpatialGridOptions](api/interfaces/ParticleSpatialGridOptions.md)
 - [ParticleSpatialGridQueryOptions](api/interfaces/ParticleSpatialGridQueryOptions.md)
 - [PointLightOptions](api/Supporting-Types/interfaces/PointLightOptions.md)
+- [RendererChildrenOptions](api/interfaces/RendererChildrenOptions.md)
 - [RotationByDepthOptions](api/Supporting-Types/interfaces/RotationByDepthOptions.md)
 - [RotationBySizeOptions](api/Supporting-Types/interfaces/RotationBySizeOptions.md)
 - [RotationBySpeedOptions](api/Supporting-Types/interfaces/RotationBySpeedOptions.md)
@@ -196,8 +197,10 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 
 - [AdvectionMethod](api/enumerations/AdvectionMethod.md)
 - [CollisionGeometryUpdatePolicy](api/enumerations/CollisionGeometryUpdatePolicy.md)
+- [CompensationMode](api/enumerations/CompensationMode.md)
 - [EmissionSource](api/enumerations/EmissionSource.md)
 - [EndBehavior](api/enumerations/EndBehavior.md)
+- [FluidBoundsPolicy](api/enumerations/FluidBoundsPolicy.md)
 - [GPUEventType](api/enumerations/GPUEventType.md)
 - [MaxCulling](api/enumerations/MaxCulling.md)
 - [Priority](api/Supporting-Types/enumerations/Priority.md)
@@ -207,6 +210,8 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [TagSelectionMethod](api/enumerations/TagSelectionMethod.md)
 - [TrailMode](api/enumerations/TrailMode.md)
 - [TrailTextureMode](api/enumerations/TrailTextureMode.md)
+- [VolumeDensityMapping](api/enumerations/VolumeDensityMapping.md)
+- [VolumeInterpolation](api/enumerations/VolumeInterpolation.md)
 - [Weight](api/Supporting-Types/enumerations/Weight.md)
 
 ### Callbacks
@@ -302,6 +307,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [ThreeGPUCollisionBackendStats](api/interfaces/ThreeGPUCollisionBackendStats.md)
 - [Vector3Input](api/type-aliases/Vector3Input.md)
 - [VolumeField](api/interfaces/VolumeField.md)
+- [VolumeFieldProvider](api/interfaces/VolumeFieldProvider.md)
 - [VolumeSample](api/interfaces/VolumeSample.md)
 - [VolumeSampleCount](api/type-aliases/VolumeSampleCount.md)
 

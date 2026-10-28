@@ -66,8 +66,6 @@ export function getGPUEmitterSupport(emitter: Emitter): GPUEmissionSupportReport
     }
   }
 
-  if (emitter.useUpdateLOD) features.push('updateLOD');
-  if (emitter.countLOD) features.push('countLOD');
 
   if (shapeReport.supported) {
     features.push(`builtIn:${emitter.source.geometry.type}:${emitter.source.source}`);

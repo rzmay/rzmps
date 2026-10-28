@@ -14,6 +14,22 @@
 
 ## Properties
 
+<a id="children"></a>
+
+### children?
+
+```ts
+optional children?: RendererChildrenOptions;
+```
+
+Artistic render-only copies, generated before LOD children.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`children`](RendererOptions.md#children)
+
+***
+
 <a id="color"></a>
 
 ### color
@@ -26,25 +42,23 @@ Tint multiplied with material color at creation. Default white.
 
 ***
 
-<a id="compensatesize"></a>
+<a id="compensation"></a>
 
-### compensateSize?
-
-```ts
-optional compensateSize?: boolean;
-```
-
-Temporarily enlarges retained particles when count LOD reduces visibility.
-
-#### Default Value
+### compensation?
 
 ```ts
-false
+optional compensation?:
+  | "none"
+  | "children"
+  | "size"
+  | CompensationMode;
 ```
+
+Visual approximation for population removed by system LOD. Defaults to none.
 
 #### Inherited from
 
-[`RendererOptions`](RendererOptions.md).[`compensateSize`](RendererOptions.md#compensatesize)
+[`RendererOptions`](RendererOptions.md).[`compensation`](RendererOptions.md#compensation)
 
 ***
 
@@ -57,22 +71,6 @@ continuousRate: number;
 ```
 
 Projections per second per live particle, starting after one interval. Zero disables continuous placement.
-
-***
-
-<a id="countlod"></a>
-
-### countLOD?
-
-```ts
-optional countLOD?: Partial<LODSettings>;
-```
-
-Reduces the number of rendered particles with distance without deleting simulated particles.
-
-#### Inherited from
-
-[`RendererOptions`](RendererOptions.md).[`countLOD`](RendererOptions.md#countlod)
 
 ***
 
@@ -121,6 +119,22 @@ Multiplies by lerp(1, 1 - distance / maxDistance, amount). Default 0.
 ```ts
 distanceAffectsSize: number;
 ```
+
+***
+
+<a id="generatechildren"></a>
+
+### generateChildren?
+
+```ts
+optional generateChildren?: boolean;
+```
+
+Enables artistic and LOD child generation. Defaults to true.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`generateChildren`](RendererOptions.md#generatechildren)
 
 ***
 
@@ -309,35 +323,3 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](RendererOptions.md).[`tags`](RendererOptions.md#tags)
-
-***
-
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-Distance-based renderer update quality.
-
-#### Inherited from
-
-[`RendererOptions`](RendererOptions.md).[`updateLOD`](RendererOptions.md#updatelod)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD?
-
-```ts
-optional useUpdateLOD?: boolean;
-```
-
-Enables distance-based renderer update skipping.
-
-#### Inherited from
-
-[`RendererOptions`](RendererOptions.md).[`useUpdateLOD`](RendererOptions.md#useupdatelod)

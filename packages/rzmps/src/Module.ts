@@ -4,7 +4,6 @@ import type { Tag } from './types/Tag';
 import type { StrictMultiple } from './types/Multiple';
 import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
-import LODHelper, { type LODSettings } from './LODHelper';
 import SpatialEffect from './SpatialEffect';
 import Priority from './enums/Priority';
 import type { GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateContext } from './gpu/Particle';
@@ -72,10 +71,6 @@ export interface ModuleOptions {
   condition: ModuleCondition;
   /** Optional TSL condition callback for GPU processing. */
   conditionGPU: ModuleGPUCondition | null;
-  /** Enables distance-based module update skipping. */
-  useUpdateLOD: boolean;
-  /** Module update quality settings; skipped callbacks do not accumulate their own delta. */
-  updateLOD: Partial<LODSettings>;
   /** TSL modifier used when GPU processing is active. */
   modifyGPU: ModuleGPUUpdate | null;
   /** Explicit module effect collection; supplying an empty array suppresses automatic discovery. */
@@ -116,9 +111,6 @@ export default class Module {
   condition: ModuleCondition;
   conditionGPU?: ModuleGPUCondition;
   private readonly _hasCustomCondition: boolean;
-  useUpdateLOD: boolean;
-  updateLOD?: Partial<LODSettings>;
-  private _lodHelper: LODHelper;
   spatialEffects: SpatialEffect[] = [];
   explicitSpatialEffects?: SpatialEffect[];
   spatialEffectFilter?: (spatialEffect: SpatialEffect) => boolean;
@@ -159,9 +151,6 @@ export default class Module {
     this._hasCustomCondition = options.condition !== undefined;
     this.condition = options.condition ?? (() => true);
     this.conditionGPU = options.conditionGPU ?? undefined;
-    this.updateLOD = options.updateLOD;
-    this.useUpdateLOD = options.useUpdateLOD ?? Boolean(this.updateLOD);
-    this._lodHelper = new LODHelper(this.updateLOD);
     this.priority = options.priority ?? this.priority;
     this.modifyGPU = options.modifyGPU ?? Module.GPU_UNSUPPORTED;
     this.explicitSpatialEffects = options.spatialEffects;
@@ -195,11 +184,8 @@ export default class Module {
     this._gpuStructureSignature = structureSignature;
   }
 
-  /** Applies tag, condition, and LOD selection before invoking the particle callback. */
+  /** Applies tag and condition selection before invoking the particle callback. */
   public modify(particles: Particle[], deltaTime: number, particleSystem?: ParticleSystem): void {
-    const distanceSq = particleSystem?.cameraDistanceSq ?? Number.MAX_SAFE_INTEGER;
-    if (this.useUpdateLOD && !this._lodHelper.shouldUpdate(Math.sqrt(distanceSq))) return;
-
     particles.filter((p) => (
       p.alive
       && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))

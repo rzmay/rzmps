@@ -194,6 +194,9 @@ export { default as ParticleForceFieldHelper } from './spatial/ParticleForceFiel
 // Collision
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';
 export type { VolumeField } from './interfaces/VolumeField';
+export type { VolumeFieldProvider } from './interfaces/VolumeFieldProvider';
+export { VolumeInterpolation } from './enums/VolumeInterpolation';
+export { VolumeDensityMapping } from './enums/VolumeDensityMapping';
 export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBackend';
 export type { ThreeCollisionBackendOptions } from './collision/ThreeCollisionBackend';
 export { default as ThreeGPUCollisionBackend } from './collision/ThreeGPUCollisionBackend';
@@ -233,3 +236,6 @@ export type {
 
 // Texture helper
 export * as Textures from './Textures';
+
+export { CompensationMode } from './Renderer';
+export type { RendererChildrenOptions } from './Renderer';

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
+import { MeshBasicNodeMaterial, WebGPURenderer, type Node, type UniformNode } from 'three/webgpu';
 import {
   Break,
   Discard,
@@ -12,38 +12,86 @@ import {
   cameraProjectionMatrix,
   cameraViewMatrix,
   float,
+  ceil,
+  floor,
+  hash,
   linearDepth,
   max,
   min,
+  mix,
+  pow,
   modelWorldMatrix,
   modelWorldMatrixInverse,
   positionGeometry,
   smoothstep,
   texture3D,
+  texture,
   uniform,
   vec3,
+  vec2,
   vec4,
   viewZToOrthographicDepth,
   viewportDepthTexture,
 } from 'three/tsl';
-import Renderer, { type RendererOptions } from '../Renderer';
+import Renderer, { CompensationMode, type RendererOptions } from '../Renderer';
 import Particle from '../Particle';
 import ParticleSystem from '../ParticleSystem';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
-import GasSimulation from '../modules/GasSimulation';
+import type { VolumeFieldProvider } from '../interfaces/VolumeFieldProvider';
 import type { VolumeField } from '../interfaces/VolumeField';
+import volumeVert from '../shaders/Volume.vert';
+import volumeFrag from '../shaders/Volume.frag';
+import volumeLayersGLSL from '../shaders/VolumeLayers';
+import volumeChildren, { volumeNumber } from '../helpers/volumeChildren';
+import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import { VolumeInterpolation } from '../enums/VolumeInterpolation';
+import { VolumeDensityMapping } from '../enums/VolumeDensityMapping';
+import type { ValueByParameter } from '../types/ValueByParameter';
+
+interface FieldBinding {
+  field: VolumeField;
+  texture: THREE.Texture;
+  owned: boolean;
+  version: number;
+  resolution: THREE.Vector3;
+  minimum: UniformNode<'vec3', THREE.Vector3>;
+  size: UniformNode<'vec3', THREE.Vector3>;
+  resolutionNode: UniformNode<'vec3', THREE.Vector3>;
+}
+
+interface VolumeLayer {
+  density: FieldBinding;
+  color?: FieldBinding;
+  offset: UniformNode<'vec3', THREE.Vector3>;
+  scale: UniformNode<'float', number>;
+  alpha: UniformNode<'float', number>;
+}
 
 export interface VolumeRendererOptions extends RendererOptions {
   field?: VolumeField | (() => VolumeField | undefined);
   colorField?: VolumeField | (() => VolumeField | undefined);
   baseColor: THREE.ColorRepresentation;
+  /** Opacity per cell of ray travel, after density mapping. Defaults to 0.25. */
   opacity: number;
   threshold: number;
   range: number;
+  /** Maximum samples per ray, clamped to 512. Defaults to 100. */
   steps: number;
   renderOrder: number;
   depthTest: boolean;
   jitter: boolean;
+  /** Voxel reconstruction, independent of simulation advection. Defaults to Linear. */
+  interpolation: VolumeInterpolation | `${VolumeInterpolation}`;
+  /** Cell-relative ray spacing. Smaller values take more samples, up to steps. Defaults to one. */
+  stepSizeMultiplier: number;
+  /** Render-only density multiplier. Defaults to one. */
+  densityGain: number;
+  /** Defaults to Smoothstep, which uses threshold/range. */
+  densityMapping: VolumeDensityMapping | `${VolumeDensityMapping}`;
+  /** Density interval mapped to zero through one in Linear/Curve modes. Defaults to [0, 1]. */
+  densityRange: [number, number];
+  /** Opacity curve on normalized density. Uses the existing ValueByParameter convention. */
+  densityCurve: ValueByParameter<number>;
 }
 
 class VolumeRenderer extends Renderer {
@@ -57,13 +105,15 @@ class VolumeRenderer extends Renderer {
   renderOrder: number;
   depthTest: boolean;
   jitter: boolean;
+  interpolation: VolumeRendererOptions['interpolation'];
+  stepSizeMultiplier: number;
+  densityGain: number;
+  densityMapping: VolumeRendererOptions['densityMapping'];
+  densityRange: [number, number];
+  densityCurve: VolumeRendererOptions['densityCurve'];
 
-  private texture?: THREE.Texture;
-  private colorTexture?: THREE.Texture;
-  private fieldVersion = -1;
-  private colorFieldVersion = -1;
-  private fieldResolution = new THREE.Vector3(-1, -1, -1);
-  private colorFieldResolution = new THREE.Vector3(-1, -1, -1);
+  private bindings = new Map<VolumeField, FieldBinding>();
+  private layers: VolumeLayer[] = [];
   private frame = 0;
   private geometry = new THREE.BoxGeometry(1, 1, 1);
   private webglMaterial: THREE.RawShaderMaterial;
@@ -82,6 +132,26 @@ class VolumeRenderer extends Renderer {
   private readonly gpuBaseB = uniform(0.5);
   private gpuMaterialSteps = 0;
   private gpuMaterialDepthTest = true;
+  private readonly gpuBoundsMinimum = uniform(new THREE.Vector3());
+  private readonly gpuBoundsSize = uniform(new THREE.Vector3(1, 1, 1));
+  private readonly gpuCellSize = uniform(1);
+  private readonly gpuReferenceCellSize = uniform(1);
+  private readonly gpuStepSize = uniform(1);
+  private readonly gpuDensityGain = uniform(1);
+  private readonly gpuDensityRange = uniform(new THREE.Vector2(0, 1));
+  private readonly gpuFrame = uniform(0);
+  private readonly gpuJitter = uniform(0);
+  private materialSamplingKey = '';
+  private readonly curveData = new Uint16Array(256 * 4);
+  private readonly curveTexture = new THREE.DataTexture(this.curveData, 256, 1, THREE.RGBAFormat, THREE.HalfFloatType);
+  private volumeChildCount = 0;
+  private readonly fieldIds = new WeakMap<VolumeField, number>();
+  private nextFieldId = 0;
+
+  protected override get usesParticleChildren(): boolean { return false; }
+
+  /** Number of additional field copies, not additional simulated particles. */
+  override get renderedChildCount(): number { return this.volumeChildCount; }
 
   constructor(options: Partial<VolumeRendererOptions> = {}) {
     super(options);
@@ -96,6 +166,16 @@ class VolumeRenderer extends Renderer {
     this.renderOrder = options.renderOrder ?? 100;
     this.depthTest = options.depthTest ?? true;
     this.jitter = options.jitter ?? false;
+    this.interpolation = options.interpolation ?? VolumeInterpolation.Linear;
+    this.stepSizeMultiplier = options.stepSizeMultiplier ?? 1;
+    this.densityGain = options.densityGain ?? 1;
+    this.densityMapping = options.densityMapping ?? VolumeDensityMapping.Smoothstep;
+    this.densityRange = [...(options.densityRange ?? [0, 1])];
+    this.densityCurve = options.densityCurve ?? ((t: number) => t);
+    this.curveTexture.minFilter = THREE.LinearFilter;
+    this.curveTexture.magFilter = THREE.LinearFilter;
+    this.curveTexture.generateMipmaps = false;
+    this.validateOptions();
     this.syncGPUUniforms();
 
     this.webglMaterial = this.createWebGLMaterial();
@@ -110,79 +190,70 @@ class VolumeRenderer extends Renderer {
       this.setActiveMaterial(renderer);
       this.updateMaterialSide(camera);
       this.frame += 1;
+      this.gpuFrame.value = this.frame;
       this.webglMaterial.uniforms.frame.value = this.frame;
     };
 
-    const field = this.resolveField(system);
-    const colorField = this.resolveColorField(system);
-
-    if (!field) {
-      this.mesh.visible = false;
-      system.addRendererObject(this.mesh);
-      return;
-    }
-
-    this.texture = field.texture ?? this.createTexture(field, 1);
-    this.fieldVersion = field.version;
-    this.fieldResolution.copy(field.resolution);
-    if (colorField) {
-      this.colorTexture = colorField.texture ?? this.createTexture(colorField, colorField.channels ?? 4);
-      this.colorFieldVersion = colorField.version;
-      this.colorFieldResolution.copy(colorField.resolution);
-    }
-    this.updateMaterialTexture();
-    this.updateBounds(field);
-    this.setActiveMaterial(system.sceneRenderer);
-
+    this._update([], system);
     system.addRendererObject(this.mesh);
   }
 
-  protected _update(_particles: Particle[], system: ParticleSystem): void {
-    const field = this.resolveField(system);
-    const colorField = this.resolveColorField(system);
-
-    this.setActiveMaterial(system.sceneRenderer);
-
-    if (!field) {
-      this.mesh.visible = false;
-      return;
-    }
-
-    if (!this.texture || !this.fieldResolution.equals(field.resolution) || (field.texture && field.texture !== this.texture)) {
-      if (this.texture instanceof THREE.Data3DTexture && this.texture !== field.texture) this.texture.dispose();
-      this.texture = field.texture ?? this.createTexture(field, 1);
-      this.fieldResolution.copy(field.resolution);
-      this.fieldVersion = field.version;
-      this.updateMaterialTexture();
-    } else if (!field.texture && field.version !== this.fieldVersion && this.texture instanceof THREE.Data3DTexture) {
-      if (!field.data) throw new Error('VolumeField.data is required for CPU volume textures.');
-      this.texture.image.data = field.data;
-      this.texture.needsUpdate = true;
-      this.fieldVersion = field.version;
-    }
-
-    if (colorField) {
-      if (!this.colorTexture || !this.colorFieldResolution.equals(colorField.resolution) || (colorField.texture && colorField.texture !== this.colorTexture)) {
-        if (this.colorTexture instanceof THREE.Data3DTexture && this.colorTexture !== colorField.texture) this.colorTexture.dispose();
-        this.colorTexture = colorField.texture ?? this.createTexture(colorField, colorField.channels ?? 4);
-        this.colorFieldResolution.copy(colorField.resolution);
-        this.colorFieldVersion = colorField.version;
-        this.updateMaterialTexture();
-      } else if (!colorField.texture && colorField.version !== this.colorFieldVersion && this.colorTexture instanceof THREE.Data3DTexture) {
-        if (!colorField.data) throw new Error('VolumeField.data is required for CPU color textures.');
-        this.colorTexture.image.data = colorField.data;
-        this.colorTexture.needsUpdate = true;
-        this.colorFieldVersion = colorField.version;
+  protected _update(particles: Particle[], system: ParticleSystem): void {
+    void particles;
+    this.validateOptions();
+    const previous = this.layers;
+    const active = new Set<VolumeField>();
+    const next: VolumeLayer[] = [];
+    this.volumeChildCount = 0;
+    for (const { field, colorField } of system.quality > 0 ? this.resolveFields(system) : []) {
+      active.add(field);
+      if (colorField) active.add(colorField);
+      const density = this.bindField(field, field.channels ?? 1);
+      const color = colorField ? this.bindField(colorField, colorField.channels ?? 4) : undefined;
+      const copies = [{ offset: new THREE.Vector3(), scale: 1, alpha: 1 }];
+      if (this.generateChildren) copies.push(...volumeChildren(this.children, `volume:${this.layersSourceId(field)}`));
+      const artistic = copies.length;
+      if (this.generateChildren && this.compensation === CompensationMode.Children && system.quality < 1) {
+        const additional = 1 / system.quality - 1;
+        const cell = field.bounds.getSize(new THREE.Vector3()).divide(field.resolution).length() / Math.sqrt(3);
+        for (let i = 0; i < artistic; i++) {
+          const parent = copies[i];
+          const children = volumeChildren({ count: [additional, additional + 1], radius: cell }, `volume:lod:${i}`);
+          for (const child of children) {
+            copies.push({ offset: child.offset.add(parent.offset), scale: parent.scale, alpha: parent.alpha });
+          }
+        }
       }
-    } else if (this.colorTexture) {
-      if (this.colorTexture instanceof THREE.Data3DTexture) this.colorTexture.dispose();
-      this.colorTexture = undefined;
-      this.colorFieldVersion = -1;
-      this.colorFieldResolution.set(-1, -1, -1);
+      this.volumeChildCount += copies.length - 1;
+      for (const copy of copies) {
+        const index = next.length;
+        const old = previous[index];
+        const layer = old?.density === density && old.color === color ? old : {
+          density, color, offset: uniform(new THREE.Vector3()), scale: uniform(1), alpha: uniform(1),
+        };
+        layer.offset.value.copy(copy.offset);
+        layer.scale.value = copy.scale * (this.compensation === CompensationMode.Size
+          ? 1 / Math.sqrt(system.quality) : 1);
+        layer.alpha.value = copy.alpha;
+        next.push(layer);
+      }
+    }
+    this.layers = next;
+    for (const [field, binding] of this.bindings) {
+      if (active.has(field)) continue;
+      if (binding.owned) binding.texture.dispose();
+      this.bindings.delete(field);
+    }
+    const changed = previous.length !== this.layers.length || this.layers.some((layer, index) => (
+      layer.density !== previous[index]?.density || layer.color !== previous[index]?.color
+    ));
+    this.updateBounds();
+    const samplingKey = `${this.interpolation}:${this.densityMapping}`;
+    if (changed || this.steps !== this.gpuMaterialSteps || this.depthTest !== this.gpuMaterialDepthTest
+      || this.materialSamplingKey !== samplingKey) {
+      this.materialSamplingKey = samplingKey;
       this.updateMaterialTexture();
     }
-
-    if (!this.bounds.equals(field.bounds)) this.updateBounds(field);
 
     this.webglMaterial.uniforms.base.value.copy(this.baseColor);
     this.webglMaterial.uniforms.opacity.value = this.opacity;
@@ -190,10 +261,13 @@ class VolumeRenderer extends Renderer {
     this.webglMaterial.uniforms.range.value = this.range;
     this.webglMaterial.uniforms.steps.value = this.steps;
     this.webglMaterial.uniforms.jitter.value = this.jitter;
+    this.webglMaterial.uniforms.cellSize.value = this.gpuCellSize.value;
+    this.webglMaterial.uniforms.referenceCellSize.value = this.gpuReferenceCellSize.value;
+    this.webglMaterial.uniforms.stepSizeMultiplier.value = this.stepSizeMultiplier;
+    this.webglMaterial.uniforms.densityGain.value = this.densityGain;
+    this.webglMaterial.uniforms.densityRange.value.set(...this.densityRange);
+    this.updateDensityCurve();
     this.syncGPUUniforms();
-    if (this.steps !== this.gpuMaterialSteps || this.depthTest !== this.gpuMaterialDepthTest) {
-      this.updateMaterialTexture();
-    }
     this.mesh.renderOrder = this.renderOrder;
     this.webglMaterial.depthTest = this.depthTest;
     this.webgpuMaterial.depthTest = this.depthTest;
@@ -207,21 +281,72 @@ class VolumeRenderer extends Renderer {
     this.gpuBaseR.value = this.baseColor.r;
     this.gpuBaseG.value = this.baseColor.g;
     this.gpuBaseB.value = this.baseColor.b;
+    this.gpuStepSize.value = this.stepSizeMultiplier;
+    this.gpuDensityGain.value = this.densityGain;
+    this.gpuDensityRange.value.set(...this.densityRange);
+    this.gpuJitter.value = this.jitter ? 1 : 0;
   }
 
-  public override updateGPU(
-    _buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+  private layersSourceId(field: VolumeField): number {
+    let id = this.fieldIds.get(field);
+    if (id === undefined) { id = this.nextFieldId++; this.fieldIds.set(field, id); }
+    return id;
+  }
+
+  private validateOptions(): void {
+    if (!Object.values(VolumeInterpolation).includes(this.interpolation as VolumeInterpolation)) {
+      throw new RangeError('Unknown volume interpolation.');
+    }
+    if (!Object.values(VolumeDensityMapping).includes(this.densityMapping as VolumeDensityMapping)) {
+      throw new RangeError('Unknown volume densityMapping.');
+    }
+    if (!(this.stepSizeMultiplier > 0) || !Number.isFinite(this.stepSizeMultiplier)) {
+      throw new RangeError('Volume stepSizeMultiplier must be finite and positive.');
+    }
+    if (!Number.isFinite(this.densityGain) || this.densityGain < 0) {
+      throw new RangeError('Volume densityGain must be finite and nonnegative.');
+    }
+    if (!this.densityRange.every(Number.isFinite) || this.densityRange[1] <= this.densityRange[0]) {
+      throw new RangeError('Volume densityRange must be finite and increasing.');
+    }
+    if (!Number.isFinite(this.steps) || this.steps < 1) throw new RangeError('Volume steps must be at least one.');
+  }
+
+  private updateDensityCurve(): void {
+    if (this.densityMapping !== VolumeDensityMapping.Curve) return;
+    let changed = false;
+    const curve = volumeNumber(this.densityCurve) as ValueByParameter<number>;
+    for (let i = 0; i < 256; i++) {
+      const value = typeof curve === 'number' ? curve : evaluateByParameterNumber(curve, i / 255);
+      if (!Number.isFinite(value)) throw new RangeError('Volume densityCurve must return finite values.');
+      const half = THREE.DataUtils.toHalfFloat(THREE.MathUtils.clamp(value, 0, 1));
+      for (let channel = 0; channel < 4; channel++) {
+        const index = i * 4 + channel;
+        changed ||= this.curveData[index] !== half;
+        this.curveData[index] = half;
+      }
+    }
+    if (changed) this.curveTexture.needsUpdate = true;
+  }
+
+  protected override _updateGPU(
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
   ): void {
+    void buffers;
     this._update([], system);
   }
 
   destroy(): void {
-    if (this.texture instanceof THREE.Data3DTexture) this.texture.dispose();
-    if (this.colorTexture instanceof THREE.Data3DTexture) this.colorTexture.dispose();
+    for (const binding of this.bindings.values()) {
+      if (binding.owned) binding.texture.dispose();
+    }
+    this.bindings.clear();
+    this.layers = [];
     this.geometry.dispose();
     this.webglMaterial.dispose();
     this.webgpuMaterial.dispose();
+    this.curveTexture.dispose();
     this.mesh.removeFromParent();
   }
 
@@ -229,30 +354,45 @@ class VolumeRenderer extends Renderer {
     this.mesh.visible = false;
   }
 
-  private resolveField(system?: ParticleSystem): VolumeField | undefined {
+  private resolveFields(system: ParticleSystem): Array<{ field: VolumeField; colorField?: VolumeField }> {
+    const providers = system.getModules<VolumeFieldProvider>(['getVolumeField'], this.tags);
+    const color = typeof this.colorField === 'function' ? this.colorField() : this.colorField;
     if (this.field) {
-      return typeof this.field === 'function'
-        ? this.field()
-        : this.field;
+      const field = typeof this.field === 'function' ? this.field() : this.field;
+      return field ? [{ field, colorField: this.colorField ? color : providers[0]?.getVolumeColorField?.() }] : [];
     }
-
-    return this.resolveGasSimulation(system)?.density;
+    return providers.flatMap(provider => {
+      const field = provider.getVolumeField();
+      return field ? [{ field, colorField: this.colorField ? color : provider.getVolumeColorField?.() }] : [];
+    });
   }
 
-  private resolveColorField(system?: ParticleSystem): VolumeField | undefined {
-    if (this.colorField) {
-      return typeof this.colorField === 'function'
-        ? this.colorField()
-        : this.colorField;
+  private bindField(field: VolumeField, channels: 1 | 3 | 4): FieldBinding {
+    let binding = this.bindings.get(field);
+    if (!binding || !binding.resolution.equals(field.resolution) || field.texture !== (
+      binding.owned ? undefined : binding.texture
+    )) {
+      if (binding?.owned) binding.texture.dispose();
+      binding = {
+        field,
+        texture: field.texture ?? this.createTexture(field, channels),
+        owned: !field.texture,
+        version: field.version,
+        resolution: field.resolution.clone(),
+        minimum: uniform(field.bounds.min.clone()),
+        size: uniform(field.bounds.getSize(new THREE.Vector3())),
+        resolutionNode: uniform(field.resolution.clone()),
+      };
+      this.bindings.set(field, binding);
+    } else if (binding.owned && binding.version !== field.version) {
+      if (!field.data) throw new Error('VolumeField.data is required for CPU volume textures.');
+      (binding.texture as THREE.Data3DTexture).image.data = field.data;
+      binding.texture.needsUpdate = true;
+      binding.version = field.version;
     }
-
-    return this.resolveGasSimulation(system)?.colorField;
-  }
-
-  private resolveGasSimulation(system?: ParticleSystem): GasSimulation | undefined {
-    return system?.modules
-      .flatMap((module) => module.withDependents())
-      .find((module): module is GasSimulation => module instanceof GasSimulation);
+    binding.minimum.value.copy(field.bounds.min);
+    field.bounds.getSize(binding.size.value).clampScalar(Number.EPSILON, Infinity);
+    return binding;
   }
 
   private createTexture(field: VolumeField, channels: 1 | 3 | 4): THREE.Data3DTexture {
@@ -281,25 +421,71 @@ class VolumeRenderer extends Renderer {
   }
 
   private updateMaterialTexture(): void {
-    this.webglMaterial.uniforms.map.value = this.texture;
-    this.webglMaterial.uniforms.colorMap.value = this.colorTexture;
-    this.webglMaterial.uniforms.useColorMap.value = Boolean(this.colorTexture);
+    const uniforms = this.webglMaterial.uniforms;
+    for (const key of Object.keys(uniforms)) {
+      if (key.startsWith('layer')) delete uniforms[key];
+    }
+    const sources: VolumeLayer[] = [];
+    const sourceIndices = this.layers.map(layer => {
+      let index = sources.findIndex(source => source.density === layer.density && source.color === layer.color);
+      if (index < 0) { index = sources.length; sources.push(layer); }
+      return index;
+    });
+    sources.forEach((layer, index) => {
+      for (const [name, binding] of [['Density', layer.density], ['Color', layer.color]] as const) {
+        if (!binding) continue;
+        uniforms[`layer${name}Map${index}`] = { value: binding.texture };
+        uniforms[`layer${name}Min${index}`] = { value: binding.minimum.value };
+        uniforms[`layer${name}Size${index}`] = { value: binding.size.value };
+        uniforms[`layer${name}Resolution${index}`] = { value: binding.resolution };
+      }
+    });
+    this.layers.forEach((layer, index) => {
+      uniforms[`layerOffset${index}`] = { value: layer.offset.value };
+      uniforms[`layerScale${index}`] = layer.scale;
+      uniforms[`layerAlpha${index}`] = layer.alpha;
+    });
+    this.webglMaterial.fragmentShader = volumeFrag.replace(
+      '/* VOLUME_FIELDS */', volumeLayersGLSL(
+        sources.map(layer => Boolean(layer.color)), sourceIndices, this.interpolation, this.densityMapping,
+      ),
+    );
+    this.webglMaterial.needsUpdate = true;
 
     this.webgpuMaterial.dispose();
     this.webgpuMaterial = this.createWebGPUMaterial();
   }
 
-  private updateBounds(field: VolumeField): void {
-    this.bounds.copy(field.bounds);
+  private updateBounds(): void {
+    this.bounds.makeEmpty();
+    let cellSize = Infinity;
+    let referenceCellSize = Infinity;
+    for (const layer of this.layers) {
+      const field = layer.density.field;
+      const center = field.bounds.getCenter(new THREE.Vector3()).add(layer.offset.value);
+      const size = field.bounds.getSize(new THREE.Vector3()).multiplyScalar(layer.scale.value);
+      this.bounds.union(new THREE.Box3().setFromCenterAndSize(center, size));
+      const cell = size.divide(field.resolution);
+      cellSize = Math.min(cellSize, cell.x, cell.y, cell.z);
+      referenceCellSize = Math.min(referenceCellSize,
+        cell.x / layer.scale.value, cell.y / layer.scale.value, cell.z / layer.scale.value);
+    }
+    this.gpuCellSize.value = Math.max(1e-6, Number.isFinite(cellSize) ? cellSize : 1);
+    this.gpuReferenceCellSize.value = Math.max(1e-6, Number.isFinite(referenceCellSize) ? referenceCellSize : 1);
+    this.mesh.visible = !this.bounds.isEmpty();
+    if (!this.mesh.visible) return;
     this.bounds.getCenter(this.boundsCenter);
     this.bounds.getSize(this.boundsSize);
     this.mesh.position.copy(this.boundsCenter);
     this.mesh.scale.copy(this.boundsSize);
-    this.mesh.visible = !this.bounds.isEmpty();
+    this.gpuBoundsMinimum.value.copy(this.bounds.min);
+    this.gpuBoundsSize.value.copy(this.boundsSize);
   }
 
   private setActiveMaterial(renderer?: THREE.WebGLRenderer | WebGPURenderer): void {
-    const gpuTexture = (this.texture as THREE.Texture & { isStorageTexture?: boolean })?.isStorageTexture;
+    const gpuTexture = this.layers.some(layer => (
+      (layer.density.texture as THREE.Texture & { isStorageTexture?: boolean }).isStorageTexture
+    ));
     this.mesh.material = (renderer instanceof WebGPURenderer || (!renderer && gpuTexture))
       ? this.webgpuMaterial
       : this.webglMaterial;
@@ -328,9 +514,8 @@ class VolumeRenderer extends Renderer {
       depthTest: this.depthTest,
       depthWrite: false,
       uniforms: {
-        map: { value: null },
-        colorMap: { value: null },
-        useColorMap: { value: false },
+        boundsMinimum: { value: this.gpuBoundsMinimum.value },
+        boundsSize: { value: this.gpuBoundsSize.value },
         base: { value: this.baseColor.clone() },
         threshold: { value: this.threshold },
         range: { value: this.range },
@@ -338,119 +523,16 @@ class VolumeRenderer extends Renderer {
         steps: { value: this.steps },
         frame: { value: 0 },
         jitter: { value: this.jitter },
+        cellSize: { value: 1 },
+        referenceCellSize: { value: 1 },
+        stepSizeMultiplier: { value: this.stepSizeMultiplier },
+        densityGain: { value: this.densityGain },
+        densityRange: { value: new THREE.Vector2(...this.densityRange) },
+        densityCurve: { value: this.curveTexture },
       },
-      vertexShader: /* glsl */`
-        precision highp float;
-
-        in vec3 position;
-
-        uniform mat4 modelMatrix;
-        uniform mat4 modelViewMatrix;
-        uniform mat4 projectionMatrix;
-        uniform vec3 cameraPosition;
-
-        out vec3 vOrigin;
-        out vec3 vDirection;
-
-        void main() {
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-
-          vOrigin = vec3(inverse(modelMatrix) * vec4(cameraPosition, 1.0));
-          vDirection = position - vOrigin;
-
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: /* glsl */`
-        precision highp float;
-        precision highp sampler3D;
-
-        uniform sampler3D map;
-        uniform sampler3D colorMap;
-        uniform bool useColorMap;
-        uniform vec3 base;
-        uniform float threshold;
-        uniform float range;
-        uniform float opacity;
-        uniform float steps;
-        uniform float frame;
-        uniform bool jitter;
-
-        in vec3 vOrigin;
-        in vec3 vDirection;
-
-        out vec4 outColor;
-
-        vec2 hitBox(vec3 orig, vec3 dir) {
-          const vec3 boxMin = vec3(-0.5);
-          const vec3 boxMax = vec3(0.5);
-          vec3 invDir = 1.0 / dir;
-          vec3 tMinTemp = (boxMin - orig) * invDir;
-          vec3 tMaxTemp = (boxMax - orig) * invDir;
-          vec3 tMin = min(tMinTemp, tMaxTemp);
-          vec3 tMax = max(tMinTemp, tMaxTemp);
-          float t0 = max(max(tMin.x, tMin.y), tMin.z);
-          float t1 = min(min(tMax.x, tMax.y), tMax.z);
-
-          return vec2(t0, t1);
-        }
-
-        float random(vec3 scale, float seed) {
-          return fract(sin(dot(gl_FragCoord.xyz + seed, scale)) * 43758.5453 + seed);
-        }
-
-        float sampleDensity(vec3 coord) {
-          return texture(map, coord + 0.5).r;
-        }
-
-        void main() {
-          vec3 rayDir = normalize(vDirection);
-          vec2 bounds = hitBox(vOrigin, rayDir);
-
-          if (bounds.x > bounds.y) discard;
-
-          bounds.x = max(bounds.x, 0.0);
-
-          vec3 p = vOrigin + bounds.x * rayDir;
-          vec3 inc = 1.0 / abs(rayDir);
-          float stepSize = min(min(inc.x, inc.y), inc.z) / steps;
-          vec3 step = rayDir * stepSize;
-          if (jitter) {
-            p += step * random(vec3(12.9898, 78.233, 37.719), frame);
-          }
-
-          vec4 color = vec4(0.0);
-
-          for (int i = 0; i < 512; i++) {
-            if (float(i) >= steps) break;
-            if (distance(p, vOrigin) > bounds.y) break;
-
-            float d = sampleDensity(p);
-            float shadeStep = 1.0 / 256.0;
-            vec3 gradient = vec3(
-              sampleDensity(p - vec3(shadeStep, 0.0, 0.0)) - sampleDensity(p + vec3(shadeStep, 0.0, 0.0)),
-              sampleDensity(p - vec3(0.0, shadeStep, 0.0)) - sampleDensity(p + vec3(0.0, shadeStep, 0.0)),
-              sampleDensity(p - vec3(0.0, 0.0, shadeStep)) - sampleDensity(p + vec3(0.0, 0.0, shadeStep))
-            );
-            float light = clamp(dot(normalize(gradient + 0.0001), normalize(vec3(1.0, 1.0, 1.0))) * 0.5 + 0.5, 0.35, 1.0);
-            float lower = max(threshold - range, 0.000001);
-            float a = d <= 0.0 ? 0.0 : smoothstep(lower, threshold + range, d) * opacity;
-            vec4 fieldColor = useColorMap ? texture(colorMap, p + 0.5) : vec4(base, 1.0);
-            vec3 sampleColor = mix(base, fieldColor.rgb, fieldColor.a) * light;
-
-            color.rgb += (1.0 - color.a) * a * sampleColor;
-            color.a += (1.0 - color.a) * a;
-
-            if (color.a >= 0.95) break;
-
-            p += step;
-          }
-
-          if (color.a <= 0.0) discard;
-
-          outColor = color;
-        }
-      `,
+      vertexShader: volumeVert,
+      fragmentShader: volumeFrag.replace('/* VOLUME_FIELDS */', volumeLayersGLSL([], [], this.interpolation,
+        this.densityMapping)),
     });
   }
 
@@ -466,7 +548,7 @@ class VolumeRenderer extends Renderer {
       depthWrite: false,
     });
 
-    if (this.texture) {
+    if (this.layers.length) {
       // Test the ray's entry depth, including when the camera is inside the box.
       // The march below clips individual samples against opaque scene depth.
       material.depthNode = Fn(() => {
@@ -494,37 +576,30 @@ class VolumeRenderer extends Renderer {
         const far = min(min(maximum.x, maximum.y), maximum.z);
         const start = max(near, float(0));
         const position = origin.add(direction.mul(start)).toVar('volumePosition');
-        const step = direction.mul(far.sub(start).div(Math.max(1, this.steps)));
+        const worldLength = direction.mul(this.gpuBoundsSize).length().mul(max(far.sub(start), 0));
+        const count = ceil(worldLength.div(this.gpuCellSize.mul(this.gpuStepSize)))
+          .clamp(1, Math.min(512, Math.floor(this.steps)));
+        const step = direction.mul(far.sub(start).div(count));
+        position.addAssign(step.mul(hash(positionGeometry.dot(vec3(12.9898, 78.233, 37.719))
+          .add(this.gpuFrame))).mul(this.gpuJitter));
         const accumulated = vec4(0).toVar('volumeAccumulated');
         const sceneDepth = this.depthTest
           ? linearDepth(viewportDepthTexture())
           : float(1);
-        const base = vec3(
-          this.gpuBaseR,
-          this.gpuBaseG,
-          this.gpuBaseB,
-        );
         If(near.greaterThan(far), () => Discard());
-        Loop({ start: 0, end: Math.max(1, Math.min(512, this.steps)), type: 'int' }, () => {
+        Loop({ start: 0, end: Math.max(1, Math.min(512, Math.floor(this.steps))), type: 'int' }, ({ i }) => {
+          If(float(i).greaterThanEqual(count), () => Break());
           if (this.depthTest) {
             const worldPosition = modelWorldMatrix.mul(vec4(position, 1));
             const viewPosition = cameraViewMatrix.mul(worldPosition);
             const sampleDepth = viewZToOrthographicDepth(viewPosition.z, cameraNear, cameraFar);
             If(sampleDepth.greaterThanEqual(sceneDepth), () => Break());
           }
-          const uv = position.add(0.5);
-          const density = texture3D(this.texture!).sample(uv).r;
-          const alpha = density.greaterThan(0).select(
-            smoothstep(
-              max(this.gpuThreshold.sub(this.gpuRange), float(0.000001)),
-              this.gpuThreshold.add(this.gpuRange),
-              density,
-            ).mul(this.gpuOpacity),
-            float(0),
-          );
-          const color = this.colorTexture
-            ? texture3D(this.colorTexture).sample(uv).rgb
-            : base;
+          const sample = this.sampleVolume(position);
+          const density = sample.a;
+          const alpha = float(1).sub(pow(float(1).sub(this.renderOpacity(density)),
+            worldLength.div(count.mul(this.gpuReferenceCellSize))));
+          const color = sample.rgb.div(max(density, 1e-6));
           const contribution = float(1).sub(accumulated.a).mul(alpha);
           accumulated.rgb.addAssign(color.mul(contribution));
           accumulated.a.addAssign(contribution);
@@ -537,6 +612,73 @@ class VolumeRenderer extends Renderer {
     }
 
     return material;
+  }
+
+  private sampleVolume(position: Node<'vec3'>): Node<'vec4'> {
+    const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
+    const result = vec4(0).toVar('volumeSample');
+    const base = vec3(this.gpuBaseR, this.gpuBaseG, this.gpuBaseB);
+    for (const layer of this.layers) {
+      const center = layer.density.minimum.add(layer.density.size.mul(0.5));
+      const sourcePoint = point.sub(center).sub(layer.offset).div(layer.scale).add(center);
+      const uv = sourcePoint.sub(layer.density.minimum).div(layer.density.size);
+      If(uv.greaterThanEqual(0).all().and(uv.lessThanEqual(1).all()), () => {
+        const density = max(this.readVolume(layer.density, uv).r, float(0)).mul(layer.alpha);
+        const color = vec3(base).toVar();
+        if (layer.color) {
+          const colorUV = sourcePoint.sub(layer.color.minimum).div(layer.color.size);
+          If(colorUV.greaterThanEqual(0).all().and(colorUV.lessThanEqual(1).all()), () => {
+            const sample = this.readVolume(layer.color!, colorUV);
+            color.assign(mix(base, sample.rgb, sample.a));
+          });
+        }
+        result.addAssign(vec4(color.mul(density), density));
+      });
+    }
+    return result;
+  }
+
+  private renderOpacity(rawDensity: Node<'float'>): Node<'float'> {
+    if (this.densityMapping === VolumeDensityMapping.None) return float(0);
+    const density = max(rawDensity.mul(this.gpuDensityGain), 0);
+    const normalized = density.sub(this.gpuDensityRange.x)
+      .div(this.gpuDensityRange.y.sub(this.gpuDensityRange.x)).clamp(0, 1);
+    let mapped = smoothstep(max(this.gpuThreshold.sub(this.gpuRange), 1e-6),
+      this.gpuThreshold.add(this.gpuRange), density);
+    if (this.densityMapping === VolumeDensityMapping.Linear) mapped = normalized;
+    if (this.densityMapping === VolumeDensityMapping.Curve) {
+      mapped = texture(this.curveTexture).sample(vec2(normalized.mul(255).add(0.5).div(256), 0.5)).r;
+    }
+    return density.greaterThan(0).select(mapped.mul(this.gpuOpacity).clamp(0, 1), float(0));
+  }
+
+  private readVolume(binding: FieldBinding, uv: Node<'vec3'>): Node<'vec4'> {
+    const resolution = binding.resolutionNode;
+    if (this.interpolation === VolumeInterpolation.Nearest) {
+      const texel = floor(uv.mul(resolution)).clamp(vec3(0), resolution.sub(1));
+      return texture3D(binding.texture).sample(texel.add(0.5).div(resolution));
+    }
+    if (this.interpolation !== VolumeInterpolation.Cubic) return texture3D(binding.texture).sample(uv);
+    // Group cubic B-spline weights into eight hardware-linear texture reads.
+    const p = uv.mul(resolution).sub(0.5);
+    const f = p.sub(floor(p));
+    const w0 = pow(vec3(1).sub(f), vec3(3)).div(6);
+    const w1 = f.mul(f).mul(f).mul(3).sub(f.mul(f).mul(6)).add(4).div(6);
+    const w2 = f.mul(f).mul(f).mul(-3).add(f.mul(f).mul(3)).add(f.mul(3)).add(1).div(6);
+    const w3 = f.mul(f).mul(f).div(6);
+    const g0 = w0.add(w1);
+    const g1 = w2.add(w3);
+    const a = floor(p).sub(0.5).add(w1.div(g0)).div(resolution);
+    const b = floor(p).add(1.5).add(w3.div(g1)).div(resolution);
+    const sample = (x: Node<'float'>, y: Node<'float'>, z: Node<'float'>) => (
+      texture3D(binding.texture).sample(vec3(x, y, z))
+    );
+    return mix(
+      mix(mix(sample(a.x, a.y, a.z), sample(b.x, a.y, a.z), g1.x),
+        mix(sample(a.x, b.y, a.z), sample(b.x, b.y, a.z), g1.x), g1.y),
+      mix(mix(sample(a.x, a.y, b.z), sample(b.x, a.y, b.z), g1.x),
+        mix(sample(a.x, b.y, b.z), sample(b.x, b.y, b.z), g1.x), g1.y), g1.z,
+    );
   }
 }
 

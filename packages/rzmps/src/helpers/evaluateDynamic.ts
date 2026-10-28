@@ -16,14 +16,14 @@ export default function evaluateDynamic<T, Input = T>(
   if (typeof value === 'function') {
     return evaluateDynamic((value as (t: number) => DynamicValue<Input>)(time), interpolate, time, seed, accept);
   } else if (Array.isArray(value)) {
-    const interpTime = seed == undefined ? Math.random() : seedrandom(seed).quick();
+    const interpTime = seed == undefined ? Math.random() : seedrandom.tychei(seed).quick();
 
     const min: T = evaluateDynamic(value[0], interpolate, time, seed, accept);
     const max: T = evaluateDynamic(value[1], interpolate, time, seed, accept);
 
     return interpolate(min, max, interpTime);
   } else if (value instanceof Set) {
-    const indexSelector = seed == undefined ? Math.random() : seedrandom(seed).quick();
+    const indexSelector = seed == undefined ? Math.random() : seedrandom.tychei(seed).quick();
     const item =  Array.from(value)[Math.floor(value.size * indexSelector)];
 
     return evaluateDynamic(item, interpolate, time, seed, accept);

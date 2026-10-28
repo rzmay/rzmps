@@ -20,12 +20,12 @@
 
 ```ts
 advectionMethod:
-  | "semiLagrangian"
-  | "macCormack"
+  | "SemiLagrangian"
+  | "MacCormack"
   | AdvectionMethod;
 ```
 
-Defaults to semiLagrangian. macCormack enables experimental bounded higher-order transport.
+Defaults to SemiLagrangian. MacCormack enables experimental bounded higher-order transport.
 
 ***
 
@@ -70,6 +70,27 @@ boundsPadding: number;
 #### Inherited from
 
 [`FluidSimulationOptions`](FluidSimulationOptions.md).[`boundsPadding`](FluidSimulationOptions.md#boundspadding)
+
+***
+
+<a id="boundspolicy"></a>
+
+### boundsPolicy
+
+```ts
+boundsPolicy:
+  | "Ballistic"
+  | "Kill"
+  | "Contain"
+  | FluidBoundsPolicy;
+```
+
+Behavior at the finite maxBounds cap, not intermediate adaptive edges. Defaults to Ballistic.
+Contain retains a reached cap instead of shrinking away closed field walls.
+
+#### Inherited from
+
+`GasSimulationOptions`.[`boundsPolicy`](#boundspolicy)
 
 ***
 
@@ -174,7 +195,7 @@ maxBounds: number;
 ```
 
 Maximum domain side length in simulation units. Infinity leaves growth unlimited.
-Power-of-two grids round this limit down. Escaped particles are not confined by it.
+Power-of-two grids round this limit down. Particle behavior is selected by boundsPolicy.
 
 #### Inherited from
 
@@ -517,22 +538,6 @@ Independent animated noise acceleration in simulation units per second squared.
 
 ***
 
-<a id="updatelod"></a>
-
-### updateLOD?
-
-```ts
-optional updateLOD?: Partial<LODSettings>;
-```
-
-Module update quality settings; skipped callbacks do not accumulate their own delta.
-
-#### Inherited from
-
-[`ModuleOptions`](ModuleOptions.md).[`updateLOD`](ModuleOptions.md#updatelod)
-
-***
-
 <a id="useoctree"></a>
 
 ### useOctree?
@@ -562,22 +567,6 @@ Enables a managed GPU ParticleSpatialGrid with default options.
 #### Inherited from
 
 [`ModuleOptions`](ModuleOptions.md).[`useSpatialGrid`](ModuleOptions.md#usespatialgrid)
-
-***
-
-<a id="useupdatelod"></a>
-
-### useUpdateLOD?
-
-```ts
-optional useUpdateLOD?: boolean;
-```
-
-Enables distance-based module update skipping.
-
-#### Inherited from
-
-[`ModuleOptions`](ModuleOptions.md).[`useUpdateLOD`](ModuleOptions.md#useupdatelod)
 
 ***
 
