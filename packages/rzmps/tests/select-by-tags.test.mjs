@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { TaggedSelector, MeshRenderer, SpriteRenderer, Particle, ParticleSystem } from '../build/index.mjs';
+import {
+  prepareTaggedSelection, selectByTags, MeshRenderer, SpriteRenderer, Particle, ParticleSystem,
+} from '../build/index.mjs';
 
 const leaf = value => typeof value === 'string';
-const tree = new TaggedSelector({
+const tree = prepareTaggedSelection({
   outer: { red: 'red', blue: ['blue-0', 'blue-1'] },
   other: ['other-0', { extra: 'other-extra' }],
   '*': 'fallback',
 }, leaf);
-const value = (tags, index) => tree.values[tree.select(tags, 'stable', index)];
+const value = (tags, index) => tree.values[selectByTags(tree, tags, 'stable', index)];
 assert.equal(value(['outer', 'red']), 'red');
 assert.equal(value(['outer', 'blue'], 0), 'blue-0');
 assert.equal(value(['outer', 'blue'], -1), 'blue-1');
@@ -19,17 +21,17 @@ assert.equal(value(['other', 'extra'], 1), 'other-extra');
 assert.equal(value(['outer', 'blue']), value(['outer', 'blue']));
 assert.deepEqual(tree.tags, ['outer', 'red', 'blue', 'other', 'extra']);
 
-const missing = new TaggedSelector({ first: { inner: 'a' }, second: 'b' }, leaf);
-assert.equal(missing.select(['first']), -1);
-assert.equal(missing.values[missing.select(['first', 'second'])], 'b');
-assert.equal(new TaggedSelector({ '*': 'default', red: 'r' }, leaf).select(['red']), 0);
-assert.equal(new TaggedSelector([{ red: 'r' }, { blue: 'b' }], leaf).select([]), -1);
-assert.throws(() => new TaggedSelector([], leaf), /at least one/);
-assert.throws(() => new TaggedSelector({}, leaf), /at least one/);
+const missing = prepareTaggedSelection({ first: { inner: 'a' }, second: 'b' }, leaf);
+assert.equal(selectByTags(missing, ['first']), -1);
+assert.equal(missing.values[selectByTags(missing, ['first', 'second'])], 'b');
+assert.equal(selectByTags(prepareTaggedSelection({ '*': 'default', red: 'r' }, leaf), ['red']), 0);
+assert.equal(selectByTags(prepareTaggedSelection([{ red: 'r' }, { blue: 'b' }], leaf), []), -1);
+assert.throws(() => prepareTaggedSelection([], leaf), /at least one/);
+assert.throws(() => prepareTaggedSelection({}, leaf), /at least one/);
 const cycle = {};
 cycle.tag = cycle;
-assert.throws(() => new TaggedSelector(cycle, leaf), /cycles/);
-assert.throws(() => new TaggedSelector(new THREE.Vector3(), leaf), /plain tag map/);
+assert.throws(() => prepareTaggedSelection(cycle, leaf), /cycles/);
+assert.throws(() => prepareTaggedSelection(new THREE.Vector3(), leaf), /plain tag map/);
 
 const red = new THREE.Texture({ width: 4, height: 4 });
 const blue = new THREE.Texture({ width: 4, height: 4 });

@@ -1,7 +1,9 @@
 import MeshBatch, { type AppearanceNodes } from './MeshBatch';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import type { DynamicValue } from '../types/DynamicValue';
-import TaggedSelector from '../helpers/TaggedSelector';
+import prepareTaggedSelection, { type TaggedSelection } from '../helpers/prepareTaggedSelection';
+import selectByTags from '../helpers/selectByTags';
+import selectByTagsGPU from '../helpers/selectByTagsGPU';
 import type { TaggedValue } from '../types/TaggedValue';
 import rotateXYZ from '../helpers/rotateParticleGPU';
 import type Appearance from '../material-copy/Appearance';
@@ -54,7 +56,7 @@ class MeshRenderer extends Renderer {
     /** Source templates used by the batched path. Source transforms are not particle transforms. */
     readonly meshes: readonly THREE.Mesh[];
     meshIndex?: DynamicValue<number>;
-    private readonly meshSelection: TaggedSelector<THREE.Mesh | THREE.BufferGeometry>;
+    private readonly meshSelection: TaggedSelection<THREE.Mesh | THREE.BufferGeometry>;
 
     override get selectionTags(): readonly string[] {
       return this.meshSelection?.tags ?? [];
@@ -97,7 +99,7 @@ class MeshRenderer extends Renderer {
       if (options.maxParticles !== undefined && (!Number.isSafeInteger(options.maxParticles)
         || options.maxParticles < 1)) throw new RangeError('maxParticles must be a positive integer.');
       this.meshSource = options.mesh ?? options.geometry ?? new THREE.SphereGeometry();
-      this.meshSelection = new TaggedSelector<THREE.Mesh | THREE.BufferGeometry>(
+      this.meshSelection = prepareTaggedSelection<THREE.Mesh | THREE.BufferGeometry>(
         this.meshSource,
         (value): value is THREE.Mesh | THREE.BufferGeometry => options.mesh
           ? value instanceof THREE.Mesh : value instanceof THREE.BufferGeometry,
@@ -398,7 +400,7 @@ gl_FragColor.a *= vInstanceAlpha;`
     }
 
     private selectMesh(particle: Particle): number {
-      return this.meshSelection.select(particle.tags, particle.id, this.meshIndex === undefined
+      return selectByTags(this.meshSelection, particle.tags, particle.id, this.meshIndex === undefined
         ? undefined : evaluateDynamicNumber(this.meshIndex, particle.time, particle.id));
     }
 
@@ -407,7 +409,7 @@ gl_FragColor.a *= vInstanceAlpha;`
     }, system: ParticleSystem): Node<'float'> {
       const index = this.meshIndex === undefined ? undefined
         : this.gpuParameters.number('meshIndex', () => this.meshIndex, particle.time, 0, particle.index);
-      return this.meshSelection.selectGPU(particle.tagMask, tag => system.getGPURendererTagMask([tag]) ?? 0,
+      return selectByTagsGPU(this.meshSelection, particle.tagMask, tag => system.getGPURendererTagMask([tag]) ?? 0,
         particle.id.x.bitXor(particle.id.y), index);
     }
 

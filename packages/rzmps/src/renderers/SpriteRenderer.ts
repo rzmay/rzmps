@@ -1,6 +1,8 @@
 import rotateXYZ from '../helpers/rotateParticleGPU';
 import TextureAtlas from '../TextureAtlas';
-import TaggedSelector from '../helpers/TaggedSelector';
+import prepareTaggedSelection, { type TaggedSelection } from '../helpers/prepareTaggedSelection';
+import selectByTags from '../helpers/selectByTags';
+import selectByTagsGPU from '../helpers/selectByTagsGPU';
 import type { TaggedValue } from '../types/TaggedValue';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
@@ -118,7 +120,7 @@ class SpriteRenderer extends Renderer {
   private textureAliases: number[] = [];
   private textureAliasNode?: ReturnType<typeof uniformArray>;
   private textureListCount = 0;
-  private readonly textureSelection?: TaggedSelector<string | THREE.Texture>;
+  private readonly textureSelection?: TaggedSelection<string | THREE.Texture>;
 
   override get selectionTags(): readonly string[] {
     return this.textureSelection?.tags ?? [];
@@ -218,7 +220,7 @@ class SpriteRenderer extends Renderer {
 
     this.textureSource = texture;
     const textureLoader = new THREE.TextureLoader();
-    const choices = new TaggedSelector(texture,
+    const choices = prepareTaggedSelection(texture,
       (value): value is string | THREE.Texture => typeof value === 'string' || value instanceof THREE.Texture);
     if (choices.structured) this.textureSelection = choices;
     let sourceTexture = choices.values[0];
@@ -915,7 +917,7 @@ class SpriteRenderer extends Renderer {
         : this.randomStartFrame ? undefined : float(0);
       const frame = particle.realtime.div(1000)
         .mul(this.gpuParameters.number('fps', () => this.fps, particle.time, 0, particle.index)).floor();
-      const selected = this.textureSelection.selectGPU(particle.tagMask,
+      const selected = selectByTagsGPU(this.textureSelection, particle.tagMask,
         tag => system.getGPURendererTagMask([tag]) ?? 0, particle.id.x.bitXor(particle.id.y), index, frame);
       const visible = baseVisible.mul(selected.greaterThanEqual(0).select(1, 0));
       const tile = this.textureAliasNode!.element(uint(selected.max(0))) as unknown as Node<'float'>;
@@ -1031,7 +1033,7 @@ class SpriteRenderer extends Renderer {
         ? evaluateDynamicNumber(this.textureIndex, particle.time, particle.id)
         : this.randomStartFrame ? undefined : 0;
       const frame = Math.floor(particle.realtime / 1000 * evaluateDynamicNumber(this.fps, particle.time, particle.id));
-      const selected = this.textureSelection.select(particle.tags, particle.id, index, frame);
+      const selected = selectByTags(this.textureSelection, particle.tags, particle.id, index, frame);
       return selected < 0 ? -1 : this.textureAliases[selected];
     }
     const selected = (

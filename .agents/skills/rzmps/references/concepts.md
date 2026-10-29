@@ -1435,9 +1435,12 @@ branch supplies a fallback and is tried after named keys, wherever it appears in
 Existing renderer `tags` filters still apply independently. Empty trees and cyclic input are rejected.
 
 Inputs are static resource trees: recreate the renderer when replacing their structure. The exported
-`TaggedValue<T>` type and `TaggedSelector<T>` helper also support custom renderers. Construct a selector
-with a leaf predicate, then call `select(tags, seed, index?, offset?)` to obtain an index into `values`,
-or -1 for no match. `selectGPU` builds matching TSL expressions from the existing particle tag mask.
+`TaggedValue<T>` type and selection helpers also support custom renderers. Prepare the tree once with
+`prepareTaggedSelection(resources, isLeaf)` to obtain its flattened `values`, resource `tags` and branch graph.
+Call `selectByTags(selection, tags, seed?, index?, offset?)` to obtain an index into `selection.values`,
+or -1 for no match. `selectByTagsGPU(selection, tagMask, maskForTag, seed, index?, offset?)` builds the
+matching TSL expression. Selection uses plain functions and prepared data; it does not rebuild the tree
+per particle.
 Plain resource arrays use direct index arithmetic; tag checks add no storage buffers. Resource keys
 participate in the existing GPU tag registry and its 32-tag limit.
 

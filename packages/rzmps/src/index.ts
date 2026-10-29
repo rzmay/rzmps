@@ -229,4 +229,7 @@ export { MaterialCopySampleMode } from './material-copy/Surface';
 export type { MaterialTarget, SurfacePatch } from './material-copy/Surface';
 
 export type { TaggedValue } from './types/TaggedValue';
-export { default as TaggedSelector } from './helpers/TaggedSelector';
+export { default as prepareTaggedSelection } from './helpers/prepareTaggedSelection';
+export type { TaggedSelection } from './helpers/prepareTaggedSelection';
+export { default as selectByTags } from './helpers/selectByTags';
+export { default as selectByTagsGPU } from './helpers/selectByTagsGPU';
