@@ -1358,6 +1358,15 @@ Inheritance factors control scale, lifetime, color, alpha, mass, and velocity tr
 
 Collision emission needs a Collision module and collidable scene geometry or a configured collision backend. `impulseThreshold` rejects weak contacts; impulse factors can increase spark scale or speed, and `impulseAffectsAlignment` points emission away from the contact. Test in a collision scene: an empty scene cannot demonstrate a contact-triggered effect.
 
+Set `impulseAffectsCount` to scale every emitter in a collision run by
+`impulseMagnitude ** impulseAffectsCount`. The default `0` leaves emission unchanged; `1` is linear
+and `0.5` uses a square root. This multiplier applies to burst counts, rate and rate over distance,
+and combines with population LOD before integer counts are allocated. Fractional emission credit
+is retained within the emission context. Spawn/death events and continuous parent-following emission
+keep their configured counts. The multiplier uses the triggering impact for the whole emission run.
+[Destruction](https://rzmps.rzmay.com/docs/examples/destruction.html) uses square-root scaling to shed fewer fragments on weak impacts.
+Both CPU and native GPU processing support this without additional storage buffers.
+
 [Fireworks](https://rzmps.rzmay.com/docs/examples/fireworks.html) combines continuous rocket smoke and a death burst. [Metal Balls](https://rzmps.rzmay.com/docs/examples/collisionSubEmitters.html) combines collision sparks and collision audio. Inspect their source-linked system regions as well as their emitter regions: the child's lifetime, gravity, and looping choices are independent of the parent.
 
 Destroy the owning root to clean up the effect. Do not also update owned subsystems from a scene traversal, or attempt to reuse one child under two parents. Explicit frame advancement follows the same parent-owned event processing as normal updates.
@@ -1384,3 +1393,53 @@ That example uses a single emitter at 12 particles per second. Cube particles ro
 A `condition` callback further restricts a module or spatial effect after tag matching. Use it for a value-dependent rule, such as age or speed, instead of creating a tag for every transient state. Keep conditions cheap because they run over the candidate population each update.
 
 Tags are application-defined values. Use consistent names across emitters, module filters, renderer filters, and particle-affector `sourceTags`. A misspelled tag can produce a technically valid but invisible effect; inspect both the population and the rendered preview when diagnosing it.
+
+
+## Choosing textures and meshes by tag
+
+SpriteRenderer textures and MeshRenderer `mesh` / `geometry` options accept a resource, an array,
+or a nested tag map. All resources are discovered during construction and use the same atlas or
+batch as an ordinary list:
+
+```js
+new SpriteRenderer({
+  wood: woodTexture,
+  stone: [stoneTextureA, stoneTextureB],
+  '*': defaultTexture,
+});
+
+new MeshRenderer({
+  mesh: {
+    debris: {
+      stone: [rockA, rockB],
+      wood: splinter,
+    },
+  },
+});
+```
+
+Object branches are checked in JavaScript key order. The first matching branch that can resolve
+wins. Nested keys require all tags along that path: the rock meshes above require both `debris`
+and `stone`. Assign them with `tags: ['debris', 'stone'], tagSelection: 'all'` on an emitter.
+If a matching outer branch cannot resolve a nested key, selection tries the next outer branch.
+
+An array makes a stable random choice among its resolvable children. Nested arrays retain their
+own random choice, rather than becoming one flattened distribution. Repeated resources can weight
+the choice, while repeated texture objects still alias the same atlas tile. `textureIndex` and
+`meshIndex` replace random choice within each selected array, wrapping integer indices (including
+negative indices). They do not bypass tag constraints. Sprite `fps` advances within that branch;
+`randomStartFrame: false` starts at its first eligible choice.
+
+No matching resource hides the particle for that renderer, while simulation continues. A `'*'`
+branch supplies a fallback and is tried after named keys, wherever it appears in the object.
+Existing renderer `tags` filters still apply independently. Empty trees and cyclic input are rejected.
+
+Inputs are static resource trees: recreate the renderer when replacing their structure. The exported
+`TaggedValue<T>` type and `TaggedSelector<T>` helper also support custom renderers. Construct a selector
+with a leaf predicate, then call `select(tags, seed, index?, offset?)` to obtain an index into `values`,
+or -1 for no match. `selectGPU` builds matching TSL expressions from the existing particle tag mask.
+Plain resource arrays use direct index arithmetic; tag checks add no storage buffers. Resource keys
+participate in the existing GPU tag registry and its 32-tag limit.
+
+The [Destruction example](https://rzmps.rzmay.com/docs/examples/destruction.html) supplies five meshes as a plain random-choice array.
+Wrap that array in a map such as `{ rock: { fracture: meshes } }` to require both tags instead.

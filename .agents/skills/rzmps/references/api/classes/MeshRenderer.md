@@ -8,7 +8,7 @@
 
 # Class: MeshRenderer
 
-Instances shared mesh geometry and material across particles; geometry complexity multiplies by population.
+Instances a single source mesh, or batches multiple mesh variants with atlas-backed material factors.
 
 ## Extends
 
@@ -82,16 +82,6 @@ compensation:
 
 ***
 
-<a id="instances"></a>
-
-### instances
-
-```ts
-instances: InstancedMesh;
-```
-
-***
-
 <a id="materialcopysamplemode"></a>
 
 ### materialCopySampleMode
@@ -127,6 +117,42 @@ optional materialTarget?: MaterialTarget;
 ```ts
 mesh: Mesh;
 ```
+
+***
+
+<a id="meshes"></a>
+
+### meshes
+
+```ts
+readonly meshes: readonly Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, Material<MaterialEventMap> | Material<MaterialEventMap>[], Object3DEventMap>[];
+```
+
+Source templates used by the batched path. Source transforms are not particle transforms.
+
+***
+
+<a id="meshindex"></a>
+
+### meshIndex?
+
+```ts
+optional meshIndex?: DynamicValue<number>;
+```
+
+***
+
+<a id="meshsource"></a>
+
+### meshSource
+
+```ts
+readonly meshSource: TaggedValue<
+  | BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
+| Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, Material<MaterialEventMap> | Material<MaterialEventMap>[], Object3DEventMap>>;
+```
+
+Original resource tree, retained for tooling and serialization.
 
 ***
 
@@ -171,6 +197,45 @@ get gpuParameterUploadCount(): number;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`gpuParameterUploadCount`](Renderer.md#gpuparameteruploadcount)
+
+***
+
+<a id="instances"></a>
+
+### instances
+
+#### Get Signature
+
+```ts
+get instances():
+  | BatchedMesh
+| InstancedMesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, Material<MaterialEventMap> | Material<MaterialEventMap>[], Object3DEventMap>;
+```
+
+Single geometry uses instancing; multiple source meshes use batching.
+
+##### Returns
+
+  \| `BatchedMesh`
+  \| `InstancedMesh`\<`BufferGeometry`\<`NormalBufferAttributes`, `BufferGeometryEventMap`\>, `Material`\<`MaterialEventMap`\> \| `Material`\<`MaterialEventMap`\>[], `Object3DEventMap`\>
+
+***
+
+<a id="maxparticles"></a>
+
+### maxParticles
+
+#### Get Signature
+
+```ts
+get maxParticles(): number;
+```
+
+Particle capacity, independent of the number of batched geometry parts.
+
+##### Returns
+
+`number`
 
 ***
 

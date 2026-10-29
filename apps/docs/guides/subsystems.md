@@ -8,6 +8,15 @@ Inheritance factors control scale, lifetime, color, alpha, mass, and velocity tr
 
 Collision emission needs a Collision module and collidable scene geometry or a configured collision backend. `impulseThreshold` rejects weak contacts; impulse factors can increase spark scale or speed, and `impulseAffectsAlignment` points emission away from the contact. Test in a collision scene: an empty scene cannot demonstrate a contact-triggered effect.
 
+Set `impulseAffectsCount` to scale every emitter in a collision run by
+`impulseMagnitude ** impulseAffectsCount`. The default `0` leaves emission unchanged; `1` is linear
+and `0.5` uses a square root. This multiplier applies to burst counts, rate and rate over distance,
+and combines with population LOD before integer counts are allocated. Fractional emission credit
+is retained within the emission context. Spawn/death events and continuous parent-following emission
+keep their configured counts. The multiplier uses the triggering impact for the whole emission run.
+[Destruction](../examples/destruction.md) uses square-root scaling to shed fewer fragments on weak impacts.
+Both CPU and native GPU processing support this without additional storage buffers.
+
 [Fireworks](../examples/fireworks.md) combines continuous rocket smoke and a death burst. [Metal Balls](../examples/collisionSubEmitters.md) combines collision sparks and collision audio. Inspect their source-linked system regions as well as their emitter regions: the child's lifetime, gravity, and looping choices are independent of the parent.
 
 Destroy the owning root to clean up the effect. Do not also update owned subsystems from a scene traversal, or attempt to reuse one child under two parents. Explicit frame advancement follows the same parent-owned event processing as normal updates.

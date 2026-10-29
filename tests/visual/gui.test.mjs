@@ -28,9 +28,20 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-    for (const preset of ['Snow', 'LOD Stress Test', 'Fireworks', 'Fire']) {
+    for (const preset of ['Snow', 'LOD Stress Test', 'Fireworks', 'Fire', 'Destruction']) {
       await page.goto(`${origin}/?preset=${encodeURIComponent(preset)}`, { waitUntil: 'networkidle0' });
       await page.waitForSelector('.psgui-renderers', { timeout: 15000 });
+      if (preset === 'Destruction') {
+        // Scene setup follows GUI construction and code export; both used to throw for BatchedMesh.
+        await page.evaluate(() => {
+          const select = [...document.querySelectorAll('.psgui-demo select')]
+            .find(element => [...element.options].some(option => option.text === 'UV debug'));
+          select.value = [...select.options].find(option => option.text === 'UV debug').value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await page.waitForFunction(() => new URL(location.href).searchParams.get('scene') === 'UV debug');
+        await page.waitForNetworkIdle();
+      }
       const folders = await page.$$eval('.lil-gui .lil-title', elements => elements.map(element => element.textContent));
       assert.ok(folders.includes('LOD'), `${preset}: population LOD controls`);
       assert.ok(folders.includes('Renderer Children'), `${preset}: renderer children controls`);
@@ -41,7 +52,7 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
         const counts = await page.$eval('.particle-count-monitor', element => (
           element.textContent.match(/[\d,]+/g).map(value => Number(value.replaceAll(',', '')))
         ));
-        assert.equal(counts[1], counts[0] * 3, 'Snow rendered total includes its two children per particle');
+        assert.equal(counts[1], counts[0] * 6, 'Snow rendered total includes its five children per particle');
       } else if (preset === 'Fire') {
         const text = await page.$eval('.particle-count-monitor', element => element.textContent);
         assert.doesNotMatch(text, /rendered|children/, 'No child line when there are no children');

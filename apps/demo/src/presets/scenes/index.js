@@ -1,4 +1,4 @@
-import createMaterialCopyScene from './materialCopy';
+import createUVDebugScene from './uvDebug';
 import loadCheckerboard from './checkerboard';
 import loadColorLights from './colorLights';
 import loadHdri from './hdri';
@@ -27,7 +27,7 @@ function withMetadata(factory, fileName, author = factory.author) {
 }
 
 const scenePresets = {
-  'UV Debug Surfaces': withMetadata(createMaterialCopyScene, 'materialCopy.js'),
+  'UV debug': withMetadata(createUVDebugScene, 'uvDebug.js'),
   Checkerboard: withMetadata(loadCheckerboard, 'checkerboard.js'),
   'Cornell Box': withMetadata(loadCornellBox, 'cornellBox.js'),
   'Light Probe Room': withMetadata(createLightProbeScene, 'lightProbes.js'),

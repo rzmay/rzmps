@@ -30,6 +30,18 @@ color: Color;
 
 ***
 
+<a id="countscale"></a>
+
+### countScale?
+
+```ts
+optional countScale?: number;
+```
+
+Multiplies burst counts and time/distance emission rates; defaults to one.
+
+***
+
 <a id="distortionstrength"></a>
 
 ### distortionStrength

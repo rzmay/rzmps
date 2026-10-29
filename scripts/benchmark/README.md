@@ -22,8 +22,9 @@ concurrent rendering can change the results. Run without other GPU workloads for
 
 No CPU texture readback is used. GPU completion waits occur only in the benchmark.
 
-For visual checks, run `node scripts/preview/compareMaterialCopy.mjs`. It captures mesh and
-sprite debris with UVPatch, Color and Texture on both backends using the UV Debug Surfaces
-scene. Every case checks that debris is absent before impact and present afterward; WebGPU
-also checks native simulation and the eight-storage-buffer limit. The default output directory
-is `/tmp/rzmps-material-copy-modes`.
+For sustained collision checks, run `node scripts/preview/checkDestruction.mjs`. It captures
+mesh debris on Checkerboard and UV debug scenes using both backends, through 62 seconds of
+repeated impacts. Each checkpoint checks that debris remains present; WebGPU also checks native
+simulation and the eight-storage-buffer limit. The output directory defaults to
+`/tmp/rzmps-destruction-lifetime`. Sampling-mode and sprite regressions live in
+`tests/visual/mesh-batch.test.mjs`; the Destruction demo itself stays mesh-only with UV patches.

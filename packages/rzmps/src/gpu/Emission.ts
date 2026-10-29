@@ -111,14 +111,16 @@ export class GPUEmissionRunBufferState {
   }
 
   load(index: Node<'uint'> | number): GPUEmissionRunNode {
-    const particle = this.snapshots.storage.createParticle(
-      typeof index === 'number' ? uint(index) : index,
-      true,
-    );
+    const slot = typeof index === 'number' ? uint(index) : index;
+    const storage = this.snapshots.storage;
+    const particle = storage.createParticle(slot, true);
+
+    // Run lifetime bookkeeping must write through to storage so completed slots can be reused.
+    // Keep the remaining particle fields as a stable snapshot for emission inheritance.
     return {
-      active: particle.alive,
+      active: storage.createStateNode(slot).x,
       eventType: particle.tagMask,
-      elapsed: particle.realtime,
+      elapsed: storage.createScalarNodes(slot).realtime,
       duration: particle.lifetime,
       collisionPoint: particle.acceleration,
       collisionNormal: particle.angularAcceleration,

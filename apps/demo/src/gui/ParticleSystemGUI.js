@@ -533,6 +533,7 @@ export class ParticleSystemGUI {
         folder.add(options, 'inheritAlpha', 0, 1, 0.01).name('Inherit Alpha');
         folder.add(options, 'inheritMass', 0, 1, 0.01).name('Inherit Mass');
         folder.add(options, 'inheritVelocity', 0, 1, 0.01).name('Inherit Velocity');
+        folder.add(options, 'impulseAffectsCount', 0, 4, 0.01).name('Impulse Affects Count');
         folder.add(options, 'impulseAffectsScale', 0, 4, 0.01).name('Impulse Affects Scale');
         folder.add(options, 'impulseAffectsSpeed', 0, 4, 0.01).name('Impulse Affects Speed');
         folder.add(options, 'impulseAffectsLifetime', 0, 4, 0.01).name('Impulse Affects Lifetime');

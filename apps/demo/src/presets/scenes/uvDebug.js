@@ -3,8 +3,8 @@ import debugUrl from '../../assets/images/uv_debug.jpg?url';
 import { createSceneParticleRoot, disposeSceneParticleRoot } from './particleRoot';
 
 /** A separate environment so any particle preset can exercise the same UV charts. */
-export default async function createMaterialCopyScene(scene) {
-  const root = createSceneParticleRoot(scene, [0, 4, 0]);
+export default async function createUVDebugScene(scene) {
+  const root = createSceneParticleRoot(scene);
   const map = await new THREE.TextureLoader().loadAsync(debugUrl);
   map.colorSpace = THREE.SRGBColorSpace;
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
@@ -12,7 +12,7 @@ export default async function createMaterialCopyScene(scene) {
 
   const material = new THREE.MeshStandardMaterial({ map, roughness: 0.75, metalness: 0 });
   const group = new THREE.Group();
-  group.name = 'UV Debug Surfaces';
+  group.name = 'UV debug';
 
   const light = new THREE.DirectionalLight(0xffffff, 2);
   light.position.set(5, 10, 5);
@@ -46,4 +46,4 @@ export default async function createMaterialCopyScene(scene) {
   };
 }
 
-createMaterialCopyScene.author = 'rzmay';
+createUVDebugScene.author = 'rzmay';

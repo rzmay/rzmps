@@ -158,6 +158,8 @@ export interface SubSystemOptions {
   inheritMass: number;
   inheritVelocity: number;
 
+  /** Exponent scaling burst counts and emission rates by contact impulse; zero disables scaling. */
+  impulseAffectsCount?: number;
   /** Exponent controlling contact-impulse scaling of child size. */
 
   impulseAffectsScale: number;
@@ -1983,6 +1985,11 @@ class ParticleSystem extends THREE.Object3D {
                 elapsedTimeNode: run.elapsed,
                 durationNode: run.duration,
                 emitterPositionNode: run.particle.position,
+                countScaleNode: (input.options.impulseAffectsCount ?? 0) > 0
+                  ? run.eventType.equal(uint(GPUEventType.Collision)).select(
+                    pow(run.collisionImpulse.length().max(float(0)), float(input.options.impulseAffectsCount ?? 0)),
+                    float(1),
+                  ) : undefined,
                 emitter,
                 emitterIndex,
                 output: context.buffers,
@@ -3053,6 +3060,7 @@ class ParticleSystem extends THREE.Object3D {
       });
       system.renderers.forEach((renderer) => {
         renderer.tags?.forEach((tag) => this._registerGPUTag(tag));
+        renderer.selectionTags.forEach((tag) => this._registerGPUTag(tag));
       });
       system.subSystems.forEach((_options, child) => registerSystem(child));
     };
@@ -3159,6 +3167,7 @@ class ParticleSystem extends THREE.Object3D {
       options.inheritAlpha,
       options.inheritMass,
       options.inheritVelocity,
+      options.impulseAffectsCount,
       options.impulseAffectsScale,
       options.impulseAffectsSpeed,
       options.impulseAffectsLifetime,
@@ -3975,6 +3984,7 @@ class ParticleSystem extends THREE.Object3D {
             velocity: options.inheritVelocity > 0
               ? this._particleEmissionVelocity.copy(run.particle.velocity).multiplyScalar(options.inheritVelocity)
               : undefined,
+            countScale: this._getImpulseEffect(run.collision, Math.max(0, options.impulseAffectsCount ?? 0)),
             scale: this._getImpulseEffect(run.collision, options.impulseAffectsScale),
             velocityScale: this._getImpulseEffect(run.collision, options.impulseAffectsSpeed),
             tags: run.particle.tags,
@@ -4480,6 +4490,7 @@ class ParticleSystem extends THREE.Object3D {
       inheritVelocity: options.inheritVelocity ?? 0,
 
       // Impulse options
+      impulseAffectsCount: options.impulseAffectsCount ?? 0,
       impulseAffectsScale: options.impulseAffectsScale ?? 0,
       impulseAffectsSpeed: options.impulseAffectsSpeed ?? 0,
       impulseAffectsLifetime: options.impulseAffectsLifetime ?? 0,

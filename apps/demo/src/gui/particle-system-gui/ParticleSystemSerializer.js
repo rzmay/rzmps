@@ -129,6 +129,7 @@ export class ParticleSystemSerializer {
             ratio: options.ratio,
             emitContinuous: options.emitContinuous,
             emitOnCollision: options.emitOnCollision,
+            copyCollisionMaterial: options.copyCollisionMaterial,
             emitOnSpawn: options.emitOnSpawn,
             emitOnDeath: options.emitOnDeath,
             inheritScale: options.inheritScale,
@@ -137,6 +138,7 @@ export class ParticleSystemSerializer {
             inheritAlpha: options.inheritAlpha,
             inheritMass: options.inheritMass,
             inheritVelocity: options.inheritVelocity,
+            impulseAffectsCount: options.impulseAffectsCount,
             impulseAffectsScale: options.impulseAffectsScale,
             impulseAffectsSpeed: options.impulseAffectsSpeed,
             impulseAffectsLifetime: options.impulseAffectsLifetime,
@@ -342,9 +344,14 @@ export class ParticleSystemSerializer {
             return `new AudioRenderer(${this.serializeValue(options)})`;
         }
         if (renderer instanceof SpriteRenderer) {
-            const texture = this.serializeTexture(renderer.texture);
+            const texture = this.serializeResourceTree(renderer.textureSource,
+                value => typeof value === 'string' || value?.isTexture,
+                value => typeof value === 'string' ? this.textureReference(value) ?? JSON.stringify(value)
+                    : this.serializeTexture(value));
             const options = this.serializeValue({
                 fps: renderer.fps,
+                textureIndex: renderer.textureIndex,
+                materialCopySampleMode: renderer.materialCopySampleMode,
                 billboard: renderer.billboard,
                 sizeAttenuation: renderer.sizeAttenuation,
                 tileSize: renderer.tileSize,
@@ -380,8 +387,12 @@ export class ParticleSystemSerializer {
         }
         if (renderer instanceof MeshRenderer) {
             return `new MeshRenderer(${this.serializeValue({
-                mesh: this.rawCode(this.serializeMesh(renderer.mesh)),
-                maxParticles: renderer.instances.instanceMatrix.count,
+                mesh: this.rawCode(this.serializeResourceTree(renderer.meshSource,
+                    value => value?.isMesh || value?.isBufferGeometry,
+                    value => this.serializeMesh(value.isMesh ? value : new THREE.Mesh(value, renderer.mesh.material)))),
+                meshIndex: renderer.meshIndex,
+                maxParticles: renderer.maxParticles,
+                materialCopySampleMode: renderer.materialCopySampleMode,
                 castShadow: renderer.castShadow,
                 receiveShadow: renderer.receiveShadow,
                 ...this.getLODOptions(renderer, true, true),
@@ -438,17 +449,27 @@ export class ParticleSystemSerializer {
         );
     }
 
+    serializeResourceTree(value, isLeaf, serializeLeaf) {
+        if (isLeaf(value)) return serializeLeaf(value);
+        if (Array.isArray(value)) {
+            return `[${value.map(child => this.serializeResourceTree(child, isLeaf, serializeLeaf)).join(', ')}]`;
+        }
+        return `{ ${Object.entries(value).map(([tag, child]) =>
+            `${this.serializeKey(tag)}: ${this.serializeResourceTree(child, isLeaf, serializeLeaf)}`).join(', ')} }`;
+    }
+
     serializeMesh(mesh) {
         const geometry = mesh.geometry;
         const geometryCtor = geometry.type;
         const params = geometry.parameters;
-        const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         const geometryExpression = params
             ? `new THREE.${geometryCtor}(${Object.values(params).map((value) => this.serializeValue(value)).join(', ')})`
-            : `new THREE.BufferGeometry() /* replace with ${geometry.type} */`;
-        const materialExpression = material
-            ? `new THREE.${material.type}(${this.serializeMaterialOptions(material)})`
-            : 'new THREE.MeshStandardMaterial()';
+            : `new THREE.BufferGeometryLoader().parse(${JSON.stringify(geometry.toJSON())})`;
+        const expressions = materials.map(material => material
+            ? `new THREE.${material.type}(${this.serializeMaterialOptions(material, true)})`
+            : 'new THREE.MeshStandardMaterial()');
+        const materialExpression = Array.isArray(mesh.material) ? `[${expressions.join(', ')}]` : expressions[0];
         return `new THREE.Mesh(${geometryExpression}, ${materialExpression})`;
     }
 
@@ -460,11 +481,12 @@ export class ParticleSystemSerializer {
         const options = {};
 
         if (loadTextures) {
-            for (const key of ['map', 'alphaMap', 'normalMap']) {
+            for (const key of ['map', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap']) {
                 const texture = material[key];
                 if (!texture) continue;
                 options[key] = this.rawCode(
-                    `Object.assign(new THREE.TextureLoader().load(${this.serializeTexture(texture)}), { colorSpace: ${this.serializeValue(texture.colorSpace)} })`,
+                    `Object.assign(new THREE.TextureLoader().load(${this.serializeTexture(texture)}), `
+                        + `{ colorSpace: ${this.serializeValue(texture.colorSpace)} })`,
                 );
             }
             if (material.normalMap) options.normalScale = material.normalScale;
@@ -582,10 +604,16 @@ export class ParticleSystemSerializer {
             .find(([, value]) => value === source)?.[0];
     }
 
+    resourceTreeUsesBuiltInTexture(value) {
+        if (typeof value === 'string') return Boolean(this.textureReference(value));
+        if (value?.isTexture) return Boolean(this.textureReference(this.textureSource(value)));
+        return Object.values(value ?? {}).some(child => this.resourceTreeUsesBuiltInTexture(child));
+    }
+
     rendererUsesBuiltInTexture(renderer) {
         if (renderer instanceof SpriteRenderer) {
             return Boolean(
-                this.textureReference(this.textureSource(renderer.texture))
+                this.resourceTreeUsesBuiltInTexture(renderer.textureSource)
                 || this.textureReference(this.textureSource(renderer.alphaMap)),
             );
         }

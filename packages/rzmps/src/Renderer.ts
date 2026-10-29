@@ -88,6 +88,11 @@ export default abstract class Renderer {
     this.appearance = undefined;
   }
 
+  /** @internal Tags referenced by renderer resource choices, separate from the renderer's tag filter. */
+  get selectionTags(): readonly Tag[] {
+    return [];
+  }
+
   tags?: Tag[];
   children: RendererChildrenOptions;
   compensation: CompensationMode | `${CompensationMode}`;

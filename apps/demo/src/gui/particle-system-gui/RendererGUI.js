@@ -241,7 +241,7 @@ export class RendererGUI extends GUIEditorBase {
             material: Array.isArray(renderer.mesh.material)
                 ? `${renderer.mesh.material.length} materials`
                 : renderer.mesh.material.type,
-            capacity: renderer.instances.instanceMatrix.count,
+            capacity: renderer.maxParticles,
         };
         folder.add(info, 'mesh').name('Mesh').disable();
         folder.add(info, 'geometry').name('Geometry').disable();

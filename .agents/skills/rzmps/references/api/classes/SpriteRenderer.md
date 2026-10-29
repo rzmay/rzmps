@@ -28,9 +28,7 @@ new SpriteRenderer(texture?, options?): SpriteRenderer;
 
 ##### texture?
 
-  \| `string`
-  \| `Texture`\<`unknown`, `TextureEventMap`\>
-  \| (`string` \| `Texture`\<`unknown`, `TextureEventMap`\>)[] = `defaultTex`
+[`TaggedValue`](../type-aliases/TaggedValue.md)\<`string` \| `Texture`\<`unknown`, `TextureEventMap`\>\> = `defaultTex`
 
 ##### options?
 
@@ -249,6 +247,18 @@ Optional GPU atlas created from a texture list; invalidate dynamic sources here.
 ```ts
 optional textureIndex?: DynamicValue<number>;
 ```
+
+***
+
+<a id="texturesource"></a>
+
+### textureSource
+
+```ts
+readonly textureSource: TaggedValue<string | Texture<unknown, TextureEventMap>>;
+```
+
+Original resource tree, retained for tooling and serialization.
 
 ***
 

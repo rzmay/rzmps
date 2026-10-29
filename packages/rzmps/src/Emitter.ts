@@ -105,6 +105,8 @@ export interface EmissionContext {
   distortionStrength: number;
   velocity: THREE.Vector3;
   velocityScale: number;
+  /** Multiplies burst counts and time/distance emission rates; defaults to one. */
+  countScale?: number;
   scale: number;
   tags: Tag[];
 }
@@ -120,6 +122,7 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
   emitterRuntime?: GPUEmitterInstanceRuntime;
   durationNode?: Node<'float'>;
   normalizedTimeNode?: Node<'float'>;
+  countScaleNode?: Node<'float'>;
   emitterPositionNode?: Node<'vec3'>;
   parentParticle?: GPUParticleLike;
   resolveParentParticle?: (claimIndex: Node<'uint'>) => GPUParticleLike;
@@ -618,6 +621,7 @@ class Emitter {
     const duration = context.durationNode ?? float(Math.max(context.system.duration, Number.EPSILON));
     const normalizedTime = context.normalizedTimeNode
       ?? elapsedTime.div(duration.max(float(Number.EPSILON)));
+    const emissionMultiplier = this._gpuQuality.mul((context.countScaleNode ?? float(1)).max(0));
     const requestCount = runtime.pendingRequestCount().toVar('emitterRequestCount');
     const resetContext = runtime.identity.x.equal(uint(0))
       .or(elapsedTime.lessThan(runtime.timing.w))
@@ -640,7 +644,7 @@ class Emitter {
         const rate = this._gpuParameters.number(
           'rate', () => this.rate, normalizedTime, 0, uint(context.emitterIndex * 4099),
         )
-          .mul(this._gpuQuality);
+          .mul(emissionMultiplier);
         If(rate.greaterThan(float(0)), () => {
           const emissionCredit = elapsedTime.sub(runtime.timing.y).mul(rate);
           const due = emissionCredit.floor();
@@ -659,7 +663,7 @@ class Emitter {
         normalizedTime,
         0,
         uint(context.emitterIndex * 6151),
-      ).mul(this._gpuQuality);
+      ).mul(emissionMultiplier);
       if (context.emitterPositionNode) {
         const emitterPosition = context.emitterPositionNode;
         If(resetContext.not().and(rateOverDistance.greaterThan(float(0))), () => {
@@ -687,7 +691,7 @@ class Emitter {
           const burstCredit = this._gpuParameters.number(
             `burst.${burstIndex}.count`, () => this.bursts[burstIndex]?.count,
             normalizedTime, 0, uint(context.emitterIndex * 4099 + burstIndex * 131),
-          ).mul(this._gpuQuality).add(runtime.distance.w);
+          ).mul(emissionMultiplier).add(runtime.distance.w);
           const due = burstCredit.floor();
           requestCount.addAssign(uint(due));
           runtime.distance.w.assign(burstCredit.sub(due));
@@ -870,7 +874,7 @@ class Emitter {
       return spawned;
     }
 
-    const emissionMultiplier = particleSystem.quality;
+    const emissionMultiplier = particleSystem.quality * Math.max(0, context.countScale ?? 1);
     const rate = evaluateDynamicNumber(this.rate, time) * emissionMultiplier;
     if (emissionMultiplier <= 0) state.lastSpawn = elapsedMilliseconds ?? now;
     if (rate > 0) {

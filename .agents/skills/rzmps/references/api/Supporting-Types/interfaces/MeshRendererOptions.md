@@ -67,10 +67,10 @@ Visual approximation for population removed by system LOD. Defaults to none.
 ### geometry
 
 ```ts
-geometry: BufferGeometry;
+geometry: TaggedValue<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>>;
 ```
 
-Shared geometry used when mesh is omitted; defaults to sphere geometry.
+One geometry or static variants sharing the material; defaults to sphere geometry.
 
 ***
 
@@ -145,10 +145,22 @@ Allocated instance capacity; size it for the maximum visible population. Default
 ### mesh
 
 ```ts
-mesh: Mesh;
+mesh: TaggedValue<Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, Material<MaterialEventMap> | Material<MaterialEventMap>[], Object3DEventMap>>;
 ```
 
-Shared source geometry/material; takes precedence over geometry, material, and materialOptions.
+One source mesh or static mesh templates; takes precedence over geometry and material options.
+
+***
+
+<a id="meshindex"></a>
+
+### meshIndex?
+
+```ts
+optional meshIndex?: DynamicValue<number>;
+```
+
+Geometry choice; omission chooses a stable random mesh per particle.
 
 ***
 

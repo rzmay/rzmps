@@ -227,3 +227,6 @@ export { default as TextureAtlas } from './TextureAtlas';
 export type { TextureAtlasOptions } from './TextureAtlas';
 export { MaterialCopySampleMode } from './material-copy/Surface';
 export type { MaterialTarget, SurfacePatch } from './material-copy/Surface';
+
+export type { TaggedValue } from './types/TaggedValue';
+export { default as TaggedSelector } from './helpers/TaggedSelector';

@@ -20,7 +20,7 @@
     "docs:build": "npm run build --workspace @rzmps/docs",
     "docs:check": "npm run docs:build && node --test scripts/docs/examples.test.mjs scripts/docs/distribution.test.mjs scripts/docs/navigation.test.mjs && node scripts/docs/check-links.mjs",
     "preview": "node scripts/preview/capture.mjs",
-    "preview:smoke": "node --test tests/visual/preview.test.mjs tests/visual/gui.test.mjs",
+    "preview:smoke": "node --test tests/visual/preview.test.mjs tests/visual/mesh-batch.test.mjs tests/visual/gui.test.mjs",
     "docs:previews": "node scripts/docs/generate-previews.mjs",
     "agents:check": "node scripts/docs/package-agents.mjs && node scripts/docs/check-agents.mjs",
     "site:build": "npm run build:modules && npm run docs:check && npm run build --workspace demo && node scripts/site/assemble.mjs",

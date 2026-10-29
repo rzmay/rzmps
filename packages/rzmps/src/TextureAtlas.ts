@@ -227,7 +227,10 @@ export default class TextureAtlas {
 
     let material: THREE.Material;
     if ('isWebGPURenderer' in renderer) {
-      const sampleUV = uv().mul(1 + 2 * border).sub(border).clamp(vec2(minimum), vec2(maximum));
+      // Native WebGPU samples texture row zero at the top, including render targets.
+      // Bake row zero from source v=0 so aliases retain the source UV convention on either backend.
+      const coordinates = renderer.coordinateSystem === THREE.WebGPUCoordinateSystem ? uv().flipY() : uv();
+      const sampleUV = coordinates.mul(1 + 2 * border).sub(border).clamp(vec2(minimum), vec2(maximum));
       const sample = texture(source, sampleUV);
       const nodeMaterial = new MeshBasicNodeMaterial();
       nodeMaterial.colorNode = sample.rgb;
