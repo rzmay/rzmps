@@ -20,6 +20,18 @@ optional collision?: CollisionHit;
 
 ***
 
+<a id="data"></a>
+
+### data
+
+```ts
+data: readonly [Vector4, Vector4, Vector4];
+```
+
+GPU numerical payload, including zero-filled unused vectors.
+
+***
+
 <a id="generation"></a>
 
 ### generation
@@ -79,5 +91,5 @@ optional tagMask?: number;
 ### type
 
 ```ts
-type: GPUEventType;
+type: number;
 ```

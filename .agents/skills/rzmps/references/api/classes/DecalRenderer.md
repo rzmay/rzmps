@@ -140,6 +140,16 @@ distanceAffectsSize: number = 0;
 
 ***
 
+<a id="emissiontags"></a>
+
+### emissionTags?
+
+```ts
+optional emissionTags?: string[];
+```
+
+***
+
 <a id="hitselection"></a>
 
 ### hitSelection
@@ -329,6 +339,24 @@ Number of persistent decals, including those whose particles have died.
 ##### Returns
 
 `number`
+
+***
+
+<a id="decals"></a>
+
+### decals
+
+#### Get Signature
+
+```ts
+get decals(): readonly DecalInstance[];
+```
+
+Persistent instances remain accessible after their originating particles die.
+
+##### Returns
+
+readonly [`DecalInstance`](../interfaces/DecalInstance.md)[]
 
 ***
 

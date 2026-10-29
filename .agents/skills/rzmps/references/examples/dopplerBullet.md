@@ -3,7 +3,7 @@
 
 # Doppler Bullet
 
-Doppler effect on a fast bullet particle, with smoke, faint trails, spawn blast effects, and distortion wake subsystems.
+Doppler audio on a fast bullet, with smoke, faint trails, spawn blasts, and distortion wake subsystems.
 
 [View live example](https://rzmps.rzmay.com/?preset=Doppler%20Bullet)
 
@@ -154,7 +154,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
         alpha: (time) => fadeInOut(time, 0.18, 0.65),
       }),
       new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
+        angularVelocity: [-1, 1],
       }),
     ],
     renderers: [
@@ -255,10 +255,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
           ],
           color: ['#ffffff', '#ffd07a'],
           alpha: 1,
-          rotation: [
-            new THREE.Vector3(-Math.PI, 0, 0),
-            new THREE.Vector3(Math.PI, 0, 0),
-          ],
+          rotation: [-Math.PI, Math.PI],
         },
       }),
     ],
@@ -295,7 +292,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L383)
+[Source: system:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L380)
 
 ```js
   return new ParticleSystem({
@@ -450,17 +447,14 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
           ],
           color: ['#ffffff', '#ffd07a'],
           alpha: 1,
-          rotation: [
-            new THREE.Vector3(-Math.PI, 0, 0),
-            new THREE.Vector3(Math.PI, 0, 0),
-          ],
+          rotation: [-Math.PI, Math.PI],
         },
       }),
     ],
 ```
 
 
-[Source: emitters:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L387)
+[Source: emitters:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L384)
 
 ```js
     emitters: [
@@ -510,7 +504,7 @@ The root has no explicit module list. Secondary smoke uses force, noise, growth,
         alpha: (time) => fadeInOut(time, 0.18, 0.65),
       }),
       new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
+        angularVelocity: [-1, 1],
       }),
     ],
 ```
@@ -537,7 +531,7 @@ The root has no explicit module list. Secondary smoke uses force, noise, growth,
 ```
 
 
-[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L345)
+[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L342)
 
 ```js
     modules: [
@@ -560,7 +554,7 @@ The root has no explicit module list. Secondary smoke uses force, noise, growth,
 ```
 
 
-[Source: modules:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L405)
+[Source: modules:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L402)
 
 ```js
     modules: [
@@ -680,7 +674,7 @@ The metallic mesh is paired with a faint 0.28-second trail of width 0.055 and op
 ```
 
 
-[Source: renderers:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L364)
+[Source: renderers:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L361)
 
 ```js
     renderers: [
@@ -698,7 +692,7 @@ The metallic mesh is paired with a faint 0.28-second trail of width 0.055 and op
 ```
 
 
-[Source: renderers:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L419)
+[Source: renderers:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L416)
 
 ```js
     renderers: [

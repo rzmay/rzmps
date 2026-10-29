@@ -609,6 +609,12 @@ overflowCount: number;
 pending: number;
 ```
 
+###### readbackCount
+
+```ts
+readbackCount: number;
+```
+
 ***
 
 <a id="gpuparticlebuffers"></a>
@@ -1272,6 +1278,40 @@ Permanently destroys this system and renderer resources; later update or advance
 
 ***
 
+<a id="emitevent"></a>
+
+### emitEvent()
+
+```ts
+emitEvent(
+   id,
+   event,
+   data?
+): void;
+```
+
+Targets either a registered source or a live simulated particle by its stable ID.
+
+#### Parameters
+
+##### id
+
+`string`
+
+##### event
+
+`string`
+
+##### data?
+
+`unknown`
+
+#### Returns
+
+`void`
+
+***
+
 <a id="getgpuemissionsupport"></a>
 
 ### getGPUEmissionSupport()
@@ -1478,6 +1518,28 @@ Freezes emission and simulation while playing; propagates to subsystems and opti
 #### Returns
 
 `void`
+
+***
+
+<a id="registeremissionsource"></a>
+
+### registerEmissionSource()
+
+```ts
+registerEmissionSource(data): RegisteredEmissionSource;
+```
+
+Registers a persistent CPU-managed subsystem emission origin.
+
+#### Parameters
+
+##### data
+
+[`EmissionSourceData`](../interfaces/EmissionSourceData.md)
+
+#### Returns
+
+[`RegisteredEmissionSource`](RegisteredEmissionSource.md)
 
 ***
 
@@ -1756,6 +1818,28 @@ Stops emission and resets prewarm state. clearParticles chooses whether to remov
 
 ***
 
+<a id="unregisteremissionsource"></a>
+
+### unregisterEmissionSource()
+
+```ts
+unregisterEmissionSource(id): void;
+```
+
+Dispatches death once and releases continuous context state; event runs keep their snapshots.
+
+#### Parameters
+
+##### id
+
+`string`
+
+#### Returns
+
+`void`
+
+***
+
 <a id="update"></a>
 
 ### update()
@@ -1781,6 +1865,32 @@ updateBoundingBox(): void;
 ```
 
 Recomputes particle bounds used by spatial processing and renderer helpers.
+
+#### Returns
+
+`void`
+
+***
+
+<a id="updatesource"></a>
+
+### updateSource()
+
+```ts
+updateSource(id, changes): void;
+```
+
+Updates CPU attributes only; repeated updates coalesce at the next frame.
+
+#### Parameters
+
+##### id
+
+`string`
+
+##### changes
+
+`Partial`\<[`EmissionSourceData`](../interfaces/EmissionSourceData.md)\>
 
 #### Returns
 

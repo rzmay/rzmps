@@ -1,3 +1,4 @@
+import type { Vector3Input } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -8,9 +9,10 @@ import { uniform } from 'three/tsl';
 import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 
 export interface RotationByDepthOptions extends Partial<ModuleOptions> {
-  angle: ValueByParameter<THREE.Vector3>;
-  angularVelocity: ValueByParameter<THREE.Vector3>;
-  angularAcceleration: ValueByParameter<THREE.Vector3>;
+  /** Angular values are radians; scalar inputs expand uniformly across axes. */
+  angle: ValueByParameter<Vector3Input>;
+  angularVelocity: ValueByParameter<Vector3Input>;
+  angularAcceleration: ValueByParameter<Vector3Input>;
   /** Camera-distance interval mapped to zero through one; omitted endpoints use camera near/far when available. */
   depthRange?: [number, number];
 }

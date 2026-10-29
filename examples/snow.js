@@ -51,10 +51,11 @@ export default async function createSnow() {
         multiplyDragByVelocity: true,
       }),
       new RotationOverLifetime({
-        angularVelocity: new THREE.Vector3(0.65, 0, 0),
+        angularVelocity: 0.65,
       }),
       new ColorOverLifetime({
-        alpha: (t) => ((t) < 0.2 ? (t) / 0.2 : (t) < 0.75 ? 1 - 0.15 * (((t) - 0.2) / 0.55) : 0.85 * (1 - (((t) - 0.75) / 0.25)))
+        alpha: (t) =>
+          ((t) < 0.2 ? (t) / 0.2 : (t) < 0.75 ? 1 - 0.15 * (((t) - 0.2) / 0.55) : 0.85 * (1 - (((t) - 0.75) / 0.25)))
       }),
       new ColorByDepth({
         alpha: [1, 0.5],

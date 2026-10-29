@@ -42,9 +42,26 @@ returns a TSL boolean node.
 For performance-sensitive modules, avoid allocating objects inside the per
 particle callback. Reuse vectors and colors outside the callback when possible.
 
-A plain Module defaults to permanent priority. The example's velocity increment accumulates over time; multiplying by delta seconds makes 0.5 an acceleration rather than an amount per frame. Its alpha multiplication also accumulates. For a fade defined entirely by normalized age, prefer ColorOverLifetime or set `priority: Module.Priority.Transient` so the fade is reapplied to cached base alpha each frame.
+A plain Module defaults to permanent priority. The example's velocity increment accumulates over time; multiplying by
+delta seconds makes 0.5 an acceleration rather than an amount per frame. Its alpha multiplication also accumulates. For
+a fade defined entirely by normalized age, prefer ColorOverLifetime or set `priority: Module.Priority.Transient` so the
+fade is reapplied to cached base alpha each frame.
 
-Use `Module.Priority.PreMovementTransient` when a temporary velocity adjustment must affect this frame's integration. Render-time transient modules run after movement. See [module priority](module-priority.md) before combining several modules that assign the same property.
+Use `Module.Priority.PreMovementTransient` when a temporary velocity adjustment must affect this frame's integration.
+Render-time transient modules run after movement. See [module priority](module-priority.md) before combining several
+modules that assign the same property.
+
+## System Update Hooks
+
+`prepare(system, deltaTime)` can also run effect-level scheduling once per simulation step, even when a module does
+not modify individual particles. Supply an empty CPU callback and `modifyGPU() {}` to keep both backends supported,
+then put the shared scheduling work in prepare(). Call `super.prepare()` to preserve the base preparation behavior.
+This follows the system's pause state, simulation speed and fixed-step advancement.
+
+[Acid](../examples/acid.md) uses this pattern to schedule independent bubble events from persistent decal sources.
+Its per-particle callbacks intentionally do nothing. The demo factory returns a ParticleSystem, so this hook lets it
+keep scheduling on the system's clock without owning an animation loop. Applications with their own animation loop
+can instead schedule events there before calling the root system's update().
 
 ## Managed Octree
 
@@ -78,9 +95,14 @@ approximation such as average position or velocity is cheaper than collecting ev
 particle; see
 [particle spatial acceleration](particle-octree.md).
 
-For reusable behavior, extend Module and pass your per-particle callback and options to `super`. Override `prepare(system, deltaTime)` when expensive shared work should happen once per frame; call `super.prepare` if using automatic spatial-effect collection. Put resource cleanup in `cleanup()`. Dependencies in `dependents` participate in normal priority sorting rather than forcing an independent update loop.
+For reusable behavior, extend Module and pass your per-particle callback and options to `super`. Override
+`prepare(system, deltaTime)` when expensive shared work should happen once per frame; call `super.prepare` if using
+automatic spatial-effect collection. Put resource cleanup in `cleanup()`. Dependencies in `dependents` participate in
+normal priority sorting rather than forcing an independent update loop.
 
-Built-in modules already cover forces, noise, scale, rotation, depth, color, and collision. Reuse those when their semantics match the effect. Custom callbacks are most useful for application-specific logic, and should mutate the particle provided rather than storing a shared mutable vector in multiple particles.
+Built-in modules already cover forces, noise, scale, rotation, depth, color, and collision. Reuse those when their
+semantics match the effect. Custom callbacks are most useful for application-specific logic, and should mutate the
+particle provided rather than storing a shared mutable vector in multiple particles.
 
 The callback above is CPU-only. Continue with [First GPU Module](first-gpu-module.md) to add the
 equivalent TSL operation, then use [GPU processing](gpu-processing.md) as the reference for managed

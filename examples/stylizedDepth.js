@@ -55,11 +55,7 @@ export default async function createStylizedDepth() {
         depthRange,
       }),
       new RotationByDepth({
-        angularVelocity: (t) => new THREE.Vector3(
-          THREE.MathUtils.lerp(0.12, 1.6, THREE.MathUtils.smoothstep(t, 0.15, 1)),
-          0,
-          0,
-        ),
+        angularVelocity: (t) => THREE.MathUtils.lerp(0.12, 1.6, THREE.MathUtils.smoothstep(t, 0.15, 1)),
         depthRange,
       }),
       new VelocityByDepth({

@@ -105,7 +105,7 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
         alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
+        angularVelocity: [-1, 1],
       }),
     ],
     renderers: [
@@ -300,7 +300,7 @@ The rocket module list is empty, leaving normal integration to shape flight. Smo
         alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
+        angularVelocity: [-1, 1],
       }),
     ],
 ```

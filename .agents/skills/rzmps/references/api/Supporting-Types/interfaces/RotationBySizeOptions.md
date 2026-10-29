@@ -19,8 +19,10 @@
 ### angle
 
 ```ts
-angle: ValueByParameter<Vector3>;
+angle: ValueByParameter<Vector3Input>;
 ```
+
+Angular values are radians; scalar inputs expand uniformly across axes.
 
 ***
 
@@ -29,7 +31,7 @@ angle: ValueByParameter<Vector3>;
 ### angularAcceleration
 
 ```ts
-angularAcceleration: ValueByParameter<Vector3>;
+angularAcceleration: ValueByParameter<Vector3Input>;
 ```
 
 ***
@@ -39,7 +41,7 @@ angularAcceleration: ValueByParameter<Vector3>;
 ### angularVelocity
 
 ```ts
-angularVelocity: ValueByParameter<Vector3>;
+angularVelocity: ValueByParameter<Vector3Input>;
 ```
 
 ***

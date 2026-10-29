@@ -1,6 +1,6 @@
-import Particle from "../Particle";
 
-export default function particleRatio(particle: Particle, ratio: number): boolean {
+
+export default function particleRatio(particle: { id: string }, ratio: number): boolean {
   if (ratio <= 0) return false;
   if (ratio >= 1) return true;
 

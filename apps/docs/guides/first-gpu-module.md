@@ -106,5 +106,32 @@ Runtime scalar, vector, color, range, and curve properties on built-in modules s
 parameters automatically. A custom class can use its protected `gpuParameters` store for the same
 pattern. Set `needsUpdate = true` only when a change alters graph structure or owned resources.
 
+## Killing a Particle
+
+Call `particle.kill()` on either backend. For a permanent boundary rule, pair a CPU condition with a TSL condition:
+
+```ts
+const boundary = new Module(
+  particle => {
+    if (particle.position.y < -10) particle.kill();
+  },
+  {
+    modifyGPU(particle) {
+      If(particle.position.y.lessThan(-10), () => {
+        particle.kill();
+      });
+    },
+  },
+);
+```
+
+`If` comes from `three/tsl`. The default module priority is permanent. The GPU helper marks the slot dead immediately
+and advances its age past its lifetime using finite values. Normal death-event subscribers still receive one event,
+including when the module runs in a separate stored update before integration. Event source snapshots are historical
+views and cannot kill a live particle.
+
+The [Fireflies example](../examples/fireflies.md) kills insects outside its volume instead of steering them toward
+boundaries, and replenishes them through ordinary emission to maintain a roaming population with a bounded spatial grid.
+
 Continue with [GPU processing](gpu-processing.md) for execution phases, fallback rules, readback,
 and validation.

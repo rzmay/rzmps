@@ -1,6 +1,7 @@
 import { Color, Vector3 } from 'three';
 import { vec3 } from 'three/tsl';
 import { Emitter, ColorBySpeed, ScaleByDepth, TransformByNoise, DecalRenderer } from '../build/index.mjs';
+import { RotationOverLifetime, RotationBySize, RotationBySpeed, RotationByDepth } from '../build/index.mjs';
 import { MeshBasicMaterial } from 'three';
 import type {
   ModuleCondition, ModuleGPUCondition, ModuleUpdate, ModuleGPUUpdate,
@@ -42,3 +43,13 @@ new Emitter({ initialValues: {
   // @ts-expect-error Directional inputs require explicit vectors.
   velocity: 1,
 } });
+
+new Emitter({ initialValues: {
+  rotation: [0, Math.PI * 2],
+  angularVelocity: new Set([-1, 1]),
+  angularAcceleration: () => 0.25,
+} });
+new RotationOverLifetime({ angle: 0.5, angularVelocity: new Set([-2, 2]), angularAcceleration: () => [0, 1] });
+new RotationBySize({ angle: [0, 1], angularVelocity: 2, angularAcceleration: () => 0.5 });
+new RotationBySpeed({ angle: () => 1, angularVelocity: [0, 2], angularAcceleration: 0 });
+new RotationByDepth({ angle: 1, angularVelocity: () => 2, angularAcceleration: [0, 1] });

@@ -43,7 +43,7 @@ export default async function createFireball() {
           speed: 1,
           scale: 2.5,
           color: ['#ffffff', '#ffd166'],
-          rotation: [new THREE.Vector3(-90, 0, 0), new THREE.Vector3(90, 0, 0)],
+          rotation: [-90, 90],
           alpha: 1,
           velocity: new THREE.Vector3(0, 0, 0),
           radial: 0.45,
@@ -148,10 +148,7 @@ function createHeatDistortion(alphaMap, distortionMap) {
           scale: 6,
           velocity: new THREE.Vector3(0, 1.35, 0),
           color: '#ffffff',
-          rotation: [
-            new THREE.Vector3(-Math.PI, 0, 0),
-            new THREE.Vector3(Math.PI, 0, 0),
-          ],
+          rotation: [-Math.PI, Math.PI],
         },
       }),
     ],
@@ -172,13 +169,13 @@ function createHeatDistortion(alphaMap, distortionMap) {
         scale: (time) => 2 * Easing.cubic.out(time),
       }),
       new ColorOverLifetime({
-        alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: (time) =>
+          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [
-          new THREE.Vector3(-0.45, 0, 0),
-          new THREE.Vector3(0.45, 0, 0),
-        ],
+        angularVelocity: [-0.45, 0.45],
       }),
     ],
     // #endregion docs:modules:2
@@ -205,7 +202,8 @@ function createHeatDistortion(alphaMap, distortionMap) {
 export const metadata = {
   "id": "fireball",
   "title": "Fireball",
-  "description": "Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks.",
+  "description":
+    "Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks.",
   "tags": [
     "fireball"
   ],

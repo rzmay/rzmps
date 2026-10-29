@@ -18,6 +18,10 @@ Fixed steps and a seeded preview-local random source make comparisons more repea
 
 Inspect `contact-sheet.png` for motion, scale, density, clipping, and fade timing. Read `metadata.json` for backend, camera, timestep, times, population, and browser warnings. Technical success does not establish artistic quality; vary warmup and interval when the important event is outside the captured window.
 
+Selected scene presets supply their own lighting. Checkerboard exposes **Scene Settings → Light Strength** in the
+demo; for captures, use `--scene Checkerboard --scene-light-strength 0.08` to dim its ambient and point lights without
+changing particle lights. The default multiplier is 1.
+
 The default camera can clip broad or elevated effects. Override it with
 `--camera-position 8,15,32 --camera-target 0,12,0 --camera-fov 50` for fireworks.
 The coordinates and FOV are recorded in metadata so comparisons can reuse them.

@@ -30,6 +30,8 @@ export interface ParticleNoiseValues {
   noise4d: number;
 }
 
+// Ownership stays outside serializable/cloned particle attributes.
+const eventOwners = new WeakMap<Particle, { emitEvent(id: string, event: string, data?: unknown): void }>();
 /** Mutable particle state with separate birth and cached permanent values. */
 class Particle {
   position: THREE.Vector3;
@@ -129,6 +131,17 @@ class Particle {
     this._start = this.createValues();
     this.noise = {};
     this.data = {};
+  }
+
+  /** Dispatches a named event through this simulated particle's owner. */
+  emitEvent(event: string, data?: unknown): this {
+    eventOwners.get(this)?.emitEvent(this.id, event, data);
+    return this;
+  }
+
+  /** @internal */
+  setEventOwner(owner: { emitEvent(id: string, event: string, data?: unknown): void }): void {
+    eventOwners.set(this, owner);
   }
 
   cache() {

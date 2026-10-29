@@ -4,7 +4,7 @@ import { float } from 'three/tsl';
 import {
   ColorBySize, ColorOverLifetime, Emitter, LimitVelocityOverLifetime,
   Module, Particle, ParticleSystem, ScaleBySpeed, ScaleOverLifetime,
-  TrailRenderer, TransformByNoise,
+  TrailRenderer, TransformByNoise, RotationOverLifetime, RotationBySize, RotationBySpeed, RotationByDepth,
 } from '../build/index.mjs';
 
 function birth(initialValues) {
@@ -81,7 +81,8 @@ new TransformByNoise({ strength: 0 }).modify([new Particle()], 1);
 const limited = new Particle({ velocity: new THREE.Vector3(3, -3, 2) });
 new LimitVelocityOverLifetime({ limit: 1 }).modify([limited], 1);
 assert.deepEqual(limited.velocity.toArray(), [1, -1, 1]);
-const trail = new TrailRenderer({ texture: new THREE.Texture(), colorOverLifetime: 'red', colorOverTrail: () => 0xffffff });
+const trail = new TrailRenderer({ texture: new THREE.Texture(), colorOverLifetime: 'red', colorOverTrail: () =>
+  0xffffff });
 assert.ok(trail);
 
 // GPU stores normalize uniforms and callback samples, and retain bindings across shorthand/object edits.
@@ -105,8 +106,39 @@ assert.deepEqual(colorNode.value.toArray(), [0, 0, 0]);
 for (const value of [() => 2, [1, 3], new Set([1, 2]), () => [1, new THREE.Vector3(3, 3, 3)]]) {
   assert.doesNotThrow(() => store.vector(`vector${store.bindings.size}`, () => value, float(0.5)));
 }
-for (const value of [() => 'red', ['red', new THREE.Color('blue')], new Set(['red', 0x0000ff]), () => ['red', 'blue']]) {
+for (const value of [() => 'red', ['red', new THREE.Color('blue')], new Set(['red', 0x0000ff]), () => ['red',
+  'blue']]) {
   assert.doesNotThrow(() => store.color(`color${store.bindings.size}`, () => value, float(0.5)));
 }
 assert.equal(store.sync(), false);
 console.log('value shortcut tests passed');
+
+// Angular shortcuts use the existing vector normalization path on birth and in every rotation module.
+const rotatedBirth = birth({ rotation: 1.25, angularVelocity: -0.5, angularAcceleration: () => 0.2 });
+assert.deepEqual(rotatedBirth.rotation.toArray(), [1.25, 1.25, 1.25]);
+assert.deepEqual(rotatedBirth.angularVelocity.toArray(), [-0.5, -0.5, -0.5]);
+assert.deepEqual(rotatedBirth.angularAcceleration.toArray(), [0.2, 0.2, 0.2]);
+for (const value of [1, () => 1, [1, 1], new Set([1])]) {
+  const p = new Particle();
+  new RotationOverLifetime({ angle: value, angularVelocity: value, angularAcceleration: value }).modify([p], 0);
+  for (const channel of ['rotation', 'angularVelocity', 'angularAcceleration']) {
+    assert.deepEqual(p[channel].toArray(), [1, 1, 1]);
+  }
+}
+for (const module of [
+  new RotationBySize({ sizeRange: [0, 2], angle: [0, 4], angularVelocity: () => 3, angularAcceleration: [0, 2] }),
+  new RotationBySpeed({ speedRange: [0, 10], angle: [0, 4], angularVelocity: () => 3, angularAcceleration: [0, 2] }),
+  new RotationByDepth({ depthRange: [0, 10], angle: [0, 4], angularVelocity: () => 3, angularAcceleration: [0, 2] }),
+]) {
+  const p = new Particle({ scale: new THREE.Vector3(1, 0, 0), velocity: new THREE.Vector3(5, 0, 0),
+    position: new THREE.Vector3(0, 0, 5) });
+  module.modify([p], 0);
+  assert.deepEqual(p.rotation.toArray(), [2, 2, 2]);
+  assert.deepEqual(p.angularVelocity.toArray(), [3, 3, 3]);
+  assert.deepEqual(p.angularAcceleration.toArray(), [1, 1, 1]);
+}
+const suppliedAngles = new THREE.Vector3(1, 2, 3);
+const independentlyRotated = new Particle();
+new RotationOverLifetime({ angle: suppliedAngles }).modify([independentlyRotated], 0);
+independentlyRotated.rotation.setScalar(0);
+assert.deepEqual(suppliedAngles.toArray(), [1, 2, 3]);

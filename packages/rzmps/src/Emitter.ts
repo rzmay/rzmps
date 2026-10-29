@@ -27,6 +27,9 @@ import {
   instanceIndex,
   int,
   mix,
+  inverse,
+  transpose,
+  mat3,
   cos,
   shiftLeft,
   sin,
@@ -86,6 +89,7 @@ interface EmitterContextState {
   burstCredit: number;
   lastDistancePosition?: THREE.Vector3;
   firedBursts: Set<number>;
+  cycle?: number;
 }
 
 export interface EmissionContext {
@@ -121,6 +125,8 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
   emitterPositionNode?: Node<'vec3'>;
   parentParticle?: GPUParticleLike;
   resolveParentParticle?: (claimIndex: Node<'uint'>) => GPUParticleLike;
+  resolveDistortionStrength?: (claimIndex: Node<'uint'>) => Node<'float'>;
+  resolveEmissionTransform?: (claimIndex: Node<'uint'>) => Node<'mat4'>;
   resolveEmissionTime?: (claimIndex: Node<'uint'>) => Node<'float'>;
   resolveImpulseEffects?: (claimIndex: Node<'uint'>) => {
     scale: Node<'float'>;
@@ -394,6 +400,7 @@ class Emitter {
         const inheritance = context.inheritance;
         const parent = context.resolveParentParticle?.(claimIndex) ?? context.parentParticle;
         const impulseEffects = context.resolveImpulseEffects?.(claimIndex);
+        const emissionTransform = context.resolveEmissionTransform?.(claimIndex);
         const inheritedTransformScale = parent && inheritance && inheritance.scale > 0
           ? mix(vec3(1, 1, 1), parent.scale, inheritance.scale)
           : vec3(1, 1, 1);
@@ -414,10 +421,13 @@ class Emitter {
           : parent
             ? rotateEulerYXZGPU(normal, parent.rotation)
             : normal;
-        const emissionPosition = parent
+        const emissionPosition = emissionTransform ? transformPointGPU(localPosition.add(initialPosition),
+          emissionTransform) : parent
           ? rotatedPosition.add(parent.position)
           : parentLocalPosition.add(context.emitterPositionNode ?? vec3(0, 0, 0));
-        const emissionNormal = rotatedNormal.normalize();
+        const emissionNormal = emissionTransform
+          ? transpose(inverse(mat3(emissionTransform))).mul(normal).normalize() as Node<'vec3'>
+          : rotatedNormal.normalize();
         const initialVelocity = this._gpuParameters.vector(
           'initial.velocity',
           () => this.initialValues.velocity,
@@ -545,7 +555,9 @@ class Emitter {
         particle.speed.assign(initialSpeed);
         particle.alpha.assign(initialAlpha.mul(inheritedAlpha));
         particle.mass.assign(initialMass.mul(inheritedMass).mul(impulseEffects?.mass ?? float(1)));
-        particle.distortionStrength.assign(initialDistortion);
+        particle.distortionStrength.assign(
+          initialDistortion.mul(context.resolveDistortionStrength?.(claimIndex) ?? float(1)),
+        );
         particle.lifetime.assign(initialLifetime);
         particle.time.assign(float(0));
         particle.realtime.assign(float(0));
@@ -837,11 +849,18 @@ class Emitter {
     const state = this.getContextState(context.key ?? '__default', elapsedMilliseconds ?? now);
     const duration = context.duration ?? particleSystem.duration;
     const elapsedTime = context.elapsedTime ?? ((now - state.startTime) / 1000);
-    const time = context.time ?? (duration <= 0 ? 1 : elapsedTime / duration);
+    let time = context.time ?? (duration <= 0 ? 1 : elapsedTime / duration);
     const looping = context.looping ?? particleSystem.looping;
     const spawned: Particle[] = [];
 
-    if (context.time === undefined && elapsedTime >= duration) {
+    const explicitLoopClock = context.elapsedTime !== undefined && context.time === undefined && looping &&
+      duration > 0;
+    if (explicitLoopClock) {
+      const cycle = Math.floor(elapsedTime / duration);
+      time = (elapsedTime % duration) / duration;
+      if (state.cycle !== cycle) { state.firedBursts.clear(); state.cycle = cycle; }
+    }
+    if (!explicitLoopClock && context.time === undefined && elapsedTime >= duration) {
       if (!looping) return spawned;
 
       state.startTime = now;
@@ -1078,7 +1097,7 @@ function transformDirectionGPU(vector: Node<'vec3'>, matrix: Node<'mat4'>): Node
   return matrix.mul(vec4(vector, 0)).xyz as Node<'vec3'>;
 }
 
-function rotateEulerYXZGPU(vector: Node<'vec3'>, rotation: Node<'vec3'>): Node<'vec3'> {
+export function rotateEulerYXZGPU(vector: Node<'vec3'>, rotation: Node<'vec3'>): Node<'vec3'> {
   const a = cos(rotation.x);
   const b = sin(rotation.x);
   const c = cos(rotation.y);
@@ -1099,7 +1118,7 @@ function rotateEulerYXZGPU(vector: Node<'vec3'>, rotation: Node<'vec3'>): Node<'
   ) as Node<'vec3'>;
 }
 
-function rotateFromYGPU(vector: Node<'vec3'>, direction: Node<'vec3'>): Node<'vec3'> {
+export function rotateFromYGPU(vector: Node<'vec3'>, direction: Node<'vec3'>): Node<'vec3'> {
   const target = direction.normalize();
   const quaternionVector = vec3(target.z, 0, target.x.negate());
   const quaternionScalar = float(1).add(target.y);

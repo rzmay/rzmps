@@ -19,8 +19,10 @@
 ### angle
 
 ```ts
-angle: DynamicValue<Vector3>;
+angle: DynamicValue<Vector3Input>;
 ```
+
+Angular values are radians; scalar inputs expand uniformly across axes.
 
 ***
 
@@ -29,7 +31,7 @@ angle: DynamicValue<Vector3>;
 ### angularAcceleration
 
 ```ts
-angularAcceleration: DynamicValue<Vector3>;
+angularAcceleration: DynamicValue<Vector3Input>;
 ```
 
 ***
@@ -39,7 +41,7 @@ angularAcceleration: DynamicValue<Vector3>;
 ### angularVelocity
 
 ```ts
-angularVelocity: DynamicValue<Vector3>;
+angularVelocity: DynamicValue<Vector3Input>;
 ```
 
 ***

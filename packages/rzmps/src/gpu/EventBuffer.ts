@@ -1,3 +1,4 @@
+import type { GPUEventData, GPUEventPayload } from '../Events';
 import * as THREE from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
@@ -133,16 +134,16 @@ enum EventFloatSlot {
   AngularAcceleration,
   ScalarAcceleration,
   Color,
-  CollisionPoint,
-  CollisionNormal,
-  CollisionImpulse,
+  Payload0,
+  Payload1,
+  Payload2,
   Metadata,
 }
 
 export const GPU_EVENT_FLOAT_SLOT_COUNT = Object.keys(EventFloatSlot).filter(key => isNaN(Number(key))).length;
 
 export interface GPUEventRecord {
-  type: GPUEventType;
+  type: number;
   slot: number;
   /** Slot incarnation, incremented whenever a slot is recycled. */
   generation: number;
@@ -151,6 +152,8 @@ export interface GPUEventRecord {
   tagMask?: number;
   particle: Particle;
   collision?: CollisionHit;
+  /** GPU numerical payload, including zero-filled unused vectors. */
+  data: readonly [THREE.Vector4, THREE.Vector4, THREE.Vector4];
 }
 
 export interface GPUEventReadbackBatch {
@@ -167,6 +170,7 @@ export interface GPUEventNodeRecord {
   generation: Node<'uint'>;
   sequence: Node<'uint'>;
   particle: GPUParticleLike;
+  data: GPUEventData;
   collisionPoint: Node<'vec3'>;
   collisionNormal: Node<'vec3'>;
   collisionImpulse: Node<'vec3'>;
@@ -208,6 +212,10 @@ export class GPUEventReader {
       generation: bitcastFloatToUint(record.z),
       sequence: uint(this.state.sequence),
       particle: {
+        kill() { throw new Error('GPU event snapshots cannot kill live particles.'); },
+        emitEvent() {},
+        addTag() { throw new Error('GPU event snapshots cannot mutate live particle tags.'); },
+        removeTag() { throw new Error('GPU event snapshots cannot mutate live particle tags.'); },
         get id() {
           return uvec2(this.index, this.generation);
         },
@@ -242,9 +250,14 @@ export class GPUEventReader {
         generation: bitcastFloatToUint(record.z),
         lodPriority: uint(0),
       },
-      collisionPoint: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionPoint)).xyz,
-      collisionNormal: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionNormal)).xyz,
-      collisionImpulse: this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionImpulse)).xyz,
+      data: [
+        this.eventFloatStorage.element(base.add(EventFloatSlot.Payload0)),
+        this.eventFloatStorage.element(base.add(EventFloatSlot.Payload1)),
+        this.eventFloatStorage.element(base.add(EventFloatSlot.Payload2)),
+      ],
+      collisionPoint: this.eventFloatStorage.element(base.add(EventFloatSlot.Payload0)).xyz,
+      collisionNormal: this.eventFloatStorage.element(base.add(EventFloatSlot.Payload1)).xyz,
+      collisionImpulse: this.eventFloatStorage.element(base.add(EventFloatSlot.Payload2)).xyz,
     };
   }
 }
@@ -281,16 +294,16 @@ export class GPUEventWriter {
     normal: Node<'vec3'>,
     impulse: Node<'vec3'>,
   ): void {
-    this.emitParticleEvent(GPUEventType.Collision, particle, point, normal, impulse);
+    this.emitParticleEvent(GPUEventType.Collision, particle, [vec4(point, 0), vec4(normal, 0), vec4(impulse, 0)]);
   }
 
-  private emitParticleEvent(
+  emitParticleEvent(
     type: number,
     particle: GPUParticleLike,
-    collisionPoint?: Node<'vec3'>,
-    collisionNormal?: Node<'vec3'>,
-    collisionImpulse?: Node<'vec3'>,
+    payload?: GPUEventPayload,
   ): void {
+    const data = Array.isArray(payload) ? payload : payload ? [payload] : [];
+    if (data.length > 3) throw new Error('GPU custom event payload accepts at most three vec4 values (12 floats).');
     const eventIndex = atomicAdd(
       this.counterStorage.element(uint(EventCounter.Count)),
       uint(1),
@@ -305,10 +318,8 @@ export class GPUEventWriter {
         bitcastUintToFloat(particle.tagMask),
       ));
       this.writeParticleSnapshot(eventIndex, particle);
-      if (collisionPoint && collisionNormal && collisionImpulse) {
-        this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionPoint)).assign(vec4(collisionPoint, 0));
-        this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionNormal)).assign(vec4(collisionNormal, 0));
-        this.eventFloatStorage.element(base.add(EventFloatSlot.CollisionImpulse)).assign(vec4(collisionImpulse, 0));
+      for (let i = 0; i < 3; i += 1) {
+        this.eventFloatStorage.element(base.add(EventFloatSlot.Payload0 + i)).assign(data[i] ?? vec4(0));
       }
     }).Else(() => {
       atomicAdd(this.counterStorage.element(uint(EventCounter.OverflowCount)), uint(1));
@@ -426,11 +437,7 @@ export class GPUEventBufferState {
     for (let index = 0; index < count; index += 1) {
       const eventOffset = packedOffset(index, EventFloatSlot.Metadata);
       const type = eventUintData[eventOffset];
-      if (
-        type !== GPUEventType.Death
-        && type !== GPUEventType.Spawn
-        && type !== GPUEventType.Collision
-      ) continue;
+      if (type < 1 || type > 32) continue;
 
       const slot = eventUintData[eventOffset + 1];
       const generation = eventUintData[eventOffset + 2];
@@ -438,6 +445,8 @@ export class GPUEventBufferState {
       const tagMask = eventUintData[eventOffset + 3];
       const identity = identityForEvent(slot, generation);
       const particle = identity?.clone() ?? new Particle();
+      // Synthetic GPU identity names the captured generation, never the current slot occupant.
+      if (!identity) particle.id = `gpu:${slot}:${generation}`;
       readParticleSnapshot(eventFloatData, index, particle);
       particle.alive = type !== GPUEventType.Death;
 
@@ -448,11 +457,13 @@ export class GPUEventBufferState {
         sequence,
         tagMask,
         particle,
+        data: [0, 1, 2].map(i => new THREE.Vector4().fromArray(eventFloatData,
+          packedOffset(index, EventFloatSlot.Payload0 + i))) as [THREE.Vector4, THREE.Vector4, THREE.Vector4],
         collision: type === GPUEventType.Collision
           ? {
-            point: readNewVector(eventFloatData, index, EventFloatSlot.CollisionPoint),
-            normal: readNewVector(eventFloatData, index, EventFloatSlot.CollisionNormal),
-            impulse: readNewVector(eventFloatData, index, EventFloatSlot.CollisionImpulse),
+            point: readNewVector(eventFloatData, index, EventFloatSlot.Payload0),
+            normal: readNewVector(eventFloatData, index, EventFloatSlot.Payload1),
+            impulse: readNewVector(eventFloatData, index, EventFloatSlot.Payload2),
           }
           : undefined,
       });

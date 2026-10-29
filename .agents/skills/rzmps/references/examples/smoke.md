@@ -58,10 +58,13 @@ The 10-second loop sustains a plume while particles live for 4.5 seconds. The sm
       }),
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: (time) =>
+          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
+        angularVelocity: [-1, 1],
       }),
     ],
     renderers: [
@@ -136,10 +139,13 @@ Noise is stronger horizontally (0.65) than vertically (0.35), producing rolling 
       }),
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: (time) =>
+          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
+        angularVelocity: [-1, 1],
       }),
     ],
 ```
@@ -150,7 +156,7 @@ Noise is stronger horizontally (0.65) than vertically (0.35), producing rolling 
 Lit sprites use the smoke alpha image as their silhouette. Roughness 1 avoids glossy highlights; spherical normals 1 and normal lighting 0.5 give each billboard some volume under scene lighting. Soft-particle distance 1 reduces hard lines where the smoke intersects geometry.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/smoke.js#L68)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/smoke.js#L71)
 
 ```js
     renderers: [

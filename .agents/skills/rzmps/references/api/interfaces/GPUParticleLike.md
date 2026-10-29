@@ -277,3 +277,87 @@ readonly time: Node<"float">;
 ```ts
 readonly velocity: Node<"vec3">;
 ```
+
+## Methods
+
+<a id="addtag"></a>
+
+### addTag()
+
+```ts
+addTag(tag): void;
+```
+
+Adds a tag registered by an emitter, module, renderer, spatial effect, or subsystem selector.
+
+#### Parameters
+
+##### tag
+
+`string`
+
+#### Returns
+
+`void`
+
+***
+
+<a id="emitevent"></a>
+
+### emitEvent()
+
+```ts
+emitEvent(event, payload?): void;
+```
+
+#### Parameters
+
+##### event
+
+`string`
+
+##### payload?
+
+[`GPUEventPayload`](../type-aliases/GPUEventPayload.md)
+
+#### Returns
+
+`void`
+
+***
+
+<a id="kill"></a>
+
+### kill()
+
+```ts
+kill(): void;
+```
+
+Marks this particle dead in the current GPU update.
+
+#### Returns
+
+`void`
+
+***
+
+<a id="removetag"></a>
+
+### removeTag()
+
+```ts
+removeTag(tag): void;
+```
+
+Removes a registered tag while preserving all other tags.
+
+#### Parameters
+
+##### tag
+
+`string`
+
+#### Returns
+
+`void`

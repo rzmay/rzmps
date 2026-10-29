@@ -35,7 +35,7 @@ alpha: DynamicValue<number>;
 ### angularAcceleration
 
 ```ts
-angularAcceleration: DynamicValue<Vector3>;
+angularAcceleration: DynamicValue<Vector3Input>;
 ```
 
 ***
@@ -45,7 +45,7 @@ angularAcceleration: DynamicValue<Vector3>;
 ### angularVelocity
 
 ```ts
-angularVelocity: DynamicValue<Vector3>;
+angularVelocity: DynamicValue<Vector3Input>;
 ```
 
 ***
@@ -107,8 +107,10 @@ Offset from the emission shape's sampled position, in emitter-local space.
 ### rotation
 
 ```ts
-rotation: DynamicValue<Vector3>;
+rotation: DynamicValue<Vector3Input>;
 ```
+
+Euler rotation in radians; a scalar applies to all axes (billboard sprites use X for roll).
 
 ***
 

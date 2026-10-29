@@ -58,10 +58,13 @@ A 10-second loop and 4.5-second particle lifetime maintain a slow plume. Gravity
       }),
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: (time) =>
+          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
+        angularVelocity: [-1, 1],
       }),
     ],
     renderers: [
@@ -135,10 +138,13 @@ Low-frequency noise (0.8) moves the smoke in broad curls, with less vertical tha
       }),
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: (time) =>
+          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
+        angularVelocity: [-1, 1],
       }),
     ],
 ```
@@ -149,7 +155,7 @@ Low-frequency noise (0.8) moves the smoke in broad curls, with less vertical tha
 The lit smoke sprites use AdditiveBlending, so overlapping particles brighten the scene rather than darkening it like opaque soot. The low starting alpha counterbalances that accumulation. Roughness 1 and spherical normals retain lighting cues, while soft-particle distance 1 blends contacts with scene geometry.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/additiveSmoke.js#L68)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/additiveSmoke.js#L71)
 
 ```js
     renderers: [

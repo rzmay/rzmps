@@ -224,7 +224,7 @@ function createSmokeWake() {
         alpha: (time) => fadeInOut(time, 0.18, 0.65),
       }),
       new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
+        angularVelocity: [-1, 1],
       }),
     ],
     // #endregion docs:modules:1
@@ -333,10 +333,7 @@ function createMuzzleFlash(texture) {
           ],
           color: ['#ffffff', '#ffd07a'],
           alpha: 1,
-          rotation: [
-            new THREE.Vector3(-Math.PI, 0, 0),
-            new THREE.Vector3(Math.PI, 0, 0),
-          ],
+          rotation: [-Math.PI, Math.PI],
         },
       }),
     ],
@@ -481,7 +478,8 @@ function fadeInOut(time, fadeInEnd, fadeOutStart) {
 export const metadata = {
   "id": "dopplerBullet",
   "title": "Doppler Bullet",
-  "description": "Doppler effect on a fast bullet particle, with smoke, faint trails, spawn blast effects, and distortion wake subsystems.",
+  "description":
+    "Doppler audio on a fast bullet, with smoke, faint trails, spawn blasts, and distortion wake subsystems.",
   "tags": [
     "dopplerBullet"
   ],

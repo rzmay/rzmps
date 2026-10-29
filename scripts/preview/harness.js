@@ -30,12 +30,19 @@ async function capture(options) {
   scene.background = new THREE.Color('#11151f');
   const light = new THREE.DirectionalLight(0xffffff, 3);
   light.position.set(5,10,5);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.8),light);
+  if (!options.scene) scene.add(new THREE.AmbientLight(0xffffff, 0.8),light);
   try {
-    const example = examples.find(e => e.id === options.example);
+    const fixtures = {
+      nativeEvents: () => import('../../tests/visual/fixtures/nativeEvents.js'),
+      gpuKill: () => import('../../tests/visual/fixtures/gpuKill.js'),
+    };
+    const example = Object.hasOwn(fixtures, options.example)
+      ? { create: (await fixtures[options.example]()).default }
+      : examples.find(e => e.id === options.example);
     if (!example) throw new Error(`Unknown example ${options.example}. Available: ${examples.map(e=>e.id).join(', ')}`);
     if (options.backend === 'webgpu') {
-      if (!navigator.gpu || !await navigator.gpu.requestAdapter()) throw new Error('WebGPU is unavailable; no fallback was attempted');
+      if (!navigator.gpu ||
+        !await navigator.gpu.requestAdapter()) throw new Error('WebGPU is unavailable; no fallback was attempted');
       renderer = await createWebGPURenderer({ antialias:true, forceWebGL:false });
       if (!renderer.backend.isWebGPUBackend) throw new Error('WebGPU initialization used an unexpected backend');
       const backend = renderer.backend;
@@ -46,7 +53,8 @@ async function capture(options) {
           for (const program of [pipeline.computeProgram, pipeline.vertexProgram, pipeline.fragmentProgram]) {
             if (!program) continue;
             const storageBuffers = (program.code.match(/var<storage/g) ?? []).length;
-            shaderBindings.push({ stage: program.stage, name: program.name || (program.stage === 'compute' ? 'simulation' : 'render'), storageBuffers });
+            shaderBindings.push({ stage: program.stage, name: program.name || (program.stage ===
+              'compute' ? 'simulation' : 'render'), storageBuffers });
             if (storageBuffers > 8) throw new Error(`${program.stage} shader uses ${storageBuffers} storage buffers`);
           }
           return original(input, ...args);
@@ -61,8 +69,27 @@ async function capture(options) {
       const factory=scenePresets[options.scene];
       if (!factory) throw new Error(`Unknown scene ${options.scene}`);
       sceneHandle=await factory(scene,renderer,camera);
+      if (options.sceneLightStrength !== undefined) {
+        if (!sceneHandle?.setLightStrength) throw new Error('Selected scene has no light strength control');
+        sceneHandle.setLightStrength(options.sceneLightStrength);
+      }
     }
     system = await example.create();
+    system.traverse(object => {
+      for (const view of object.renderers ?? []) {
+        if (!Array.isArray(view.lights)) continue;
+        const update = view._update.bind(view);
+        view._update = particles => {
+          for (const p of particles) {
+            const values = [...p.position.toArray(), p.time, p.alpha];
+            if (values.some(value => !Number.isFinite(value))) {
+              throw new Error(`Invalid light source ${p.id}: ${values.join(', ')}`);
+            }
+          }
+          update(particles);
+        };
+      }
+    });
     getSceneParticleRoot(scene).add(system);
     scene.userData.__rzmps_configureParticleSystem?.(system);
     // Avoid built-in prewarm; the CLI specifies the exact initial step count.
@@ -92,6 +119,12 @@ async function capture(options) {
         scene.traverse(object=>{if(typeof object.advanceFrames==='function'&&!object.isSubSystem)roots.push(object);});
         for(const root of roots)root.advanceFrames(1,options.deltaTime);
         step++;
+        // Let asynchronous GPU lifecycle consumers (including persistent decals)
+        // observe frames during warmup, as they do in a real animation loop.
+        if (options.backend === 'webgpu' && step % 30 === 0) {
+          await renderer.backend.device.queue.onSubmittedWorkDone();
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
       }
     }
     await advance(options.warmup);
@@ -106,6 +139,20 @@ async function capture(options) {
         }
       });
       await render();
+      // Readback-based views such as particle lights finish asynchronously after the render.
+      if (options.backend === 'webgpu') {
+        const lightRenderers = [];
+        system.traverse(object => {
+          for (const view of object.renderers ?? []) if (Array.isArray(view.lights)) lightRenderers.push(view);
+        });
+        if (lightRenderers.length) {
+          const deadline = performance.now() + 2000;
+          while (lightRenderers.some(view => view._gpuReadbackPending) && performance.now() < deadline) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+          await render();
+        }
+      }
       const data=renderer.domElement.toDataURL('image/png');
       if(!data.startsWith('data:image/png;base64,'))throw new Error('Canvas PNG export failed');
       // Preview metadata is an explicit observation, so inspect GPU state rather
@@ -131,17 +178,28 @@ async function capture(options) {
         if(!Array.isArray(object.particles))return;
         const simulated = gpuCounts.get(object) ?? object.liveParticleCount;
         particles += simulated;
-        systems.push({ name: object.name, quality: object.quality, gpuProcessingActive: object.isGPUProcessingActive, simulated });
+        const lights = object.renderers.flatMap(view => Array.isArray(view.lights) ? view.lights : []);
+        systems.push({ name: object.name, quality: object.quality,
+          gpuProcessingActive: object.isGPUProcessingActive, simulated, events: object.gpuEventStats,
+          lights: { count: lights.length, active: lights.filter(light => light.intensity > 0).length,
+            peakIntensity: Math.max(0, ...lights.map(light => light.intensity)) } });
         for(const particle of object.particles) {
-          const values=[...particle.position.toArray(),...particle.velocity.toArray(),...particle.scale.toArray(),particle.alpha];
-          if(values.some(value=>!Number.isFinite(value)))throw new Error(`Non-finite particle state in ${object.name || 'system'}`);
+          const values=[...particle.position.toArray(),...particle.velocity.toArray(),...particle.scale.toArray(),
+            particle.alpha];
+          if(values.some(value=>
+            !Number.isFinite(value))) {
+            throw new Error(`Non-finite particle state in ${object.name || 'system'}: ${values.join(', ')}`);
+          }
         }
       });
-      frames.push({data,systems,time:step*options.deltaTime,step,particles,simulationSpeed:system.simulationSpeed,simulatedSeconds:step*options.deltaTime*Math.max(0,system.simulationSpeed)});
+      frames.push({data,systems,time:step*options.deltaTime,step,particles,simulationSpeed:system.simulationSpeed,
+        simulatedSeconds:step*options.deltaTime*Math.max(0,system.simulationSpeed)});
     }
     const childValidation = options.backend === 'webgpu' ? await validateGPUChildren(system, renderer) : [];
     const contactSheet=await makeContactSheet(frames,options);
-    return {frames,contactSheet,shaderBindings,childValidation,camera:{position:camera.position.toArray(),target:options.cameraTarget,fov:options.cameraFov},rendererInfo:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles},userAgent:navigator.userAgent,assetErrors};
+    return {frames,contactSheet,shaderBindings,childValidation,camera:{position:camera.position.toArray(),
+      target:options.cameraTarget,fov:options.cameraFov},rendererInfo:{calls:renderer.info.render.calls,
+      triangles:renderer.info.render.triangles},userAgent:navigator.userAgent,assetErrors};
   } finally {
     try {
       system?.destroy();

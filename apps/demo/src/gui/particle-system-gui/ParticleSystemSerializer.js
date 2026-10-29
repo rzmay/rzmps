@@ -8,6 +8,7 @@ import {
     EndBehavior,
     LightRenderer,
     MeshRenderer,
+    Module,
     NoiseModule,
     OrientToDirection,
     SpriteRenderer,
@@ -238,6 +239,22 @@ export class ParticleSystemSerializer {
                 ...this.getLODOptions(module),
                 tags: module.tags,
             })})`;
+        }
+
+        if (module.constructor === Module) {
+            // Export constructor inputs, never the live octree/grid and their cyclic particle references.
+            const options = this.serializeValue({
+                priority: module.priority,
+                tags: module.tags,
+                condition: module.condition,
+                conditionGPU: module.conditionGPU,
+                modifyGPU: module.modifyGPU,
+                useOctree: module.useOctree,
+                octreeOptions: module.octreeOptions,
+                useSpatialGrid: module.useSpatialGrid,
+                spatialGridOptions: module.spatialGridOptions,
+            });
+            return `new Module(${this.serializeFunction(module._modify)}, ${options})`;
         }
 
         const runtime = module;
@@ -650,7 +667,12 @@ export class ParticleSystemSerializer {
     }
 
     serializeFunction(value) {
-        const source = value.toString();
+        let source = value.toString();
+        // Object-method shorthand needs a function expression when emitted as a property value.
+        if (/^(?:async\s+)?[\w$]+\s*\([^)]*\)\s*\{/.test(source)
+            && !/^(?:async\s+)?function\b/.test(source)) {
+            source = source.replace(/^(async\s+)?/, '$1function ');
+        }
         if (/\bEasing\./.test(source)) {
             this.usesEasing = true;
         }

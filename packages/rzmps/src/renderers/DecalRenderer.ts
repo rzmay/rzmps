@@ -1,3 +1,5 @@
+import type EmissionSource from '../EmissionSource';
+import type { Tag } from '../types/Tag';
 import * as THREE from 'three';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import Renderer, { type RendererOptions } from '../Renderer';
@@ -26,6 +28,8 @@ export type DecalHitSelection = (
 ) => THREE.Intersection[];
 
 export interface DecalRendererOptions extends Partial<RendererOptions> {
+  /** Registers each persistent decal as an emission source with these tags. */
+  emissionTags?: Tag[];
   /** World-space search direction(s); defaults down. Collision searches use the opposite contact normal. */
   direction: THREE.Vector3 | DecalDirectionSampler;
   /** Defaults to Nearest. Receives all candidates and the optional maxHits unchanged. */
@@ -66,7 +70,10 @@ export interface DecalRendererOptions extends Partial<RendererOptions> {
 }
 
 type DecalMaterial = THREE.Material & { color?: THREE.Color };
-interface DecalInstance {
+export interface DecalInstance {
+  source?: EmissionSource;
+  /** Surface-local emission frame; +Y points out of the decal. */
+  emissionTransform?: THREE.Matrix4;
   mesh: THREE.Mesh<THREE.BufferGeometry, DecalMaterial>;
   age: number;
   lifetime: number;
@@ -123,6 +130,7 @@ export default class DecalRenderer extends Renderer {
   onDeath = false;
   continuousRate = 0;
   ratio = 1;
+  emissionTags?: Tag[];
 
   /** Local +Y forward transformed by particle rotation, with an optional local XYZ offset in radians. */
   static Forward(rotation = new THREE.Vector3()): DecalDirectionSampler {
@@ -151,6 +159,7 @@ export default class DecalRenderer extends Renderer {
 
   constructor(public material: THREE.Material, options: Partial<DecalRendererOptions> = {}) {
     super(options);
+    this.emissionTags = options.emissionTags?.slice();
     this.direction = options.direction ?? this.direction;
     this.hitSelection = options.hitSelection ?? this.hitSelection;
     this.maxHits = options.maxHits === undefined ? undefined
@@ -181,6 +190,9 @@ export default class DecalRenderer extends Renderer {
 
   /** Number of persistent decals, including those whose particles have died. */
   get count(): number { return this.instances.length; }
+
+  /** Persistent instances remain accessible after their originating particles die. */
+  get decals(): readonly DecalInstance[] { return this.instances; }
 
   setup(system: ParticleSystem): void {
     if (this.system === system) return;
@@ -234,7 +246,7 @@ export default class DecalRenderer extends Renderer {
       const decal = this.instances[i];
       decal.age += step;
       if (decal.age >= decal.lifetime) this.remove(i);
-      else this.fade(decal);
+      else { this.fade(decal); this.updateEmissionSource(decal); }
     }
   }
 
@@ -394,11 +406,25 @@ export default class DecalRenderer extends Renderer {
     mesh.userData[PARTICLE_RENDERER_OBJECT_KEY] = true;
 
     // Evict oldest resources before attaching the new persistent mark to its surface.
-    const decal = { mesh, age: 0, lifetime, alpha, opacity: this.opacity, seed: particle.id };
+    const decal: DecalInstance = { mesh, age: 0, lifetime, alpha, opacity: this.opacity, seed: particle.id };
     this.fade(decal);
     while (this.instances.length >= this.maxDecals) this.remove(0);
     this.instances.push(decal);
     hit.object.add(mesh);
+    if (this.emissionTags && this.system) {
+      const normal = (hit.normal ?? hit.face!.normal).clone()
+        .applyMatrix3(new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld)).normalize();
+      const orientation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+      orientation.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), particle.rotation.z));
+      const scale = new THREE.Vector3(1, 1, 1).lerp(particle.scale, this.inheritScale);
+      const transform = new THREE.Matrix4().compose(hit.point.clone().addScaledVector(normal, this.offset),
+        orientation, new THREE.Vector3(Math.abs(size.x * scale.x), 1, Math.abs(size.y * scale.y)));
+      decal.emissionTransform = hit.object.matrixWorld.clone().invert().multiply(transform);
+      decal.source = this.system.registerEmissionSource({
+        tags: this.emissionTags, transform: this.emissionMatrix(decal),
+        color: material.color ?? new THREE.Color(1, 1, 1), alpha: material.opacity,
+      });
+    }
   }
 
   private createGeometry(
@@ -461,8 +487,24 @@ export default class DecalRenderer extends Renderer {
     decal.mesh.material.opacity = Number.isFinite(alpha) ? THREE.MathUtils.clamp(alpha, 0, 1) : 0;
   }
 
+  private emissionMatrix(decal: DecalInstance): THREE.Matrix4 {
+    decal.mesh.updateWorldMatrix(true, false);
+    const transform = decal.mesh.matrixWorld.clone().multiply(decal.emissionTransform!);
+    if (this.system?.simulationSpace === 'local') {
+      this.system.updateWorldMatrix(true, false);
+      transform.premultiply(this.system.matrixWorld.clone().invert());
+    }
+    return transform;
+  }
+
+  private updateEmissionSource(decal: DecalInstance): void {
+    decal.source?.update({ transform: this.emissionMatrix(decal),
+      color: decal.mesh.material.color, alpha: decal.mesh.material.opacity });
+  }
+
   private remove(index: number): void {
     const [decal] = this.instances.splice(index, 1);
+    decal.source?.dispose();
     decal.mesh.removeFromParent();
     decal.mesh.geometry.dispose();
     decal.mesh.material.dispose();

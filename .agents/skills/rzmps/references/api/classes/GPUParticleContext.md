@@ -488,3 +488,105 @@ get root(): GPUParticleContext;
 #### Implementation of
 
 [`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`root`](../interfaces/GPUParticleLike.md#root)
+
+## Methods
+
+<a id="addtag"></a>
+
+### addTag()
+
+```ts
+addTag(_tag): void;
+```
+
+Builds a tag mutation inside a system's GPU update callback.
+
+#### Parameters
+
+##### \_tag
+
+`string`
+
+#### Returns
+
+`void`
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`addTag`](../interfaces/GPUParticleLike.md#addtag)
+
+***
+
+<a id="emitevent"></a>
+
+### emitEvent()
+
+```ts
+emitEvent(event, payload?): void;
+```
+
+Builds an event-buffer write at this point in the TSL graph.
+
+#### Parameters
+
+##### event
+
+`string`
+
+##### payload?
+
+[`GPUEventPayload`](../type-aliases/GPUEventPayload.md)
+
+#### Returns
+
+`void`
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`emitEvent`](../interfaces/GPUParticleLike.md#emitevent)
+
+***
+
+<a id="kill"></a>
+
+### kill()
+
+```ts
+kill(): void;
+```
+
+Marks the particle dead and advances its age past its lifetime using finite GPU values.
+
+#### Returns
+
+`void`
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`kill`](../interfaces/GPUParticleLike.md#kill)
+
+***
+
+<a id="removetag"></a>
+
+### removeTag()
+
+```ts
+removeTag(_tag): void;
+```
+
+Builds a tag mutation inside a system's GPU update callback.
+
+#### Parameters
+
+##### \_tag
+
+`string`
+
+#### Returns
+
+`void`
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`removeTag`](../interfaces/GPUParticleLike.md#removetag)

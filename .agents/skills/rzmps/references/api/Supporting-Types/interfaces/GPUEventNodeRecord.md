@@ -40,6 +40,16 @@ collisionPoint: Node<"vec3">;
 
 ***
 
+<a id="data"></a>
+
+### data
+
+```ts
+data: GPUEventData;
+```
+
+***
+
 <a id="generation"></a>
 
 ### generation

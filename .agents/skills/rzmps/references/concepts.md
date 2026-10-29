@@ -288,7 +288,9 @@ The loop duration schedules emission; it is independent of each particle's lifet
 
 # Surface Decals
 
-`DecalRenderer` clips persistent geometry onto rigid scene meshes with Three.js `DecalGeometry`. Pass a material first and an optional options object. Each mark owns a material clone and geometry; your material, textures, and target geometry remain caller-owned. Standard Three.js materials work with WebGL and WebGPU rendering.
+`DecalRenderer` clips persistent geometry onto rigid scene meshes with Three.js `DecalGeometry`. Pass a material first
+and an optional options object. Each mark owns a material clone and geometry; your material, textures, and target
+geometry remain caller-owned. Standard Three.js materials work with WebGL and WebGPU rendering.
 
 ```ts
 import * as THREE from 'three';
@@ -306,17 +308,40 @@ const decals = new DecalRenderer(material, {
 // Supply decals in a ParticleSystem's renderers collection.
 ```
 
-Spawn projection is enabled by default. Set `onSpawn: false, onCollision: true` for contact marks, or `onDeath: true` to search from the final particle position. Triggers are independent; enabling two can deliberately create two sets of marks for one particle. `continuousRate` defaults to zero (disabled). Set `onSpawn: false, continuousRate: 2` to project from each live particle twice per second instead of waiting for a collision. Its first projection occurs after one interval, so a particle that dies sooner than `1 / continuousRate` never projects continuously. Birth, collision, and death switches still work independently when continuous placement is enabled.
+Spawn projection is enabled by default. Set `onSpawn: false, onCollision: true` for contact marks, or `onDeath: true` to
+search from the final particle position. Triggers are independent; enabling two can deliberately create two sets of
+marks for one particle. `continuousRate` defaults to zero (disabled). Set `onSpawn: false, continuousRate: 2` to project
+from each live particle twice per second instead of waiting for a collision. Its first projection occurs after one
+interval, so a particle that dies sooner than `1 / continuousRate` never projects continuously. Birth, collision, and
+death switches still work independently when continuous placement is enabled.
 
-Continuous placement follows particle simulation age, respects tag filters, and stops when the particle dies. Pause freezes placement and decal aging; stopping emission without clearing lets surviving particles keep projecting. Repeated processing of the same particle snapshot does not duplicate an interval. If a large step crosses multiple intervals, missed projections use the current particle state, with catch-up work limited to `maxDecals` per particle per update. Clear/reset discard timing history; attaching to an already living population does not replay its entire past. Emitters, bursts, distance-based emission, and subsystems continue to determine which particles exist.
+Continuous placement follows particle simulation age, respects tag filters, and stops when the particle dies. Pause
+freezes placement and decal aging; stopping emission without clearing lets surviving particles keep projecting. Repeated
+processing of the same particle snapshot does not duplicate an interval. If a large step crosses multiple intervals,
+missed projections use the current particle state, with catch-up work limited to `maxDecals` per particle per update.
+Clear/reset discard timing history; attaching to an already living population does not replay its entire past. Emitters,
+bursts, distance-based emission, and subsystems continue to determine which particles exist.
 
-`ratio` defaults to `1` and is clamped to `[0, 1]`. It selects a consistent fraction of particles by ID for all projection triggers, including continuous placement. Setting it to zero disables new projections; existing decals continue fading.
+`ratio` defaults to `1` and is clamped to `[0, 1]`. It selects a consistent fraction of particles by ID for all
+projection triggers, including continuous placement. Setting it to zero disables new projections; existing decals
+continue fading.
 
-Constructor settings are exposed directly as renderer properties, for example `decals.continuousRate = 2` or `decals.size = 1.5`; there is no stored options object. New configuration affects subsequent projections, while existing marks keep their creation-time properties. Numeric configuration is clamped instead of throwing: distance and depth remain positive, capacities/counts are rounded down, capacity/rate cannot be negative, and nonfinite values use defaults (or zero for an explicit invalid hit count). Radial ray counts are rounded down to at least one, with nonfinite counts becoming one.
+Constructor settings are exposed directly as renderer properties, for example `decals.continuousRate = 2` or
+`decals.size = 1.5`; there is no stored options object. New configuration affects subsequent projections, while existing
+marks keep their creation-time properties. Numeric configuration is clamped instead of throwing: distance and depth
+remain positive, capacities/counts are rounded down, capacity/rate cannot be negative, and nonfinite values use defaults
+(or zero for an explicit invalid hit count). Radial ray counts are rounded down to at least one, with nonfinite counts
+becoming one.
 
-Directions are world-space vectors. The exported `DecalDirectionSampler` and `DecalHitSelection` types describe direction and selection callbacks. A direction callback receives the original particle in its simulation space and may return one vector or an ordered array. Nonzero finite vectors are normalized without modifying them. `DecalRenderer.Radial(24)` returns twenty-four deterministic Fibonacci-sphere directions. Local particle positions are transformed into world space before querying.
+Directions are world-space vectors. The exported `DecalDirectionSampler` and `DecalHitSelection` types describe
+direction and selection callbacks. A direction callback receives the original particle in its simulation space and may
+return one vector or an ordered array. Nonzero finite vectors are normalized without modifying them.
+`DecalRenderer.Radial(24)` returns twenty-four deterministic Fibonacci-sphere directions. Local particle positions are
+transformed into world space before querying.
 
-`DecalRenderer.Forward()` samples local +Y transformed by `particle.rotation`, matching the forward-axis convention in `OrientToDirection`. Its optional `THREE.Vector3` supplies an XYZ rotation offset in radians, applied in the particle's local frame before its rotation. For example, rotate X by π to point backward:
+`DecalRenderer.Forward()` samples local +Y transformed by `particle.rotation`, matching the forward-axis convention in
+`OrientToDirection`. Its optional `THREE.Vector3` supplies an XYZ rotation offset in radians, applied in the particle's
+local frame before its rotation. For example, rotate X by π to point backward:
 
 ```ts
 const decals = new DecalRenderer(material, {
@@ -324,13 +349,28 @@ const decals = new DecalRenderer(material, {
 });
 ```
 
-Forward follows orientation; use `OrientToDirection` when orientation should follow velocity. As with any particle-aware sampler, a rotated local simulation needs a callback that transforms the returned direction to world space using the system's world matrix. Samplers leave particle state and caller-owned vectors unchanged.
+Forward follows orientation; use `OrientToDirection` when orientation should follow velocity. As with any particle-aware
+sampler, a rotated local simulation needs a callback that transforms the returned direction to world space using the
+system's world matrix. Samplers leave particle state and caller-owned vectors unchanged.
 
-Each ray contributes its first supported intersection. Search uses a configured `ThreeCollisionBackend`'s current membership, including explicit object lists and filters; without that backend it scans scene meshes using the shared collision exclusions. Particle renderer objects and decal meshes are excluded. Other physics backends supply contacts directly when their `CollisionHit.object` is a supported mesh; otherwise search falls back to scene geometry. A valid collision contact bypasses direction sampling and raycasting. When mesh identity is unavailable, a finite nonzero collision normal selects the opposite world-space search direction, including on walls and slopes; the configured sampler is used only when that normal is unavailable. The built-in octree backend currently lacks target identity, so it uses this fallback, which can differ from an aggregate capsule contact.
+Each ray contributes its first supported intersection. Search uses a configured `ThreeCollisionBackend`'s current
+membership, including explicit object lists and filters; without that backend it scans scene meshes using the shared
+collision exclusions. Particle renderer objects and decal meshes are excluded. Other physics backends supply contacts
+directly when their `CollisionHit.object` is a supported mesh; otherwise search falls back to scene geometry. A valid
+collision contact bypasses direction sampling and raycasting. When mesh identity is unavailable, a finite nonzero
+collision normal selects the opposite world-space search direction, including on walls and slopes; the configured
+sampler is used only when that normal is unavailable. The built-in octree backend currently lacks target identity, so it
+uses this fallback, which can differ from an aggregate capsule contact.
 
-`maxDistance` limits ray length in world units (default 2). `depth` is the projector's Z clipping thickness (default 0.1); width and height come from `size` and inherited X/Y scale. Normals use the mesh normal matrix, and particle Z rotation supplies projector roll in radians. `offset` displaces generated vertices along the outgoing normal (default 0.001). Keep depth shallow on thin or curved targets: clipping can reach nearby faces and corners can distort the projection.
+`maxDistance` limits ray length in world units (default 2). `depth` is the projector's Z clipping thickness (default
+0.1); width and height come from `size` and inherited X/Y scale. Normals use the mesh normal matrix, and particle Z
+rotation supplies projector roll in radians. `offset` displaces generated vertices along the outgoing normal (default
+0.001). Keep depth shallow on thin or curved targets: clipping can reach nearby faces and corners can distort the
+projection.
 
-`hitSelection` defaults to the direct callback `DecalRenderer.Nearest`. It receives `(hits, particle, maxHits)`, with `THREE.Intersection` candidates in ray order. `face.normal` and optional `normal` follow Three.js mesh-local conventions; transform them with the target's normal matrix for world-space comparisons.
+`hitSelection` defaults to the direct callback `DecalRenderer.Nearest`. It receives `(hits, particle, maxHits)`, with
+`THREE.Intersection` candidates in ray order. `face.normal` and optional `normal` follow Three.js mesh-local
+conventions; transform them with the target's normal matrix for world-space comparisons.
 
 | Selector | Omitted maxHits | Explicit maxHits: 4 |
 | --- | --- | --- |
@@ -338,7 +378,9 @@ Each ray contributes its first supported intersection. Search uses a configured 
 | `DecalRenderer.Farthest` | One farthest | Up to four farthest |
 | `DecalRenderer.All` | All in ray order | First four in ray order |
 
-The built-ins leave the input array unchanged. Negative `maxHits` disables truncation; zero creates no marks. A custom selector may return fewer candidates. Explicit nonnegative `maxHits` also caps its valid result. Distinct intersections on one mesh remain separate candidates.
+The built-ins leave the input array unchanged. Negative `maxHits` disables truncation; zero creates no marks. A custom
+selector may return fewer candidates. Explicit nonnegative `maxHits` also caps its valid result. Distinct intersections
+on one mesh remain separate candidates.
 
 ```ts
 const decals = new DecalRenderer(material, {
@@ -356,21 +398,61 @@ const decals = new DecalRenderer(material, {
 });
 ```
 
-`color` accepts `ColorInput` values (Three.js colors, CSS strings, or numeric hex values). `size` accepts `Vector3Input`: a number for uniform width/height or a vector for separate X/Y dimensions; Z is ignored because `depth` controls clipping. Both support callbacks, ranges, and sets without modifying caller-owned values.
+`color` accepts `ColorInput` values (Three.js colors, CSS strings, or numeric hex values). `size` accepts
+`Vector3Input`: a number for uniform width/height or a vector for separate X/Y dimensions; Z is ignored because `depth`
+controls clipping. Both support callbacks, ranges, and sets without modifying caller-owned values.
 
-`size`, `color`, and `lifetime` use the existing CPU `DynamicValue` helpers and are sampled once at source particle age. Geometry never resizes after creation. Nonpositive or nonfinite lifetime/size creates nothing. Lifetime is in seconds; its default is eight. `opacity` is evaluated on normalized **decal age** from zero to one, with a stable source seed for random ranges. It multiplies the template material opacity and snapshotted alpha. CPU evaluation does not accept TSL nodes.
+`size`, `color`, and `lifetime` use the existing CPU `DynamicValue` helpers and are sampled once at source particle age.
+Geometry never resizes after creation. Nonpositive or nonfinite lifetime/size creates nothing. Lifetime is in seconds;
+its default is eight. `opacity` is evaluated on normalized **decal age** from zero to one, with a stable source seed for
+random ranges. It multiplies the template material opacity and snapshotted alpha. CPU evaluation does not accept TSL
+nodes.
 
-`inheritColor`, `inheritScale`, and `inheritAlpha` default to 1 and follow subsystem math: base multiplied by `lerp(1, particleValue, amount)`, component-wise for color and nonuniform scale. Zero and negative amounts retain the base value, matching subsystem handling. Half blends halfway, and one inherits fully. The material color, configured color, and inherited particle color multiply together. Each decal's material fades independently.
+`inheritColor`, `inheritScale`, and `inheritAlpha` default to 1 and follow subsystem math: base multiplied by `lerp(1,
+particleValue, amount)`, component-wise for color and nonuniform scale. Zero and negative amounts retain the base value,
+matching subsystem handling. Half blends halfway, and one inherits fully. The material color, configured color, and
+inherited particle color multiply together. Each decal's material fades independently.
 
-`distanceAffectsSize` and `distanceAffectsOpacity` default to zero. Their multiplier is `lerp(1, proximity, amount)`, where `proximity = 1 - clamp(hit.distance / maxDistance, 0, 1)`. Zero is neutral and one gives full distance attenuation.
+`distanceAffectsSize` and `distanceAffectsOpacity` default to zero. Their multiplier is `lerp(1, proximity, amount)`,
+where `proximity = 1 - clamp(hit.distance / maxDistance, 0, 1)`. Zero is neutral and one gives full distance
+attenuation.
 
-`maxHits` limits selection per trigger. `maxDecals` instead limits active persistent marks (default 256). Insertion at capacity evicts the oldest mark and disposes its geometry and cloned material. Expiry, `clear`, reset, removal from the scene, and destruction also release owned resources. Pause freezes decal age; stopping without clearing lets marks continue fading. Destruction unregisters callbacks. Renderer update/count LOD does not skip lifetime updates or lifecycle placement; tag filters still apply. Normal system simulation LOD and culling affect the system clock as usual.
+`maxHits` limits selection per trigger. `maxDecals` instead limits active persistent marks (default 256). Insertion at
+capacity evicts the oldest mark and disposes its geometry and cloned material. Expiry, `clear`, reset, removal from the
+scene, and destruction also release owned resources. Pause freezes decal age; stopping without clearing lets marks
+continue fading. Destruction unregisters callbacks. Renderer update/count LOD does not skip lifetime updates or
+lifecycle placement; tag filters still apply. Normal system simulation LOD and culling affect the system clock as usual.
 
-Generated geometry is stored in the target mesh's local space so it follows rigid motion. Skinned and instanced targets are rejected; deforming geometry and animated morph targets are unsupported. Choose a material with a color property when using tint inheritance. Texture and custom shader compatibility follow the supplied material's capabilities.
+Generated geometry is stored in the target mesh's local space so it follows rigid motion. Skinned and instanced targets
+are rejected; deforming geometry and animated morph targets are unsupported. Choose a material with a color property
+when using tint inheritance. Texture and custom shader compatibility follow the supplied material's capabilities.
 
-GPU event-only modes use the existing asynchronous lifecycle-event snapshots without adding particle readbacks. Continuous mode uses the same `updateCPUFromGPU` helper as LightRenderer and TrailRenderer, forwarding snapshots through the normal update path. There is no separate readback-frequency cap; the helper guards against overlapping requests. Fixed direction vectors request position, rotation, normalized age, and elapsed age, plus scale/color/alpha when inherited. Arbitrary direction callbacks may inspect every particle field, so those request complete snapshots. Decal lifetimes still advance on each simulation update while a readback is in flight. Marks may appear after readback latency. GPU contacts currently lack mesh identity and search opposite the collision normal. Follow-up work: preserve GPU collision target identity for exact contact projection. Geometry clipping and material allocation remain CPU work; batching and deforming mesh projection are deferred.
+GPU event-only modes use the existing asynchronous lifecycle-event snapshots without adding particle readbacks.
+Continuous mode uses the same `updateCPUFromGPU` helper as LightRenderer and TrailRenderer, forwarding snapshots through
+the normal update path. There is no separate readback-frequency cap; the helper guards against overlapping requests.
+Fixed direction vectors request position, rotation, normalized age, and elapsed age, plus scale/color/alpha when
+inherited. Arbitrary direction callbacks may inspect every particle field, so those request complete snapshots. Decal
+lifetimes still advance on each simulation update while a readback is in flight. Marks may appear after readback
+latency. GPU contacts currently lack mesh identity and search opposite the collision normal. Follow-up work: preserve
+GPU collision target identity for exact contact projection. Geometry clipping and material allocation remain CPU work;
+batching and deforming mesh projection are deferred.
 
-The [Splatter example](https://rzmps.rzmay.com/docs/examples/splatter.html) uses matte paintballs and long-lived collision marks that inherit color and scale. The [Fire example](https://rzmps.rzmay.com/docs/examples/fire.html) uses continuous radial projection from its flame particles. Short-lived, low-opacity marks fade in and accumulate into textured scorch patches. [Fireball](https://rzmps.rzmay.com/docs/examples/fireball.html) uses the same texture with a higher continuous rate suited to its brief bursts.
+The [Splatter example](https://rzmps.rzmay.com/docs/examples/splatter.html) uses matte paintballs and long-lived collision marks that inherit color
+and scale. The [Fire example](https://rzmps.rzmay.com/docs/examples/fire.html) uses continuous radial projection from its flame particles.
+Short-lived, low-opacity marks fade in and accumulate into textured scorch patches. [Fireball](https://rzmps.rzmay.com/docs/examples/fireball.html)
+uses the same texture with a higher continuous rate suited to its brief bursts.
+
+## Emitting from Persistent Decals
+
+Set `emissionTags: ['acid-pool']` to register each successful decal as an emission source.
+The public `decals` collection exposes `decal.source`; call `decal.source?.emitEvent('bubble', payload)`
+from application scheduling code. Sources follow decal transforms, rigid surface movement, material
+color and opacity, and are disposed on expiry, eviction, clear or renderer destruction.
+A child with `{ tags: ['acid-pool'], emitContinuous: true, inheritLifetime: 0 }` can emit smoke
+from every pool; another with `onEvent: ['bubble']` can produce splashes.
+
+See [Emission Sources and Custom Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) for handle APIs and deferred
+synchronization, and [Acid](https://rzmps.rzmay.com/docs/examples/acid.html) for the complete effect.
 
 
 ---
@@ -511,7 +593,9 @@ type StrictMultiple<T> = T | [T, ...[T]];
 type Tag = string;
 ```
 
-Lifetime-module callbacks receive normalized particle age, from `0` to `1`. Emitter rate and birth-value callbacks instead receive normalized emission-cycle time. A callback is evaluated in its component’s context; it does not receive wall-clock seconds.
+Lifetime-module callbacks receive normalized particle age, from `0` to `1`. Emitter rate and birth-value callbacks
+instead receive normalized emission-cycle time. A callback is evaluated in its component’s context; it does not receive
+wall-clock seconds.
 
 | Form           | Example                       | Behavior                               |
 | -------------- | ----------------------------- | -------------------------------------- |
@@ -526,7 +610,8 @@ type uses `DynamicValue<number>`, `DynamicValue<THREE.Vector3>`, or
 
 Color inputs accept `THREE.Color`, hex numbers, and CSS color strings (the same values
 as `new THREE.Color(...)`). Uniform-axis inputs such as scale, scale velocity/acceleration,
-noise strength, and velocity limits also accept a number: `scale: 2` means
+noise strength, rotation/angular velocity/angular acceleration, and velocity limits also accept a number: `scale: 2`
+means
 `new THREE.Vector3(2, 2, 2)`. Positions and directional inputs still require vectors.
 These shortcuts work inside callbacks, ranges, and sets too, including GPU processing;
 particle state always contains `THREE.Color` and `THREE.Vector3` objects.
@@ -538,6 +623,27 @@ initialValues: {
 }
 // Lifetime modifier: scale: (t) => 1 + t
 ```
+
+## Rotation Shortcuts
+
+Birth `rotation`, `angularVelocity`, and `angularAcceleration`, plus the corresponding rotation-module options,
+accept `Vector3Input`: a scalar or a `THREE.Vector3`. As with scale, a scalar expands uniformly across X, Y and Z.
+Billboard sprites use X for their screen-space roll, so a scalar is sufficient. Meshes and non-billboard sprites
+still use all three axes; supply an explicit vector for axis-specific rotation.
+
+```ts
+new Emitter({ initialValues: {
+  rotation: [0, Math.PI * 2],
+  angularVelocity: 0.65,
+} });
+new RotationOverLifetime({ angularVelocity: new Set([-1.8, 1.8]) });
+new RotationBySpeed({ speedRange: [0, 10], angularVelocity: [0, 2] });
+```
+
+Angles use radians, angular velocity uses radians per second, and angular acceleration uses radians per second
+squared. Lifetime options support constants, ranges, sets and callbacks, on CPU and GPU. Size, speed and depth options
+retain their `ValueByParameter` semantics: ranges interpolate, direct values scale with the normalized parameter,
+and callbacks supply explicit results. The particle's stored angular channels remain `THREE.Vector3` objects.
 
 The [curves](https://www.npmjs.com/package/curves) package was designed and
 built to streamline functional values by defining and evaluating eased curves,
@@ -564,6 +670,318 @@ sampled into an interpolated lookup table with `ParticleSystem.GPU_DYNAMIC_VALUE
 entries, so sharp or high-frequency curves may need a higher resolution. GPU-aware options can
 also accept TSL nodes. Runtime value changes synchronize automatically; a change that alters a
 custom shader graph's structure should additionally set that component's `needsUpdate` flag.
+
+
+---
+
+<!-- Source: apps/docs/guides/emission-sources-events.md -->
+
+# Emission Sources and Custom Events
+
+A subsystem can follow a simulated particle or a persistent CPU-managed emission source. Registered sources use the
+existing emitter contexts, tag intersection, deterministic ratio selection, numeric inheritance and event runs. They do
+not enter the particle population, consume simulated slots, or require placeholder particles. Update only the owning
+root system; its children share its clock.
+
+## Registering and Updating Sources
+
+```ts
+const source = system.registerEmissionSource({
+  tags: ['acid-pool'],
+  transform: new THREE.Matrix4().makeTranslation(0, 0.1, 0),
+  color: new THREE.Color('#78e832'),
+  alpha: 1,
+  scale: 1,
+  velocity: new THREE.Vector3(),
+  mass: 1,
+});
+
+source.update({ alpha: 0.5 });
+source.emitEvent('bubble', { strength: 2 });
+// Equivalent system methods:
+system.updateSource(source.id, { alpha: 0.5 });
+system.emitEvent(source.id, 'bubble', { strength: 2 });
+// Use either removal form:
+source.dispose();
+system.unregisterEmissionSource(source.id);
+```
+
+Registration returns a `RegisteredEmissionSource` handle. The package already exports an `EmissionSource` enum for
+geometry sampling (`Volume`, `Surface`, `Vertices`); that existing export remains compatible. The handle delegates
+update, dispatch and disposal to its owning system and exposes `id`, `system`, canonical attributes, and a copied `data`
+snapshot. Input matrices, vectors, colors and tag arrays are copied. Registered IDs start with `source:`; existing
+particle IDs retain their format.
+
+Transforms and velocities use the owning system's simulation space. In world simulation supply world transforms; in
+local simulation premultiply world transforms by the system's inverse world matrix. The emitter's local +Y axis is the
+outward axis for surface emission. Source transform scale and optional scalar `scale` combine for transform inheritance.
+Updating attributes preserves identity, registration age, distance credit and burst progression.
+
+A source remains alive until disposed or its owner is destroyed. Registration dispatches `spawn`; removal dispatches
+`death` exactly once and immediately stops continuous emission. Repeated disposal is safe. Removal releases continuous
+emitter context state; already created child particles and captured event runs finish normally. Ordinary particle
+clearing does not remove externally registered sources; explicit removal or system destruction does.
+
+`realtime` is source age in milliseconds of parent simulation time, respecting pause and simulation speed. `time` is
+that age divided by the owning system duration. Registered sources have no finite particle lifetime; their child
+emitters use their own duration and looping behavior. Set `inheritLifetime: 0` explicitly to communicate that
+independent timing. `rateOverDistance` follows source transform movement using the same per-context distance accumulator
+as particle-backed emission. Multiple position updates before one frame contribute the final displacement, rather than
+every intermediate point.
+
+## Selecting Sources and Inheriting Attributes
+
+```ts
+system.addSubSystem(smoke, {
+  tags: ['acid-pool'],
+  emitContinuous: true,
+  ratio: 0.75,
+  shouldEmit: source => source.alpha > 0.05,
+  inheritLifetime: 0,
+  inheritScale: 0.5,
+  inheritColor: 1,
+  inheritAlpha: 1,
+  inheritVelocity: 0.25,
+});
+```
+
+`tags` uses the same intersection semantics as modules and renderers: omission accepts every source; an empty selection
+accepts none. Both particles and registered sources can drive this child simultaneously when their tags match. No
+source-type switch is needed. `ratio` chooses sources consistently by identity; `shouldEmit` receives their common
+attributes. Function-valued selectors use CPU evaluation; they cannot automatically become a native GPU predicate.
+Native GPU particle consumers require boolean `shouldEmit`. Continuous CPU consumers of GPU particles receive
+asynchronous snapshots through the existing selective readback infrastructure; their source contexts are released when
+those snapshots report removal. Registered sources remain directly available to these selectors without source readback.
+
+Inheritance factors remain numbers. Color, alpha, mass, and transform scale blend from neutral values using their
+configured factors; inherited velocity adds the selected fraction of source velocity. Scale inheritance affects the
+emission frame, while an event context's scalar `scale` multiplies child particle size. Child particles can themselves
+drive nested subsystems, on CPU or GPU. Registered source updates do not restart continuous bursts or event runs.
+
+## One Event API
+
+```ts
+system.emitEvent(particle.id, 'explode', { strength: 3 });
+particle.emitEvent('explode', { strength: 3 });
+source.emitEvent('bubble', { strength: 1.5 });
+
+system.addSubSystem(splash, { onEvent: ['explode', 'bubble'] });
+```
+
+`emitEvent` resolves a live particle or registered source in its owning system. Unknown or disposed IDs are ignored. A
+CPU particle's alias uses ownership stored outside its serializable attributes; cloning or making a render-only shallow
+view does not copy that ownership. Dispatch never performs shader compilation or requires explicit event registration.
+
+CPU dispatch targeting a native GPU particle ID queues a generation-validated selective snapshot at
+the next system update. Its CPU handler runs asynchronously when that snapshot is available, then
+stages births for GPU children where appropriate. A recycled or dead generation is ignored. Calls
+are batched without coalescing separate events, and a busy readback pool retries the batch. This
+explicit CPU-to-GPU targeting is separate from GPU-native events, which need no snapshot readback.
+
+An event-only subscription disables continuous emission by default. Set `emitContinuous: true` when both are desired.
+`emitOnSpawn`, `emitOnDeath` and `emitOnCollision` remain supported; subscribing to a built-in event through both a
+legacy flag and `onEvent` creates one run, with the named callback applied once. Explicit collision events can also
+originate from registered sources. Supplying the established collision hit shape preserves impulse threshold, alignment
+and scaling behavior.
+
+### CPU Context Handlers
+
+```ts
+system.addSubSystem(splash, {
+  tags: ['acid-pool'],
+  onEvent: {
+    bubble: (data, source, context) => {
+      if (typeof data !== 'object' || data === null
+        || !('strength' in data) || typeof data.strength !== 'number') return;
+      return {
+        scale: context.scale * data.strength,
+        velocity: context.velocity.clone().add(new THREE.Vector3(0, data.strength, 0)),
+      };
+    },
+  },
+});
+```
+
+CPU handlers execute immediately at dispatch, receive an arbitrary JavaScript payload typed as `unknown`, a common
+source view, and the inherited `EmissionContext`, and may return partial overrides. Applications narrow or assert their
+own payload schema; the library never needs to know it. Event contexts own their mutable values. Changing an event
+context never changes persistent source attributes. A run captures the resolved values, so later source updates or
+disposal do not alter that event.
+
+Context overrides include transform, position, color, alpha, mass, velocity, scalar scale, velocityScale,
+distortionStrength and duration. Identity and elapsed run timing remain owned by the scheduler. A position-only override
+updates transform translation; a transform-only override updates the context position. Supplying both keeps both
+explicit values. Collision runs retain existing impulse effects and their snapshot-based lifecycle.
+
+## GPU-Native Events
+
+Inside a module's `modifyGPU(particle, deltaTime, context)`, use `particle.emitEvent(name, payload)` within the relevant
+TSL control flow. It appends a snapshot and payload to the existing GPU event buffer at that point in the graph.
+Multiple events from one particle remain separate records.
+
+```ts
+system.addSubSystem(splash, {
+  onEvent: {
+    explode: (data, source, context) => {
+      if (typeof data !== 'object' || data === null
+        || !('strength' in data) || typeof data.strength !== 'number') return;
+      return { scale: context.scale * data.strength };
+    },
+    gpu: {
+      explode: (data, particle, context) => ({
+        scale: context.scale.mul(data[0].x),
+        velocity: context.velocity.add(particle.velocity.mul(data[0].y)),
+      }),
+    },
+  },
+});
+```
+
+GPU handlers are JavaScript callbacks that **build TSL expressions during kernel compilation**. They are not JavaScript
+callbacks executed per particle or per event at runtime. Return TSL nodes for context overrides. GPU context includes
+`transform` (a matrix node), `position`, `color`, `alpha`, `mass`, `velocity`, `scale`, `velocityScale`, and `duration`;
+transform and position overrides use the same translation precedence as CPU contexts. Full affine transforms are
+preserved in persistent GPU event runs.
+
+Names are discovered automatically from both CPU and GPU subscriptions. Built-in IDs remain death = 1, spawn = 2,
+collision = 3. Each parent system supports **32 distinct names: three built-ins plus 29 custom names**. IDs are retained
+for that system's lifetime, including previously used names after a subscription is removed. Exceeding capacity throws a
+diagnostic. Subscription changes can rebuild the affected GPU kernels; data updates and dispatch do not.
+
+An unsubscribed GPU event name produces no record. If both implementations exist, GPU-origin events use the GPU handler
+and CPU-origin events use the CPU handler. A GPU-origin event with only a CPU handler is delivered asynchronously
+through event readback. Array subscriptions and `true` entries need no handler and can stay GPU-native.
+
+## GPU Payload Format and Capacity
+
+Each GPU event accepts either one `vec4` node or an array with one to three `vec4` nodes:
+
+```ts
+particle.emitEvent('explode', vec4(strength, 0, 0, 0));
+particle.emitEvent('impact', [vec4(position, 0), vec4(normal, 0), vec4(impulse, 0)]);
+```
+
+The maximum is **three vec4 values, or twelve float components per record**. A fourth vector produces a development-time
+error during graph construction. Missing vectors are explicitly initialized to zero, including built-in events that do
+not use payloads. Every GPU handler receives exactly three entries, accessible as `data[0]`, `data[1]`, and `data[2]`.
+Each supports `.x`, `.y`, `.z`, `.w` and vector swizzles such as `.xyz`.
+
+Payloads contain numerical TSL values. Arbitrary JavaScript objects cannot be sent through a native GPU event. The
+particle snapshot is stored separately and remains available to the handler even after the original particle dies or its
+slot is reused. Identity validation retains the original slot generation; readback never substitutes the particle
+currently occupying that slot.
+
+The event record remains **15 vec4 slots**. Its existing collision point, normal and impulse slots are generalized as
+Payload0, Payload1 and Payload2. For collisions, their `.xyz` retain point, normal and impulse, with `.w = 0`. The
+separate per-particle collision cache and existing collision APIs remain intact. No additional event buffer or storage
+binding is needed for custom payloads.
+
+### Example A: One Scalar
+
+```ts
+// Inside modifyGPU:
+particle.emitEvent('explode', vec4(strength, 0, 0, 0));
+// Inside onEvent.gpu:
+const explode = (data, particle, context) => ({
+  scale: context.scale.mul(data[0].x),
+});
+```
+
+Here `data[0].x` carries strength; `data[1]` and `data[2]` are zero vectors.
+
+### Example B: Multiple Parameters
+
+```ts
+particle.emitEvent('explode', vec4(strength, radius, temperature, 0));
+const explode = (data, particle, context) => ({
+  scale: context.scale.mul(data[0].x),
+  position: context.position.add(vec3(0, data[0].y, 0)),
+  alpha: context.alpha.mul(data[0].z.div(200).clamp(0, 1)),
+});
+```
+
+This application chooses `.x` for strength, `.y` for radius, `.z` for temperature and leaves `.w` unused. These semantic
+meanings are conventions chosen by the developer; RZMPS does not assign them.
+
+### Example C: All Three Vectors
+
+```ts
+particle.emitEvent('impact', [
+  vec4(position, 0),
+  vec4(normal, 0),
+  vec4(impulse, 0),
+]);
+const impact = (data, particle, context) => ({
+  position: data[0].xyz,
+  velocity: context.velocity.add(data[1].xyz.mul(data[2].xyz.length())),
+  scale: context.scale.mul(data[2].xyz.length().max(0.1)),
+});
+```
+
+This custom impact convention uses position, normal and impulse, reading every vector. It is independent of the built-in
+collision event. [Fireflies](https://rzmps.rzmay.com/docs/examples/fireflies.html) uses a smaller payload for a neighbor-driven light pulse;
+applications only need to fill the components their child effect consumes.
+
+### Readback Representation
+
+GPU events delivered to CPU custom handlers carry `readonly [THREE.Vector4, THREE.Vector4, THREE.Vector4]`. The array
+contains decoded numerical values from the event snapshot, not an invented object schema. For example, use `data[0].x`
+on CPU too. CPU-generated events may instead carry arbitrary JavaScript data, such as `{ strength: 2 }`. These payload
+representations are intentionally different. A CPU callback serving both origins should discriminate the payload shape.
+
+Built-in collision listeners retain their established `CollisionHit` interface. Custom named GPU callbacks receive the
+numerical three-vector payload. GPU-to-CPU delivery is asynchronous and preserves frame delivery order as provided by
+the existing event pipeline. It may arrive after the originating particle dies; the captured snapshot remains valid for
+that run.
+
+## Synchronization and Performance
+
+Registered sources are CPU-managed. Calls to `source.update()` only change canonical CPU attributes; repeated calls
+coalesce automatically. At the next system update, existing emitter contexts evaluate continuous and event-run births,
+then GPU children receive a single reusable batch. GPU allocation chooses actual free destination slots. No per-source
+compute dispatch, source readback or shader recompilation occurs. Applications do not need to throttle updates manually.
+This implementation evaluates registered-source emitter scheduling on CPU even when child particle simulation runs on
+GPU.
+
+Event dispatches are never coalesced with attribute updates. Every dispatch captures its own context. Persistent event
+runs and continuous distance/rate credits retain their separate identities and are released at completion or source
+removal. GPU upload storage grows geometrically and is reused across frames.
+
+GPU-generated events consumed entirely by native GPU subsystems use the existing GPU event stream without event-buffer
+CPU readback. CPU listeners, CPU-only predicates or CPU event handlers can require asynchronous delivery. Ordinary
+particle and allocation diagnostics have their own independent readback behavior.
+
+Three separate limits matter: distinct event names (32), floats per payload (12), and records in the shared event buffer
+per frame (`ParticleSystem.GPU_EVENT_BUFFER_CAPACITY`). Custom events share capacity with spawn, death and collision
+records. Overflow bounds-checks writes, discards excess records and increments the existing overflow diagnostic.
+Concurrent persistent runs also have a finite destination capacity; size child `maxParticles` and event capacity for the
+intended overlap. CPU-staged births obey child particle capacity and available GPU slots. Very dense events can be
+dropped safely when those destinations are full.
+
+## Persistent Decals
+
+```ts
+const decals = new DecalRenderer(material, {
+  onSpawn: false,
+  onCollision: true,
+  emissionTags: ['acid-pool'],
+  lifetime: 18,
+});
+// Attach decals as a renderer of system before emitting particles.
+system.addRenderer(decals);
+system.addSubSystem(smoke, { tags: ['acid-pool'], emitContinuous: true, inheritLifetime: 0 });
+system.addSubSystem(splash, { tags: ['acid-pool'], onEvent: ['bubble'], inheritLifetime: 0 });
+for (const decal of decals.decals) {
+  decal.source?.emitEvent('bubble', { strength: 0.5 + Math.random() });
+}
+```
+
+Only decals with `emissionTags` register sources. `decal.source` exposes the persistent handle; its transform uses the
+actual decal footprint and points +Y along the outward surface normal. Color and alpha follow the decal material. Moving
+rigid surfaces update emission frames automatically. Expiry, eviction, clear/reset and renderer destruction dispose
+handles and dispatch death before releasing contexts. Already emitted children remain alive. See [Surface
+Decals](https://rzmps.rzmay.com/docs/guides/decals.html) and the complete [Acid](https://rzmps.rzmay.com/docs/examples/acid.html) factory for independent randomized bubbling and
+fading smoke.
 
 
 ---
@@ -677,6 +1095,33 @@ grid resolution appropriate for the effect; see
 Runtime scalar, vector, color, range, and curve properties on built-in modules synchronize to GPU
 parameters automatically. A custom class can use its protected `gpuParameters` store for the same
 pattern. Set `needsUpdate = true` only when a change alters graph structure or owned resources.
+
+## Killing a Particle
+
+Call `particle.kill()` on either backend. For a permanent boundary rule, pair a CPU condition with a TSL condition:
+
+```ts
+const boundary = new Module(
+  particle => {
+    if (particle.position.y < -10) particle.kill();
+  },
+  {
+    modifyGPU(particle) {
+      If(particle.position.y.lessThan(-10), () => {
+        particle.kill();
+      });
+    },
+  },
+);
+```
+
+`If` comes from `three/tsl`. The default module priority is permanent. The GPU helper marks the slot dead immediately
+and advances its age past its lifetime using finite values. Normal death-event subscribers still receive one event,
+including when the module runs in a separate stored update before integration. Event source snapshots are historical
+views and cannot kill a live particle.
+
+The [Fireflies example](https://rzmps.rzmay.com/docs/examples/fireflies.html) kills insects outside its volume instead of steering them toward
+boundaries, and replenishes them through ordinary emission to maintain a roaming population with a bounded spatial grid.
 
 Continue with [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) for execution phases, fallback rules, readback,
 and validation.
@@ -793,9 +1238,26 @@ returns a TSL boolean node.
 For performance-sensitive modules, avoid allocating objects inside the per
 particle callback. Reuse vectors and colors outside the callback when possible.
 
-A plain Module defaults to permanent priority. The example's velocity increment accumulates over time; multiplying by delta seconds makes 0.5 an acceleration rather than an amount per frame. Its alpha multiplication also accumulates. For a fade defined entirely by normalized age, prefer ColorOverLifetime or set `priority: Module.Priority.Transient` so the fade is reapplied to cached base alpha each frame.
+A plain Module defaults to permanent priority. The example's velocity increment accumulates over time; multiplying by
+delta seconds makes 0.5 an acceleration rather than an amount per frame. Its alpha multiplication also accumulates. For
+a fade defined entirely by normalized age, prefer ColorOverLifetime or set `priority: Module.Priority.Transient` so the
+fade is reapplied to cached base alpha each frame.
 
-Use `Module.Priority.PreMovementTransient` when a temporary velocity adjustment must affect this frame's integration. Render-time transient modules run after movement. See [module priority](https://rzmps.rzmay.com/docs/guides/module-priority.html) before combining several modules that assign the same property.
+Use `Module.Priority.PreMovementTransient` when a temporary velocity adjustment must affect this frame's integration.
+Render-time transient modules run after movement. See [module priority](https://rzmps.rzmay.com/docs/guides/module-priority.html) before combining several
+modules that assign the same property.
+
+## System Update Hooks
+
+`prepare(system, deltaTime)` can also run effect-level scheduling once per simulation step, even when a module does
+not modify individual particles. Supply an empty CPU callback and `modifyGPU() {}` to keep both backends supported,
+then put the shared scheduling work in prepare(). Call `super.prepare()` to preserve the base preparation behavior.
+This follows the system's pause state, simulation speed and fixed-step advancement.
+
+[Acid](https://rzmps.rzmay.com/docs/examples/acid.html) uses this pattern to schedule independent bubble events from persistent decal sources.
+Its per-particle callbacks intentionally do nothing. The demo factory returns a ParticleSystem, so this hook lets it
+keep scheduling on the system's clock without owning an animation loop. Applications with their own animation loop
+can instead schedule events there before calling the root system's update().
 
 ## Managed Octree
 
@@ -829,9 +1291,14 @@ approximation such as average position or velocity is cheaper than collecting ev
 particle; see
 [particle spatial acceleration](https://rzmps.rzmay.com/docs/guides/particle-octree.html).
 
-For reusable behavior, extend Module and pass your per-particle callback and options to `super`. Override `prepare(system, deltaTime)` when expensive shared work should happen once per frame; call `super.prepare` if using automatic spatial-effect collection. Put resource cleanup in `cleanup()`. Dependencies in `dependents` participate in normal priority sorting rather than forcing an independent update loop.
+For reusable behavior, extend Module and pass your per-particle callback and options to `super`. Override
+`prepare(system, deltaTime)` when expensive shared work should happen once per frame; call `super.prepare` if using
+automatic spatial-effect collection. Put resource cleanup in `cleanup()`. Dependencies in `dependents` participate in
+normal priority sorting rather than forcing an independent update loop.
 
-Built-in modules already cover forces, noise, scale, rotation, depth, color, and collision. Reuse those when their semantics match the effect. Custom callbacks are most useful for application-specific logic, and should mutate the particle provided rather than storing a shared mutable vector in multiple particles.
+Built-in modules already cover forces, noise, scale, rotation, depth, color, and collision. Reuse those when their
+semantics match the effect. Custom callbacks are most useful for application-specific logic, and should mutate the
+particle provided rather than storing a shared mutable vector in multiple particles.
 
 The callback above is CPU-only. Continue with [First GPU Module](https://rzmps.rzmay.com/docs/guides/first-gpu-module.html) to add the
 equivalent TSL operation, then use [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) as the reference for managed
@@ -1087,6 +1554,7 @@ Apply individual features to an existing particle system.
 - [Renderer Children and Population LOD](https://rzmps.rzmay.com/docs/guides/renderer-children-lod.html)
 - [Using Tags](https://rzmps.rzmay.com/docs/guides/tags.html)
 - [Using Subsystems](https://rzmps.rzmay.com/docs/guides/subsystems.html)
+- [Emission Sources and Custom Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html)
 - [Collision and Physics](https://rzmps.rzmay.com/docs/guides/collision-and-physics.html)
 - [Surface Decals](https://rzmps.rzmay.com/docs/guides/decals.html)
 - [Particle Spatial Acceleration](https://rzmps.rzmay.com/docs/guides/particle-octree.html)
@@ -1350,23 +1818,43 @@ and update policies.
 
 # Using Subsystems
 
-Attach a secondary ParticleSystem with `parent.addSubSystem(child, options)`. The parent owns its simulation timing; update only the root. The child is reused across emissions, with separate emission contexts for parent particles, rather than creating a new system for every event.
+Attach a secondary ParticleSystem with `parent.addSubSystem(child, options)`. The parent owns its simulation timing;
+update only the root. The child is reused across emissions, with separate emission contexts for parent particles, rather
+than creating a new system for every event.
 
-Choose `emitOnSpawn`, `emitOnDeath`, or `emitOnCollision` for event bursts. Use `emitContinuous` for a stream following live parent particles. A burst emitter with `rate: 0` and a time-zero burst is a good starting point for a short event effect. A continuous smoke emitter needs a rate and a lifetime long enough to leave a visible wake.
+Choose `emitOnSpawn`, `emitOnDeath`, or `emitOnCollision` for event bursts. Use `emitContinuous` for a stream following
+live parent particles. A burst emitter with `rate: 0` and a time-zero burst is a good starting point for a short event
+effect. A continuous smoke emitter needs a rate and a lifetime long enough to leave a visible wake.
 
-Inheritance factors control scale, lifetime, color, alpha, mass, and velocity transferred from the triggering particle. Set `inheritLifetime: 0` when a death burst should keep its own lifetime; inheriting a dying particle's lifetime would defeat the separate timing. Set `inheritScale: 0` when the secondary effect should retain a fixed world size. `ratio` samples which parent particles emit; lowering it reduces child population and renderer costs.
+Inheritance factors control scale, lifetime, color, alpha, mass, and velocity transferred from the triggering particle.
+Set `inheritLifetime: 0` when a death burst should keep its own lifetime; inheriting a dying particle's lifetime would
+defeat the separate timing. Set `inheritScale: 0` when the secondary effect should retain a fixed world size. `ratio`
+samples which parent particles emit; lowering it reduces child population and renderer costs.
 
-Collision emission needs a Collision module and collidable scene geometry or a configured collision backend. `impulseThreshold` rejects weak contacts; impulse factors can increase spark scale or speed, and `impulseAffectsAlignment` points emission away from the contact. Test in a collision scene: an empty scene cannot demonstrate a contact-triggered effect.
+Collision emission needs a Collision module and collidable scene geometry or a configured collision backend.
+`impulseThreshold` rejects weak contacts; impulse factors can increase spark scale or speed, and
+`impulseAffectsAlignment` points emission away from the contact. Test in a collision scene: an empty scene cannot
+demonstrate a contact-triggered effect.
 
-[Fireworks](https://rzmps.rzmay.com/docs/examples/fireworks.html) combines continuous rocket smoke and a death burst. [Metal Balls](https://rzmps.rzmay.com/docs/examples/collisionSubEmitters.html) combines collision sparks and collision audio. Inspect their source-linked system regions as well as their emitter regions: the child's lifetime, gravity, and looping choices are independent of the parent.
+[Fireworks](https://rzmps.rzmay.com/docs/examples/fireworks.html) combines continuous rocket smoke and a death burst. [Metal
+Balls](https://rzmps.rzmay.com/docs/examples/collisionSubEmitters.html) combines collision sparks and collision audio. Inspect their source-linked
+system regions as well as their emitter regions: the child's lifetime, gravity, and looping choices are independent of
+the parent.
 
-Destroy the owning root to clean up the effect. Do not also update owned subsystems from a scene traversal, or attempt to reuse one child under two parents. Explicit frame advancement follows the same parent-owned event processing as normal updates.
+Destroy the owning root to clean up the effect. Do not also update owned subsystems from a scene traversal, or attempt
+to reuse one child under two parents. Explicit frame advancement follows the same parent-owned event processing as
+normal updates.
 
 GPU-active roots schedule subsystem systems parent-before-child and keep native spawn, death,
 collision, and continuous runs in GPU buffers. CPU listeners and CPU-input renderers receive
 asynchronous event/readback data and can observe a small delay. A function-valued `shouldEmit`
 cannot be translated automatically to a GPU predicate; inspect `getGPUEmissionSupport()` when a
 custom subsystem selector is involved.
+
+Registered sources and named custom events also drive these same subsystem contexts. Use `tags`
+to select eligible source tags and `onEvent` for CPU or native GPU context handlers. See
+[Emission Sources and Custom Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) and
+[Acid](https://rzmps.rzmay.com/docs/examples/acid.html).
 
 
 ---
@@ -1384,3 +1872,33 @@ That example uses a single emitter at 12 particles per second. Cube particles ro
 A `condition` callback further restricts a module or spatial effect after tag matching. Use it for a value-dependent rule, such as age or speed, instead of creating a tag for every transient state. Keep conditions cheap because they run over the candidate population each update.
 
 Tags are application-defined values. Use consistent names across emitters, module filters, renderer filters, and particle-affector `sourceTags`. A misspelled tag can produce a technically valid but invisible effect; inspect both the population and the rendered preview when diagnosing it.
+
+## Changing Tags During Updates
+
+CPU modules can modify `particle.tags` directly. GPU update callbacks can use `particle.addTag(name)` and
+`particle.removeTag(name)` to modify the particle's bitmask without assigning bit positions themselves:
+
+```ts
+const pulseTags = new Module(() => {}, {
+  modifyGPU(particle) {
+    If(particle.alpha.greaterThan(0.5), () => {
+      particle.addTag('glowing');
+    }).Else(() => {
+      particle.removeTag('glowing');
+    });
+  },
+});
+const lights = new LightRenderer({ tags: 'glowing', count: 16 });
+```
+
+Here `If` comes from `three/tsl`; `Module` and `LightRenderer` come from `@rzmps/rzmps`. The tag must already be
+registered by an emitter, module, renderer, spatial effect, or subsystem tag selector in the composition. The light
+renderer registers `glowing` in this example. Unknown names throw during shader construction, so typos cannot silently
+change unrelated bits. Repeated additions and removals are idempotent and preserve other tags, including bit 31.
+
+Use a permanent module priority when the change should persist into later simulation steps. A transient module's
+changes follow the existing transient-state rules. GPU event records are snapshots; their source views cannot use
+these helpers to mutate a live particle. GPU tag capacity remains 32 names per composition.
+
+The [Fireflies example](https://rzmps.rzmay.com/docs/examples/fireflies.html) gives its glow pulses their own particle system, allowing a light
+renderer to select that population directly without changing tags.

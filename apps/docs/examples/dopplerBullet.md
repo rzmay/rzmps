@@ -5,7 +5,7 @@ example: dopplerBullet
 
 # Doppler Bullet
 
-Doppler effect on a fast bullet particle, with smoke, faint trails, spawn blast effects, and distortion wake subsystems.
+Doppler audio on a fast bullet, with smoke, faint trails, spawn blasts, and distortion wake subsystems.
 
 [View live example](https://rzmps.rzmay.com/?preset=Doppler%20Bullet)
 

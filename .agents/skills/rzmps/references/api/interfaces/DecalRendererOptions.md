@@ -122,6 +122,18 @@ distanceAffectsSize: number;
 
 ***
 
+<a id="emissiontags"></a>
+
+### emissionTags?
+
+```ts
+optional emissionTags?: string[];
+```
+
+Registers each persistent decal as an emission source with these tags.
+
+***
+
 <a id="hitselection"></a>
 
 ### hitSelection

@@ -1,3 +1,5 @@
+import type { GPUEventPayload } from '../Events';
+import type { Tag } from '../types/Tag';
 import * as THREE from 'three';
 import { StorageBufferAttribute, IndirectStorageBufferAttribute, type ComputeNode } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
@@ -97,6 +99,13 @@ export interface GPUParticleUpdateContext {
 }
 
 export interface GPUParticleLike {
+  /** Marks this particle dead in the current GPU update. */
+  kill(): void;
+  emitEvent(event: string, payload?: GPUEventPayload): void;
+  /** Adds a tag registered by an emitter, module, renderer, spatial effect, or subsystem selector. */
+  addTag(tag: Tag): void;
+  /** Removes a registered tag while preserving all other tags. */
+  removeTag(tag: Tag): void;
   readonly id: Node<'uvec2'>;
   readonly isChild: Node<'bool'>;
   readonly parent: GPUParticleLike | null;
@@ -129,6 +138,23 @@ export interface GPUParticleLike {
 
 /** Shader-node view of one particle; unlike Particle, this is not a CPU value object. */
 export class GPUParticleContext implements GPUParticleLike {
+  /** Marks the particle dead and advances its age past its lifetime using finite GPU values. */
+  kill(): void {
+    this.realtime.assign(this.lifetime.mul(1000).add(1));
+    this.time.assign(float(1).add(float(0.001).div(this.lifetime.max(0.000001))));
+    this.alive.assign(uint(0));
+  }
+  /** Builds a tag mutation inside a system's GPU update callback. */
+  addTag(_tag: Tag): void { throw new Error('GPU tag helpers require a particle system update context.'); }
+  /** Builds a tag mutation inside a system's GPU update callback. */
+  removeTag(_tag: Tag): void { throw new Error('GPU tag helpers require a particle system update context.'); }
+  private eventDispatcher?: (event: string, payload?: GPUEventPayload) => void;
+  /** Builds an event-buffer write at this point in the TSL graph. */
+  emitEvent(event: string, payload?: GPUEventPayload): void { this.eventDispatcher?.(event, payload); }
+  /** @internal */
+  setEventDispatcher(dispatch: (event: string, payload?: GPUEventPayload) => void): void { this.eventDispatcher =
+    dispatch; }
+
   readonly index: Node<'uint'>;
 
   readonly position: Node<'vec3'>;
