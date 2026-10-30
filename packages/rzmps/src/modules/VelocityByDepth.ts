@@ -98,7 +98,7 @@ class VelocityByDepth extends Module {
       camera.getWorldPosition(this.cameraPosition);
 
       if (particleSystem.simulationSpace !== 'world') {
-        particleSystem.worldToLocal(this.cameraPosition);
+        particleSystem.worldToSimulation(this.cameraPosition);
       }
 
       if (camera instanceof THREE.PerspectiveCamera || camera instanceof THREE.OrthographicCamera) {

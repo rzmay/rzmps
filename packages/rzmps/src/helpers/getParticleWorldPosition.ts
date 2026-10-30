@@ -11,7 +11,7 @@ export default function getParticleWorldPosition(
 
   if (particleSystem && particleSystem.simulationSpace !== 'world') {
     particleSystem.updateWorldMatrix(true, false);
-    particleSystem.localToWorld(target);
+    particleSystem.simulationToWorld(target);
   }
 
   return target;

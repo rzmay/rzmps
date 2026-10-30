@@ -22,7 +22,7 @@ alone. The larger, sparse volume and local radius allow separate flash clusters 
 pulse immediately synchronizing the whole population.
 
 The event creates one 0.65-second glow particle. Its strength controls glow size; its source identity keeps the glow
-attached to the moving firefly. CPU processing uses live references. GPU processing uses a slot and generation pair,
+attached to the moving firefly through Source simulation space. GPU processing uses a slot and generation pair,
 rejecting a dead or reused source slot. Both systems remain owned and updated by the root.
 
 <ExampleCode region="system" />
@@ -32,7 +32,9 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
 A box volume distributes the insects across the scene, with randomized initial charge to stagger their first pulses.
 Eight new insects per second quickly replenish deaths, with the live population capped at 96. Insects live for
 24–32 seconds unless they leave the larger kill volume first. A single point-source burst emits each glow, so the event
-has a visible purpose without adding decorative sparks or a permanent trail.
+has a visible purpose without adding decorative sparks or a permanent trail. Its `radialSpeed` is explicitly zero:
+Source space carries independent particle motion with the source, so the emitter's default speed of 1 would make a
+pulse drift away from the insect.
 
 <ExampleCode region="emitters" />
 
@@ -50,13 +52,13 @@ flashes, and the cooldown prevents continuous retriggering.
 The example uses mass as an application-owned charge accumulator because no physical forces depend on mass here.
 Negative charge represents the refractory period; its first 0.65 seconds signal a visible flash to neighbors.
 The CPU event carries an object containing strength. The GPU event packs strength into the first component of one vec4;
-the GPU handler consumes strength and uses the event source's slot and generation to attach the glow. Other payload
-components remain available to applications that need more metadata.
+the GPU handler consumes strength. Source space handles source identity automatically, leaving the other payload
+components available to applications that need more metadata.
 
-Glow opacity follows a smooth sine pulse stored in permanent simulation state, so GPU light readback sees the envelope
-as well as the sprite renderer. Its follow module updates position from the living source and keeps velocity at zero.
-The FollowGlow subclass overrides prepare to prune dead CPU references once per step, after calling super.prepare.
-No per-particle tag changes are needed because the glow population is separate from the insects.
+The glow system uses `simulationSpace: 'source'` to keep its small sampled offset attached to the moving insect.
+`sourceLoss: 'kill'` removes a pulse when its insect dies. It needs no follow module, source maps, or scratch identity
+attributes. ColorOverLifetime supplies the smooth sine opacity pulse. No per-particle tag changes are needed because
+the glow population is separate from the insects.
 
 <ExampleCode region="modules" />
 
@@ -65,8 +67,9 @@ No per-particle tag changes are needed because the glow population is separate f
 The supplied firefly PNG displays the insects. Soft additive sprites display pulses, while a LightRenderer attached
 only to the glow system selects a quarter of the pulses and supplies at most sixteen small yellow-green point lights.
 This also makes its bounded GPU sample cover the glow system's 128 slots, including sparse active slots. The small
-0.38-size glow sprites and 1.1-unit light range keep each pulse local. Brightness 0.8 and opacity-driven intensity
-produce a gentle light envelope with peak intensity 0.52.
+0.38-size glow sprites and 1.1-unit light range keep each pulse local. The brightness callback evaluates the same sine
+pulse envelope with peak intensity 0.52. It evaluates the curve explicitly because GPU light readback uses stored
+simulation state, while ColorOverLifetime applies opacity during the transient render phase.
 
 The particle factory adds no scene geometry. Select Checkerboard and lower **Scene Settings → Light Strength**
 to about 0.08 to see the insects and local light patches against a dim floor. This control scales the scene's ambient
@@ -81,3 +84,5 @@ event buffer. Disabling that renderer leaves the particle effect and event proce
 See [Sources and Events](../guides/emission-sources-events.md) for event payloads and readback semantics,
 [Particle Spatial Acceleration](../guides/particle-octree.md) for neighbor queries, and
 [Using Tags](../guides/tags.md) for optional GPU tag mutation helpers.
+
+See [Simulation frames](../guides/subsystems.md#simulation-frames) for attachment and source-loss behavior.

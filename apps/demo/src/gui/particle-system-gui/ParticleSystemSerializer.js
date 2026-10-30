@@ -84,6 +84,9 @@ export class ParticleSystemSerializer {
             `  gravityModifier: ${this.serializeValue(system.gravityModifier)},`,
             `  inheritVelocity: ${this.serializeValue(system.inheritVelocity)},`,
             `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
+            `  simulationSpaceTransform: ${this.serializeValue(system.simulationSpaceTransform instanceof THREE.Object3D
+                ? system.simulationSpaceTransform.matrixWorld : system.simulationSpaceTransform)},`,
+            `  sourceLoss: ${JSON.stringify(system.sourceLoss)},`,
             `  useSpatialEffects: ${this.serializeValue(system.useSpatialEffects)},`,
             `  spatialEffectBoundsFiltering: ${this.serializeValue(system.spatialEffectBoundsFiltering)},`,
             `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
@@ -637,6 +640,8 @@ export class ParticleSystemSerializer {
             return String(value);
         if (typeof value === 'function')
             return this.serializeFunction(value);
+        if (value instanceof THREE.Matrix4)
+            return `new THREE.Matrix4().fromArray(${JSON.stringify(value.elements)})`;
         if (value instanceof THREE.Vector3)
             return `new THREE.Vector3(${value.x}, ${value.y}, ${value.z})`;
         if (value instanceof THREE.Box3)

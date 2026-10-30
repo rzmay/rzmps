@@ -328,12 +328,26 @@ Camera-distance limit for normal updates; zero disables distance culling.
 
 ```ts
 simulationSpace:
+  | "source"
+  | "transform"
   | "local"
   | SimulationSpace
   | "world";
 ```
 
-Local or world coordinates for simulated particles; changing it converts existing particles.
+World, Local, Transform or per-particle Source coordinates; changing modes preserves existing world poses.
+
+***
+
+<a id="simulationspacetransform"></a>
+
+### simulationSpaceTransform
+
+```ts
+simulationSpaceTransform: Matrix4 | Object3D<Object3DEventMap> | null;
+```
+
+Live world-space frame for Transform mode; a Matrix4 is caller-managed. Omission uses identity.
 
 ***
 
@@ -352,6 +366,18 @@ Nonnegative multiplier applied to simulation delta seconds.
 ```ts
 1
 ```
+
+***
+
+<a id="sourceloss"></a>
+
+### sourceLoss
+
+```ts
+sourceLoss: "detach" | "kill";
+```
+
+Source mode behavior when an emitting source disappears. Defaults to detach at its last valid frame.
 
 ***
 

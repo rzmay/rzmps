@@ -32,12 +32,11 @@ emitted smoke and splash particles finish their own lifetimes. Update only the r
   decals.lifetime = 18;
   decals.maxDecals = 64;
   decals.opacity = t => 1 - THREE.MathUtils.smoothstep(t, 0.55, 1);
-  decals.size = 10;
+  decals.size = 15;
 
   // Shape points become offsets within each pool's emission frame, including its scale.
-  const smokeShape = EmissionShape.Sphere(0.45);
+  const smokeShape = EmissionShape.Sphere(0.2);
   smokeShape.scale.set(1, 0.12, 1);
-  smokeShape.position.y = 0.08;
   const smoke = new ParticleSystem({
     duration: 60,
     gravityModifier: -0.005,
@@ -49,7 +48,7 @@ emitted smoke and splash particles finish their own lifetimes. Update only the r
       initialValues: {
         lifetime: [2, 3.5],
         scale: 1.5,
-        alpha: 0.05,
+        alpha: 0.025,
         color: '#83cf3e',
         velocity: new THREE.Vector3(0, 0.55, 0),
       },
@@ -184,9 +183,8 @@ slots.
 
 ```js
   // Shape points become offsets within each pool's emission frame, including its scale.
-  const smokeShape = EmissionShape.Sphere(0.45);
+  const smokeShape = EmissionShape.Sphere(0.2);
   smokeShape.scale.set(1, 0.12, 1);
-  smokeShape.position.y = 0.08;
   const smoke = new ParticleSystem({
     duration: 60,
     gravityModifier: -0.005,
@@ -198,7 +196,7 @@ slots.
       initialValues: {
         lifetime: [2, 3.5],
         scale: 1.5,
-        alpha: 0.05,
+        alpha: 0.025,
         color: '#83cf3e',
         velocity: new THREE.Vector3(0, 0.55, 0),
       },
@@ -281,7 +279,7 @@ state, and ordinary source updates do not restart countdowns. No interval callba
 alive.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/acid.js#L121)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/acid.js#L120)
 
 ```js
   class PoolBubbling extends Module {
@@ -326,7 +324,7 @@ The bubble subsystem owns a live cubemap; normal root updates refresh subsystem 
 The factory disposes both bubble material textures with the root.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/acid.js#L148)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/acid.js#L147)
 
 ```js
   smoke.name = 'Pool Smoke';

@@ -396,17 +396,17 @@ class ParticleForceField extends SpatialEffect {
   writeStaticGPUParameters(target: Float32Array, offset: number, system: ParticleSystem): void {
     this.writeGPUInfluenceParameters(target, offset, system);
     const center = this.getWorldPosition(new THREE.Vector3());
-    if (system.simulationSpace === 'local') {
+    if (system.simulationSpace !== 'world') {
       system.updateWorldMatrix(true, false);
-      system.worldToLocal(center);
+      system.worldToSimulation(center);
     }
 
     const direction = this.direction instanceof THREE.Vector3 ? this.direction : new THREE.Vector3();
     const effectRotation = this.getWorldQuaternion(new THREE.Quaternion());
     direction.applyQuaternion(effectRotation);
     const rotationAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(effectRotation);
-    if (system.simulationSpace === 'local') {
-      const inverseSystemRotation = system.getWorldQuaternion(new THREE.Quaternion()).invert();
+    if (system.simulationSpace !== 'world') {
+      const inverseSystemRotation = system.getSimulationWorldQuaternion(new THREE.Quaternion()).invert();
       direction.applyQuaternion(inverseSystemRotation);
       rotationAxis.applyQuaternion(inverseSystemRotation);
     }
@@ -502,7 +502,7 @@ class ParticleForceField extends SpatialEffect {
 
     if (this.radialFalloff) force.multiplyScalar(this.getFalloff(position));
 
-    if (particleSystem?.simulationSpace === 'local') {
+    if (particleSystem && particleSystem.simulationSpace !== 'world') {
       force.applyQuaternion(this._inverseWorldQuaternion);
     }
 
@@ -515,8 +515,8 @@ class ParticleForceField extends SpatialEffect {
   ): THREE.Vector3 {
     this._particleWorldVelocity.copy(particle.velocity);
 
-    if (particleSystem?.simulationSpace === 'local') {
-      particleSystem.getWorldQuaternion(this._worldQuaternion);
+    if (particleSystem && particleSystem.simulationSpace !== 'world') {
+      particleSystem.getSimulationWorldQuaternion(this._worldQuaternion);
       this._inverseWorldQuaternion.copy(this._worldQuaternion).invert();
       this._particleWorldVelocity.applyQuaternion(this._worldQuaternion);
     }

@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import EmissionSource, { type EmissionSourceData, type SubSystemSource } from './EmissionSource';
 import { eventNames, cpuEventHandler, type EventSubscriptions, type GPUEmissionContext } from './Events';
 import tagsIntersect from './helpers/tagsIntersect';
+import { bindParticleSourceFrame, particleSourceFrame } from './SourceFrame';
+import { matrixColumnGPU, particleFrameGPU, transformParticleFrameGPU } from './helpers/simulationFrame';
 import Particle, { type ParticleCachedValues } from './Particle';
-import Emitter, { rotateEulerYXZGPU, rotateFromYGPU, type EmissionContext } from './Emitter';
+import Emitter, { rotateFromYGPU, type EmissionContext } from './Emitter';
 import type { GPUEmissionSupportReport } from './gpu/Emission';
 import Module from './Module';
 import Renderer from './Renderer';
@@ -21,7 +23,8 @@ import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
 import { WebGPURenderer, type ComputeNode, type Node, StorageBufferAttribute } from 'three/webgpu';
-import { float, Fn, hash, If, instanceIndex, Loop, Break, mix, pow, storage, uint, uniform, vec3, vec4, mat4 }
+import { float, Fn, hash, If, instanceIndex, Loop, Break, mix, pow, storage, uint, uniform, vec3, vec4, mat4,
+  inverse, determinant, bitcast, uvec4, abs, min, mat3 }
   from 'three/tsl';
 import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } from './renderers/LiveCubemap';
 import LODHelper, { type LODSettings } from './LODHelper';
@@ -59,6 +62,7 @@ import { GPUEmissionRunBufferState } from './gpu/Emission';
 import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
 import SpatialEffect from './SpatialEffect';
 import ParticleSpatialGrid, { type ParticleSpatialGridOptions } from './gpu/ParticleSpatialGrid';
+import GPUSourceFrames from './gpu/SourceFrames';
 import type { PackedFloatStorage } from './gpu/Storage';
 
 /** Construction options; fields can be omitted to use the documented defaults. */
@@ -112,8 +116,12 @@ export interface ParticleSystemOptions {
   gravityModifier: DynamicValue<number>;
   /** Multiplier for velocity inherited from movement of the emitter context. */
   inheritVelocity: number;
-  /** Local or world coordinates for simulated particles; changing it converts existing particles. */
+  /** World, Local, Transform or per-particle Source coordinates; changing modes preserves existing world poses. */
   simulationSpace: SimulationSpace | `${SimulationSpace}`;
+  /** Live world-space frame for Transform mode; a Matrix4 is caller-managed. Omission uses identity. */
+  simulationSpaceTransform: THREE.Object3D | THREE.Matrix4 | null;
+  /** Source mode behavior when an emitting source disappears. Defaults to detach at its last valid frame. */
+  sourceLoss: 'detach' | 'kill';
   /** Requests GPU simulation when a WebGPURenderer and compatible components are available. */
   gpuProcessing: boolean;
   /** Enables periodic GPU allocation and dispatch diagnostics. */
@@ -180,6 +188,8 @@ export interface SubSystemOptions {
 }
 
 interface SubSystemEmissionRun {
+  source?: SubSystemSource;
+  sourceFrame?: THREE.Matrix4;
   id: string;
   transform: THREE.Matrix4;
   startTime: number;
@@ -599,20 +609,215 @@ class ParticleSystem extends THREE.Object3D {
     return buildGPUSystemSchedule(this);
   }
 
-  private _simulationSpace: SimulationSpace = SimulationSpace.Local;
-  /** Coordinate space of particle state; assigning a new space converts particles and propagates to subsystems. */
-  get simulationSpace(): SimulationSpace {
-    return this._simulationSpace;
-  }
-  set simulationSpace(value: SimulationSpace) {
-    if (value === this._simulationSpace) return;
+  private _sourceFrames?: GPUSourceFrames;
+  private _sourceFrameCompute?: { key: string; nodes: ComputeNode[] };
+  private _sourceReadbackPending = false;
+  private readonly _gpuParentToSimulationNode = uniform(new THREE.Matrix4(), 'mat4');
+  private readonly _gpuEmissionFrameNode = uniform(new THREE.Matrix4(), 'mat4');
 
-    this.convertParticlesToSimulationSpace(value);
-    this._simulationSpace = value;
-    this.subSystems.forEach((_options, subSystem) => {
-      subSystem.simulationSpace = value;
+  private _sourceScaleInheritance(): number {
+    return this._subSystemParent?.subSystems.get(this)?.inheritScale ?? 1;
+  }
+
+  /** @internal Birth values are authored in the source frame and resolved before simulation. */
+  getSourceEmissionFrame(source?: SubSystemSource): THREE.Matrix4 | undefined {
+    if (this.simulationSpace !== SimulationSpace.Source || !this._subSystemParent || !source?.alive) return;
+    const matrix = this._particleEmissionTransform(source, this._sourceScaleInheritance());
+    return Math.abs(matrix.determinant()) > 1e-10 ? matrix : undefined;
+  }
+
+  private _sourceIsAlive(source: SubSystemSource): boolean {
+    if (!source.alive || !this._subSystemParent) return false;
+    if (source.id.startsWith('source:')) return this._subSystemParent._emissionSources.has(source.id);
+    if (this._subSystemParent._isGPUProcessingActive) return source.alive;
+    return this._subSystemParent.particles.some(particle => particle.id === source.id && particle.alive);
+  }
+
+  /** @internal Records a live source independently of transient emission contexts. */
+  bindParticleSource(particle: Particle, source?: SubSystemSource): void {
+    if (this.simulationSpace !== SimulationSpace.Source || !this._subSystemParent || !source?.alive) return;
+    this._sourceFrames ??= new GPUSourceFrames(1);
+    const record = this._sourceFrames.register(source);
+    if (this._sourceFrames.records.length > this._sourceFrames.capacity) {
+      this._sourceFrames = this._sourceFrames.grow(
+        isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined,
+        this._sourceFrames.records.length);
+    }
+    bindParticleSourceFrame(particle, {
+      source, previous: this._particleEmissionTransform(source, this._sourceScaleInheritance()),
+      slot: record.slot, generation: record.generation,
     });
+  }
+
+  private _updateCPUSourceFrames(): void {
+    if (this.simulationSpace !== SimulationSpace.Source) return;
+    for (const particle of this.particles) {
+      const binding = particleSourceFrame(particle);
+      if (!binding || !particle.alive) continue;
+      const record = this._sourceFrames?.records[binding.slot];
+      const source = record?.generation === binding.generation ? record.source : binding.source;
+      const alive = this._sourceIsAlive(source);
+      const current = this._particleEmissionTransform(source, this._sourceScaleInheritance());
+      if (Math.abs(current.determinant()) > 1e-10) {
+        const delta = current.clone().multiply(binding.previous.clone().invert());
+        particle.transformSimulationFrame(delta);
+        binding.previous.copy(current);
+      }
+      if (!alive) {
+        if (this.sourceLoss === 'kill') particle.kill();
+        bindParticleSourceFrame(particle);
+      }
+    }
+    this._refreshGPUSourceSnapshots();
+  }
+
+  private _refreshGPUSourceSnapshots(requests = new Map<string, GPUSelectiveReadbackRequest>()): void {
+    if (this._subSystemParent?._isGPUProcessingActive) {
+      for (const record of this._sourceFrames?.records ?? []) {
+        const gpuID = /^gpu:(\d+):(\d+)$/.exec(record.source.id);
+        const parent = this._subSystemParent;
+        const slot = gpuID ? Number(gpuID[1]) : parent._gpuParticleSlotIds.indexOf(record.source.id);
+        const generation = gpuID ? Number(gpuID[2]) : parent._gpuParticleSlotGenerations[slot];
+        if (record.active !== false && record.source.alive && slot >= 0 && generation > 0) {
+          requests.set(record.source.id, { slot, generation });
+        }
+      }
+    }
+    if (requests.size && !this._sourceReadbackPending && this._subSystemParent) {
+      this._sourceReadbackPending = true;
+      const parent = this._subSystemParent;
+      const lifecycle = this._gpuLifecycleGeneration;
+      const requested = [...requests.entries()];
+      void parent._readbackGPUParticles(requested.map(([, request]) => request)).then(results => {
+        if (lifecycle !== this._gpuLifecycleGeneration) return;
+        results.forEach((result, index) => {
+          const [id, request] = requested[index];
+          const record = this._sourceFrames?.records.find(candidate => candidate.source.id === id);
+          if (!record) return;
+          if (result.valid && result.generation === request.generation) {
+            result.particle.id = id;
+            record.source = result.particle;
+          } else record.source = { ...record.source, alive: false };
+          this._emissionRuns.forEach(run => {
+            if (run.source?.id === id) run.source = record.source;
+          });
+        });
+      }).catch(error => { this._logGPUDebug('source frame readback failed', { error }); })
+        .finally(() => { if (lifecycle === this._gpuLifecycleGeneration) this._sourceReadbackPending = false; });
+    }
+  }
+
+  private _simulationSpace: SimulationSpace = SimulationSpace.Local;
+  private _simulationSpaceExplicit = false;
+  private _simulationSpaceTransform: THREE.Object3D | THREE.Matrix4 | null = null;
+  private readonly _lastSimulationFrame = new THREE.Matrix4();
+  private _pendingFrameConversion?: THREE.Matrix4;
+  /** Behavior when an attached source dies or its slot is reused. Defaults to detach. */
+  sourceLoss: 'detach' | 'kill' = 'detach';
+
+  /** Live Object3D or caller-managed world matrix for Transform mode; null uses identity. */
+  get simulationSpaceTransform(): THREE.Object3D | THREE.Matrix4 | null { return this._simulationSpaceTransform; }
+  set simulationSpaceTransform(value: THREE.Object3D | THREE.Matrix4 | null) {
+    const previous = this.getSimulationToWorldMatrix();
+    this._simulationSpaceTransform = value;
+    if (this.simulationSpace === SimulationSpace.Transform) this._rebaseSimulationFrame(previous);
+  }
+
+  /** Resolves the common frame used by modules, spatial queries, renderers, and readback. */
+  getSimulationToWorldMatrix(target = new THREE.Matrix4()): THREE.Matrix4 {
+    if (this.simulationSpace === SimulationSpace.World) {
+      target.identity();
+      this._lastSimulationFrame.copy(target);
+      return target;
+    }
+    if (this.simulationSpace === SimulationSpace.Transform) {
+      const reference = this.simulationSpaceTransform;
+      if (!reference && !this._simulationSpaceExplicit && this._subSystemParent) {
+        return this._subSystemParent.getSimulationToWorldMatrix(target);
+      }
+      if (reference instanceof THREE.Object3D) {
+        reference.updateWorldMatrix(true, false);
+        target.copy(reference.matrixWorld);
+      } else target.copy(reference ?? new THREE.Matrix4());
+    } else {
+      this.updateWorldMatrix(true, false);
+      target.copy(this.matrixWorld);
+    }
+    const determinant = target.determinant();
+    if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-10) {
+      return target.copy(this._lastSimulationFrame);
+    }
+    this._lastSimulationFrame.copy(target);
+    return target;
+  }
+
+  /** Converts a position from the system's common simulation frame to world coordinates. */
+  simulationToWorld(position: THREE.Vector3): THREE.Vector3 {
+    return position.applyMatrix4(this.getSimulationToWorldMatrix());
+  }
+
+  /** Converts a world position to the system's common simulation frame. */
+  worldToSimulation(position: THREE.Vector3): THREE.Vector3 {
+    return position.applyMatrix4(this.getSimulationToWorldMatrix().invert());
+  }
+
+  /** World orientation of the common simulation frame. */
+  getSimulationWorldQuaternion(target = new THREE.Quaternion()): THREE.Quaternion {
+    return target.setFromRotationMatrix(new THREE.Matrix4().extractRotation(this.getSimulationToWorldMatrix()));
+  }
+
+  /** Resolves an attached particle's source frame in world coordinates. */
+  resolveSimulationFrame(particle?: Particle, target = new THREE.Matrix4()): THREE.Matrix4 {
+    this.getSimulationToWorldMatrix(target);
+    const binding = particle && particleSourceFrame(particle);
+    if (this.simulationSpace === SimulationSpace.Source && binding) target.multiply(binding.previous);
+    return target;
+  }
+
+  private _rebaseSimulationFrame(previous: THREE.Matrix4): void {
+    const conversion = this.getSimulationToWorldMatrix().invert().multiply(previous);
+    this.particles.forEach(particle => {
+      particle.transformSimulationFrame(conversion);
+      bindParticleSourceFrame(particle);
+    });
+    this._emissionSources.forEach(source => source.apply({
+      transform: conversion.clone().multiply(source.transform),
+      velocity: source.velocity.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(conversion)),
+    }));
+    if (this._isGPUProcessingActive) {
+      this._pendingFrameConversion = this._pendingFrameConversion
+        ? conversion.multiply(this._pendingFrameConversion) : conversion;
+    }
     this.syncRendererParents();
+  }
+
+  /** Selects the particle reference frame. Explicit child modes are preserved when parenting. */
+  get simulationSpace(): SimulationSpace { return this._simulationSpace; }
+  set simulationSpace(value: SimulationSpace | `${SimulationSpace}`) {
+    this._setSimulationSpace(value as SimulationSpace, true);
+  }
+
+  private _setSimulationSpace(value: SimulationSpace, explicit: boolean, previous?: THREE.Matrix4): void {
+    this._simulationSpaceExplicit = explicit;
+    if (value === this._simulationSpace) return;
+    previous ??= this.getSimulationToWorldMatrix();
+    // Capture inherited frames before changing the parent that resolves them.
+    const inherited = new Map<ParticleSystem, THREE.Matrix4>();
+    const capture = (system: ParticleSystem) => system.subSystems.forEach((_options, child) => {
+      if (!child._simulationSpaceExplicit) {
+        inherited.set(child, child.getSimulationToWorldMatrix());
+        capture(child);
+      }
+    });
+    capture(this);
+    this._simulationSpace = value;
+    this._rebaseSimulationFrame(previous);
+    this._disposeGPUComputeCaches();
+    inherited.forEach((_frame, child) => { child._simulationSpace = value; });
+    inherited.forEach((frame, child) => {
+      child._rebaseSimulationFrame(frame);
+      child._disposeGPUComputeCaches();
+    });
   }
 
   private _scene?: THREE.Scene;
@@ -835,6 +1040,9 @@ class ParticleSystem extends THREE.Object3D {
     this.gravityModifier = options.gravityModifier ?? (options.gravity ? 1 : 0);
     this.inheritVelocity = Math.max(0, options.inheritVelocity ?? 0);
     this._simulationSpace = (options.simulationSpace as SimulationSpace) ?? this._simulationSpace;
+    this._simulationSpaceExplicit = options.simulationSpace !== undefined;
+    this._simulationSpaceTransform = options.simulationSpaceTransform ?? null;
+    this.sourceLoss = options.sourceLoss ?? 'detach';
     this._worldRendererRoot.name = 'ParticleSystem World Renderers';
 
     this.lastFrame = Date.now();
@@ -1013,6 +1221,7 @@ class ParticleSystem extends THREE.Object3D {
     }
 
     this.particles.forEach((particle) => particle.restore());
+    if (!this._isGPUProcessingActive) this._updateCPUSourceFrames();
     this.updateBoundingBox();
 
     // Module preparation
@@ -1266,6 +1475,7 @@ class ParticleSystem extends THREE.Object3D {
     };
     const modifiers = [...modules, ...gpuSpatialEffects];
 
+    this._computeGPUFrameConversion(context);
     if (gpuNativeEmission || this._gpuSubSystemFrameInput) {
       this._computeGPUAllocationSnapshot(context);
     }
@@ -1286,6 +1496,7 @@ class ParticleSystem extends THREE.Object3D {
       this._computeGPUEmissionPhase(context);
     }
     this._computeStagedBirths(context);
+    this._resolveGPUSourceFrames(context);
     this._computeGPUSpawnEventPhase(context);
 
     const permanentPreMovementModifiers = modifiers
@@ -1487,6 +1698,100 @@ class ParticleSystem extends THREE.Object3D {
     })();
   }
 
+  private _computeGPUFrameConversion(context: GPUParticleUpdateContext): void {
+    const conversion = this._pendingFrameConversion;
+    const renderer = this.sceneRenderer;
+    if (!conversion || !isWebGPURenderer(renderer)) return;
+    const matrix = uniform(conversion, 'mat4');
+    const node = Fn(() => {
+      const particle = context.buffers.storage.createParticle(undefined, true);
+      If(particle.alive.notEqual(uint(0)), () => {
+        transformParticleFrameGPU(particle, matrix);
+        context.buffers.storage.storeParticle(particle);
+      });
+      context.buffers.storage.createSourceIdentityNode().assign(vec4(0));
+    })().compute(context.buffers.count);
+    renderer.compute(node);
+    node.dispose();
+    this._pendingFrameConversion = undefined;
+  }
+
+  private _resolveGPUSourceFrames(context: GPUParticleUpdateContext): void {
+    const renderer = this.sceneRenderer;
+    if (this.simulationSpace !== SimulationSpace.Source || !this._subSystemParent
+      || !isWebGPURenderer(renderer)) return;
+    this._sourceFrames ??= new GPUSourceFrames(Math.max(this.maxParticles, context.buffers.capacity));
+    this._sourceFrames = this._sourceFrames.grow(renderer,
+      Math.max(context.buffers.capacity, this._sourceFrames.records.length));
+    const frames = this._sourceFrames;
+    this._refreshGPUSourceSnapshots();
+    frames.refresh(source => this._particleEmissionTransform(source, this._sourceScaleInheritance()),
+      source => this._sourceIsAlive(source));
+    frames.initialize(renderer);
+    const parent = this._subSystemParent._gpuBuffers;
+    const key = `${context.buffers.version}:${context.buffers.capacity}:${frames.version}:${frames.capacity}:`
+      + `${parent?.version}:${parent?.capacity}:${context.eventWriter?.version}:`
+      + `${this.sourceLoss}:${this._sourceScaleInheritance()}`;
+    if (this._sourceFrameCompute?.key !== key) {
+      this._sourceFrameCompute?.nodes.forEach(node => node.dispose());
+      const nodes: ComputeNode[] = [];
+      for (const kind of [1, 2]) {
+        if (kind === 1 && !parent) continue;
+        nodes.push(Fn(() => {
+          const particle = context.buffers.storage.createParticle(undefined, true);
+          const packed = context.buffers.storage.createSourceIdentityNode();
+          const link = (bitcast(packed, 'uvec4') as unknown as Node<'uvec4'>).toVar('sourceLink');
+          If(particle.alive.notEqual(uint(0)).and(link.z.equal(uint(kind))), () => {
+            const ownerSlot = uint(min(float(link.x), float((parent?.capacity ?? 1) - 1)));
+            const managedSlot = uint(min(float(link.x), float(frames.capacity - 1)));
+            const owner = kind === 1 ? parent!.storage.createParticle(ownerSlot) : null;
+            const status = kind === 2 ? frames.states.element(managedSlot) : null;
+            const current = kind === 1
+              ? this._gpuParentToSimulationNode.mul(particleFrameGPU(owner!, this._sourceScaleInheritance()))
+              : frames.matrix(managedSlot);
+            const generationMatches = kind === 1 ? owner!.generation.equal(link.y)
+              : status!.y.equal(link.y);
+            const alive = kind === 1 ? owner!.alive.notEqual(uint(0)) : status!.x.notEqual(uint(0));
+            const sourceExists = generationMatches.and(alive);
+            const pendingBirth = link.w.equal(uint(0)).toVar();
+            const orphan = () => {
+              if (this.sourceLoss === 'kill') {
+                particle.kill();
+              } else {
+                // Pending births cannot attach to an already-reused source slot.
+                If(pendingBirth, () => { particle.kill(); });
+              }
+              packed.assign(vec4(0));
+            };
+            If(generationMatches.and(abs(determinant(current)).greaterThan(1e-10)), () => {
+              const change = mat4(new THREE.Matrix4()).toVar('sourceFrameChange');
+              If(link.w.equal(uint(0)), () => {
+                change.assign(current);
+              }).ElseIf(link.w.equal(uint(1)), () => {
+                change.assign(current.mul(inverse(frames.matrix(particle.index, true))));
+              });
+              transformParticleFrameGPU(particle, change);
+              for (let column = 0; column < 4; column++) {
+                frames.previous.element(particle.index.mul(4).add(column)).assign(matrixColumnGPU(current, column));
+              }
+              link.w.assign(uint(1));
+              packed.assign(bitcast(link, 'vec4'));
+              If(sourceExists.not(), orphan);
+            }).Else(() => {
+              If(sourceExists.not(), orphan).ElseIf(pendingBirth, () => { particle.kill(); packed.assign(vec4(0)); });
+            });
+            If(particle.alive.equal(uint(0)).and(pendingBirth.not()), () => {
+              context.eventWriter?.emitDeath(particle);
+            });
+            context.buffers.storage.storeParticle(particle);
+          });
+        })().compute(context.buffers.capacity));
+      }
+      this._sourceFrameCompute = { key, nodes };
+    }
+    this._sourceFrameCompute.nodes.forEach(node => renderer.compute(node));
+  }
+
   private _computeGPUEmissionPhase(context: GPUParticleUpdateContext): void {
     const emitters = this.emitters;
     if (emitters.length <= 0) return;
@@ -1535,6 +1840,9 @@ class ParticleSystem extends THREE.Object3D {
         emitterIndex,
         output: buffers,
         emitterRuntime: emitterInstances.createRuntime(emitterIndex),
+        emissionFrame: this.simulationSpace === SimulationSpace.World
+          || this.simulationSpace === SimulationSpace.Transform
+          ? this._gpuEmissionFrameNode : undefined,
         tagMasks: this._getGPUEmitterTagMasks(emitter),
         reclaimOld,
       });
@@ -1677,7 +1985,7 @@ class ParticleSystem extends THREE.Object3D {
       this._gpuSpawnEventComputeCache?.node.dispose?.();
       const node = Fn(() => {
         const particle = context.buffers.storage.createParticle(undefined, true);
-        If(context.allocationWriter!.wasSpawned(particle), () => {
+        If(context.allocationWriter!.wasSpawned(particle).and(particle.alive.notEqual(uint(0))), () => {
           context.eventWriter!.emitSpawn(particle);
         });
       })().compute(context.buffers.capacity);
@@ -1784,6 +2092,8 @@ class ParticleSystem extends THREE.Object3D {
             const birth = births.storage.createParticle(claim);
             context.buffers.storage.storeParticle(Object.assign(birth, { index: particle.index,
               generation: particle.generation, alive: uint(1) }));
+            context.buffers.storage.createSourceIdentityNode(particle.index)
+              .assign(births.storage.createSourceIdentityNode(claim));
             context.allocationWriter!.markSpawned(particle);
           });
       })().compute(context.buffers.capacity);
@@ -1912,6 +2222,24 @@ class ParticleSystem extends THREE.Object3D {
               resolveParentSlot(claimIndex),
               true
             ),
+            resolveInheritedVelocity: claim => {
+              const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
+              const velocity = this._gpuParentToSimulationNode.mul(vec4(source.velocity, 0));
+              return (this.simulationSpace === SimulationSpace.Source
+                ? inverse(this._gpuParentToSimulationNode
+                  .mul(particleFrameGPU(source, input.options.inheritScale))).mul(velocity) : velocity)
+                .xyz.mul(input.options.inheritVelocity);
+            },
+            sourceRelative: this.simulationSpace === SimulationSpace.Source,
+            resolveSourceIdentity: this.simulationSpace === SimulationSpace.Source ? claim => {
+              const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
+              return bitcast(uvec4(source.index, source.generation, 1, 0), 'vec4') as unknown as Node<'vec4'>;
+            } : undefined,
+            resolveEmissionTransform: claim => {
+              if (this.simulationSpace === SimulationSpace.Source) return mat4(new THREE.Matrix4());
+              const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
+              return this._gpuParentToSimulationNode.mul(particleFrameGPU(source, input.options.inheritScale));
+            },
             resolveEmissionTime: (claimIndex) => {
               const parentSlot = resolveParentSlot(claimIndex);
               if (input.options.inheritLifetime > 0) {
@@ -2014,7 +2342,7 @@ class ParticleSystem extends THREE.Object3D {
                 const transformScale = mix(vec3(1), event.particle.scale, float(Math.max(0,
                   input.options.inheritScale)));
                 const rotate = (v: Node<'vec3'>): Node<'vec3'> => {
-                  const base = rotateEulerYXZGPU(v, event.particle.rotation);
+                  const base = mat3(particleFrameGPU(event.particle, 0)).mul(v);
                   return input.options.impulseAffectsAlignment
                     ? event.collisionImpulse.length().greaterThan(0).select(rotateFromYGPU(v,
                       event.collisionImpulse), base) as Node<'vec3'>
@@ -2027,13 +2355,14 @@ class ParticleSystem extends THREE.Object3D {
                 const impulseMass = event.type.equal(uint(GPUEventType.Collision)).select(
                   pow(event.collisionImpulse.length().max(0), Math.max(0, input.options.impulseAffectsMass)), float(1));
                 const resolved: GPUEmissionContext = {
-                  transform,
-                  position: event.particle.position,
+                  transform: this._gpuParentToSimulationNode.mul(transform),
+                  position: this._gpuParentToSimulationNode.mul(vec4(event.particle.position, 1)).xyz,
                   color: mix(vec3(1), event.particle.color, float(Math.max(0, input.options.inheritColor))),
                   alpha: mix(float(1), event.particle.alpha, float(Math.max(0, input.options.inheritAlpha))),
                   mass: mix(float(1), event.particle.mass, float(Math.max(0,
                     input.options.inheritMass))).mul(impulseMass),
-                  velocity: event.particle.velocity.mul(Math.max(0, input.options.inheritVelocity)),
+                  velocity: this._gpuParentToSimulationNode.mul(vec4(event.particle.velocity, 0)).xyz
+                    .mul(Math.max(0, input.options.inheritVelocity)),
                   scale: event.type.equal(uint(GPUEventType.Collision)).select(
                     pow(event.collisionImpulse.length().max(0), input.options.impulseAffectsScale),
                       float(1)) as Node<'float'>,
@@ -2062,6 +2391,21 @@ class ParticleSystem extends THREE.Object3D {
                       }
                     });
                   }
+                }
+                if (this.simulationSpace === SimulationSpace.Source) {
+                  // Death-triggered births retain the final snapshot instead of attaching to an already-dead source.
+                  If(event.type.notEqual(uint(GPUEventType.Death)), () => {
+                    const sourceFrame = this._gpuParentToSimulationNode
+                      .mul(particleFrameGPU(event.particle, input.options.inheritScale));
+                    const toSource = inverse(sourceFrame);
+                    contextValues.transform.assign(toSource.mul(contextValues.transform));
+                    contextValues.position.assign(toSource.mul(vec4(contextValues.position, 1)).xyz);
+                    contextValues.velocity.assign(toSource.mul(vec4(contextValues.velocity, 0)).xyz);
+                    runs.snapshots.storage.createSourceIdentityNode(instanceIndex)
+                      .assign(bitcast(uvec4(event.slot, event.generation, 1, 0), 'vec4'));
+                  }).Else(() => {
+                    runs.snapshots.storage.createSourceIdentityNode(instanceIndex).assign(vec4(0));
+                  });
                 }
                 runs.storeParticle(instanceIndex, {
                   ...event.particle,
@@ -2144,6 +2488,8 @@ class ParticleSystem extends THREE.Object3D {
             emitterRuntime: globalRuntime,
             tagMasks: this._getGPUEmitterTagMasks(emitter),
             inheritance: { color: 1, alpha: 1, mass: 1, velocity: 1, scale: 1 },
+            resolveSourceIdentity: this.simulationSpace === SimulationSpace.Source ? claim =>
+              runs.snapshots.storage.createSourceIdentityNode(resolveRunIndex(claim)) : undefined,
             resolveParentParticle: (claimIndex) => runs.load(resolveRunIndex(claimIndex)).particle,
             resolveDistortionStrength: claimIndex => runs.load(resolveRunIndex(claimIndex)).particle.time,
             resolveEmissionTransform: claimIndex => {
@@ -2524,13 +2870,13 @@ class ParticleSystem extends THREE.Object3D {
     this._gpuDurationNode.value = Math.max(this.duration, Number.EPSILON);
     this._gpuGravityNode.value.copy(this.gravity);
     this.updateWorldMatrix(true, false);
-    if (this.simulationSpace === SimulationSpace.World) {
-      this._gpuSimulationToWorldNode.value.identity();
-      this._gpuWorldToSimulationNode.value.identity();
-    } else {
-      this._gpuSimulationToWorldNode.value.copy(this.matrixWorld);
-      this._gpuWorldToSimulationNode.value.copy(this.matrixWorld).invert();
-    }
+    const frame = this.getSimulationToWorldMatrix();
+    this._gpuEmissionFrameNode.value.copy(frame).invert().multiply(this.matrixWorld);
+    this._gpuSimulationToWorldNode.value.copy(frame);
+    this._gpuWorldToSimulationNode.value.copy(frame).invert();
+    this._gpuParentToSimulationNode.value.copy(frame).invert().multiply(
+      this._subSystemParent?.getSimulationToWorldMatrix() ?? frame);
+
     if (this.simulationSpace === SimulationSpace.World) {
       this._gpuEmitterPositionNode.value.setFromMatrixPosition(this.matrixWorld);
     } else {
@@ -2627,6 +2973,8 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _disposeGPUComputeCaches(): void {
+    this._sourceFrameCompute?.nodes.forEach(node => node.dispose());
+    this._sourceFrameCompute = undefined;
     this._gpuLODCull?.node.dispose();
     this._gpuLODCull = undefined;
     this._gpuEmissionPrepareComputeCache?.nodes.forEach((node) => node.dispose?.());
@@ -3860,9 +4208,9 @@ class ParticleSystem extends THREE.Object3D {
       .expandByScalar(maxVelocity * travelTime);
 
     const effectBounds = effect.getWorldBounds();
-    if (this.simulationSpace === SimulationSpace.Local) {
+    if (this.simulationSpace !== SimulationSpace.World) {
       this.updateWorldMatrix(true, false);
-      this._spatialEffectBoundsInverse.copy(this.matrixWorld).invert();
+      this._spatialEffectBoundsInverse.copy(this.getSimulationToWorldMatrix()).invert();
       effectBounds.applyMatrix4(this._spatialEffectBoundsInverse);
     }
     return this._spatialEffectTravelBounds.intersectsBox(effectBounds);
@@ -4124,10 +4472,13 @@ class ParticleSystem extends THREE.Object3D {
   private _sourceContext(source: SubSystemSource, options: SubSystemOptions): Partial<EmissionContext> {
     const finiteLifetime = Number.isFinite(source.lifetime);
     const lifetime = finiteLifetime ? options.inheritLifetime : 0;
+    const parentToChild = this.getSimulationToWorldMatrix().invert()
+      .multiply(this._subSystemParent?.getSimulationToWorldMatrix() ?? new THREE.Matrix4());
     return {
+      source,
       key: source.id,
       transform: this._particleEmissionTransform(source, options.inheritScale),
-      position: source.position.clone(),
+      position: source.position.clone().applyMatrix4(parentToChild),
       time: lifetime > 0 ? source.time * lifetime : undefined,
       elapsedTime: source instanceof EmissionSource ? source.realtime / 1000 : undefined,
       duration: lifetime > 0 ? THREE.MathUtils.lerp(this.duration, source.lifetime, lifetime) : undefined,
@@ -4135,7 +4486,8 @@ class ParticleSystem extends THREE.Object3D {
       color: new THREE.Color(1, 1, 1).lerp(source.color, Math.max(0, options.inheritColor)),
       alpha: THREE.MathUtils.lerp(1, source.alpha, Math.max(0, options.inheritAlpha)),
       mass: THREE.MathUtils.lerp(1, source.mass, Math.max(0, options.inheritMass)),
-      velocity: source.velocity.clone().multiplyScalar(Math.max(0, options.inheritVelocity)),
+      velocity: source.velocity.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(parentToChild))
+        .multiplyScalar(Math.max(0, options.inheritVelocity)),
       tags: source.tags?.slice(),
     };
   }
@@ -4161,6 +4513,11 @@ class ParticleSystem extends THREE.Object3D {
   private _updateEmissionRuns(options: SubSystemOptions): void {
     for (let i = this._emissionRuns.length - 1; i >= 0; i -= 1) {
       const run = this._emissionRuns[i];
+      if (this.simulationSpace === SimulationSpace.Source && run.source && !run.source.alive) {
+        this.emitters.forEach(emitter => emitter.clearContext(run.id));
+        this._emissionRuns.splice(i, 1);
+        continue;
+      }
 
       run.realtime += this.deltaTime;
 
@@ -4177,9 +4534,19 @@ class ParticleSystem extends THREE.Object3D {
         if (time < 1) {
           finished = false;
 
+          const frameChange = run.source && run.sourceFrame && this.simulationSpace === SimulationSpace.Source
+            ? this._particleEmissionTransform(run.source, this._sourceScaleInheritance())
+              .multiply(run.sourceFrame.clone().invert()) : undefined;
+          const eventContext = run.context && frameChange ? {
+            ...run.context,
+            transform: run.context.transform && frameChange.clone().multiply(run.context.transform),
+            position: run.context.position?.clone().applyMatrix4(frameChange),
+            velocity: run.context.velocity?.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(frameChange)),
+          } : run.context;
           this._emitContext(emitter, {
+            source: run.source,
             key: run.id,
-            transform: run.transform,
+            transform: frameChange ? frameChange.clone().multiply(run.transform) : run.transform,
             position: run.particle.position,
             time,
             duration,
@@ -4193,12 +4560,15 @@ class ParticleSystem extends THREE.Object3D {
               : undefined,
             mass: this._getEmissionRunMass(run, options),
             velocity: options.inheritVelocity > 0
-              ? this._particleEmissionVelocity.copy(run.particle.velocity).multiplyScalar(options.inheritVelocity)
+              ? this._particleEmissionVelocity.copy(run.particle.velocity)
+                .applyMatrix3(new THREE.Matrix3().setFromMatrix4(this.getSimulationToWorldMatrix().invert()
+                  .multiply(this._subSystemParent?.getSimulationToWorldMatrix() ?? new THREE.Matrix4())))
+                .multiplyScalar(options.inheritVelocity)
               : undefined,
             scale: this._getImpulseEffect(run.collision, options.impulseAffectsScale),
             velocityScale: this._getImpulseEffect(run.collision, options.impulseAffectsSpeed),
             tags: run.particle.tags,
-            ...run.context,
+            ...eventContext,
           });
         } else {
           emitter.clearContext(run.id);
@@ -4269,6 +4639,7 @@ class ParticleSystem extends THREE.Object3D {
       eventContext.color = eventContext.color.clone();
       eventContext.tags = eventContext.tags?.slice() ?? [];
       // Timing and identity belong to the run, while callback values are frozen now.
+      delete (eventContext as Partial<EmissionContext>).source;
       delete (eventContext as Partial<EmissionContext>).key;
       delete (eventContext as Partial<EmissionContext>).time;
       delete (eventContext as Partial<EmissionContext>).elapsedTime;
@@ -4276,6 +4647,8 @@ class ParticleSystem extends THREE.Object3D {
       if (overrides?.transform && !overrides.position) eventContext.position.setFromMatrixPosition(overrides.transform);
     }
     this._emissionRuns.push({
+      source: particle.alive ? particle : undefined,
+      sourceFrame: this.getSourceEmissionFrame(particle),
       id: `event_${this._nextEmissionRunId++}`,
       transform,
       startTime: now,
@@ -4318,13 +4691,18 @@ class ParticleSystem extends THREE.Object3D {
         particle.rotation.z,
       ));
 
-    return new THREE.Matrix4().compose(
+    const sourceFrame = new THREE.Matrix4().compose(
       particle.position,
       quaternion,
       inheritScale > 0
         ? this._particleEmissionScale.copy(this._particleEmissionUnitScale).lerp(particle.scale, inheritScale)
         : this._particleEmissionUnitScale,
     );
+    if (this._subSystemParent) {
+      sourceFrame.premultiply(this.getSimulationToWorldMatrix().invert()
+        .multiply(this._subSystemParent.getSimulationToWorldMatrix()));
+    }
+    return sourceFrame;
   }
 
   // eslint-disable-next-line class-methods-use-this
@@ -4439,6 +4817,10 @@ class ParticleSystem extends THREE.Object3D {
   public clearParticles(children: boolean = true): void {
     const gpuRenderer = isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined;
     this._gpuLifecycleGeneration += 1;
+    this._sourceFrames?.dispose(gpuRenderer);
+    this._sourceFrames = undefined;
+    this._pendingFrameConversion = undefined;
+    this._sourceReadbackPending = false;
     this.particles.length = 0;
     this._particleSpacing.clear();
     this.particleOctree = undefined;
@@ -4806,7 +5188,10 @@ class ParticleSystem extends THREE.Object3D {
 
     this._discoverEventTypes();
     subSystem._subSystemParent = this;
-    subSystem.simulationSpace = this.simulationSpace;
+    if (!subSystem._simulationSpaceExplicit) {
+      subSystem.simulationSpace = this.simulationSpace;
+      subSystem._simulationSpaceExplicit = false;
+    }
 
     // Identity local transform makes the subsystem share this system's space.
     subSystem.position.set(0, 0, 0);
@@ -4923,10 +5308,9 @@ class ParticleSystem extends THREE.Object3D {
         : undefined,
     };
 
-    if (this.simulationSpace !== SimulationSpace.World) return context;
-
     this.updateWorldMatrix(true, false);
-    const transform = this.matrixWorld.clone();
+    const transform = this.getSimulationToWorldMatrix().invert().multiply(this.matrixWorld);
+    if ([SimulationSpace.Local, SimulationSpace.Source].includes(this.simulationSpace)) return context;
 
     return {
       ...context,
@@ -4959,7 +5343,7 @@ class ParticleSystem extends THREE.Object3D {
     if (this.simulationSpace === SimulationSpace.World) return;
 
     const worldQuaternion = new THREE.Quaternion();
-    this.getWorldQuaternion(worldQuaternion).invert();
+    this.getSimulationWorldQuaternion(worldQuaternion).invert();
     this._emitterContextVelocity.applyQuaternion(worldQuaternion);
   }
 
@@ -5082,15 +5466,14 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private getRendererParent(): THREE.Object3D {
-    if (this.simulationSpace !== SimulationSpace.World) return this;
-
+    if (![SimulationSpace.World, SimulationSpace.Transform].includes(this.simulationSpace)) return this;
     return this._worldRendererRoot;
   }
 
   private syncRendererParents(): void {
     const worldRendererParent = this.getWorldRendererParent();
 
-    if (this.simulationSpace === SimulationSpace.World) {
+    if (this.simulationSpace === SimulationSpace.World || this.simulationSpace === SimulationSpace.Transform) {
       if (worldRendererParent && this._worldRendererRoot.parent !== worldRendererParent) {
         worldRendererParent.add(this._worldRendererRoot);
       }
@@ -5098,6 +5481,13 @@ class ParticleSystem extends THREE.Object3D {
       this._worldRendererRoot.removeFromParent();
     }
 
+    if (this.simulationSpace === SimulationSpace.Transform || this.simulationSpace === SimulationSpace.World) {
+      worldRendererParent?.updateWorldMatrix(true, false);
+      this._worldRendererRoot.matrixAutoUpdate = false;
+      this._worldRendererRoot.matrix.copy(worldRendererParent?.matrixWorld ?? new THREE.Matrix4()).invert()
+        .multiply(this.getSimulationToWorldMatrix());
+      this._worldRendererRoot.matrixWorldNeedsUpdate = true;
+    }
     const parent = this.getRendererParent();
     this._rendererObjects.forEach((object) => {
       if (object.parent !== parent) parent.add(object);
@@ -5114,27 +5504,8 @@ class ParticleSystem extends THREE.Object3D {
     return parent ?? undefined;
   }
 
-  private convertParticlesToSimulationSpace(space: SimulationSpace): void {
-    this.updateWorldMatrix(true, false);
-
-    if (space === SimulationSpace.World) {
-      const normalMatrix = this._directionNormalMatrix.getNormalMatrix(this.matrixWorld);
-
-      this.particles.forEach((particle) => {
-        particle.localToWorld(this.matrixWorld, normalMatrix);
-      });
-    } else {
-      const inverseWorldMatrix = this._inverseWorldMatrix.copy(this.matrixWorld).invert();
-      const normalMatrix = this._directionNormalMatrix.getNormalMatrix(this.matrixWorld).invert();
-
-      this.particles.forEach((particle) => {
-        particle.worldToLocal(inverseWorldMatrix, normalMatrix);
-      });
-    }
-  }
-
   private localDirectionToWorld(vector: THREE.Vector3): void {
-    vector.applyMatrix3(this._directionNormalMatrix.getNormalMatrix(this.matrixWorld));
+    vector.applyMatrix3(this._directionNormalMatrix.getNormalMatrix(this.getSimulationToWorldMatrix()));
   }
 
 }

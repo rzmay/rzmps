@@ -304,7 +304,7 @@ export default class DecalRenderer extends Renderer {
 
     system.updateWorldMatrix(true, false);
     const origin = particle.position.clone();
-    if (system.simulationSpace === 'local') origin.applyMatrix4(system.matrixWorld);
+    if (system.simulationSpace !== 'world') origin.applyMatrix4(system.getSimulationToWorldMatrix());
 
     // A known contact already identifies the surface; only search when it is unavailable.
     const hit = contact && this.contactHit(contact, origin, system);
@@ -328,9 +328,9 @@ export default class DecalRenderer extends Renderer {
 
     const point = contact.point.clone();
     const normal = contact.normal.clone();
-    if (system.simulationSpace === 'local') {
-      point.applyMatrix4(system.matrixWorld);
-      normal.transformDirection(system.matrixWorld);
+    if (system.simulationSpace !== 'world') {
+      point.applyMatrix4(system.getSimulationToWorldMatrix());
+      normal.transformDirection(system.getSimulationToWorldMatrix());
     }
 
     // Adapt collision world normals to the mesh-local convention used by raycast faces.
@@ -350,7 +350,7 @@ export default class DecalRenderer extends Renderer {
     if (contact?.normal instanceof THREE.Vector3
       && Number.isFinite(contact.normal.lengthSq()) && contact.normal.lengthSq() > 0) {
       contactDirection = contact.normal.clone().negate();
-      if (system.simulationSpace === 'local') contactDirection.transformDirection(system.matrixWorld);
+      if (system.simulationSpace !== 'world') contactDirection.transformDirection(system.getSimulationToWorldMatrix());
     }
     const sampled = contactDirection
       ?? (typeof this.direction === 'function' ? this.direction(particle) : this.direction);
@@ -490,9 +490,9 @@ export default class DecalRenderer extends Renderer {
   private emissionMatrix(decal: DecalInstance): THREE.Matrix4 {
     decal.mesh.updateWorldMatrix(true, false);
     const transform = decal.mesh.matrixWorld.clone().multiply(decal.emissionTransform!);
-    if (this.system?.simulationSpace === 'local') {
+    if (this.system && this.system.simulationSpace !== 'world') {
       this.system.updateWorldMatrix(true, false);
-      transform.premultiply(this.system.matrixWorld.clone().invert());
+      transform.premultiply(this.system.getSimulationToWorldMatrix().clone().invert());
     }
     return transform;
   }

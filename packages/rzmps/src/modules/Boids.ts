@@ -657,13 +657,13 @@ class Boids extends Module {
     target.set(0, 0, 0);
 
     const particleSystem = this.particleSystem;
-    const useLocalSimulationSpace = particleSystem?.simulationSpace === 'local';
+    const useLocalSimulationSpace = particleSystem?.simulationSpace !== 'world';
 
     if (useLocalSimulationSpace && particleSystem) {
       particleSystem.updateWorldMatrix(true, false);
       this.affectorSamplePosition.copy(particle.position);
-      particleSystem.localToWorld(this.affectorSamplePosition);
-      particleSystem.getWorldQuaternion(this.worldQuaternion);
+      particleSystem.simulationToWorld(this.affectorSamplePosition);
+      particleSystem.getSimulationWorldQuaternion(this.worldQuaternion);
       this.inverseWorldQuaternion.copy(this.worldQuaternion).invert();
     } else {
       this.affectorSamplePosition.copy(particle.position);

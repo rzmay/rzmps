@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { validateGPUChildren } from './validateGPUChildren.js';
+import { validateFireflyAttachments } from './validateFireflyAttachments.js';
 import { examples } from '../../examples/index.js';
 import scenePresets from '../../apps/demo/src/presets/scenes/index.js';
 import { getSceneParticleRoot } from '../../apps/demo/src/presets/scenes/particleRoot.js';
@@ -35,6 +36,7 @@ async function capture(options) {
     const fixtures = {
       nativeEvents: () => import('../../tests/visual/fixtures/nativeEvents.js'),
       gpuKill: () => import('../../tests/visual/fixtures/gpuKill.js'),
+      simulationSpaces: () => import('../../tests/visual/fixtures/simulationSpaces.js'),
     };
     const example = Object.hasOwn(fixtures, options.example)
       ? { create: (await fixtures[options.example]()).default }
@@ -192,12 +194,17 @@ async function capture(options) {
           }
         }
       });
-      frames.push({data,systems,time:step*options.deltaTime,step,particles,simulationSpeed:system.simulationSpeed,
+      const attachmentValidation = options.example === 'fireflies'
+        ? await validateFireflyAttachments(system) : undefined;
+      frames.push({data,systems,attachmentValidation,time:step*options.deltaTime,step,particles,
+        simulationSpeed:system.simulationSpeed,
         simulatedSeconds:step*options.deltaTime*Math.max(0,system.simulationSpeed)});
     }
     const childValidation = options.backend === 'webgpu' ? await validateGPUChildren(system, renderer) : [];
+    const frameValidation = await system.userData.validateSimulationFrames?.(renderer) ?? [];
     const contactSheet=await makeContactSheet(frames,options);
-    return {frames,contactSheet,shaderBindings,childValidation,camera:{position:camera.position.toArray(),
+    return {frames,contactSheet,shaderBindings,childValidation,frameValidation,
+      camera:{position:camera.position.toArray(),
       target:options.cameraTarget,fov:options.cameraFov},rendererInfo:{calls:renderer.info.render.calls,
       triangles:renderer.info.render.triangles},userAgent:navigator.userAgent,assetErrors};
   } finally {

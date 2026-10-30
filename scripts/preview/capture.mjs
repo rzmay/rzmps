@@ -155,6 +155,7 @@ export async function capturePreview(options) {
       camera: result.camera,
       rendererInfo: result.rendererInfo,
       childValidation: result.childValidation,
+      frameValidation: result.frameValidation,
       shaderBindings: Object.values((result.shaderBindings ?? []).reduce((stages, entry) => {
         const key = `${entry.stage}:${entry.name}`;
         const stage = stages[key] ??= { stage: entry.stage, name: entry.name, pipelines: 0, maxStorageBuffers: 0 };

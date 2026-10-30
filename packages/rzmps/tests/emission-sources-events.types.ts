@@ -1,4 +1,4 @@
-import { Matrix4, Vector3 } from 'three';
+import { Matrix4, Object3D, Vector3 } from 'three';
 import { vec4 } from 'three/tsl';
 import { ParticleSystem, Module, EmissionSource, EmissionShape } from '../build/index.mjs';
 import type { RegisteredEmissionSource, GPUEventPayload } from '../build/index.mjs';
@@ -34,3 +34,12 @@ void unchecked;
 // @ts-expect-error Native GPU payloads contain at most three vec4 values.
 const tooMany: GPUEventPayload = [vec4(1), vec4(2), vec4(3), vec4(4)];
 void tooMany;
+
+new ParticleSystem({ simulationSpace: 'transform', simulationSpaceTransform: new Object3D() });
+new ParticleSystem({ simulationSpace: 'transform', simulationSpaceTransform: new Matrix4() });
+new ParticleSystem({ simulationSpace: 'source', sourceLoss: 'kill' });
+// @ts-expect-error Custom frames must be Object3D or world Matrix4 references.
+new ParticleSystem({ simulationSpace: 'transform', simulationSpaceTransform: new Vector3() });
+
+parent.simulationSpace = 'source';
+parent.simulationSpaceTransform = new Object3D();

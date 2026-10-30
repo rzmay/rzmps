@@ -53,6 +53,7 @@ for (const backend of ['webgl', 'webgpu']) test(`${backend}: fireflies emit neig
       '--output', output]));
     assert.equal(metadata.status, 'complete');
     const populations = metadata.captures.map(frame => {
+      assert.ok(frame.attachmentValidation.maxDistance <= 0.01, 'pulses must remain inside their source offset');
       const parent = frame.systems.find(s => s.name === 'Fireflies');
       const glow = frame.systems.find(s => s.name === 'Firefly Pulses');
       assert.equal(parent.gpuProcessingActive, backend === 'webgpu');
@@ -66,6 +67,7 @@ for (const backend of ['webgl', 'webgpu']) test(`${backend}: fireflies emit neig
       return glow.simulated;
     });
     assert.ok(populations.some(count => count > 0), 'threshold crossings must create glow particles');
+    assert.ok(metadata.captures.some(frame => frame.attachmentValidation.pulses > 0));
     assert.ok(populations.every(count => count < 48), 'sparse neighbors must avoid population-wide pulse waves');
     assert.ok(metadata.captures.some(frame => frame.systems.find(s => s.name === 'Firefly Pulses').lights.active > 0),
       'pulse lights must actually illuminate the scene');
@@ -110,5 +112,19 @@ test('webgpu: three-vector custom payload drives persistent runs without event r
     assert.ok(nested?.simulated > 0, 'event-born GPU particles must drive nested death emission');
     assert.equal(nested.gpuProcessingActive, true);
     assert.ok(metadata.shaderBindings.every(s => s.maxStorageBuffers <= 8));
+  } finally { await fs.rm(output, { recursive: true, force: true }); }
+});
+
+for (const backend of ['webgl', 'webgpu']) test(`${backend}: Source frames preserve offsets and delayed births`,
+  { timeout: 240000 }, async () => {
+  const output = await fs.mkdtemp(path.join(os.tmpdir(), 'rzmps-source-frames-'));
+  try {
+    const metadata = await capturePreview(parseOptions(['--example', 'simulationSpaces', '--backend', backend,
+      '--warmup', '65', '--frames', '1', '--width', '320', '--height', '240', '--output', output]));
+    assert.equal(metadata.frameValidation.length, 6);
+    assert.ok(metadata.shaderBindings.every(s => s.maxStorageBuffers <= 8));
+    for (const system of metadata.captures[0].systems.filter(s => s.name.startsWith('Source '))) {
+      assert.equal(system.gpuProcessingActive, backend === 'webgpu');
+    }
   } finally { await fs.rm(output, { recursive: true, force: true }); }
 });

@@ -278,7 +278,7 @@ export default class AudioRenderer extends Renderer {
       system.sceneCamera.getWorldPosition(this._cameraPosition);
 
       if (system.simulationSpace !== 'world') {
-        system.worldToLocal(this._cameraPosition);
+        system.worldToSimulation(this._cameraPosition);
       }
 
       if (

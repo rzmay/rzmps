@@ -30,6 +30,7 @@ import {
   inverse,
   transpose,
   mat3,
+  mat4,
   cos,
   shiftLeft,
   sin,
@@ -93,6 +94,8 @@ interface EmitterContextState {
 }
 
 export interface EmissionContext {
+  /** @internal Live attachment source, separate from the event snapshot. */
+  source?: import('./EmissionSource').SubSystemSource;
   /** Stable root or subsystem run identity. */
   key: string;
   transform: THREE.Matrix4;
@@ -113,6 +116,10 @@ export interface EmissionContext {
 
 /** @internal Context used to construct the built-in GPU birth graph. */
 export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
+  /** @internal Native Source births are initialized in the emitting particle's reference frame. */
+  sourceRelative?: boolean;
+  resolveSourceIdentity?: (claimIndex: Node<'uint'>) => Node<'vec4'>;
+  emissionFrame?: Node<'mat4'>;
   /** Emitter whose birth graph is being constructed. */
   emitter: Emitter;
   /** Emitter position in the owning system's emitter array. */
@@ -124,6 +131,7 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
   normalizedTimeNode?: Node<'float'>;
   emitterPositionNode?: Node<'vec3'>;
   parentParticle?: GPUParticleLike;
+  resolveInheritedVelocity?: (claimIndex: Node<'uint'>) => Node<'vec3'>;
   resolveParentParticle?: (claimIndex: Node<'uint'>) => GPUParticleLike;
   resolveDistortionStrength?: (claimIndex: Node<'uint'>) => Node<'float'>;
   resolveEmissionTransform?: (claimIndex: Node<'uint'>) => Node<'mat4'>;
@@ -400,7 +408,8 @@ class Emitter {
         const inheritance = context.inheritance;
         const parent = context.resolveParentParticle?.(claimIndex) ?? context.parentParticle;
         const impulseEffects = context.resolveImpulseEffects?.(claimIndex);
-        const emissionTransform = context.resolveEmissionTransform?.(claimIndex);
+        const emissionTransform = context.resolveEmissionTransform?.(claimIndex)
+          ?? (context.sourceRelative ? mat4(new THREE.Matrix4()) : context.emissionFrame);
         const inheritedTransformScale = parent && inheritance && inheritance.scale > 0
           ? mix(vec3(1, 1, 1), parent.scale, inheritance.scale)
           : vec3(1, 1, 1);
@@ -440,7 +449,8 @@ class Emitter {
         ).clamp(0, 1);
         const alignedRotation = vec3(
           asin(emissionNormal.y.clamp(-1, 1)).negate(),
-          atan(emissionNormal.x, emissionNormal.z),
+          atan(emissionNormal.x, emissionNormal.x.abs().add(emissionNormal.z.abs()).lessThan(1e-8)
+            .select(float(1), emissionNormal.z)),
           0,
         ).mul(alignment);
         const initialRotation = this.initialValues.rotation === undefined
@@ -533,9 +543,9 @@ class Emitter {
         const inheritedMass = parent && inheritance && inheritance.mass > 0
           ? mix(float(1), parent.mass, inheritance.mass)
           : float(1);
-        const inheritedVelocity = parent && inheritance && inheritance.velocity > 0
-          ? parent.velocity.mul(inheritance.velocity)
-          : vec3(0, 0, 0);
+        const inheritedVelocity = context.resolveInheritedVelocity?.(claimIndex)
+          ?? (parent && inheritance && inheritance.velocity > 0
+            ? parent.velocity.mul(inheritance.velocity) : vec3(0, 0, 0));
 
         particle.position.assign(emissionPosition);
         particle.orbitCenter.assign(vec3(0, 0, 0));
@@ -561,6 +571,9 @@ class Emitter {
         particle.lifetime.assign(initialLifetime);
         particle.time.assign(float(0));
         particle.realtime.assign(float(0));
+        context.output.storage.createSourceIdentityNode(particle.index).assign(
+          context.resolveSourceIdentity?.(claimIndex) ?? vec4(0),
+        );
         const tagMasks = context.tagMasks ?? [];
         if (
           (this.tagSelection === TagSelectionMethod.Random
@@ -970,6 +983,17 @@ class Emitter {
     context: Partial<EmissionContext>,
     particleSystem: ParticleSystem,
   ): Particle | undefined {
+    const sourceFrame = particleSystem.getSourceEmissionFrame(context.source);
+    if (context.source?.alive && particleSystem.isSubSystem
+      && particleSystem.simulationSpace === 'source' && !sourceFrame) return;
+    if (sourceFrame) {
+      const toSource = sourceFrame.clone().invert();
+      context = {
+        ...context,
+        transform: toSource.clone().multiply(context.transform ?? new THREE.Matrix4()),
+        velocity: context.velocity?.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(toSource)),
+      };
+    }
     const point = this.source.getPoint();
     const position = point.position.clone().add(
       evaluateDynamicVector(this.initialValues.position ?? new THREE.Vector3(), time),
@@ -1069,8 +1093,11 @@ class Emitter {
       }),
     });
 
+    if (sourceFrame) particle.transformSimulationFrame(sourceFrame);
     particle.lodPriority = particleSystem.quality * Math.random();
-    return particleSystem.addParticle(particle, particles) ? particle : undefined;
+    if (!particleSystem.addParticle(particle, particles)) return undefined;
+    particleSystem.bindParticleSource(particle, context.source);
+    return particle;
   }
 
   private _selectTags(): Tag[] | undefined {

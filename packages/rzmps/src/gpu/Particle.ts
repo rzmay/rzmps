@@ -5,6 +5,7 @@ import { StorageBufferAttribute, IndirectStorageBufferAttribute, type ComputeNod
 import type { Node } from 'three/webgpu';
 import { float, uint, uvec2, Fn, instanceIndex, storage } from 'three/tsl';
 import Particle from '../Particle';
+import { particleSourceFrame } from '../SourceFrame';
 import type ParticleSystem from '../ParticleSystem';
 import type { GPUAllocationWriter } from './AllocationBuffer';
 import type { GPUCollisionEventWriter, GPUEventWriter } from './EventBuffer';
@@ -59,6 +60,7 @@ enum ParticleFloatSlot {
   AngularAcceleration,
   ScalarAcceleration,
   Color,
+  SourceIdentity,
 }
 
 enum ParticleRenderFloatSlot {
@@ -290,6 +292,11 @@ export class GPUParticleStorage {
 
   createStateNode(index: Node<'uint'> = instanceIndex): Node<'uvec4'> {
     return this.uintStorage.element(index.mul(UINT_SLOT_COUNT));
+  }
+
+  /** @internal Source slot, generation, kind, and initialization state, bit-packed into one vec4. */
+  createSourceIdentityNode(index: Node<'uint'> = instanceIndex): Node<'vec4'> {
+    return this.floatElement(ParticleFloatSlot.SourceIdentity, index);
   }
 
   createParticle(
@@ -750,6 +757,10 @@ export class GPUParticleBufferState {
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.AngularAcceleration, particle.angularAcceleration, 0);
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.ScalarAcceleration, particle.scalarAcceleration, 0);
     writeColor(this.floatData, index, ParticleFloatSlot.Color, particle.color);
+    const source = particleSourceFrame(particle);
+    const sourceOffset = (index * FLOAT_SLOT_COUNT + ParticleFloatSlot.SourceIdentity) * 16;
+    const sourceWords = new Uint32Array(this.floatData.buffer, sourceOffset, 4);
+    sourceWords.set(source ? [source.slot, source.generation, 2, 2] : [0, 0, 0, 0]);
 
     writeState(
       this.uintData,

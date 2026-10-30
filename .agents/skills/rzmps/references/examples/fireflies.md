@@ -20,11 +20,11 @@ alone. The larger, sparse volume and local radius allow separate flash clusters 
 pulse immediately synchronizing the whole population.
 
 The event creates one 0.65-second glow particle. Its strength controls glow size; its source identity keeps the glow
-attached to the moving firefly. CPU processing uses live references. GPU processing uses a slot and generation pair,
+attached to the moving firefly through Source simulation space. GPU processing uses a slot and generation pair,
 rejecting a dead or reused source slot. Both systems remain owned and updated by the root.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L19)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L20)
 
 ```js
   // Sparse neighbors allow local flash clusters without synchronizing the entire population.
@@ -152,71 +152,27 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
   });
   fireflies.name = 'Fireflies';
 
-  // CPU references and GPU slot/generation pairs keep each glow on its living source during the pulse.
-  const cpuSources = new Map();
-  const cpuSourceSlots = new WeakMap();
-  let nextSourceSlot = 0;
-  class FollowGlow extends Module {
-    constructor() {
-      super(
-        particle => {
-          const parent = cpuSources.get(particle.mass);
-          if (!parent?.alive) {
-            particle.kill();
-            return;
-          }
-
-          particle.position.copy(parent.position);
-          particle.velocity.set(0, 0, 0);
-          particle.alpha = 0.65 * Math.pow(Math.max(0, Math.sin(Math.PI * particle.time)), 1.5);
-        },
-        {
-          modifyGPU(particle) {
-            // Glow mass stores the source slot; distortionStrength stores its generation.
-            // Checking both prevents a surviving glow from following a replacement insect in a reused slot.
-            const parent = fireflies.gpuParticleBuffers.storage.createParticle(uint(particle.mass));
-            const sourceAlive = parent.alive.notEqual(uint(0));
-            const sameGeneration = parent.generation.equal(uint(particle.distortionStrength));
-
-            If(sourceAlive.and(sameGeneration), () => {
-              particle.position.assign(parent.position);
-              particle.velocity.assign(vec3(0));
-              // Keep opacity in simulation state so LightRenderer readback sees the same pulse envelope.
-              particle.alpha.assign(particle.time.mul(Math.PI).sin().max(0).pow(1.5).mul(0.65));
-            }).Else(() => {
-              particle.kill();
-            });
-          },
-        },
-      );
-    }
-
-    // prepare runs once per step; preserve base preparation before pruning dead CPU references.
-    prepare(system, dt) {
-      super.prepare(system, dt);
-      for (const [slot, parent] of cpuSources) {
-        if (!parent.alive) cpuSources.delete(slot);
-      }
-    }
-  }
-
+  // Source space keeps each pulse attached without application-owned source maps or update callbacks.
+  const pulse = t => Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5);
   const glow = new ParticleSystem({
     duration: 0.1,
+    simulationSpace: 'source',
+    sourceLoss: 'kill',
     gravityModifier: 0,
     maxParticles: 128,
     emitters: new Emitter({
       source: EmissionShape.Box(0.01, 0.01, 0.01),
+      radialSpeed: 0, // A pulse stays at its sampled source offset; it has no motion of its own.
       bursts: { time: 0, count: 1 },
       initialValues: {
         lifetime: pulseDuration,
         scale: 0.38,
         color: '#d9ff65',
-        alpha: 0,
-        mass: 1, // Event context multiplies this value by the source's reference slot.
+        alpha: 0.65,
       },
     }),
     modules: [
-      new FollowGlow(),
+      new ColorOverLifetime({ alpha: pulse }),
       new ScaleOverLifetime({ scale: t => 0.7 + 0.3 * Math.sin(Math.PI * t) }),
     ],
     renderers: [
@@ -228,10 +184,11 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
       }),
       new LightRenderer({
         count: 16,
-        ratio: 0.25, // Sample all 128 GPU slots, then select a quarter of the active pulses for lights.
+        ratio: 0.25,
         groupingRadiusRatio: 0,
-        alphaAffectsIntensity: true,
-        brightness: 0.8,
+        // Light readback uses stored state; evaluate the same pulse curve explicitly for light intensity.
+        alphaAffectsIntensity: false,
+        brightness: t => 0.52 * Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5),
         lightOptions: {
           distance: 1.1,
           intensity: 1,
@@ -248,30 +205,20 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
     inheritLifetime: 0,
     onEvent: {
       // CPU payloads are unknown to the library; the application narrows its own schema.
-      flash: (data, parent) => {
+      flash: data => {
         if (typeof data !== 'object' || data === null || !('strength' in data)
           || typeof data.strength !== 'number') {
           return;
         }
-        if (!cpuSourceSlots.has(parent)) {
-          cpuSourceSlots.set(parent, nextSourceSlot++);
-        }
-        const slot = cpuSourceSlots.get(parent);
-        cpuSources.set(slot, parent);
-        return { scale: data.strength, mass: slot };
+        return { scale: data.strength };
       },
       gpu: {
         // Resolve the native event snapshot into birth values; no CPU event readback is needed.
-        flash: (data, parent) => ({
-          scale: data[0].x,
-          mass: float(parent.index),
-          distortionStrength: float(parent.generation),
-        }),
+        flash: data => ({ scale: data[0].x }),
       },
     },
   });
 
-  fireflies.addEventListener('destroyed', () => cpuSources.clear());
 ```
 
 
@@ -280,10 +227,12 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
 A box volume distributes the insects across the scene, with randomized initial charge to stagger their first pulses.
 Eight new insects per second quickly replenish deaths, with the live population capped at 96. Insects live for
 24–32 seconds unless they leave the larger kill volume first. A single point-source burst emits each glow, so the event
-has a visible purpose without adding decorative sparks or a permanent trail.
+has a visible purpose without adding decorative sparks or a permanent trail. Its `radialSpeed` is explicitly zero:
+Source space carries independent particle motion with the source, so the emitter's default speed of 1 would make a
+pulse drift away from the insect.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L120)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L121)
 
 ```js
     emitters: new Emitter({
@@ -300,18 +249,18 @@ has a visible purpose without adding decorative sparks or a permanent trail.
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L205)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L160)
 
 ```js
     emitters: new Emitter({
       source: EmissionShape.Box(0.01, 0.01, 0.01),
+      radialSpeed: 0, // A pulse stays at its sampled source offset; it has no motion of its own.
       bursts: { time: 0, count: 1 },
       initialValues: {
         lifetime: pulseDuration,
         scale: 0.38,
         color: '#d9ff65',
-        alpha: 0,
-        mass: 1, // Event context multiplies this value by the source's reference slot.
+        alpha: 0.65,
       },
     }),
 ```
@@ -331,16 +280,16 @@ flashes, and the cooldown prevents continuous retriggering.
 The example uses mass as an application-owned charge accumulator because no physical forces depend on mass here.
 Negative charge represents the refractory period; its first 0.65 seconds signal a visible flash to neighbors.
 The CPU event carries an object containing strength. The GPU event packs strength into the first component of one vec4;
-the GPU handler consumes strength and uses the event source's slot and generation to attach the glow. Other payload
-components remain available to applications that need more metadata.
+the GPU handler consumes strength. Source space handles source identity automatically, leaving the other payload
+components available to applications that need more metadata.
 
-Glow opacity follows a smooth sine pulse stored in permanent simulation state, so GPU light readback sees the envelope
-as well as the sprite renderer. Its follow module updates position from the living source and keeps velocity at zero.
-The FollowGlow subclass overrides prepare to prune dead CPU references once per step, after calling super.prepare.
-No per-particle tag changes are needed because the glow population is separate from the insects.
+The glow system uses `simulationSpace: 'source'` to keep its small sampled offset attached to the moving insect.
+`sourceLoss: 'kill'` removes a pulse when its insect dies. It needs no follow module, source maps, or scratch identity
+attributes. ColorOverLifetime supplies the smooth sine opacity pulse. No per-particle tag changes are needed because
+the glow population is separate from the insects.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L34)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L35)
 
 ```js
   // Mass is an application-owned charge accumulator here: negative values are the refractory period.
@@ -425,60 +374,11 @@ No per-particle tag changes are needed because the glow population is separate f
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L155)
-
-```js
-  class FollowGlow extends Module {
-    constructor() {
-      super(
-        particle => {
-          const parent = cpuSources.get(particle.mass);
-          if (!parent?.alive) {
-            particle.kill();
-            return;
-          }
-
-          particle.position.copy(parent.position);
-          particle.velocity.set(0, 0, 0);
-          particle.alpha = 0.65 * Math.pow(Math.max(0, Math.sin(Math.PI * particle.time)), 1.5);
-        },
-        {
-          modifyGPU(particle) {
-            // Glow mass stores the source slot; distortionStrength stores its generation.
-            // Checking both prevents a surviving glow from following a replacement insect in a reused slot.
-            const parent = fireflies.gpuParticleBuffers.storage.createParticle(uint(particle.mass));
-            const sourceAlive = parent.alive.notEqual(uint(0));
-            const sameGeneration = parent.generation.equal(uint(particle.distortionStrength));
-
-            If(sourceAlive.and(sameGeneration), () => {
-              particle.position.assign(parent.position);
-              particle.velocity.assign(vec3(0));
-              // Keep opacity in simulation state so LightRenderer readback sees the same pulse envelope.
-              particle.alpha.assign(particle.time.mul(Math.PI).sin().max(0).pow(1.5).mul(0.65));
-            }).Else(() => {
-              particle.kill();
-            });
-          },
-        },
-      );
-    }
-
-    // prepare runs once per step; preserve base preparation before pruning dead CPU references.
-    prepare(system, dt) {
-      super.prepare(system, dt);
-      for (const [slot, parent] of cpuSources) {
-        if (!parent.alive) cpuSources.delete(slot);
-      }
-    }
-  }
-```
-
-
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L218)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L173)
 
 ```js
     modules: [
-      new FollowGlow(),
+      new ColorOverLifetime({ alpha: pulse }),
       new ScaleOverLifetime({ scale: t => 0.7 + 0.3 * Math.sin(Math.PI * t) }),
     ],
 ```
@@ -489,8 +389,9 @@ No per-particle tag changes are needed because the glow population is separate f
 The supplied firefly PNG displays the insects. Soft additive sprites display pulses, while a LightRenderer attached
 only to the glow system selects a quarter of the pulses and supplies at most sixteen small yellow-green point lights.
 This also makes its bounded GPU sample cover the glow system's 128 slots, including sparse active slots. The small
-0.38-size glow sprites and 1.1-unit light range keep each pulse local. Brightness 0.8 and opacity-driven intensity
-produce a gentle light envelope with peak intensity 0.52.
+0.38-size glow sprites and 1.1-unit light range keep each pulse local. The brightness callback evaluates the same sine
+pulse envelope with peak intensity 0.52. It evaluates the curve explicitly because GPU light readback uses stored
+simulation state, while ColorOverLifetime applies opacity during the transient render phase.
 
 The particle factory adds no scene geometry. Select Checkerboard and lower **Scene Settings → Light Strength**
 to about 0.08 to see the insects and local light patches against a dim floor. This control scales the scene's ambient
@@ -501,7 +402,7 @@ The LightRenderer uses bounded selective particle readback to position Three.js 
 event buffer. Disabling that renderer leaves the particle effect and event processing entirely on the GPU.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L143)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L144)
 
 ```js
     renderers: new SpriteRenderer(fireflyImage, {
@@ -510,7 +411,7 @@ event buffer. Disabling that renderer leaves the particle effect and event proce
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L224)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L179)
 
 ```js
     renderers: [
@@ -522,10 +423,11 @@ event buffer. Disabling that renderer leaves the particle effect and event proce
       }),
       new LightRenderer({
         count: 16,
-        ratio: 0.25, // Sample all 128 GPU slots, then select a quarter of the active pulses for lights.
+        ratio: 0.25,
         groupingRadiusRatio: 0,
-        alphaAffectsIntensity: true,
-        brightness: 0.8,
+        // Light readback uses stored state; evaluate the same pulse curve explicitly for light intensity.
+        alphaAffectsIntensity: false,
+        brightness: t => 0.52 * Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5),
         lightOptions: {
           distance: 1.1,
           intensity: 1,
@@ -539,3 +441,5 @@ event buffer. Disabling that renderer leaves the particle effect and event proce
 See [Sources and Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) for event payloads and readback semantics,
 [Particle Spatial Acceleration](https://rzmps.rzmay.com/docs/guides/particle-octree.html) for neighbor queries, and
 [Using Tags](https://rzmps.rzmay.com/docs/guides/tags.html) for optional GPU tag mutation helpers.
+
+See [Simulation frames](https://rzmps.rzmay.com/docs/guides/subsystems.html#simulation-frames) for attachment and source-loss behavior.

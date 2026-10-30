@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import * as THREE from 'three';
+import { transformParticleFrame } from './helpers/simulationFrame';
 import type { Tag } from './types/Tag';
 
 export interface ParticleOptions {
@@ -176,6 +177,13 @@ class Particle {
 
   snapshot(): ParticleCachedValues {
     return this.writeValues();
+  }
+
+  /** @internal Changes the reference frame without losing birth or cached permanent values. */
+  transformSimulationFrame(matrix: THREE.Matrix4): void {
+    transformParticleFrame(this, matrix);
+    transformParticleFrame(this._start, matrix);
+    if (this._cachedValues) transformParticleFrame(this._cachedValues, matrix);
   }
 
   kill(): void {

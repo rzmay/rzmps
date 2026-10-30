@@ -420,7 +420,8 @@ export class ParticleSystemGUI {
         folder.domElement.classList.add('psgui-system');
         folder.open();
         const destroyed = this.isSystemDestroyed(system);
-        folder.add(system, 'simulationSpace', ['local', 'world']).name('Simulation Space');
+        folder.add(system, 'simulationSpace', ['local', 'world', 'transform', 'source']).name('Simulation Space');
+        folder.add(system, 'sourceLoss', ['detach', 'kill']).name('Source Loss');
         folder.add(system, 'useSpatialEffects').name('Spatial Effects');
         folder.add(system, 'spatialEffectBoundsFiltering').name('Spatial Bounds Filter');
         const gravityFolder = folder.addFolder('Gravity');

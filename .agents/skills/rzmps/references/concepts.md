@@ -713,7 +713,8 @@ snapshot. Input matrices, vectors, colors and tag arrays are copied. Registered 
 particle IDs retain their format.
 
 Transforms and velocities use the owning system's simulation space. In world simulation supply world transforms; in
-local simulation premultiply world transforms by the system's inverse world matrix. The emitter's local +Y axis is the
+Local or Source simulation premultiply world transforms by `getSimulationToWorldMatrix().invert()`.
+The same conversion applies to Transform mode using its selected reference frame. The emitter's local +Y axis is the
 outward axis for surface emission. Source transform scale and optional scalar `scale` combine for transform inheritance.
 Updating attributes preserves identity, registration age, distance credit and burst progression.
 
@@ -982,6 +983,11 @@ rigid surfaces update emission frames automatically. Expiry, eviction, clear/res
 handles and dispatch death before releasing contexts. Already emitted children remain alive. See [Surface
 Decals](https://rzmps.rzmay.com/docs/guides/decals.html) and the complete [Acid](https://rzmps.rzmay.com/docs/examples/acid.html) factory for independent randomized bubbling and
 fading smoke.
+
+
+Use [Source simulation space](https://rzmps.rzmay.com/docs/guides/subsystems.html#simulation-frames) when emitted particles should remain attached to their
+origin as it moves, rotates, or scales. Ordinary Local/World subsystem emission samples the origin at birth; Source
+space retains the live source relationship for the child's lifetime.
 
 
 ---
@@ -1855,6 +1861,71 @@ Registered sources and named custom events also drive these same subsystem conte
 to select eligible source tags and `onEvent` for CPU or native GPU context handlers. See
 [Emission Sources and Custom Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) and
 [Acid](https://rzmps.rzmay.com/docs/examples/acid.html).
+
+## Simulation frames
+
+`simulationSpace` selects the reference frame for particle motion:
+
+| Mode | Frame |
+| --- | --- |
+| `'world'` | Identity world matrix. Existing particles stay behind when the system moves. |
+| `'local'` | The particle system's world transform. |
+| `'transform'` | `simulationSpaceTransform`, supplied as an Object3D or world Matrix4; omitted means identity. |
+| `'source'` | Each particle's emitting source transform. On a root system, this behaves like Local. |
+
+Transform mode keeps a live reference. Moving the supplied Object3D, including its ancestors, or editing the supplied
+world Matrix4 moves existing particles with that frame. The emitter still belongs to the particle system: its world
+pose is converted into the selected simulation frame at birth. A source is a per-particle version of this relationship,
+so one shared subsystem can attach particles to many moving sources.
+
+```js
+const pulses = new ParticleSystem({
+  simulationSpace: 'source',
+  sourceLoss: 'kill',
+  // emitters, modules, renderers...
+});
+fireflies.addSubSystem(pulses, {
+  onEvent: ['flash'],
+  inheritLifetime: 0,
+  inheritScale: 0,
+});
+```
+
+Source particles keep their sampled offsets and independent motion while following source translation, rotation, and
+inherited scale. `inheritScale: 0` keeps the attachment frame's scale at one. This avoids a follow module, source maps,
+or storing source identity in application-owned particle attributes. Both registered sources and simulated particles
+work; native GPU sources use slot and generation handles without copying their transforms through the CPU.
+
+`sourceLoss` defaults to `'detach'`: an existing particle stops following the lost source and continues from its last
+resolved pose. Choose `'kill'` for effects that should disappear with their source, such as firefly pulses. Reusing a
+GPU
+slot never reattaches an old particle to its replacement. Delayed births from a lost source are canceled; a death event
+instead emits from its final snapshot and creates unattached particles. Singular reference matrices retain the last
+usable frame for existing attachments. Use nonzero scales for emission.
+
+Source space permits motion relative to the source. To pin a particle to its sampled offset, set the emitter's
+`radialSpeed: 0` and leave its initial velocity and inherited velocity at zero; movement modules can also move it away
+from that offset. The emitter's default radial speed is 1, including in Source space.
+
+An explicitly configured child space survives parenting and parent space changes. A child with no explicit space
+inherits its parent's mode, including its Transform reference when no child reference is supplied. For example, a
+World parent gives an unspecified child World space, while an explicitly configured Source child stays in Source space.
+Assigning `child.simulationSpace` also makes that child's choice explicit. This replaces the previous forced matching
+of parent and child modes; emission converts between their frames when they differ. Changing the mode
+or replacing `simulationSpaceTransform` preserves the world pose of existing particles; moving the referenced transform
+moves the effect. GPU conversion takes place at the next simulation step.
+
+Modules, particle positions, spatial queries, collisions, renderer inputs, and readback use a shared resolved coordinate
+space: World uses world coordinates, Transform uses the supplied frame, and Local/Source use the system's coordinates.
+Source offsets and motion are transformed into that common space before module updates. Consequently neighbor queries
+can compare particles emitted by different sources, and scene forces act in the common frame. Use
+`simulationToWorld`, `worldToSimulation`, and `getSimulationToWorldMatrix` for application conversions;
+`resolveSimulationFrame(particle)` also includes a CPU particle's attachment frame. Three.js `localToWorld` and
+`worldToLocal` continue to describe the Object3D itself. Particle orientation and scale use TRS decomposition;
+compositions that introduce shear have the same approximation as Three.js Object3D transforms.
+
+See [Fireflies](https://rzmps.rzmay.com/docs/examples/fireflies.html) for native Source attachments and
+[Emission Sources and Custom Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) for registered origins and payload handlers.
 
 
 ---

@@ -278,6 +278,18 @@ simulationSpeed: number;
 
 ***
 
+<a id="sourceloss"></a>
+
+### sourceLoss
+
+```ts
+sourceLoss: "detach" | "kill" = 'detach';
+```
+
+Behavior when an attached source dies or its slot is reused. Defaults to detach.
+
+***
+
 <a id="spatialeffectboundsfiltering"></a>
 
 ### spatialEffectBoundsFiltering
@@ -986,7 +998,7 @@ Active renderer captured by the context object during rendering.
 get simulationSpace(): SimulationSpace;
 ```
 
-Coordinate space of particle state; assigning a new space converts particles and propagates to subsystems.
+Selects the particle reference frame. Explicit child modes are preserved when parenting.
 
 ##### Returns
 
@@ -1002,7 +1014,45 @@ set simulationSpace(value): void;
 
 ###### value
 
-[`SimulationSpace`](../enumerations/SimulationSpace.md)
+  \| `"source"`
+  \| `"transform"`
+  \| `"local"`
+  \| [`SimulationSpace`](../enumerations/SimulationSpace.md)
+  \| `"world"`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="simulationspacetransform"></a>
+
+### simulationSpaceTransform
+
+#### Get Signature
+
+```ts
+get simulationSpaceTransform(): Matrix4 | Object3D<Object3DEventMap> | null;
+```
+
+Live Object3D or caller-managed world matrix for Transform mode; null uses identity.
+
+##### Returns
+
+`Matrix4` \| `Object3D`\<`Object3DEventMap`\> \| `null`
+
+#### Set Signature
+
+```ts
+set simulationSpaceTransform(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`Matrix4` \| `Object3D`\<`Object3DEventMap`\> \| `null`
 
 ##### Returns
 
@@ -1407,6 +1457,50 @@ Values are keyed by simulation slot generation and never read back to CPU.
 
 ***
 
+<a id="getsimulationtoworldmatrix"></a>
+
+### getSimulationToWorldMatrix()
+
+```ts
+getSimulationToWorldMatrix(target?): Matrix4;
+```
+
+Resolves the common frame used by modules, spatial queries, renderers, and readback.
+
+#### Parameters
+
+##### target?
+
+`Matrix4` = `...`
+
+#### Returns
+
+`Matrix4`
+
+***
+
+<a id="getsimulationworldquaternion"></a>
+
+### getSimulationWorldQuaternion()
+
+```ts
+getSimulationWorldQuaternion(target?): Quaternion;
+```
+
+World orientation of the common simulation frame.
+
+#### Parameters
+
+##### target?
+
+`Quaternion` = `...`
+
+#### Returns
+
+`Quaternion`
+
+***
+
 <a id="notifycollision"></a>
 
 ### notifyCollision()
@@ -1741,6 +1835,32 @@ Stop, clear all CPU/GPU state and timing, then begin a fresh run.
 
 ***
 
+<a id="resolvesimulationframe"></a>
+
+### resolveSimulationFrame()
+
+```ts
+resolveSimulationFrame(particle?, target?): Matrix4;
+```
+
+Resolves an attached particle's source frame in world coordinates.
+
+#### Parameters
+
+##### particle?
+
+[`Particle`](Particle.md)
+
+##### target?
+
+`Matrix4` = `...`
+
+#### Returns
+
+`Matrix4`
+
+***
+
 <a id="selectivereadback"></a>
 
 ### selectiveReadback()
@@ -1767,6 +1887,28 @@ readonly [`GPUParticleReadbackField`](../type-aliases/GPUParticleReadbackField.m
 #### Returns
 
 `Promise`\<[`GPUSelectiveReadbackResult`](../interfaces/GPUSelectiveReadbackResult.md)[]\>
+
+***
+
+<a id="simulationtoworld"></a>
+
+### simulationToWorld()
+
+```ts
+simulationToWorld(position): Vector3;
+```
+
+Converts a position from the system's common simulation frame to world coordinates.
+
+#### Parameters
+
+##### position
+
+`Vector3`
+
+#### Returns
+
+`Vector3`
 
 ***
 
@@ -1895,3 +2037,25 @@ Updates CPU attributes only; repeated updates coalesce at the next frame.
 #### Returns
 
 `void`
+
+***
+
+<a id="worldtosimulation"></a>
+
+### worldToSimulation()
+
+```ts
+worldToSimulation(position): Vector3;
+```
+
+Converts a world position to the system's common simulation frame.
+
+#### Parameters
+
+##### position
+
+`Vector3`
+
+#### Returns
+
+`Vector3`

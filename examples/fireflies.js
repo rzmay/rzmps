@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { If, float, uint, vec3, vec4 } from 'three/tsl';
+import { If, float, vec3, vec4 } from 'three/tsl';
 import {
+  ColorOverLifetime,
   Emitter,
   EmissionShape,
   LightRenderer,
@@ -147,76 +148,30 @@ export default async function createFireflies() {
   });
   fireflies.name = 'Fireflies';
 
-  // CPU references and GPU slot/generation pairs keep each glow on its living source during the pulse.
-  const cpuSources = new Map();
-  const cpuSourceSlots = new WeakMap();
-  let nextSourceSlot = 0;
-  // #region docs:modules:2
-  class FollowGlow extends Module {
-    constructor() {
-      super(
-        particle => {
-          const parent = cpuSources.get(particle.mass);
-          if (!parent?.alive) {
-            particle.kill();
-            return;
-          }
-
-          particle.position.copy(parent.position);
-          particle.velocity.set(0, 0, 0);
-          particle.alpha = 0.65 * Math.pow(Math.max(0, Math.sin(Math.PI * particle.time)), 1.5);
-        },
-        {
-          modifyGPU(particle) {
-            // Glow mass stores the source slot; distortionStrength stores its generation.
-            // Checking both prevents a surviving glow from following a replacement insect in a reused slot.
-            const parent = fireflies.gpuParticleBuffers.storage.createParticle(uint(particle.mass));
-            const sourceAlive = parent.alive.notEqual(uint(0));
-            const sameGeneration = parent.generation.equal(uint(particle.distortionStrength));
-
-            If(sourceAlive.and(sameGeneration), () => {
-              particle.position.assign(parent.position);
-              particle.velocity.assign(vec3(0));
-              // Keep opacity in simulation state so LightRenderer readback sees the same pulse envelope.
-              particle.alpha.assign(particle.time.mul(Math.PI).sin().max(0).pow(1.5).mul(0.65));
-            }).Else(() => {
-              particle.kill();
-            });
-          },
-        },
-      );
-    }
-
-    // prepare runs once per step; preserve base preparation before pruning dead CPU references.
-    prepare(system, dt) {
-      super.prepare(system, dt);
-      for (const [slot, parent] of cpuSources) {
-        if (!parent.alive) cpuSources.delete(slot);
-      }
-    }
-  }
-  // #endregion docs:modules:2
-
+  // Source space keeps each pulse attached without application-owned source maps or update callbacks.
+  const pulse = t => Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5);
   const glow = new ParticleSystem({
     duration: 0.1,
+    simulationSpace: 'source',
+    sourceLoss: 'kill',
     gravityModifier: 0,
     maxParticles: 128,
     // #region docs:emitters:2
     emitters: new Emitter({
       source: EmissionShape.Box(0.01, 0.01, 0.01),
+      radialSpeed: 0, // A pulse stays at its sampled source offset; it has no motion of its own.
       bursts: { time: 0, count: 1 },
       initialValues: {
         lifetime: pulseDuration,
         scale: 0.38,
         color: '#d9ff65',
-        alpha: 0,
-        mass: 1, // Event context multiplies this value by the source's reference slot.
+        alpha: 0.65,
       },
     }),
     // #endregion docs:emitters:2
     // #region docs:modules:2
     modules: [
-      new FollowGlow(),
+      new ColorOverLifetime({ alpha: pulse }),
       new ScaleOverLifetime({ scale: t => 0.7 + 0.3 * Math.sin(Math.PI * t) }),
     ],
     // #endregion docs:modules:2
@@ -229,13 +184,14 @@ export default async function createFireflies() {
         },
       }),
       new LightRenderer({
-        count: 32,
-        ratio: 1,
+        count: 16,
+        ratio: 0.25,
         groupingRadiusRatio: 0,
-        alphaAffectsIntensity: true,
-        brightness: [0.2, 0.4],
+        // Light readback uses stored state; evaluate the same pulse curve explicitly for light intensity.
+        alphaAffectsIntensity: false,
+        brightness: t => 0.52 * Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5),
         lightOptions: {
-          distance: 25,
+          distance: 1.1,
           intensity: 1,
           decay: 2,
         },
@@ -251,30 +207,20 @@ export default async function createFireflies() {
     inheritLifetime: 0,
     onEvent: {
       // CPU payloads are unknown to the library; the application narrows its own schema.
-      flash: (data, parent) => {
+      flash: data => {
         if (typeof data !== 'object' || data === null || !('strength' in data)
           || typeof data.strength !== 'number') {
           return;
         }
-        if (!cpuSourceSlots.has(parent)) {
-          cpuSourceSlots.set(parent, nextSourceSlot++);
-        }
-        const slot = cpuSourceSlots.get(parent);
-        cpuSources.set(slot, parent);
-        return { scale: data.strength, mass: slot };
+        return { scale: data.strength };
       },
       gpu: {
         // Resolve the native event snapshot into birth values; no CPU event readback is needed.
-        flash: (data, parent) => ({
-          scale: data[0].x,
-          mass: float(parent.index),
-          distortionStrength: float(parent.generation),
-        }),
+        flash: data => ({ scale: data[0].x }),
       },
     },
   });
 
-  fireflies.addEventListener('destroyed', () => cpuSources.clear());
   // #endregion docs:system:1
   return fireflies;
 }

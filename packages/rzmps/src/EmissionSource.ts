@@ -67,10 +67,16 @@ export default class EmissionSource implements SubSystemSource {
     if (data.distortionStrength !== undefined) this.distortionStrength = data.distortionStrength;
     if (data.scale !== undefined) this.scalarScale = data.scale;
 
-    const q = new THREE.Quaternion();
-    this.transform.decompose(this.position, q, this.scale);
-    const e = new THREE.Euler().setFromQuaternion(q);
-    this.rotation.set(e.x, e.y, e.z);
+    this.position.setFromMatrixPosition(this.transform);
+    if (Math.abs(this.transform.determinant()) > 1e-10) {
+      const q = new THREE.Quaternion();
+      this.transform.decompose(this.position, q, this.scale);
+      const e = new THREE.Euler().setFromQuaternion(q);
+      this.rotation.set(e.x, e.y, e.z);
+    } else {
+      // Matrix4.decompose retains the destination scale for singular matrices. Preserve actual zero axes instead.
+      this.scale.setFromMatrixScale(this.transform);
+    }
     this.scale.multiplyScalar(this.scalarScale);
   }
 }

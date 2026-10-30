@@ -35,7 +35,8 @@ snapshot. Input matrices, vectors, colors and tag arrays are copied. Registered 
 particle IDs retain their format.
 
 Transforms and velocities use the owning system's simulation space. In world simulation supply world transforms; in
-local simulation premultiply world transforms by the system's inverse world matrix. The emitter's local +Y axis is the
+Local or Source simulation premultiply world transforms by `getSimulationToWorldMatrix().invert()`.
+The same conversion applies to Transform mode using its selected reference frame. The emitter's local +Y axis is the
 outward axis for surface emission. Source transform scale and optional scalar `scale` combine for transform inheritance.
 Updating attributes preserves identity, registration age, distance credit and burst progression.
 
@@ -304,3 +305,8 @@ rigid surfaces update emission frames automatically. Expiry, eviction, clear/res
 handles and dispatch death before releasing contexts. Already emitted children remain alive. See [Surface
 Decals](./decals.md) and the complete [Acid](../examples/acid.md) factory for independent randomized bubbling and
 fading smoke.
+
+
+Use [Source simulation space](./subsystems.md#simulation-frames) when emitted particles should remain attached to their
+origin as it moves, rotates, or scales. Ordinary Local/World subsystem emission samples the origin at birth; Source
+space retains the live source relationship for the child's lifetime.

@@ -406,13 +406,13 @@ class SpatialEffect extends THREE.Object3D {
     this._gpuLocalToWorldNode.value.copy(this.matrixWorld);
     this._gpuLocalToSimulationNode.value.copy(this.matrixWorld);
     const effectRotation = this.getWorldQuaternion(new THREE.Quaternion());
-    if (system.simulationSpace === SimulationSpace.Local) {
+    if (system.simulationSpace !== SimulationSpace.World) {
       system.updateWorldMatrix(true, false);
-      this._gpuSimulationToWorldNode.value.copy(system.matrixWorld);
+      this._gpuSimulationToWorldNode.value.copy(system.getSimulationToWorldMatrix());
       this._gpuLocalToSimulationNode.value.premultiply(
-        new THREE.Matrix4().copy(system.matrixWorld).invert(),
+        new THREE.Matrix4().copy(system.getSimulationToWorldMatrix()).invert(),
       );
-      effectRotation.premultiply(system.getWorldQuaternion(new THREE.Quaternion()).invert());
+      effectRotation.premultiply(system.getSimulationWorldQuaternion(new THREE.Quaternion()).invert());
     } else {
       this._gpuSimulationToWorldNode.value.identity();
     }
@@ -481,9 +481,9 @@ class SpatialEffect extends THREE.Object3D {
   ): void {
     this.updateWorldMatrix(true, false);
     const simulationToWorld = new THREE.Matrix4();
-    if (system.simulationSpace === SimulationSpace.Local) {
+    if (system.simulationSpace !== SimulationSpace.World) {
       system.updateWorldMatrix(true, false);
-      simulationToWorld.copy(system.matrixWorld);
+      simulationToWorld.copy(system.getSimulationToWorldMatrix());
     }
     const matrix = this.matrixWorld.clone().invert().multiply(simulationToWorld);
     const elements = matrix.elements;

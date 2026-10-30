@@ -1387,7 +1387,7 @@ function getWorldToSystemRotationMatrix(system: ParticleSystem): THREE.Matrix4 {
 
   if (system.simulationSpace !== 'world') {
     system.updateWorldMatrix(true, false);
-    matrix.extractRotation(system.matrixWorld).invert();
+    matrix.extractRotation(system.getSimulationToWorldMatrix()).invert();
   }
 
   return matrix;
