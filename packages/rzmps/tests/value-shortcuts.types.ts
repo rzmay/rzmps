@@ -1,6 +1,8 @@
 import { Color, Vector3 } from 'three';
 import { vec3 } from 'three/tsl';
-import { Emitter, ColorBySpeed, ScaleByDepth, TransformByNoise, DecalRenderer } from '../build/index.mjs';
+import {
+  Module, ParticleSystem, Emitter, ColorBySpeed, ScaleByDepth, TransformByNoise, DecalRenderer,
+} from '../build/index.mjs';
 import { RotationOverLifetime, RotationBySize, RotationBySpeed, RotationByDepth } from '../build/index.mjs';
 import { MeshBasicMaterial } from 'three';
 import type {
@@ -53,3 +55,31 @@ new RotationOverLifetime({ angle: 0.5, angularVelocity: new Set([-2, 2]), angula
 new RotationBySize({ angle: [0, 1], angularVelocity: 2, angularAcceleration: () => 0.5 });
 new RotationBySpeed({ angle: () => 1, angularVelocity: [0, 2], angularAcceleration: 0 });
 new RotationByDepth({ angle: 1, angularVelocity: () => 2, angularAcceleration: [0, 1] });
+
+new Module((particle, deltaTime, context) => {
+  particle.alpha = context.events.length ? 1 : 0;
+  context.system.getSimulationToWorldMatrix();
+  context.octree?.particlesInRadius(particle.position, deltaTime);
+}, {
+  prepare(context) {
+    context.system.updateBoundingBox();
+  },
+  condition: (_particle, _dt, context) => context.events.length > 0,
+  modifyGPU(particle, _dt, context) {
+    context.spatialGrid?.forEachParticleInRadius(particle.position, particle.mass, () => {});
+    context.events.forEach('pulse', event => { particle.mass.assign(event.data[0].x); });
+  },
+});
+
+// @ts-expect-error The major-release API has one callback signature and no contextual constructor variant.
+new Module({ modify() {} });
+
+const moduleWithContext = new Module(() => {});
+// @ts-expect-error prepare receives an execution context, not a system and delta arguments.
+moduleWithContext.prepare(new ParticleSystem(), 0.1);
+
+new Module(() => {}, { eventScope: ['local', 'parent', 'child'] as const });
+new Emitter({ eventScope: 'parent' });
+new ParticleSystem().addSubSystem(new ParticleSystem(), { eventScope: ['local', 'parent'] });
+// @ts-expect-error Cumulative scope aliases are replaced by explicit origin arrays.
+new Module(() => {}, { eventScope: 'both' });

@@ -496,14 +496,14 @@ get root(): GPUParticleContext;
 ### addTag()
 
 ```ts
-addTag(_tag): void;
+addTag(tag): void;
 ```
 
 Builds a tag mutation inside a system's GPU update callback.
 
 #### Parameters
 
-##### \_tag
+##### tag
 
 `string`
 
@@ -572,14 +572,14 @@ Marks the particle dead and advances its age past its lifetime using finite GPU 
 ### removeTag()
 
 ```ts
-removeTag(_tag): void;
+removeTag(tag): void;
 ```
 
 Builds a tag mutation inside a system's GPU update callback.
 
 #### Parameters
 
-##### \_tag
+##### tag
 
 `string`
 

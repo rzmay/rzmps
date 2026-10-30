@@ -8,7 +8,9 @@ import { root, discoverExamples } from '../../scripts/docs/examples.mjs';
 import { previewDirectory, validatePreviews } from '../../scripts/docs/preview-manifest.mjs';
 
 const run = promisify(execFile);
-test('docs checks repair missing and stale real previews, then generation reuses current captures', { timeout: 300000 }, async () => {
+test('docs checks repair missing and stale real previews, then generation reuses current captures', {
+  timeout: 300000,
+}, async () => {
   const generate = () => run('npm', ['run', 'docs:generate'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
   // A clean checkout has no previews until the first generation.
   await generate();
@@ -39,7 +41,9 @@ test('docs checks repair missing and stale real previews, then generation reuses
     assert.equal((reused.stdout.match(/preview is current/g) || []).length, discoverExamples().length);
   } finally {
     // Restore the local preview cache after the repair checks.
-    for (const [index, id] of affected.entries()) await fs.writeFile(path.join(previewDirectory, id + '.png'), originals[index]);
+    for (const [index, id] of affected.entries()) {
+      await fs.writeFile(path.join(previewDirectory, id + '.png'), originals[index]);
+    }
     await fs.writeFile(manifestFile, manifest);
   }
 });

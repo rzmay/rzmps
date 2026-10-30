@@ -60,6 +60,28 @@ generation: Node<"uint">;
 
 ***
 
+<a id="hassource"></a>
+
+### hasSource
+
+```ts
+hasSource: Node<"bool">;
+```
+
+***
+
+<a id="origin"></a>
+
+### origin
+
+```ts
+origin: Node<"uint">;
+```
+
+Owning system's numeric Object3D identity; zero in legacy standalone buffers.
+
+***
+
 <a id="particle"></a>
 
 ### particle

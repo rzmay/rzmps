@@ -77,6 +77,7 @@
 - [BoidAggregate](type-aliases/BoidAggregate.md)
 - [BoidParticleAffectorAggregate](type-aliases/BoidParticleAffectorAggregate.md)
 - [DecalMaterial](type-aliases/DecalMaterial.md)
+- [EmitterSources](type-aliases/EmitterSources.md)
 - [GPUParticleScalarNodes](type-aliases/GPUParticleScalarNodes.md)
 - [GPUParticleVectorNodes](type-aliases/GPUParticleVectorNodes.md)
 - [GPUSpatialParameterType](type-aliases/GPUSpatialParameterType.md)

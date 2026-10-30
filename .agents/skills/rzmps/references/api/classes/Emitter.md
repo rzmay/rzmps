@@ -10,6 +10,10 @@
 
 Samples particle births from a shape using time, distance, and burst emission.
 
+## Extends
+
+- [`EventReceiver`](EventReceiver.md)
+
 ## Constructors
 
 <a id="constructor"></a>
@@ -32,6 +36,10 @@ Creates emission state; bursts default the continuous rate to zero.
 
 `Emitter`
 
+#### Overrides
+
+[`EventReceiver`](EventReceiver.md).[`constructor`](EventReceiver.md#constructor)
+
 ## Properties
 
 <a id="alignment"></a>
@@ -51,6 +59,74 @@ alignment: DynamicValue<number>;
 ```ts
 bursts: SpawnBurst[];
 ```
+
+***
+
+<a id="emission"></a>
+
+### emission
+
+```ts
+emission: Partial<SubSystemOptions>;
+```
+
+Emitter-owned triggers and source inheritance, overlaid by attachment overrides at execution.
+
+***
+
+<a id="events"></a>
+
+### events
+
+```ts
+events: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`events`](EventReceiver.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`eventScope`](EventReceiver.md#eventscope)
+
+***
+
+<a id="executioncontext"></a>
+
+### executionContext?
+
+```ts
+optional executionContext?: EventExecutionContext;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`executionContext`](EventReceiver.md#executioncontext)
+
+***
+
+<a id="gpuexecutioncontext"></a>
+
+### gpuExecutionContext
+
+```ts
+gpuExecutionContext: GPUEventExecutionContext;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`gpuExecutionContext`](EventReceiver.md#gpuexecutioncontext)
 
 ***
 
@@ -104,6 +180,16 @@ source: EmissionShape;
 
 ***
 
+<a id="sources"></a>
+
+### sources?
+
+```ts
+optional sources?: EmitterSources;
+```
+
+***
+
 <a id="tags"></a>
 
 ### tags?
@@ -122,7 +208,175 @@ optional tags?: string[];
 tagSelection: TagSelectionMethod = TagSelectionMethod.All;
 ```
 
+***
+
+<a id="capacity"></a>
+
+### CAPACITY
+
+```ts
+readonly static CAPACITY: 1024 = 1024;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`CAPACITY`](EventReceiver.md#capacity)
+
 ## Accessors
+
+<a id="emitcontinuous"></a>
+
+### emitContinuous
+
+#### Get Signature
+
+```ts
+get emitContinuous(): boolean | undefined;
+```
+
+##### Returns
+
+`boolean` \| `undefined`
+
+#### Set Signature
+
+```ts
+set emitContinuous(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="emitoncollision"></a>
+
+### emitOnCollision
+
+#### Get Signature
+
+```ts
+get emitOnCollision(): boolean | undefined;
+```
+
+##### Returns
+
+`boolean` \| `undefined`
+
+#### Set Signature
+
+```ts
+set emitOnCollision(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="emitondeath"></a>
+
+### emitOnDeath
+
+#### Get Signature
+
+```ts
+get emitOnDeath(): boolean | undefined;
+```
+
+##### Returns
+
+`boolean` \| `undefined`
+
+#### Set Signature
+
+```ts
+set emitOnDeath(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="emitonspawn"></a>
+
+### emitOnSpawn
+
+#### Get Signature
+
+```ts
+get emitOnSpawn(): boolean | undefined;
+```
+
+##### Returns
+
+`boolean` \| `undefined`
+
+#### Set Signature
+
+```ts
+set emitOnSpawn(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="gpunative"></a>
+
+### gpuNative
+
+#### Set Signature
+
+```ts
+set gpuNative(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`LightRenderer`](LightRenderer.md).[`gpuNative`](LightRenderer.md#gpunative)
+
+***
 
 <a id="gpuparameteruploadcount"></a>
 
@@ -137,6 +391,390 @@ get gpuParameterUploadCount(): number;
 ##### Returns
 
 `number`
+
+***
+
+<a id="impulseaffectsalignment"></a>
+
+### impulseAffectsAlignment
+
+#### Get Signature
+
+```ts
+get impulseAffectsAlignment(): boolean | undefined;
+```
+
+##### Returns
+
+`boolean` \| `undefined`
+
+#### Set Signature
+
+```ts
+set impulseAffectsAlignment(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="impulseaffectslifetime"></a>
+
+### impulseAffectsLifetime
+
+#### Get Signature
+
+```ts
+get impulseAffectsLifetime(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set impulseAffectsLifetime(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="impulseaffectsmass"></a>
+
+### impulseAffectsMass
+
+#### Get Signature
+
+```ts
+get impulseAffectsMass(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set impulseAffectsMass(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="impulseaffectsscale"></a>
+
+### impulseAffectsScale
+
+#### Get Signature
+
+```ts
+get impulseAffectsScale(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set impulseAffectsScale(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="impulseaffectsspeed"></a>
+
+### impulseAffectsSpeed
+
+#### Get Signature
+
+```ts
+get impulseAffectsSpeed(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set impulseAffectsSpeed(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="impulsethreshold"></a>
+
+### impulseThreshold
+
+#### Get Signature
+
+```ts
+get impulseThreshold(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set impulseThreshold(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="inheritalpha"></a>
+
+### inheritAlpha
+
+#### Get Signature
+
+```ts
+get inheritAlpha(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set inheritAlpha(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="inheritcolor"></a>
+
+### inheritColor
+
+#### Get Signature
+
+```ts
+get inheritColor(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set inheritColor(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="inheritlifetime"></a>
+
+### inheritLifetime
+
+#### Get Signature
+
+```ts
+get inheritLifetime(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set inheritLifetime(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="inheritmass"></a>
+
+### inheritMass
+
+#### Get Signature
+
+```ts
+get inheritMass(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set inheritMass(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="inheritscale"></a>
+
+### inheritScale
+
+#### Get Signature
+
+```ts
+get inheritScale(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set inheritScale(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="inheritvelocity"></a>
+
+### inheritVelocity
+
+#### Get Signature
+
+```ts
+get inheritVelocity(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set inheritVelocity(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
 
 ***
 
@@ -155,6 +793,128 @@ set needsUpdate(value): void;
 ###### value
 
 `boolean`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="onevent"></a>
+
+### onEvent
+
+#### Get Signature
+
+```ts
+get onEvent():
+  | EventSubscriptions
+  | undefined;
+```
+
+##### Returns
+
+  \| [`EventSubscriptions`](../type-aliases/EventSubscriptions.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set onEvent(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`EventSubscriptions`](../type-aliases/EventSubscriptions.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="overflowcount"></a>
+
+### overflowCount
+
+#### Get Signature
+
+```ts
+get overflowCount(): number;
+```
+
+Number of CPU events dropped when the pending batch reached capacity.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`overflowCount`](EventReceiver.md#overflowcount)
+
+***
+
+<a id="ratio"></a>
+
+### ratio
+
+#### Get Signature
+
+```ts
+get ratio(): number | undefined;
+```
+
+##### Returns
+
+`number` \| `undefined`
+
+#### Set Signature
+
+```ts
+set ratio(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number` \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="shouldemit"></a>
+
+### shouldEmit
+
+#### Get Signature
+
+```ts
+get shouldEmit(): boolean | ((source) => boolean) | undefined;
+```
+
+##### Returns
+
+`boolean` \| ((`source`) => `boolean`) \| `undefined`
+
+#### Set Signature
+
+```ts
+set shouldEmit(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean` \| ((`source`) => `boolean`) \| `undefined`
 
 ##### Returns
 
@@ -198,6 +958,102 @@ Monotonic GPU configuration version used to invalidate compiled work.
 
 ## Methods
 
+<a id="begin"></a>
+
+### begin()
+
+```ts
+begin(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Snapshots once per actual execution; events raised during execution remain pending.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`begin`](EventReceiver.md#begin)
+
+***
+
+<a id="beginexecution"></a>
+
+### beginExecution()
+
+```ts
+beginExecution(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Creates and retains the context shared by every callback in this execution.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`beginExecution`](EventReceiver.md#beginexecution)
+
+***
+
 <a id="clearcontext"></a>
 
 ### clearContext()
@@ -215,6 +1071,26 @@ clearContext(key): void;
 #### Returns
 
 `void`
+
+***
+
+<a id="dispose"></a>
+
+### dispose()
+
+```ts
+dispose(): void;
+```
+
+Clears batches and unsubscribes when a component is removed or its system is destroyed.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`dispose`](EventReceiver.md#dispose)
 
 ***
 
@@ -339,3 +1215,33 @@ updateGPUQuality(quality): void;
 #### Returns
 
 `void`
+
+***
+
+<a id="visiblesystems"></a>
+
+### visibleSystems()
+
+```ts
+visibleSystems(system?, scope?): ParticleSystem[];
+```
+
+Selects producers without forwarding or traversing beyond immediate relatives.
+
+#### Parameters
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `...`
+
+#### Returns
+
+[`ParticleSystem`](ParticleSystem.md)[]
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`visibleSystems`](EventReceiver.md#visiblesystems)

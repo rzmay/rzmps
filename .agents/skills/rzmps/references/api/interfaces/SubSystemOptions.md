@@ -60,6 +60,28 @@ Starts child emission when a parent particle is born.
 
 ***
 
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+Exclusive event origins; an explicit attachment value overrides the emitter scope.
+
+***
+
 <a id="impulseaffectsalignment"></a>
 
 ### impulseAffectsAlignment

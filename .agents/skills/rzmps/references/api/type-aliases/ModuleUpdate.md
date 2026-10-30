@@ -9,7 +9,7 @@
 # Type Alias: ModuleUpdate
 
 ```ts
-type ModuleUpdate = (particle, deltaTime, particleSystem?, octree?) => void;
+type ModuleUpdate = (particle, deltaTime, context) => void;
 ```
 
 ## Parameters
@@ -22,13 +22,9 @@ type ModuleUpdate = (particle, deltaTime, particleSystem?, octree?) => void;
 
 `number`
 
-### particleSystem?
+### context
 
-[`ParticleSystem`](../classes/ParticleSystem.md)
-
-### octree?
-
-[`ParticleOctree`](../classes/ParticleOctree.md)\<`unknown`\>
+[`ModuleExecutionContext`](../interfaces/ModuleExecutionContext.md)
 
 ## Returns
 

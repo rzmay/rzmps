@@ -9,7 +9,7 @@
 # Type Alias: ModuleCondition
 
 ```ts
-type ModuleCondition = (particle, deltaTime, particleSystem?, octree?) => boolean;
+type ModuleCondition = (particle, deltaTime, context) => boolean;
 ```
 
 ## Parameters
@@ -22,13 +22,9 @@ type ModuleCondition = (particle, deltaTime, particleSystem?, octree?) => boolea
 
 `number`
 
-### particleSystem?
+### context
 
-[`ParticleSystem`](../classes/ParticleSystem.md)
-
-### octree?
-
-[`ParticleOctree`](../classes/ParticleOctree.md)\<`unknown`\>
+[`ModuleExecutionContext`](../interfaces/ModuleExecutionContext.md)
 
 ## Returns
 

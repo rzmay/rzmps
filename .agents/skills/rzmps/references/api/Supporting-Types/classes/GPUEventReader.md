@@ -17,7 +17,7 @@ Shader-side random-access reader used to consume an already populated stream.
 ### Constructor
 
 ```ts
-new GPUEventReader(state): GPUEventReader;
+new GPUEventReader(state, receiverSlot?): GPUEventReader;
 ```
 
 #### Parameters
@@ -25,6 +25,10 @@ new GPUEventReader(state): GPUEventReader;
 ##### state
 
 [`GPUEventBufferState`](../../classes/GPUEventBufferState.md)
+
+##### receiverSlot?
+
+`number`
 
 #### Returns
 

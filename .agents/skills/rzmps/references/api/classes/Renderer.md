@@ -10,6 +10,10 @@
 
 Base renderer that filters particles and applies renderer LOD before delegating to a backend-compatible view.
 
+## Extends
+
+- [`EventReceiver`](EventReceiver.md)
+
 ## Extended by
 
 - [`LightRenderer`](LightRenderer.md)
@@ -41,6 +45,10 @@ Configures particle filtering, artistic children, and LOD compensation.
 
 `Renderer`
 
+#### Overrides
+
+[`EventReceiver`](EventReceiver.md).[`constructor`](EventReceiver.md#constructor)
+
 ## Properties
 
 <a id="children"></a>
@@ -67,6 +75,62 @@ compensation:
 
 ***
 
+<a id="events"></a>
+
+### events
+
+```ts
+events: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`events`](EventReceiver.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`eventScope`](EventReceiver.md#eventscope)
+
+***
+
+<a id="executioncontext"></a>
+
+### executionContext?
+
+```ts
+optional executionContext?: EventExecutionContext;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`executionContext`](EventReceiver.md#executioncontext)
+
+***
+
+<a id="gpuexecutioncontext"></a>
+
+### gpuExecutionContext
+
+```ts
+gpuExecutionContext: GPUEventExecutionContext;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`gpuExecutionContext`](EventReceiver.md#gpuexecutioncontext)
+
+***
+
 <a id="tags"></a>
 
 ### tags?
@@ -75,7 +139,47 @@ compensation:
 optional tags?: string[];
 ```
 
+***
+
+<a id="capacity"></a>
+
+### CAPACITY
+
+```ts
+readonly static CAPACITY: 1024 = 1024;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`CAPACITY`](EventReceiver.md#capacity)
+
 ## Accessors
+
+<a id="gpunative"></a>
+
+### gpuNative
+
+#### Set Signature
+
+```ts
+set gpuNative(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`LightRenderer`](LightRenderer.md).[`gpuNative`](LightRenderer.md#gpunative)
+
+***
 
 <a id="gpuparameteruploadcount"></a>
 
@@ -112,6 +216,28 @@ set needsUpdate(value): void;
 ##### Returns
 
 `void`
+
+***
+
+<a id="overflowcount"></a>
+
+### overflowCount
+
+#### Get Signature
+
+```ts
+get overflowCount(): number;
+```
+
+Number of CPU events dropped when the pending batch reached capacity.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`overflowCount`](EventReceiver.md#overflowcount)
 
 ***
 
@@ -167,6 +293,102 @@ get version(): number;
 
 ## Methods
 
+<a id="begin"></a>
+
+### begin()
+
+```ts
+begin(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Snapshots once per actual execution; events raised during execution remain pending.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`begin`](EventReceiver.md#begin)
+
+***
+
+<a id="beginexecution"></a>
+
+### beginExecution()
+
+```ts
+beginExecution(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Creates and retains the context shared by every callback in this execution.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`beginExecution`](EventReceiver.md#beginexecution)
+
+***
+
 <a id="clear"></a>
 
 ### clear()
@@ -196,6 +418,26 @@ Permanently releases owned rendering resources.
 #### Returns
 
 `void`
+
+***
+
+<a id="dispose"></a>
+
+### dispose()
+
+```ts
+dispose(): void;
+```
+
+Clears batches and unsubscribes when a component is removed or its system is destroyed.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`dispose`](EventReceiver.md#dispose)
 
 ***
 
@@ -319,3 +561,33 @@ Base-class GPU preprocessing; subclasses consume the resulting ordinary render v
 #### Returns
 
 `void`
+
+***
+
+<a id="visiblesystems"></a>
+
+### visibleSystems()
+
+```ts
+visibleSystems(system?, scope?): ParticleSystem[];
+```
+
+Selects producers without forwarding or traversing beyond immediate relatives.
+
+#### Parameters
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `...`
+
+#### Returns
+
+[`ParticleSystem`](ParticleSystem.md)[]
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`visibleSystems`](EventReceiver.md#visiblesystems)

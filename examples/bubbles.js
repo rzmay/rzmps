@@ -175,6 +175,7 @@ createBubbles.author = "rzmay";
 export const metadata = {
   "id": "bubbles",
   "title": "Bubbles",
+  // eslint-disable-next-line max-len -- Documentation discovery requires a single literal description.
   "description": "Refractive sprite transmission with spherical normals and size-driven distortion. Both continuous sounds and collision-triggered bubble pops.",
   "tags": [
     "bubbles"

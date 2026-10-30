@@ -16,7 +16,7 @@ Preset by [rzmay](https://github.com/rzmay).
 The 2.6-second looping rocket system owns continuous smoke and a death-triggered sparkle system. Rocket lifetime two seconds sets the burst timing. Smoke has a separate 4.5-second particle lifetime; sparkles are nonlooping with reduced gravity modifier 0.18, producing a slower downward arc after the explosion.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L54)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L53)
 
 ```js
   const fireworks = new ParticleSystem({
@@ -61,7 +61,7 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L102)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L101)
 
 ```js
   const smoke = new ParticleSystem({
@@ -124,7 +124,7 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
 ```
 
 
-[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L169)
+[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L168)
 
 ```js
   const sparkles = new ParticleSystem({
@@ -200,7 +200,7 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
 Three rockets per second begin in a radius-one sphere with upward velocity 8.5. A discrete five-color Set gives each launch a clear color. Smoke emits at 36 per second per active context with low alpha 0.1. Each death burst creates 100–300 sparkles at radial speed 4.5–12, spreading the inherited rocket color into a broad shell.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L59)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L58)
 
 ```js
     emitters: [
@@ -224,7 +224,7 @@ Three rockets per second begin in a radius-one sphere with upward velocity 8.5. 
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L108)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L107)
 
 ```js
     emitters: [
@@ -245,7 +245,7 @@ Three rockets per second begin in a radius-one sphere with upward velocity 8.5. 
 ```
 
 
-[Source: emitters:3](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L176)
+[Source: emitters:3](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L175)
 
 ```js
     emitters: [
@@ -269,14 +269,14 @@ Three rockets per second begin in a radius-one sphere with upward velocity 8.5. 
 The rocket module list is empty, leaving normal integration to shape flight. Smoke uses lateral noise, velocity limits, growth, rotation, and cubic fading. Sparkles fade linearly over their 0.75–1.35-second lifetimes. Child lifetime inheritance is disabled so event particles survive after the rocket dies.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L79)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L78)
 
 ```js
     modules: [],
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L125)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L124)
 
 ```js
     modules: [
@@ -306,7 +306,7 @@ The rocket module list is empty, leaving normal integration to shape flight. Smo
 ```
 
 
-[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L191)
+[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L190)
 
 ```js
     modules: [
@@ -323,7 +323,7 @@ The rocket module list is empty, leaving normal integration to shape flight. Smo
 Rocket sprites are lit, with launch and death audio selected from two clips and pitch range 0.8–1.2. Smoke uses rough lit alpha sprites. Sparkles use a 5×2 animated atlas at 10 fps with random starting frames, short 0.1-second trails, and up to ten bright lights. The light cap limits a burst’s illumination cost even when hundreds of particles spawn.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L82)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L81)
 
 ```js
     renderers: [
@@ -344,7 +344,7 @@ Rocket sprites are lit, with launch and death audio selected from two clips and 
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L151)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L150)
 
 ```js
     renderers: [
@@ -362,7 +362,7 @@ Rocket sprites are lit, with launch and death audio selected from two clips and 
 ```
 
 
-[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L199)
+[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/fireworks.js#L198)
 
 ```js
     renderers: [

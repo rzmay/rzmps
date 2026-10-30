@@ -154,6 +154,34 @@ Strength of relative-velocity pitch shifting; zero disables the Doppler response
 
 ***
 
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](../../interfaces/EventReceiverOptions.md).[`events`](../../interfaces/EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](../../interfaces/EventReceiverOptions.md).[`eventScope`](../../interfaces/EventReceiverOptions.md#eventscope)
+
+***
+
 <a id="gpuinterpolationrate"></a>
 
 ### gpuInterpolationRate

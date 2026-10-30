@@ -16,7 +16,7 @@ Preset by [rzmay](https://github.com/rzmay).
 The 10-second loop schedules a continuous flame; individual flame particles last only 1.35 seconds. The shorter particle lifetime keeps the flame near its source while the secondary distortion system supplies a separate one-second heat shimmer. Inheritance is disabled for the shimmer’s appearance so its scale and opacity do not collapse with the flame. Flame particles continuously project faint scorch marks onto nearby surfaces; use Checkerboard to see the burn build up on a floor.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L33)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L31)
 
 ```js
   const fire = new ParticleSystem({
@@ -111,7 +111,7 @@ The 10-second loop schedules a continuous flame; individual flame particles last
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L159)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L157)
 
 ```js
   return new ParticleSystem({
@@ -176,7 +176,7 @@ A cone surface spreads the base of the flame. At 90 particles per second and a 1
 Uniform scale values and color strings use the standard input shortcuts.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L37)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L35)
 
 ```js
     emitters: [
@@ -200,7 +200,7 @@ Uniform scale values and color strings use the standard input shortcuts.
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L163)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L161)
 
 ```js
     emitters: [
@@ -225,7 +225,7 @@ Uniform scale values and color strings use the standard input shortcuts.
 Noise strength 2.1 and frequency 1.35 break up the regular rise. The additional upward force bends the motion over time, while the scale multiplier shrinks from 1.3 to 0.2. The alpha curve fades in during the first fifth of life and fades out over the final quarter, hiding sprite births and deaths. The distortion subsystem uses gentler noise and its own grow-and-fade curve.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L57)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L55)
 
 ```js
     modules: [
@@ -259,7 +259,7 @@ Noise strength 2.1 and frequency 1.35 break up the regular rise. The additional 
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L179)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L177)
 
 ```js
     modules: [
@@ -292,7 +292,7 @@ Noise strength 2.1 and frequency 1.35 break up the regular rise. The additional 
 The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one animation across the 1.35-second life. Soft-particle distance 1 blends intersections. Particle lights are limited to 18 with ratio 0.3, avoiding a light per sprite. The secondary sprite transmits the background with distortion strength 0.05 and disables depth writing so the shimmer does not occlude the flame. DecalRenderer disables spawn placement and uses continuousRate 1.5, so each surviving flame particle projects after each two-thirds of a second of particle age. Twenty-four spherical directions find the nearest surface within three world units. The supplied black scorch texture uses a 2.5-unit footprint and shallow 0.06-unit clipping depth. Each mark lives eight seconds, fades in over its first 0.08 seconds, and fades out over its final 3.2 seconds. Peak opacity is just 0.035, so overlapping marks from multiple flame particles gradually darken the surface. Color, scale, and alpha inheritance are disabled so flame tint and lifetime modifiers do not change the burn marks. The factory disposes its scorch template material and texture when destroyed.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L87)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L85)
 
 ```js
     renderers: [
@@ -337,7 +337,7 @@ The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one anim
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L203)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L201)
 
 ```js
     renderers: [

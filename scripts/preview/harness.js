@@ -35,6 +35,7 @@ async function capture(options) {
   try {
     const fixtures = {
       nativeEvents: () => import('../../tests/visual/fixtures/nativeEvents.js'),
+      eventScopes: () => import('../../tests/visual/fixtures/eventScopes.js'),
       gpuKill: () => import('../../tests/visual/fixtures/gpuKill.js'),
       simulationSpaces: () => import('../../tests/visual/fixtures/simulationSpaces.js'),
     };

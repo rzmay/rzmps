@@ -124,8 +124,9 @@ export default async function createAcid() {
     }
 
     // A once-per-step hook for this factory's scheduler; modify/modifyGPU remain empty.
-    prepare(system, dt) {
-      super.prepare(system, dt);
+    prepare(context) {
+      super.prepare(context);
+      const { deltaTime: dt } = context;
       const alive = new Set();
       for (const decal of decals.decals) {
         const source = decal.source;

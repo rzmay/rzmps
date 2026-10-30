@@ -1,10 +1,14 @@
+import type EventReceiver from '../EventReceiver';
 import type { GPUEventData, GPUEventPayload } from '../Events';
 import * as THREE from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
-import type { Node } from 'three/webgpu';
+import type { Node, ComputeNode } from 'three/webgpu';
 import {
   atomicAdd,
   atomicLoad,
+  atomicStore,
+  Fn,
+  instanceIndex,
   float,
   floatBitsToUint,
   If,
@@ -170,6 +174,9 @@ export interface GPUEventNodeRecord {
   generation: Node<'uint'>;
   sequence: Node<'uint'>;
   particle: GPUParticleLike;
+  /** Owning system's numeric Object3D identity; zero in legacy standalone buffers. */
+  origin: Node<'uint'>;
+  hasSource: Node<'bool'>;
   data: GPUEventData;
   collisionPoint: Node<'vec3'>;
   collisionNormal: Node<'vec3'>;
@@ -181,22 +188,31 @@ export class GPUEventReader {
   private readonly counterStorage: AtomicUintStorage;
   private readonly eventFloatStorage: PackedFloatStorage;
 
-  constructor(private readonly state: GPUEventBufferState) {
-    this.counterStorage = storage(
-      state.counterAttribute, 'uint', GPU_EVENT_COUNTER_COUNT,
-    ).toAtomic() as AtomicUintStorage;
-    this.eventFloatStorage = storage(
-      state.floatAttribute, 'vec4', state.capacity * GPU_EVENT_FLOAT_SLOT_COUNT,
-    ) as PackedFloatStorage;
+  constructor(private readonly state: GPUEventBufferState, private readonly receiverSlot?: number) {
+    this.counterStorage = state.counterStorage;
+    this.eventFloatStorage = state.eventFloatStorage;
+  }
+
+  /** @internal Stable graph identity for a shared receiver range. */
+  get versionKey(): string { return `${this.state.version}:${this.receiverSlot ?? 'frame'}`; }
+
+  private start(): Node<'uint'> {
+    return this.state.journal ? atomicLoad(this.counterStorage.element(uint(
+      this.receiverSlot === undefined ? 2 : 4 + this.receiverSlot * 4))) : uint(0);
   }
 
   count(): Node<'uint'> {
-    const count = atomicLoad(this.counterStorage.element(uint(EventCounter.Count)));
+    const end = atomicLoad(this.counterStorage.element(uint(this.receiverSlot === undefined
+      ? EventCounter.Count : 5 + this.receiverSlot * 4)));
+    const count = end.sub(this.start());
     return count.lessThan(uint(this.state.capacity)).select(count, uint(this.state.capacity)) as Node<'uint'>;
   }
 
   load(index: Node<'uint'>): GPUEventNodeRecord {
-    const base = index.mul(GPU_EVENT_FLOAT_SLOT_COUNT);
+    const ordinal = this.start().add(index);
+    const physical = this.state.journal ? ordinal.mod(this.state.capacity) : index;
+    const base = physical.add(this.receiverSlot === undefined ? 0 : this.state.capacity)
+      .mul(GPU_EVENT_FLOAT_SLOT_COUNT);
     const record = this.eventFloatStorage.element(base.add(EventFloatSlot.Metadata));
     const positionSpeed = this.eventFloatStorage.element(base.add(EventFloatSlot.PositionSpeed));
     const orbitCenterAlpha = this.eventFloatStorage.element(base.add(EventFloatSlot.OrbitCenterAlpha));
@@ -207,6 +223,8 @@ export class GPUEventReader {
     const scalarVelocityRealtime = this.eventFloatStorage.element(base.add(EventFloatSlot.ScalarVelocityRealtime));
 
     return {
+      origin: bitcastFloatToUint(this.eventFloatStorage.element(base.add(EventFloatSlot.Color)).w),
+      hasSource: bitcastFloatToUint(record.y).notEqual(uint(0xffffffff)),
       type: bitcastFloatToUint(record.x),
       slot: bitcastFloatToUint(record.y),
       generation: bitcastFloatToUint(record.z),
@@ -269,15 +287,11 @@ export class GPUEventWriter {
   private readonly counterStorage: AtomicUintStorage;
   private readonly eventFloatStorage: PackedFloatStorage;
 
-  constructor(state: GPUEventBufferState) {
+  constructor(private readonly state: GPUEventBufferState, private readonly origin = 0) {
     this.version = state.version;
     this.capacity = state.capacity;
-    this.counterStorage = storage(
-      state.counterAttribute, 'uint', GPU_EVENT_COUNTER_COUNT,
-    ).toAtomic() as AtomicUintStorage;
-    this.eventFloatStorage = storage(
-      state.floatAttribute, 'vec4', state.capacity * GPU_EVENT_FLOAT_SLOT_COUNT,
-    ) as PackedFloatStorage;
+    this.counterStorage = state.counterStorage;
+    this.eventFloatStorage = state.eventFloatStorage;
   }
 
   emitDeath(particle: GPUParticleLike): void {
@@ -309,19 +323,26 @@ export class GPUEventWriter {
       uint(1),
     ).toVar('particleEventIndex');
 
-    If(eventIndex.lessThan(uint(this.capacity)), () => {
-      const base = eventIndex.mul(GPU_EVENT_FLOAT_SLOT_COUNT);
+    const write = () => {
+      const physical = this.state.journal ? eventIndex.mod(this.capacity) : eventIndex;
+      const base = physical.mul(GPU_EVENT_FLOAT_SLOT_COUNT);
       this.eventFloatStorage.element(base.add(EventFloatSlot.Metadata)).assign(vec4(
         bitcastUintToFloat(uint(type)),
         bitcastUintToFloat(particle.index),
         bitcastUintToFloat(particle.generation),
         bitcastUintToFloat(particle.tagMask),
       ));
-      this.writeParticleSnapshot(eventIndex, particle);
+      this.writeParticleSnapshot(physical, particle);
       for (let i = 0; i < 3; i += 1) {
         this.eventFloatStorage.element(base.add(EventFloatSlot.Payload0 + i)).assign(data[i] ?? vec4(0));
       }
-    }).Else(() => {
+    };
+    if (this.state.journal) {
+      write();
+      If(eventIndex.sub(atomicLoad(this.counterStorage.element(uint(2)))).greaterThanEqual(this.capacity), () => {
+        atomicAdd(this.counterStorage.element(uint(EventCounter.OverflowCount)), uint(1));
+      });
+    } else If(eventIndex.lessThan(uint(this.capacity)), write).Else(() => {
       atomicAdd(this.counterStorage.element(uint(EventCounter.OverflowCount)), uint(1));
     });
   }
@@ -357,7 +378,9 @@ export class GPUEventWriter {
     this.eventFloatStorage.element(base.add(EventFloatSlot.ScalarAcceleration)).assign(
       vec4(particle.scalarAcceleration, 0),
     );
-    this.eventFloatStorage.element(base.add(EventFloatSlot.Color)).assign(vec4(particle.color, 0));
+    this.eventFloatStorage.element(base.add(EventFloatSlot.Color)).assign(
+      vec4(particle.color, bitcastUintToFloat(uint(this.origin))),
+    );
   }
 }
 
@@ -368,40 +391,144 @@ export class GPUEventBufferState {
   counterAttribute: StorageBufferAttribute;
   floatAttribute: StorageBufferAttribute;
 
-  private readonly counterData = new Uint32Array(GPU_EVENT_COUNTER_COUNT);
+  private readonly counterData: Uint32Array;
+  readonly counterLength: number;
+  readonly floatLength: number;
+  /** @internal Readers and writers share node identities as well as GPU allocations. */
+  readonly counterStorage: AtomicUintStorage;
+  readonly eventFloatStorage: PackedFloatStorage;
+  private frameReset?: ComputeNode;
+  private snapshotCopy?: ComputeNode;
+  private readonly boundaries = new Map<number, ComputeNode>();
+  private readonly receiverSlots = new WeakMap<EventReceiver, { slot: number; revision: number }>();
+  private readonly receiverDisposers = new Map<number, () => void>();
+  private readonly baselines = new Map<number, ComputeNode>();
+  private readonly freeReceiverSlots: number[] = [];
+  private nextReceiverSlot = 0;
+  private framePending = false;
+  private dirtySnapshot = true;
   private readonly floatData: Float32Array;
   private static nextVersion = 1;
 
-  constructor(capacity: number) {
+  constructor(capacity: number, readonly journal = false) {
     this.capacity = nextPowerOfTwo(capacity);
+    this.counterLength = journal ? 4 + 1024 * 4 : GPU_EVENT_COUNTER_COUNT;
+    this.floatLength = this.capacity * GPU_EVENT_FLOAT_SLOT_COUNT * (journal ? 2 : 1);
+    this.counterData = new Uint32Array(this.counterLength);
     this.version = GPUEventBufferState.nextVersion;
     GPUEventBufferState.nextVersion += 1;
-    this.floatData = new Float32Array(this.capacity * GPU_EVENT_FLOAT_SLOT_COUNT * 4);
+    this.floatData = new Float32Array(this.floatLength * 4);
     this.counterAttribute = new StorageBufferAttribute(this.counterData, 1);
     this.floatAttribute = new StorageBufferAttribute(this.floatData, 4);
+    this.counterStorage = storage(this.counterAttribute, 'uint', this.counterLength).toAtomic() as AtomicUintStorage;
+    this.eventFloatStorage = storage(this.floatAttribute, 'vec4', this.floatLength) as PackedFloatStorage;
   }
 
   initialize(renderer: GPUStorageBufferRenderer): void {
     initializeStorageAttribute(renderer, this.counterAttribute);
     initializeStorageAttribute(renderer, this.floatAttribute);
+    if (this.journal && this.framePending) {
+      const counters = this.counterStorage;
+      this.frameReset ??= Fn(() => {
+        atomicStore(counters.element(uint(2)), atomicLoad(counters.element(uint(0))));
+        atomicStore(counters.element(uint(1)), uint(0));
+      })().compute(1);
+      (renderer as GPUStorageBufferRenderer & { compute(node: ComputeNode): void }).compute(this.frameReset);
+      this.framePending = false;
+      this.dirtySnapshot = true;
+    }
   }
+
+  /** @internal Registration starts at the current producer cursor, without replaying earlier subscriptions. */
+  register(receiver: EventReceiver,
+    renderer: GPUStorageBufferRenderer & { compute(node: ComputeNode): void }): number {
+    let selection = this.receiverSlots.get(receiver);
+    if (selection?.revision === receiver.revision) return selection.slot;
+    if (!selection) {
+      const slot = this.freeReceiverSlots.pop() ?? this.nextReceiverSlot++;
+      if (slot >= 1024) throw new Error('GPU event journal supports at most 1024 receivers per root.');
+      selection = { slot, revision: receiver.revision };
+      this.receiverSlots.set(receiver, selection);
+      this.receiverDisposers.set(slot, receiver.onDispose(() => {
+        this.receiverSlots.delete(receiver);
+        this.receiverDisposers.delete(slot);
+        this.freeReceiverSlots.push(slot);
+      }));
+    }
+    selection.revision = receiver.revision;
+    const { slot } = selection;
+    if (!this.baselines.has(slot)) {
+      const base = 4 + slot * 4;
+      this.baselines.set(slot, Fn(() => {
+        const cursor = atomicLoad(this.counterStorage.element(uint(0))).toVar();
+        for (let field = 0; field < 3; field++) atomicStore(this.counterStorage.element(uint(base + field)), cursor);
+        atomicStore(this.counterStorage.element(uint(base + 3)), uint(0));
+      })().compute(1));
+    }
+    renderer.compute(this.baselines.get(slot)!);
+    return slot;
+  }
+
+  /** @internal A read-only arena in the same storage binding protects consumers that also emit events. */
+  snapshot(receiver: EventReceiver, renderer: GPUStorageBufferRenderer & { compute(node: ComputeNode): void }): number {
+    this.initialize(renderer);
+    const slot = this.register(receiver, renderer);
+    const counters = this.counterStorage;
+    if (this.dirtySnapshot) {
+      const values = this.eventFloatStorage;
+      this.snapshotCopy ??= Fn(() => {
+        const offset = instanceIndex.mul(GPU_EVENT_FLOAT_SLOT_COUNT);
+        for (let field = 0; field < GPU_EVENT_FLOAT_SLOT_COUNT; field++) {
+          values.element(offset.add(this.capacity * GPU_EVENT_FLOAT_SLOT_COUNT + field))
+            .assign(values.element(offset.add(field)));
+        }
+      })().compute(this.capacity);
+      renderer.compute(this.snapshotCopy);
+      this.dirtySnapshot = false;
+    }
+    if (!this.boundaries.has(slot)) {
+      const base = 4 + slot * 4;
+      this.boundaries.set(slot, Fn(() => {
+        const end = atomicLoad(counters.element(uint(0))).toVar();
+        const cursor = atomicLoad(counters.element(uint(base + 2)));
+        const available = end.sub(cursor).toVar();
+        const retained = available.lessThan(this.capacity).select(available, uint(this.capacity));
+        atomicStore(counters.element(uint(base)), end.sub(retained));
+        atomicStore(counters.element(uint(base + 1)), end);
+        atomicStore(counters.element(uint(base + 2)), end);
+        atomicAdd(counters.element(uint(base + 3)), available.sub(retained));
+      })().compute(1));
+    }
+    renderer.compute(this.boundaries.get(slot)!);
+    return slot;
+  }
+
+  /** @internal */
+  produced(): void { this.dirtySnapshot = true; }
 
   reset(sequence: number): void {
     this.sequence = sequence;
+    if (this.journal) { this.framePending = true; return; }
     this.counterData[EventCounter.Count] = 0;
     this.counterData[EventCounter.OverflowCount] = 0;
     this.counterAttribute.needsUpdate = true;
   }
 
-  createWriter(): GPUEventWriter {
-    return new GPUEventWriter(this);
+  createWriter(origin = 0): GPUEventWriter {
+    return new GPUEventWriter(this, origin);
   }
 
-  createReader(): GPUEventReader {
-    return new GPUEventReader(this);
+  createReader(receiverSlot?: number): GPUEventReader {
+    return new GPUEventReader(this, receiverSlot);
   }
 
   dispose(renderer?: GPUStorageBufferRenderer): void {
+    this.frameReset?.dispose();
+    this.snapshotCopy?.dispose();
+    this.boundaries.forEach(node => node.dispose());
+    this.baselines.forEach(node => node.dispose());
+    this.receiverDisposers.forEach(unsubscribe => unsubscribe());
+    this.receiverDisposers.clear();
     destroyGPUStorageAttribute(renderer, this.counterAttribute);
     destroyGPUStorageAttribute(renderer, this.floatAttribute);
   }
@@ -409,6 +536,7 @@ export class GPUEventBufferState {
   async readback(
     renderer: GPUReadbackRenderer,
     identityForEvent: (slot: number, generation: number) => Particle | undefined,
+    origin?: number,
   ): Promise<GPUEventReadbackBatch> {
     const sequence = this.sequence;
     const [counterBuffer, floatBuffer] = await Promise.all([
@@ -416,7 +544,8 @@ export class GPUEventBufferState {
       renderer.getArrayBufferAsync(this.floatAttribute),
     ]);
     const counters = new Uint32Array(counterBuffer);
-    const rawEventCount = counters[EventCounter.Count] ?? 0;
+    const frameStart = this.journal ? counters[2] : 0;
+    const rawEventCount = ((counters[EventCounter.Count] ?? 0) - frameStart) >>> 0;
     const overflowCount = counters[EventCounter.OverflowCount] ?? 0;
     const count = Math.min(rawEventCount, this.capacity);
     const events: GPUEventRecord[] = [];
@@ -434,7 +563,10 @@ export class GPUEventBufferState {
     const eventFloatData = new Float32Array(floatBuffer);
     const eventUintData = new Uint32Array(floatBuffer);
 
-    for (let index = 0; index < count; index += 1) {
+    for (let ordinal = 0; ordinal < count; ordinal += 1) {
+      const index = this.journal ? ((frameStart + Math.max(0, rawEventCount - count) + ordinal) >>> 0)
+        % this.capacity : ordinal;
+      if (origin !== undefined && eventUintData[packedOffset(index, EventFloatSlot.Color) + 3] !== origin) continue;
       const eventOffset = packedOffset(index, EventFloatSlot.Metadata);
       const type = eventUintData[eventOffset];
       if (type < 1 || type > 32) continue;

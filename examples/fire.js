@@ -7,7 +7,6 @@ import {
   EmissionSource,
   ForceOverLifetime,
   LightRenderer,
-  LimitVelocityOverLifetime,
   ParticleSystem,
   RotationOverLifetime,
   ScaleOverLifetime,
@@ -15,7 +14,6 @@ import {
   TransformByNoise,
   VelocityOverLifetime,
   Textures,
-  Module,
 } from '@rzmps/rzmps';
 import fireSprite from '../apps/demo/src/assets/images/fire_tile_8x4_n32.png?url';
 import warpNormal from '../apps/demo/src/assets/images/warp_norm.jpg?url';

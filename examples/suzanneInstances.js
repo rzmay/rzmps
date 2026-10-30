@@ -4,7 +4,6 @@ import {
   Emitter,
   MeshRenderer,
   ParticleSystem,
-  SpriteRenderer,
 } from '@rzmps/rzmps';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import suzanneModel from '../apps/demo/src/assets/models/suzanne.glb?url';

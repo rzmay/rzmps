@@ -64,14 +64,14 @@ The [Boids example](../examples/boids.md) demonstrates aggregation in a complete
 
 Modules normally request a managed grid instead of constructing one. Set `useSpatialGrid: true`
 for defaults or pass construction options through `spatialGridOptions`; the module's `modifyGPU` callback receives the
-grid as its final argument. The equivalent CPU callback receives its managed octree when
+grid through `context.spatialGrid`. The equivalent CPU callback reads `context.octree` when
 `useOctree` or `octreeOptions` is configured. Boids uses this managed lifecycle with its own
 aggregate format and includes particle-affector source tags in the tree population;
 its GPU grid uses the same managed acquisition and cleanup as other modules.
 
 ```ts
 const neighbors = new Module(
-  (particle, deltaTime, system, octree) => {
+  (particle, deltaTime, { system, octree }) => {
     const neighbors = octree.particlesInRadius(particle.position, 2);
     // Compare CPU neighbors; skip particle itself when needed.
   },
@@ -79,7 +79,7 @@ const neighbors = new Module(
     useOctree: true,
     useSpatialGrid: true,
     spatialGridOptions: { brickSubdivisions: 3, cellSubdivisions: 4 },
-    modifyGPU: (particle, deltaTime, context, grid) => {
+    modifyGPU: (particle, deltaTime, { spatialGrid: grid }) => {
       grid?.forEachParticleInRadius(
         particle.position,
         float(2),

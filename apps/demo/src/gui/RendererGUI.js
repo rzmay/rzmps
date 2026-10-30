@@ -61,6 +61,8 @@ export class RendererGUI extends GUIEditorBase {
         } else {
             this.addObject(folder, renderer, new Set([
                 'setup',
+                'executionContext',
+                'gpuExecutionContext',
                 'update',
                 'destroy',
                 'mesh',
@@ -355,6 +357,7 @@ export class RendererGUI extends GUIEditorBase {
 
     buildAudioRenderer(folder, renderer) {
         const hidden = new Set([
+            'executionContext', 'gpuExecutionContext',
             'listener',
             'sound',
             'onCollisionSound',

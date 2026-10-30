@@ -163,6 +163,7 @@ createBoids.author = "rzmay";
 export const metadata = {
   "id": "boids",
   "title": "Boids",
+  // eslint-disable-next-line max-len -- Documentation discovery requires a single literal description.
   "description": "Flocking particles using ParticleOctree aggregation, with red hazard particles acting as tagged particle affectors.",
   "tags": [
     "boids"

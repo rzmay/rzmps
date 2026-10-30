@@ -4,7 +4,6 @@ import {
   CompensationMode,
   Emitter,
   EmissionShape,
-  NoiseModule,
   ParticleSystem,
   ScaleOverLifetime,
   SpriteRenderer,
@@ -66,8 +65,9 @@ export default async function createLODStress() {
       }),
       new ScaleOverLifetime({
         scale: (time) => {
-          const size = ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25)));
-          return size;
+          if (time < 0.2) return time / 0.2;
+          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
+          return 0.85 * (1 - ((time - 0.75) / 0.25));
         },
       }),
       new ColorOverLifetime({

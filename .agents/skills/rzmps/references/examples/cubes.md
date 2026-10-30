@@ -16,7 +16,7 @@ Preset by [rzmay](https://github.com/rzmay).
 A 10-second loop keeps emission continuous, while zero gravity isolates instanced mesh appearance and rotation. Lifetimes of 4–8 seconds leave enough time to watch each cube tumble before it fades away.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L21)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L20)
 
 ```js
   const system = new ParticleSystem({
@@ -72,7 +72,7 @@ A 10-second loop keeps emission continuous, while zero gravity isolates instance
 Rate 12 and mean lifetime 6 imply roughly 72 simultaneous cubes. The discrete color Set avoids intermediate hues. Scale ranges from 0.4 to 1, applied to a 0.25-unit box mesh, so visible cube edges stay small enough to separate the instances.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L29)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L28)
 
 ```js
     emitters: [
@@ -100,7 +100,7 @@ Rate 12 and mean lifetime 6 imply roughly 72 simultaneous cubes. The discrete co
 Angular velocity is sampled between differently oriented vectors so cubes do not all rotate around the same axis. The cubic fade keeps them opaque early and removes them near death. There is no added acceleration module, so the emitter’s initial motion stays easy to distinguish from rotation.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L49)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L48)
 
 ```js
     modules: [
@@ -119,7 +119,7 @@ Angular velocity is sampled between differently oriented vectors so cubes do not
 MeshRenderer instances a BoxGeometry and MeshStandardMaterial. Cast and receive shadows are enabled, making real geometric faces apparent when the scene has shadow-casting lights. Compare this example with the sprite-based Spheres preset to see the difference between geometry and spherical normal shading.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L60)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/cubes.js#L59)
 
 ```js
     renderers: [

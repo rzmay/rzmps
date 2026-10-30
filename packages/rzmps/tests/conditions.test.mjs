@@ -29,15 +29,16 @@ const createSystem = (scene = new THREE.Scene()) => ({
     useOctree: true,
     condition: (...args) => {
       conditionCalls.push(args);
-      const [particle, deltaTime, owner, octree] = args;
+      const [particle, deltaTime, { system: owner, octree }] = args;
       assert.equal(deltaTime, 0.125);
       assert.equal(owner, system);
       assert.equal(octree, module.getParticleOctree());
       return octree.particlesInRadius(particle.position, 0.5).includes(accepted);
     },
   });
-  module.prepare(system, 0.125);
-  module.modify(system.particles, 0.125, system);
+  const context = module.beginExecution(system, 0.125);
+  module.prepare(context);
+  module.modify(system.particles, 0.125, context);
   assert.deepEqual(conditionCalls.map(args => args[0]), [accepted, rejected]);
   assert.equal(updateCalls.length, 1);
   assert.deepEqual(updateCalls[0], conditionCalls[0]);
@@ -52,8 +53,9 @@ const createSystem = (scene = new THREE.Scene()) => ({
   const module = new Module((...args) => { updateArgs = args; }, {
     condition: (...args) => { conditionArgs = args; return true; },
   });
-  module.modify([particle], 0.25);
-  assert.deepEqual(conditionArgs, [particle, 0.25, undefined, undefined]);
+  const context = module.beginExecution(createSystem(), 0.25);
+  module.modify([particle], 0.25, context);
+  assert.deepEqual(conditionArgs, [particle, 0.25, context]);
   assert.deepEqual(updateArgs, conditionArgs);
 }
 
@@ -73,7 +75,7 @@ const createSystem = (scene = new THREE.Scene()) => ({
     condition: (particle) => particle.tags?.includes('accepted') ?? false,
   });
 
-  module.modify([accepted, rejected], 0, createSystem());
+  module.modify([accepted, rejected], 0, module.beginExecution(createSystem(), 0));
 
   assert.equal(accepted.alpha, 0.25);
   assert.equal(rejected.alpha, 1);

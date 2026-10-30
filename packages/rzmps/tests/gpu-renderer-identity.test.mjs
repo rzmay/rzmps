@@ -14,6 +14,7 @@ camera.position.set(0, 0, 10);
 camera.updateMatrixWorld(true);
 const rendererSystem = {
   cameraDistanceSq: 0,
+  beginGPUEventExecution: () => ({ forEach() {} }),
   sceneCamera: camera,
   useLiveCubemap: false,
   scene: undefined,

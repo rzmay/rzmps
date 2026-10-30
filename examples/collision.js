@@ -71,6 +71,7 @@ createCollision.author = "rzmay";
 export const metadata = {
   "id": "collision",
   "title": "Collision",
+  // eslint-disable-next-line max-len -- Documentation discovery requires a single literal description.
   "description": "Particle collision with automatic mesh detection and sorting between static and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, Rapier, and Ammo can be used as external physics backends, allowing particles to affect other physics objects in the scene.",
   "tags": [
     "collision"

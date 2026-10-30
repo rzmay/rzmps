@@ -168,8 +168,8 @@ const system = new ParticleSystem({
 
 system.particles.push(boid, neighbor);
 system.deltaTime = 1;
-boids.prepare(system);
-boids.modify([boid], 1, system);
+boids.prepare(boids.beginExecution(system, 0));
+boids.modify([boid], 1, boids.executionContext);
 
 assert.ok(boid.velocity.y > 0);
 
@@ -177,9 +177,9 @@ assert.ok(boid.velocity.y > 0);
 const boidsRoot = boids.octree.root;
 assert.ok(boidsRoot.aggregate.particleAffectors instanceof Map);
 assert.equal(boidsRoot.aggregate.count, 2);
-boids.prepare(system);
+boids.prepare(boids.beginExecution(system, 0));
 assert.equal(boids.octree.root, boidsRoot);
-boids.prepare(system);
+boids.prepare(boids.beginExecution(system, 0));
 assert.notEqual(boids.octree.root, boidsRoot);
 assert.ok(boids.octree.root.aggregate.particleAffectors instanceof Map);
 
@@ -212,8 +212,8 @@ const radiusLimitedSystem = new ParticleSystem({
   modules: [],
 });
 radiusLimitedSystem.particles.push(radiusLimitedBoid, outOfRangeNeighbor);
-radiusLimitedBoids.prepare(radiusLimitedSystem);
-radiusLimitedBoids.modify([radiusLimitedBoid], 0.1, radiusLimitedSystem);
+radiusLimitedBoids.prepare(radiusLimitedBoids.beginExecution(radiusLimitedSystem, 0));
+radiusLimitedBoids.modify([radiusLimitedBoid], 0.1, radiusLimitedBoids.executionContext);
 assert.deepEqual(radiusLimitedBoid.velocity.toArray(), [1, 0, 0]);
 
 const quickTurnBoid = new Particle({
@@ -248,8 +248,8 @@ const quickTurnSystem = new ParticleSystem({
 });
 
 quickTurnSystem.particles.push(quickTurnBoid, quickTurnNeighbor);
-quickTurnBoids.prepare(quickTurnSystem);
-quickTurnBoids.modify([quickTurnBoid], 0.1, quickTurnSystem);
+quickTurnBoids.prepare(quickTurnBoids.beginExecution(quickTurnSystem, 0));
+quickTurnBoids.modify([quickTurnBoid], 0.1, quickTurnBoids.executionContext);
 
 assert.ok(quickTurnBoid.velocity.y > 0.75);
 
@@ -281,8 +281,8 @@ const autoBoundsSystem = new ParticleSystem({
 });
 
 autoBoundsSystem.particles.push(distantBoid, distantNeighbor);
-autoBoundsBoids.prepare(autoBoundsSystem);
-autoBoundsBoids.modify([distantBoid], 1, autoBoundsSystem);
+autoBoundsBoids.prepare(autoBoundsBoids.beginExecution(autoBoundsSystem, 0));
+autoBoundsBoids.modify([distantBoid], 1, autoBoundsBoids.executionContext);
 
 assert.ok(distantBoid.velocity.y > 0);
 
@@ -312,8 +312,8 @@ const neutralSpeedSystem = new ParticleSystem({
 });
 
 neutralSpeedSystem.particles.push(neutralSpeedBoid);
-neutralSpeedBoids.prepare(neutralSpeedSystem);
-neutralSpeedBoids.modify([neutralSpeedBoid], 1, neutralSpeedSystem);
+neutralSpeedBoids.prepare(neutralSpeedBoids.beginExecution(neutralSpeedSystem, 0));
+neutralSpeedBoids.modify([neutralSpeedBoid], 1, neutralSpeedBoids.executionContext);
 
 assert.deepEqual(neutralSpeedBoid.velocity.toArray(), [2, 0, 0]);
 
@@ -344,8 +344,8 @@ const neutralNoMaintainSystem = new ParticleSystem({
 });
 
 neutralNoMaintainSystem.particles.push(neutralNoMaintainBoid);
-neutralNoMaintainBoids.prepare(neutralNoMaintainSystem);
-neutralNoMaintainBoids.modify([neutralNoMaintainBoid], 1, neutralNoMaintainSystem);
+neutralNoMaintainBoids.prepare(neutralNoMaintainBoids.beginExecution(neutralNoMaintainSystem, 0));
+neutralNoMaintainBoids.modify([neutralNoMaintainBoid], 1, neutralNoMaintainBoids.executionContext);
 
 assert.deepEqual(neutralNoMaintainBoid.velocity.toArray(), [1, 0, 0]);
 
@@ -381,8 +381,8 @@ const opposingSystem = new ParticleSystem({
 });
 
 opposingSystem.particles.push(opposingBoid, opposingNeighbor);
-opposingBoids.prepare(opposingSystem);
-opposingBoids.modify([opposingBoid], 1, opposingSystem);
+opposingBoids.prepare(opposingBoids.beginExecution(opposingSystem, 0));
+opposingBoids.modify([opposingBoid], 1, opposingBoids.executionContext);
 
 assert.ok(Math.abs(opposingBoid.velocity.length() - 1) < Number.EPSILON);
 
@@ -419,8 +419,8 @@ const targetSystem = new ParticleSystem({
 });
 
 targetSystem.particles.push(targetBoid);
-targetBoids.prepare(targetSystem);
-targetBoids.modify([targetBoid], 1, targetSystem);
+targetBoids.prepare(targetBoids.beginExecution(targetSystem, 0));
+targetBoids.modify([targetBoid], 1, targetBoids.executionContext);
 
 assert.ok(targetBoid.velocity.x > 0.99);
 assert.ok(Math.abs(targetBoid.velocity.y) < 1e-12);
@@ -460,8 +460,8 @@ const excludedSystem = new ParticleSystem({
 });
 
 excludedSystem.particles.push(excludedBoid);
-excludedBoids.prepare(excludedSystem);
-excludedBoids.modify([excludedBoid], 1, excludedSystem);
+excludedBoids.prepare(excludedBoids.beginExecution(excludedSystem, 0));
+excludedBoids.modify([excludedBoid], 1, excludedBoids.executionContext);
 
 assert.deepEqual(excludedBoid.velocity.toArray(), [0, 1, 0]);
 
@@ -506,8 +506,8 @@ const conditionedSystem = new ParticleSystem({
 });
 
 conditionedSystem.particles.push(conditionedBoid, unconditionedBoid);
-conditionedBoids.prepare(conditionedSystem);
-conditionedBoids.modify([conditionedBoid, unconditionedBoid], 1, conditionedSystem);
+conditionedBoids.prepare(conditionedBoids.beginExecution(conditionedSystem, 0));
+conditionedBoids.modify([conditionedBoid, unconditionedBoid], 1, conditionedBoids.executionContext);
 
 assert.ok(conditionedBoid.velocity.x > 0.99);
 assert.deepEqual(unconditionedBoid.velocity.toArray(), [0, 1, 0]);
@@ -579,8 +579,8 @@ const particleAffectorSystem = new ParticleSystem({
 });
 
 particleAffectorSystem.particles.push(particleAffectorBoid, particleAffectorSource);
-particleAffectorBoids.prepare(particleAffectorSystem);
-particleAffectorBoids.modify([particleAffectorBoid], 1, particleAffectorSystem);
+particleAffectorBoids.prepare(particleAffectorBoids.beginExecution(particleAffectorSystem, 0));
+particleAffectorBoids.modify([particleAffectorBoid], 1, particleAffectorBoids.executionContext);
 
 assert.ok(particleAffectorBoid.velocity.x < -0.99);
 
@@ -629,8 +629,8 @@ const particleTargetSystem = new ParticleSystem({
 });
 
 particleTargetSystem.particles.push(particleTargetBoid, particleTargetSource);
-particleTargetBoids.prepare(particleTargetSystem);
-particleTargetBoids.modify([particleTargetBoid], 1, particleTargetSystem);
+particleTargetBoids.prepare(particleTargetBoids.beginExecution(particleTargetSystem, 0));
+particleTargetBoids.modify([particleTargetBoid], 1, particleTargetBoids.executionContext);
 
 assert.ok(particleTargetBoid.velocity.x > 0.99);
 
@@ -688,11 +688,11 @@ taggedParticleAffectorSystem.particles.push(
   taggedParticleAffectorIgnored,
   taggedParticleAffectorSource,
 );
-taggedParticleAffectorBoids.prepare(taggedParticleAffectorSystem);
+taggedParticleAffectorBoids.prepare(taggedParticleAffectorBoids.beginExecution(taggedParticleAffectorSystem, 0));
 taggedParticleAffectorBoids.modify([
   taggedParticleAffectorPrey,
   taggedParticleAffectorIgnored,
-], 1, taggedParticleAffectorSystem);
+], 1, taggedParticleAffectorBoids.executionContext);
 
 assert.ok(taggedParticleAffectorPrey.velocity.x < -0.99);
 assert.deepEqual(taggedParticleAffectorIgnored.velocity.toArray(), [0, 1, 0]);

@@ -1,8 +1,15 @@
+const context = {
+  system: new ParticleSystem({ emitters: [], modules: [], renderers: [] }),
+  deltaTime: 0,
+  events: Object.freeze([]),
+};
+
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
   ColorByDepth,
   Particle,
+  ParticleSystem,
 } from '../build/index.mjs';
 
 /*
@@ -22,7 +29,7 @@ import {
     depthRange: [6, 24],
   });
 
-  fadeOut.modify([particle], 0);
+  fadeOut.modify([particle], 0, context);
 
   assert.equal(particle.alpha, 1);
 }
@@ -41,8 +48,10 @@ import {
     depthRange: [0, 1],
   });
 
-  fadeOut.modify([particle], 0);
-  fadeIn.modify([particle], 0);
+  fadeOut.modify([particle], 0, context);
+  fadeIn.modify([particle], 0, context);
 
   assert.equal(particle.alpha, 0.5);
 }
+
+context.system.destroy();

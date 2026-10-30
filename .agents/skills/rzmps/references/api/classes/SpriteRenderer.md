@@ -106,6 +106,48 @@ compensation:
 
 ***
 
+<a id="events"></a>
+
+### events
+
+```ts
+events: readonly string[];
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`events`](Renderer.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`eventScope`](Renderer.md#eventscope)
+
+***
+
+<a id="executioncontext"></a>
+
+### executionContext?
+
+```ts
+optional executionContext?: EventExecutionContext;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`executionContext`](Renderer.md#executioncontext)
+
+***
+
 <a id="fps"></a>
 
 ### fps
@@ -123,6 +165,20 @@ fps: DynamicValue<number> = 1;
 ```ts
 frames: number = 1;
 ```
+
+***
+
+<a id="gpuexecutioncontext"></a>
+
+### gpuExecutionContext
+
+```ts
+gpuExecutionContext: GPUEventExecutionContext;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`gpuExecutionContext`](Renderer.md#gpuexecutioncontext)
 
 ***
 
@@ -218,7 +274,47 @@ tileMargin: Vector2;
 tileSize: Vector2;
 ```
 
+***
+
+<a id="capacity"></a>
+
+### CAPACITY
+
+```ts
+readonly static CAPACITY: 1024 = 1024;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`CAPACITY`](Renderer.md#capacity)
+
 ## Accessors
+
+<a id="gpunative"></a>
+
+### gpuNative
+
+#### Set Signature
+
+```ts
+set gpuNative(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`LightRenderer`](LightRenderer.md).[`gpuNative`](LightRenderer.md#gpunative)
+
+***
 
 <a id="gpuparameteruploadcount"></a>
 
@@ -304,6 +400,28 @@ set needsUpdate(value): void;
 ```ts
 Renderer.needsUpdate
 ```
+
+***
+
+<a id="overflowcount"></a>
+
+### overflowCount
+
+#### Get Signature
+
+```ts
+get overflowCount(): number;
+```
+
+Number of CPU events dropped when the pending batch reached capacity.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`overflowCount`](Renderer.md#overflowcount)
 
 ***
 
@@ -401,6 +519,102 @@ Renderer._update
 
 ***
 
+<a id="begin"></a>
+
+### begin()
+
+```ts
+begin(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Snapshots once per actual execution; events raised during execution remain pending.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`begin`](Renderer.md#begin)
+
+***
+
+<a id="beginexecution"></a>
+
+### beginExecution()
+
+```ts
+beginExecution(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Creates and retains the context shared by every callback in this execution.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`beginExecution`](Renderer.md#beginexecution)
+
+***
+
 <a id="clear"></a>
 
 ### clear()
@@ -438,6 +652,26 @@ Permanently releases owned rendering resources.
 #### Overrides
 
 [`Renderer`](Renderer.md).[`destroy`](Renderer.md#destroy)
+
+***
+
+<a id="dispose"></a>
+
+### dispose()
+
+```ts
+dispose(): void;
+```
+
+Clears batches and unsubscribes when a component is removed or its system is destroyed.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`dispose`](Renderer.md#dispose)
 
 ***
 
@@ -581,3 +815,33 @@ Base-class GPU preprocessing; subclasses consume the resulting ordinary render v
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`updateGPU`](Renderer.md#updategpu)
+
+***
+
+<a id="visiblesystems"></a>
+
+### visibleSystems()
+
+```ts
+visibleSystems(system?, scope?): ParticleSystem[];
+```
+
+Selects producers without forwarding or traversing beyond immediate relatives.
+
+#### Parameters
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `...`
+
+#### Returns
+
+[`ParticleSystem`](ParticleSystem.md)[]
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`visibleSystems`](Renderer.md#visiblesystems)

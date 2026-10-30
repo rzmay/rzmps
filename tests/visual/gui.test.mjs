@@ -27,16 +27,40 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
     } else args.push('--use-angle=default');
     browser = await puppeteer.launch({ headless: true, args });
     const page = await browser.newPage();
+    await page.setRequestInterception(true);
+    // Author avatars are external decoration; their availability must not block local GUI checks.
+    page.on('request', request => {
+      if (request.url().startsWith('https://avatars.githubusercontent.com/')) request.abort();
+      else request.continue();
+    });
     const errors = [];
+    const consoleErrors = [];
+    const pending = new Map();
+    page.on('request', request => pending.set(request, request.url()));
+    page.on('requestfinished', request => pending.delete(request));
+    page.on('requestfailed', request => pending.delete(request));
     page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
     const cases = ['Snow', 'LOD Stress Test', 'Fireworks', 'Fire', 'Fireflies'].map(preset => [preset, 'webgl']);
     cases.push(['Fireflies', 'webgpu']);
-    for (const [preset, backend] of cases) {
-      await page.goto(`${origin}/?preset=${encodeURIComponent(preset)}&renderer=${backend}`, {
-        waitUntil: 'networkidle0',
-      });
-      await page.waitForSelector('.psgui-renderers', { timeout: 15000 });
+    for (const [preset, backend] of cases.filter(([name]) => (
+      !process.env.RZMPS_GUI_PRESET || name === process.env.RZMPS_GUI_PRESET
+    ))) {
+      try {
+        await page.goto(`${origin}/?preset=${encodeURIComponent(preset)}&renderer=${backend}`, {
+          // The selectors and monitor checks below establish readiness without waiting for decorative assets.
+          waitUntil: 'domcontentloaded',
+        });
+        await page.waitForSelector('.psgui-renderers', { timeout: 15000 });
+      } catch (error) {
+        const body = await page.evaluate(() => document.body.innerText.slice(0, 2000));
+        throw new Error(`${preset} (${backend}): ${error.message}; page errors: ${errors.join('; ')}; `
+          + `console: ${consoleErrors.join('; ')}; `
+          + `pending requests: ${[...pending.values()].join(', ')}; body: ${body}`, { cause: error });
+      }
       if (backend === 'webgpu') {
         await page.waitForFunction(() => /GPU slots/.test(
           document.querySelector('.particle-count-monitor')?.textContent ?? '',

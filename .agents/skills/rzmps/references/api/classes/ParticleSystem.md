@@ -283,7 +283,7 @@ simulationSpeed: number;
 ### sourceLoss
 
 ```ts
-sourceLoss: "detach" | "kill" = 'detach';
+sourceLoss: "kill" | "detach" = 'detach';
 ```
 
 Behavior when an attached source dies or its slot is reused. Defaults to detach.
@@ -1058,6 +1058,24 @@ set simulationSpaceTransform(value): void;
 
 `void`
 
+***
+
+<a id="subsystemparent"></a>
+
+### subSystemParent
+
+#### Get Signature
+
+```ts
+get subSystemParent(): ParticleSystem | undefined;
+```
+
+Immediate attachment parent; event scopes never traverse beyond this relationship.
+
+##### Returns
+
+`ParticleSystem` \| `undefined`
+
 ## Methods
 
 <a id="acquireparticlespatialgrid"></a>
@@ -1224,7 +1242,7 @@ Adds an explicit generic effect; avoid adding the same effect more than once.
 ### addSubSystem()
 
 ```ts
-addSubSystem(subSystem, options): this;
+addSubSystem(subSystem, options?): this;
 ```
 
 Adds a system to this system as a subsystem, using this system's particles as its emission points.
@@ -1235,9 +1253,9 @@ Adds a system to this system as a subsystem, using this system's particles as it
 
 `ParticleSystem`
 
-##### options
+##### options?
 
-`Partial`\<[`SubSystemOptions`](../interfaces/SubSystemOptions.md)\>
+`Partial`\<[`SubSystemOptions`](../interfaces/SubSystemOptions.md)\> = `{}`
 
 #### Returns
 
@@ -1332,6 +1350,30 @@ Permanently destroys this system and renderer resources; later update or advance
 
 ### emitEvent()
 
+#### Call Signature
+
+```ts
+emitEvent(event, data?): void;
+```
+
+Targets either a registered source or a live simulated particle by its stable ID.
+
+##### Parameters
+
+###### event
+
+`string`
+
+###### data?
+
+`unknown`
+
+##### Returns
+
+`void`
+
+#### Call Signature
+
 ```ts
 emitEvent(
    id,
@@ -1342,23 +1384,45 @@ emitEvent(
 
 Targets either a registered source or a live simulated particle by its stable ID.
 
-#### Parameters
+##### Parameters
 
-##### id
-
-`string`
-
-##### event
+###### id
 
 `string`
 
-##### data?
+###### event
+
+`string`
+
+###### data?
 
 `unknown`
 
-#### Returns
+##### Returns
 
 `void`
+
+***
+
+<a id="getemitteroptions"></a>
+
+### getEmitterOptions()
+
+```ts
+getEmitterOptions(emitter): SubSystemOptions;
+```
+
+Effective configuration is attachment-specific and never changes emitter properties.
+
+#### Parameters
+
+##### emitter
+
+[`Emitter`](Emitter.md)
+
+#### Returns
+
+[`SubSystemOptions`](../interfaces/SubSystemOptions.md)
 
 ***
 
@@ -1568,6 +1632,32 @@ Registers a synchronous listener for particle expiry; returns the system for com
 #### Returns
 
 `this`
+
+***
+
+<a id="onevent"></a>
+
+### onEvent()
+
+```ts
+onEvent(names, consume): () => void;
+```
+
+Subscribes to this system's events; returns an idempotent unsubscribe function.
+
+#### Parameters
+
+##### names
+
+`string` \| readonly `string`[]
+
+##### consume
+
+(`event`) => `void`
+
+#### Returns
+
+() => `void`
 
 ***
 

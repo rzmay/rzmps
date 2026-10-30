@@ -10,6 +10,10 @@
 
 Per-particle modifier with priority phases, tag filtering, and a once-per-update preparation hook.
 
+## Extends
+
+- [`EventReceiver`](EventReceiver.md)
+
 ## Extended by
 
 - [`NoiseModule`](NoiseModule.md)
@@ -50,14 +54,12 @@ Per-particle modifier with priority phases, tag filtering, and a once-per-update
 ### Constructor
 
 ```ts
-new Module(_modify, options?): Module;
+new Module(modify, options?): Module;
 ```
-
-Wraps a per-particle callback; options select filtering, spatial collection, and priority.
 
 #### Parameters
 
-##### \_modify
+##### modify
 
 [`ModuleUpdate`](../type-aliases/ModuleUpdate.md)
 
@@ -69,6 +71,10 @@ Wraps a per-particle callback; options select filtering, spatial collection, and
 
 `Module`
 
+#### Overrides
+
+[`EventReceiver`](EventReceiver.md).[`constructor`](EventReceiver.md#constructor)
+
 ## Properties
 
 <a id="_modify"></a>
@@ -78,6 +84,8 @@ Wraps a per-particle callback; options select filtering, spatial collection, and
 ```ts
 _modify: ModuleUpdate;
 ```
+
+Wraps a per-particle callback; options select filtering, spatial collection, and priority.
 
 ***
 
@@ -111,6 +119,48 @@ dependents: Module[] = [];
 
 ***
 
+<a id="events"></a>
+
+### events
+
+```ts
+events: readonly string[];
+```
+
+#### Inherited from
+
+[`Emitter`](Emitter.md).[`events`](Emitter.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`eventScope`](EventReceiver.md#eventscope)
+
+***
+
+<a id="executioncontext"></a>
+
+### executionContext?
+
+```ts
+optional executionContext?: ModuleExecutionContext;
+```
+
+#### Overrides
+
+[`EventReceiver`](EventReceiver.md).[`executionContext`](EventReceiver.md#executioncontext)
+
+***
+
 <a id="explicitspatialeffects"></a>
 
 ### explicitSpatialEffects?
@@ -118,6 +168,20 @@ dependents: Module[] = [];
 ```ts
 optional explicitSpatialEffects?: SpatialEffect[];
 ```
+
+***
+
+<a id="gpuexecutioncontext"></a>
+
+### gpuExecutionContext
+
+```ts
+gpuExecutionContext: GPUEventExecutionContext;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`gpuExecutionContext`](EventReceiver.md#gpuexecutioncontext)
 
 ***
 
@@ -251,6 +315,20 @@ readonly useSpatialGrid: boolean;
 
 ***
 
+<a id="capacity"></a>
+
+### CAPACITY
+
+```ts
+readonly static CAPACITY: 1024 = 1024;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`CAPACITY`](EventReceiver.md#capacity)
+
+***
+
 <a id="cpu_unsupported"></a>
 
 ### CPU\_UNSUPPORTED
@@ -280,6 +358,32 @@ readonly static Priority: typeof Priority;
 ```
 
 ## Accessors
+
+<a id="gpunative"></a>
+
+### gpuNative
+
+#### Set Signature
+
+```ts
+set gpuNative(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`LightRenderer`](LightRenderer.md).[`gpuNative`](LightRenderer.md#gpunative)
+
+***
 
 <a id="gpuparameteruploadcount"></a>
 
@@ -319,6 +423,28 @@ set needsUpdate(value): void;
 
 ***
 
+<a id="overflowcount"></a>
+
+### overflowCount
+
+#### Get Signature
+
+```ts
+get overflowCount(): number;
+```
+
+Number of CPU events dropped when the pending batch reached capacity.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`overflowCount`](EventReceiver.md#overflowcount)
+
+***
+
 <a id="supportsgpu"></a>
 
 ### supportsGPU
@@ -353,6 +479,102 @@ get version(): number;
 
 ## Methods
 
+<a id="begin"></a>
+
+### begin()
+
+```ts
+begin(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Snapshots once per actual execution; events raised during execution remain pending.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`begin`](EventReceiver.md#begin)
+
+***
+
+<a id="beginexecution"></a>
+
+### beginExecution()
+
+```ts
+beginExecution(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Creates and retains the context shared by every callback in this execution.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`beginExecution`](EventReceiver.md#beginexecution)
+
+***
+
 <a id="cleanup"></a>
 
 ### cleanup()
@@ -366,6 +588,26 @@ Releases managed CPU and GPU spatial acceleration references.
 #### Returns
 
 `void`
+
+***
+
+<a id="dispose"></a>
+
+### dispose()
+
+```ts
+dispose(): void;
+```
+
+Clears batches and unsubscribes when a component is removed or its system is destroyed.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`dispose`](EventReceiver.md#dispose)
 
 ***
 
@@ -415,7 +657,7 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 modify(
    particles,
    deltaTime,
-   particleSystem?
+   context
 ): void;
 ```
 
@@ -431,9 +673,9 @@ Applies tag and condition selection before invoking the particle callback.
 
 `number`
 
-##### particleSystem?
+##### context
 
-[`ParticleSystem`](ParticleSystem.md)
+[`ModuleExecutionContext`](../interfaces/ModuleExecutionContext.md)
 
 #### Returns
 
@@ -446,20 +688,16 @@ Applies tag and condition selection before invoking the particle callback.
 ### prepare()
 
 ```ts
-prepare(particleSystem, deltaTime): void;
+prepare(context): void;
 ```
 
 Prepares shared work once per system update; the base implementation collects matching spatial effects.
 
 #### Parameters
 
-##### particleSystem
+##### context
 
-[`ParticleSystem`](ParticleSystem.md)
-
-##### deltaTime
-
-`number`
+[`ModuleExecutionContext`](../interfaces/ModuleExecutionContext.md)
 
 #### Returns
 
@@ -478,6 +716,36 @@ syncGPUConfiguration(): void;
 #### Returns
 
 `void`
+
+***
+
+<a id="visiblesystems"></a>
+
+### visibleSystems()
+
+```ts
+visibleSystems(system?, scope?): ParticleSystem[];
+```
+
+Selects producers without forwarding or traversing beyond immediate relatives.
+
+#### Parameters
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `...`
+
+#### Returns
+
+[`ParticleSystem`](ParticleSystem.md)[]
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`visibleSystems`](EventReceiver.md#visiblesystems)
 
 ***
 

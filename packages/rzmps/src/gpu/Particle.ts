@@ -1,3 +1,4 @@
+import type { GPUEventBatch } from './EventBatch';
 import type { GPUEventPayload } from '../Events';
 import type { Tag } from '../types/Tag';
 import * as THREE from 'three';
@@ -86,6 +87,8 @@ export interface GPUParticleBufferInitialization {
 }
 
 export interface GPUParticleUpdateContext {
+  /** Native event storage, frozen for the receiving component's execution. */
+  events?: GPUEventBatch;
   system: ParticleSystem;
   buffers: GPUParticleBufferState;
   deltaTime: number;
@@ -147,9 +150,13 @@ export class GPUParticleContext implements GPUParticleLike {
     this.alive.assign(uint(0));
   }
   /** Builds a tag mutation inside a system's GPU update callback. */
-  addTag(_tag: Tag): void { throw new Error('GPU tag helpers require a particle system update context.'); }
+  addTag(tag: Tag): void {
+    throw new Error(`Adding GPU tag '${tag}' requires a particle system update context.`);
+  }
   /** Builds a tag mutation inside a system's GPU update callback. */
-  removeTag(_tag: Tag): void { throw new Error('GPU tag helpers require a particle system update context.'); }
+  removeTag(tag: Tag): void {
+    throw new Error(`Removing GPU tag '${tag}' requires a particle system update context.`);
+  }
   private eventDispatcher?: (event: string, payload?: GPUEventPayload) => void;
   /** Builds an event-buffer write at this point in the TSL graph. */
   emitEvent(event: string, payload?: GPUEventPayload): void { this.eventDispatcher?.(event, payload); }

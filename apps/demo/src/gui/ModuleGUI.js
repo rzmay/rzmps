@@ -40,6 +40,7 @@ export class ModuleGUI extends GUIEditorBase {
         else {
             const hidden = new Set([
                 'modify',
+                'executionContext',
                 'noiseGenerator',
                 'dependents',
                 'priority',

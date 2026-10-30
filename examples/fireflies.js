@@ -35,7 +35,7 @@ export default async function createFireflies() {
   // Mass is an application-owned charge accumulator here: negative values are the refractory period.
   const flashing = charge => charge < -(cooldown - pulseDuration);
   const flash = new Module(
-    (particle, dt, system, octree) => {
+    (particle, dt, { octree }) => {
       let neighbors = 0;
 
       // An insect must recharge before it can respond to another insect's flash.
@@ -65,7 +65,7 @@ export default async function createFireflies() {
         cellSubdivisions: 3,
         autoExpand: false,
       },
-      modifyGPU(particle, dt, context, grid) {
+      modifyGPU(particle, dt, { spatialGrid: grid }) {
         // The paired TSL implementation runs entirely on GPU particle storage.
         const neighbors = float(0).toVar('flashingNeighbors');
 

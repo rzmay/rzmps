@@ -8,6 +8,10 @@
 
 # Interface: RendererOptions
 
+## Extends
+
+- [`EventReceiverOptions`](EventReceiverOptions.md)
+
 ## Extended by
 
 - [`LightRendererOptions`](../Supporting-Types/interfaces/LightRendererOptions.md)
@@ -42,6 +46,34 @@ compensation:
 ```
 
 Visual approximation for population removed by system LOD. Defaults to none.
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`events`](EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
 
 ***
 

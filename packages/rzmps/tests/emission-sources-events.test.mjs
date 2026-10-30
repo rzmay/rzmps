@@ -370,3 +370,26 @@ test('emitter shape offsets are sampled before source translation, rotation and 
   assert.ok(Math.abs(Math.abs(position.z - 6) - 1) < 1e-6);
   system.destroy();
 });
+
+
+test("default parent scope excludes an emitter's own dying particles", () => {
+  const parent = root();
+  const emitter = new Emitter({
+    emitOnDeath: true,
+    bursts: { time: 0, count: 3 },
+    initialValues: { lifetime: 0.1 },
+  });
+  const child = new ParticleSystem({
+    duration: 0.2, looping: false, gpuProcessing: false, emitters: [emitter], renderers: [],
+  });
+  let births = 0;
+  child.onSpawn(() => { births++; });
+  parent.addSubSystem(child);
+  const rocket = new Particle({ lifetime: 0.1, tags: ['rocket'] });
+  parent.particles.push(rocket);
+  try {
+    parent.advanceFrames(60, 0.05);
+    assert.equal(births, 3, 'only the rocket death starts a burst');
+    assert.equal(child.particles.filter(particle => particle.alive).length, 0);
+  } finally { parent.destroy(); }
+});

@@ -39,3 +39,9 @@ these helpers to mutate a live particle. GPU tag capacity remains 32 names per c
 
 The [Fireflies example](../examples/fireflies.md) gives its glow pulses their own particle system, allowing a light
 renderer to select that population directly without changing tags.
+
+
+Sub-particles do not automatically inherit tags from their source particle or registered source. Set the child
+emitter's `tags` explicitly. `sourceTags` filters event origins independently of the tags assigned to new particles;
+this makes it possible to select rocket deaths while producing sparkles that do not match the rocket filter.
+Tag inheritance is not required for Source simulation space or source tracking.

@@ -8,10 +8,9 @@ import {
   sqrt,
   uniform,
   vec4,
-  vec3,
 } from 'three/tsl';
 
-import Module, { type ModuleOptions } from '../Module';
+import Module, { type ModuleExecutionContext, type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
@@ -128,7 +127,9 @@ class Collision extends Module {
   private readonly _simulationToWorld = uniform(new THREE.Matrix4(), 'mat4');
   private readonly _worldToSimulation = uniform(new THREE.Matrix4(), 'mat4');
 
-  public prepare(system: ParticleSystem, deltaTime: number) {
+  public prepare(context: ModuleExecutionContext): void {
+    const { system, deltaTime } = context;
+    super.prepare(context);
     this._simulationToWorld.value.copy(system.getSimulationToWorldMatrix());
     this._worldToSimulation.value.copy(this._simulationToWorld.value).invert();
     this._system = system;

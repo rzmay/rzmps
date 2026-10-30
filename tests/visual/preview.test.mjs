@@ -128,3 +128,16 @@ for (const backend of ['webgl', 'webgpu']) test(`${backend}: Source frames prese
     }
   } finally { await fs.rm(output, { recursive: true, force: true }); }
 });
+
+
+for (const backend of ['webgl', 'webgpu']) test(`${backend}: exclusive event origins and independent birth tags`,
+  { timeout: 240000 }, async () => {
+    const output = await fs.mkdtemp(path.join(os.tmpdir(), `rzmps-event-scopes-${backend}-`));
+    try {
+      const metadata = await capturePreview(parseOptions(['--example', 'eventScopes', '--backend', backend,
+        '--warmup', '90', '--frames', '1', '--width', '320', '--height', '240', '--output', output]));
+      assert.equal(metadata.frameValidation.length, 12);
+      assert.ok(metadata.shaderBindings.every(shader => shader.maxStorageBuffers <= 8));
+      assert.ok(metadata.captures[0].systems.every(system => system.gpuProcessingActive === (backend === 'webgpu')));
+    } finally { await fs.rm(output, { recursive: true, force: true }); }
+  });

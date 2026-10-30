@@ -37,10 +37,11 @@ through [First GPU Module](first-gpu-module.md) for a complete paired implementa
 [First GPU Spatial Effect](first-gpu-spatial-effect.md) for influence, feathering, and custom test
 rules.
 
-Reuse ordinary CPU hooks for setup and cleanup. `prepare(system, deltaTime)` runs once before a
+Reuse ordinary CPU hooks for setup and cleanup. `prepare(context)` runs once before a
 module's work on either backend. A function-defined module can request managed acceleration with
 `useOctree`/`octreeOptions` for CPU or `useSpatialGrid`/`spatialGridOptions` for GPU; the resulting
-`ParticleOctree` or `ParticleSpatialGrid` is passed as the optional final callback argument.
+`ParticleOctree` is available as `context.octree` on CPU; the GPU context exposes `context.spatialGrid`.
+Both callbacks use `(particle, deltaTime, context)`, as do their conditions.
 `cleanup()` must call `super.cleanup()` when overridden so managed references are released.
 
 Dynamic numbers, vectors, colors, ranges, sets, and callbacks are available to built-in GPU

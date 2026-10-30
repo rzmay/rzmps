@@ -51,6 +51,8 @@ Creates the modifier with its built-in priority and optional filtering/LOD setti
 _modify: ModuleUpdate;
 ```
 
+Wraps a per-particle callback; options select filtering, spatial collection, and priority.
+
 #### Inherited from
 
 [`Module`](Module.md).[`_modify`](Module.md#_modify)
@@ -99,6 +101,48 @@ dependents: Module[] = [];
 
 ***
 
+<a id="events"></a>
+
+### events
+
+```ts
+events: readonly string[];
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`events`](Module.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`eventScope`](Module.md#eventscope)
+
+***
+
+<a id="executioncontext"></a>
+
+### executionContext?
+
+```ts
+optional executionContext?: ModuleExecutionContext;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`executionContext`](Module.md#executioncontext)
+
+***
+
 <a id="explicitspatialeffects"></a>
 
 ### explicitSpatialEffects?
@@ -110,6 +154,20 @@ optional explicitSpatialEffects?: SpatialEffect[];
 #### Inherited from
 
 [`Module`](Module.md).[`explicitSpatialEffects`](Module.md#explicitspatialeffects)
+
+***
+
+<a id="gpuexecutioncontext"></a>
+
+### gpuExecutionContext
+
+```ts
+gpuExecutionContext: GPUEventExecutionContext;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`gpuExecutionContext`](Module.md#gpuexecutioncontext)
 
 ***
 
@@ -301,6 +359,20 @@ readonly useSpatialGrid: boolean;
 
 ***
 
+<a id="capacity"></a>
+
+### CAPACITY
+
+```ts
+readonly static CAPACITY: 1024 = 1024;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`CAPACITY`](Module.md#capacity)
+
+***
+
 <a id="cpu_unsupported"></a>
 
 ### CPU\_UNSUPPORTED
@@ -342,6 +414,32 @@ readonly static Priority: typeof Priority;
 [`Module`](Module.md).[`Priority`](Module.md#priority-1)
 
 ## Accessors
+
+<a id="gpunative"></a>
+
+### gpuNative
+
+#### Set Signature
+
+```ts
+set gpuNative(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`Module`](Module.md).[`gpuNative`](Module.md#gpunative)
+
+***
 
 <a id="gpuparameteruploadcount"></a>
 
@@ -389,6 +487,28 @@ set needsUpdate(value): void;
 
 ***
 
+<a id="overflowcount"></a>
+
+### overflowCount
+
+#### Get Signature
+
+```ts
+get overflowCount(): number;
+```
+
+Number of CPU events dropped when the pending batch reached capacity.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Module`](Module.md).[`overflowCount`](Module.md#overflowcount)
+
+***
+
 <a id="supportsgpu"></a>
 
 ### supportsGPU
@@ -431,6 +551,102 @@ get version(): number;
 
 ## Methods
 
+<a id="begin"></a>
+
+### begin()
+
+```ts
+begin(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Snapshots once per actual execution; events raised during execution remain pending.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`Module`](Module.md).[`begin`](Module.md#begin)
+
+***
+
+<a id="beginexecution"></a>
+
+### beginExecution()
+
+```ts
+beginExecution(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Creates and retains the context shared by every callback in this execution.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`Module`](Module.md).[`beginExecution`](Module.md#beginexecution)
+
+***
+
 <a id="cleanup"></a>
 
 ### cleanup()
@@ -448,6 +664,26 @@ Releases managed CPU and GPU spatial acceleration references.
 #### Inherited from
 
 [`Module`](Module.md).[`cleanup`](Module.md#cleanup)
+
+***
+
+<a id="dispose"></a>
+
+### dispose()
+
+```ts
+dispose(): void;
+```
+
+Clears batches and unsubscribes when a component is removed or its system is destroyed.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Module`](Module.md).[`dispose`](Module.md#dispose)
 
 ***
 
@@ -505,7 +741,7 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 modify(
    particles,
    deltaTime,
-   particleSystem?
+   context
 ): void;
 ```
 
@@ -521,9 +757,9 @@ Applies tag and condition selection before invoking the particle callback.
 
 `number`
 
-##### particleSystem?
+##### context
 
-[`ParticleSystem`](ParticleSystem.md)
+[`ModuleExecutionContext`](../interfaces/ModuleExecutionContext.md)
 
 #### Returns
 
@@ -540,20 +776,16 @@ Applies tag and condition selection before invoking the particle callback.
 ### prepare()
 
 ```ts
-prepare(particleSystem, deltaTime): void;
+prepare(context): void;
 ```
 
 Prepares shared work once per system update; the base implementation collects matching spatial effects.
 
 #### Parameters
 
-##### particleSystem
+##### context
 
-[`ParticleSystem`](ParticleSystem.md)
-
-##### deltaTime
-
-`number`
+[`ModuleExecutionContext`](../interfaces/ModuleExecutionContext.md)
 
 #### Returns
 
@@ -580,6 +812,36 @@ syncGPUConfiguration(): void;
 #### Inherited from
 
 [`Module`](Module.md).[`syncGPUConfiguration`](Module.md#syncgpuconfiguration)
+
+***
+
+<a id="visiblesystems"></a>
+
+### visibleSystems()
+
+```ts
+visibleSystems(system?, scope?): ParticleSystem[];
+```
+
+Selects producers without forwarding or traversing beyond immediate relatives.
+
+#### Parameters
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `...`
+
+#### Returns
+
+[`ParticleSystem`](ParticleSystem.md)[]
+
+#### Inherited from
+
+[`Module`](Module.md).[`visibleSystems`](Module.md#visiblesystems)
 
 ***
 

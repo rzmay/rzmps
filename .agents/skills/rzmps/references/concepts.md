@@ -759,9 +759,55 @@ configured factors; inherited velocity adds the selected fraction of source velo
 emission frame, while an event context's scalar `scale` multiplies child particle size. Child particles can themselves
 drive nested subsystems, on CPU or GPU. Registered source updates do not restart continuous bursts or event runs.
 
+## Event Origins and Defaults
+
+`EventScope` selects event producers explicitly. Every selection is exclusive:
+
+| Scope | Producers |
+| --- | --- |
+| `'local'` | The receiver's own system |
+| `'parent'` | Its immediate parent only |
+| `'child'` | Its immediate children only |
+| `['local', 'parent']` | Its own system and immediate parent |
+| `['local', 'parent', 'child']` | All three immediate origins |
+| `[]` | None |
+
+There is no recursive ancestor or descendant visibility, and repeated selections do not duplicate events.
+Modules and renderers default to `'local'`. Root emitters default to `'local'`; subsystem emitters default to
+`'parent'` only. These rules apply equally to lifecycle and custom events. A child emitter with `emitOnDeath: true`
+therefore responds to parent deaths without restarting when its own particles die. Selecting `'local'` explicitly
+allows local lifecycle reactions, including self-emission; use that intentionally.
+
+Scope filters subscriptions. It does not forward events: a child observing parent events does not publish its own
+events upward. Each delivered event preserves its original producer in `event.origin`, its identity, and its optional
+source. GPU filtering checks producer identity and that producer's event-name mapping together; numeric event IDs
+alone do not identify events across systems.
+
+```ts
+const emitter = new Emitter({
+  eventScope: ['local', 'parent'],
+  emitOnDeath: true,
+  bursts: { time: 0, count: 8 },
+});
+
+// An explicit relationship scope replaces the emitter's selection for this attachment.
+parent.addSubSystem(child, { eventScope: 'parent' });
+```
+
+Omitting the attachment override preserves an explicitly configured emitter scope, otherwise the subsystem default
+applies. Attachment overrides never mutate the emitter, and detaching or reparenting discards the previous override.
+The former cumulative `'both'` alias is replaced by explicit origin arrays in this major release.
+
+Source tags select which origins may emit. They are not automatically copied to emitted particles: configure the
+child emitter's own `tags` to label its output. For example, a rocket emitter can assign `['rocket']` and a sparkle
+emitter can select `sourceTags: ['rocket']` while assigning `tags: ['sparkle']`. The same rule applies to registered
+sources, continuous emission, and event bursts on CPU and GPU. Source identity and Source-space attachment do not
+depend on tags.
+
 ## One Event API
 
 ```ts
+system.emitEvent('alarm', { strength: 3 }); // No particle or transform is required.
 system.emitEvent(particle.id, 'explode', { strength: 3 });
 particle.emitEvent('explode', { strength: 3 });
 source.emitEvent('bubble', { strength: 1.5 });
@@ -769,9 +815,10 @@ source.emitEvent('bubble', { strength: 1.5 });
 system.addSubSystem(splash, { onEvent: ['explode', 'bubble'] });
 ```
 
-`emitEvent` resolves a live particle or registered source in its owning system. Unknown or disposed IDs are ignored. A
-CPU particle's alias uses ownership stored outside its serializable attributes; cloning or making a render-only shallow
-view does not copy that ownership. Dispatch never performs shader compilation or requires explicit event registration.
+With an ID, `emitEvent` resolves a live particle or registered source in its owning system. Unknown or disposed IDs
+are ignored. A CPU particle's alias uses ownership stored outside its serializable attributes. Cloning or making a
+render-only shallow view does not copy that ownership. Dispatch never performs shader compilation or requires
+explicit event registration.
 
 CPU dispatch targeting a native GPU particle ID queues a generation-validated selective snapshot at
 the next system update. Its CPU handler runs asynchronously when that snapshot is available, then
@@ -784,6 +831,23 @@ An event-only subscription disables continuous emission by default. Set `emitCon
 legacy flag and `onEvent` creates one run, with the named callback applied once. Explicit collision events can also
 originate from registered sources. Supplying the established collision hit shape preserves impulse threshold, alignment
 and scaling behavior.
+
+### Declarative Consumers
+
+`Module`, `Renderer`, and `Emitter` extend `EventReceiver`. The superclass owns their `events` and
+`eventScope` subscriptions, CPU and GPU execution contexts, batching, overflow tracking, and subscription cleanup.
+Components extend the shared execution context when needed; modules add access to their managed octree.
+CPU execution contexts expose a read-only `events` batch. Module `prepare(context)`, conditions, and particle callbacks
+share one execution context, so shared event interpretation can happen once during preparation. Native GPU modules
+use `context.events.forEach(name, callback)` over shared storage without event readback.
+
+Events emitted during consumption remain pending for a subsequent eligible execution. CPU receivers retain the newest
+1024 pending events and count dropped oldest entries in `overflowCount`. GPU receivers keep independent
+cursors into bounded shared storage; entries overwritten before a receiver executes are dropped. A receiver that does
+not execute retains pending events until its next execution, subject to these bounds.
+
+`system.onEvent(nameOrNames, callback)` observes only events produced by that system and returns an unsubscribe
+function. Declarative scopes subscribe to the relevant producer dispatchers directly; they do not rebroadcast events.
 
 ### CPU Context Handlers
 
@@ -1059,7 +1123,7 @@ module uses the grid's exact-radius query and performs the count entirely in the
 
 ```ts
 const crowdDrag = new Module(
-  (particle, deltaTime, _system, octree) => {
+  (particle, deltaTime, { octree }) => {
     const nearbyCount = octree
       .particlesInRadius(particle.position, 2)
       .filter((neighbor) => neighbor !== particle)
@@ -1073,7 +1137,7 @@ const crowdDrag = new Module(
     octreeOptions: { maxDepth: 6, particlesPerLeaf: 8 },
     useSpatialGrid: true,
     spatialGridOptions: { brickSubdivisions: 3, cellSubdivisions: 4 },
-    modifyGPU: (particle, deltaTime, _context, grid) => {
+    modifyGPU: (particle, deltaTime, { spatialGrid: grid }) => {
       if (!grid) return;
 
       const nearbyCount = float(0).toVar("nearbyCount");
@@ -1092,7 +1156,7 @@ const crowdDrag = new Module(
 );
 ```
 
-RZMPS rebuilds both structures and passes the appropriate one as the final callback argument. A
+RZMPS rebuilds both structures and exposes them as `context.octree` on CPU and `context.spatialGrid` on GPU. A
 grid query emits shader-side work and never returns JavaScript particles. Its callback can inspect
 each neighbor and the squared distance when a count alone is not enough. Keep query bounds and
 grid resolution appropriate for the effect; see
@@ -1203,7 +1267,7 @@ also inspect each custom effect's `supportsGPU` while developing it. See
 # First Module
 
 Modules change particle values over time. A custom module receives the live
-particle, the frame delta, and the owning particle system.
+particle, the frame delta, and a shared execution context.
 
 ```ts
 import { Module } from "@rzmps/rzmps";
@@ -1235,11 +1299,22 @@ const sparksOnly = new Module((particle) => {
 ```
 
 The exported `ModuleCondition` type receives the same arguments as `ModuleUpdate`:
-`(particle, deltaTime, particleSystem?, octree?)`, and returns a boolean. The system and managed
-octree are optional, just as they are for the update callback. Conditions run after alive and tag
-filtering and receive the same frame delta and context as the update. Existing particle-only
-predicates still work. On GPU, `ModuleGPUCondition` matches `ModuleGPUUpdate`'s arguments and
-returns a TSL boolean node.
+`(particle, deltaTime, context)`, and returns a boolean. The context exposes the owning `system`,
+`deltaTime`, a read-only `events` batch, and the optional managed `octree`. Preparation, conditions,
+and particle callbacks share one context for the execution. Conditions run after alive and tag
+filtering. Callbacks can omit arguments they do not need. On GPU, `ModuleGPUCondition` matches
+`ModuleGPUUpdate`'s arguments and returns a TSL boolean node; its context exposes the managed
+`spatialGrid` and native event batch.
+
+This major release replaces the former `(particle, deltaTime, system?, octree?)` signature.
+Move system and spatial queries into the context; class preparation now receives `prepare(context)`.
+There is one callback path for both function-defined and class-based modules.
+
+Declare `events` and optionally `eventScope` in module options to receive subscribed events. Modules default to
+`'local'`; use `'parent'` for the immediate parent only, or an array such as `['local', 'parent']` to combine origins.
+The batch is frozen before preparation and stays the same through conditions and particle updates.
+Events emitted during those callbacks remain pending until a subsequent execution. Use the preparation
+hook to interpret a batch once when the result can be shared across particles.
 
 For performance-sensitive modules, avoid allocating objects inside the per
 particle callback. Reuse vectors and colors outside the callback when possible.
@@ -1255,9 +1330,22 @@ modules that assign the same property.
 
 ## System Update Hooks
 
-`prepare(system, deltaTime)` can also run effect-level scheduling once per simulation step, even when a module does
+`prepare(context)` can also run effect-level scheduling once per simulation step, even when a module does
 not modify individual particles. Supply an empty CPU callback and `modifyGPU() {}` to keep both backends supported,
-then put the shared scheduling work in prepare(). Call `super.prepare()` to preserve the base preparation behavior.
+then put the shared scheduling work in `prepare(context)`. Read `context.system` and `context.deltaTime` there. Call
+`super.prepare(context)` to preserve the base preparation behavior.
+Function-defined modules can supply the same hook as an option:
+
+```ts
+const scheduler = new Module(() => {}, {
+  prepare({ system, deltaTime }) {
+    // Advance application scheduling on the simulation clock.
+    advanceSchedule(system, deltaTime);
+  },
+  modifyGPU() {},
+});
+```
+
 This follows the system's pause state, simulation speed and fixed-step advancement.
 
 [Acid](https://rzmps.rzmay.com/docs/examples/acid.html) uses this pattern to schedule independent bubble events from persistent decal sources.
@@ -1269,11 +1357,11 @@ can instead schedule events there before calling the root system's update().
 
 Particle-to-particle comparisons should use a managed `ParticleOctree` instead of scanning the
 whole particle array for every particle. Enable it in the module options; RZMPS rebuilds it and
-passes it as the callback's fourth argument.
+exposes it through `context.octree` in preparation, conditions, and particle callbacks.
 
 ```ts
 const crowdDrag = new Module(
-  (particle, deltaTime, _system, octree) => {
+  (particle, deltaTime, { octree }) => {
     const nearbyCount = octree
       .particlesInRadius(particle.position, 2)
       .filter((neighbor) => neighbor !== particle)
@@ -1298,7 +1386,7 @@ particle; see
 [particle spatial acceleration](https://rzmps.rzmay.com/docs/guides/particle-octree.html).
 
 For reusable behavior, extend Module and pass your per-particle callback and options to `super`. Override
-`prepare(system, deltaTime)` when expensive shared work should happen once per frame; call `super.prepare` if using
+`prepare(context)` when expensive shared work should happen once per frame; call `super.prepare` if using
 automatic spatial-effect collection. Put resource cleanup in `cleanup()`. Dependencies in `dependents` participate in
 normal priority sorting rather than forcing an independent update loop.
 
@@ -1407,10 +1495,11 @@ through [First GPU Module](https://rzmps.rzmay.com/docs/guides/first-gpu-module.
 [First GPU Spatial Effect](https://rzmps.rzmay.com/docs/guides/first-gpu-spatial-effect.html) for influence, feathering, and custom test
 rules.
 
-Reuse ordinary CPU hooks for setup and cleanup. `prepare(system, deltaTime)` runs once before a
+Reuse ordinary CPU hooks for setup and cleanup. `prepare(context)` runs once before a
 module's work on either backend. A function-defined module can request managed acceleration with
 `useOctree`/`octreeOptions` for CPU or `useSpatialGrid`/`spatialGridOptions` for GPU; the resulting
-`ParticleOctree` or `ParticleSpatialGrid` is passed as the optional final callback argument.
+`ParticleOctree` is available as `context.octree` on CPU; the GPU context exposes `context.spatialGrid`.
+Both callbacks use `(particle, deltaTime, context)`, as do their conditions.
 `cleanup()` must call `super.cleanup()` when overridden so managed references are released.
 
 Dynamic numbers, vectors, colors, ranges, sets, and callbacks are available to built-in GPU
@@ -1595,7 +1684,9 @@ At the beginning of the next update, cached values are restored. A render-time v
 
 Prefer a built-in lifetime module before writing an equivalent callback: those modules already select phases appropriate to their behavior. When combining modifiers that write the same property, inspect both their priorities and whether each callback assigns or multiplies that property. A later assignment can replace an earlier result.
 
-`prepare(system, deltaTime)` runs before the per-particle phase. Use it for shared calculations or spatial collection, and reuse scratch objects in the particle callback. Population LOD removes simulated particles before module work; surviving particles run every step.
+`prepare(context)` runs before the per-particle phase. Use it for shared calculations or spatial collection, and reuse
+scratch objects in the particle callback. Population LOD removes simulated particles before module work; surviving
+particles run every step.
 
 
 ---
@@ -1668,14 +1759,14 @@ The [Boids example](https://rzmps.rzmay.com/docs/examples/boids.html) demonstrat
 
 Modules normally request a managed grid instead of constructing one. Set `useSpatialGrid: true`
 for defaults or pass construction options through `spatialGridOptions`; the module's `modifyGPU` callback receives the
-grid as its final argument. The equivalent CPU callback receives its managed octree when
+grid through `context.spatialGrid`. The equivalent CPU callback reads `context.octree` when
 `useOctree` or `octreeOptions` is configured. Boids uses this managed lifecycle with its own
 aggregate format and includes particle-affector source tags in the tree population;
 its GPU grid uses the same managed acquisition and cleanup as other modules.
 
 ```ts
 const neighbors = new Module(
-  (particle, deltaTime, system, octree) => {
+  (particle, deltaTime, { system, octree }) => {
     const neighbors = octree.particlesInRadius(particle.position, 2);
     // Compare CPU neighbors; skip particle itself when needed.
   },
@@ -1683,7 +1774,7 @@ const neighbors = new Module(
     useOctree: true,
     useSpatialGrid: true,
     spatialGridOptions: { brickSubdivisions: 3, cellSubdivisions: 4 },
-    modifyGPU: (particle, deltaTime, context, grid) => {
+    modifyGPU: (particle, deltaTime, { spatialGrid: grid }) => {
       grid?.forEachParticleInRadius(
         particle.position,
         float(2),
@@ -1807,7 +1898,9 @@ Modules can collect scene effects for their own algorithms. Set `requireSpatialE
 
 For a module, explicitly supplying `spatialEffects: []` deliberately gives it an empty collection and suppresses discovery. Supplying a nonempty collection limits it to those objects. `spatialEffectFilter` and constructor requirements still filter that explicit list. Distinguish this module-level selection from the system's generic effects list.
 
-Use [First Spatial Effect](https://rzmps.rzmay.com/docs/guides/first-spatial-effect.html) to build a field. For expensive selection, cache work in `prepare()` rather than traversing the scene inside every particle callback. If you override `prepare()`, call `super.prepare(system, deltaTime)` when you rely on the base spatial collection behavior.
+Use [First Spatial Effect](https://rzmps.rzmay.com/docs/guides/first-spatial-effect.html) to build a field. For expensive selection, cache work in `prepare()`
+rather than traversing the scene inside every particle callback. If you override `prepare()`, call
+`super.prepare(context)` when you rely on the base spatial collection behavior.
 
 On GPU, built-in analytic effects can be parameterized, batched, and indexed together. A custom
 effect must provide GPU callbacks to run there; an unsupported generic effect is skipped rather
@@ -1973,3 +2066,9 @@ these helpers to mutate a live particle. GPU tag capacity remains 32 names per c
 
 The [Fireflies example](https://rzmps.rzmay.com/docs/examples/fireflies.html) gives its glow pulses their own particle system, allowing a light
 renderer to select that population directly without changing tags.
+
+
+Sub-particles do not automatically inherit tags from their source particle or registered source. Set the child
+emitter's `tags` explicitly. `sourceTags` filters event origins independently of the tags assigned to new particles;
+this makes it possible to select rocket deaths while producing sparkles that do not match the rocket filter.
+Tag inheritance is not required for Source simulation space or source tracking.

@@ -1,3 +1,4 @@
+import EventReceiver, { type EventReceiverOptions } from './EventReceiver';
 import Particle from './Particle';
 import ParticleSystem from './ParticleSystem';
 import type { StrictMultiple } from './types/Multiple';
@@ -36,7 +37,7 @@ export interface RendererChildrenOptions {
   radialFalloff?: (parameter: number) => number;
 }
 
-export interface RendererOptions {
+export interface RendererOptions extends EventReceiverOptions {
   /** Filters the simulated population by tag before rendering. */
   tags: StrictMultiple<Tag>;
   /** Artistic render-only copies, generated before LOD children. */
@@ -46,7 +47,7 @@ export interface RendererOptions {
 }
 
 /** Base renderer that filters particles and applies renderer LOD before delegating to a backend-compatible view. */
-export default abstract class Renderer {
+export default abstract class Renderer extends EventReceiver {
   tags?: Tag[];
   children: RendererChildrenOptions;
   compensation: CompensationMode | `${CompensationMode}`;
@@ -83,6 +84,7 @@ export default abstract class Renderer {
 
   /** Configures particle filtering, artistic children, and LOD compensation. */
   constructor(options: Partial<RendererOptions> = {}) {
+    super(options);
     this.tags = acceptMultiple(options.tags);
     this.children = options.children ?? {};
     this.compensation = options.compensation ?? CompensationMode.None;
@@ -97,6 +99,9 @@ export default abstract class Renderer {
     system: ParticleSystem,
     deltaTime: number,
   ): void;
+
+  /** @internal CPU-readback renderers consume their batch when the CPU preprocessing actually executes. */
+  get supportsGPUEventInput(): boolean { return this.supportsGPUInput && !this.updateGPUUsesCPUReadback; }
 
   /** Whether this renderer can consume GPU particle buffers without a selective CPU readback. */
   get supportsGPUInput(): boolean {
@@ -152,6 +157,7 @@ export default abstract class Renderer {
     system: ParticleSystem,
     deltaTime: number = 0,
   ): void {
+    this.beginExecution(system, deltaTime);
     this._usesGPUChildren = false;
     const visible = system.quality === 0 ? [] : particles.filter(particle => (
       !this.tags || tagsIntersect(this.tags, particle.tags ?? [])
@@ -234,6 +240,10 @@ export default abstract class Renderer {
     deltaTime: number = 0,
   ): void {
     if (!this.supportsGPUInput) throw new Error('This particle renderer does not support GPU particle buffers.');
+    if (!this.updateGPUUsesCPUReadback) {
+      this.beginExecution(system, deltaTime);
+      this.beginGPUExecution(system);
+    }
     this._usesGPUChildren = !this.updateGPUUsesCPUReadback;
     // Readback implementations expand once through the CPU update entry point.
     const visual = this.updateGPUUsesCPUReadback ? buffers : this._gpuChildren.prepare(

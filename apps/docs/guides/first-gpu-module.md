@@ -63,7 +63,7 @@ module uses the grid's exact-radius query and performs the count entirely in the
 
 ```ts
 const crowdDrag = new Module(
-  (particle, deltaTime, _system, octree) => {
+  (particle, deltaTime, { octree }) => {
     const nearbyCount = octree
       .particlesInRadius(particle.position, 2)
       .filter((neighbor) => neighbor !== particle)
@@ -77,7 +77,7 @@ const crowdDrag = new Module(
     octreeOptions: { maxDepth: 6, particlesPerLeaf: 8 },
     useSpatialGrid: true,
     spatialGridOptions: { brickSubdivisions: 3, cellSubdivisions: 4 },
-    modifyGPU: (particle, deltaTime, _context, grid) => {
+    modifyGPU: (particle, deltaTime, { spatialGrid: grid }) => {
       if (!grid) return;
 
       const nearbyCount = float(0).toVar("nearbyCount");
@@ -96,7 +96,7 @@ const crowdDrag = new Module(
 );
 ```
 
-RZMPS rebuilds both structures and passes the appropriate one as the final callback argument. A
+RZMPS rebuilds both structures and exposes them as `context.octree` on CPU and `context.spatialGrid` on GPU. A
 grid query emits shader-side work and never returns JavaScript particles. Its callback can inspect
 each neighbor and the squared distance when a count alone is not enough. Keep query bounds and
 grid resolution appropriate for the effect; see

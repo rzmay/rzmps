@@ -1,3 +1,9 @@
+const context = {
+  system: new ParticleSystem({ emitters: [], modules: [], renderers: [] }),
+  deltaTime: 0,
+  events: Object.freeze([]),
+};
+
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { float } from 'three/tsl';
@@ -40,10 +46,10 @@ assert.deepEqual(nested.scale.toArray(), [2, 2, 2]);
 
 const particle = new Particle();
 particle.time = 0.25;
-new ScaleOverLifetime({ scale: (t) => 1 + t, scalarVelocity: [2, 2] }).modify([particle], 0);
+new ScaleOverLifetime({ scale: (t) => 1 + t, scalarVelocity: [2, 2] }).modify([particle], 0, context);
 assert.deepEqual(particle.scale.toArray(), [1.25, 1.25, 1.25]);
 assert.deepEqual(particle.scalarVelocity.toArray(), [2, 2, 2]);
-new ColorOverLifetime({ color: new Set(['red', 0xff0000]) }).modify([particle], 0);
+new ColorOverLifetime({ color: new Set(['red', 0xff0000]) }).modify([particle], 0, context);
 assert.ok(particle.color.equals(new THREE.Color('red')));
 
 // Mixed shorthand/object ranges and sets preserve seeded sampling and object inputs.
@@ -54,32 +60,32 @@ for (const [shortcut, explicit] of [
   const a = new Particle();
   const b = new Particle();
   b.id = a.id;
-  new ScaleOverLifetime({ scale: shortcut }).modify([a], 0);
-  new ScaleOverLifetime({ scale: explicit }).modify([b], 0);
+  new ScaleOverLifetime({ scale: shortcut }).modify([a], 0, context);
+  new ScaleOverLifetime({ scale: explicit }).modify([b], 0, context);
   assert.ok(a.scale.equals(b.scale));
 }
 const a = new Particle();
 const b = new Particle();
 b.id = a.id;
-new ColorOverLifetime({ color: ['red', 0x0000ff] }).modify([a], 0);
-new ColorOverLifetime({ color: [new THREE.Color('red'), new THREE.Color('blue')] }).modify([b], 0);
+new ColorOverLifetime({ color: ['red', 0x0000ff] }).modify([a], 0, context);
+new ColorOverLifetime({ color: [new THREE.Color('red'), new THREE.Color('blue')] }).modify([b], 0, context);
 assert.ok(a.color.equals(b.color));
 
 // Parameter ranges interpolate; direct values scale with the parameter; callbacks are explicit.
 for (const [scale, expected] of [[4, 2], [[1, 3], 2], [() => 3, 3], [[() => 1, () => 3], 2]]) {
   const p = new Particle({ velocity: new THREE.Vector3(5, 0, 0) });
-  new ScaleBySpeed({ speedRange: [0, 10], scale }).modify([p], 0);
+  new ScaleBySpeed({ speedRange: [0, 10], scale }).modify([p], 0, context);
   assert.deepEqual(p.scale.toArray(), [expected, expected, expected]);
 }
 for (const color of [['black', 'white'], () => '#bcbcbc', [() => 'black', () => 'white']]) {
   const p = new Particle({ scale: new THREE.Vector3(5, 0, 0) });
-  new ColorBySize({ sizeRange: [0, 10], color }).modify([p], 0);
+  new ColorBySize({ sizeRange: [0, 10], color }).modify([p], 0, context);
   const expected = typeof color === 'function' ? new THREE.Color('#bcbcbc') : new THREE.Color(0.5, 0.5, 0.5);
   assert.ok(p.color.equals(expected));
 }
-new TransformByNoise({ strength: 0 }).modify([new Particle()], 1);
+new TransformByNoise({ strength: 0 }).modify([new Particle()], 1, context);
 const limited = new Particle({ velocity: new THREE.Vector3(3, -3, 2) });
-new LimitVelocityOverLifetime({ limit: 1 }).modify([limited], 1);
+new LimitVelocityOverLifetime({ limit: 1 }).modify([limited], 1, context);
 assert.deepEqual(limited.velocity.toArray(), [1, -1, 1]);
 const trail = new TrailRenderer({ texture: new THREE.Texture(), colorOverLifetime: 'red', colorOverTrail: () =>
   0xffffff });
@@ -120,7 +126,8 @@ assert.deepEqual(rotatedBirth.angularVelocity.toArray(), [-0.5, -0.5, -0.5]);
 assert.deepEqual(rotatedBirth.angularAcceleration.toArray(), [0.2, 0.2, 0.2]);
 for (const value of [1, () => 1, [1, 1], new Set([1])]) {
   const p = new Particle();
-  new RotationOverLifetime({ angle: value, angularVelocity: value, angularAcceleration: value }).modify([p], 0);
+  new RotationOverLifetime({ angle: value, angularVelocity: value, angularAcceleration: value })
+    .modify([p], 0, context);
   for (const channel of ['rotation', 'angularVelocity', 'angularAcceleration']) {
     assert.deepEqual(p[channel].toArray(), [1, 1, 1]);
   }
@@ -132,13 +139,15 @@ for (const module of [
 ]) {
   const p = new Particle({ scale: new THREE.Vector3(1, 0, 0), velocity: new THREE.Vector3(5, 0, 0),
     position: new THREE.Vector3(0, 0, 5) });
-  module.modify([p], 0);
+  module.modify([p], 0, context);
   assert.deepEqual(p.rotation.toArray(), [2, 2, 2]);
   assert.deepEqual(p.angularVelocity.toArray(), [3, 3, 3]);
   assert.deepEqual(p.angularAcceleration.toArray(), [1, 1, 1]);
 }
 const suppliedAngles = new THREE.Vector3(1, 2, 3);
 const independentlyRotated = new Particle();
-new RotationOverLifetime({ angle: suppliedAngles }).modify([independentlyRotated], 0);
+new RotationOverLifetime({ angle: suppliedAngles }).modify([independentlyRotated], 0, context);
 independentlyRotated.rotation.setScalar(0);
 assert.deepEqual(suppliedAngles.toArray(), [1, 2, 3]);
+
+context.system.destroy();

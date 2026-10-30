@@ -129,6 +129,7 @@ export class ParticleSystemSerializer {
 
     serializeSubSystemOptions(options) {
         return this.serializeValue({
+            eventScope: options.eventScope,
             shouldEmit: options.shouldEmit,
             ratio: options.ratio,
             emitContinuous: options.emitContinuous,
@@ -249,6 +250,9 @@ export class ParticleSystemSerializer {
             const options = this.serializeValue({
                 priority: module.priority,
                 tags: module.tags,
+                events: module.events,
+                eventScope: module.eventScope,
+                prepare: module._prepare,
                 condition: module.condition,
                 conditionGPU: module.conditionGPU,
                 modifyGPU: module.modifyGPU,
@@ -452,6 +456,7 @@ export class ParticleSystemSerializer {
 
     getSerializableRuntimeOptions(target) {
         const hidden = new Set([
+            'executionContext', 'gpuExecutionContext',
         ]);
         return Object.fromEntries(
             Object.entries(target).filter(([key]) => !key.startsWith('_') && !hidden.has(key)),

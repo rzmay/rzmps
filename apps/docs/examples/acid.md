@@ -37,10 +37,11 @@ slots.
 
 ## Modules
 
-PoolBubbling uses `Module.prepare()` as a once-per-simulation-step hook, including GPU processing. Its per-particle
+PoolBubbling uses `Module.prepare(context)` as a once-per-simulation-step hook, including GPU processing. Its
+per-particle
 `modify` and `modifyGPU` callbacks intentionally do nothing; the empty GPU callback preserves GPU eligibility. The
 factory returns a ParticleSystem rather than its own animation loop, so prepare() keeps the scheduler on the system's
-clock, respecting pause, simulation speed and fixed-step advancement. Call `super.prepare()` when overriding it.
+clock, respecting pause, simulation speed and fixed-step advancement. Call `super.prepare(context)` when overriding it.
 
 This is also a useful pattern for other effect-level scheduling. In an application that owns the animation loop, the
 same scheduling code can run outside a module before calling the root system's update(). Do not update children

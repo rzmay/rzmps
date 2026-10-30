@@ -14,4 +14,6 @@ At the beginning of the next update, cached values are restored. A render-time v
 
 Prefer a built-in lifetime module before writing an equivalent callback: those modules already select phases appropriate to their behavior. When combining modifiers that write the same property, inspect both their priorities and whether each callback assigns or multiplies that property. A later assignment can replace an earlier result.
 
-`prepare(system, deltaTime)` runs before the per-particle phase. Use it for shared calculations or spatial collection, and reuse scratch objects in the particle callback. Population LOD removes simulated particles before module work; surviving particles run every step.
+`prepare(context)` runs before the per-particle phase. Use it for shared calculations or spatial collection, and reuse
+scratch objects in the particle callback. Population LOD removes simulated particles before module work; surviving
+particles run every step.

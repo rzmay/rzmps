@@ -1,3 +1,4 @@
+import EventReceiver, { type EventExecutionContext, type EventReceiverOptions } from './EventReceiver';
 import Particle from './Particle';
 import ParticleSystem from './ParticleSystem';
 import type { Tag } from './types/Tag';
@@ -6,6 +7,7 @@ import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
 import SpatialEffect from './SpatialEffect';
 import Priority from './enums/Priority';
+import type { GPUEventBatch } from './gpu/EventBatch';
 import type { GPUParticleLike, GPUParticleUpdateContext } from './gpu/Particle';
 import type { Node } from 'three/webgpu';
 import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
@@ -15,6 +17,14 @@ import ParticleOctree, {
   type OctreeConfig,
 } from './helpers/ParticleOctree';
 
+export interface ModuleExecutionContext extends EventExecutionContext {
+  readonly octree?: ParticleOctree<unknown>;
+}
+export interface ModuleGPUExecutionContext extends GPUParticleUpdateContext {
+  readonly events: GPUEventBatch;
+  readonly spatialGrid?: ParticleSpatialGrid;
+}
+
 export interface ModuleOctreeAggregate {
   count: number;
 }
@@ -22,37 +32,35 @@ export interface ModuleOctreeAggregate {
 export type ModuleUpdate = (
   particle: Particle,
   deltaTime: number,
-  particleSystem?: ParticleSystem,
-  octree?: ParticleOctree<unknown>,
+  context: ModuleExecutionContext,
 ) => void;
 
 export type ModuleCondition = (
   particle: Particle,
   deltaTime: number,
-  particleSystem?: ParticleSystem,
-  octree?: ParticleOctree<unknown>,
+  context: ModuleExecutionContext,
 ) => boolean;
 
 export type ModuleGPUUpdate = (
   /** Shader-node particle view; mutate fields through TSL assignment methods. */
   particle: GPUParticleLike,
   deltaTime: Node<'float'>,
-  context: GPUParticleUpdateContext,
-  spatialGrid?: ParticleSpatialGrid,
+  context: ModuleGPUExecutionContext,
 ) => void;
 
 export type ModuleGPUCondition = (
   particle: GPUParticleLike,
   deltaTime: Node<'float'>,
-  context: GPUParticleUpdateContext,
-  spatialGrid?: ParticleSpatialGrid,
+  context: ModuleGPUExecutionContext,
 ) => Node<'bool'>;
 
 export type SpatialEffectConstructor<T extends SpatialEffect = SpatialEffect> = {
   new (...args: never[]): T;
 };
 
-export interface ModuleOptions {
+export interface ModuleOptions extends EventReceiverOptions {
+  /** Shared preparation work, called once before processing particles. */
+  prepare: (context: ModuleExecutionContext) => void;
   // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
   /** Execution phase:
    * negative is permanent before movement,
@@ -89,7 +97,7 @@ export interface ModuleOptions {
 }
 
 /** Per-particle modifier with priority phases, tag filtering, and a once-per-update preparation hook. */
-export default class Module {
+export default class Module extends EventReceiver {
   public static readonly Priority = Priority;
 
   static CPU_UNSUPPORTED: ModuleUpdate = () => {
@@ -99,6 +107,8 @@ export default class Module {
   static GPU_UNSUPPORTED: ModuleGPUUpdate = () => {
     throw new Error('This particle module does not support GPU processing.');
   };
+
+  declare executionContext?: ModuleExecutionContext;
 
   // Sub-modules on which this module depends.
   // Useful for pre-processing or combining priority stages.
@@ -140,10 +150,14 @@ export default class Module {
   }
 
   /** Wraps a per-particle callback; options select filtering, spatial collection, and priority. */
-  constructor(
-    public _modify: ModuleUpdate,
-    options: Partial<ModuleOptions> = {},
-  ) {
+  public _modify: ModuleUpdate;
+  /** @internal Function-defined preparation hook, preserved by demo serialization. */
+  public readonly _prepare?: (context: ModuleExecutionContext) => void;
+
+  constructor(modify: ModuleUpdate, options: Partial<ModuleOptions> = {}) {
+    super(options);
+    this._modify = modify;
+    this._prepare = options.prepare;
     this.tags = acceptMultiple(options.tags);
     this._hasCustomCondition = options.condition !== undefined;
     this.condition = options.condition ?? (() => true);
@@ -182,13 +196,22 @@ export default class Module {
   }
 
   /** Applies tag and condition selection before invoking the particle callback. */
-  public modify(particles: Particle[], deltaTime: number, particleSystem?: ParticleSystem): void {
+  public modify(particles: Particle[], deltaTime: number, context: ModuleExecutionContext): void {
     particles.filter((p) => (
       p.alive
       && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
-      && this.condition(p, deltaTime, particleSystem, this.octree)
+      && this.condition(p, deltaTime, context)
     ))
-      .forEach((p) => this._modify(p, deltaTime, particleSystem, this.octree));
+      .forEach((p) => this._modify(p, deltaTime, context));
+  }
+
+  /** @internal Freezes one event batch for preparation, conditions, and all particle callbacks. */
+  protected override createExecutionContext(context: EventExecutionContext): ModuleExecutionContext {
+    // Preparation can create the managed tree; keep the shared context's octree access live.
+    return Object.freeze(Object.defineProperty({ ...context }, 'octree', {
+      enumerable: true,
+      get: () => this.octree,
+    }));
   }
 
   /** Flattens dependents before this module; priority sorting still determines execution phases. */
@@ -201,8 +224,12 @@ export default class Module {
   }
 
   /** Prepares shared work once per system update; the base implementation collects matching spatial effects. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public prepare(particleSystem: ParticleSystem, deltaTime: number) {
+  public prepare(context: ModuleExecutionContext): void {
+    this.prepareCollections(context.system);
+    this._prepare?.(context);
+  }
+
+  private prepareCollections(particleSystem: ParticleSystem): void {
     this.prepareSpatialEffects(particleSystem);
     if (!this.useOctree || particleSystem.isGPUProcessingActive) return;
 

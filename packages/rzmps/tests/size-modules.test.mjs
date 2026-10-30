@@ -1,3 +1,9 @@
+const context = {
+  system: new ParticleSystem({ emitters: [], modules: [], renderers: [] }),
+  deltaTime: 0,
+  events: Object.freeze([]),
+};
+
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
@@ -5,6 +11,7 @@ import {
   DistortionBySize,
   MassBySize,
   Particle,
+  ParticleSystem,
   SpeedBySize,
 } from '../build/index.mjs';
 
@@ -29,24 +36,26 @@ const particle = new Particle({
 new ColorBySize({
   alpha: [1, 3],
   sizeRange: [0, 10],
-}).modify([particle], 0);
+}).modify([particle], 0, context);
 
 new DistortionBySize({
   distortionStrength: [1, 3],
   sizeRange: [0, 10],
-}).modify([particle], 0);
+}).modify([particle], 0, context);
 
 new MassBySize({
   mass: [1, 3],
   sizeRange: [0, 10],
-}).modify([particle], 0);
+}).modify([particle], 0, context);
 
 new SpeedBySize({
   speed: [1, 3],
   sizeRange: [0, 10],
-}).modify([particle], 0);
+}).modify([particle], 0, context);
 
 assert.equal(particle.alpha, 2);
 assert.equal(particle.distortionStrength, 4);
 assert.equal(particle.mass, 4);
 assert.equal(particle.speed, 4);
+
+context.system.destroy();

@@ -65,7 +65,7 @@ export default function createSimulationSpaces() {
   transformed.position.set(-2, 3, -3); transformed.name = 'Transform Frame';
   parent.add(transformed);
   // The harness calls this after all steps. Move the external reference and verify rendering uses it live.
-  parent.userData.validateSimulationFrames = async renderer => {
+  parent.userData.validateSimulationFrames = async () => {
     const read = async system => {
       if (!system.isGPUProcessingActive) return system.particles.filter(p => p.alive);
       const results = await system._readbackGPUParticles(Array.from({length: system.gpuParticleBuffers.count},

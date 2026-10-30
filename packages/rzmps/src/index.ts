@@ -227,3 +227,10 @@ export * as Textures from './Textures';
 
 export { CompensationMode } from './Renderer';
 export type { RendererChildrenOptions } from './Renderer';
+
+export { default as EventReceiver } from './EventReceiver';
+export type {
+  EventOrigin, EventScope, SimulationEvent, EventExecutionContext, GPUEventExecutionContext, EventReceiverOptions,
+} from './EventReceiver';
+export type { ModuleExecutionContext, ModuleGPUExecutionContext } from './Module';
+export type { GPUEventBatch } from './gpu/EventBatch';

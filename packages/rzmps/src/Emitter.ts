@@ -1,3 +1,5 @@
+import EventReceiver, { type EventReceiverOptions } from './EventReceiver';
+import type { SubSystemOptions } from './ParticleSystem';
 import * as THREE from 'three';
 import { StorageBufferAttribute, type Node } from 'three/webgpu';
 import EmissionShape from './EmissionShape';
@@ -55,7 +57,12 @@ export type SpawnBurst = {
     fired?: boolean,
 };
 
-export interface EmitterOptions {
+export type EmitterSources = readonly string[] | { ids?: readonly string[]; tags?: readonly string[] };
+export interface EmitterOptions extends EventReceiverOptions, Partial<Omit<SubSystemOptions, 'tags'>> {
+    /** Registered source IDs, or a union of IDs and sources with any selected tag. Omission uses ordinary emission. */
+    sources?: EmitterSources;
+    /** Tags selecting event origins; tags continues to assign tags at particle birth. */
+    sourceTags?: Tag[];
     /** Dynamic values sampled at birth; mutable values are isolated per particle. */
     initialValues: Partial<InitialParticleValues>;
     /** Geometry and sampling rule used to place particles. Defaults to a sphere. */
@@ -157,7 +164,10 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
 export type GPUEmitterUpdate = (context: GPUEmitterUpdateContext) => void;
 
 /** Samples particle births from a shape using time, distance, and burst emission. */
-class Emitter {
+class Emitter extends EventReceiver {
+  /** Emitter-owned triggers and source inheritance, overlaid by attachment overrides at execution. */
+  emission: Partial<SubSystemOptions>;
+  sources?: EmitterSources;
   source: EmissionShape;
   rate: DynamicValue<number>;
   rateOverDistance: DynamicValue<number>;
@@ -198,6 +208,67 @@ class Emitter {
   // Used for subsystems
   private _contextStates = new Map<string, EmitterContextState>();
 
+  get emitContinuous(): SubSystemOptions['emitContinuous'] | undefined { return this.emission.emitContinuous; }
+  set emitContinuous(value: SubSystemOptions['emitContinuous'] | undefined) { this.emission.emitContinuous = value; }
+  get emitOnSpawn(): SubSystemOptions['emitOnSpawn'] | undefined { return this.emission.emitOnSpawn; }
+  set emitOnSpawn(value: SubSystemOptions['emitOnSpawn'] | undefined) { this.emission.emitOnSpawn = value; }
+  get emitOnDeath(): SubSystemOptions['emitOnDeath'] | undefined { return this.emission.emitOnDeath; }
+  set emitOnDeath(value: SubSystemOptions['emitOnDeath'] | undefined) { this.emission.emitOnDeath = value; }
+  get emitOnCollision(): SubSystemOptions['emitOnCollision'] | undefined { return this.emission.emitOnCollision; }
+  set emitOnCollision(value: SubSystemOptions['emitOnCollision'] | undefined) { this.emission.emitOnCollision = value; }
+  get onEvent(): SubSystemOptions['onEvent'] | undefined { return this.emission.onEvent; }
+  set onEvent(value: SubSystemOptions['onEvent'] | undefined) { this.emission.onEvent = value; }
+  get shouldEmit(): SubSystemOptions['shouldEmit'] | undefined { return this.emission.shouldEmit; }
+  set shouldEmit(value: SubSystemOptions['shouldEmit'] | undefined) { this.emission.shouldEmit = value; }
+  get ratio(): SubSystemOptions['ratio'] | undefined { return this.emission.ratio; }
+  set ratio(value: SubSystemOptions['ratio'] | undefined) { this.emission.ratio = value; }
+  get inheritScale(): SubSystemOptions['inheritScale'] | undefined { return this.emission.inheritScale; }
+  set inheritScale(value: SubSystemOptions['inheritScale'] | undefined) { this.emission.inheritScale = value; }
+  get inheritColor(): SubSystemOptions['inheritColor'] | undefined { return this.emission.inheritColor; }
+  set inheritColor(value: SubSystemOptions['inheritColor'] | undefined) { this.emission.inheritColor = value; }
+  get inheritAlpha(): SubSystemOptions['inheritAlpha'] | undefined { return this.emission.inheritAlpha; }
+  set inheritAlpha(value: SubSystemOptions['inheritAlpha'] | undefined) { this.emission.inheritAlpha = value; }
+  get inheritMass(): SubSystemOptions['inheritMass'] | undefined { return this.emission.inheritMass; }
+  set inheritMass(value: SubSystemOptions['inheritMass'] | undefined) { this.emission.inheritMass = value; }
+  get inheritVelocity(): SubSystemOptions['inheritVelocity'] | undefined { return this.emission.inheritVelocity; }
+  set inheritVelocity(value: SubSystemOptions['inheritVelocity'] | undefined) { this.emission.inheritVelocity = value; }
+  get inheritLifetime(): SubSystemOptions['inheritLifetime'] | undefined { return this.emission.inheritLifetime; }
+  set inheritLifetime(value: SubSystemOptions['inheritLifetime'] | undefined) { this.emission.inheritLifetime = value; }
+  get impulseThreshold(): SubSystemOptions['impulseThreshold'] | undefined { return this.emission.impulseThreshold; }
+  set impulseThreshold(value: SubSystemOptions['impulseThreshold'] | undefined) {
+    this.emission.impulseThreshold = value;
+  }
+  get impulseAffectsScale(): SubSystemOptions['impulseAffectsScale'] | undefined {
+    return this.emission.impulseAffectsScale;
+  }
+  set impulseAffectsScale(value: SubSystemOptions['impulseAffectsScale'] | undefined) {
+    this.emission.impulseAffectsScale = value;
+  }
+  get impulseAffectsSpeed(): SubSystemOptions['impulseAffectsSpeed'] | undefined {
+    return this.emission.impulseAffectsSpeed;
+  }
+  set impulseAffectsSpeed(value: SubSystemOptions['impulseAffectsSpeed'] | undefined) {
+    this.emission.impulseAffectsSpeed = value;
+  }
+  get impulseAffectsMass(): SubSystemOptions['impulseAffectsMass'] | undefined {
+    return this.emission.impulseAffectsMass;
+  }
+  set impulseAffectsMass(value: SubSystemOptions['impulseAffectsMass'] | undefined) {
+    this.emission.impulseAffectsMass = value;
+  }
+  get impulseAffectsLifetime(): SubSystemOptions['impulseAffectsLifetime'] | undefined {
+    return this.emission.impulseAffectsLifetime;
+  }
+  set impulseAffectsLifetime(value: SubSystemOptions['impulseAffectsLifetime'] | undefined) {
+    this.emission.impulseAffectsLifetime = value;
+  }
+  get impulseAffectsAlignment(): SubSystemOptions['impulseAffectsAlignment'] | undefined {
+    return this.emission.impulseAffectsAlignment;
+  }
+  set impulseAffectsAlignment(value: SubSystemOptions['impulseAffectsAlignment'] | undefined) {
+    this.emission.impulseAffectsAlignment = value;
+  }
+
   /** Monotonic GPU configuration version used to invalidate compiled work. */
   get version(): number {
     return this._gpuVersion;
@@ -215,20 +286,28 @@ class Emitter {
   constructor(
     options: Partial<EmitterOptions> = {},
   ) {
-    this.source = options.source ?? EmissionShape.Sphere();
-    this.initialValues = options.initialValues ?? {};
+    const {
+      source, sources, sourceTags, initialValues, bursts, rate, rateOverDistance,
+      radialSpeed, alignment, tags, tagSelection, events, eventScope, ...emission
+    } = options;
 
-    this.bursts = acceptMultiple(options.bursts) ?? [];
+    super({ events, eventScope });
+
+    this.sources = sources;
+    this.emission = { ...emission, ...(sourceTags === undefined ? {} : { tags: sourceTags }) };
+    this.source = source ?? EmissionShape.Sphere();
+    this.initialValues = initialValues ?? {};
+
+    this.bursts = acceptMultiple(bursts) ?? [];
     this.normalizeBurstTimes();
-    this.rate = options.rate ?? (this.bursts.length > 0 ? 0 : 50);
-    this.rateOverDistance = options.rateOverDistance ?? 0;
+    this.rate = rate ?? (this.bursts.length > 0 ? 0 : 50);
+    this.rateOverDistance = rateOverDistance ?? 0;
 
-    this.radialSpeed = options.radialSpeed ?? 1
-    this.alignment = options.alignment ?? 0;
+    this.radialSpeed = radialSpeed ?? 1;
+    this.alignment = alignment ?? 0;
 
-    this.tags = acceptMultiple(options.tags);
-    this.tagSelection = (options.tagSelection as TagSelectionMethod) ?? this.tagSelection;
-
+    this.tags = acceptMultiple(tags);
+    this.tagSelection = (tagSelection as TagSelectionMethod) ?? this.tagSelection;
   }
 
   /*
@@ -590,7 +669,6 @@ class Emitter {
         } else {
           particle.tagMask.assign(uint(tagMasks.reduce((mask, value) => mask | value, 0)));
         }
-        if (parent) particle.tagMask.assign(bitOr(particle.tagMask, parent.tagMask));
         context.allocationWriter?.markSpawned(particle);
       };
 
@@ -854,8 +932,8 @@ class Emitter {
     context: Partial<EmissionContext>,
     particleSystem: ParticleSystem,
   ): Particle[] {
-    this.normalizeBurstTimes();
     const now = Date.now();
+    this.normalizeBurstTimes();
     const elapsedMilliseconds = context.elapsedTime === undefined
       ? undefined
       : context.elapsedTime * 1000;
@@ -980,20 +1058,18 @@ class Emitter {
   private spawnParticle(
     particles: Particle[],
     time: number,
-    context: Partial<EmissionContext>,
+    emissionContext: Partial<EmissionContext>,
     particleSystem: ParticleSystem,
   ): Particle | undefined {
-    const sourceFrame = particleSystem.getSourceEmissionFrame(context.source);
-    if (context.source?.alive && particleSystem.isSubSystem
+    const sourceFrame = particleSystem.getSourceEmissionFrame(emissionContext.source);
+    if (emissionContext.source?.alive && particleSystem.isSubSystem
       && particleSystem.simulationSpace === 'source' && !sourceFrame) return;
-    if (sourceFrame) {
-      const toSource = sourceFrame.clone().invert();
-      context = {
-        ...context,
-        transform: toSource.clone().multiply(context.transform ?? new THREE.Matrix4()),
-        velocity: context.velocity?.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(toSource)),
-      };
-    }
+    const toSource = sourceFrame?.clone().invert();
+    const context = toSource ? {
+      ...emissionContext,
+      transform: toSource.clone().multiply(emissionContext.transform ?? new THREE.Matrix4()),
+      velocity: emissionContext.velocity?.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(toSource)),
+    } : emissionContext;
     const point = this.source.getPoint();
     const position = point.position.clone().add(
       evaluateDynamicVector(this.initialValues.position ?? new THREE.Vector3(), time),

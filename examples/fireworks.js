@@ -11,7 +11,6 @@ import {
   SpriteRenderer,
   TrailRenderer,
   TrailTextureMode,
-  MeshRenderer,
   TransformByNoise,
   LimitVelocityOverLifetime,
   RotationOverLifetime,

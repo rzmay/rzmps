@@ -23,7 +23,9 @@ function exportSources(source) {
 
 function classSection(name, source) {
   if (/^GPU/.test(name) || name === 'ParticleSpatialGrid') return 'GPU Infrastructure';
-  if (['./ParticleSystem', './Particle', './EmissionSource'].includes(source)) return 'Particle Systems';
+  if (['./ParticleSystem', './Particle', './EmissionSource', './EventReceiver'].includes(source)) {
+    return 'Particle Systems';
+  }
   if (['./Emitter', './EmissionShape'].includes(source)) return 'Emitters';
   if (source === './Module' || source?.startsWith('./modules/')) return 'Modules';
   if (source === './Renderer' || (source?.startsWith('./renderers/') && name !== 'LiveCubemap')) return 'Renderers';

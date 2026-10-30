@@ -81,9 +81,55 @@ configured factors; inherited velocity adds the selected fraction of source velo
 emission frame, while an event context's scalar `scale` multiplies child particle size. Child particles can themselves
 drive nested subsystems, on CPU or GPU. Registered source updates do not restart continuous bursts or event runs.
 
+## Event Origins and Defaults
+
+`EventScope` selects event producers explicitly. Every selection is exclusive:
+
+| Scope | Producers |
+| --- | --- |
+| `'local'` | The receiver's own system |
+| `'parent'` | Its immediate parent only |
+| `'child'` | Its immediate children only |
+| `['local', 'parent']` | Its own system and immediate parent |
+| `['local', 'parent', 'child']` | All three immediate origins |
+| `[]` | None |
+
+There is no recursive ancestor or descendant visibility, and repeated selections do not duplicate events.
+Modules and renderers default to `'local'`. Root emitters default to `'local'`; subsystem emitters default to
+`'parent'` only. These rules apply equally to lifecycle and custom events. A child emitter with `emitOnDeath: true`
+therefore responds to parent deaths without restarting when its own particles die. Selecting `'local'` explicitly
+allows local lifecycle reactions, including self-emission; use that intentionally.
+
+Scope filters subscriptions. It does not forward events: a child observing parent events does not publish its own
+events upward. Each delivered event preserves its original producer in `event.origin`, its identity, and its optional
+source. GPU filtering checks producer identity and that producer's event-name mapping together; numeric event IDs
+alone do not identify events across systems.
+
+```ts
+const emitter = new Emitter({
+  eventScope: ['local', 'parent'],
+  emitOnDeath: true,
+  bursts: { time: 0, count: 8 },
+});
+
+// An explicit relationship scope replaces the emitter's selection for this attachment.
+parent.addSubSystem(child, { eventScope: 'parent' });
+```
+
+Omitting the attachment override preserves an explicitly configured emitter scope, otherwise the subsystem default
+applies. Attachment overrides never mutate the emitter, and detaching or reparenting discards the previous override.
+The former cumulative `'both'` alias is replaced by explicit origin arrays in this major release.
+
+Source tags select which origins may emit. They are not automatically copied to emitted particles: configure the
+child emitter's own `tags` to label its output. For example, a rocket emitter can assign `['rocket']` and a sparkle
+emitter can select `sourceTags: ['rocket']` while assigning `tags: ['sparkle']`. The same rule applies to registered
+sources, continuous emission, and event bursts on CPU and GPU. Source identity and Source-space attachment do not
+depend on tags.
+
 ## One Event API
 
 ```ts
+system.emitEvent('alarm', { strength: 3 }); // No particle or transform is required.
 system.emitEvent(particle.id, 'explode', { strength: 3 });
 particle.emitEvent('explode', { strength: 3 });
 source.emitEvent('bubble', { strength: 1.5 });
@@ -91,9 +137,10 @@ source.emitEvent('bubble', { strength: 1.5 });
 system.addSubSystem(splash, { onEvent: ['explode', 'bubble'] });
 ```
 
-`emitEvent` resolves a live particle or registered source in its owning system. Unknown or disposed IDs are ignored. A
-CPU particle's alias uses ownership stored outside its serializable attributes; cloning or making a render-only shallow
-view does not copy that ownership. Dispatch never performs shader compilation or requires explicit event registration.
+With an ID, `emitEvent` resolves a live particle or registered source in its owning system. Unknown or disposed IDs
+are ignored. A CPU particle's alias uses ownership stored outside its serializable attributes. Cloning or making a
+render-only shallow view does not copy that ownership. Dispatch never performs shader compilation or requires
+explicit event registration.
 
 CPU dispatch targeting a native GPU particle ID queues a generation-validated selective snapshot at
 the next system update. Its CPU handler runs asynchronously when that snapshot is available, then
@@ -106,6 +153,23 @@ An event-only subscription disables continuous emission by default. Set `emitCon
 legacy flag and `onEvent` creates one run, with the named callback applied once. Explicit collision events can also
 originate from registered sources. Supplying the established collision hit shape preserves impulse threshold, alignment
 and scaling behavior.
+
+### Declarative Consumers
+
+`Module`, `Renderer`, and `Emitter` extend `EventReceiver`. The superclass owns their `events` and
+`eventScope` subscriptions, CPU and GPU execution contexts, batching, overflow tracking, and subscription cleanup.
+Components extend the shared execution context when needed; modules add access to their managed octree.
+CPU execution contexts expose a read-only `events` batch. Module `prepare(context)`, conditions, and particle callbacks
+share one execution context, so shared event interpretation can happen once during preparation. Native GPU modules
+use `context.events.forEach(name, callback)` over shared storage without event readback.
+
+Events emitted during consumption remain pending for a subsequent eligible execution. CPU receivers retain the newest
+1024 pending events and count dropped oldest entries in `overflowCount`. GPU receivers keep independent
+cursors into bounded shared storage; entries overwritten before a receiver executes are dropped. A receiver that does
+not execute retains pending events until its next execution, subject to these bounds.
+
+`system.onEvent(nameOrNames, callback)` observes only events produced by that system and returns an unsubscribe
+function. Declarative scopes subscribe to the relevant producer dispatchers directly; they do not rebroadcast events.
 
 ### CPU Context Handlers
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { attribute, float, uint } from 'three/tsl';
+import { attribute } from 'three/tsl';
 import type { Node, WebGPURenderer } from 'three/webgpu';
 import { cos, positionLocal, sin, vec3 } from 'three/tsl';
 import Renderer, { type RendererOptions } from '../Renderer';
