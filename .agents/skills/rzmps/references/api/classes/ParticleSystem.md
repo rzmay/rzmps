@@ -1272,6 +1272,31 @@ Permanently destroys this system and renderer resources; later update or advance
 
 ***
 
+<a id="estimateparticlecount"></a>
+
+### estimateParticleCount()
+
+```ts
+estimateParticleCount(tags?): number;
+```
+
+Predicts peak population from rate * lifetime plus configured bursts, capped by maxParticles.
+Uses the GPU allocation estimator without its minimum-buffer/power-of-two padding.
+Results are shared within a simulation step. Optional tags conservatively select emitters.
+Movement-driven emission, event subsystems and opaque TSL values may require later growth.
+
+#### Parameters
+
+##### tags?
+
+readonly `string`[]
+
+#### Returns
+
+`number`
+
+***
+
 <a id="getgpuemissionsupport"></a>
 
 ### getGPUEmissionSupport()

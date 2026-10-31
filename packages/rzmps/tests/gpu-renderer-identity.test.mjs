@@ -113,6 +113,7 @@ let resolveReadback;
 let readbackCalls = 0;
 let requestedLimit = 0;
 const selectiveSystem = {
+  getGPURendererTagMask() { return undefined; },
   cameraDistanceSq: 0,
   selectiveReadback(limit) {
     requestedLimit = limit;

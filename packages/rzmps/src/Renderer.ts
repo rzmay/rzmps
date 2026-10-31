@@ -1,4 +1,6 @@
 import Particle from './Particle';
+import groupRendererParticles from './helpers/groupRendererParticles';
+import GPURendererGrouping from './gpu/RendererGrouping';
 import ParticleSystem from './ParticleSystem';
 import type { StrictMultiple } from './types/Multiple';
 import type { Tag } from './types/Tag';
@@ -37,6 +39,12 @@ export interface RendererChildrenOptions {
 }
 
 export interface RendererOptions {
+  /** Desired representative cap. Negative or Infinity means unlimited. Defaults to -1. */
+  count: number;
+  /** Representative fraction, rounded with Math.round after applying count. Defaults to 1. */
+  ratio: number;
+  /** Maximum world-space assignment distance. Negative means unbounded (default -1). */
+  groupingRadius: number;
   /** Filters the simulated population by tag before rendering. */
   tags: StrictMultiple<Tag>;
   /** Artistic render-only copies, generated before LOD children. */
@@ -48,6 +56,14 @@ export interface RendererOptions {
 /** Base renderer that filters particles and applies renderer LOD before delegating to a backend-compatible view. */
 export default abstract class Renderer {
   tags?: Tag[];
+  protected _groupCount: number;
+  ratio: number;
+  groupingRadius: number;
+  get count(): number { return this._groupCount; }
+  set count(value: number) { this._groupCount = value; }
+  /** Event-oriented renderers retain their existing ratio selection policy. */
+  protected get groupingRatio(): number { return this.ratio; }
+  private readonly _gpuGrouping = new GPURendererGrouping();
   children: RendererChildrenOptions;
   compensation: CompensationMode | `${CompensationMode}`;
   private readonly _gpuQuality = uniform(1, 'float');
@@ -83,6 +99,9 @@ export default abstract class Renderer {
 
   /** Configures particle filtering, artistic children, and LOD compensation. */
   constructor(options: Partial<RendererOptions> = {}) {
+    this._groupCount = options.count ?? -1;
+    this.ratio = options.ratio ?? 1;
+    this.groupingRadius = options.groupingRadius ?? -1;
     this.tags = acceptMultiple(options.tags);
     this.children = options.children ?? {};
     this.compensation = options.compensation ?? CompensationMode.None;
@@ -115,6 +134,7 @@ export default abstract class Renderer {
     const signature = [
       this.tags?.join('|') ?? '',
       this.compensation,
+      this._groupCount, this.groupingRatio, this.groupingRadius,
       JSON.stringify(this.children, (_key, value) => {
         if (typeof value === 'function') return value.toString();
         return value instanceof Set ? [...value] : value;
@@ -153,9 +173,18 @@ export default abstract class Renderer {
     deltaTime: number = 0,
   ): void {
     this._usesGPUChildren = false;
-    const visible = system.quality === 0 ? [] : particles.filter(particle => (
-      !this.tags || tagsIntersect(this.tags, particle.tags ?? [])
+    const eligible = system.quality === 0 ? [] : particles.filter(particle => (
+      particle.alive && (!this.tags || tagsIntersect(this.tags, particle.tags ?? []))
     ));
+    this.preparePopulation(eligible.length);
+    const visible = groupRendererParticles(eligible, this._groupCount, this.groupingRatio, this.groupingRadius, system);
+    this.updateView(visible, particles, system, deltaTime);
+  }
+
+  /** Resource reservation hook; count refers to the eligible simulation population. */
+  protected preparePopulation(count: number): void { void count; }
+
+  private updateView(visible: Particle[], particles: Particle[], system: ParticleSystem, deltaTime: number): void {
     const originalCount = visible.length;
     const childCounts: number[] = [];
 
@@ -235,9 +264,26 @@ export default abstract class Renderer {
   ): void {
     if (!this.supportsGPUInput) throw new Error('This particle renderer does not support GPU particle buffers.');
     this._usesGPUChildren = !this.updateGPUUsesCPUReadback;
+    const grouped = this._gpuGrouping.prepare(buffers, system, this._groupCount,
+      this.groupingRatio, this.groupingRadius, system.getGPURendererTagMask(this.tags));
+    if (grouped !== buffers && this.updateGPUUsesCPUReadback) {
+      this._usesGPUChildren = false;
+      if (!this._gpuReadbackPending) {
+        const sequence = ++this._gpuReadbackSequence;
+        this._gpuReadbackPending = true;
+        void this._gpuGrouping.readback().then(particles => {
+          if (sequence !== this._gpuReadbackSequence) return;
+          this.preparePopulation(this._gpuGrouping.eligibleCount);
+          this.updateView(particles, particles, system, deltaTime);
+        }).finally(() => {
+          if (sequence === this._gpuReadbackSequence) this._gpuReadbackPending = false;
+        });
+      }
+      return;
+    }
     // Readback implementations expand once through the CPU update entry point.
     const visual = this.updateGPUUsesCPUReadback ? buffers : this._gpuChildren.prepare(
-      buffers,
+      grouped,
       system,
       this.children,
       this.compensation,
@@ -319,6 +365,7 @@ export default abstract class Renderer {
     this._usesGPUChildren = false;
     this.cancelGPUSelectiveReadback();
     this._gpuChildren.reset();
+    this._gpuGrouping.reset();
   }
 
   // Cleanup

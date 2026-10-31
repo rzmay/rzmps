@@ -64,6 +64,7 @@ enum ParticleRenderFloatSlot {
   RotationDistortion,
   ScaleRealtime,
   ColorTime,
+  Contribution,
 }
 
 const FLOAT_SLOT_COUNT = enumValueCount(ParticleFloatSlot);
@@ -129,6 +130,7 @@ export interface GPUParticleLike {
 
 /** Shader-node view of one particle; unlike Particle, this is not a CPU value object. */
 export class GPUParticleContext implements GPUParticleLike {
+  readonly contribution = float(1);
   readonly index: Node<'uint'>;
 
   readonly position: Node<'vec3'>;
@@ -318,6 +320,8 @@ export class GPUParticleStorage {
 }
 
 export class GPUParticleRenderContext {
+  readonly velocity: Node<'vec3'>;
+  readonly contribution: Node<'float'>;
   readonly index: Node<'uint'>;
   readonly position: Node<'vec3'>;
   readonly rotation: Node<'vec3'>;
@@ -334,12 +338,14 @@ export class GPUParticleRenderContext {
 
   constructor(
     index: Node<'uint'>,
-    vectors: Pick<GPUParticleVectorNodes, 'position' | 'rotation' | 'scale' | 'color'>,
-    scalars: Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'>,
+    vectors: Pick<GPUParticleVectorNodes, 'position' | 'rotation' | 'scale' | 'color' | 'velocity'>,
+    scalars: Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'> & { contribution: Node<'float'> },
     state: Node<'uvec4'>,
     private readonly owner?: GPUParticleRenderStorage,
   ) {
     this.index = index;
+    this.contribution = scalars.contribution;
+    this.velocity = vectors.velocity;
     this.position = vectors.position;
     this.rotation = vectors.rotation;
     this.scale = vectors.scale;
@@ -423,8 +429,9 @@ export class GPUParticleRenderStorage {
 
   createVectorNodes(
     index: Node<'uint'> = instanceIndex,
-  ): Pick<GPUParticleVectorNodes, 'position' | 'rotation' | 'scale' | 'color'> {
+  ): Pick<GPUParticleVectorNodes, 'position' | 'rotation' | 'scale' | 'color' | 'velocity'> {
     return {
+      velocity: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.Contribution, index).yzw,
       position: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.PositionAlpha, index).xyz,
       rotation: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.RotationDistortion, index).xyz,
       scale: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.ScaleRealtime, index).xyz,
@@ -434,8 +441,9 @@ export class GPUParticleRenderStorage {
 
   createScalarNodes(
     index: Node<'uint'> = instanceIndex,
-  ): Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'> {
+  ): Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'> & { contribution: Node<'float'> } {
     return {
+      contribution: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.Contribution, index).x,
       alpha: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.PositionAlpha, index).w,
       distortionStrength: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.RotationDistortion, index).w,
       realtime: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.ScaleRealtime, index).w,
@@ -466,6 +474,8 @@ export class GPUParticleRenderStorage {
     vectors.rotation.assign(particle.rotation);
     vectors.scale.assign(particle.scale);
     vectors.color.assign(particle.color);
+    vectors.velocity.assign(particle.velocity);
+    scalars.contribution.assign(float(1));
     scalars.alpha.assign(particle.alpha);
     scalars.distortionStrength.assign(particle.distortionStrength);
     scalars.realtime.assign(particle.realtime);
@@ -740,6 +750,8 @@ export class GPUParticleBufferState {
 export class GPUParticleRenderBufferState {
   /** Actual GPU-produced visual range, including original simulation slots. */
   instanceCountNode?: Node<'uint'>;
+  /** Source simulation slot for system-owned LOD spacing. */
+  spacingIndex?: (index: Node<'uint'>) => Node<'uint'>;
   private indirect?: IndirectStorageBufferAttribute;
   private indirectCompute?: ComputeNode;
   private indirectIndexCount = -1;

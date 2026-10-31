@@ -103,6 +103,7 @@ export { TagSelectionMethod } from './enums/TagSelectionMethod';
 export { default as Renderer } from './Renderer';
 export type { RendererOptions } from './Renderer';
 export { default as LightRenderer } from './renderers/LightRenderer';
+export type { LightRendererAllocationOptions } from './renderers/LightRenderer';
 export { default as MeshRenderer } from './renderers/MeshRenderer';
 export { default as SpriteRenderer } from './renderers/SpriteRenderer';
 export { default as AudioRenderer } from './renderers/AudioRenderer';

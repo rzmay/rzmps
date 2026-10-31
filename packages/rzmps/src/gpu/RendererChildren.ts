@@ -97,7 +97,7 @@ export default class GPURendererChildren {
     const backend = renderer.backend as unknown as {
       device?: { limits: { maxStorageBufferBindingSize: number } };
     };
-    const limit = Math.floor((backend?.device?.limits.maxStorageBufferBindingSize ?? 134217728) / 64);
+    const limit = Math.floor((backend?.device?.limits.maxStorageBufferBindingSize ?? 134217728) / 80);
     // Opaque TSL expressions cannot provide a CPU-side allocation bound. Use
     // the device-bounded global arena, not an assumed per-parent maximum.
     const capacity = moments.opaque ? limit
@@ -169,6 +169,8 @@ export default class GPURendererChildren {
       target.scale.assign(source.scale);
       target.color.assign(source.color);
       target.alpha.assign(source.alpha);
+      target.contribution.assign(source.contribution);
+      target.velocity.assign(source.velocity);
       target.distortionStrength.assign(source.distortionStrength);
       target.realtime.assign(source.realtime);
       target.time.assign(source.time);
@@ -240,7 +242,7 @@ export default class GPURendererChildren {
               If(destination.lessThan(uint(capacity)), () => {
                 const child = copy(instanceIndex, destination, false);
                 mapping.element(destination.sub(originalCount)).assign(uvec2(instanceIndex, i));
-                const radius = spacing!.element(rootIndex).x;
+                const radius = spacing!.element('spacingIndex' in input && input.spacingIndex ? input.spacingIndex(rootIndex) : rootIndex).x;
                 child.position.addAssign(offset(seedFor(parent.id, i, 0x6c6f6421), radius));
               }).Else(() => {
                 atomicAdd(counters.element(2), uint(1));

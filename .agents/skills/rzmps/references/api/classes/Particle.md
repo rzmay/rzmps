@@ -92,6 +92,18 @@ color: Color;
 
 ***
 
+<a id="contribution"></a>
+
+### contribution
+
+```ts
+contribution: number = 1;
+```
+
+Extensive visual energy; simulation particles contribute one by default.
+
+***
+
 <a id="data"></a>
 
 ### data

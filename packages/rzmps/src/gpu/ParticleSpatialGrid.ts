@@ -24,6 +24,7 @@ import {
   min,
   storage,
   uint,
+  uniform,
   vec3,
   vec4,
 } from 'three/tsl';
@@ -181,6 +182,17 @@ export default class ParticleSpatialGrid {
     return ParticleSpatialGrid.locate(position, this.bounds, this.cellsPerAxis);
   }
 
+  /** Allocates reusable grid storage before shader query graphs are constructed. */
+  initialize(renderer: ParticleSpatialGridRenderer, buffers: GPUParticleBufferState): void {
+    this.ensureCapacity(renderer, buffers.capacity);
+    if (this.currentBuffers !== buffers) {
+      this.buildNodes?.forEach(node => node.dispose());
+      this.buildNodes = undefined;
+      this.buildBufferVersion = -1;
+    }
+    this.currentBuffers = buffers;
+  }
+
   /** Alias matching the CPU utility's rebuild terminology. */
   rebuild(
     renderer: ParticleSpatialGridRenderer,
@@ -200,6 +212,7 @@ export default class ParticleSpatialGrid {
     if (this.updateAccumulator >= 1) this.updateAccumulator -= 1;
     this.ensureCapacity(renderer, buffers.capacity);
     this.lastBufferVersion = buffers.version;
+    this.buildCount.value = buffers.count;
     this.lastBuildToken = buildToken;
 
     this.getBuildNodes(buffers).forEach((node) => renderer.compute(node));
@@ -375,8 +388,61 @@ export default class ParticleSpatialGrid {
     );
   }
 
+  /** Emits a GPU bounds update for a grid whose caller already reduced the population.
+   * Set autoExpand to false when supplying fresh bounds this way each frame.
+   */
+  setBoundsNode(minimum: Node<'vec3'>, maximum: Node<'vec3'>): void {
+    this.assertReady();
+    const size = maximum.sub(minimum).max(vec3(1e-6));
+    this.gpuBounds!.element(0).assign(vec4(minimum.sub(size.mul(0.001)), 0));
+    this.gpuBounds!.element(1).assign(vec4(minimum.add(size.mul(1.001)), 0));
+  }
+
+  /** Exact nearest neighbor, pruning hash cells against the current best distance.
+   * Returns 0xffffffff when no particle lies within radius; negative radius is unbounded.
+   * Use a coarse grid for small representative populations. No per-query traversal cap applies.
+   */
+  nearestParticleIndexNode(position: Node<'vec3'>, radius: Node<'float'>): Node<'uint'> {
+    this.assertReady();
+    const minimum = this.gpuBounds!.element(0).xyz;
+    const cellSize = this.getCellSizeNode();
+    const coordinate = ivec3(clamp(floor(position.sub(minimum).div(cellSize)), vec3(0), vec3(this.cellsPerAxis - 1))).toVar();
+    const best = radius.lessThan(0).select(float(3.402823e38), radius.mul(radius)).toVar();
+    const result = uint(0xffffffff).toVar();
+    const visit = (cell: Node<'ivec3'>) => {
+      const lower = minimum.add(vec3(cell).mul(cellSize));
+      const delta = lower.sub(position).max(position.sub(lower.add(cellSize))).max(vec3(0));
+      If(delta.lengthSq().lessThanEqual(best), () => {
+        const encoded = atomicLoad(this.heads!.element(this.hashCoordinateNode(cell))).toVar();
+        Loop(() => {
+          If(encoded.equal(uint(0)), () => { Break(); });
+          const slot = encoded.sub(1).toVar();
+          const record = this.coordinates!.element(slot);
+          const p = this.currentBuffers!.storage.createParticle(slot);
+          const exact = record.x.equal(cell.x).and(record.y.equal(cell.y)).and(record.z.equal(cell.z));
+          If(exact.and(p.alive.notEqual(uint(0))).and(p.generation.equal(uint(record.w))), () => {
+            const distance = p.position.sub(position).lengthSq();
+            If(distance.lessThan(best).or(distance.equal(best).and(slot.lessThan(result))), () => {
+              best.assign(distance); result.assign(slot);
+            });
+          });
+          encoded.assign(this.links!.element(slot));
+        });
+      });
+    };
+    visit(coordinate);
+    Loop(this.cellsPerAxis ** 3, ({ i }) => {
+      const cell = ivec3(int(i).mod(this.cellsPerAxis), int(i).div(this.cellsPerAxis).mod(this.cellsPerAxis), int(i).div(this.cellsPerAxis ** 2));
+      If(cell.x.notEqual(coordinate.x).or(cell.y.notEqual(coordinate.y)).or(cell.z.notEqual(coordinate.z)), () => { visit(cell); });
+    });
+    return result;
+  }
+
   /** Releases GPU attributes owned by this grid. Explicitly shared grids remain caller-owned. */
   dispose(renderer?: GPUStorageBufferRenderer): void {
+    this.buildNodes?.forEach(node => node.dispose());
+    this.buildNodes = undefined;
+    this.buildBufferVersion = -1;
     [
       this.headAttribute,
       this.linkAttribute,
@@ -493,6 +559,9 @@ export default class ParticleSpatialGrid {
   }
 
   private currentBuffers?: GPUParticleBufferState;
+  private buildNodes?: ComputeNode[];
+  private buildBufferVersion = -1;
+  private readonly buildCount = uniform(0, 'uint');
 
   private ensureCapacity(renderer: GPUStorageBufferRenderer, capacity: number): void {
     if (capacity === this.capacity && this.headAttribute) return;
@@ -518,7 +587,10 @@ export default class ParticleSpatialGrid {
   }
 
   private getBuildNodes(buffers: GPUParticleBufferState): ComputeNode[] {
+    if (this.currentBuffers === buffers && this.buildBufferVersion === buffers.version && this.buildNodes) return this.buildNodes;
+    this.buildNodes?.forEach(node => node.dispose());
     this.currentBuffers = buffers;
+    this.buildBufferVersion = buffers.version;
     const reset = Fn(() => {
       If(instanceIndex.lessThan(uint(this.hashCapacity)), () => {
         atomicStore(this.heads!.element(instanceIndex), uint(EMPTY_LINK));
@@ -534,7 +606,7 @@ export default class ParticleSpatialGrid {
 
     const reduce = Fn(() => {
       const particle = buffers.storage.createParticle(undefined, true);
-      If(particle.alive.notEqual(uint(0)), () => {
+      If(instanceIndex.lessThan(this.buildCount).and(particle.alive.notEqual(uint(0))), () => {
         atomicMin(this.reductions!.element(BoundsReduction.MinimumX), orderedFloatNode(particle.position.x));
         atomicMin(this.reductions!.element(BoundsReduction.MinimumY), orderedFloatNode(particle.position.y));
         atomicMin(this.reductions!.element(BoundsReduction.MinimumZ), orderedFloatNode(particle.position.z));
@@ -543,7 +615,7 @@ export default class ParticleSpatialGrid {
         atomicMax(this.reductions!.element(BoundsReduction.MaximumZ), orderedFloatNode(particle.position.z));
         atomicStore(this.reductions!.element(BoundsReduction.HasParticles), uint(1));
       });
-    })().compute(buffers.count);
+    })().compute(buffers.capacity);
 
     const finalize = Fn(() => {
       if (!this.autoExpand) return;
@@ -582,7 +654,7 @@ export default class ParticleSpatialGrid {
 
     const insert = Fn(() => {
       const particle = buffers.storage.createParticle(undefined, true);
-      If(particle.alive.notEqual(uint(0)), () => {
+      If(instanceIndex.lessThan(this.buildCount).and(particle.alive.notEqual(uint(0))), () => {
         const boundsMin = vec3(this.gpuBounds!.element(0).xyz);
         const boundsMax = vec3(this.gpuBounds!.element(1).xyz);
         const inside = particle.position.greaterThanEqual(boundsMin).all()
@@ -610,9 +682,10 @@ export default class ParticleSpatialGrid {
           );
         });
       });
-    })().compute(buffers.count);
+    })().compute(buffers.capacity);
 
-    return [reset, reduce, finalize, insert];
+    this.buildNodes = this.autoExpand ? [reset, reduce, finalize, insert] : [reset, insert];
+    return this.buildNodes;
   }
 
   private hashCoordinateNode(coordinate: Node<'ivec3'>): Node<'uint'> {

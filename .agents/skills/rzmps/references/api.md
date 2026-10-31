@@ -137,6 +137,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [ForceFieldOptions](api/interfaces/ForceFieldOptions.md)
 - [ForceOverLifetimeOptions](api/Supporting-Types/interfaces/ForceOverLifetimeOptions.md)
 - [KillZoneOptions](api/type-aliases/KillZoneOptions.md)
+- [LightRendererAllocationOptions](api/interfaces/LightRendererAllocationOptions.md)
 - [LightRendererOptions](api/Supporting-Types/interfaces/LightRendererOptions.md)
 - [LimitVelocityOverLifetimeOptions](api/Supporting-Types/interfaces/LimitVelocityOverLifetimeOptions.md)
 - [LitSpriteOptions](api/Supporting-Types/interfaces/LitSpriteOptions.md)

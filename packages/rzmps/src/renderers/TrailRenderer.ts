@@ -92,11 +92,11 @@ type RenderPoint = {
 
 /** Builds particle trails or ribbons; trail lifetime and vertex spacing control persistence and geometry costs. */
 class TrailRenderer extends Renderer {
+  protected get groupingRatio(): number { return 1; }
   mode: TrailMode = TrailMode.Particle;
 
   texture: THREE.Texture;
 
-  ratio = 1;
 
   lifetime: DynamicValue<number> = 1;
 
@@ -255,6 +255,7 @@ class TrailRenderer extends Renderer {
   }
 
   destroy(): void {
+    super.reset();
     this.cancelGPUSelectiveReadback();
     this.restoreMaterialEnvironment();
     this.geometry.dispose();

@@ -40,6 +40,16 @@ new LightRenderer(options?): LightRenderer;
 
 ## Properties
 
+<a id="allocation"></a>
+
+### allocation
+
+```ts
+allocation: LightRendererAllocationOptions;
+```
+
+***
+
 <a id="alphaaffectsintensity"></a>
 
 ### alphaAffectsIntensity
@@ -102,13 +112,17 @@ decay: number;
 
 ***
 
-<a id="groupingradiusratio"></a>
+<a id="groupingradius"></a>
 
-### groupingRadiusRatio
+### groupingRadius
 
 ```ts
-groupingRadiusRatio: number;
+groupingRadius: number;
 ```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`groupingRadius`](Renderer.md#groupingradius)
 
 ***
 
@@ -170,6 +184,10 @@ rangeMultiplier: DynamicValue<number>;
 ratio: number;
 ```
 
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`ratio`](Renderer.md#ratio)
+
 ***
 
 <a id="sizeaffectsrange"></a>
@@ -226,6 +244,12 @@ set count(value): void;
 
 `void`
 
+#### Inherited from
+
+```ts
+Renderer.count
+```
+
 ***
 
 <a id="gpuparameteruploadcount"></a>
@@ -245,6 +269,42 @@ get gpuParameterUploadCount(): number;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`gpuParameterUploadCount`](Renderer.md#gpuparameteruploadcount)
+
+***
+
+<a id="groupingradiusratio"></a>
+
+### groupingRadiusRatio
+
+#### Get Signature
+
+```ts
+get groupingRadiusRatio(): number;
+```
+
+##### Deprecated
+
+Alias for groupingRadius, now measured in world units.
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set groupingRadiusRatio(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
 
 ***
 
@@ -345,7 +405,7 @@ get version(): number;
 ### \_update()
 
 ```ts
-_update(particles): void;
+_update(particles, system?): void;
 ```
 
 #### Parameters
@@ -353,6 +413,10 @@ _update(particles): void;
 ##### particles
 
 [`Particle`](Particle.md)[]
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) \| `undefined` = `...`
 
 #### Returns
 

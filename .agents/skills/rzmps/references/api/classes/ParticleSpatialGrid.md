@@ -267,6 +267,32 @@ GPU-resolved cell extent, including automatic bounds expansion.
 
 ***
 
+<a id="initialize"></a>
+
+### initialize()
+
+```ts
+initialize(renderer, buffers): void;
+```
+
+Allocates reusable grid storage before shader query graphs are constructed.
+
+#### Parameters
+
+##### renderer
+
+[`ParticleSpatialGridRenderer`](../Supporting-Types/interfaces/ParticleSpatialGridRenderer.md)
+
+##### buffers
+
+[`GPUParticleBufferState`](../interfaces/GPUParticleBufferState.md)
+
+#### Returns
+
+`void`
+
+***
+
 <a id="locate"></a>
 
 ### locate()
@@ -286,6 +312,34 @@ Returns the logical cell coordinate using the currently configured CPU-side boun
 #### Returns
 
 `Vector3`
+
+***
+
+<a id="nearestparticleindexnode"></a>
+
+### nearestParticleIndexNode()
+
+```ts
+nearestParticleIndexNode(position, radius): Node<"uint">;
+```
+
+Exact nearest neighbor, pruning hash cells against the current best distance.
+Returns 0xffffffff when no particle lies within radius; negative radius is unbounded.
+Use a coarse grid for small representative populations. No per-query traversal cap applies.
+
+#### Parameters
+
+##### position
+
+`Node`\<`"vec3"`\>
+
+##### radius
+
+`Node`\<`"float"`\>
+
+#### Returns
+
+`Node`\<`"uint"`\>
 
 ***
 
@@ -365,6 +419,33 @@ ParticleOctree.setBounds and to make the deferred GPU rebuild explicit.
 #### Returns
 
 `this`
+
+***
+
+<a id="setboundsnode"></a>
+
+### setBoundsNode()
+
+```ts
+setBoundsNode(minimum, maximum): void;
+```
+
+Emits a GPU bounds update for a grid whose caller already reduced the population.
+Set autoExpand to false when supplying fresh bounds this way each frame.
+
+#### Parameters
+
+##### minimum
+
+`Node`\<`"vec3"`\>
+
+##### maximum
+
+`Node`\<`"vec3"`\>
+
+#### Returns
+
+`void`
 
 ***
 
