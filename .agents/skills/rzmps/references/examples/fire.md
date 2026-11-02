@@ -75,7 +75,6 @@ The 10-second loop schedules a continuous flame; individual flame particles last
       new LightRenderer({
         count: 18,
         ratio: 0.3,
-        randomDistribution: true,
         inheritParticleColor: true,
         sizeAffectsRange: true,
         alphaAffectsIntensity: true,
@@ -108,7 +107,7 @@ The 10-second loop schedules a continuous flame; individual flame particles last
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L156)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L155)
 
 ```js
   return new ParticleSystem({
@@ -202,7 +201,7 @@ Uniform scale values and color strings use the standard input shortcuts.
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L160)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L159)
 
 ```js
     emitters: [
@@ -261,7 +260,7 @@ Noise strength 2.1 and frequency 1.35 break up the regular rise. The additional 
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L179)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L178)
 
 ```js
     modules: [
@@ -309,7 +308,6 @@ The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one anim
       new LightRenderer({
         count: 18,
         ratio: 0.3,
-        randomDistribution: true,
         inheritParticleColor: true,
         sizeAffectsRange: true,
         alphaAffectsIntensity: true,
@@ -341,7 +339,7 @@ The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one anim
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L205)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L204)
 
 ```js
     renderers: [

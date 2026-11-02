@@ -875,7 +875,7 @@ compactRenderSystem.deltaTime = 1 / 60;
 compactRenderSystem._processParticles();
 
 assert.equal(renderDispatches, 2);
-assert.equal(receivedRenderBuffer.attributes.floatData.count, receivedRenderBuffer.capacity * 4);
+assert.equal(receivedRenderBuffer.attributes.floatData.count, receivedRenderBuffer.capacity * 5);
 
 ParticleSystem.GPU_READBACK_RATE = previousReadbackRate;
 

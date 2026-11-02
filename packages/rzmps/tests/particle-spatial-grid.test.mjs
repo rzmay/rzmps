@@ -85,7 +85,8 @@ system.particles.push(included, excluded);
 managedOctreeModule.prepare(system, 1 / 60);
 managedOctreeModule.modify(system.particles, 1 / 60, system);
 assert.equal(callbackOctree, managedOctreeModule.getParticleOctree());
-assert.equal(callbackOctree.root.aggregate.count, 1);
+assert.deepEqual(callbackOctree.root.aggregate, {});
+assert.deepEqual(callbackOctree.particlesInRadius(new THREE.Vector3(), 10), [included]);
 
 // Octree config can override the module's processing tags without changing particle filtering.
 const sourceFilteredModule = new Module(() => {}, {
@@ -93,11 +94,12 @@ const sourceFilteredModule = new Module(() => {}, {
   octreeOptions: { bounds: configuredBounds, tags: 'excluded' },
 });
 sourceFilteredModule.prepare(system, 0);
-assert.equal(sourceFilteredModule.getParticleOctree().root.aggregate.count, 1);
+assert.deepEqual(sourceFilteredModule.getParticleOctree().root.aggregate, {});
 assert.deepEqual(sourceFilteredModule.getParticleOctree().particlesInRadius(new THREE.Vector3(), 10), [excluded]);
 sourceFilteredModule.octreeOptions.tags = [];
 sourceFilteredModule.prepare(system, 0);
-assert.equal(sourceFilteredModule.getParticleOctree().root.aggregate.count, 2);
+assert.deepEqual(sourceFilteredModule.getParticleOctree().root.aggregate, {});
+assert.equal(sourceFilteredModule.getParticleOctree().particlesInRadius(new THREE.Vector3(), 10).length, 2);
 
 // Function-defined GPU modules receive a compatible system-managed grid.
 let callbackGrid;

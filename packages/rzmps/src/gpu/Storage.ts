@@ -151,3 +151,12 @@ export function destroyStorageAttribute(
   if (backend?.get && !backend.get(attribute).buffer) return;
   backend?.destroyAttribute?.(attribute);
 }
+
+// TSL bitcast declarations lose the concrete node generic; preserve the shader value type here.
+export function bitcastFloatToUint(value: Node<'float'>): Node<'uint'> {
+  return floatBitsToUint(value) as unknown as Node<'uint'>;
+}
+
+export function bitcastUintToFloat(value: Node<'uint'>): Node<'float'> {
+  return uintBitsToFloat(value) as unknown as Node<'float'>;
+}

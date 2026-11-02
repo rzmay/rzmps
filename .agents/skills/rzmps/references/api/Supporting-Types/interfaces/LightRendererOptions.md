@@ -14,6 +14,18 @@
 
 ## Properties
 
+<a id="allocation"></a>
+
+### allocation
+
+```ts
+allocation: LightRendererAllocationOptions;
+```
+
+Predictive scene-light reservation and shrink hysteresis.
+
+***
+
 <a id="alphaaffectsintensity"></a>
 
 ### alphaAffectsIntensity
@@ -78,6 +90,12 @@ Visual approximation for population removed by system LOD. Defaults to none.
 count: number;
 ```
 
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Overrides
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`count`](../../interfaces/RendererOptions.md#count)
+
 ***
 
 <a id="decay"></a>
@@ -90,13 +108,19 @@ decay: number;
 
 ***
 
-<a id="groupingradiusratio"></a>
+<a id="groupingradius"></a>
 
-### groupingRadiusRatio
+### groupingRadius
 
 ```ts
-groupingRadiusRatio: number;
+groupingRadius: number;
 ```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`groupingRadius`](../../interfaces/RendererOptions.md#groupingradius)
 
 ***
 
@@ -120,16 +144,6 @@ lightOptions: PointLightOptions;
 
 ***
 
-<a id="randomdistribution"></a>
-
-### randomDistribution
-
-```ts
-randomDistribution: boolean;
-```
-
-***
-
 <a id="rangemultiplier"></a>
 
 ### rangeMultiplier
@@ -147,6 +161,12 @@ rangeMultiplier: DynamicValue<number>;
 ```ts
 ratio: number;
 ```
+
+Representative fraction, rounded with Math.round after applying count. Defaults to 1.
+
+#### Overrides
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`ratio`](../../interfaces/RendererOptions.md#ratio)
 
 ***
 

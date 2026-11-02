@@ -1,3 +1,5 @@
+import getAttributeVersion from './helpers/getAttributeVersion';
+import { transformPointGPU } from './helpers/gpuTransforms';
 import * as THREE from 'three';
 import { MeshBVH, type HitPointInfo } from 'three-mesh-bvh';
 import type { Node } from 'three/webgpu';
@@ -617,8 +619,8 @@ class SpatialEffect extends THREE.Object3D {
     if (!geometry) throw new Error('A spatial effect without geometry has no BVH.');
     const positionAttribute = geometry.getAttribute('position');
     const topologyKey =
-      `${positionAttribute?.count ?? 0}:${geometry.index?.count ?? 0}:${attributeVersion(geometry.index)}`;
-    const positionVersion = attributeVersion(positionAttribute);
+      `${positionAttribute?.count ?? 0}:${geometry.index?.count ?? 0}:${getAttributeVersion(geometry.index)}`;
+    const positionVersion = getAttributeVersion(positionAttribute);
     if (!this._bvh || this._bvhGeometry !== geometry || this._bvhTopologyKey !== topologyKey) {
       this._bvh = new MeshBVH(geometry);
       this._bvhGeometry = geometry;
@@ -865,9 +867,9 @@ class SpatialEffect extends THREE.Object3D {
     return [
       this.geometry?.uuid ?? 'point',
       position?.count ?? 0,
-      attributeVersion(position),
+      getAttributeVersion(position),
       index?.count ?? 0,
-      attributeVersion(index),
+      getAttributeVersion(index),
     ].join(':');
   }
 
@@ -934,17 +936,6 @@ class SpatialEffect extends THREE.Object3D {
 
     return mix(lower, upper, position.sub(lowerPosition)) as Node<'float'>;
   }
-}
-
-function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
-  return matrix.mul(vec4(point, 1)).xyz as Node<'vec3'>;
-}
-
-function attributeVersion(
-  attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined,
-): number {
-  if (!attribute) return -1;
-  return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
 }
 
 export default SpatialEffect;

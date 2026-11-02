@@ -157,6 +157,16 @@ readonly color: Node<"vec3">;
 
 ***
 
+<a id="contribution"></a>
+
+### contribution
+
+```ts
+readonly contribution: VarNode<"float", ConstNode<"float", number>>;
+```
+
+***
+
 <a id="distortionstrength"></a>
 
 ### distortionStrength

@@ -1,3 +1,4 @@
+import { transformPointGPU } from '../helpers/gpuTransforms';
 import * as THREE from 'three';
 import { MeshBVH, type MeshBVHOptions } from 'three-mesh-bvh';
 import tagsIntersect from '../helpers/tagsIntersect';
@@ -10,7 +11,7 @@ import SpatialEffect, {
   type SpatialEffectOptions,
 } from '../SpatialEffect';
 import type { Node } from 'three/webgpu';
-import { If, texture3D, vec3, vec4 } from 'three/tsl';
+import { If, texture3D, vec3 } from 'three/tsl';
 
 // No custom test allowed here
 export interface BoidAffectorOptions extends Omit<SpatialEffectOptions, 'test'> {
@@ -451,10 +452,6 @@ class BoidAffector extends SpatialEffect {
 
     return geometryRadius + influenceRange;
   }
-}
-
-function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
-  return matrix.mul(vec4(point, 1)).xyz as Node<'vec3'>;
 }
 
 export default BoidAffector;

@@ -363,11 +363,11 @@ export class ParticleSystemSerializer {
             return `new LightRenderer(${this.serializeValue({
                 brightness: renderer.brightness,
                 rangeMultiplier: renderer.rangeMultiplier,
-                groupingRadiusRatio: renderer.groupingRadiusRatio,
+                groupingRadius: renderer.groupingRadius,
+                allocation: renderer.allocation,
                 decay: renderer.decay,
                 count: renderer.count,
                 ratio: renderer.ratio,
-                randomDistribution: renderer.randomDistribution,
                 inheritParticleColor: renderer.inheritParticleColor,
                 sizeAffectsRange: renderer.sizeAffectsRange,
                 alphaAffectsIntensity: renderer.alphaAffectsIntensity,

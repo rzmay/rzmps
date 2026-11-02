@@ -1,3 +1,8 @@
+import {
+  ParticleFloatSlot, ParticleRenderFloatSlot, FLOAT_SLOT_COUNT, RENDER_FLOAT_SLOT_COUNT, UINT_SLOT_COUNT,
+  createAttributes, renderFloatElement, packedOffset, stateOffset, writeVectorAndScalar,
+  writeState, readVector, readScalar,
+} from './ParticleLayout';
 import * as THREE from 'three';
 import { StorageBufferAttribute, IndirectStorageBufferAttribute, type ComputeNode } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
@@ -8,7 +13,6 @@ import type { GPUAllocationWriter } from './AllocationBuffer';
 import type { GPUCollisionEventWriter, GPUEventWriter } from './EventBuffer';
 import {
   destroyStorageAttribute,
-  enumValueCount,
   initializeStorageAttribute,
   nextPowerOfTwo,
   type GPUReadbackRenderer,
@@ -44,31 +48,7 @@ export type GPUParticleScalarField =
 type GPUParticleVectorNodes = Record<GPUParticleVectorField, Node<'vec3'>>;
 type GPUParticleScalarNodes = Record<GPUParticleScalarField, Node<'float'>>;
 
-// Values are packed into vec4s
-enum ParticleFloatSlot {
-  PositionSpeed,
-  OrbitCenterAlpha,
-  RotationMass,
-  ScaleDistortion,
-  VelocityLifetime,
-  AngularVelocityTime,
-  ScalarVelocityRealtime,
-  Acceleration,
-  AngularAcceleration,
-  ScalarAcceleration,
-  Color,
-}
 
-enum ParticleRenderFloatSlot {
-  PositionAlpha,
-  RotationDistortion,
-  ScaleRealtime,
-  ColorTime,
-}
-
-const FLOAT_SLOT_COUNT = enumValueCount(ParticleFloatSlot);
-const RENDER_FLOAT_SLOT_COUNT = enumValueCount(ParticleRenderFloatSlot);
-const UINT_SLOT_COUNT = 1; // Dead/alive flag
 
 export interface GPUParticleAttributes {
   floatData: StorageBufferAttribute;
@@ -129,6 +109,7 @@ export interface GPUParticleLike {
 
 /** Shader-node view of one particle; unlike Particle, this is not a CPU value object. */
 export class GPUParticleContext implements GPUParticleLike {
+  readonly contribution = float(1);
   readonly index: Node<'uint'>;
 
   readonly position: Node<'vec3'>;
@@ -318,6 +299,8 @@ export class GPUParticleStorage {
 }
 
 export class GPUParticleRenderContext {
+  readonly velocity: Node<'vec3'>;
+  readonly contribution: Node<'float'>;
   readonly index: Node<'uint'>;
   readonly position: Node<'vec3'>;
   readonly rotation: Node<'vec3'>;
@@ -334,12 +317,15 @@ export class GPUParticleRenderContext {
 
   constructor(
     index: Node<'uint'>,
-    vectors: Pick<GPUParticleVectorNodes, 'position' | 'rotation' | 'scale' | 'color'>,
-    scalars: Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'>,
+    vectors: Pick<GPUParticleVectorNodes, 'position' | 'rotation' | 'scale' | 'color' | 'velocity'>,
+    scalars: Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'>
+      & { contribution: Node<'float'> },
     state: Node<'uvec4'>,
     private readonly owner?: GPUParticleRenderStorage,
   ) {
     this.index = index;
+    this.contribution = scalars.contribution;
+    this.velocity = vectors.velocity;
     this.position = vectors.position;
     this.rotation = vectors.rotation;
     this.scale = vectors.scale;
@@ -423,8 +409,9 @@ export class GPUParticleRenderStorage {
 
   createVectorNodes(
     index: Node<'uint'> = instanceIndex,
-  ): Pick<GPUParticleVectorNodes, 'position' | 'rotation' | 'scale' | 'color'> {
+  ): Pick<GPUParticleVectorNodes, 'position' | 'rotation' | 'scale' | 'color' | 'velocity'> {
     return {
+      velocity: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.Contribution, index).yzw,
       position: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.PositionAlpha, index).xyz,
       rotation: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.RotationDistortion, index).xyz,
       scale: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.ScaleRealtime, index).xyz,
@@ -434,8 +421,10 @@ export class GPUParticleRenderStorage {
 
   createScalarNodes(
     index: Node<'uint'> = instanceIndex,
-  ): Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'> {
+  ): Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'>
+    & { contribution: Node<'float'> } {
     return {
+      contribution: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.Contribution, index).x,
       alpha: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.PositionAlpha, index).w,
       distortionStrength: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.RotationDistortion, index).w,
       realtime: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.ScaleRealtime, index).w,
@@ -466,6 +455,8 @@ export class GPUParticleRenderStorage {
     vectors.rotation.assign(particle.rotation);
     vectors.scale.assign(particle.scale);
     vectors.color.assign(particle.color);
+    vectors.velocity.assign(particle.velocity);
+    scalars.contribution.assign(float(1));
     scalars.alpha.assign(particle.alpha);
     scalars.distortionStrength.assign(particle.distortionStrength);
     scalars.realtime.assign(particle.realtime);
@@ -651,7 +642,11 @@ export class GPUParticleBufferState {
       readVector(this.floatData, index, ParticleFloatSlot.Acceleration, particle.acceleration);
       readVector(this.floatData, index, ParticleFloatSlot.AngularAcceleration, particle.angularAcceleration);
       readVector(this.floatData, index, ParticleFloatSlot.ScalarAcceleration, particle.scalarAcceleration);
-      readColor(this.floatData, index, ParticleFloatSlot.Color, particle.color);
+      // Restore color from its packed RGB components.
+      const colorOffset = packedOffset(index, ParticleFloatSlot.Color);
+      particle.color.setRGB(
+        this.floatData[colorOffset], this.floatData[colorOffset + 1], this.floatData[colorOffset + 2],
+      );
 
       particle.speed = readScalar(this.floatData, index, ParticleFloatSlot.PositionSpeed);
       particle.alpha = readScalar(this.floatData, index, ParticleFloatSlot.OrbitCenterAlpha);
@@ -660,7 +655,7 @@ export class GPUParticleBufferState {
       particle.lifetime = readScalar(this.floatData, index, ParticleFloatSlot.VelocityLifetime);
       particle.time = readScalar(this.floatData, index, ParticleFloatSlot.AngularVelocityTime);
       particle.realtime = readScalar(this.floatData, index, ParticleFloatSlot.ScalarVelocityRealtime);
-      particle.alive = readState(this.uintData, index) !== 0;
+      particle.alive = this.uintData[stateOffset(index)] !== 0;
       particle.lodPriority = this.uintData[stateOffset(index) + 3] / 4294967296;
       particle.cache();
     }
@@ -723,7 +718,9 @@ export class GPUParticleBufferState {
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.Acceleration, particle.acceleration, 0);
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.AngularAcceleration, particle.angularAcceleration, 0);
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.ScalarAcceleration, particle.scalarAcceleration, 0);
-    writeColor(this.floatData, index, ParticleFloatSlot.Color, particle.color);
+    // The color slot stores RGB with an unused fourth component.
+    const colorOffset = packedOffset(index, ParticleFloatSlot.Color);
+    this.floatData.set([particle.color.r, particle.color.g, particle.color.b, 0], colorOffset);
 
     writeState(
       this.uintData,
@@ -740,6 +737,8 @@ export class GPUParticleBufferState {
 export class GPUParticleRenderBufferState {
   /** Actual GPU-produced visual range, including original simulation slots. */
   instanceCountNode?: Node<'uint'>;
+  /** Source simulation slot for system-owned LOD spacing. */
+  spacingIndex?: (index: Node<'uint'>) => Node<'uint'>;
   private indirect?: IndirectStorageBufferAttribute;
   private indirectCompute?: ComputeNode;
   private indirectIndexCount = -1;
@@ -855,85 +854,6 @@ export function createEmptyGPUParticleBufferState(capacity: number): GPUParticle
 
 export function createGPUParticleRenderBufferState(capacity = 1): GPUParticleRenderBufferState {
   return new GPUParticleRenderBufferState(Math.max(1, capacity));
-}
-
-// These packing helpers are private because they define this file's particle ABI.
-function createAttributes(floatData: Float32Array, uintData: Uint32Array): GPUParticleAttributes {
-  return {
-    floatData: new StorageBufferAttribute(floatData, 4),
-    uintData: new StorageBufferAttribute(uintData, 4),
-  };
-}
-
-function renderFloatElement(
-  floatStorage: PackedFloatStorage,
-  slot: number,
-  index: Node<'uint'> = instanceIndex,
-): Node<'vec4'> {
-  return floatStorage.element(index.mul(RENDER_FLOAT_SLOT_COUNT).add(slot));
-}
-
-function packedOffset(index: number, slot: number): number {
-  return (index * FLOAT_SLOT_COUNT + slot) * 4;
-}
-
-function stateOffset(index: number): number {
-  return index * UINT_SLOT_COUNT * 4;
-}
-
-function writeVectorAndScalar(
-  array: Float32Array,
-  index: number,
-  slot: number,
-  vector: THREE.Vector3,
-  scalar: number,
-): void {
-  const offset = packedOffset(index, slot);
-  array[offset] = vector.x;
-  array[offset + 1] = vector.y;
-  array[offset + 2] = vector.z;
-  array[offset + 3] = scalar;
-}
-
-function writeColor(array: Float32Array, index: number, slot: number, color: THREE.Color): void {
-  const offset = packedOffset(index, slot);
-  array[offset] = color.r;
-  array[offset + 1] = color.g;
-  array[offset + 2] = color.b;
-  array[offset + 3] = 0;
-}
-
-function writeState(
-  array: Uint32Array,
-  index: number,
-  alive: number,
-  tagMask: number,
-  generation: number,
-  lodPriority = 0,
-): void {
-  const offset = stateOffset(index);
-  array[offset] = alive;
-  array[offset + 1] = tagMask >>> 0;
-  array[offset + 2] = generation >>> 0;
-  array[offset + 3] = Math.floor(lodPriority * 4294967296) >>> 0;
-}
-
-function readVector(array: Float32Array, index: number, slot: number, vector: THREE.Vector3): void {
-  const offset = packedOffset(index, slot);
-  vector.set(array[offset], array[offset + 1], array[offset + 2]);
-}
-
-function readColor(array: Float32Array, index: number, slot: number, color: THREE.Color): void {
-  const offset = packedOffset(index, slot);
-  color.setRGB(array[offset], array[offset + 1], array[offset + 2]);
-}
-
-function readScalar(array: Float32Array, index: number, slot: number): number {
-  return array[packedOffset(index, slot) + 3];
-}
-
-function readState(array: Uint32Array, index: number): number {
-  return array[stateOffset(index)];
 }
 
 export function destroyGPUStorageAttribute(

@@ -16,7 +16,7 @@ Particle-space octree with caller-defined aggregation; rebuild replaces node ide
 
 ### TAggregate
 
-`TAggregate`
+`TAggregate` = `Record`\<`string`, `never`\>
 
 ## Constructors
 
@@ -25,7 +25,7 @@ Particle-space octree with caller-defined aggregation; rebuild replaces node ide
 ### Constructor
 
 ```ts
-new ParticleOctree<TAggregate>(config, aggregator): ParticleOctree<TAggregate>;
+new ParticleOctree<TAggregate>(config, aggregator?): ParticleOctree<TAggregate>;
 ```
 
 Creates an empty tree and normalizes depth, leaf capacity, and rebuild-quality settings.
@@ -36,9 +36,19 @@ Creates an empty tree and normalizes depth, leaf capacity, and rebuild-quality s
 
 `Partial`\<[`OctreeConfig`](../interfaces/OctreeConfig.md)\>
 
-##### aggregator
+##### aggregator?
 
-[`OctreeAggregator`](../interfaces/OctreeAggregator.md)\<`TAggregate`\>
+###### combine
+
+(`a`, `b`) => `TAggregate`
+
+###### finalize?
+
+(`aggregate`) => `TAggregate`
+
+###### new
+
+(`particle?`, `particleIndex?`, `node?`) => `TAggregate`
 
 #### Returns
 
@@ -136,6 +146,70 @@ Isolated particles fall back to their visual extent. No neighbor array is alloca
 #### Returns
 
 `number`
+
+***
+
+<a id="getaggregate"></a>
+
+### getAggregate()
+
+```ts
+getAggregate(region): TAggregate;
+```
+
+Returns derived output without replacing the raw aggregate used by parent reductions.
+
+#### Parameters
+
+##### region
+
+[`OctreeNode`](../interfaces/OctreeNode.md)\<`TAggregate`\>
+
+#### Returns
+
+`TAggregate`
+
+***
+
+<a id="getbounds"></a>
+
+### getBounds()
+
+```ts
+getBounds(region?): Box3;
+```
+
+#### Parameters
+
+##### region?
+
+[`OctreeNode`](../interfaces/OctreeNode.md)\<`TAggregate`\> = `...`
+
+#### Returns
+
+`Box3`
+
+***
+
+<a id="getchildren"></a>
+
+### getChildren()
+
+```ts
+getChildren(region): readonly OctreeNode<TAggregate>[];
+```
+
+Returns occupied immediate children; leaves have no finer maintained regions.
+
+#### Parameters
+
+##### region
+
+[`OctreeNode`](../interfaces/OctreeNode.md)\<`TAggregate`\>
+
+#### Returns
+
+readonly [`OctreeNode`](../interfaces/OctreeNode.md)\<`TAggregate`\>[]
 
 ***
 

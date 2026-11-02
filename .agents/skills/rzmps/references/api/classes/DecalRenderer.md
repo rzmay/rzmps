@@ -140,6 +140,20 @@ distanceAffectsSize: number = 0;
 
 ***
 
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`groupingRadius`](Renderer.md#groupingradius)
+
+***
+
 <a id="hitselection"></a>
 
 ### hitSelection
@@ -285,8 +299,12 @@ opacity: DynamicValue<number> = 1;
 ### ratio
 
 ```ts
-ratio: number = 1;
+ratio: number;
 ```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`ratio`](Renderer.md#ratio)
 
 ***
 
@@ -329,6 +347,12 @@ Number of persistent decals, including those whose particles have died.
 ##### Returns
 
 `number`
+
+#### Overrides
+
+```ts
+Renderer.count
+```
 
 ***
 
