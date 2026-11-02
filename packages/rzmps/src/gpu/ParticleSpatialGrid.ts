@@ -478,32 +478,43 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
     const coordinate = ivec3(clamp(floor(position.sub(minimum).div(cellSize)),
       vec3(0), vec3(this.cellsPerAxis - 1))).toVar();
     const best = radius.lessThan(0).select(float(3.402823e38), radius.mul(radius)).toVar();
+
     const result = uint(0xffffffff).toVar();
     const visit = (cell: Node<'ivec3'>) => {
       const lower = minimum.add(vec3(cell).mul(cellSize));
       const delta = lower.sub(position).max(position.sub(lower.add(cellSize))).max(vec3(0));
+
       If(delta.lengthSq().lessThanEqual(best), () => {
         const encoded = atomicLoad(this.heads!.element(this.hashCoordinateNode(cell))).toVar();
+
         Loop(() => {
           If(encoded.equal(uint(0)), () => { Break(); });
+
           const slot = encoded.sub(1).toVar();
           const record = this.coordinates!.element(slot);
           const p = this.currentBuffers!.storage.createParticle(slot);
           const exact = record.x.equal(cell.x).and(record.y.equal(cell.y)).and(record.z.equal(cell.z));
+
           If(exact.and(p.alive.notEqual(uint(0))).and(p.generation.equal(uint(record.w))), () => {
+
             const distance = p.position.sub(position).lengthSq();
+
             If(distance.lessThan(best).or(distance.equal(best).and(slot.lessThan(result))), () => {
               best.assign(distance); result.assign(slot);
             });
           });
+
           encoded.assign(atomicLoad(this.heads!.element(slot.add(this.hashCapacity))));
         });
       });
     };
+
     visit(coordinate);
+
     Loop(this.cellsPerAxis ** 3, ({ i }) => {
       const cell = ivec3(int(i).mod(this.cellsPerAxis), int(i).div(this.cellsPerAxis).mod(this.cellsPerAxis),
         int(i).div(this.cellsPerAxis ** 2));
+
       If(cell.x.notEqual(coordinate.x).or(cell.y.notEqual(coordinate.y)).or(cell.z.notEqual(coordinate.z)), () => {
         visit(cell);
       });
@@ -676,10 +687,12 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
       If(instanceIndex.lessThan(uint(this.hashCapacity)), () => {
         atomicStore(this.heads!.element(instanceIndex), uint(EMPTY_LINK));
       });
+
       If(instanceIndex.lessThan(uint(REDUCTION_WORDS)), () => {
         const initial = instanceIndex.lessThan(uint(3)).select(uint(0xffffffff), uint(0));
         atomicStore(this.reductions!.element(instanceIndex), initial);
       });
+
       If(instanceIndex.equal(uint(0)), () => {
         atomicStore(this.diagnostics!.element(0), uint(0));
       });
@@ -699,6 +712,7 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
 
     const finalize = Fn(() => {
       if (!this.autoExpand) return;
+
       If(atomicLoad(this.reductions!.element(BoundsReduction.HasParticles)).notEqual(uint(0)), () => {
         const previousMin = vec3(this.gpuBounds!.element(0).xyz);
         const previousMax = vec3(this.gpuBounds!.element(1).xyz);
@@ -714,18 +728,21 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
         );
         const outside = reducedMin.lessThan(previousMin).any()
           .or(reducedMax.greaterThan(previousMax).any());
+
         If(outside, () => {
           const wantedMin = vec3(min(previousMin, reducedMin));
           const wantedMax = vec3(max(previousMax, reducedMax));
           const padding = vec3(wantedMax.sub(wantedMin).mul(this.expansionHysteresis));
           const expandedMin = vec3(wantedMin.sub(padding)).toVar('spatialGridExpandedMin');
           const expandedMax = vec3(wantedMax.add(padding)).toVar('spatialGridExpandedMax');
+
           if (this.powerOfTwoBounds) {
             const center = vec3(expandedMin.add(expandedMax).mul(0.5));
             const size = vec3(exp2(ceil(log2(expandedMax.sub(expandedMin).max(vec3(Number.EPSILON))))));
             expandedMin.assign(center.sub(size.mul(0.5)));
             expandedMax.assign(center.add(size.mul(0.5)));
           }
+
           this.gpuBounds!.element(0).assign(vec4(expandedMin, 0));
           this.gpuBounds!.element(1).assign(vec4(expandedMax, 0));
         });
@@ -738,6 +755,7 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
         const boundsMax = vec3(this.gpuBounds!.element(1).xyz);
         const inside = particle.position.greaterThanEqual(boundsMin).all()
           .and(particle.position.lessThanEqual(boundsMax).all());
+
         If(inside, () => {
           const coordinate = ivec3(clamp(
             floor(
@@ -748,6 +766,7 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
             vec3(0),
             vec3(this.cellsPerAxis - 1),
           ));
+
           const bucket = this.hashCoordinateNode(coordinate);
           const encoded = particle.index.add(uint(1));
           const previous = atomicFunc(
@@ -755,7 +774,9 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
             this.heads!.element(bucket),
             encoded,
           );
+
           atomicStore(this.heads!.element(particle.index.add(this.hashCapacity)), previous);
+
           this.coordinates!.element(particle.index).assign(
             ivec4(coordinate.x, coordinate.y, coordinate.z, int(particle.generation)),
           );
