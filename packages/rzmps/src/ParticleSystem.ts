@@ -1,14 +1,16 @@
 import { SharedGPUEventBatch, emptyGPUEvents, type GPUEventBatch } from './gpu/EventBatch';
-import resolveEmitterOptions from './helpers/emitterOptions';
+import overrideEmitterOptions from './helpers/overrideEmitterOptions';
 import EventReceiver, { type EventScope, type SimulationEvent } from './EventReceiver';
+import { nextPowerOfTwo } from './gpu/Storage';
 import * as THREE from 'three';
 import EmissionSource, { type EmissionSourceData, type SubSystemSource } from './EmissionSource';
 import { eventNames, cpuEventHandler, type EventSubscriptions, type GPUEmissionContext } from './Events';
 import tagsIntersect from './helpers/tagsIntersect';
-import { bindParticleSourceFrame, particleSourceFrame } from './SourceFrame';
+import { setParticleSourceBinding, getParticleSourceBinding } from './ParticleSourceBindings';
 import { matrixColumnGPU, particleFrameGPU, transformParticleFrameGPU } from './helpers/simulationFrame';
 import Particle, { type ParticleCachedValues } from './Particle';
-import Emitter, { rotateFromYGPU, type EmissionContext } from './Emitter';
+import Emitter, { type EmissionContext } from './Emitter';
+import { rotateFromYGPU } from './helpers/gpuTransforms';
 import type { GPUEmissionSupportReport } from './gpu/Emission';
 import Module from './Module';
 import Renderer from './Renderer';
@@ -65,7 +67,7 @@ import { GPUEmissionRunBufferState } from './gpu/Emission';
 import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
 import SpatialEffect from './SpatialEffect';
 import ParticleSpatialGrid, { type ParticleSpatialGridOptions } from './gpu/ParticleSpatialGrid';
-import GPUSourceFrames from './gpu/SourceFrames';
+import GPUSourceFrameBuffer from './gpu/SourceFrameBuffer';
 import type { PackedFloatStorage } from './gpu/Storage';
 
 /** Construction options; fields can be omitted to use the documented defaults. */
@@ -263,25 +265,6 @@ interface GPUSelectiveReadbackSlot {
 }
 
 // Three's matrix node proxy supports column access; its declarations expose it only on arrays.
-function matrixColumn(matrix: Node<'mat4'>, index: number): Node<'vec4'> {
-  return (matrix as unknown as { element(index: number): Node<'vec4'> }).element(index);
-}
-
-function isWebGPURenderer(renderer: unknown): renderer is WebGPURenderer {
-  const candidate = renderer as {
-    isWebGPURenderer?: boolean;
-    backend?: { isWebGLBackend?: boolean };
-  } | undefined;
-
-  // Three's WebGPURenderer keeps its identity after falling back to WebGL2,
-  // but that backend cannot execute RZMPS's storage-buffer compute pipeline.
-  return (renderer instanceof WebGPURenderer || candidate?.isWebGPURenderer === true)
-    && candidate?.backend?.isWebGLBackend !== true;
-}
-
-function nextPowerOfTwo(value: number): number {
-  return 2 ** Math.ceil(Math.log2(Math.max(1, value)));
-}
 
 /** Owns particle simulation and renderer objects; attach to a Three.js scene and update once per frame. */
 class ParticleSystem extends THREE.Object3D {
@@ -618,7 +601,7 @@ class ParticleSystem extends THREE.Object3D {
     return buildGPUSystemSchedule(this);
   }
 
-  private _sourceFrames?: GPUSourceFrames;
+  private _sourceFrames?: GPUSourceFrameBuffer;
   private _sourceFrameCompute?: { key: string; nodes: ComputeNode[] };
   private _sourceReadbackPending = false;
   private readonly _gpuParentToSimulationNode = uniform(new THREE.Matrix4(), 'mat4');
@@ -653,14 +636,14 @@ class ParticleSystem extends THREE.Object3D {
   /** @internal Records a live source independently of transient emission contexts. */
   bindParticleSource(particle: Particle, source?: SubSystemSource): void {
     if (this.simulationSpace !== SimulationSpace.Source || !this._subSystemParent || !source?.alive) return;
-    this._sourceFrames ??= new GPUSourceFrames(1);
+    this._sourceFrames ??= new GPUSourceFrameBuffer(1);
     const record = this._sourceFrames.register(source);
     if (this._sourceFrames.records.length > this._sourceFrames.capacity) {
       this._sourceFrames = this._sourceFrames.grow(
-        isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined,
+        ParticleSystem.isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined,
         this._sourceFrames.records.length);
     }
-    bindParticleSourceFrame(particle, {
+    setParticleSourceBinding(particle, {
       source, previous: this._particleEmissionTransform(source, this._sourceScaleInheritance()),
       slot: record.slot, generation: record.generation,
     });
@@ -669,7 +652,7 @@ class ParticleSystem extends THREE.Object3D {
   private _updateCPUSourceFrames(): void {
     if (this.simulationSpace !== SimulationSpace.Source) return;
     for (const particle of this.particles) {
-      const binding = particleSourceFrame(particle);
+      const binding = getParticleSourceBinding(particle);
       if (!binding || !particle.alive) continue;
       const record = this._sourceFrames?.records[binding.slot];
       const source = record?.generation === binding.generation ? record.source : binding.source;
@@ -682,7 +665,7 @@ class ParticleSystem extends THREE.Object3D {
       }
       if (!alive) {
         if (this.sourceLoss === 'kill') particle.kill();
-        bindParticleSourceFrame(particle);
+        setParticleSourceBinding(particle);
       }
     }
     this._refreshGPUSourceSnapshots();
@@ -786,7 +769,7 @@ class ParticleSystem extends THREE.Object3D {
   /** Resolves an attached particle's source frame in world coordinates. */
   resolveSimulationFrame(particle?: Particle, target = new THREE.Matrix4()): THREE.Matrix4 {
     this.getSimulationToWorldMatrix(target);
-    const binding = particle && particleSourceFrame(particle);
+    const binding = particle && getParticleSourceBinding(particle);
     if (this.simulationSpace === SimulationSpace.Source && binding) target.multiply(binding.previous);
     return target;
   }
@@ -795,7 +778,7 @@ class ParticleSystem extends THREE.Object3D {
     const conversion = this.getSimulationToWorldMatrix().invert().multiply(previous);
     this.particles.forEach(particle => {
       particle.transformSimulationFrame(conversion);
-      bindParticleSourceFrame(particle);
+      setParticleSourceBinding(particle);
     });
     this._emissionSources.forEach(source => source.apply({
       transform: conversion.clone().multiply(source.transform),
@@ -873,7 +856,7 @@ class ParticleSystem extends THREE.Object3D {
   /** Effective configuration is attachment-specific and never changes emitter properties. */
   getEmitterOptions(emitter: Emitter): SubSystemOptions {
     const overrides = this._subSystemParent?._subSystemOverrides.get(this) ?? {};
-    return resolveEmitterOptions({ ...emitter.emission, eventScope: emitter.eventScope }, overrides, this.isSubSystem);
+    return overrideEmitterOptions({ ...emitter.emission, eventScope: emitter.eventScope }, overrides, this.isSubSystem);
   }
 
   private _emitterEventNames(emitter: Emitter): string[] {
@@ -939,7 +922,7 @@ class ParticleSystem extends THREE.Object3D {
       for (const component of [...system.modules.flatMap(module => module.withDependents()),
         ...system.renderers, ...system.emitters]) {
         component.gpuNative = system.gpuProcessing
-          && isWebGPURenderer(system.sceneRenderer ?? root.sceneRenderer)
+          && ParticleSystem.isWebGPURenderer(system.sceneRenderer ?? root.sceneRenderer)
           && (component instanceof Renderer ? component.supportsGPUEventInput
             : system.modules.every(module => module.supportsGPU));
         component.synchronize(system, component instanceof Emitter && system.isSubSystem
@@ -1010,7 +993,7 @@ class ParticleSystem extends THREE.Object3D {
   beginGPUEventExecution(receiver: EventReceiver): GPUEventBatch {
     const renderer = this.sceneRenderer;
     const journal = this._eventRoot()._sharedGPUEvents;
-    if (!journal || !receiver.subscriptions.length || !isWebGPURenderer(renderer)) return emptyGPUEvents;
+    if (!journal || !receiver.subscriptions.length || !ParticleSystem.isWebGPURenderer(renderer)) return emptyGPUEvents;
     const slot = journal.snapshot(receiver, renderer);
     const origins = receiver.visibleSystems(this);
     const batch = new SharedGPUEventBatch(journal.createReader(slot), origins, receiver.subscriptions);
@@ -1385,13 +1368,13 @@ class ParticleSystem extends THREE.Object3D {
         this._emitContext(emitter, this.getEmitterContext());
       }
     }
-    this._updateEmissionRuns(resolveEmitterOptions({}));
+    this._updateEmissionRuns(overrideEmitterOptions({}));
   }
 
   private _advanceSimulationStep(handleEndBehavior: boolean = true): void {
     this._reconcileEventReceivers();
     const renderer = this.sceneRenderer;
-    if (isWebGPURenderer(renderer) && this._usesSharedGPUEvents()) {
+    if (ParticleSystem.isWebGPURenderer(renderer) && this._usesSharedGPUEvents()) {
       const journal = this._journal(renderer);
       journal.reset(this._gpuEventFrameSequence + 1);
       journal.initialize(renderer);
@@ -1536,7 +1519,7 @@ class ParticleSystem extends THREE.Object3D {
       .some((modifier) => modifier.priority >= 1);
 
     return this.gpuProcessing
-      && isWebGPURenderer(this.sceneRenderer)
+      && ParticleSystem.isWebGPURenderer(this.sceneRenderer)
       && !this._gpuTagOverflow
       && !(hasCPUInputRenderer && hasRenderTimeModifier)
       && modules.every((module) => module.supportsGPU);
@@ -1556,7 +1539,7 @@ class ParticleSystem extends THREE.Object3D {
 
   private _processParticlesGPU(modules: Module[], spatialEffects: SpatialEffect[]): void {
     const sceneRenderer = this.sceneRenderer;
-    if (!isWebGPURenderer(sceneRenderer)) return;
+    if (!ParticleSystem.isWebGPURenderer(sceneRenderer)) return;
     this._flushTargetedGPUEvents();
     const lifecycleGeneration = this._gpuLifecycleGeneration;
     const gpuSpatialEffects = spatialEffects.filter((spatialEffect) => spatialEffect.supportsGPU);
@@ -1726,7 +1709,7 @@ class ParticleSystem extends THREE.Object3D {
       this._computeGPUEmissionPhase(context);
       if (this.emitters.some(emitter => this._emitterEventNames(emitter).length)) {
         this._computeGPUEventSubSystemEmissionPhase(context, {
-          parent: this, options: resolveEmitterOptions({}, {}, false),
+          parent: this, options: overrideEmitterOptions({}, {}, false),
         });
       }
     }
@@ -1939,7 +1922,7 @@ class ParticleSystem extends THREE.Object3D {
   private _computeGPUFrameConversion(context: GPUParticleUpdateContext): void {
     const conversion = this._pendingFrameConversion;
     const renderer = this.sceneRenderer;
-    if (!conversion || !isWebGPURenderer(renderer)) return;
+    if (!conversion || !ParticleSystem.isWebGPURenderer(renderer)) return;
     const matrix = uniform(conversion, 'mat4');
     const node = Fn(() => {
       const particle = context.buffers.storage.createParticle(undefined, true);
@@ -1957,8 +1940,8 @@ class ParticleSystem extends THREE.Object3D {
   private _resolveGPUSourceFrames(context: GPUParticleUpdateContext): void {
     const renderer = this.sceneRenderer;
     if (this.simulationSpace !== SimulationSpace.Source || !this._subSystemParent
-      || !isWebGPURenderer(renderer)) return;
-    this._sourceFrames ??= new GPUSourceFrames(Math.max(this.maxParticles, context.buffers.capacity));
+      || !ParticleSystem.isWebGPURenderer(renderer)) return;
+    this._sourceFrames ??= new GPUSourceFrameBuffer(Math.max(this.maxParticles, context.buffers.capacity));
     this._sourceFrames = this._sourceFrames.grow(renderer,
       Math.max(context.buffers.capacity, this._sourceFrames.records.length));
     const frames = this._sourceFrames;
@@ -2041,7 +2024,7 @@ class ParticleSystem extends THREE.Object3D {
     const emitters = this.emitters;
     if (emitters.length <= 0) return;
     const renderer = this.sceneRenderer;
-    if (!isWebGPURenderer(renderer)) return;
+    if (!ParticleSystem.isWebGPURenderer(renderer)) return;
 
     const emitterInstances = this._acquireGPUEmitterInstances('standalone', emitters.length, emitters, renderer);
     const prepareNodes = this._getGPUEmissionPrepareComputeNodes(context, emitters, emitterInstances);
@@ -2110,7 +2093,7 @@ class ParticleSystem extends THREE.Object3D {
     emitterInstances: GPUEmitterInstanceBufferState,
   ): void {
     const renderer = this.sceneRenderer;
-    if (!isWebGPURenderer(renderer) || !context.allocationWriter) return;
+    if (!ParticleSystem.isWebGPURenderer(renderer) || !context.allocationWriter) return;
 
     const selectionKey = [
       'old-emission-selection',
@@ -2176,7 +2159,7 @@ class ParticleSystem extends THREE.Object3D {
 
   private _computeGPUOldDeathEventPhase(context: GPUParticleUpdateContext): void {
     const renderer = this.sceneRenderer;
-    if (!isWebGPURenderer(renderer) || !context.allocationWriter || !context.eventWriter) return;
+    if (!ParticleSystem.isWebGPURenderer(renderer) || !context.allocationWriter || !context.eventWriter) return;
     const cacheKey = [
       'old-emission-deaths',
       `buffer:${context.buffers.version}:${context.buffers.capacity}`,
@@ -2202,7 +2185,7 @@ class ParticleSystem extends THREE.Object3D {
 
   private _computeGPUAllocationSnapshot(context: GPUParticleUpdateContext): void {
     const renderer = this.sceneRenderer;
-    if (!isWebGPURenderer(renderer) || !context.allocationWriter) return;
+    if (!ParticleSystem.isWebGPURenderer(renderer) || !context.allocationWriter) return;
     const cacheKey = `allocation-snapshot:${context.buffers.version}:${context.buffers.capacity}`;
 
     if (this._gpuAllocationSnapshotComputeCache?.key !== cacheKey) {
@@ -2219,7 +2202,7 @@ class ParticleSystem extends THREE.Object3D {
 
   private _computeGPUSpawnEventPhase(context: GPUParticleUpdateContext): void {
     const renderer = this.sceneRenderer;
-    if (!isWebGPURenderer(renderer) || !context.allocationWriter || !context.eventWriter) return;
+    if (!ParticleSystem.isWebGPURenderer(renderer) || !context.allocationWriter || !context.eventWriter) return;
     const cacheKey = [
       'spawn-events',
       `buffer:${context.buffers.version}:${context.buffers.capacity}`,
@@ -2320,7 +2303,7 @@ class ParticleSystem extends THREE.Object3D {
 
   private _computeStagedBirths(context: GPUParticleUpdateContext): void {
     const renderer = this.sceneRenderer;
-    if (!this._stagedBirths.length || !isWebGPURenderer(renderer)) return;
+    if (!this._stagedBirths.length || !ParticleSystem.isWebGPURenderer(renderer)) return;
     const count = Math.min(this._stagedBirths.length, context.buffers.capacity);
     const capacity = nextPowerOfTwo(count);
     if (!this._stagedBirthBuffers || this._stagedBirthBuffers.capacity < capacity) {
@@ -2360,7 +2343,7 @@ class ParticleSystem extends THREE.Object3D {
   ): void {
     const parentBuffers = input.parent._gpuBuffers;
     const renderer = this.sceneRenderer;
-    if (!parentBuffers || !isWebGPURenderer(renderer)) return;
+    if (!parentBuffers || !ParticleSystem.isWebGPURenderer(renderer)) return;
 
     const emitters = this.emitters;
     if (emitters.length === 0) return;
@@ -2518,7 +2501,7 @@ class ParticleSystem extends THREE.Object3D {
   ): void {
     const eventBuffer = this._eventRoot()._sharedGPUEvents ?? input.parent._gpuFrameEventBuffer;
     const renderer = this.sceneRenderer;
-    if (!eventBuffer || !isWebGPURenderer(renderer)) return;
+    if (!eventBuffer || !ParticleSystem.isWebGPURenderer(renderer)) return;
 
     const emitters = this.emitters;
     if (emitters.length === 0) return;
@@ -2664,10 +2647,10 @@ class ParticleSystem extends THREE.Object3D {
                           for (const [key, value] of Object.entries(overrides)) {
                             (contextValues[key as keyof GPUEmissionContext] as Node).assign(value);
                           }
-                          if (overrides.position && !overrides.transform) matrixColumn(contextValues.transform,
+                          if (overrides.position && !overrides.transform) matrixColumnGPU(contextValues.transform,
                             3).assign(vec4(overrides.position, 1));
                           if (overrides.transform && !overrides.position) {
-                            contextValues.position.assign(matrixColumn(overrides.transform, 3).xyz);
+                            contextValues.position.assign(matrixColumnGPU(overrides.transform, 3).xyz);
                           }
                         }
                       });
@@ -2700,10 +2683,10 @@ class ParticleSystem extends THREE.Object3D {
                     velocity: contextValues.velocity,
                     speed: contextValues.scale, distortionStrength: contextValues.velocityScale,
                     // Event-specific values are resolved now; the payload need not survive in run storage.
-                    acceleration: matrixColumn(contextValues.transform, 0).xyz,
-                    angularAcceleration: matrixColumn(contextValues.transform, 1).xyz,
-                    scalarAcceleration: matrixColumn(contextValues.transform, 2).xyz,
-                    angularVelocity: matrixColumn(contextValues.transform, 3).xyz,
+                    acceleration: matrixColumnGPU(contextValues.transform, 0).xyz,
+                    angularAcceleration: matrixColumnGPU(contextValues.transform, 1).xyz,
+                    scalarAcceleration: matrixColumnGPU(contextValues.transform, 2).xyz,
+                    angularVelocity: matrixColumnGPU(contextValues.transform, 3).xyz,
                     scalarVelocity: event.collisionImpulse,
                     orbitCenter: event.collisionPoint, lodPriority: event.type,
                     time: contextValues.distortionStrength,
@@ -2820,7 +2803,7 @@ class ParticleSystem extends THREE.Object3D {
   ): void {
     const buffers = context.buffers;
     if (!buffers.count) return;
-    if (!isWebGPURenderer(this.sceneRenderer)) return;
+    if (!ParticleSystem.isWebGPURenderer(this.sceneRenderer)) return;
 
     const computeNode = this._getGPUSimulationComputeNode(
       context,
@@ -2836,7 +2819,7 @@ class ParticleSystem extends THREE.Object3D {
     modifiers: Array<Module | SpatialEffect>,
   ): Array<Module | SpatialEffect> {
     const renderer = this.sceneRenderer;
-    if (!isWebGPURenderer(renderer)) return modifiers;
+    if (!ParticleSystem.isWebGPURenderer(renderer)) return modifiers;
 
     let pending: Array<Module | SpatialEffect> = [];
     this._gpuSpatialBuildSequence += 1;
@@ -3105,7 +3088,7 @@ class ParticleSystem extends THREE.Object3D {
     context: GPUParticleUpdateContext,
   ): void {
     if (!source.count) return;
-    if (!isWebGPURenderer(this.sceneRenderer)) return;
+    if (!ParticleSystem.isWebGPURenderer(this.sceneRenderer)) return;
 
     const computeNode = this._getGPURenderOutputComputeNode(source, target, modifiers, context);
 
@@ -3879,7 +3862,7 @@ class ParticleSystem extends THREE.Object3D {
 
   private _usesGPUStableParticleSlots(): boolean {
     return this._isGPUProcessingActive
-      || (this.gpuProcessing && isWebGPURenderer(this.sceneRenderer));
+      || (this.gpuProcessing && ParticleSystem.isWebGPURenderer(this.sceneRenderer));
   }
 
   private _shouldRequestGPUReadback(): boolean {
@@ -3915,7 +3898,8 @@ class ParticleSystem extends THREE.Object3D {
 
   private _canUpdateAsGPUSubSystem(parent: ParticleSystem, options: SubSystemOptions): boolean {
     if (!parent || !options || !parent._gpuBuffers || !parent._isGPUProcessingActive) return false;
-    if (!this.gpuProcessing || !isWebGPURenderer(this.sceneRenderer ?? parent.sceneRenderer)) return false;
+    if (!this.gpuProcessing
+      || !ParticleSystem.isWebGPURenderer(this.sceneRenderer ?? parent.sceneRenderer)) return false;
     if (typeof options.shouldEmit === 'function') return false;
     if (!this.emitters.length) return false;
 
@@ -3928,7 +3912,7 @@ class ParticleSystem extends THREE.Object3D {
 
   private _canHandleNativeGPUEvent(parent: ParticleSystem, options: SubSystemOptions, event: string): boolean {
     const renderer = this.sceneRenderer ?? this._eventRoot().sceneRenderer;
-    if (!this.gpuProcessing || !parent.gpuProcessing || !isWebGPURenderer(renderer)
+    if (!this.gpuProcessing || !parent.gpuProcessing || !ParticleSystem.isWebGPURenderer(renderer)
       || typeof options.shouldEmit !== 'boolean' || !this.modules.every(module => module.supportsGPU)) return false;
     const gpuHandler = !Array.isArray(options.onEvent) && options.onEvent?.gpu?.[event];
     return !cpuEventHandler(options.onEvent, event) || !!gpuHandler;
@@ -4271,7 +4255,7 @@ class ParticleSystem extends THREE.Object3D {
     if (!this._gpuBuffers || requests.length === 0) return [];
 
     const renderer = this.sceneRenderer;
-    if (!isWebGPURenderer(renderer) || typeof renderer.getArrayBufferAsync !== 'function') {
+    if (!ParticleSystem.isWebGPURenderer(renderer) || typeof renderer.getArrayBufferAsync !== 'function') {
       throw new Error('Selective GPU particle readback requires a WebGPU renderer with async buffer readback.');
     }
 
@@ -4667,7 +4651,7 @@ class ParticleSystem extends THREE.Object3D {
 
     if (
       this._gpuFrameEventBuffer
-      && isWebGPURenderer(this.sceneRenderer)
+      && ParticleSystem.isWebGPURenderer(this.sceneRenderer)
       && this._hasGPUNativeSubSystemConsumers()
     ) {
       this._scheduleGPUEventReadback(this._gpuFrameEventBuffer, this.sceneRenderer);
@@ -5123,7 +5107,7 @@ class ParticleSystem extends THREE.Object3D {
 
   /** Clears particles and renderer contents; optionally includes independent child systems. */
   public clearParticles(children: boolean = true): void {
-    const gpuRenderer = isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined;
+    const gpuRenderer = ParticleSystem.isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined;
     this._gpuLifecycleGeneration += 1;
     this._sourceFrames?.dispose(gpuRenderer);
     this._sourceFrames = undefined;
@@ -5210,7 +5194,8 @@ class ParticleSystem extends THREE.Object3D {
     if (this._destroyed) return;
 
     for (const id of this._emissionSources.keys()) this.unregisterEmissionSource(id);
-    this._sharedGPUEvents?.dispose(isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined);
+    const gpuRenderer = ParticleSystem.isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined;
+    this._sharedGPUEvents?.dispose(gpuRenderer);
     this._sharedGPUEvents = undefined;
     this._destroyed = true;
     for (const component of [...this.emitters, ...this.modules, ...this.renderers]) component.dispose();
@@ -5227,7 +5212,6 @@ class ParticleSystem extends THREE.Object3D {
       renderer.reset();
       renderer.destroy();
     });
-    const gpuRenderer = isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined;
     this._particleSpatialGrids.forEach((grid) => grid.dispose(gpuRenderer));
     this._particleSpatialGrids.clear();
     this._explicitParticleSpatialGrids.clear();
@@ -5479,9 +5463,9 @@ class ParticleSystem extends THREE.Object3D {
     this._subSystemOverrides.set(subSystem, { ...options });
     const view = new Proxy({} as SubSystemOptions, {
       get: (_target, key) => {
-        const values = subSystem.emitters.map(emitter => resolveEmitterOptions(
+        const values = subSystem.emitters.map(emitter => overrideEmitterOptions(
           { ...emitter.emission, eventScope: emitter.eventScope }, this._subSystemOverrides.get(subSystem), true));
-        const base = values[0] ?? resolveEmitterOptions({}, this._subSystemOverrides.get(subSystem), true);
+        const base = values[0] ?? overrideEmitterOptions({}, this._subSystemOverrides.get(subSystem), true);
         if (['emitContinuous', 'emitOnSpawn', 'emitOnDeath', 'emitOnCollision'].includes(String(key))) {
           return values.some(value => value[key as keyof SubSystemOptions]);
         }
@@ -5497,7 +5481,7 @@ class ParticleSystem extends THREE.Object3D {
         return true;
       },
       ownKeys: () => [...new Set([
-        ...Reflect.ownKeys(resolveEmitterOptions({}, {}, true)), 'onEvent', 'tags', 'events', 'eventScope',
+        ...Reflect.ownKeys(overrideEmitterOptions({}, {}, true)), 'onEvent', 'tags', 'events', 'eventScope',
       ])],
       getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
     });
@@ -5830,6 +5814,18 @@ class ParticleSystem extends THREE.Object3D {
     vector.applyMatrix3(this._directionNormalMatrix.getNormalMatrix(this.getSimulationToWorldMatrix()));
   }
 
+  // Require a compute-capable WebGPU backend before using storage buffers.
+  private static isWebGPURenderer(renderer: unknown): renderer is WebGPURenderer {
+    const candidate = renderer as {
+      isWebGPURenderer?: boolean;
+      backend?: { isWebGLBackend?: boolean };
+    } | undefined;
+
+    // Three's WebGPURenderer keeps its identity after falling back to WebGL2,
+    // but that backend cannot execute RZMPS's storage-buffer compute pipeline.
+    return (renderer instanceof WebGPURenderer || candidate?.isWebGPURenderer === true)
+      && candidate?.backend?.isWebGLBackend !== true;
+  }
 }
 
 export default ParticleSystem;

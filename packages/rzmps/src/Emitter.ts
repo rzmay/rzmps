@@ -1,3 +1,5 @@
+import getAttributeVersion from './helpers/getAttributeVersion';
+import { transformPointGPU, transformDirectionGPU, rotateEulerYXZGPU, rotateFromYGPU } from './helpers/gpuTransforms';
 import EventReceiver, { type EventReceiverOptions } from './EventReceiver';
 import type { SubSystemOptions } from './ParticleSystem';
 import * as THREE from 'three';
@@ -348,18 +350,18 @@ class Emitter extends EventReceiver {
       this.source.version,
       geometry.type,
       geometry.getAttribute('position')?.count ?? 0,
-      getGeometryAttributeVersion(geometry.getAttribute('position')),
-      getGeometryAttributeVersion(geometry.getAttribute('normal')),
+      getAttributeVersion(geometry.getAttribute('position'), 0),
+      getAttributeVersion(geometry.getAttribute('normal'), 0),
       geometry.index?.count ?? 0,
       geometry.index?.version ?? 0,
       this.bursts.length,
-      getDynamicStructure(this.rate),
-      getDynamicStructure(this.rateOverDistance),
-      getDynamicStructure(this.radialSpeed),
-      getDynamicStructure(this.alignment),
-      ...this.bursts.map((burst) => getDynamicStructure(burst.count)),
+      this.getDynamicStructure(this.rate),
+      this.getDynamicStructure(this.rateOverDistance),
+      this.getDynamicStructure(this.radialSpeed),
+      this.getDynamicStructure(this.alignment),
+      ...this.bursts.map((burst) => this.getDynamicStructure(burst.count)),
       ...Object.keys(this.initialValues).sort().map((key) => (
-        `${key}:${getDynamicStructure(this.initialValues[key as keyof InitialParticleValues])}`
+        `${key}:${this.getDynamicStructure(this.initialValues[key as keyof InitialParticleValues])}`
       )),
       this.tags?.length ?? 0,
       this.tagSelection,
@@ -799,7 +801,7 @@ class Emitter extends EventReceiver {
     const signature = [
       this.source.version,
       samples.length,
-      getGeometryAttributeVersion(geometry.getAttribute('position')),
+      getAttributeVersion(geometry.getAttribute('position'), 0),
       geometry.index?.version ?? 0,
     ].join(':');
     if (this._gpuVolumeSampling?.signature === signature) return this._gpuVolumeSampling;
@@ -835,8 +837,8 @@ class Emitter extends EventReceiver {
     const signature = [
       this.source.version,
       position.count,
-      getGeometryAttributeVersion(position),
-      getGeometryAttributeVersion(normal),
+      getAttributeVersion(position, 0),
+      getAttributeVersion(normal, 0),
       geometry.index?.count ?? 0,
       geometry.index?.version ?? 0,
     ].join(':');
@@ -1190,68 +1192,17 @@ class Emitter extends EventReceiver {
         return this.tags;
     }
   }
-}
 
-function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
-  return matrix.mul(vec4(point, 1)).xyz as Node<'vec3'>;
-}
-
-function transformDirectionGPU(vector: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
-  return matrix.mul(vec4(vector, 0)).xyz as Node<'vec3'>;
-}
-
-export function rotateEulerYXZGPU(vector: Node<'vec3'>, rotation: Node<'vec3'>): Node<'vec3'> {
-  const a = cos(rotation.x);
-  const b = sin(rotation.x);
-  const c = cos(rotation.y);
-  const d = sin(rotation.y);
-  const e = cos(rotation.z);
-  const f = sin(rotation.z);
-
-  return vec3(
-    vector.x.mul(c.mul(e).add(d.mul(b).mul(f)))
-      .add(vector.y.mul(c.mul(f).negate().add(d.mul(b).mul(e))))
-      .add(vector.z.mul(d.mul(a))),
-    vector.x.mul(a.mul(f))
-      .add(vector.y.mul(a.mul(e)))
-      .sub(vector.z.mul(b)),
-    vector.x.mul(d.mul(e).negate().add(c.mul(b).mul(f)))
-      .add(vector.y.mul(d.mul(f).add(c.mul(b).mul(e))))
-      .add(vector.z.mul(c.mul(a))),
-  ) as Node<'vec3'>;
-}
-
-export function rotateFromYGPU(vector: Node<'vec3'>, direction: Node<'vec3'>): Node<'vec3'> {
-  const target = direction.normalize();
-  const quaternionVector = vec3(target.z, 0, target.x.negate());
-  const quaternionScalar = float(1).add(target.y);
-  const inverseLength = quaternionVector.lengthSq().add(quaternionScalar.mul(quaternionScalar))
-    .max(float(Number.EPSILON))
-    .sqrt()
-    .reciprocal();
-  const qVector = quaternionVector.mul(inverseLength);
-  const qScalar = quaternionScalar.mul(inverseLength);
-  const rotated = vector.add(qVector.cross(qVector.cross(vector).add(vector.mul(qScalar))).mul(2));
-  const antiparallel = vec3(vector.x, vector.y.negate(), vector.z.negate());
-
-  return target.y.lessThan(-0.9999).select(antiparallel, rotated) as Node<'vec3'>;
-}
-
-function getDynamicStructure(value: unknown): string {
-  if (value === undefined) return 'undefined';
-  if (typeof value === 'number' || typeof value === 'function') return typeof value;
-  if (Array.isArray(value)) return `array:${value.map(getDynamicStructure).join(',')}`;
-  if (value instanceof Set) return `set:${Array.from(value).map(getDynamicStructure).join(',')}`;
-  if (value instanceof THREE.Vector3) return 'vector3';
-  if (value instanceof THREE.Color) return 'color';
-  return typeof value === 'object' ? 'node' : typeof value;
-}
-
-function getGeometryAttributeVersion(
-  attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | undefined
-): number {
-  if (!attribute) return 0;
-  return 'version' in attribute ? attribute.version : attribute.data.version;
+  // Recursively describe emission option structure for GPU configuration invalidation.
+  private getDynamicStructure(value: unknown): string {
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'number' || typeof value === 'function') return typeof value;
+    if (Array.isArray(value)) return `array:${value.map(value => this.getDynamicStructure(value)).join(',')}`;
+    if (value instanceof Set) return `set:${Array.from(value).map(value => this.getDynamicStructure(value)).join(',')}`;
+    if (value instanceof THREE.Vector3) return 'vector3';
+    if (value instanceof THREE.Color) return 'color';
+    return typeof value === 'object' ? 'node' : typeof value;
+  }
 }
 
 export default Emitter;

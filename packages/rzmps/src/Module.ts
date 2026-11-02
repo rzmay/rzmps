@@ -25,10 +25,6 @@ export interface ModuleGPUExecutionContext extends GPUParticleUpdateContext {
   readonly spatialGrid?: ParticleSpatialGrid;
 }
 
-export interface ModuleOctreeAggregate {
-  count: number;
-}
-
 export type ModuleUpdate = (
   particle: Particle,
   deltaTime: number,
@@ -125,7 +121,7 @@ export default class Module extends EventReceiver {
   octree?: ParticleOctree<unknown>;
   readonly useOctree: boolean;
   readonly octreeOptions: Partial<OctreeConfig>;
-  readonly octreeAggregator: OctreeAggregator<unknown>;
+  readonly octreeAggregator?: OctreeAggregator<unknown>;
   readonly useSpatialGrid: boolean;
   spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
   protected spatialGrid?: ParticleSpatialGrid;
@@ -169,7 +165,7 @@ export default class Module extends EventReceiver {
     this.requireSpatialEffects = acceptMultiple(options.requireSpatialEffects);
     this.useOctree = options.useOctree ?? options.octreeOptions !== undefined;
     this.octreeOptions = options.octreeOptions ?? {};
-    this.octreeAggregator = options.octreeAggregator ?? createDefaultOctreeAggregator();
+    this.octreeAggregator = options.octreeAggregator;
     this.useSpatialGrid = options.useSpatialGrid ?? options.spatialGridOptions !== undefined;
     this.spatialGridOptions = options.spatialGridOptions;
   }
@@ -188,7 +184,7 @@ export default class Module extends EventReceiver {
     }
 
     const options = (this as Module & { options?: unknown }).options;
-    const structureSignature = getGPUValueStructure(options);
+    const structureSignature = this.getGPUValueStructure(options);
     if (this._gpuStructureSignature && structureSignature !== this._gpuStructureSignature) {
       this._version += 1;
     }
@@ -295,27 +291,24 @@ export default class Module extends EventReceiver {
       ) this.spatialEffects.push(object);
     });
   }
-}
 
-function createDefaultOctreeAggregator(): OctreeAggregator<ModuleOctreeAggregate> {
-  return {
-    new: (particle) => ({ count: particle ? 1 : 0 }),
-    combine: (a, b) => ({ count: a.count + b.count }),
-  };
-}
+  // Recursively describe GPU option structure; numeric values stay in dynamic parameter storage.
+  private getGPUValueStructure(value: unknown): string {
+    if (value === undefined) return 'undefined';
+    if (value === null) return 'null';
+    if (typeof value === 'boolean' || typeof value === 'string') return `${typeof value}:${value}`;
+    if (typeof value === 'number' || typeof value === 'function') return typeof value;
+    if (Array.isArray(value) || value instanceof Set) {
+      const entries = Array.from(value).map(entry => this.getGPUValueStructure(entry));
+      return `${Array.isArray(value) ? 'array' : 'set'}:${entries.join(',')}`;
+    }
+    if (typeof value !== 'object') return typeof value;
 
-function getGPUValueStructure(value: unknown): string {
-  if (value === undefined) return 'undefined';
-  if (value === null) return 'null';
-  if (typeof value === 'boolean' || typeof value === 'string') return `${typeof value}:${value}`;
-  if (typeof value === 'number' || typeof value === 'function') return typeof value;
-  if (Array.isArray(value)) return `array:${value.map(getGPUValueStructure).join(',')}`;
-  if (value instanceof Set) return `set:${Array.from(value).map(getGPUValueStructure).join(',')}`;
-  if (typeof value !== 'object') return typeof value;
-
-  const record = value as Record<string, unknown>;
-  if ('isNode' in record) return 'node';
-  const constructorName = value.constructor?.name ?? 'Object';
-  if (constructorName !== 'Object') return constructorName;
-  return `object:${Object.keys(record).sort().map((key) => `${key}=${getGPUValueStructure(record[key])}`).join(',')}`;
+    const record = value as Record<string, unknown>;
+    if ('isNode' in record) return 'node';
+    const constructorName = value.constructor?.name ?? 'Object';
+    if (constructorName !== 'Object') return constructorName;
+    const entries = Object.keys(record).sort().map(key => `${key}=${this.getGPUValueStructure(record[key])}`);
+    return `object:${entries.join(',')}`;
+  }
 }

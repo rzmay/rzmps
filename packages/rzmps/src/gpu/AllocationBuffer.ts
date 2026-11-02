@@ -337,49 +337,51 @@ export class GPUAllocationBufferState {
   }
 
   snapshot(): GPUAllocationDiagnostics {
-    return diagnosticsFromCounters(this.counterData);
+    return GPUAllocationBufferState.diagnosticsFromCounters(this.counterData);
   }
 
   async readback(renderer: GPUReadbackRenderer): Promise<GPUAllocationDiagnostics> {
     const buffer = await renderer.getArrayBufferAsync(this.attribute);
-    return diagnosticsFromCounters(new Uint32Array(buffer));
+    return GPUAllocationBufferState.diagnosticsFromCounters(new Uint32Array(buffer));
+  }
+
+  // Decode counters for synchronous and asynchronous allocation diagnostics.
+  private static diagnosticsFromCounters(counters: Uint32Array): GPUAllocationDiagnostics {
+    const allocationSuccesses = counters[AllocationCounter.AllocationSuccesses] ?? 0;
+    const recycledDeaths = counters[AllocationCounter.RecycledDeaths] ?? 0;
+    const startingActiveCount = counters[AllocationCounter.StartingActiveCount] ?? 0;
+
+    const hasBounds = (counters[AllocationCounter.HasBounds] ?? 0) !== 0;
+    const bounds = hasBounds
+      ? new THREE.Box3(
+        new THREE.Vector3(
+          unorderedFloatBits(counters[AllocationCounter.BoundsMinimumX]),
+          unorderedFloatBits(counters[AllocationCounter.BoundsMinimumY]),
+          unorderedFloatBits(counters[AllocationCounter.BoundsMinimumZ]),
+        ),
+        new THREE.Vector3(
+          unorderedFloatBits(counters[AllocationCounter.BoundsMaximumX]),
+          unorderedFloatBits(counters[AllocationCounter.BoundsMaximumY]),
+          unorderedFloatBits(counters[AllocationCounter.BoundsMaximumZ]),
+        ),
+      )
+      : undefined;
+
+    return {
+      sequence: counters[AllocationCounter.Sequence] ?? 0,
+      capacity: counters[AllocationCounter.Capacity] ?? 0,
+      cullingMode: counters[AllocationCounter.CullingMode] ?? 0,
+      allocationAttempts: counters[AllocationCounter.AllocationAttempts] ?? 0,
+      allocationSuccesses,
+      allocationFailures: counters[AllocationCounter.AllocationFailures] ?? 0,
+      recycledDeaths,
+      startingActiveCount,
+      estimatedActiveCount: Math.max(0, startingActiveCount + allocationSuccesses - recycledDeaths),
+      activeCount: counters[AllocationCounter.ActiveCount] ?? 0,
+      bounds,
+      maxVelocity: unorderedFloatBits(counters[AllocationCounter.MaximumVelocity] ?? 0x80000000),
+    };
   }
 }
 
 // Sequence is the simulation-frame token that produced this asynchronous snapshot.
-function diagnosticsFromCounters(counters: Uint32Array): GPUAllocationDiagnostics {
-  const allocationSuccesses = counters[AllocationCounter.AllocationSuccesses] ?? 0;
-  const recycledDeaths = counters[AllocationCounter.RecycledDeaths] ?? 0;
-  const startingActiveCount = counters[AllocationCounter.StartingActiveCount] ?? 0;
-
-  const hasBounds = (counters[AllocationCounter.HasBounds] ?? 0) !== 0;
-  const bounds = hasBounds
-    ? new THREE.Box3(
-      new THREE.Vector3(
-        unorderedFloatBits(counters[AllocationCounter.BoundsMinimumX]),
-        unorderedFloatBits(counters[AllocationCounter.BoundsMinimumY]),
-        unorderedFloatBits(counters[AllocationCounter.BoundsMinimumZ]),
-      ),
-      new THREE.Vector3(
-        unorderedFloatBits(counters[AllocationCounter.BoundsMaximumX]),
-        unorderedFloatBits(counters[AllocationCounter.BoundsMaximumY]),
-        unorderedFloatBits(counters[AllocationCounter.BoundsMaximumZ]),
-      ),
-    )
-    : undefined;
-
-  return {
-    sequence: counters[AllocationCounter.Sequence] ?? 0,
-    capacity: counters[AllocationCounter.Capacity] ?? 0,
-    cullingMode: counters[AllocationCounter.CullingMode] ?? 0,
-    allocationAttempts: counters[AllocationCounter.AllocationAttempts] ?? 0,
-    allocationSuccesses,
-    allocationFailures: counters[AllocationCounter.AllocationFailures] ?? 0,
-    recycledDeaths,
-    startingActiveCount,
-    estimatedActiveCount: Math.max(0, startingActiveCount + allocationSuccesses - recycledDeaths),
-    activeCount: counters[AllocationCounter.ActiveCount] ?? 0,
-    bounds,
-    maxVelocity: unorderedFloatBits(counters[AllocationCounter.MaximumVelocity] ?? 0x80000000),
-  };
-}

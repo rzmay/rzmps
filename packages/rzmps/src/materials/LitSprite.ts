@@ -61,7 +61,7 @@ const LitSprite = (
 
         // Normal lighting, if not already set, defaults to 1 if there is a normal map present and 0 if not.
         normalLighting: { value: normalLighting ?? (normalMap ? 1 : 0) },
-        sphericalNormals: { value: normalizeSphericalNormals(sphericalNormals) },
+        sphericalNormals: { value: THREE.MathUtils.clamp(Number(sphericalNormals ?? 0), 0, 1) },
 
         roughness: { value: roughness },
         roughnessMap: { value: roughnessMap ?? null },
@@ -106,9 +106,5 @@ const LitSprite = (
     ...materialOptions,
   });
 };
-
-function normalizeSphericalNormals(value: number | boolean | undefined): number {
-  return THREE.MathUtils.clamp(Number(value ?? 0), 0, 1);
-}
 
 export default LitSprite;

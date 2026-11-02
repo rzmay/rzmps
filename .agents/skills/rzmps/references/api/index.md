@@ -286,7 +286,6 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [ModuleExecutionContext](interfaces/ModuleExecutionContext.md)
 - [ModuleGPUCondition](type-aliases/ModuleGPUCondition.md)
 - [ModuleGPUExecutionContext](interfaces/ModuleGPUExecutionContext.md)
-- [ModuleOctreeAggregate](interfaces/ModuleOctreeAggregate.md)
 - [Multiple](Supporting-Types/type-aliases/Multiple.md)
 - [OctreeAggregator](interfaces/OctreeAggregator.md)
 - [OctreeNode](interfaces/OctreeNode.md)

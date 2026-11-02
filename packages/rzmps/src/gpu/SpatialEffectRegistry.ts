@@ -17,6 +17,9 @@ import {
   type ScalarUintStorage,
 } from './Storage';
 
+type TypedArray = Float32Array | Uint32Array | Int32Array;
+type UpdateRange = { start: number; count: number };
+
 // This small closed set is the parameter-buffer ABI. Effects batch only when
 // their shader functions, compilation key, and complete parameter layout match.
 export type GPUSpatialParameterType = 'float' | 'vec3' | 'vec4';
@@ -112,6 +115,8 @@ export interface GPUSpatialEffectRegistryStats {
  * finite travel bounds, and premature filtering would miss moving effects/particles.
  */
 export class GPUSpatialEffectRegistry {
+  private static readonly objectIds = new WeakMap<object, number>();
+  private static nextObjectId = 1;
   private static nextVersion = 1;
 
   readonly parameterAttribute: StorageBufferAttribute;
@@ -150,32 +155,32 @@ export class GPUSpatialEffectRegistry {
     this.types = build.types;
     this.bvhNodes = build.bvhNodes;
     this.leafEffectIds = build.leafEffectIds;
-    this.signature = createSignature(build.types);
+    this.signature = `types:${build.types.map(value => GPUSpatialEffectRegistry.getTypeKey(value)).join(';')}`;
     this.version = GPUSpatialEffectRegistry.nextVersion;
     GPUSpatialEffectRegistry.nextVersion += 1;
     this.parameterAttribute = new StorageBufferAttribute(
-      reserveFloat32(build.parameterData, 256),
+      GPUSpatialEffectRegistry.reserveFloat32(build.parameterData, 256),
       4,
     );
     this.metadataAttribute = new StorageBufferAttribute(
-      reserveUint32(build.metadataData, 64 * 4),
+      GPUSpatialEffectRegistry.reserveUint32(build.metadataData, 64 * 4),
       4,
     );
     this.bvhBoundsAttribute = new StorageBufferAttribute(
-      reserveFloat32(build.bvhBoundsData, 64 * 8),
+      GPUSpatialEffectRegistry.reserveFloat32(build.bvhBoundsData, 64 * 8),
       4,
     );
-    this.bvhNodeAttribute = new StorageBufferAttribute(
-      reserveInt32(build.bvhNodeData, 64 * 4),
-      4,
-    );
+    // Reserve spare node capacity so refits can reuse the existing storage allocation.
+    const bvhNodeData = new Int32Array(GPUSpatialEffectRegistry.reservedLength(build.bvhNodeData.length, 64 * 4));
+    bvhNodeData.set(build.bvhNodeData);
+    this.bvhNodeAttribute = new StorageBufferAttribute(bvhNodeData, 4);
     this.leafAttribute = new StorageBufferAttribute(
-      reserveUint32(new Uint32Array(build.leafEffectIds), 64),
+      GPUSpatialEffectRegistry.reserveUint32(new Uint32Array(build.leafEffectIds), 64),
       1,
     );
     this.bvhNodeCountNode.value = build.bvhNodes.length;
     this.parameterScratchByTypeId = build.types.map((type) => (
-      new Float32Array(getLayoutFloatSize(type.parameterLayout))
+      new Float32Array(GPUSpatialEffectRegistry.getLayoutFloatSize(type.parameterLayout))
     ));
     this.leafNodeByEffectId = new Int32Array(build.records.length).fill(-1);
     this.parentNodeByNode = new Int32Array(build.bvhNodes.length).fill(-1);
@@ -214,7 +219,7 @@ export class GPUSpatialEffectRegistry {
     system: ParticleSystem,
     tagMaskForEffect: (effect: SpatialEffect) => number,
   ): boolean {
-    const sortedEffects = getSortedEffects(effects);
+    const sortedEffects = GPUSpatialEffectRegistry.getSortedEffects(effects);
     if (sortedEffects.length !== this.records.length) return false;
 
     const parameterData = this.parameterAttribute.array as Float32Array;
@@ -230,16 +235,21 @@ export class GPUSpatialEffectRegistry {
       const type = batchable.gpuSpatialType!;
       if (
         record.effect !== effect
-        || getTypeKey(this.types[record.typeId]) !== getTypeKey(type)
+        || GPUSpatialEffectRegistry.getTypeKey(this.types[record.typeId]) !== GPUSpatialEffectRegistry.getTypeKey(type)
         || record.priority !== effect.priority
         || record.order !== order
       ) return false;
 
-      const parameterSize = getLayoutFloatSize(type.parameterLayout);
+      const parameterSize = GPUSpatialEffectRegistry.getLayoutFloatSize(type.parameterLayout);
       const nextParameters = this.parameterScratchByTypeId[record.typeId];
       nextParameters.fill(0);
       batchable.writeGPUParameters?.(nextParameters, 0, system);
-      if (copyChangedRange(parameterData, record.parameterOffset, nextParameters)) {
+      // Upload only parameter spans whose component values changed.
+      const parametersChanged = nextParameters.some((value, offset) => (
+        parameterData[record.parameterOffset + offset] !== value
+      ));
+      if (parametersChanged) {
+        parameterData.set(nextParameters, record.parameterOffset);
         dirtyParameterRanges.push({ start: record.parameterOffset, count: parameterSize });
       }
 
@@ -251,7 +261,7 @@ export class GPUSpatialEffectRegistry {
         metadataChanged = true;
       }
 
-      const nextBounds = getEffectWorldBounds(effect, system);
+      const nextBounds = GPUSpatialEffectRegistry.getEffectWorldBounds(effect, system);
       if (!record.bounds.equals(nextBounds)) {
         record.bounds.copy(nextBounds);
         boundsChanged = true;
@@ -261,7 +271,7 @@ export class GPUSpatialEffectRegistry {
     }
 
     if (dirtyParameterRanges.length > 0) {
-      markUpdateRanges(this.parameterAttribute, dirtyParameterRanges);
+      GPUSpatialEffectRegistry.markUpdateRanges(this.parameterAttribute, dirtyParameterRanges);
       this.stats.parameterUploads += 1;
       this.stats.parameterUploadBytes += dirtyParameterRanges.reduce(
         (bytes, range) => bytes + range.count * Float32Array.BYTES_PER_ELEMENT,
@@ -279,7 +289,7 @@ export class GPUSpatialEffectRegistry {
     system: ParticleSystem,
     tagMaskForEffect: (effect: SpatialEffect) => number,
   ): GPUSpatialEffectRegistryBuild {
-    const sortedEffects = getSortedEffects(effects);
+    const sortedEffects = GPUSpatialEffectRegistry.getSortedEffects(effects);
     const types: GPUSpatialEffectType[] = [];
     const typeIds = new Map<string, number>();
     const records: GPUSpatialEffectRecord[] = [];
@@ -288,7 +298,7 @@ export class GPUSpatialEffectRegistry {
     sortedEffects.forEach(({ effect, order }) => {
       const batchable = effect as SpatialEffect & GPUSpatialBatchableEffect;
       const type = batchable.gpuSpatialType!;
-      const typeKey = getTypeKey(type);
+      const typeKey = GPUSpatialEffectRegistry.getTypeKey(type);
       let typeId = typeIds.get(typeKey);
 
       if (typeId === undefined) {
@@ -297,9 +307,9 @@ export class GPUSpatialEffectRegistry {
         types.push(type);
       }
 
-      const parameterOffset = alignVec4(parameterValues.length);
+      const parameterOffset = GPUSpatialEffectRegistry.alignVec4(parameterValues.length);
       while (parameterValues.length < parameterOffset) parameterValues.push(0);
-      const parameterSize = getLayoutFloatSize(type.parameterLayout);
+      const parameterSize = GPUSpatialEffectRegistry.getLayoutFloatSize(type.parameterLayout);
       const parameterTarget = new Float32Array(parameterSize);
       batchable.writeGPUParameters?.(parameterTarget, 0, system);
       parameterValues.push(...parameterTarget);
@@ -314,12 +324,58 @@ export class GPUSpatialEffectRegistry {
         tagMask: tagMaskForEffect(effect),
         enabled: effect.visible,
         segmentId: -1,
-        bounds: getEffectWorldBounds(effect, system),
+        bounds: GPUSpatialEffectRegistry.getEffectWorldBounds(effect, system),
         effect,
       });
     });
 
-    const { nodes, leafEffectIds } = buildBVH(records);
+    // Partition effect bounds into a depth-first BVH with escape indices for shader traversal.
+    const nodes: GPUSpatialBVHNodeRecord[] = [];
+    const leafEffectIds: number[] = [];
+    const indexed = records.map((record) => record.id);
+
+    const buildNode = (ids: number[]): number => {
+      const index = nodes.length;
+      const bounds = ids.reduce(
+        (box, id) => box.union(records[id].bounds),
+        new THREE.Box3(),
+      );
+
+      nodes.push({ bounds, left: -1, right: -1, start: -1, count: 0, escape: -1 });
+
+      if (ids.length <= 4) {
+        nodes[index].start = leafEffectIds.length;
+        nodes[index].count = ids.length;
+        leafEffectIds.push(...ids);
+        return index;
+      }
+
+      const size = bounds.getSize(new THREE.Vector3());
+      const axis = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
+      ids.sort((a, b) => (
+        records[a].bounds.getCenter(new THREE.Vector3())[axis]
+        - records[b].bounds.getCenter(new THREE.Vector3())[axis]
+      ));
+      const middle = Math.ceil(ids.length / 2);
+
+      nodes[index].left = buildNode(ids.slice(0, middle));
+      nodes[index].right = buildNode(ids.slice(middle));
+      return index;
+    };
+
+    if (indexed.length > 0) buildNode(indexed);
+    nodes.forEach((node, index) => {
+      node.escape = index + GPUSpatialEffectRegistry.subtreeSize(nodes, index);
+    });
+
+    // Pack traversal links and leaf ranges into the node storage ABI.
+    const bvhNodeData = new Int32Array(Math.max(nodes.length, 1) * 4);
+    nodes.forEach((node, index) => {
+      const offset = index * 4;
+      bvhNodeData[offset] = node.escape;
+      bvhNodeData[offset + 1] = node.start;
+      bvhNodeData[offset + 2] = node.count;
+    });
 
     return {
       records,
@@ -327,9 +383,9 @@ export class GPUSpatialEffectRegistry {
       bvhNodes: nodes,
       leafEffectIds,
       parameterData: new Float32Array(parameterValues.length > 0 ? parameterValues : [0, 0, 0, 0]),
-      metadataData: packMetadata(records),
-      bvhBoundsData: packBVHBounds(nodes),
-      bvhNodeData: packBVHNodes(nodes),
+      metadataData: GPUSpatialEffectRegistry.packMetadata(records),
+      bvhBoundsData: GPUSpatialEffectRegistry.packBVHBounds(nodes),
+      bvhNodeData,
     };
   }
 
@@ -366,12 +422,24 @@ export class GPUSpatialEffectRegistry {
   }
 
   private uploadMetadata(): void {
-    const packed = packMetadata(this.records);
+    const packed = GPUSpatialEffectRegistry.packMetadata(this.records);
     const target = this.metadataAttribute.array as Uint32Array;
-    const changed = changedRanges(target, packed);
+    // Find contiguous metadata component ranges to update without replacing the buffer.
+    const changed: UpdateRange[] = [];
+    let start = -1;
+    for (let index = 0; index < packed.length; index += 1) {
+      const componentChanged = target[index] !== packed[index];
+      if (componentChanged && start < 0) start = index;
+      if (!componentChanged && start >= 0) {
+        changed.push({ start, count: index - start });
+        start = -1;
+      }
+    }
+    if (start >= 0) changed.push({ start, count: packed.length - start });
+
     if (changed.length === 0) return;
-    copyRanges(target, packed, changed);
-    markUpdateRanges(this.metadataAttribute, changed);
+    GPUSpatialEffectRegistry.copyRanges(target, packed, changed);
+    GPUSpatialEffectRegistry.markUpdateRanges(this.metadataAttribute, changed);
     this.stats.metadataUploads += 1;
     this.stats.metadataUploadBytes += changed.reduce(
       (bytes, range) => bytes + range.count * Uint32Array.BYTES_PER_ELEMENT,
@@ -409,13 +477,13 @@ export class GPUSpatialEffectRegistry {
 
     if (changedNodes.size === 0) return;
     const target = this.bvhBoundsAttribute.array as Float32Array;
-    const packed = packBVHBounds(this.bvhNodes);
-    const ranges = mergeRanges(Array.from(changedNodes, (index) => ({
+    const packed = GPUSpatialEffectRegistry.packBVHBounds(this.bvhNodes);
+    const ranges = GPUSpatialEffectRegistry.mergeRanges(Array.from(changedNodes, (index) => ({
       start: index * 8,
       count: 8,
     })));
-    copyRanges(target, packed, ranges);
-    markUpdateRanges(this.bvhBoundsAttribute, ranges);
+    GPUSpatialEffectRegistry.copyRanges(target, packed, ranges);
+    GPUSpatialEffectRegistry.markUpdateRanges(this.bvhBoundsAttribute, ranges);
     this.stats.bvhRefits += 1;
     this.stats.bvhBoundsUploads += 1;
     this.stats.bvhBoundsUploadBytes += ranges.reduce(
@@ -430,7 +498,7 @@ export class GPUSpatialEffectRegistry {
       'vec4',
       this.parameterAttribute.count,
     ) as PackedFloatStorage;
-    const fieldOffsets = getLayoutFieldOffsets(type.parameterLayout);
+    const fieldOffsets = GPUSpatialEffectRegistry.getLayoutFieldOffsets(type.parameterLayout);
 
     const loadVec4 = (fieldOffset: number): Node<'vec4'> => {
       const vec4Offset = parameterOffset
@@ -548,259 +616,158 @@ export class GPUSpatialEffectRegistry {
       attribute,
     ));
   }
+
+  // Registry layout, stable shader identities, and incremental storage updates.
+  private static getSortedEffects(effects: SpatialEffect[]): Array<{ effect: SpatialEffect; order: number }> {
+    return effects
+      .map((effect, order) => ({ effect, order }))
+      .filter(({ effect }) => isBatchableEffect(effect))
+      .sort((a, b) => (a.effect.priority - b.effect.priority) || (a.order - b.order));
+  }
+
+  private static getTypeKey(type: GPUSpatialEffectType): string {
+    return [
+      type.key ?? 'anonymous',
+      type.compilationKey ?? 'default',
+      `test:${GPUSpatialEffectRegistry.getObjectId(type.testGPU)}`,
+      `modify:${GPUSpatialEffectRegistry.getObjectId(type.modifyGPU)}`,
+      type.parameterLayout.id,
+      type.parameterLayout.fields.map((field) => `${field.name}:${field.type}`).join(','),
+    ].join('|');
+  }
+
+  private static getObjectId(value: object): number {
+    let id = GPUSpatialEffectRegistry.objectIds.get(value);
+    if (id === undefined) {
+      id = GPUSpatialEffectRegistry.nextObjectId;
+      GPUSpatialEffectRegistry.nextObjectId += 1;
+      GPUSpatialEffectRegistry.objectIds.set(value, id);
+    }
+    return id;
+  }
+
+  private static getLayoutFloatSize(layout: GPUSpatialParameterLayout): number {
+    const offsets = GPUSpatialEffectRegistry.getLayoutFieldOffsets(layout);
+    return layout.fields.reduce((size, field) => {
+      const offset = offsets.get(field.name) ?? 0;
+      return Math.max(size, offset + (field.type === 'vec3' || field.type === 'vec4' ? 4 : 1));
+    }, 0);
+  }
+
+  private static getLayoutFieldOffsets(layout: GPUSpatialParameterLayout): Map<string, number> {
+    const offsets = new Map<string, number>();
+    let offset = 0;
+
+    layout.fields.forEach((field) => {
+      if (field.type === 'vec3' || field.type === 'vec4') offset = GPUSpatialEffectRegistry.alignVec4(offset);
+      offsets.set(field.name, offset);
+      offset += field.type === 'vec3' || field.type === 'vec4' ? 4 : 1;
+    });
+
+    return offsets;
+  }
+
+  private static alignVec4(value: number): number {
+    return Math.ceil(value / 4) * 4;
+  }
+
+  private static getEffectWorldBounds(effect: SpatialEffect, system: ParticleSystem): THREE.Box3 {
+    const world = effect.getWorldBounds();
+    if (system.simulationSpace !== 'world') {
+      system.updateWorldMatrix(true, false);
+      const inverse = system.getSimulationToWorldMatrix().clone().invert();
+      return world.applyMatrix4(inverse);
+    }
+
+    return world;
+  }
+
+  private static subtreeSize(nodes: GPUSpatialBVHNodeRecord[], index: number): number {
+    const node = nodes[index];
+    if (!node || node.left < 0) return 1;
+    return 1
+      + GPUSpatialEffectRegistry.subtreeSize(nodes, node.left)
+      + GPUSpatialEffectRegistry.subtreeSize(nodes, node.right);
+  }
+
+  private static packMetadata(records: GPUSpatialEffectRecord[]): Uint32Array {
+    const data = new Uint32Array(Math.max(records.length, 1) * 4);
+    records.forEach((record, index) => {
+      const offset = index * 4;
+      data[offset] = record.typeId;
+      data[offset + 1] = record.parameterOffset;
+      data[offset + 2] = record.tagMask;
+      data[offset + 3] = (Math.max(record.segmentId, 0) << 1) | (record.enabled ? 1 : 0);
+    });
+    return data;
+  }
+
+  private static packBVHBounds(nodes: GPUSpatialBVHNodeRecord[]): Float32Array {
+    const data = new Float32Array(Math.max(nodes.length, 1) * 8);
+    nodes.forEach((node, index) => {
+      const offset = index * 8;
+      data.set([
+        node.bounds.min.x,
+        node.bounds.min.y,
+        node.bounds.min.z,
+        0,
+        node.bounds.max.x,
+        node.bounds.max.y,
+        node.bounds.max.z,
+        0,
+      ], offset);
+    });
+    return data;
+  }
+
+  private static reservedLength(required: number, minimum: number): number {
+    let capacity = Math.max(1, minimum);
+    while (capacity < required * 2) capacity *= 2;
+    return capacity;
+  }
+
+  private static reserveFloat32(source: Float32Array, minimum: number): Float32Array {
+    const target = new Float32Array(GPUSpatialEffectRegistry.reservedLength(source.length, minimum));
+    target.set(source);
+    return target;
+  }
+
+  private static reserveUint32(source: Uint32Array, minimum: number): Uint32Array {
+    const target = new Uint32Array(GPUSpatialEffectRegistry.reservedLength(source.length, minimum));
+    target.set(source);
+    return target;
+  }
+
+  private static mergeRanges(ranges: UpdateRange[]): UpdateRange[] {
+    const sorted = ranges.slice().sort((a, b) => a.start - b.start);
+    const merged: UpdateRange[] = [];
+    sorted.forEach((range) => {
+      const previous = merged[merged.length - 1];
+      if (previous && range.start <= previous.start + previous.count) {
+        previous.count = Math.max(previous.start + previous.count, range.start + range.count)
+          - previous.start;
+      } else {
+        merged.push({ ...range });
+      }
+    });
+    return merged;
+  }
+
+  private static copyRanges(target: TypedArray, source: TypedArray, ranges: UpdateRange[]): void {
+    ranges.forEach(({ start, count }) => {
+      target.set(source.subarray(start, start + count), start);
+    });
+  }
+
+  private static markUpdateRanges(
+    attribute: StorageBufferAttribute,
+    ranges: UpdateRange[],
+  ): void {
+    GPUSpatialEffectRegistry.mergeRanges(ranges).forEach(({ start, count }) => attribute.addUpdateRange(start, count));
+    attribute.needsUpdate = true;
+  }
 }
 
 export function isBatchableEffect(effect: SpatialEffect): effect is SpatialEffect & GPUSpatialBatchableEffect {
   return GPUSpatialEffectRegistry.isBatchableEffect(effect);
-}
-
-function getSortedEffects(effects: SpatialEffect[]): Array<{ effect: SpatialEffect; order: number }> {
-  return effects
-    .map((effect, order) => ({ effect, order }))
-    .filter(({ effect }) => isBatchableEffect(effect))
-    .sort((a, b) => (a.effect.priority - b.effect.priority) || (a.order - b.order));
-}
-
-function getTypeKey(type: GPUSpatialEffectType): string {
-  return [
-    type.key ?? 'anonymous',
-    type.compilationKey ?? 'default',
-    `test:${getObjectId(type.testGPU)}`,
-    `modify:${getObjectId(type.modifyGPU)}`,
-    type.parameterLayout.id,
-    type.parameterLayout.fields.map((field) => `${field.name}:${field.type}`).join(','),
-  ].join('|');
-}
-
-const objectIds = new WeakMap<object, number>();
-let nextObjectId = 1;
-
-function getObjectId(value: object): number {
-  let id = objectIds.get(value);
-  if (id === undefined) {
-    id = nextObjectId;
-    nextObjectId += 1;
-    objectIds.set(value, id);
-  }
-  return id;
-}
-
-function getLayoutFloatSize(layout: GPUSpatialParameterLayout): number {
-  const offsets = getLayoutFieldOffsets(layout);
-  return layout.fields.reduce((size, field) => {
-    const offset = offsets.get(field.name) ?? 0;
-    return Math.max(size, offset + (field.type === 'vec3' || field.type === 'vec4' ? 4 : 1));
-  }, 0);
-}
-
-function getLayoutFieldOffsets(layout: GPUSpatialParameterLayout): Map<string, number> {
-  const offsets = new Map<string, number>();
-  let offset = 0;
-
-  layout.fields.forEach((field) => {
-    if (field.type === 'vec3' || field.type === 'vec4') offset = alignVec4(offset);
-    offsets.set(field.name, offset);
-    offset += field.type === 'vec3' || field.type === 'vec4' ? 4 : 1;
-  });
-
-  return offsets;
-}
-
-function alignVec4(value: number): number {
-  return Math.ceil(value / 4) * 4;
-}
-
-function getEffectWorldBounds(effect: SpatialEffect, system: ParticleSystem): THREE.Box3 {
-  const world = effect.getWorldBounds();
-  if (system.simulationSpace !== 'world') {
-    system.updateWorldMatrix(true, false);
-    const inverse = system.getSimulationToWorldMatrix().clone().invert();
-    return world.applyMatrix4(inverse);
-  }
-
-  return world;
-}
-
-function buildBVH(records: GPUSpatialEffectRecord[]): {
-  nodes: GPUSpatialBVHNodeRecord[];
-  leafEffectIds: number[];
-} {
-  const nodes: GPUSpatialBVHNodeRecord[] = [];
-  const leafEffectIds: number[] = [];
-  const indexed = records.map((record) => record.id);
-
-  const buildNode = (ids: number[]): number => {
-    const index = nodes.length;
-    const bounds = ids.reduce(
-      (box, id) => box.union(records[id].bounds),
-      new THREE.Box3(),
-    );
-
-    nodes.push({ bounds, left: -1, right: -1, start: -1, count: 0, escape: -1 });
-
-    if (ids.length <= 4) {
-      nodes[index].start = leafEffectIds.length;
-      nodes[index].count = ids.length;
-      leafEffectIds.push(...ids);
-      return index;
-    }
-
-    const size = bounds.getSize(new THREE.Vector3());
-    const axis = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
-    ids.sort((a, b) => (
-      records[a].bounds.getCenter(new THREE.Vector3())[axis]
-      - records[b].bounds.getCenter(new THREE.Vector3())[axis]
-    ));
-    const middle = Math.ceil(ids.length / 2);
-
-    nodes[index].left = buildNode(ids.slice(0, middle));
-    nodes[index].right = buildNode(ids.slice(middle));
-    return index;
-  };
-
-  if (indexed.length > 0) buildNode(indexed);
-  nodes.forEach((node, index) => {
-    node.escape = index + subtreeSize(nodes, index);
-  });
-
-  return { nodes, leafEffectIds };
-}
-
-function subtreeSize(nodes: GPUSpatialBVHNodeRecord[], index: number): number {
-  const node = nodes[index];
-  if (!node || node.left < 0) return 1;
-  return 1 + subtreeSize(nodes, node.left) + subtreeSize(nodes, node.right);
-}
-
-function packMetadata(records: GPUSpatialEffectRecord[]): Uint32Array {
-  const data = new Uint32Array(Math.max(records.length, 1) * 4);
-  records.forEach((record, index) => {
-    const offset = index * 4;
-    data[offset] = record.typeId;
-    data[offset + 1] = record.parameterOffset;
-    data[offset + 2] = record.tagMask;
-    data[offset + 3] = (Math.max(record.segmentId, 0) << 1) | (record.enabled ? 1 : 0);
-  });
-  return data;
-}
-
-function packBVHBounds(nodes: GPUSpatialBVHNodeRecord[]): Float32Array {
-  const data = new Float32Array(Math.max(nodes.length, 1) * 8);
-  nodes.forEach((node, index) => {
-    const offset = index * 8;
-    data.set([
-      node.bounds.min.x,
-      node.bounds.min.y,
-      node.bounds.min.z,
-      0,
-      node.bounds.max.x,
-      node.bounds.max.y,
-      node.bounds.max.z,
-      0,
-    ], offset);
-  });
-  return data;
-}
-
-function packBVHNodes(nodes: GPUSpatialBVHNodeRecord[]): Int32Array {
-  const data = new Int32Array(Math.max(nodes.length, 1) * 4);
-  nodes.forEach((node, index) => {
-    const offset = index * 4;
-    data[offset] = node.escape;
-    data[offset + 1] = node.start;
-    data[offset + 2] = node.count;
-    data[offset + 3] = 0;
-  });
-  return data;
-}
-
-function createSignature(types: GPUSpatialEffectType[]): string {
-  return `types:${types.map(getTypeKey).join(';')}`;
-}
-
-// Reserve at least twice the live payload so parameter/transform updates stay in
-// the same GPU allocation. Structural growth still creates a new registry.
-function reservedLength(required: number, minimum: number): number {
-  let capacity = Math.max(1, minimum);
-  while (capacity < required * 2) capacity *= 2;
-  return capacity;
-}
-
-function reserveFloat32(source: Float32Array, minimum: number): Float32Array {
-  const target = new Float32Array(reservedLength(source.length, minimum));
-  target.set(source);
-  return target;
-}
-
-function reserveUint32(source: Uint32Array, minimum: number): Uint32Array {
-  const target = new Uint32Array(reservedLength(source.length, minimum));
-  target.set(source);
-  return target;
-}
-
-function reserveInt32(source: Int32Array, minimum: number): Int32Array {
-  const target = new Int32Array(reservedLength(source.length, minimum));
-  target.set(source);
-  return target;
-}
-
-type TypedArray = Float32Array | Uint32Array | Int32Array;
-type UpdateRange = { start: number; count: number };
-
-// These are contiguous typed-array component ranges, not particle ranges. Uploading
-// only changed spans avoids replacing a complete parameter or BVH buffer.
-function copyChangedRange(target: TypedArray, offset: number, source: TypedArray): boolean {
-  let changed = false;
-  for (let index = 0; index < source.length; index += 1) {
-    if (target[offset + index] !== source[index]) {
-      changed = true;
-      break;
-    }
-  }
-  if (changed) target.set(source, offset);
-  return changed;
-}
-
-function changedRanges(target: TypedArray, source: TypedArray): UpdateRange[] {
-  const ranges: UpdateRange[] = [];
-  let start = -1;
-  for (let index = 0; index < source.length; index += 1) {
-    const changed = target[index] !== source[index];
-    if (changed && start < 0) start = index;
-    if (!changed && start >= 0) {
-      ranges.push({ start, count: index - start });
-      start = -1;
-    }
-  }
-  if (start >= 0) ranges.push({ start, count: source.length - start });
-  return ranges;
-}
-
-function mergeRanges(ranges: UpdateRange[]): UpdateRange[] {
-  const sorted = ranges.slice().sort((a, b) => a.start - b.start);
-  const merged: UpdateRange[] = [];
-  sorted.forEach((range) => {
-    const previous = merged[merged.length - 1];
-    if (previous && range.start <= previous.start + previous.count) {
-      previous.count = Math.max(previous.start + previous.count, range.start + range.count)
-        - previous.start;
-    } else {
-      merged.push({ ...range });
-    }
-  });
-  return merged;
-}
-
-function copyRanges(target: TypedArray, source: TypedArray, ranges: UpdateRange[]): void {
-  ranges.forEach(({ start, count }) => {
-    target.set(source.subarray(start, start + count), start);
-  });
-}
-
-function markUpdateRanges(
-  attribute: StorageBufferAttribute,
-  ranges: UpdateRange[],
-): void {
-  mergeRanges(ranges).forEach(({ start, count }) => attribute.addUpdateRange(start, count));
-  attribute.needsUpdate = true;
 }

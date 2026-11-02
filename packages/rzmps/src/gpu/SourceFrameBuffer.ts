@@ -1,4 +1,11 @@
-import { Matrix4 } from 'three';
+/**
+ * GPU storage for Source-space simulation: per-particle matrix history plus managed source
+ * transforms and slot generations. CPU-managed sources upload through refresh(); GPU particle
+ * sources are resolved directly from their producer buffers by ParticleSystem's compute pass.
+ * CPU particles track their own previous transforms in ParticleSourceBindings.ts; their bindings
+ * retain the managed slot/generation needed when staging births into this buffer's source table.
+ */
+import type { Matrix4 } from 'three';
 import { StorageBufferAttribute, type Node } from 'three/webgpu';
 import { mat4, storage } from 'three/tsl';
 import type { SubSystemSource } from '../EmissionSource';
@@ -8,7 +15,7 @@ import {
 } from './Storage';
 
 /** @internal */
-export interface ManagedSourceFrame {
+export interface ManagedSourceRecord {
   source: SubSystemSource;
   generation: number;
   slot: number;
@@ -16,17 +23,25 @@ export interface ManagedSourceFrame {
 }
 
 /** @internal Optional Source-mode resources. Birth ownership is packed into the existing particle float buffer. */
-export default class GPUSourceFrames {
+export default class GPUSourceFrameBuffer {
   capacity: number;
   version = 0;
+
+  // Previous resolved transforms are written on the GPU and preserved when storage grows.
   previousAttribute: StorageBufferAttribute;
   previous: PackedFloatStorage;
+
+  // Current CPU-managed source transforms and generation-checked liveness state.
   frameAttribute: StorageBufferAttribute;
   frames: PackedFloatStorage;
   stateAttribute: StorageBufferAttribute;
   states: PackedUintStorage;
-  readonly records: ManagedSourceFrame[] = [];
-  private readonly byID = new Map<string, ManagedSourceFrame>();
+
+  // Stable managed slots are shared with CPU particle bindings and staged GPU births.
+  readonly records: ManagedSourceRecord[] = [];
+  private readonly byID = new Map<string, ManagedSourceRecord>();
+
+  // CPU upload mirrors; native GPU particle sources are resolved directly by compute.
   private frameData: Float32Array;
   private stateData: Uint32Array;
 
@@ -42,11 +57,14 @@ export default class GPUSourceFrames {
     this.states = storage(this.stateAttribute, 'uvec4', this.capacity) as PackedUintStorage;
   }
 
-  register(source: SubSystemSource): ManagedSourceFrame {
+  /** Reuses dead slots while advancing their generation to reject stale source identities. */
+  register(source: SubSystemSource): ManagedSourceRecord {
     const existing = this.byID.get(source.id);
     if (existing) return existing;
+
     const reusable = this.records.find(record => !record.source.alive || record.active === false);
     if (reusable) this.byID.delete(reusable.source.id);
+
     const record = reusable ?? { source, generation: 0, slot: this.records.length };
     record.source = source;
     record.active = true;
@@ -56,6 +74,7 @@ export default class GPUSourceFrames {
     return record;
   }
 
+  /** Captures the latest managed transforms at the simulation boundary for the next GPU upload. */
   refresh(resolve: (source: SubSystemSource) => Matrix4, alive = (source: SubSystemSource) => source.alive): void {
     this.stateData.fill(0);
     for (const record of this.records) {
@@ -68,11 +87,14 @@ export default class GPUSourceFrames {
     this.stateAttribute.needsUpdate = true;
   }
 
+  /** Creates shader access to the current managed transform or per-particle previous transform. */
   matrix(index: Node<'uint'>, previous = false): Node<'mat4'> {
     const data = previous ? this.previous : this.frames;
     const offset = index.mul(4);
-    return mat4(data.element(offset), data.element(offset.add(1)),
-      data.element(offset.add(2)), data.element(offset.add(3)));
+    return mat4(
+      data.element(offset), data.element(offset.add(1)),
+      data.element(offset.add(2)), data.element(offset.add(3)),
+    );
   }
 
   initialize(renderer: GPUStorageBufferRenderer): void {
@@ -82,13 +104,15 @@ export default class GPUSourceFrames {
   }
 
   /** Grows without discarding last frames already stored by GPU updates. */
-  grow(renderer: GPUStorageBufferRenderer | undefined, capacity: number): GPUSourceFrames {
+  grow(renderer: GPUStorageBufferRenderer | undefined, capacity: number): GPUSourceFrameBuffer {
     if (capacity <= this.capacity) return this;
-    const next = new GPUSourceFrames(capacity);
+
+    const next = new GPUSourceFrameBuffer(capacity);
     next.records.push(...this.records);
     for (const record of this.records) next.byID.set(record.source.id, record);
     next.version = this.version + 1;
     if (!renderer) return next;
+
     // Initialize only GPU-owned history here. Managed tables must receive refresh() before their first upload.
     initializeStorageAttribute(renderer, this.previousAttribute);
     initializeStorageAttribute(renderer, next.previousAttribute);
@@ -111,6 +135,7 @@ export default class GPUSourceFrames {
       backend.device.queue.submit([encoder.finish()]);
     }
     this.dispose(renderer);
+
     return next;
   }
 

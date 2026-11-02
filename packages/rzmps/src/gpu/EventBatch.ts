@@ -7,10 +7,14 @@ import type ParticleSystem from '../ParticleSystem';
 export interface GPUEventBatch {
   forEach(name: string, consume: (event: GPUEventNodeRecord) => void): void;
 }
+
 /** @internal */
 export class SharedGPUEventBatch implements GPUEventBatch {
-  constructor(readonly reader: GPUEventReader, readonly origins: readonly ParticleSystem[],
-    readonly names: readonly string[] = []) {}
+  constructor(
+    readonly reader: GPUEventReader,
+    readonly origins: readonly ParticleSystem[],
+    readonly names: readonly string[] = [],
+  ) {}
 
   matches(event: GPUEventNodeRecord, name?: string): Node<'bool'> {
     let eligible = uint(0).equal(uint(1));
@@ -33,5 +37,6 @@ export class SharedGPUEventBatch implements GPUEventBatch {
     });
   }
 }
+
 /** @internal */
 export const emptyGPUEvents: GPUEventBatch = { forEach() {} };

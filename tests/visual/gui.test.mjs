@@ -93,7 +93,8 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
         const counts = await page.$eval('.particle-count-monitor', element => (
           element.textContent.match(/[\d,]+/g).map(value => Number(value.replaceAll(',', '')))
         ));
-        assert.equal(counts[1], counts[0] * 6, 'Snow rendered total includes its five children per particle');
+        assert.equal(counts[1], counts[0] * 6,
+          'Snow rendered total includes its five children per particle');
       } else if (preset === 'Fire') {
         const text = await page.$eval('.particle-count-monitor', element => element.textContent);
         assert.doesNotMatch(text, /rendered|children/, 'No child line when there are no children');

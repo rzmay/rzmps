@@ -1379,6 +1379,9 @@ const crowdDrag = new Module(
 );
 ```
 
+The octree owns its default aggregator, which returns an empty object for every node.
+Supply `octreeAggregator` when a module needs custom aggregate data, such as a count or average velocity.
+
 The octree prunes nodes outside the query sphere, then returns the particles that pass exact
 distance checks in the remaining leaves. Custom aggregate data remains useful when an
 approximation such as average position or velocity is cheaper than collecting every matching
@@ -1930,6 +1933,40 @@ Set `inheritLifetime: 0` when a death burst should keep its own lifetime; inheri
 defeat the separate timing. Set `inheritScale: 0` when the secondary effect should retain a fixed world size. `ratio`
 samples which parent particles emit; lowering it reduces child population and renderer costs.
 
+## A death-triggered burst
+
+This child emits once for each parent death. Only the root needs an update call:
+
+```ts
+import * as THREE from 'three';
+import { Emitter, ParticleSystem, SpriteRenderer, Textures } from '@rzmps/rzmps';
+
+const sparks = new ParticleSystem({
+  duration: 0.3,
+  emitters: new Emitter({
+    rate: 0,
+    bursts: { time: 0, count: 12 },
+    radialSpeed: 2,
+    initialValues: { lifetime: 0.4, scale: 0.06 },
+  }),
+  renderers: new SpriteRenderer(Textures.Simple),
+});
+
+parent.addSubSystem(sparks, {
+  emitOnDeath: true,
+  inheritLifetime: 0,
+  inheritScale: 0,
+  inheritVelocity: 0.25,
+});
+
+// In the scene's animation loop:
+parent.update();
+```
+
+Subsystem emitters subscribe to their immediate parent's events by default. Their own particles dying do not
+restart the effect. Use an explicit `eventScope` when another origin is intended. Child particles receive their
+emitter's own tags; they do not automatically inherit source tags.
+
 Collision emission needs a Collision module and collidable scene geometry or a configured collision backend.
 `impulseThreshold` rejects weak contacts; impulse factors can increase spark scale or speed, and
 `impulseAffectsAlignment` points emission away from the contact. Test in a collision scene: an empty scene cannot
@@ -1954,6 +1991,118 @@ Registered sources and named custom events also drive these same subsystem conte
 to select eligible source tags and `onEvent` for CPU or native GPU context handlers. See
 [Emission Sources and Custom Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) and
 [Acid](https://rzmps.rzmay.com/docs/examples/acid.html).
+
+## Event callbacks and emission context
+
+Use `onEvent: ['flash']` to emit with the prepared context, or supply a callback to customize it. Callbacks can live
+on the child emitter or in `addSubSystem()` options. Attachment options override the emitter configuration for that
+relationship; an attachment's `onEvent` replaces the emitter's subscription map.
+
+A CPU callback receives `(data, source, context)`. `data` is application-defined and typed as `unknown`; narrow it
+before reading it. `source` is the triggering particle or registered source. `context` already contains the resolved
+source transform and configured inheritance, expressed in the child's simulation space.
+
+```ts
+const flashEmitter = new Emitter({
+  rate: 0,
+  bursts: { time: 0, count: 6 },
+  radialSpeed: 0.2,
+  initialValues: { lifetime: 0.5, scale: 0.12 },
+  inheritLifetime: 0,
+  onEvent: {
+    flash: (data, _source, context) => {
+      // This event uses a number as its payload; other payloads fall back to normal strength.
+      const strength = typeof data === 'number' ? THREE.MathUtils.clamp(data, 0.1, 3) : 1;
+      return {
+        scale: strength,
+        alpha: context.alpha * Math.min(strength, 1),
+        velocity: context.velocity.clone().add(new THREE.Vector3(0, strength, 0)),
+        duration: 0.25,
+      };
+    },
+  },
+});
+const flashes = new ParticleSystem({
+  emitters: flashEmitter,
+  renderers: new SpriteRenderer(Textures.Simple),
+});
+parent.addSubSystem(flashes);
+
+// A live parent particle or a registered source can trigger the same callback.
+particle.emitEvent('flash', 2);
+source.emitEvent('flash', 0.5);
+// With no source ID, emission uses the producing system's origin.
+parent.emitEvent('flash', 1);
+```
+
+The callback runs once per accepted event, not once per emitted particle. Its returned values are captured for that
+emission run, including delayed births. Returning a partial context replaces only those fields; returning nothing
+keeps the prepared values and still emits.
+
+Context `scale`, `color`, `alpha`, and `mass` multiply the child's initial values. `velocity` adds a velocity vector;
+`velocityScale` multiplies its initial velocity contribution. Context `duration` controls the emission run, while
+`initialValues.lifetime` controls how long each child particle lives. The example's `scale: 2` therefore doubles
+its configured `0.12` particle size without changing that emitter for other events.
+
+Clone vectors or colors when deriving overrides from the context. For example, a built-in death event can emit
+slightly above its final origin:
+
+```ts
+parent.addSubSystem(sparks, {
+  inheritLifetime: 0,
+  inheritScale: 0,
+  onEvent: {
+    death: (_data, _source, context) => ({
+      position: context.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+    }),
+  },
+});
+```
+
+This supplies a named callback for the first example's death event. Returning only `position` also updates the
+emission transform's translation; returning only `transform` derives the position from that matrix. A custom
+transform should also be authored in the child's simulation space.
+
+### Native GPU callbacks
+
+For native GPU event emission, provide the corresponding TSL handler under `onEvent.gpu`. Configure both callbacks
+before starting the system when the effect should support CPU and GPU processing:
+
+```ts
+import { float, vec3, vec4 } from 'three/tsl';
+
+flashEmitter.onEvent = {
+  flash: (data, _source, context) => {
+    // This event uses a number as its payload; other payloads fall back to normal strength.
+    const strength = typeof data === 'number' ? THREE.MathUtils.clamp(data, 0.1, 3) : 1;
+    return {
+      scale: strength,
+      alpha: context.alpha * Math.min(strength, 1),
+      velocity: context.velocity.clone().add(new THREE.Vector3(0, strength, 0)),
+      duration: 0.25,
+    };
+  },
+  gpu: {
+    flash: ([payload], _particle, context) => {
+      const strength = payload.x.clamp(0.1, 3);
+      return {
+        scale: strength,
+        alpha: context.alpha.mul(strength.min(1)),
+        velocity: context.velocity.add(vec3(0, strength, 0)),
+        duration: float(0.25),
+      };
+    },
+  },
+};
+
+// Inside a GPU module's modifyGPU callback:
+particle.emitEvent('flash', vec4(2, 0, 0, 0));
+```
+
+GPU handlers receive shader nodes and up to three `vec4` payload values. Build calculations with TSL operations;
+ordinary JavaScript conditionals cannot branch on a shader value. Native handlers operate on GPU event storage
+without CPU event readback. A CPU callback alone does not become GPU code automatically. See
+[Emission Sources and Custom Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) for payload and subscription details.
 
 ## Simulation frames
 

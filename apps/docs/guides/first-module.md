@@ -113,6 +113,9 @@ const crowdDrag = new Module(
 );
 ```
 
+The octree owns its default aggregator, which returns an empty object for every node.
+Supply `octreeAggregator` when a module needs custom aggregate data, such as a count or average velocity.
+
 The octree prunes nodes outside the query sphere, then returns the particles that pass exact
 distance checks in the remaining leaves. Custom aggregate data remains useful when an
 approximation such as average position or velocity is cheaper than collecting every matching

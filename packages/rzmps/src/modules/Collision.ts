@@ -1,3 +1,4 @@
+import { transformPointGPU, transformDirectionGPU } from '../helpers/gpuTransforms';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import {
@@ -7,7 +8,6 @@ import {
   max,
   sqrt,
   uniform,
-  vec4,
 } from 'three/tsl';
 
 import Module, { type ModuleExecutionContext, type ModuleOptions } from '../Module';
@@ -306,7 +306,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return point;
 
     system.updateWorldMatrix(true, false);
-    return this._simulationToWorld.mul(vec4(point, 1)).xyz;
+    return transformPointGPU(point, this._simulationToWorld);
   }
 
   private gpuPointToSimulationSpace(
@@ -316,7 +316,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return point;
 
     system.updateWorldMatrix(true, false);
-    return this._worldToSimulation.mul(vec4(point, 1)).xyz;
+    return transformPointGPU(point, this._worldToSimulation);
   }
 
   private gpuDirectionToWorld(
@@ -326,7 +326,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return vector;
 
     system.updateWorldMatrix(true, false);
-    return this._simulationToWorld.mul(vec4(vector, 0)).xyz;
+    return transformDirectionGPU(vector, this._simulationToWorld);
   }
 
   private gpuDirectionToSimulationSpace(
@@ -336,7 +336,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return vector;
 
     system.updateWorldMatrix(true, false);
-    return this._worldToSimulation.mul(vec4(vector, 0)).xyz;
+    return transformDirectionGPU(vector, this._worldToSimulation);
   }
 
   private collide(particle: Particle, deltaTime: number): void {

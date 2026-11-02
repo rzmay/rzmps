@@ -1,3 +1,4 @@
+import { rotateXYZ, transformDirectionGPU, transformDirectionMatrixGPU } from '../helpers/gpuTransforms';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import Renderer, { type RendererOptions } from '../Renderer';
@@ -783,7 +784,7 @@ class SpriteRenderer extends Renderer {
       this.softParticleDistance > 0 ? 1 : 0,
       this._materialOptions?.transmissionMap?.uuid ?? '',
       (this._materialOptions as { normalMap?: THREE.Texture } | undefined)?.normalMap?.uuid ?? '',
-      getGPUOptionSignature(this._materialOptions),
+      this.getGPUOptionSignature(this._materialOptions),
     ].join(':');
   }
 
@@ -814,11 +815,23 @@ class SpriteRenderer extends Renderer {
       positionLocal.y.mul(particle.scale.y).mul(visible).mul(scaleMultiplier).mul(attenuationScale),
       float(0),
     );
-    const rolledQuad = rotateZ(localQuad, particle.rotation.x);
+    // Roll the billboard before converting camera orientation into the resolved simulation frame.
+    const cosAngle = cos(particle.rotation.x);
+    const sinAngle = sin(particle.rotation.x);
+    const rolledQuad = vec3(
+      localQuad.x.mul(cosAngle).sub(localQuad.y.mul(sinAngle)),
+      localQuad.x.mul(sinAngle).add(localQuad.y.mul(cosAngle)),
+      localQuad.z,
+    );
+    const worldToSystemRotation = new THREE.Matrix4();
+    if (system.simulationSpace !== 'world') {
+      system.updateWorldMatrix(true, false);
+      worldToSystemRotation.extractRotation(system.getSimulationToWorldMatrix()).invert();
+    }
     const orientedQuad = this.billboard
-      ? transformDirectionGPU(
-        transformDirectionNodeGPU(rolledQuad, cameraWorldMatrix),
-        getWorldToSystemRotationMatrix(system),
+      ? transformDirectionMatrixGPU(
+        transformDirectionGPU(rolledQuad, cameraWorldMatrix),
+        worldToSystemRotation,
       )
       : rotateXYZ(localQuad, particle.rotation);
 
@@ -1329,93 +1342,32 @@ class SpriteRenderer extends Renderer {
       object.visible = visible;
     });
   }
-}
 
-function rotateXYZ(position: Node<'vec3'>, rotation: Node<'vec3'>): Node<'vec3'> {
-  const cx = cos(rotation.x);
-  const sx = sin(rotation.x);
-  const cy = cos(rotation.y);
-  const sy = sin(rotation.y);
-  const cz = cos(rotation.z);
-  const sz = sin(rotation.z);
+  // Recursively fingerprint material options for shader invalidation.
+  private getGPUOptionSignature(value: unknown, depth = 0): string {
+    if (value === undefined || value === null) return String(value);
+    if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
+      return `${typeof value}:${value}`;
+    }
+    if (typeof value === 'function') return 'function';
+    if (value instanceof THREE.Texture) return `texture:${value.uuid}`;
+    if (value instanceof THREE.Color) return `color:${value.getHexString()}`;
+    if (value instanceof THREE.Vector2 || value instanceof THREE.Vector3 || value instanceof THREE.Vector4) {
+      return `${value.constructor.name}:${value.toArray().join(',')}`;
+    }
+    if (Array.isArray(value)) {
+      return `array:${value.map((entry) => this.getGPUOptionSignature(entry, depth + 1)).join(',')}`;
+    }
+    if (typeof value !== 'object' || depth >= 2) {
+      return (value as { constructor?: { name?: string } }).constructor?.name ?? typeof value;
+    }
 
-  const xRotated = vec3(
-    position.x,
-    position.y.mul(cx).sub(position.z.mul(sx)),
-    position.y.mul(sx).add(position.z.mul(cx)),
-  );
-  const yRotated = vec3(
-    xRotated.x.mul(cy).add(xRotated.z.mul(sy)),
-    xRotated.y,
-    xRotated.z.mul(cy).sub(xRotated.x.mul(sy)),
-  );
-
-  return vec3(
-    yRotated.x.mul(cz).sub(yRotated.y.mul(sz)),
-    yRotated.x.mul(sz).add(yRotated.y.mul(cz)),
-    yRotated.z,
-  );
-}
-
-function rotateZ(position: Node<'vec3'>, rotation: Node<'float'>): Node<'vec3'> {
-  const c = cos(rotation);
-  const s = sin(rotation);
-
-  return vec3(
-    position.x.mul(c).sub(position.y.mul(s)),
-    position.x.mul(s).add(position.y.mul(c)),
-    position.z,
-  );
-}
-
-function transformDirectionGPU(direction: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const e = matrix.elements;
-
-  return vec3(
-    direction.x.mul(e[0]).add(direction.y.mul(e[4])).add(direction.z.mul(e[8])),
-    direction.x.mul(e[1]).add(direction.y.mul(e[5])).add(direction.z.mul(e[9])),
-    direction.x.mul(e[2]).add(direction.y.mul(e[6])).add(direction.z.mul(e[10])),
-  ) as Node<'vec3'>;
-}
-
-function transformDirectionNodeGPU(direction: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
-  return matrix.mul(vec4(direction, float(0))).xyz as Node<'vec3'>;
-}
-
-function getWorldToSystemRotationMatrix(system: ParticleSystem): THREE.Matrix4 {
-  const matrix = new THREE.Matrix4();
-
-  if (system.simulationSpace !== 'world') {
-    system.updateWorldMatrix(true, false);
-    matrix.extractRotation(system.getSimulationToWorldMatrix()).invert();
+    const record = value as Record<string, unknown>;
+    return Object.keys(record)
+      .sort()
+      .map((key) => `${key}=${this.getGPUOptionSignature(record[key], depth + 1)}`)
+      .join(';');
   }
-
-  return matrix;
-}
-
-function getGPUOptionSignature(value: unknown, depth = 0): string {
-  if (value === undefined || value === null) return String(value);
-  if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
-    return `${typeof value}:${value}`;
-  }
-  if (typeof value === 'function') return 'function';
-  if (value instanceof THREE.Texture) return `texture:${value.uuid}`;
-  if (value instanceof THREE.Color) return `color:${value.getHexString()}`;
-  if (value instanceof THREE.Vector2 || value instanceof THREE.Vector3 || value instanceof THREE.Vector4) {
-    return `${value.constructor.name}:${value.toArray().join(',')}`;
-  }
-  if (Array.isArray(value)) {
-    return `array:${value.map((entry) => getGPUOptionSignature(entry, depth + 1)).join(',')}`;
-  }
-  if (typeof value !== 'object' || depth >= 2) {
-    return (value as { constructor?: { name?: string } }).constructor?.name ?? typeof value;
-  }
-
-  const record = value as Record<string, unknown>;
-  return Object.keys(record)
-    .sort()
-    .map((key) => `${key}=${getGPUOptionSignature(record[key], depth + 1)}`)
-    .join(';');
 }
 
 export default SpriteRenderer;
