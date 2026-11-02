@@ -16,7 +16,7 @@ Particle-space octree with caller-defined aggregation; rebuild replaces node ide
 
 ### TAggregate
 
-`TAggregate`
+`TAggregate` = `Record`\<`string`, `never`\>
 
 ## Constructors
 
@@ -25,7 +25,7 @@ Particle-space octree with caller-defined aggregation; rebuild replaces node ide
 ### Constructor
 
 ```ts
-new ParticleOctree<TAggregate>(config, aggregator): ParticleOctree<TAggregate>;
+new ParticleOctree<TAggregate>(config, aggregator?): ParticleOctree<TAggregate>;
 ```
 
 Creates an empty tree and normalizes depth, leaf capacity, and rebuild-quality settings.
@@ -36,7 +36,7 @@ Creates an empty tree and normalizes depth, leaf capacity, and rebuild-quality s
 
 `Partial`\<[`OctreeConfig`](../interfaces/OctreeConfig.md)\>
 
-##### aggregator
+##### aggregator?
 
 ###### combine
 

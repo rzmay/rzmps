@@ -1,3 +1,4 @@
+import { transformPointGPU, transformDirectionGPU } from '../helpers/gpuTransforms';
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -18,7 +19,7 @@ import type { BoidAffectorOptions } from '../spatial/BoidAffector';
 import type { ParticleSpatialGridOptions } from '../gpu/ParticleSpatialGrid';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
 import type { Node } from 'three/webgpu';
-import { acos, cos, float, If, max, mix, sin, uint, vec3, vec4 } from 'three/tsl';
+import { acos, cos, float, If, max, mix, sin, uint, vec3 } from 'three/tsl';
 
 const GPU_FALLOFF_MIN_DISTANCE = 1e-3;
 
@@ -692,14 +693,6 @@ class Boids extends Module {
       return sum.addScaledVector(this.affectorDirection, -affector.weight * falloff);
     }, target);
   }
-}
-
-function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
-  return matrix.mul(vec4(point, 1)).xyz as Node<'vec3'>;
-}
-
-function transformDirectionGPU(vector: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
-  return matrix.mul(vec4(vector, 0)).xyz as Node<'vec3'>;
 }
 
 export default Boids;

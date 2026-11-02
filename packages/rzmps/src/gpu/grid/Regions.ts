@@ -14,6 +14,8 @@ import type { GPUSpatialRegion, SpatialAggregator, SpatialAggregateLayout,
 
 const EMPTY = 0xffffffff;
 const WORDS = 8;
+
+// Must be string function as atomicCompareExchangeWeak is not exposed as a node
 const claim = wgslFn(`
 fn rzmpsSpatialClaim(address: ptr<storage, atomic<u32>, read_write>, value: u32) -> u32 {
   loop {

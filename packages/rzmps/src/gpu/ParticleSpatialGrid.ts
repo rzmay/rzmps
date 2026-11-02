@@ -153,8 +153,8 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
   /** Creates a sparse grid whose storage grows with particle capacity, not world volume. */
   constructor(options: Partial<ParticleSpatialGridOptions> = {},
     private readonly aggregator?: SpatialAggregator<L, 'gpu'>) {
-    this.brickSubdivisions = clampDepth(options.brickSubdivisions ?? 3);
-    this.cellSubdivisions = clampDepth(options.cellSubdivisions ?? 4);
+    this.brickSubdivisions = ParticleSpatialGrid.clampDepth(options.brickSubdivisions ?? 3);
+    this.cellSubdivisions = ParticleSpatialGrid.clampDepth(options.cellSubdivisions ?? 4);
     this.maxDepth = this.brickSubdivisions + this.cellSubdivisions;
     this.cellsPerAxis = 2 ** this.maxDepth;
     this.levels = Object.freeze(resolveSpatialLevels(options.levels, this.brickSubdivisions, this.cellSubdivisions));
@@ -814,9 +814,11 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
       throw new Error('ParticleSpatialGrid must be rebuilt before creating query nodes.');
     }
   }
+
+  // Bound subdivision depth before allocating coordinate storage.
+  private static clampDepth(value: number): number {
+    return THREE.MathUtils.clamp(Math.floor(value), 0, 10);
+  }
 }
 
 /** Grid subdivision depths are bounded to avoid impractical coordinate ranges. */
-function clampDepth(value: number): number {
-  return THREE.MathUtils.clamp(Math.floor(value), 0, 10);
-}

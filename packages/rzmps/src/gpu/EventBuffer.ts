@@ -1,3 +1,4 @@
+import { bitcastFloatToUint, bitcastUintToFloat } from './Storage';
 import * as THREE from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
@@ -5,12 +6,10 @@ import {
   atomicAdd,
   atomicLoad,
   float,
-  floatBitsToUint,
   If,
   storage,
   uint,
   uvec2,
-  uintBitsToFloat,
   vec4,
 } from 'three/tsl';
 import Particle from '../Particle';
@@ -424,7 +423,7 @@ export class GPUEventBufferState {
     const eventUintData = new Uint32Array(floatBuffer);
 
     for (let index = 0; index < count; index += 1) {
-      const eventOffset = packedOffset(index, EventFloatSlot.Metadata);
+      const eventOffset = this.packedOffset(index, EventFloatSlot.Metadata);
       const type = eventUintData[eventOffset];
       if (
         type !== GPUEventType.Death
@@ -438,7 +437,30 @@ export class GPUEventBufferState {
       const tagMask = eventUintData[eventOffset + 3];
       const identity = identityForEvent(slot, generation);
       const particle = identity?.clone() ?? new Particle();
-      readParticleSnapshot(eventFloatData, index, particle);
+      // Decode the event snapshot using its own slot layout, independent of particle buffers.
+      this.readVector(eventFloatData, index, EventFloatSlot.PositionSpeed, particle.position);
+      this.readVector(eventFloatData, index, EventFloatSlot.OrbitCenterAlpha, particle.orbitCenter);
+      this.readVector(eventFloatData, index, EventFloatSlot.RotationMass, particle.rotation);
+      this.readVector(eventFloatData, index, EventFloatSlot.ScaleDistortion, particle.scale);
+      this.readVector(eventFloatData, index, EventFloatSlot.VelocityLifetime, particle.velocity);
+      this.readVector(eventFloatData, index, EventFloatSlot.AngularVelocityTime, particle.angularVelocity);
+      this.readVector(eventFloatData, index, EventFloatSlot.ScalarVelocityRealtime, particle.scalarVelocity);
+      this.readVector(eventFloatData, index, EventFloatSlot.Acceleration, particle.acceleration);
+      this.readVector(eventFloatData, index, EventFloatSlot.AngularAcceleration, particle.angularAcceleration);
+      this.readVector(eventFloatData, index, EventFloatSlot.ScalarAcceleration, particle.scalarAcceleration);
+      const colorOffset = this.packedOffset(index, EventFloatSlot.Color);
+      particle.color.setRGB(
+        eventFloatData[colorOffset], eventFloatData[colorOffset + 1], eventFloatData[colorOffset + 2],
+      );
+
+      particle.speed = this.readScalar(eventFloatData, index, EventFloatSlot.PositionSpeed);
+      particle.alpha = this.readScalar(eventFloatData, index, EventFloatSlot.OrbitCenterAlpha);
+      particle.mass = this.readScalar(eventFloatData, index, EventFloatSlot.RotationMass);
+      particle.distortionStrength = this.readScalar(eventFloatData, index, EventFloatSlot.ScaleDistortion);
+      particle.lifetime = this.readScalar(eventFloatData, index, EventFloatSlot.VelocityLifetime);
+      particle.time = this.readScalar(eventFloatData, index, EventFloatSlot.AngularVelocityTime);
+      particle.realtime = this.readScalar(eventFloatData, index, EventFloatSlot.ScalarVelocityRealtime);
+      particle.cache();
       particle.alive = type !== GPUEventType.Death;
 
       events.push({
@@ -450,9 +472,9 @@ export class GPUEventBufferState {
         particle,
         collision: type === GPUEventType.Collision
           ? {
-            point: readNewVector(eventFloatData, index, EventFloatSlot.CollisionPoint),
-            normal: readNewVector(eventFloatData, index, EventFloatSlot.CollisionNormal),
-            impulse: readNewVector(eventFloatData, index, EventFloatSlot.CollisionImpulse),
+            point: this.readNewVector(eventFloatData, index, EventFloatSlot.CollisionPoint),
+            normal: this.readNewVector(eventFloatData, index, EventFloatSlot.CollisionNormal),
+            impulse: this.readNewVector(eventFloatData, index, EventFloatSlot.CollisionImpulse),
           }
           : undefined,
       });
@@ -466,62 +488,23 @@ export class GPUEventBufferState {
       capacity: this.capacity,
     };
   }
-}
 
-// TSL's bitcast helpers preserve bits rather than numerically converting, but their
-// current declarations lose the concrete node generic, so the narrow cast is needed.
-function bitcastFloatToUint(value: Node<'float'>): Node<'uint'> {
-  return floatBitsToUint(value) as unknown as Node<'uint'>;
-}
+  // Read the event snapshot ABI independently from ordinary particle-buffer storage.
+  private readVector(array: Float32Array, index: number, slot: number, vector: THREE.Vector3): void {
+    const offset = this.packedOffset(index, slot);
+    vector.set(array[offset], array[offset + 1], array[offset + 2]);
+  }
 
-function bitcastUintToFloat(value: Node<'uint'>): Node<'float'> {
-  return uintBitsToFloat(value) as unknown as Node<'float'>;
-}
+  private readNewVector(array: Float32Array, index: number, slot: number): THREE.Vector3 {
+    const offset = this.packedOffset(index, slot);
+    return new THREE.Vector3(array[offset], array[offset + 1], array[offset + 2]);
+  }
 
-// Event snapshots have their own packed ABI. Selective readback uses the canonical
-// particle buffer layout, so sharing slot readers would incorrectly couple the two.
-function readParticleSnapshot(array: Float32Array, index: number, particle: Particle): void {
-  readVector(array, index, EventFloatSlot.PositionSpeed, particle.position);
-  readVector(array, index, EventFloatSlot.OrbitCenterAlpha, particle.orbitCenter);
-  readVector(array, index, EventFloatSlot.RotationMass, particle.rotation);
-  readVector(array, index, EventFloatSlot.ScaleDistortion, particle.scale);
-  readVector(array, index, EventFloatSlot.VelocityLifetime, particle.velocity);
-  readVector(array, index, EventFloatSlot.AngularVelocityTime, particle.angularVelocity);
-  readVector(array, index, EventFloatSlot.ScalarVelocityRealtime, particle.scalarVelocity);
-  readVector(array, index, EventFloatSlot.Acceleration, particle.acceleration);
-  readVector(array, index, EventFloatSlot.AngularAcceleration, particle.angularAcceleration);
-  readVector(array, index, EventFloatSlot.ScalarAcceleration, particle.scalarAcceleration);
-  readColor(array, index, EventFloatSlot.Color, particle.color);
+  private readScalar(array: Float32Array, index: number, slot: number): number {
+    return array[this.packedOffset(index, slot) + 3];
+  }
 
-  particle.speed = readScalar(array, index, EventFloatSlot.PositionSpeed);
-  particle.alpha = readScalar(array, index, EventFloatSlot.OrbitCenterAlpha);
-  particle.mass = readScalar(array, index, EventFloatSlot.RotationMass);
-  particle.distortionStrength = readScalar(array, index, EventFloatSlot.ScaleDistortion);
-  particle.lifetime = readScalar(array, index, EventFloatSlot.VelocityLifetime);
-  particle.time = readScalar(array, index, EventFloatSlot.AngularVelocityTime);
-  particle.realtime = readScalar(array, index, EventFloatSlot.ScalarVelocityRealtime);
-  particle.cache();
-}
-
-function readVector(array: Float32Array, index: number, slot: number, vector: THREE.Vector3): void {
-  const offset = packedOffset(index, slot);
-  vector.set(array[offset], array[offset + 1], array[offset + 2]);
-}
-
-function readNewVector(array: Float32Array, index: number, slot: number): THREE.Vector3 {
-  const offset = packedOffset(index, slot);
-  return new THREE.Vector3(array[offset], array[offset + 1], array[offset + 2]);
-}
-
-function readColor(array: Float32Array, index: number, slot: number, color: THREE.Color): void {
-  const offset = packedOffset(index, slot);
-  color.setRGB(array[offset], array[offset + 1], array[offset + 2]);
-}
-
-function readScalar(array: Float32Array, index: number, slot: number): number {
-  return array[packedOffset(index, slot) + 3];
-}
-
-function packedOffset(index: number, slot: number): number {
-  return (index * GPU_EVENT_FLOAT_SLOT_COUNT + slot) * 4;
+  private packedOffset(index: number, slot: number): number {
+    return (index * GPU_EVENT_FLOAT_SLOT_COUNT + slot) * 4;
+  }
 }

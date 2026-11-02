@@ -122,7 +122,6 @@ export type {
   ModuleCondition,
   ModuleGPUCondition,
   ModuleGPUUpdate,
-  ModuleOctreeAggregate,
   ModuleOptions,
   ModuleUpdate,
   SpatialEffectConstructor,
