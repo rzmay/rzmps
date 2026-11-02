@@ -61,6 +61,9 @@ class Particle {
 
   alpha: number;
 
+  /** Extensive visual energy; simulation particles contribute one by default. */
+  contribution = 1;
+
   mass: number = 1;
 
   distortionStrength: number = 1;
@@ -203,6 +206,7 @@ class Particle {
     particle.id = this.id;
     particle.lodPriority = this.lodPriority;
     particle.parent = this.parent;
+    particle.contribution = this.contribution;
     particle.noise = { ...this.noise };
     particle.data = { ...this.data };
 

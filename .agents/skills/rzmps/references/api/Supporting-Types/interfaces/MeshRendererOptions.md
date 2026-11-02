@@ -62,6 +62,22 @@ Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
+<a id="count"></a>
+
+### count
+
+```ts
+count: number;
+```
+
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`count`](../../interfaces/RendererOptions.md#count)
+
+***
+
 <a id="events"></a>
 
 ### events?
@@ -99,6 +115,22 @@ geometry: BufferGeometry;
 ```
 
 Shared geometry used when mesh is omitted; defaults to sphere geometry.
+
+***
+
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`groupingRadius`](../../interfaces/RendererOptions.md#groupingradius)
 
 ***
 
@@ -147,6 +179,22 @@ mesh: Mesh;
 ```
 
 Shared source geometry/material; takes precedence over geometry, material, and materialOptions.
+
+***
+
+<a id="ratio"></a>
+
+### ratio
+
+```ts
+ratio: number;
+```
+
+Representative fraction, rounded with Math.round after applying count. Defaults to 1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`ratio`](../../interfaces/RendererOptions.md#ratio)
 
 ***
 

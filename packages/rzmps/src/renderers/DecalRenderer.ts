@@ -84,6 +84,7 @@ export interface DecalInstance {
 
 /** Persistent CPU-clipped surface decals driven by lifecycle events or a per-particle projection rate. */
 export default class DecalRenderer extends Renderer {
+  protected get groupingRatio(): number { return 1; }
   static Nearest(hits: THREE.Intersection[], _particle: Particle, n = 1): THREE.Intersection[] {
     return hits.slice().sort((a, b) => a.distance - b.distance).slice(0, n < 0 ? undefined : n);
   }
@@ -129,7 +130,6 @@ export default class DecalRenderer extends Renderer {
   onCollision = false;
   onDeath = false;
   continuousRate = 0;
-  ratio = 1;
   emissionTags?: Tag[];
 
   /** Local +Y forward transformed by particle rotation, with an optional local XYZ offset in radians. */

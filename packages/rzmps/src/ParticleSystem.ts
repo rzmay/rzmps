@@ -20,6 +20,7 @@ import SpriteRenderer from './renderers/SpriteRenderer';
 import type { Multiple } from './types/Multiple';
 import type { DynamicValue } from './types/DynamicValue';
 import evaluateDynamicNumber from './helpers/evaluateDynamicNumber';
+import maximumDynamicNumber from './helpers/maximumDynamicNumber';
 import particleRatio from './helpers/particleRatio';
 import Collision, { type CollisionListener } from './modules/Collision';
 import type { CollisionHit } from './interfaces/ICollisionBackend';
@@ -68,6 +69,7 @@ import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
 import SpatialEffect from './SpatialEffect';
 import ParticleSpatialGrid, { type ParticleSpatialGridOptions } from './gpu/ParticleSpatialGrid';
 import GPUSourceFrameBuffer from './gpu/SourceFrameBuffer';
+import { resolveSpatialLevels } from './enums/SpatialLevels';
 import type { PackedFloatStorage } from './gpu/Storage';
 
 /** Construction options; fields can be omitted to use the documented defaults. */
@@ -472,6 +474,9 @@ class ParticleSystem extends THREE.Object3D {
       bounds: bounds ? [bounds.min.toArray(), bounds.max.toArray()] : undefined,
       brickSubdivisions: gridOrOptions.brickSubdivisions ?? 3,
       cellSubdivisions: gridOrOptions.cellSubdivisions ?? 4,
+      levels: gridOrOptions.levels === undefined || gridOrOptions.levels === 'none' || gridOrOptions.levels === 'None'
+        ? undefined : resolveSpatialLevels(gridOrOptions.levels, gridOrOptions.brickSubdivisions ?? 3,
+          gridOrOptions.cellSubdivisions ?? 4),
       powerOfTwoBounds: gridOrOptions.powerOfTwoBounds ?? true,
       autoExpand: gridOrOptions.autoExpand ?? true,
       expansionHysteresis: gridOrOptions.expansionHysteresis ?? 0.125,
@@ -3965,55 +3970,62 @@ class ParticleSystem extends THREE.Object3D {
     ].join(':');
   }
 
-  private _getInitialGPUBufferCapacity(): number {
-    const estimatedParticles = this.emitters.reduce((total, emitter) => {
-      const rate = this._getDynamicNumberMaximum(emitter.rate);
-      const lifetime = this._getDynamicNumberMaximum(emitter.initialValues.lifetime ?? 1);
-      const burstParticles = emitter.bursts.reduce(
-        (burstTotal, burst) => burstTotal + this._getDynamicNumberMaximum(burst.count),
-        0,
-      );
-
-      return total + rate * lifetime + burstParticles;
+  /**
+   * Predicts peak population from rate * lifetime plus configured bursts, capped by maxParticles.
+   * Uses the GPU allocation estimator without its minimum-buffer/power-of-two padding.
+   * Results are shared within a simulation step. Optional tags conservatively select emitters.
+   * Movement-driven emission, event subsystems and opaque TSL values may require later growth.
+   */
+  public estimateParticleCount(tags?: readonly Tag[]): number {
+    const inputs: unknown[] = [ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION];
+    const track = (value: unknown, depth = 0): void => {
+      if (depth > 8) return;
+      if (Array.isArray(value) || value instanceof Set) {
+        const values = Array.from(value);
+        inputs.push(value, values.length);
+        values.forEach(item => track(item, depth + 1));
+      } else {
+        inputs.push(value);
+        const node = value as { isNode?: boolean; value?: unknown } | undefined;
+        if (node?.isNode) inputs.push(node.value);
+      }
+    };
+    this.emitters.forEach(emitter => {
+      inputs.push(emitter, JSON.stringify(emitter.tags), emitter.bursts.length);
+      track(emitter.rate);
+      track(emitter.initialValues.lifetime ?? 1);
+      emitter.bursts.forEach(burst => track(burst.count));
+    });
+    if (this._populationEstimateToken !== this.renderFrameToken
+      || inputs.length !== this._populationEstimateInputs.length
+      || inputs.some((value, i) => value !== this._populationEstimateInputs[i])) {
+      this._populationEstimateInputs = inputs;
+      this._populationEstimates.clear();
+      this._populationEstimateToken = this.renderFrameToken;
+    }
+    const key = JSON.stringify(tags ? [...tags].sort() : null);
+    const cached = this._populationEstimates.get(key);
+    if (cached !== undefined) return Math.min(cached, Math.max(0, this.maxParticles));
+    const maximum = (value: DynamicValue<number>) => maximumDynamicNumber(value,
+      ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION);
+    const predicted = this.emitters.reduce((total, emitter) => {
+      if (tags && !tagsIntersect([...tags], emitter.tags ?? [])) return total;
+      return total + maximum(emitter.rate) * maximum(emitter.initialValues.lifetime ?? 1)
+        + emitter.bursts.reduce((sum, burst) => sum + maximum(burst.count), 0);
     }, 0);
-    const required = Math.max(
-      ParticleSystem.GPU_INITIAL_BUFFER_SIZE,
-      this.particles.length,
-      this._stagedBirths.length,
-      Math.ceil(estimatedParticles),
-      1,
-    );
-    return Math.min(nextPowerOfTwo(required), Math.max(this.maxParticles, 1));
+    const result = Math.ceil(predicted);
+    this._populationEstimates.set(key, result);
+    return Math.min(result, Math.max(0, this.maxParticles));
   }
 
-  private _getDynamicNumberMaximum(value: DynamicValue<number>, depth = 0): number {
-    if (depth > 8) return 0;
-    if (typeof value === 'number') return Number.isFinite(value) ? Math.max(0, value) : 0;
-    if (Array.isArray(value)) {
-      return Math.max(...value.map((item) => this._getDynamicNumberMaximum(item, depth + 1)));
-    }
-    if (value instanceof Set) {
-      return Math.max(0, ...Array.from(value, (item) => this._getDynamicNumberMaximum(item, depth + 1)));
-    }
-    if (typeof value === 'function') {
-      const resolution = Math.max(2, Math.floor(ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION));
-      let maximum = 0;
+  private _populationEstimateToken?: object;
+  private _populationEstimateInputs: unknown[] = [];
+  private readonly _populationEstimates = new Map<string, number>();
 
-      for (let index = 0; index < resolution; index += 1) {
-        try {
-          maximum = Math.max(
-            maximum,
-            this._getDynamicNumberMaximum(value(index / (resolution - 1)), depth + 1),
-          );
-        } catch {
-          return maximum;
-        }
-      }
-
-      return maximum;
-    }
-
-    return 0;
+  private _getInitialGPUBufferCapacity(): number {
+    const required = Math.max(ParticleSystem.GPU_INITIAL_BUFFER_SIZE,
+      this.particles.length, this._stagedBirths.length, this.estimateParticleCount(), 1);
+    return Math.min(nextPowerOfTwo(required), Math.max(this.maxParticles, 1));
   }
 
   private _acquireGPUEventBuffer(renderer: WebGPURenderer): GPUEventBufferState {
@@ -5262,6 +5274,7 @@ class ParticleSystem extends THREE.Object3D {
   /** Attaches an emitter and runs its setup hook. */
   public addEmitter(emitter: Emitter): this {
     this.emitters.push(emitter);
+    this._populationEstimates.clear();
     emitter.setup(this);
 
     return this;
@@ -5274,6 +5287,7 @@ class ParticleSystem extends THREE.Object3D {
     if (index !== -1) {
       emitter.dispose();
       this.emitters.splice(index, 1);
+      this._populationEstimates.clear();
       this.remove(emitter.source);
     }
 

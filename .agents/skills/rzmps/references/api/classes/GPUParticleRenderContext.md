@@ -32,11 +32,11 @@ new GPUParticleRenderContext(
 
 ##### vectors
 
-`Pick`\<[`GPUParticleVectorNodes`](../Supporting-Types/type-aliases/GPUParticleVectorNodes.md), `"position"` \| `"rotation"` \| `"scale"` \| `"color"`\>
+`Pick`\<[`GPUParticleVectorNodes`](../Supporting-Types/type-aliases/GPUParticleVectorNodes.md), `"position"` \| `"rotation"` \| `"scale"` \| `"color"` \| `"velocity"`\>
 
 ##### scalars
 
-`Pick`\<[`GPUParticleScalarNodes`](../Supporting-Types/type-aliases/GPUParticleScalarNodes.md), `"alpha"` \| `"distortionStrength"` \| `"realtime"` \| `"time"`\>
+`Pick`\<[`GPUParticleScalarNodes`](../Supporting-Types/type-aliases/GPUParticleScalarNodes.md), `"time"` \| `"alpha"` \| `"realtime"` \| `"distortionStrength"`\> & `object`
 
 ##### state
 
@@ -78,6 +78,16 @@ readonly alpha: Node<"float">;
 
 ```ts
 readonly color: Node<"vec3">;
+```
+
+***
+
+<a id="contribution"></a>
+
+### contribution
+
+```ts
+readonly contribution: Node<"float">;
 ```
 
 ***
@@ -178,6 +188,16 @@ readonly tagMask: Node<"uint">;
 
 ```ts
 readonly time: Node<"float">;
+```
+
+***
+
+<a id="velocity"></a>
+
+### velocity
+
+```ts
+readonly velocity: Node<"vec3">;
 ```
 
 ## Accessors

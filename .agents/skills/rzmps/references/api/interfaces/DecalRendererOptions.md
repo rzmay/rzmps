@@ -74,6 +74,22 @@ Projections per second per live particle, starting after one interval. Zero disa
 
 ***
 
+<a id="count"></a>
+
+### count?
+
+```ts
+optional count?: number;
+```
+
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`count`](RendererOptions.md#count)
+
+***
+
 <a id="depth"></a>
 
 ### depth
@@ -159,6 +175,22 @@ optional eventScope?: EventScope;
 #### Inherited from
 
 [`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
+
+***
+
+<a id="groupingradius"></a>
+
+### groupingRadius?
+
+```ts
+optional groupingRadius?: number;
+```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`groupingRadius`](RendererOptions.md#groupingradius)
 
 ***
 
@@ -319,6 +351,10 @@ ratio: number;
 ```
 
 Fraction of particles that project decals, selected consistently by particle ID. Default 1.
+
+#### Overrides
+
+[`RendererOptions`](RendererOptions.md).[`ratio`](RendererOptions.md#ratio)
 
 ***
 

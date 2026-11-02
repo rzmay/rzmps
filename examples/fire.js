@@ -92,7 +92,6 @@ export default async function createFire() {
       new LightRenderer({
         count: 18,
         ratio: 0.3,
-        randomDistribution: true,
         inheritParticleColor: true,
         sizeAffectsRange: true,
         alphaAffectsIntensity: true,

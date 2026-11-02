@@ -202,11 +202,13 @@ export class RendererGUI extends GUIEditorBase {
     buildLightRenderer(folder, renderer) {
         this.addDynamicValue(folder, renderer, 'brightness', 'Brightness');
         this.addDynamicValue(folder, renderer, 'rangeMultiplier', 'Range Multiplier');
-        folder.add(renderer, 'groupingRadiusRatio', 0).name('Grouping Radius');
+        folder.add(renderer, 'groupingRadius', -1).name('Grouping Radius');
         folder.add(renderer, 'decay', 0).name('Decay');
         folder.add(renderer, 'count').min(0).step(1).name('Max Lights');
         folder.add(renderer, 'ratio', 0, 1).name('Particle Ratio');
-        folder.add(renderer, 'randomDistribution').name('Random Distribution');
+        const allocation = folder.addFolder('Light Allocation');
+        allocation.add(renderer.allocation, 'shrinkThreshold', 0, 1).name('Shrink Threshold');
+        allocation.add(renderer.allocation, 'shrinkDelay', 0).name('Shrink Delay (s)');
         folder.add(renderer, 'inheritParticleColor').name('Inherit Particle Color');
         folder.add(renderer, 'sizeAffectsRange').name('Size Affects Range');
         folder.add(renderer, 'alphaAffectsIntensity').name('Alpha Affects Intensity');

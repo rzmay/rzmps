@@ -40,6 +40,16 @@ new LightRenderer(options?): LightRenderer;
 
 ## Properties
 
+<a id="allocation"></a>
+
+### allocation
+
+```ts
+allocation: LightRendererAllocationOptions;
+```
+
+***
+
 <a id="alphaaffectsintensity"></a>
 
 ### alphaAffectsIntensity
@@ -158,13 +168,17 @@ gpuExecutionContext: GPUEventExecutionContext;
 
 ***
 
-<a id="groupingradiusratio"></a>
+<a id="groupingradius"></a>
 
-### groupingRadiusRatio
+### groupingRadius
 
 ```ts
-groupingRadiusRatio: number;
+groupingRadius: number;
 ```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`groupingRadius`](Renderer.md#groupingradius)
 
 ***
 
@@ -198,16 +212,6 @@ lights: PointLight[] = [];
 
 ***
 
-<a id="randomdistribution"></a>
-
-### randomDistribution
-
-```ts
-randomDistribution: boolean;
-```
-
-***
-
 <a id="rangemultiplier"></a>
 
 ### rangeMultiplier
@@ -225,6 +229,10 @@ rangeMultiplier: DynamicValue<number>;
 ```ts
 ratio: number;
 ```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`ratio`](Renderer.md#ratio)
 
 ***
 
@@ -295,6 +303,12 @@ set count(value): void;
 ##### Returns
 
 `void`
+
+#### Inherited from
+
+```ts
+Renderer.count
+```
 
 ***
 
@@ -463,7 +477,7 @@ get version(): number;
 ### \_update()
 
 ```ts
-_update(particles): void;
+_update(particles, system?): void;
 ```
 
 #### Parameters
@@ -471,6 +485,10 @@ _update(particles): void;
 ##### particles
 
 [`Particle`](Particle.md)[]
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) \| `undefined` = `...`
 
 #### Returns
 

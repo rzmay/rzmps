@@ -61,7 +61,8 @@ for (const backend of ['webgl', 'webgpu']) test(`${backend}: fireflies emit neig
         'the kill margin must preserve the initial swarm while replacements fill the capped population');
       assert.equal(glow.gpuProcessingActive, backend === 'webgpu');
       if (backend === 'webgpu') assert.equal(parent.events.readbackCount, 0);
-      assert.equal(glow.lights.count, 16);
+      assert.ok(glow.lights.count >= glow.lights.active && glow.lights.count <= 16,
+        'demand-driven light allocation must stay within the configured cap');
       assert.ok(Number.isFinite(glow.lights.peakIntensity));
       assert.ok(glow.lights.peakIntensity <= 0.521);
       return glow.simulated;

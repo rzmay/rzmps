@@ -40,7 +40,7 @@ compute(node): void;
 
 ##### node
 
-`ComputeNode`
+`ComputeNode` \| `ComputeNode`[]
 
 #### Returns
 

@@ -44,6 +44,89 @@ module's work on either backend. A function-defined module can request managed a
 Both callbacks use `(particle, deltaTime, context)`, as do their conditions.
 `cleanup()` must call `super.cleanup()` when overridden so managed references are released.
 
+`ParticleSpatialGrid` hashes occupied fine cells; it does not allocate a dense world-volume grid.
+Its cached build kernels dispatch over `buffers.count`, not reserved capacity, and are submitted
+together. A compact GPU-produced population can pass a `GPUComputeRange` as the fourth argument to
+`rebuild(renderer, buffers, buildToken, range)`. The range pairs a uint count node with caller-owned
+indirect compute arguments (`ceil(count / 64), 1, 1`), written by an earlier GPU scheduling pass.
+No count readback is required. `grid.computeParticles(callback, range)` reuses that dispatch
+contract for additional kernels, including exact partial-workgroup guarding. Without a range,
+the returned kernel uses the current CPU count; update its `count` when that population changes.
+Callbacks decide whether dead slots participate. These kernels require an initialized grid and
+must be rebuilt if the grid's underlying particle storage is replaced.
+
+### Spatial Aggregation And Levels
+
+`SpatialAggregator<T, "cpu">` preserves the octree's existing `new` and `combine` members
+and optionally adds `finalize`. Parent reductions retain raw values. `getAggregate(node)`
+finalizes a copy, so deriving averages does not overwrite sums used by other nodes.
+CPU values remain ordinary objects; they do not require GPU layouts. Keep finalized state
+copyable; native data containers, ordinary object graphs and classes with `clone()` are supported.
+
+`SpatialAggregator<Layout, "gpu">` uses the same concepts with explicit channel types and
+TSL expressions. Layout channels support `float`, `uint`, `int`, `vec2`, `vec3` and `vec4`.
+Combine raw sums/counts associatively; derive means or normalized vectors in `finalize`.
+GPU finalization operates on local expressions, leaving stored raw reductions intact.
+
+```ts
+const grid = new ParticleSpatialGrid({ levels: SpatialLevels.All }, {
+  layout: { count: 'uint', sum: 'vec3' },
+  new: particle => ({
+    count: uint(particle ? 1 : 0),
+    sum: particle?.position ?? vec3(0),
+  }),
+  combine: (a, b) => ({ count: a.count.add(b.count), sum: a.sum.add(b.sum) }),
+  finalize: a => ({ count: a.count, sum: a.sum.div(float(a.count).max(1)) }),
+});
+grid.rebuild(renderer, buffers);
+const readRegions = grid.computeRegions(0, region => {
+  const average = grid.getAggregate(region);
+  const bounds = grid.getBounds(region);
+  const children = grid.getChildren(region);
+  // Consume these GPU expressions in your compute graph; they are not synchronous CPU values.
+});
+```
+
+Import the TSL constructors from `three/tsl`, and `ParticleSpatialGrid`/`SpatialLevels`
+from RZMPS. GPU aggregate callbacks construct graphs, not JavaScript particle callbacks.
+The fixed layout and callbacks are construction-time configuration; use captured uniforms
+for runtime numeric tuning. Callers own and dispose compute kernels returned by the grid.
+
+Let B be `brickSubdivisions` and D be B plus `cellSubdivisions`:
+
+| `levels` | Maintained depths |
+| --- | --- |
+| `SpatialLevels.None` / `"none"` / `"None"`, default | D only |
+| `SpatialLevels.Bricks` / `"bricks"` / `"Bricks"` | 0 through B, plus D |
+| `SpatialLevels.Cells` / `"cells"` / `"Cells"` | B through D |
+| `SpatialLevels.All` / `"*"` / `"All"` | 0 through D |
+| Readonly integer array | Requested depths plus D, sorted and deduplicated |
+
+Both brick/cell presets include B. Invalid depths or presets throw rather than silently
+clamping. The finest neighbor-query index is always present. Ordinary default/None grids
+without an aggregator allocate no extra region directories. A non-None preset, explicit
+depth array, or aggregator enables the optional sparse region directory; aggregate storage
+is allocated only when an aggregator is supplied. Managed grids share only compatible levels.
+
+Region handles are frame-local GPU expressions with a `valid` flag. `locateNode(position, depth)`
+finds an occupied region at a maintained depth; outside or empty regions are invalid.
+`getRegions(depth)` gives a GPU count and ordinal-to-region accessor; `computeRegions`
+dispatches only occupied regions. Requesting an unmaintained depth throws, rather than reporting
+an empty level. `getChildren` means the **next maintained finer level**, not necessarily depth+1.
+Repeat child traversal to reach occupied descendants without scanning every region at that depth.
+At the finest level, `getParticleIndices` gives the region's particle membership range.
+
+CPU octree handles are ordinary node references. Its existing `locate` returns the deepest
+available containing node up to the requested depth, with the existing root fallback outside
+bounds; grid `locate(Vector3, depth)` remains a CPU coordinate utility, not a GPU lookup.
+Both structures provide `getAggregate`, `getBounds` and `getChildren` where those concepts agree.
+Neither node references nor GPU region indices should be retained across rebuilds.
+
+Additional grid levels use exact sparse cell keys, compact occupied-cell lists and child
+ranges. The finest summaries are constructed once; coarser levels combine raw child summaries.
+No dense world-volume arrays or separate pointer-based GPU octree are constructed. Hash-table
+capacity clearing remains allocation-sized, while scans and aggregate work use occupied counts.
+
 Dynamic numbers, vectors, colors, ranges, sets, and callbacks are available to built-in GPU
 components. Callback curves are sampled into interpolated uniform tables at
 `ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION`; increase it when a high-frequency curve needs more

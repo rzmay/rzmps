@@ -63,7 +63,6 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
       new LightRenderer({
         count: 18,
         ratio: 0.3,
-        randomDistribution: true,
         inheritParticleColor: true,
         sizeAffectsRange: true,
         alphaAffectsIntensity: true,
@@ -96,7 +95,7 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L137)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L136)
 
 ```js
   return new ParticleSystem({
@@ -187,7 +186,7 @@ The main emitter has no continuous rate: five particles burst at time zero from 
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L141)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L140)
 
 ```js
     emitters: [
@@ -230,7 +229,7 @@ The main scale multiplier grows from 0.35 to 1.8, making the explosion expand ra
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L157)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L156)
 
 ```js
     modules: [
@@ -278,7 +277,6 @@ The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft in
       new LightRenderer({
         count: 18,
         ratio: 0.3,
-        randomDistribution: true,
         inheritParticleColor: true,
         sizeAffectsRange: true,
         alphaAffectsIntensity: true,
@@ -310,7 +308,7 @@ The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft in
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L183)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L182)
 
 ```js
     renderers: [

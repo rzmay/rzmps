@@ -238,6 +238,20 @@ gpuInterpolationRate: number;
 
 ***
 
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`groupingRadius`](Renderer.md#groupingradius)
+
+***
+
 <a id="highpass"></a>
 
 ### highPass
@@ -385,6 +399,10 @@ pitch: DynamicValue<number>;
 ```ts
 ratio: number;
 ```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`ratio`](Renderer.md#ratio)
 
 ***
 
@@ -535,6 +553,44 @@ readonly static CAPACITY: 1024 = 1024;
 [`Renderer`](Renderer.md).[`CAPACITY`](Renderer.md#capacity)
 
 ## Accessors
+
+<a id="count"></a>
+
+### count
+
+#### Get Signature
+
+```ts
+get count(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set count(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.count
+```
+
+***
 
 <a id="gpunative"></a>
 

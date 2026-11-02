@@ -506,6 +506,7 @@ class SpriteRenderer extends Renderer {
 
   destroy(): void
   {
+    super.reset();
     this.environmentRenderTarget?.dispose();
     this.environmentRenderTarget = undefined;
 

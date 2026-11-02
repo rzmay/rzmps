@@ -4,6 +4,7 @@ import acceptMultiple from './acceptMultiple';
 import tagsIntersect from './tagsIntersect';
 import type { Multiple } from '../types/Multiple';
 import type { Tag } from '../types/Tag';
+import type { SpatialAggregator } from '../types/SpatialAggregator';
 
 export interface OctreeConfig {
   /** Default rebuild filter; omission or an empty selection includes every tag. */
@@ -41,10 +42,7 @@ export interface OctreeNode<TAggregate = unknown> {
   isEmpty: boolean;
 }
 
-export interface OctreeAggregator<TAggregate> {
-  "new"(particle?: Particle, particleIndex?: number, node?: OctreeNode<TAggregate>): TAggregate;
-  combine(a: TAggregate, b: TAggregate): TAggregate;
-}
+export type OctreeAggregator<TAggregate> = SpatialAggregator<TAggregate, 'cpu'>;
 
 export interface ParticleOctreeQueryOptions {
   /** Particle index omitted from the query, normally the caller's own index. */
@@ -158,6 +156,20 @@ class ParticleOctree<TAggregate = Record<string, never>> {
   /** Returns a new array of current node references; node identities are replaced on rebuild. */
   getNodes(): OctreeNode<TAggregate>[] {
     return [...this.nodes];
+  }
+
+  /** Returns derived output without replacing the raw aggregate used by parent reductions. */
+  getAggregate(region: OctreeNode<TAggregate>): TAggregate {
+    return this.aggregator.finalize ? this.aggregator.finalize(copyAggregate(region.aggregate)) : region.aggregate;
+  }
+
+  getBounds(region: OctreeNode<TAggregate> = this.root): THREE.Box3 {
+    return new THREE.Box3(region.min.clone(), region.max.clone());
+  }
+
+  /** Returns occupied immediate children; leaves have no finer maintained regions. */
+  getChildren(region: OctreeNode<TAggregate>): readonly OctreeNode<TAggregate>[] {
+    return region.children.filter(child => !child.isEmpty);
   }
 
   /** Estimates local separation from a bounded sample of the leaf and its neighbors.
@@ -392,6 +404,48 @@ class ParticleOctree<TAggregate = Record<string, never>> {
       this.boundsSize.set(size, size, size),
     );
   }
+}
+
+/** Finalizers may normalize their copy in place without changing the hierarchy's raw reductions. */
+function copyAggregate<T>(value: T, seen = new Map<object, unknown>()): T {
+  if (typeof value !== 'object' || value === null) return value;
+  if (seen.has(value)) return seen.get(value) as T;
+
+  const clone = (value as { clone?: () => T }).clone;
+  if (typeof clone === 'function') {
+    const result = clone.call(value);
+    seen.set(value, result);
+    return result;
+  }
+
+  if (value instanceof Date || value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return structuredClone(value);
+  if (value instanceof WeakMap || value instanceof WeakSet) {
+    throw new TypeError('Spatial finalization cannot copy weak collections; derive an immutable result instead.');
+  }
+
+  if (value instanceof Map) {
+    const result = new Map();
+    seen.set(value, result);
+    value.forEach((entry, key) => result.set(copyAggregate(key, seen), copyAggregate(entry, seen)));
+    return result as T;
+  }
+
+  if (value instanceof Set) {
+    const result = new Set();
+    seen.set(value, result);
+    value.forEach(entry => result.add(copyAggregate(entry, seen)));
+    return result as T;
+  }
+
+  const result = Array.isArray(value) ? [] : Object.create(Object.getPrototypeOf(value));
+  seen.set(value, result);
+  Reflect.ownKeys(value).forEach(key => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if ('value' in descriptor) descriptor.value = copyAggregate(descriptor.value, seen);
+    Object.defineProperty(result, key, descriptor);
+  });
+
+  return result;
 }
 
 export default ParticleOctree;

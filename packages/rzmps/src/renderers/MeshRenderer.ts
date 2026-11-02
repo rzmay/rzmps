@@ -173,9 +173,10 @@ class MeshRenderer extends Renderer {
     }
 
     destroy(): void {
-        this.restoreCPUNodes();
-        this.restoreMaterialEnvironment();
-        this.instances.removeFromParent();
+      super.reset();
+      this.restoreCPUNodes();
+      this.restoreMaterialEnvironment();
+      this.instances.removeFromParent();
     }
 
     override reset(): void {

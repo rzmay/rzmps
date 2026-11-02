@@ -97,6 +97,7 @@ interface AudioFilters {
 
 /** Positional particle audio and lifecycle cues; requires audio playback permission and scene camera context. */
 export default class AudioRenderer extends Renderer {
+  protected get groupingRatio(): number { return 1; }
   listener?: THREE.AudioListener;
 
   sound?: AudioBuffer[];
@@ -108,7 +109,7 @@ export default class AudioRenderer extends Renderer {
 
   loop: boolean = true;
   maxClips: number;
-  ratio: number;
+
   collisionRatio: number;
 
   pitch: DynamicValue<number>;
@@ -707,6 +708,7 @@ export default class AudioRenderer extends Renderer {
   }
 
   public destroy(): void {
+    super.reset();
     this.cancelGPUSelectiveReadback();
     this._removeEventCallbacks();
 

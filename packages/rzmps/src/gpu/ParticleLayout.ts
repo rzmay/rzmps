@@ -25,6 +25,7 @@ export enum ParticleRenderFloatSlot {
   RotationDistortion,
   ScaleRealtime,
   ColorTime,
+  Contribution,
 }
 
 export const FLOAT_SLOT_COUNT = enumValueCount(ParticleFloatSlot);

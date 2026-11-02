@@ -175,7 +175,7 @@ simulationToWorldNode: Node<"mat4">;
 ### spatialGrid?
 
 ```ts
-readonly optional spatialGrid?: ParticleSpatialGrid;
+readonly optional spatialGrid?: ParticleSpatialGrid<SpatialAggregateLayout>;
 ```
 
 ***

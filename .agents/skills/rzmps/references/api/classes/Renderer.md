@@ -131,6 +131,26 @@ gpuExecutionContext: GPUEventExecutionContext;
 
 ***
 
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+***
+
+<a id="ratio"></a>
+
+### ratio
+
+```ts
+ratio: number;
+```
+
+***
+
 <a id="tags"></a>
 
 ### tags?
@@ -154,6 +174,38 @@ readonly static CAPACITY: 1024 = 1024;
 [`EventReceiver`](EventReceiver.md).[`CAPACITY`](EventReceiver.md#capacity)
 
 ## Accessors
+
+<a id="count"></a>
+
+### count
+
+#### Get Signature
+
+```ts
+get count(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set count(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
+
+***
 
 <a id="gpunative"></a>
 

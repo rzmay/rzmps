@@ -281,7 +281,7 @@ assert.equal(constantGPU.renderedChildCount, 0, 'Disabling children hides the ca
 constantGPU.reset();
 const opaqueGPU = new GPUCapture({ children: { count: Fn(() => float(100))() } });
 opaqueGPU.updateGPU(buffers, gpuSystem);
-assert.equal(opaqueGPU.buffers.capacity, 1048576 / 64);
+assert.equal(opaqueGPU.buffers.capacity, Math.floor(1048576 / 80));
 opaqueGPU.reset();
 // GPU spacing is system-owned and dispatched once per frame across renderers.
 gpuSystem.quality = 0.5;

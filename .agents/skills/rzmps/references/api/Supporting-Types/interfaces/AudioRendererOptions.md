@@ -102,6 +102,22 @@ Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
+<a id="count"></a>
+
+### count?
+
+```ts
+optional count?: number;
+```
+
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`count`](../../interfaces/RendererOptions.md#count)
+
+***
+
 <a id="depthaffectshighpass"></a>
 
 ### depthAffectsHighPass
@@ -189,6 +205,22 @@ optional eventScope?: EventScope;
 ```ts
 gpuInterpolationRate: number;
 ```
+
+***
+
+<a id="groupingradius"></a>
+
+### groupingRadius?
+
+```ts
+optional groupingRadius?: number;
+```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`groupingRadius`](../../interfaces/RendererOptions.md#groupingradius)
 
 ***
 
@@ -361,6 +393,10 @@ ratio: number;
 ```
 
 Fraction of eligible particles selected for continuous audio.
+
+#### Overrides
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`ratio`](../../interfaces/RendererOptions.md#ratio)
 
 ***
 
