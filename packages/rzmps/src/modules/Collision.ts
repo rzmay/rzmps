@@ -1,3 +1,4 @@
+import { transformPointMatrixGPU, transformDirectionMatrixGPU } from '../helpers/gpuTransforms';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import {
@@ -6,7 +7,6 @@ import {
   If,
   max,
   sqrt,
-  vec3,
 } from 'three/tsl';
 
 import Module, { type ModuleOptions } from '../Module';
@@ -298,7 +298,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return point;
 
     system.updateWorldMatrix(true, false);
-    return transformPointGPU(point, system.matrixWorld);
+    return transformPointMatrixGPU(point, system.matrixWorld);
   }
 
   private gpuPointToSimulationSpace(
@@ -308,7 +308,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return point;
 
     system.updateWorldMatrix(true, false);
-    return transformPointGPU(point, system.matrixWorld.clone().invert());
+    return transformPointMatrixGPU(point, system.matrixWorld.clone().invert());
   }
 
   private gpuDirectionToWorld(
@@ -318,7 +318,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return vector;
 
     system.updateWorldMatrix(true, false);
-    return transformDirectionGPU(vector, system.matrixWorld);
+    return transformDirectionMatrixGPU(vector, system.matrixWorld);
   }
 
   private gpuDirectionToSimulationSpace(
@@ -328,7 +328,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return vector;
 
     system.updateWorldMatrix(true, false);
-    return transformDirectionGPU(vector, system.matrixWorld.clone().invert());
+    return transformDirectionMatrixGPU(vector, system.matrixWorld.clone().invert());
   }
 
   private collide(particle: Particle, deltaTime: number): void {
@@ -548,26 +548,6 @@ class Collision extends Module {
       .multiplyScalar(length);
   }
 
-}
-
-function transformPointGPU(point: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const e = matrix.elements;
-
-  return vec3(
-    point.x.mul(e[0]).add(point.y.mul(e[4])).add(point.z.mul(e[8])).add(e[12]),
-    point.x.mul(e[1]).add(point.y.mul(e[5])).add(point.z.mul(e[9])).add(e[13]),
-    point.x.mul(e[2]).add(point.y.mul(e[6])).add(point.z.mul(e[10])).add(e[14]),
-  ) as Node<'vec3'>;
-}
-
-function transformDirectionGPU(vector: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const e = matrix.elements;
-
-  return vec3(
-    vector.x.mul(e[0]).add(vector.y.mul(e[4])).add(vector.z.mul(e[8])),
-    vector.x.mul(e[1]).add(vector.y.mul(e[5])).add(vector.z.mul(e[9])),
-    vector.x.mul(e[2]).add(vector.y.mul(e[6])).add(vector.z.mul(e[10])),
-  ) as Node<'vec3'>;
 }
 
 export default Collision;

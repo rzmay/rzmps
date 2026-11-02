@@ -50,6 +50,18 @@ const octreeParticles = [
     velocity: new THREE.Vector3(1, 0, 0),
   }),
 ];
+// A tree without a custom aggregator still indexes particles, with independent empty node payloads.
+const defaultOctree = new ParticleOctree({
+  bounds: new THREE.Box3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 1, 1)),
+  particlesPerLeaf: 1,
+});
+defaultOctree.rebuild(octreeParticles);
+assert.deepEqual(defaultOctree.particlesInRadius(new THREE.Vector3(), 1), octreeParticles);
+for (const node of defaultOctree.getNodes()) {
+  assert.deepEqual(node.aggregate, {});
+  if (node.parent) assert.notEqual(node.aggregate, node.parent.aggregate);
+}
+
 const octree = new ParticleOctree({
   bounds: new THREE.Box3(
     new THREE.Vector3(0, 0, 0),

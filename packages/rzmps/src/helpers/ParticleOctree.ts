@@ -54,7 +54,7 @@ export interface ParticleOctreeQueryOptions {
 }
 
 /** Particle-space octree with caller-defined aggregation; rebuild replaces node identities and may be throttled. */
-class ParticleOctree<TAggregate> {
+class ParticleOctree<TAggregate = Record<string, never>> {
   root: OctreeNode<TAggregate>;
   bounds = new THREE.Box3();
   tags?: Multiple<Tag>;
@@ -77,7 +77,11 @@ class ParticleOctree<TAggregate> {
   /** Creates an empty tree and normalizes depth, leaf capacity, and rebuild-quality settings. */
   constructor(
     config: Partial<OctreeConfig>,
-    private aggregator: OctreeAggregator<TAggregate>,
+    // An unconfigured tree collects spatial membership without attaching aggregate data.
+    private aggregator: OctreeAggregator<TAggregate> = {
+      new: () => ({} as TAggregate),
+      combine: () => ({} as TAggregate),
+    },
   ) {
     this.tags = config.tags;
     this.maxDepth = Math.max(0, Math.floor(config.maxDepth ?? 8));

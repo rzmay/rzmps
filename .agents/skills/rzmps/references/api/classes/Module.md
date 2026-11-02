@@ -143,10 +143,10 @@ optional octree?: ParticleOctree<unknown>;
 
 <a id="octreeaggregator"></a>
 
-### octreeAggregator
+### octreeAggregator?
 
 ```ts
-readonly octreeAggregator: OctreeAggregator<unknown>;
+readonly optional octreeAggregator?: OctreeAggregator<unknown>;
 ```
 
 ***
