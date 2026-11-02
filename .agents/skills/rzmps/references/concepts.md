@@ -940,6 +940,89 @@ module's work on either backend. A function-defined module can request managed a
 `ParticleOctree` or `ParticleSpatialGrid` is passed as the optional final callback argument.
 `cleanup()` must call `super.cleanup()` when overridden so managed references are released.
 
+`ParticleSpatialGrid` hashes occupied fine cells; it does not allocate a dense world-volume grid.
+Its cached build kernels dispatch over `buffers.count`, not reserved capacity, and are submitted
+together. A compact GPU-produced population can pass a `GPUComputeRange` as the fourth argument to
+`rebuild(renderer, buffers, buildToken, range)`. The range pairs a uint count node with caller-owned
+indirect compute arguments (`ceil(count / 64), 1, 1`), written by an earlier GPU scheduling pass.
+No count readback is required. `grid.computeParticles(callback, range)` reuses that dispatch
+contract for additional kernels, including exact partial-workgroup guarding. Without a range,
+the returned kernel uses the current CPU count; update its `count` when that population changes.
+Callbacks decide whether dead slots participate. These kernels require an initialized grid and
+must be rebuilt if the grid's underlying particle storage is replaced.
+
+### Spatial Aggregation And Levels
+
+`SpatialAggregator<T, "cpu">` preserves the octree's existing `new` and `combine` members
+and optionally adds `finalize`. Parent reductions retain raw values. `getAggregate(node)`
+finalizes a copy, so deriving averages does not overwrite sums used by other nodes.
+CPU values remain ordinary objects; they do not require GPU layouts. Keep finalized state
+copyable; native data containers, ordinary object graphs and classes with `clone()` are supported.
+
+`SpatialAggregator<Layout, "gpu">` uses the same concepts with explicit channel types and
+TSL expressions. Layout channels support `float`, `uint`, `int`, `vec2`, `vec3` and `vec4`.
+Combine raw sums/counts associatively; derive means or normalized vectors in `finalize`.
+GPU finalization operates on local expressions, leaving stored raw reductions intact.
+
+```ts
+const grid = new ParticleSpatialGrid({ levels: SpatialLevels.All }, {
+  layout: { count: 'uint', sum: 'vec3' },
+  new: particle => ({
+    count: uint(particle ? 1 : 0),
+    sum: particle?.position ?? vec3(0),
+  }),
+  combine: (a, b) => ({ count: a.count.add(b.count), sum: a.sum.add(b.sum) }),
+  finalize: a => ({ count: a.count, sum: a.sum.div(float(a.count).max(1)) }),
+});
+grid.rebuild(renderer, buffers);
+const readRegions = grid.computeRegions(0, region => {
+  const average = grid.getAggregate(region);
+  const bounds = grid.getBounds(region);
+  const children = grid.getChildren(region);
+  // Consume these GPU expressions in your compute graph; they are not synchronous CPU values.
+});
+```
+
+Import the TSL constructors from `three/tsl`, and `ParticleSpatialGrid`/`SpatialLevels`
+from RZMPS. GPU aggregate callbacks construct graphs, not JavaScript particle callbacks.
+The fixed layout and callbacks are construction-time configuration; use captured uniforms
+for runtime numeric tuning. Callers own and dispose compute kernels returned by the grid.
+
+Let B be `brickSubdivisions` and D be B plus `cellSubdivisions`:
+
+| `levels` | Maintained depths |
+| --- | --- |
+| `SpatialLevels.None` / `"none"` / `"None"`, default | D only |
+| `SpatialLevels.Bricks` / `"bricks"` / `"Bricks"` | 0 through B, plus D |
+| `SpatialLevels.Cells` / `"cells"` / `"Cells"` | B through D |
+| `SpatialLevels.All` / `"*"` / `"All"` | 0 through D |
+| Readonly integer array | Requested depths plus D, sorted and deduplicated |
+
+Both brick/cell presets include B. Invalid depths or presets throw rather than silently
+clamping. The finest neighbor-query index is always present. Ordinary default/None grids
+without an aggregator allocate no extra region directories. A non-None preset, explicit
+depth array, or aggregator enables the optional sparse region directory; aggregate storage
+is allocated only when an aggregator is supplied. Managed grids share only compatible levels.
+
+Region handles are frame-local GPU expressions with a `valid` flag. `locateNode(position, depth)`
+finds an occupied region at a maintained depth; outside or empty regions are invalid.
+`getRegions(depth)` gives a GPU count and ordinal-to-region accessor; `computeRegions`
+dispatches only occupied regions. Requesting an unmaintained depth throws, rather than reporting
+an empty level. `getChildren` means the **next maintained finer level**, not necessarily depth+1.
+Repeat child traversal to reach occupied descendants without scanning every region at that depth.
+At the finest level, `getParticleIndices` gives the region's particle membership range.
+
+CPU octree handles are ordinary node references. Its existing `locate` returns the deepest
+available containing node up to the requested depth, with the existing root fallback outside
+bounds; grid `locate(Vector3, depth)` remains a CPU coordinate utility, not a GPU lookup.
+Both structures provide `getAggregate`, `getBounds` and `getChildren` where those concepts agree.
+Neither node references nor GPU region indices should be retained across rebuilds.
+
+Additional grid levels use exact sparse cell keys, compact occupied-cell lists and child
+ranges. The finest summaries are constructed once; coarser levels combine raw child summaries.
+No dense world-volume arrays or separate pointer-based GPU octree are constructed. Hash-table
+capacity clearing remains allocation-sized, while scans and aggregate work use occupied counts.
+
 Dynamic numbers, vectors, colors, ranges, sets, and callbacks are available to built-in GPU
 components. Callback curves are sampled into interpolated uniform tables at
 `ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION`; increase it when a high-frequency curve needs more
@@ -1280,11 +1363,14 @@ Positive half-integers round up. A zero count or ratio produces no representativ
 negative count and positive Infinity are unlimited. K at least N preserves original
 particles without CPU aggregation. This count is computed before artistic children.
 
-The current world-space population is indexed in Morton spatial cells within
-quantized power-of-two bounds, keeping cell coordinates fixed during small motion. The most
-occupied region is split repeatedly, with spatial-coordinate tie-breaking, until
-there are K nonempty regions. Each region selects the particle nearest its density
-centroid as an anchor. This subdivides even a single dense or coincident cluster.
+The renderer builds a world-space snapshot of eligible particles in an aggregated
+`ParticleOctree` on CPU or a multiresolution `ParticleSpatialGrid` on GPU. Its policy
+distributes a K-anchor budget through occupied children in proportion to population,
+stopping at regions assigned one anchor. This is adaptive population-weighted coverage,
+not simply a ranking of the K most populated fixed cells. Cell summaries supply centroids.
+CPU selection snaps to an actual source particle; GPU selection descends toward the
+centroid and cooperatively snaps within a finest cell. Leaves receiving multiple
+anchors choose distinct member slots, including coincident populations.
 Every particle then contributes to its nearest anchor, exactly once. Anchors own
 themselves to keep coincident groups nonempty. Identity breaks otherwise equal
 spatial ties. Selection never consumes a dense region greedily.
@@ -1297,15 +1383,15 @@ but finite radii cannot guarantee coverage of the population. Translating the ef
 away from the origin does not change the radius.
 
 Aggregates use weights `1 / (1 + distanceSquared / scaleSquared)`. The scale is the
-positive finite radius when provided, otherwise the region's extent around its
-anchor, with an epsilon floor. Position, color, alpha, scale, rotation, velocity,
+positive finite radius when provided, otherwise the selected region's bounding-box
+diagonal, with an epsilon floor. Position, color, alpha, scale, rotation, velocity,
 and available age/render attributes are weighted averages; mass and visual
 `Particle.contribution` are sums. Ordinary simulation particles have contribution
 one. Lights retain their averaged brightness and alpha semantics: merging more
 particles does not multiply a light's intensity by its membership count. A singleton retains its original values.
 Simulation state, custom data and birth snapshots remain untouched.
 
-All memberships and anchors are recomputed each update. Spatial ordering and
+All memberships and anchors are recomputed each update. Spatial regions and
 weighted centroids improve coherence, but there is no stored group identity,
 membership, temporal smoothing, or guarantee of continuous motion at split or
 nearest-center boundaries. Renderers with identity-based histories can observe
@@ -1323,29 +1409,45 @@ removed by grouping. CPU compensation spacing still samples the original simulat
 population; native GPU compensation resolves each aggregate's anchor slot in the
 system-owned spatial spacing data.
 
-CPU grouping sorts spatial cells and uses `ParticleOctree` to prune nearest-center
-queries. Scratch storage is linear in population; sorting is O(N log N), and
-nearest queries can degrade for pathological distributions. Native GPU grouping
-uses a fixed 512-cell density histogram and prefix offsets to partition the eligible
-population without a sorting network. An occupancy heap subdivides regions in
-O(K log K); histogram/scatter and membership reductions are linear in the particle
-pool. A coarse `ParticleSpatialGrid` over anchors performs exact nearest-center
-queries, visiting the local cell first and pruning other cells by distance to their
-bounds. Membership uses one linked list per group in a shared buffer. Each particle
-is reduced once, with no all-population scan for each group.
+CPU grouping uses source-octree aggregates for selection and a separate anchor octree
+to prune nearest-center queries. It no longer performs grouping-specific Morton sorting
+or range splitting. Identity ordering within selected regions makes CPU ties reproducible.
+GPU grouping uses general sparse level directories and reductions, rather than a private
+512-cell histogram or serial region heap. It maintains depths zero through four for its
+source snapshot, then uses the existing coarse anchor hash for exact nearest-center queries.
+The source and anchor indices are separate because they contain different populations.
 
-The GPU path has twelve cached processing stages, submitted in batches. The
-center, assignment and reduction stages use GPU-written indirect dispatch arguments:
-workgroup counts follow the eligible population and K, not reserved pool capacity. Grid rebuilds reuse compute graphs and update population counts
-through uniforms. Only slots and scratch grow with capacity. This removes both
-per-frame sorting networks and unconditional O(NK) assignment; degenerate queries
-with many coincident centers can still inspect K anchors. Passes fit the portable
-eight-storage-buffer limit. Render attributes use 80 bytes and state uses 16 bytes
-per representative; scratch uses approximately 12 bytes per padded input slot,
-24 bytes per reserved group, and 6 KB for density bins. CPU and GPU use the same
-weighting semantics but may choose different partitions within dense cells. GPU
+GPU refinement processes independent regions in parallel at each maintained depth.
+Generic aggregate construction and anchor snapping use cooperative workgroups.
+Compact occupied-cell lists drive indirect scans and reductions; no construction readback
+is required. The number of cached build passes depends on maintained levels and capacity,
+not K iterations of a global priority queue. Final weighted memberships still use linked
+lists and sequential per-group reduction, a remaining optimization opportunity.
+Degenerate nearest queries can still inspect K anchors. Passes fit the portable
+eight-storage-buffer limit. GPU grouping adds a compact world-space snapshot, optional
+spatial directories/aggregates, and per-region selection scratch; ordinary single-resolution
+grid users do not allocate these optional structures. CPU and GPU use the same
+weighting formula but may choose different regions and anchors. GPU
 scatter and linked reduction order can vary with scheduling, so float sums and
 identity ties are not bit-for-bit identical between backends.
+
+On November 2, 2026, native Chromium WebGPU on Apple Metal measured these complete GPU
+grouping costs, including spatial construction and final weighted aggregation. Each case
+used ten warmup updates and forty timestamped samples; values are medians in milliseconds.
+The baseline is the preceding histogram/serial-heap implementation on the same machine.
+
+| Live particles / reserved slots | Representatives | Before | Hierarchical |
+| --- | ---: | ---: | ---: |
+| 10,000 / 32,768 | 18 | 0.918 | 0.646 |
+| 10,000 / 32,768 | 128 | 0.951 | 0.380 |
+| 2,000 / 32,768 | 512 | 3.820 | 0.367 |
+| 10,000 / 131,072 | 18 | 0.935 | 0.670 |
+
+These are compute-only measurements, not whole-scene FPS guarantees or a CPU/GPU comparison.
+Reproduce the current workloads with `node tests/visual/renderer-grouping-performance.mjs`;
+the script records adapter details, CPU submission and queue-completed timings, and GPU stages
+to JSON. The optional `--stages` mode changes batching for attribution and should not be used
+for the before/after totals above. Final linked-list aggregation remains a low-K bottleneck.
 
 CPU scene lights read back only the compact GPU aggregates; grouping itself stays
 on GPU. Lights are allocated predictively when the renderer is attached, using
@@ -1383,13 +1485,10 @@ asynchronous GPU readback; it does not count frames. Zero delay shrinks immediat
 configurable and exposed in the demo's Light Allocation controls.
 
 Grouping always precedes artistic children, which precede LOD compensation on CPU
-and GPU. Twelve stages do not imply fixed workgroup counts. The current spatial
-grid stores hashed fine-cell chains, not a compact list of allocated bricks. A
-future brick-driven traversal would need to build that active-brick list and
-indirect arguments during insertion. That could skip work over sparse pools, but
-it cannot simply dispatch the current hash buckets as bricks: buckets can collide,
-and a renderer still needs to discover and filter its eligible particles. No
-CPU readback is necessary to drive indirect dispatch.
+and GPU. Optional level directories represent exact logical cells; hash buckets can
+collide and must not be treated as spatial regions. The finest neighbor index remains
+available. A system-wide live-slot list and selective occupied-bucket clearing are
+separate potential optimizations, not prerequisites for these aggregate directories.
 
 `randomDistribution` remains a compatibility property without an effect on
 grouping. The deprecated `groupingRadiusRatio` aliases `groupingRadius` in world

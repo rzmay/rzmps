@@ -72,7 +72,11 @@ class LightRenderer extends Renderer {
     private belowCapacitySince?: number;
 
     constructor(options: Partial<LightRendererOptions> = {}) {
-      super({ ...options, count: options.count ?? 50, groupingRadius: options.groupingRadius ?? options.groupingRadiusRatio ?? -1 });
+      super({
+        ...options,
+        count: options.count ?? 50,
+        groupingRadius: options.groupingRadius ?? options.groupingRadiusRatio ?? -1,
+      });
 
       this.allocation = { shrinkThreshold: 0.75, shrinkDelay: 1, ...options.allocation };
       this.brightness = options.brightness ?? 1;
@@ -131,7 +135,8 @@ class LightRenderer extends Renderer {
       // Manual populations and opaque emission can use an explicit finite cap as the fallback.
       const predicted = system?.emitters?.length ? system.estimateParticleCount(this.tags) * ratio : cap;
       const parents = Math.ceil(Math.min(cap, Number.isFinite(predicted) ? predicted : 0));
-      const children = Math.floor(maximumDynamicNumber(this.children.count ?? 0, ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION));
+      const children = Math.floor(maximumDynamicNumber(this.children.count ?? 0,
+        ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION));
       const quality = system?.quality ?? 1;
       const lod = this.compensation === 'children' && quality > 0 && quality < 1 ? 1 / quality : 1;
       return Math.ceil(parents * (1 + children) * lod);

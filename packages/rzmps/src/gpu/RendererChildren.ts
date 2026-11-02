@@ -242,7 +242,9 @@ export default class GPURendererChildren {
               If(destination.lessThan(uint(capacity)), () => {
                 const child = copy(instanceIndex, destination, false);
                 mapping.element(destination.sub(originalCount)).assign(uvec2(instanceIndex, i));
-                const radius = spacing!.element('spacingIndex' in input && input.spacingIndex ? input.spacingIndex(rootIndex) : rootIndex).x;
+                const spacingIndex = 'spacingIndex' in input && input.spacingIndex
+                  ? input.spacingIndex(rootIndex) : rootIndex;
+                const radius = spacing!.element(spacingIndex).x;
                 child.position.addAssign(offset(seedFor(parent.id, i, 0x6c6f6421), radius));
               }).Else(() => {
                 atomicAdd(counters.element(2), uint(1));

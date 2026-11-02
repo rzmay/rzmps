@@ -56,6 +56,7 @@ import { GPUEmissionRunBufferState } from './gpu/Emission';
 import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
 import SpatialEffect from './SpatialEffect';
 import ParticleSpatialGrid, { type ParticleSpatialGridOptions } from './gpu/ParticleSpatialGrid';
+import { resolveSpatialLevels } from './enums/SpatialLevels';
 import type { PackedFloatStorage } from './gpu/Storage';
 
 /** Construction options; fields can be omitted to use the documented defaults. */
@@ -455,6 +456,9 @@ class ParticleSystem extends THREE.Object3D {
       bounds: bounds ? [bounds.min.toArray(), bounds.max.toArray()] : undefined,
       brickSubdivisions: gridOrOptions.brickSubdivisions ?? 3,
       cellSubdivisions: gridOrOptions.cellSubdivisions ?? 4,
+      levels: gridOrOptions.levels === undefined || gridOrOptions.levels === 'none' || gridOrOptions.levels === 'None'
+        ? undefined : resolveSpatialLevels(gridOrOptions.levels, gridOrOptions.brickSubdivisions ?? 3,
+          gridOrOptions.cellSubdivisions ?? 4),
       powerOfTwoBounds: gridOrOptions.powerOfTwoBounds ?? true,
       autoExpand: gridOrOptions.autoExpand ?? true,
       expansionHysteresis: gridOrOptions.expansionHysteresis ?? 0.125,
@@ -3165,10 +3169,12 @@ class ParticleSystem extends THREE.Object3D {
     };
     this.emitters.forEach(emitter => {
       inputs.push(emitter, JSON.stringify(emitter.tags), emitter.bursts.length);
-      track(emitter.rate); track(emitter.initialValues.lifetime ?? 1);
+      track(emitter.rate);
+      track(emitter.initialValues.lifetime ?? 1);
       emitter.bursts.forEach(burst => track(burst.count));
     });
-    if (this._populationEstimateToken !== this.renderFrameToken || inputs.length !== this._populationEstimateInputs.length
+    if (this._populationEstimateToken !== this.renderFrameToken
+      || inputs.length !== this._populationEstimateInputs.length
       || inputs.some((value, i) => value !== this._populationEstimateInputs[i])) {
       this._populationEstimateInputs = inputs;
       this._populationEstimates.clear();
@@ -3177,7 +3183,8 @@ class ParticleSystem extends THREE.Object3D {
     const key = JSON.stringify(tags ? [...tags].sort() : null);
     const cached = this._populationEstimates.get(key);
     if (cached !== undefined) return Math.min(cached, Math.max(0, this.maxParticles));
-    const maximum = (value: DynamicValue<number>) => maximumDynamicNumber(value, ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION);
+    const maximum = (value: DynamicValue<number>) => maximumDynamicNumber(value,
+      ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION);
     const predicted = this.emitters.reduce((total, emitter) => {
       if (tags && !tagsIntersect([...tags], emitter.tags ?? [])) return total;
       return total + maximum(emitter.rate) * maximum(emitter.initialValues.lifetime ?? 1)
@@ -3193,7 +3200,8 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _populationEstimates = new Map<string, number>();
 
   private _getInitialGPUBufferCapacity(): number {
-    const required = Math.max(ParticleSystem.GPU_INITIAL_BUFFER_SIZE, this.particles.length, this.estimateParticleCount(), 1);
+    const required = Math.max(ParticleSystem.GPU_INITIAL_BUFFER_SIZE,
+      this.particles.length, this.estimateParticleCount(), 1);
     return Math.min(nextPowerOfTwo(required), Math.max(this.maxParticles, 1));
   }
 

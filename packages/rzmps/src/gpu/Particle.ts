@@ -339,7 +339,8 @@ export class GPUParticleRenderContext {
   constructor(
     index: Node<'uint'>,
     vectors: Pick<GPUParticleVectorNodes, 'position' | 'rotation' | 'scale' | 'color' | 'velocity'>,
-    scalars: Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'> & { contribution: Node<'float'> },
+    scalars: Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'>
+      & { contribution: Node<'float'> },
     state: Node<'uvec4'>,
     private readonly owner?: GPUParticleRenderStorage,
   ) {
@@ -441,7 +442,8 @@ export class GPUParticleRenderStorage {
 
   createScalarNodes(
     index: Node<'uint'> = instanceIndex,
-  ): Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'> & { contribution: Node<'float'> } {
+  ): Pick<GPUParticleScalarNodes, 'alpha' | 'distortionStrength' | 'realtime' | 'time'>
+    & { contribution: Node<'float'> } {
     return {
       contribution: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.Contribution, index).x,
       alpha: renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.PositionAlpha, index).w,

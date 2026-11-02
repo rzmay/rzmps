@@ -6,10 +6,18 @@
 
 [API Reference](../index.md) / ParticleSpatialGrid
 
-# Class: ParticleSpatialGrid
+# Class: ParticleSpatialGrid\<L\>
 
 Sparse GPU particle spatial hash. The logical brick/cell resolution is fixed;
 storage scales with particle capacity rather than world volume.
+
+## Type Parameters
+
+<a id="l"></a>
+
+### L
+
+`L` *extends* [`SpatialAggregateLayout`](../type-aliases/SpatialAggregateLayout.md) = [`SpatialAggregateLayout`](../type-aliases/SpatialAggregateLayout.md)
 
 ## Constructors
 
@@ -18,7 +26,7 @@ storage scales with particle capacity rather than world volume.
 ### Constructor
 
 ```ts
-new ParticleSpatialGrid(options?): ParticleSpatialGrid;
+new ParticleSpatialGrid<L>(options?, aggregator?): ParticleSpatialGrid<L>;
 ```
 
 Creates a sparse grid whose storage grows with particle capacity, not world volume.
@@ -29,9 +37,27 @@ Creates a sparse grid whose storage grows with particle capacity, not world volu
 
 `Partial`\<[`ParticleSpatialGridOptions`](../interfaces/ParticleSpatialGridOptions.md)\> = `{}`
 
+##### aggregator?
+
+###### layout
+
+`L` & [`SpatialAggregateLayout`](../type-aliases/SpatialAggregateLayout.md)
+
+###### combine
+
+(`a`, `b`) => [`SpatialAggregateNodes`](../type-aliases/SpatialAggregateNodes.md)\<`T`\>
+
+###### finalize?
+
+(`aggregate`) => [`SpatialAggregateNodes`](../type-aliases/SpatialAggregateNodes.md)\<`T`\>
+
+###### new
+
+(`particle?`, `particleIndex?`, `region?`) => [`SpatialAggregateNodes`](../type-aliases/SpatialAggregateNodes.md)\<`T`\>
+
 #### Returns
 
-`ParticleSpatialGrid`
+`ParticleSpatialGrid`\<`L`\>
 
 ## Properties
 
@@ -95,6 +121,18 @@ readonly expansionHysteresis: number;
 
 ***
 
+<a id="levels"></a>
+
+### levels
+
+```ts
+readonly levels: readonly number[];
+```
+
+Maintained depths, normalized and including the mandatory finest neighbor index.
+
+***
+
 <a id="maxdepth"></a>
 
 ### maxDepth
@@ -134,6 +172,58 @@ readonly timeQuality: number;
 ```
 
 ## Methods
+
+<a id="computeparticles"></a>
+
+### computeParticles()
+
+```ts
+computeParticles(callback, range?): ComputeNode;
+```
+
+Builds particle work over the current CPU range or a caller-scheduled GPU compact range.
+The caller owns indirect arguments and must write them before dispatching the returned kernel.
+Callers of CPU-sized kernels can update ComputeNode.count without rebuilding the graph.
+
+#### Parameters
+
+##### callback
+
+(`particle`) => `void`
+
+##### range?
+
+[`GPUComputeRange`](../interfaces/GPUComputeRange.md)
+
+#### Returns
+
+`ComputeNode`
+
+***
+
+<a id="computeregions"></a>
+
+### computeRegions()
+
+```ts
+computeRegions(depth, callback): ComputeNode;
+```
+
+#### Parameters
+
+##### depth
+
+`number`
+
+##### callback
+
+(`region`) => `void`
+
+#### Returns
+
+`ComputeNode`
+
+***
 
 <a id="destroy"></a>
 
@@ -251,6 +341,86 @@ forEachParticleInRadius(
 
 ***
 
+<a id="getaggregate"></a>
+
+### getAggregate()
+
+```ts
+getAggregate(region): SpatialAggregateNodes<L>;
+```
+
+#### Parameters
+
+##### region
+
+[`GPUSpatialRegion`](../interfaces/GPUSpatialRegion.md)
+
+#### Returns
+
+[`SpatialAggregateNodes`](../type-aliases/SpatialAggregateNodes.md)\<`L`\>
+
+***
+
+<a id="getbounds"></a>
+
+### getBounds()
+
+```ts
+getBounds(region): object;
+```
+
+#### Parameters
+
+##### region
+
+[`GPUSpatialRegion`](../interfaces/GPUSpatialRegion.md)
+
+#### Returns
+
+`object`
+
+##### max
+
+```ts
+max: Node<"vec3">;
+```
+
+##### min
+
+```ts
+min: Node<"vec3">;
+```
+
+***
+
+<a id="getboundsnode"></a>
+
+### getBoundsNode()
+
+```ts
+getBoundsNode(): object;
+```
+
+GPU bounds from the current index; CPU `bounds` does not include automatic GPU expansion.
+
+#### Returns
+
+`object`
+
+##### max
+
+```ts
+max: Node<"vec3">;
+```
+
+##### min
+
+```ts
+min: Node<"vec3">;
+```
+
+***
+
 <a id="getcellsizenode"></a>
 
 ### getCellSizeNode()
@@ -264,6 +434,66 @@ GPU-resolved cell extent, including automatic bounds expansion.
 #### Returns
 
 `Node`\<`"vec3"`\>
+
+***
+
+<a id="getchildren"></a>
+
+### getChildren()
+
+```ts
+getChildren(region): GPUSpatialRegionRange;
+```
+
+#### Parameters
+
+##### region
+
+[`GPUSpatialRegion`](../interfaces/GPUSpatialRegion.md)
+
+#### Returns
+
+[`GPUSpatialRegionRange`](../interfaces/GPUSpatialRegionRange.md)
+
+***
+
+<a id="getparticleindices"></a>
+
+### getParticleIndices()
+
+```ts
+getParticleIndices(region): GPURegionParticleIndices;
+```
+
+#### Parameters
+
+##### region
+
+[`GPUSpatialRegion`](../interfaces/GPUSpatialRegion.md)
+
+#### Returns
+
+[`GPURegionParticleIndices`](../interfaces/GPURegionParticleIndices.md)
+
+***
+
+<a id="getregions"></a>
+
+### getRegions()
+
+```ts
+getRegions(depth): GPUSpatialRegionRange;
+```
+
+#### Parameters
+
+##### depth
+
+`number`
+
+#### Returns
+
+[`GPUSpatialRegionRange`](../interfaces/GPUSpatialRegionRange.md)
 
 ***
 
@@ -298,7 +528,7 @@ Allocates reusable grid storage before shader query graphs are constructed.
 ### locate()
 
 ```ts
-locate(position): Vector3;
+locate(position, depth?): Vector3;
 ```
 
 Returns the logical cell coordinate using the currently configured CPU-side bounds.
@@ -309,9 +539,37 @@ Returns the logical cell coordinate using the currently configured CPU-side boun
 
 `Vector3`
 
+##### depth?
+
+`number` = `...`
+
 #### Returns
 
 `Vector3`
+
+***
+
+<a id="locatenode"></a>
+
+### locateNode()
+
+```ts
+locateNode(position, depth?): GPUSpatialRegion;
+```
+
+#### Parameters
+
+##### position
+
+`Node`\<`"vec3"`\>
+
+##### depth?
+
+`number` = `...`
+
+#### Returns
+
+[`GPUSpatialRegion`](../interfaces/GPUSpatialRegion.md)
 
 ***
 
@@ -373,7 +631,8 @@ Reads hash metadata for validation and profiling without reading particle state.
 rebuild(
    renderer,
    buffers,
-   buildToken?
+   buildToken?,
+   range?
 ): boolean;
 ```
 
@@ -392,6 +651,10 @@ Alias matching the CPU utility's rebuild terminology.
 ##### buildToken?
 
 `unknown`
+
+##### range?
+
+[`GPUComputeRange`](../interfaces/GPUComputeRange.md)
 
 #### Returns
 

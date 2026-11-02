@@ -32,7 +32,7 @@ test('GPU renderer grouping matches CPU aggregates without simulation readback',
     const result = await page.evaluate(() => window.groupingResult);
     assert.equal(result.error, undefined, result.error);
     assert.deepEqual(errors, []);
-    assert.deepEqual(result.counts, [5, 13, 1, 0, 7]);
+    assert.deepEqual(result.counts, [5, 13, 1, 0, 7, 512]);
     assert.equal(result.readbacks, 0);
     console.log('GPU grouping timing:', JSON.stringify(result.timing));
   } finally {

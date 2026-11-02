@@ -1018,8 +1018,8 @@ Acquires a compatible system-owned grid, or registers a caller-owned instance.
 
 ##### gridOrOptions?
 
-  \| [`ParticleSpatialGrid`](ParticleSpatialGrid.md)
-  \| `Partial`\<[`ParticleSpatialGridOptions`](../interfaces/ParticleSpatialGridOptions.md)\> = `{}`
+  \| `Partial`\<[`ParticleSpatialGridOptions`](../interfaces/ParticleSpatialGridOptions.md)\>
+  \| [`ParticleSpatialGrid`](ParticleSpatialGrid.md)\<[`SpatialAggregateLayout`](../type-aliases/SpatialAggregateLayout.md)\> = `{}`
 
 #### Returns
 

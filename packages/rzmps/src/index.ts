@@ -211,6 +211,12 @@ export type {
   ParticleOctreeQueryOptions,
 } from './helpers/ParticleOctree';
 export { default as ParticleSpatialGrid } from './gpu/ParticleSpatialGrid';
+export type { GPUComputeRange } from './gpu/ComputeDispatch';
+export { SpatialLevels } from './enums/SpatialLevels';
+export type { SpatialLevelsInput, SpatialGridOptions } from './enums/SpatialLevels';
+export type { SpatialBackend, SpatialAggregator, SpatialAggregateLayout, SpatialAggregateType,
+  SpatialAggregateNodes, GPUSpatialRegion } from './types/SpatialAggregator';
+export type { GPUSpatialRegionRange, GPURegionParticleIndices } from './gpu/grid/Regions';
 export type {
   ParticleSpatialGridOptions,
   ParticleSpatialGridDiagnostics,
