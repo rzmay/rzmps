@@ -106,9 +106,9 @@ export default async function createDestruction() {
     // #region docs:modules:2
     modules: [
       // Contact damping reduces sliding while allowing fragments to tumble and rebound.
-      new Collision({ bounce: 0.3, dampen: 0.3, radiusScale: collisionDiameter }),
+      new Collision({ bounce: 0.3, dampen: [0.2, 0.5], radiusScale: collisionDiameter }),
       new RotationBySpeed({
-        speedRange: [0.1, 0.5],
+        speedRange: [0.25, 0.5],
         angularVelocity: [new THREE.Vector3(), new THREE.Vector3(20, 40, 10)],
       }),
       new ColorOverLifetime({
