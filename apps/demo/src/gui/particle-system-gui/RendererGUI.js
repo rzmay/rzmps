@@ -207,7 +207,6 @@ export class RendererGUI extends GUIEditorBase {
         const allocation = folder.addFolder('Light Allocation');
         allocation.add(renderer.allocation, 'shrinkThreshold', 0, 1).name('Shrink Threshold');
         allocation.add(renderer.allocation, 'shrinkDelay', 0).name('Shrink Delay (s)');
-        folder.add(renderer, 'randomDistribution').name('Random Distribution');
         folder.add(renderer, 'inheritParticleColor').name('Inherit Particle Color');
         folder.add(renderer, 'sizeAffectsRange').name('Size Affects Range');
         folder.add(renderer, 'alphaAffectsIntensity').name('Alpha Affects Intensity');

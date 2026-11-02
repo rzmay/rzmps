@@ -156,16 +156,6 @@ lights: PointLight[] = [];
 
 ***
 
-<a id="randomdistribution"></a>
-
-### randomDistribution
-
-```ts
-randomDistribution: boolean;
-```
-
-***
-
 <a id="rangemultiplier"></a>
 
 ### rangeMultiplier
@@ -269,42 +259,6 @@ get gpuParameterUploadCount(): number;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`gpuParameterUploadCount`](Renderer.md#gpuparameteruploadcount)
-
-***
-
-<a id="groupingradiusratio"></a>
-
-### groupingRadiusRatio
-
-#### Get Signature
-
-```ts
-get groupingRadiusRatio(): number;
-```
-
-##### Deprecated
-
-Alias for groupingRadius, now measured in world units.
-
-##### Returns
-
-`number`
-
-#### Set Signature
-
-```ts
-set groupingRadiusRatio(value): void;
-```
-
-##### Parameters
-
-###### value
-
-`number`
-
-##### Returns
-
-`void`
 
 ***
 

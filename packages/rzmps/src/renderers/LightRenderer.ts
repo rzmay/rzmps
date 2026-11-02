@@ -29,12 +29,9 @@ export interface LightRendererOptions extends RendererOptions {
     allocation: LightRendererAllocationOptions;
     brightness: DynamicValue<number>;
     rangeMultiplier: DynamicValue<number>;
-    /** @deprecated Use groupingRadius in world units. */
-    groupingRadiusRatio: number;
     decay: number;
     count: number;
     ratio: number;
-    randomDistribution: boolean;
     inheritParticleColor: boolean;
     sizeAffectsRange: boolean;
     alphaAffectsIntensity: boolean;
@@ -45,17 +42,11 @@ export interface LightRendererOptions extends RendererOptions {
 class LightRenderer extends Renderer {
     lights: THREE.PointLight[] = [];
 
-    /** @deprecated Alias for groupingRadius, now measured in world units. */
-    get groupingRadiusRatio(): number { return this.groupingRadius; }
-    set groupingRadiusRatio(value: number) { this.groupingRadius = value; }
-
     brightness: DynamicValue<number>;
 
     rangeMultiplier: DynamicValue<number>;
 
     decay: number;
-
-    randomDistribution: boolean;
 
     inheritParticleColor: boolean;
 
@@ -75,7 +66,6 @@ class LightRenderer extends Renderer {
       super({
         ...options,
         count: options.count ?? 50,
-        groupingRadius: options.groupingRadius ?? options.groupingRadiusRatio ?? -1,
       });
 
       this.allocation = { shrinkThreshold: 0.75, shrinkDelay: 1, ...options.allocation };
@@ -84,7 +74,6 @@ class LightRenderer extends Renderer {
       this.lightOptions = options.lightOptions ?? {};
       this.decay = options.decay ?? this.lightOptions.decay ?? 2;
       this.ratio = Math.min(Math.max(options.ratio ?? 1, 0), 1);
-      this.randomDistribution = options.randomDistribution ?? true;
       this.inheritParticleColor = options.inheritParticleColor ?? true;
       this.sizeAffectsRange = options.sizeAffectsRange ?? false;
       this.alphaAffectsIntensity = options.alphaAffectsIntensity ?? false;

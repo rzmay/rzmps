@@ -124,20 +124,6 @@ Maximum world-space assignment distance. Negative means unbounded (default -1).
 
 ***
 
-<a id="groupingradiusratio"></a>
-
-### ~~groupingRadiusRatio~~
-
-```ts
-groupingRadiusRatio: number;
-```
-
-#### Deprecated
-
-Use groupingRadius in world units.
-
-***
-
 <a id="inheritparticlecolor"></a>
 
 ### inheritParticleColor
@@ -154,16 +140,6 @@ inheritParticleColor: boolean;
 
 ```ts
 lightOptions: PointLightOptions;
-```
-
-***
-
-<a id="randomdistribution"></a>
-
-### randomDistribution
-
-```ts
-randomDistribution: boolean;
 ```
 
 ***

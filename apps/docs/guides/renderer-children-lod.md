@@ -170,11 +170,6 @@ collide and must not be treated as spatial regions. The finest neighbor index re
 available. A system-wide live-slot list and selective occupied-bucket clearing are
 separate potential optimizations, not prerequisites for these aggregate directories.
 
-`randomDistribution` remains a compatibility property without an effect on
-grouping. The deprecated `groupingRadiusRatio` aliases `groupingRadius` in world
-units; migrate old ratios by choosing an explicit world-space distance or the
-unbounded default.
-
 ## Artistic children
 
 The base `Renderer` expands its visual population before passing it to a renderer implementation. Each child inherits its immediate parent's attributes; only its position, scale, and alpha receive artistic modifiers. Children never enter `system.particles`, run modules, collide, or cause lifecycle events.
