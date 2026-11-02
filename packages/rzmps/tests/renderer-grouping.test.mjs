@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Vector3, Color } from 'three';
-import { Renderer, Particle, ParticleSystem, LightRenderer, Emitter, CompensationMode } from '../build/index.mjs';
+import { Renderer, Particle, ParticleSystem, LightRenderer, Emitter, CompensationMode, createGPUParticleBufferState } from '../build/index.mjs';
 class Capture extends Renderer {
   setup() {} clear() {} destroy() { this.reset(); }
   _update(particles) { this.output = particles; }
@@ -11,6 +11,41 @@ function particle(x, y = 0, z = 0, id = `${x}:${y}:${z}`) {
   p.id = id; return p;
 }
 const population = Array.from({ length: 101 }, (_, i) => particle((i % 13) * 0.1, Math.floor(i / 13) * 0.1, i % 3));
+// Inactive grouping must not construct helpers or touch spatial system APIs.
+class GPUCapture extends Capture {
+  _updateGPU(buffers) { this.buffers = buffers; }
+}
+const spatialGuard = new Proxy({}, {
+  get(_target, key) {
+    if (key === 'quality') return 1;
+    if (key === 'getGPURendererTagMask') return () => undefined;
+    throw new Error(`Inactive grouping accessed system.${String(key)}`);
+  },
+});
+for (const options of [{}, { count: -1, ratio: 1 }, { count: Infinity, ratio: 1 },
+  { count: 1000, ratio: 1 }, { count: -1, ratio: 0.999 }]) {
+  const inactive = new GPUCapture(options);
+  assert.equal(inactive._gpuGrouping, undefined, 'Construction does not create GPU spatial helpers');
+  inactive.update(population, spatialGuard);
+  assert.ok(inactive.output.every((p, i) => p === population[i]), 'CPU identity path preserves original particles');
+  const buffers = createGPUParticleBufferState(population);
+  inactive.updateGPU(buffers, spatialGuard);
+  assert.equal(inactive.buffers, buffers, 'GPU identity path forwards original buffers');
+  assert.equal(inactive._gpuGrouping, undefined, 'GPU identity path never constructs spatial helpers');
+  // Disabling grouping after prior use must not call a retained helper either.
+  let releases = 0;
+  inactive._gpuGrouping = { prepare() { throw new Error('Inactive grouping invoked spatial preparation'); }, reset() { releases++; } };
+  inactive.updateGPU(buffers, spatialGuard);
+  inactive.reset();
+  assert.equal(releases, 1);
+  assert.equal(inactive._gpuGrouping, undefined, 'Reset releases the old helper and restores lazy state');
+  buffers.dispose();
+}
+const empty = new GPUCapture({ count: 1, ratio: 0.1 });
+const emptyBuffers = createGPUParticleBufferState([]);
+empty.updateGPU(emptyBuffers, spatialGuard);
+assert.equal(empty._gpuGrouping, undefined, 'An empty population does not create spatial helpers');
+emptyBuffers.dispose(); empty.reset();
 const snapshots = population.map(p => p.snapshot());
 const r = new Capture({ count: 7 });
 const signature = output => output.map(p => [p.id, ...p.position.toArray(), ...p.color.toArray(), p.alpha, p.mass, p.contribution]);

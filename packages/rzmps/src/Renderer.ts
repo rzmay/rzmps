@@ -1,5 +1,5 @@
 import Particle from './Particle';
-import groupRendererParticles from './helpers/groupRendererParticles';
+import groupRendererParticles, { rendererGroupCount } from './helpers/groupRendererParticles';
 import GPURendererGrouping from './gpu/RendererGrouping';
 import ParticleSystem from './ParticleSystem';
 import type { StrictMultiple } from './types/Multiple';
@@ -63,7 +63,7 @@ export default abstract class Renderer {
   set count(value: number) { this._groupCount = value; }
   /** Event-oriented renderers retain their existing ratio selection policy. */
   protected get groupingRatio(): number { return this.ratio; }
-  private readonly _gpuGrouping = new GPURendererGrouping();
+  private _gpuGrouping?: GPURendererGrouping;
   children: RendererChildrenOptions;
   compensation: CompensationMode | `${CompensationMode}`;
   private readonly _gpuQuality = uniform(1, 'float');
@@ -264,16 +264,21 @@ export default abstract class Renderer {
   ): void {
     if (!this.supportsGPUInput) throw new Error('This particle renderer does not support GPU particle buffers.');
     this._usesGPUChildren = !this.updateGPUUsesCPUReadback;
-    const grouped = this._gpuGrouping.prepare(buffers, system, this._groupCount,
-      this.groupingRatio, this.groupingRadius, system.getGPURendererTagMask(this.tags));
+    // A non-reducing policy cannot benefit from grouping, including when only a
+    // subset of GPU slots is eligible. Do not even construct the spatial helper.
+    const needsGrouping = rendererGroupCount(buffers.count, this._groupCount, this.groupingRatio) < buffers.count;
+    const grouping = needsGrouping ? (this._gpuGrouping ??= new GPURendererGrouping()) : undefined;
+    const tagMask = system.getGPURendererTagMask(this.tags);
+    const grouped = grouping?.prepare(buffers, system, this._groupCount,
+      this.groupingRatio, this.groupingRadius, tagMask) ?? buffers;
     if (grouped !== buffers && this.updateGPUUsesCPUReadback) {
       this._usesGPUChildren = false;
       if (!this._gpuReadbackPending) {
         const sequence = ++this._gpuReadbackSequence;
         this._gpuReadbackPending = true;
-        void this._gpuGrouping.readback().then(particles => {
+        void grouping!.readback().then(particles => {
           if (sequence !== this._gpuReadbackSequence) return;
-          this.preparePopulation(this._gpuGrouping.eligibleCount);
+          this.preparePopulation(grouping!.eligibleCount);
           this.updateView(particles, particles, system, deltaTime);
         }).finally(() => {
           if (sequence === this._gpuReadbackSequence) this._gpuReadbackPending = false;
@@ -288,7 +293,7 @@ export default abstract class Renderer {
       this.children,
       this.compensation,
       this.version,
-      system.getGPURendererTagMask(this.tags),
+      tagMask,
     );
     this._updateGPU(visual, system, deltaTime);
   }
@@ -365,7 +370,8 @@ export default abstract class Renderer {
     this._usesGPUChildren = false;
     this.cancelGPUSelectiveReadback();
     this._gpuChildren.reset();
-    this._gpuGrouping.reset();
+    this._gpuGrouping?.reset();
+    this._gpuGrouping = undefined;
   }
 
   // Cleanup

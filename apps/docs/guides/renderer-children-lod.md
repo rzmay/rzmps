@@ -33,6 +33,13 @@ Increasing quality allows ordinary emission to restore density. Finite bursts ma
 representatives. Sprites and meshes default to `count: -1` (unlimited), `ratio: 1`,
 and `groupingRadius: -1` (unbounded). Lights default to `count: 50`.
 
+The unlimited-count, ratio-one policy bypasses grouping entirely: no octree or
+spatial grid is constructed, requested, rebuilt or queried for grouping. The GPU
+helper is created lazily only when the configured target can reduce the input.
+Empty populations also bypass it. A retained helper is unused while grouping is
+disabled and is released on renderer reset. Independently enabled Children LOD
+compensation can still request the system's spatial spacing data.
+
 ```ts
 const lights = new LightRenderer({ count: 8, ratio: 0.1, groupingRadius: -1 });
 ```
