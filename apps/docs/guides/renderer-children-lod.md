@@ -111,24 +111,6 @@ weighting formula but may choose different regions and anchors. GPU
 scatter and linked reduction order can vary with scheduling, so float sums and
 identity ties are not bit-for-bit identical between backends.
 
-On November 2, 2026, native Chromium WebGPU on Apple Metal measured these complete GPU
-grouping costs, including spatial construction and final weighted aggregation. Each case
-used ten warmup updates and forty timestamped samples; values are medians in milliseconds.
-The baseline is the preceding histogram/serial-heap implementation on the same machine.
-
-| Live particles / reserved slots | Representatives | Before | Hierarchical |
-| --- | ---: | ---: | ---: |
-| 10,000 / 32,768 | 18 | 0.918 | 0.646 |
-| 10,000 / 32,768 | 128 | 0.951 | 0.380 |
-| 2,000 / 32,768 | 512 | 3.820 | 0.367 |
-| 10,000 / 131,072 | 18 | 0.935 | 0.670 |
-
-These are compute-only measurements, not whole-scene FPS guarantees or a CPU/GPU comparison.
-Reproduce the current workloads with `node tests/visual/renderer-grouping-performance.mjs`;
-the script records adapter details, CPU submission and queue-completed timings, and GPU stages
-to JSON. The optional `--stages` mode changes batching for attribution and should not be used
-for the before/after totals above. Final linked-list aggregation remains a low-K bottleneck.
-
 CPU scene lights read back only the compact GPU aggregates; grouping itself stays
 on GPU. Lights are allocated predictively when the renderer is attached, using
 `ceil(min(count, ratio * system.estimateParticleCount(tags)))`. Negative or infinite
