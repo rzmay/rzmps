@@ -374,7 +374,7 @@ set gpuNative(value): void;
 
 #### Inherited from
 
-[`LightRenderer`](LightRenderer.md).[`gpuNative`](LightRenderer.md#gpunative)
+[`EventReceiver`](EventReceiver.md).[`gpuNative`](EventReceiver.md#gpunative)
 
 ***
 
@@ -1118,7 +1118,7 @@ Returns feature and incompatibility details for GPU-native emission.
 reset(): void;
 ```
 
-Clears timed bursts, movement credit, LOD state, and per-context emission clocks.
+Clears timed bursts, movement credit, LOD state, and instance emission clocks.
 
 #### Returns
 

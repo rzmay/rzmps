@@ -129,7 +129,7 @@ events: readonly string[];
 
 #### Inherited from
 
-[`Emitter`](Emitter.md).[`events`](Emitter.md#events)
+[`EventReceiver`](EventReceiver.md).[`events`](EventReceiver.md#events)
 
 ***
 

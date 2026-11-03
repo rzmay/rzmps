@@ -84,7 +84,7 @@ test('registration/death dispatch once, tag filtering, ratio and predicate selec
   source.dispose(); source.dispose(); frame(system);
   assert.equal(child.particles.length, 3);
   assert.equal(selected.filter(id => id === source.id).length, 2);
-  assert.equal(child.emitters[0]._contextStates.has(source.id), false);
+  assert.equal(child.emitters[0]._instances.get(child.id)?.has(source.id) ?? false, false);
   system.subSystems.get(child).ratio = 0;
   origin(system, { tags: ['pool'] }); frame(system);
   assert.equal(child.particles.length, 3);
@@ -96,15 +96,15 @@ test('source movement retains distance credit and continuous state, loops and ch
   system.addSubSystem(child, { emitContinuous: true, inheritLifetime: 0 });
   const source = origin(system);
   frame(system);
-  const state = child.emitters[0]._contextStates.get(source.id);
+  const state = child.emitters[0]._instances.get(child.id)?.get(source.id);
   source.update({ transform: new THREE.Matrix4().makeTranslation(0.2, 0, 0) }); frame(system);
   assert.equal(child.particles.length, 0);
   source.update({ transform: new THREE.Matrix4().makeTranslation(0.6, 0, 0) }); frame(system);
   assert.equal(child.particles.length, 1);
-  assert.equal(child.emitters[0]._contextStates.get(source.id), state);
+  assert.equal(child.emitters[0]._instances.get(child.id)?.get(source.id), state);
   source.dispose(); frame(system);
   assert.equal(child.particles.length, 1);
-  assert.equal(child.emitters[0]._contextStates.size, 0);
+  assert.equal((child.emitters[0]._instances.get(child.id)?.size ?? 0), 0);
   system.destroy();
 });
 
@@ -150,8 +150,8 @@ test('legacy and named built-in subscriptions create one run; source death runs 
   frame(system, 0.5);
   assert.equal(child.particles.length, 2);
   frame(system, 1);
-  assert.equal(child._emissionRuns.length, 0);
-  assert.equal(child.emitters[0]._contextStates.size, 0);
+  assert.equal([...child._emitterInstances].filter(instance => instance.source.kind === 'snapshot').length, 0);
+  assert.equal((child.emitters[0]._instances.get(child.id)?.size ?? 0), 0);
   system.destroy();
 });
 
@@ -282,7 +282,7 @@ test('source updates preserve simulation-clock loops and independent burst progr
   frame(system, 0.1); assert.equal(child.particles.length, 1);
   source.update({ alpha: 0.8 }); frame(system, 0.5); assert.equal(child.particles.length, 2);
   source.update({ alpha: 0.6 }); frame(system, 0.5); assert.equal(child.particles.length, 3);
-  source.dispose(); assert.equal(child.emitters[0]._contextStates.size, 0);
+  source.dispose(); assert.equal((child.emitters[0]._instances.get(child.id)?.size ?? 0), 0);
   system.destroy();
 });
 
@@ -310,7 +310,7 @@ test('explicit registered collision events preserve impulse rules and capture co
   frame(system, 0.5);
   assert.equal(child.particles.at(-1).scale.x, 2);
   source.emitEvent('collision', { ...hit, impulse: new THREE.Vector3(0, 0.5, 0) });
-  assert.equal(child._emissionRuns.length, 1);
+  assert.equal([...child._emitterInstances].filter(instance => instance.source.kind === 'snapshot').length, 1);
   system.destroy();
 });
 
@@ -327,10 +327,10 @@ test('GPU particles feed CPU continuous predicates through snapshots and release
   system._readGPUContinuousSources(); await Promise.resolve(); await Promise.resolve();
   frame(system);
   assert.equal(child.particles.length, 1);
-  assert.ok(child.emitters[0]._contextStates.has(snapshot.id));
+  assert.ok(child.emitters[0]._instances.get(child.id)?.has(snapshot.id));
   await Promise.resolve(); await Promise.resolve(); alive = false;
   system._readGPUContinuousSources(); await Promise.resolve(); await Promise.resolve();
-  assert.equal(child.emitters[0]._contextStates.has(snapshot.id), false);
+  assert.equal(child.emitters[0]._instances.get(child.id)?.has(snapshot.id) ?? false, false);
   assert.equal(child.particles.length, 1);
   system.destroy();
 });
@@ -392,4 +392,101 @@ test("default parent scope excludes an emitter's own dying particles", () => {
     assert.equal(births, 3, 'only the rocket death starts a burst');
     assert.equal(child.particles.filter(particle => particle.alive).length, 0);
   } finally { parent.destroy(); }
+});
+
+test('shared emitter definitions keep owner clocks, bursts, restart and disposal independent', () => {
+  const emitter = new Emitter({ rate: 4, bursts: { time: 0, count: 1 }, initialValues: { lifetime: 20 } });
+  const first = new ParticleSystem({ emitters: [emitter], renderers: [], gravityModifier: 0 });
+  const second = new ParticleSystem({ emitters: [emitter], renderers: [], gravityModifier: 0 });
+  first.advanceFrames(2, 1 / 4);
+  second.advanceFrames(1, 1 / 4);
+  assert.equal(first.particles.length, 2);
+  assert.equal(second.particles.length, 1);
+  first.start(false);
+  second.advanceFrames(1, 1 / 4);
+  assert.equal(second.particles.length, 2);
+  first.destroy();
+  second.advanceFrames(1, 1 / 4);
+  assert.equal(second.particles.length, 3);
+  second.destroy();
+  assert.equal(emitter._instances.size, 0);
+});
+
+test('live instances reuse their clock while definition changes affect every selected source', () => {
+  const system = root();
+  const first = origin(system, { tags: ['pool'] });
+  const second = origin(system, { tags: ['pool'] });
+  const emitter = new Emitter({ sources: { tags: ['pool'] }, rate: 4, initialValues: { lifetime: 20 } });
+  system.emitters = [emitter];
+  system.advanceFrames(2, 1 / 4);
+  assert.equal(system.particles.length, 2);
+  emitter.rate = 8;
+  system.advanceFrames(1, 1 / 4);
+  assert.equal(system.particles.length, 6);
+  first.dispose();
+  system.advanceFrames(1, 1 / 4);
+  assert.equal(system.particles.length, 8);
+  second.dispose();
+  system.advanceFrames(1, 1 / 4);
+  assert.equal(system.particles.length, 8);
+  assert.equal(system._emitterInstances.size, 0);
+  system.destroy();
+});
+
+test('filtered or removed live bindings retire without retaining their sources', () => {
+  const system = root();
+  const source = origin(system, { tags: ['pool'] });
+  const emitter = new Emitter({ sources: { tags: ['pool'] }, rate: 0, bursts: { time: 0, count: 1 } });
+  system.emitters = [emitter];
+  system.advanceFrames(1, 1 / 10);
+  assert.equal(system.particles.length, 1);
+  source.update({ tags: ['other'] });
+  system.advanceFrames(1, 1 / 10);
+  assert.equal(system._emitterInstances.size, 0);
+  source.update({ tags: ['pool'] });
+  system.advanceFrames(1, 1 / 10);
+  assert.equal(system.particles.length, 2);
+  system.emitters = [];
+  system.advanceFrames(1, 1 / 10);
+  assert.equal(emitter._instances.size, 0);
+  system.destroy();
+});
+
+test('snapshot instances retain event-time inputs after source updates and disposal without a handler', () => {
+  const system = root();
+  const child = effect({ bursts: [{ time: 0, count: 1 }, { time: 0.5, count: 1 }] });
+  system.addSubSystem(child, { onEvent: ['pulse'], inheritColor: 1, inheritAlpha: 1 });
+  const source = origin(system, {
+    transform: new THREE.Matrix4().makeTranslation(2, 0, 0),
+    color: new THREE.Color('red'), alpha: 0.3,
+  });
+  source.emitEvent('pulse');
+  source.update({ transform: new THREE.Matrix4().makeTranslation(99, 0, 0),
+    color: new THREE.Color('blue'), alpha: 1 });
+  frame(system);
+  source.dispose();
+  frame(system, 0.5);
+  assert.equal(child.particles.length, 2);
+  for (const particle of child.particles) {
+    assert.equal(particle.position.x, 2);
+    assert.equal(particle.color.getHexString(), 'ff0000');
+    assert.equal(particle.alpha, 0.3);
+  }
+  system.destroy();
+});
+
+test('instance orchestration preserves custom emitter update overrides', () => {
+  class CustomEmitter extends Emitter {
+    calls = 0;
+    update(...args) {
+      this.calls++;
+      return super.update(...args);
+    }
+  }
+  const emitter = new CustomEmitter({ bursts: { time: 0, count: 1 } });
+  const system = new ParticleSystem({ emitters: [emitter], renderers: [] });
+  system.advanceFrames(2);
+  assert.equal(emitter.calls, 2);
+  assert.equal(system.particles.length, 1);
+  system.destroy();
 });

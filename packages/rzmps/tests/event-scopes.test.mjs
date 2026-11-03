@@ -85,7 +85,7 @@ test('relationship scope overrides replace emitter scope and do not leak through
     first.addSubSystem(child, { eventScope: 'parent' });
     first.emitEvent('pulse', 'parent');
     child.emitEvent('pulse', 'local');
-    child._beginEmitterExecutions();
+    child._updateEmitterInstances();
     assert.deepEqual(emitter.executionContext.events.map(event => event.data), ['parent']);
     assert.equal(emitter.eventScope, 'local');
     assert.equal(child.getEmitterOptions(emitter).eventScope, 'parent');
@@ -95,7 +95,7 @@ test('relationship scope overrides replace emitter scope and do not leak through
     first.emitEvent('pulse', 'old');
     second.emitEvent('pulse', 'new');
     child.emitEvent('pulse', 'local-again');
-    child._beginEmitterExecutions();
+    child._updateEmitterInstances();
     assert.deepEqual(emitter.executionContext.events.map(event => event.data), ['local-again']);
 
     second.removeSubSystem(child);
@@ -115,10 +115,10 @@ test('parent custom-event emission preserves producer identity and does not forw
   try {
     child.emitEvent('pulse', 'child');
     assert.equal(seen.length, 0);
-    assert.equal(child._emissionRuns.length, 0);
+    assert.equal([...child._emitterInstances].filter(instance => instance.source.kind === 'snapshot').length, 0);
     parent.emitEvent('pulse', 'parent');
-    assert.equal(child._emissionRuns.length, 1);
-    child._beginEmitterExecutions();
+    assert.equal([...child._emitterInstances].filter(instance => instance.source.kind === 'snapshot').length, 1);
+    child._updateEmitterInstances();
     assert.equal(emitter.executionContext.events[0], seen[0]);
     assert.equal(seen[0].origin, parent);
   } finally { unsubscribe(); parent.destroy(); }

@@ -1,3 +1,4 @@
+import EmitterInstance from './EmitterInstance';
 import getAttributeVersion from './helpers/getAttributeVersion';
 import { transformPointGPU, transformDirectionGPU, rotateEulerYXZGPU, rotateFromYGPU } from './helpers/gpuTransforms';
 import EventReceiver, { type EventReceiverOptions } from './EventReceiver';
@@ -92,20 +93,10 @@ export interface EmitterOptions extends EventReceiverOptions, Partial<Omit<SubSy
 
 }
 
-interface EmitterContextState {
-  startTime: number;
-  lastSpawn: number;
-  distanceCredit: number;
-  burstCredit: number;
-  lastDistancePosition?: THREE.Vector3;
-  firedBursts: Set<number>;
-  cycle?: number;
-}
-
 export interface EmissionContext {
   /** @internal Live attachment source, separate from the event snapshot. */
   source?: import('./EmissionSource').SubSystemSource;
-  /** Stable root or subsystem run identity. */
+  /** Stable identity of this emitter execution. */
   key: string;
   transform: THREE.Matrix4;
   position: THREE.Vector3;
@@ -207,8 +198,8 @@ class Emitter extends EventReceiver {
 
   private _lastTagIndex: number = 0;
 
-  // Used for subsystems
-  private _contextStates = new Map<string, EmitterContextState>();
+  // Owner-specific lookup; each entry is the execution itself, with no parallel context-state map.
+  private readonly _instances = new Map<number, Map<string, EmitterInstance>>();
 
   get emitContinuous(): SubSystemOptions['emitContinuous'] | undefined { return this.emission.emitContinuous; }
   set emitContinuous(value: SubSystemOptions['emitContinuous'] | undefined) { this.emission.emitContinuous = value; }
@@ -316,13 +307,15 @@ class Emitter extends EventReceiver {
     * CONTROLS
   */
 
-  /** Clears timed bursts, movement credit, LOD state, and per-context emission clocks. */
+  /** Clears timed bursts, movement credit, LOD state, and instance emission clocks. */
   public reset(): void {
     this.bursts.forEach((burst) => {
       burst.fired = false;
     });
 
-    this._contextStates.clear();
+    for (const instances of this._instances.values()) {
+      for (const instance of instances.values()) instance.reset();
+    }
   }
 
   /** Whether the current source and emission configuration support GPU-native births. */
@@ -929,17 +922,27 @@ class Emitter extends EventReceiver {
   }
 
   /** Emits births for the supplied simulation context and returns the newly created particles. */
+  update(particles: Particle[], context: Partial<EmissionContext>, particleSystem: ParticleSystem): Particle[];
+  /** @internal The coordinator can reuse its resolved instance without another identity lookup. */
+  update(
+    particles: Particle[], context: Partial<EmissionContext>, particleSystem: ParticleSystem, instance: EmitterInstance,
+  ): Particle[];
   update(
     particles: Particle[],
     context: Partial<EmissionContext>,
     particleSystem: ParticleSystem,
+    instance?: EmitterInstance,
   ): Particle[] {
+    const state = instance ?? this.getInstance(particleSystem, context.key ?? '__default');
     const now = Date.now();
     this.normalizeBurstTimes();
     const elapsedMilliseconds = context.elapsedTime === undefined
       ? undefined
       : context.elapsedTime * 1000;
-    const state = this.getContextState(context.key ?? '__default', elapsedMilliseconds ?? now);
+    if (state.startTime === undefined) {
+      state.startTime = elapsedMilliseconds ?? now;
+      state.lastSpawn = state.startTime;
+    }
     const duration = context.duration ?? particleSystem.duration;
     const elapsedTime = context.elapsedTime ?? ((now - state.startTime) / 1000);
     let time = context.time ?? (duration <= 0 ? 1 : elapsedTime / duration);
@@ -1032,23 +1035,46 @@ class Emitter extends EventReceiver {
     });
   }
 
-  clearContext(key: string) {
-    this._contextStates.delete(key);
+  clearContext(key: string): void;
+  /** @internal Retires a binding without disturbing another owner of this emitter. */
+  clearContext(key: string, system: ParticleSystem): void;
+  clearContext(key: string, system?: ParticleSystem): void {
+    const owners = system ? [this._instances.get(system.id)] : this._instances.values();
+    for (const instances of owners) {
+      if (!instances) continue;
+      const instance = instances.get(key);
+      if (instance) instance.active = false;
+      instances.delete(key);
+    }
   }
 
-  private getContextState(key: string, startTime: number): EmitterContextState {
-    let state = this._contextStates.get(key);
-    if (!state) {
-      state = {
-        startTime,
-        lastSpawn: startTime,
-        distanceCredit: 0,
-        burstCredit: 0,
-        firedBursts: new Set<number>(),
-      };
-      this._contextStates.set(key, state);
+  /** @internal Returns the execution binding owned by this system and identity. */
+  getInstance(system: ParticleSystem, key: string): EmitterInstance {
+    let instances = this._instances.get(system.id);
+    if (!instances) {
+      instances = new Map();
+      this._instances.set(system.id, instances);
     }
-    return state;
+    let instance = instances.get(key);
+    if (!instance) {
+      instance = new EmitterInstance(this, key);
+      instances.set(key, instance);
+    }
+    return instance;
+  }
+
+  /** @internal Releases an execution without affecting another owner of this definition. */
+  releaseInstance(system: ParticleSystem, instance: EmitterInstance): void {
+    const instances = this._instances.get(system.id);
+    if (instances?.get(instance.key) === instance) instances.delete(instance.key);
+    if (instances?.size === 0) this._instances.delete(system.id);
+    instance.active = false;
+  }
+
+  /** @internal Releases this owner's clocks, including direct update() contexts. */
+  releaseInstances(system: ParticleSystem): void {
+    for (const instance of this._instances.get(system.id)?.values() ?? []) instance.active = false;
+    this._instances.delete(system.id);
   }
 
   private _getDistancePosition(context: Partial<EmissionContext>): THREE.Vector3 | undefined {

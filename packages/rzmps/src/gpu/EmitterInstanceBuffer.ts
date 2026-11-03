@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import type { GPUAllocationWriter } from './AllocationBuffer';
 import { StorageBufferAttribute } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
-import { atomicAdd, atomicLoad, atomicStore, storage, uint } from 'three/tsl';
+import { atomicAdd, atomicLoad, atomicStore, Loop, storage, uint } from 'three/tsl';
 import {
   enumValueCount,
   initializeStorageAttribute,
@@ -51,6 +52,10 @@ export interface GPUEmitterInstanceRecord {
   lastDistancePosition: THREE.Vector3;
   duration: number;
 }
+
+/** Indexed execution state: standalone entry, live source slot, or event snapshot slot.
+ * Bindings differ, but timing, request submission and retirement use the same runtime.
+ */
 export class GPUEmitterInstanceRuntime {
   readonly timing: Node<'vec4'>;
   readonly distance: Node<'vec4'>;
@@ -108,6 +113,21 @@ export class GPUEmitterInstanceRuntime {
         : this.uintOffset.add(slot),
     );
     return packed[['x', 'y', 'z', 'w'][overflowIndex % 4] as 'x' | 'y' | 'z' | 'w'];
+  }
+
+  /** @internal Submit this instance's births to its emitter's shared allocation/birth pass. */
+  queueBirths(writer: GPUAllocationWriter, destination: GPUEmitterInstanceRuntime, sourceIndex: Node<'uint'>): void {
+    const count = this.requestCount();
+    const offset = destination.reserveRequestCount(count);
+    Loop({ start: 0, end: count, type: 'uint' }, ({ i }) => {
+      writer.storeEmissionSource(offset.add(i), sourceIndex);
+    });
+  }
+
+  /** @internal A reused slot starts a fresh clock and burst state on its next preparation. */
+  retire(): void {
+    this.identity.x.assign(uint(0));
+    this.resetRequestCount(uint(0));
   }
 
   private counter(index: number): Node<'uint'> {

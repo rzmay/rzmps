@@ -67,36 +67,8 @@ export function parseOptions(args) {
 
 let demoBuild;
 export async function capturePreview(options) {
-  const retryWarnings = [];
-  const maxAttempts = 3;
-  const label = `Preview "${options.example}" (${options.backend})`;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await capturePreviewAttempt(options, attempt, retryWarnings);
-    } catch (error) {
-      // Dawn can lose its instance on headless runners. Retry the complete capture on a fresh browser.
-      const description = `${error.name ?? ''}: ${error.message ?? String(error)}`;
-      const deviceLost = description.includes('A valid external Instance reference no longer exists')
-        || description.includes('Instance dropped in popErrorScope');
-      if (!deviceLost) throw error;
-      if (attempt === maxAttempts) {
-        throw new Error(`${label} failed after ${attempt} attempts: ${description}`, {
-          cause: error,
-        });
-      }
-
-      const warning = `${label} lost its WebGPU instance; retrying capture `
-        + `(${attempt + 1}/${maxAttempts}): ${description}`;
-      retryWarnings.push(warning);
-      console.warn(warning);
-    }
-  }
-}
-
-async function capturePreviewAttempt(options, attempt, retryWarnings) {
   const root = path.resolve(import.meta.dirname, '../..');
-  const diagnostics = { warnings: [...retryWarnings], errors: [] };
+  const diagnostics = { warnings: [], errors: [] };
   await fs.mkdir(options.output, { recursive: true });
   // Replace artifacts owned by this tool, preserving unrelated user files.
   for (const file of await fs.readdir(options.output)) {
@@ -106,7 +78,6 @@ async function capturePreviewAttempt(options, attempt, retryWarnings) {
   const metadata = {
     ...options,
     status: 'initializing',
-    attempts: attempt,
     determinism: {
       seededMathRandom: true,
       limitations: [
@@ -139,10 +110,7 @@ async function capturePreviewAttempt(options, attempt, retryWarnings) {
     const address = server.httpServer.address();
     const args = ['--disable-dev-shm-usage', '--enable-unsafe-webgpu', '--autoplay-policy=no-user-gesture-required'];
     if (process.env.CI === 'true') {
-      args.push(
-        '--no-sandbox', '--disable-setuid-sandbox', '--use-gl=angle', '--use-angle=swiftshader',
-        '--enable-unsafe-swiftshader', '--use-webgpu-adapter=swiftshader', '--use-gpu-in-tests',
-      );
+      args.push('--no-sandbox', '--disable-setuid-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader');
     } else args.push('--use-angle=default');
     browser = await puppeteer.launch({
       headless: true,

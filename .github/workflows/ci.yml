@@ -39,9 +39,6 @@ jobs:
       - name: Build packages
         run: npm run build:modules
 
-      - name: Check preview device-loss recovery
-        run: node --test tests/visual/preview-recovery.test.mjs
-
       - name: Build demo
         run: npm run build --workspace demo
 
