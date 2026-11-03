@@ -7,7 +7,7 @@ import type { StrictMultiple } from './types/Multiple';
 import type { Tag } from './types/Tag';
 import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
-import type { DynamicUntimedValue } from './types/DynamicValue';
+import type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
 import type { ValueByParameter } from './types/ValueByParameter';
 import { MathUtils, Vector3 } from 'three';
 import seedrandom from 'seedrandom';
@@ -29,7 +29,7 @@ export enum CompensationMode {
 export interface RendererChildrenOptions {
   /** Additional visual copies. Counts are floored and clamped to nonnegative integers. */
   count?: DynamicUntimedValue<number>;
-  radius?: number;
+  radius?: DynamicValue<number>;
   /** Radial multiplier; numeric values are constant. */
   scale?: ValueByParameter<number>;
   /** Radial multiplier; numeric values are constant. */
@@ -201,7 +201,21 @@ export default abstract class Renderer extends EventReceiver {
       const count = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
       childCounts[i] = count;
       for (let child = 0; child < count; child++) {
-        visible.push(this.generateChild(parent, child, Math.max(0, this.children.radius ?? 0), true));
+        visible.push(
+          this.generateChild(
+            parent,
+            child,
+            Math.max(
+              0,
+              evaluateDynamicNumber(
+                this.children.radius,
+                parent.time,
+                `${parent.id}:${child}`
+              ) ?? 0
+            ),
+            true
+          )
+        );
       }
     }
 

@@ -59,7 +59,7 @@ optional radialFalloff?: (parameter) => number;
 ### radius?
 
 ```ts
-optional radius?: number;
+optional radius?: DynamicValue<number>;
 ```
 
 ***

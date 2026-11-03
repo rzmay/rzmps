@@ -202,7 +202,9 @@ export default class GPURendererChildren {
             const child = copy(instanceIndex, destination, true);
             mapping.element(destination.sub(originalCount)).assign(uvec2(instanceIndex, i));
             const childSeed = seedFor(id, i, 0x72656e64);
-            const radius = float(Math.max(0, options.radius ?? 0));
+            const radius = this.parameters.number(
+              'children.radius', () => this.options.radius, parent.time, 0, childSeed,
+            ).max(0);
             const delta = offset(childSeed, radius);
             child.position.addAssign(delta);
             const d = radius.greaterThan(float(0)).select(delta.length().div(radius.max(1e-8)), float(0));
