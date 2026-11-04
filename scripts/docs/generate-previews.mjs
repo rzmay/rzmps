@@ -4,7 +4,9 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { discoverExamples, root } from './examples.mjs';
-import { checksum, previewDirectory, previewInputs, readPreviewManifest } from './preview-manifest.mjs';
+import {
+  checksum, previewDirectory, previewInputs, readPreviewManifest, previewIsCurrent,
+} from './preview-manifest.mjs';
 export async function generatePreviews({ force = false } = {}) {
   const examples = discoverExamples();
   const inputs = previewInputs(examples);
@@ -16,7 +18,7 @@ export async function generatePreviews({ force = false } = {}) {
     const destination = path.join(previewDirectory,example.id+'.png');
     const entry = manifest.examples[example.id];
     const current = await fs.readFile(destination).catch(() => null);
-    if (!force && entry?.inputHash === inputs.get(example.id) && current && entry.imageHash === checksum(current)) {
+    if (!force && previewIsCurrent(entry, inputs.get(example.id), current)) {
       console.log(`${example.id}: preview is current`);
       continue;
     }

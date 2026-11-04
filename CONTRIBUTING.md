@@ -19,8 +19,9 @@ reports in the READMEs, generates and validates documentation, and builds the de
 It stops at the first failure and checks staged and unstaged whitespace at the end.
 Install the browser once with `npx puppeteer browsers install chrome`.
 
-Review and commit the updated README benchmark tables and generated documentation
-with your source changes. The GitHub runner's cross-branch PR benchmarks remain a
+Review and commit the updated README benchmark tables, generated documentation, and
+`apps/docs/public/previews/` images and manifest with your source changes. CI and deployment
+validate committed previews and reject missing or stale captures without launching Chrome. The GitHub runner's cross-branch PR benchmarks remain a
 separate, unchanged process. This command does not create local PR comparison results.
 
 See the [code of conduct](.github/CODE_OF_CONDUCT.md).

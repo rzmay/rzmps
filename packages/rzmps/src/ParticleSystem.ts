@@ -841,6 +841,16 @@ class ParticleSystem extends THREE.Object3D {
     return overrideEmitterOptions({ ...emitter.emission, eventScope: emitter.eventScope }, overrides, this.isSubSystem);
   }
 
+  /** Checks subscription settings before building complete emission options. */
+  private _emitterHasEvents(emitter: Emitter): boolean {
+    const overrides = this._subSystemParent?._subSystemOverrides.get(this);
+    return !!((overrides?.events ?? emitter.emission.events ?? emitter.events).length
+      || (overrides?.onEvent ?? emitter.onEvent)
+      || (overrides?.emitOnSpawn ?? emitter.emitOnSpawn)
+      || (overrides?.emitOnDeath ?? emitter.emitOnDeath)
+      || (overrides?.emitOnCollision ?? emitter.emitOnCollision));
+  }
+
   private _emitterEventNames(emitter: Emitter): string[] {
     const options = this.getEmitterOptions(emitter);
     return [...new Set([...(options.events ?? emitter.events), ...eventNames(options.onEvent),
@@ -874,6 +884,7 @@ class ParticleSystem extends THREE.Object3D {
     const root = this._eventRoot();
     const route = (owner: ParticleSystem) => {
       for (const emitter of owner.emitters) {
+        if (!owner._emitterHasEvents(emitter)) continue;
         if (!emitter.visibleSystems(owner).includes(event.origin)) continue;
         const options = owner.getEmitterOptions(emitter);
         if (!owner._subscribes(options, event.name)) continue;
@@ -903,6 +914,9 @@ class ParticleSystem extends THREE.Object3D {
     const reconcile = (system: ParticleSystem) => {
       for (const component of [...system.modules.flatMap(module => module.withDependents()),
         ...system.renderers, ...system.emitters]) {
+        // Empty receivers need no producer resolution. Retain reconciliation when clearing subscriptions.
+        if (!component.events.length && !component.subscriptions.length
+          && (!(component instanceof Emitter) || !system._emitterHasEvents(component))) continue;
         component.gpuNative = system.gpuProcessing
           && ParticleSystem.isWebGPURenderer(system.sceneRenderer ?? root.sceneRenderer)
           && (component instanceof Renderer ? component.supportsGPUEventInput

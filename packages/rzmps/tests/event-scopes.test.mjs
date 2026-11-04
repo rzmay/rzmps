@@ -144,3 +144,41 @@ test('sub-particle birth tags come from its emitter, independently of particle a
     } finally { parent.destroy(); }
   }
 });
+
+test('empty receivers discover subscriptions added between updates and release removed names', () => {
+  const receiver = new Module(() => {});
+  const owner = system({ modules: [receiver] });
+  try {
+    owner.advanceFrames(1);
+    receiver.events = ['pulse'];
+    owner.emitEvent('pulse', 42);
+    assert.equal(receiver.beginExecution(owner, 0).events[0].data, 42);
+    receiver.events = [];
+    owner.emitEvent('pulse', 99);
+    assert.equal(receiver.beginExecution(owner, 0).events.length, 0);
+    const emitter = new Emitter({ rate: 0 });
+    owner.emitters = [emitter];
+    emitter.emission.events = ['pulse'];
+    owner.emitEvent('pulse', 7);
+    owner.advanceFrames(1);
+    assert.equal(emitter.executionContext.events[0].data, 7);
+  } finally { owner.destroy(); }
+});
+
+test('initially empty emitter subscriptions discover relationship changes between updates', () => {
+  const parent = system();
+  const emitter = new Emitter({ bursts: { time: 0, count: 1 }, initialValues: { lifetime: 10 } });
+  const child = system({ emitters: [emitter], duration: 0.1 });
+  parent.addSubSystem(child, { emitContinuous: false, emitOnSpawn: false });
+  try {
+    parent.advanceFrames(1);
+    parent.subSystems.get(child).emitOnSpawn = true;
+    parent.registerEmissionSource({});
+    parent.advanceFrames(1);
+    assert.equal(child.particles.length, 1);
+    parent.subSystems.get(child).emitOnSpawn = false;
+    parent.registerEmissionSource({});
+    parent.advanceFrames(1);
+    assert.equal(child.particles.length, 1);
+  } finally { parent.destroy(); }
+});

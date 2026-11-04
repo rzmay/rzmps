@@ -179,10 +179,9 @@ if (!check) {
   // Renamed API sections must not leave empty folders in editors or prompt status caches.
   for (const directory of generatedDirs) removeEmptySubdirectories(path.join(root, directory));
 }
-// Previews are ignored build artifacts, so checks rebuild them too. Write the registry
-// first so newly discovered factories are available to the capture harness.
+// Committed previews are validated during builds; browser capture is an explicit local generation step.
 if (!skipPreviews) {
-  await generatePreviews();
+  if (!check) await generatePreviews();
   validatePreviews(examples);
 }
 console.log(`${check?'Checked':'Generated'} documentation for ${examples.length} shared examples and ${outputs.size} derived files.`);

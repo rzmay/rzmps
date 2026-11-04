@@ -8,11 +8,11 @@ import { root, discoverExamples } from '../../scripts/docs/examples.mjs';
 import { previewDirectory, validatePreviews } from '../../scripts/docs/preview-manifest.mjs';
 
 const run = promisify(execFile);
-test('docs checks repair missing and stale real previews, then generation reuses current captures', {
+test('docs checks reject stale previews without a browser; explicit generation repairs and reuses captures', {
   timeout: 300000,
 }, async () => {
   const generate = () => run('npm', ['run', 'docs:generate'], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
-  // A clean checkout has no previews until the first generation.
+  // Explicit generation is available locally; builds consume the committed captures.
   await generate();
   const manifestFile = path.join(previewDirectory, 'manifest.json');
   const manifest = await fs.readFile(manifestFile);
@@ -25,9 +25,14 @@ test('docs checks repair missing and stale real previews, then generation reuses
     const stale = JSON.parse(manifest);
     stale.examples.smoke.inputHash = 'outdated-source';
     await fs.writeFile(manifestFile, JSON.stringify(stale));
-    const repaired = await run('npm', ['run', 'docs:generate', '--', '--check'], {
+    const checked = () => run('npm', ['run', 'docs:generate', '--', '--check'], {
       cwd: root, maxBuffer: 8 * 1024 * 1024,
+      env: { ...process.env, PUPPETEER_EXECUTABLE_PATH: '/nonexistent-preview-browser' },
     });
+    await assert.rejects(checked(), error => /missing or stale preview/.test(error.stderr)
+      && /commit apps\/docs\/public\/previews/.test(error.stderr));
+    await assert.rejects(fs.access(path.join(previewDirectory, 'fire.png')));
+    const repaired = await generate();
     assert.equal((repaired.stdout.match(/Captured 1 webgl frames/g) || []).length, 2);
     validatePreviews(discoverExamples());
     for (const id of affected) {
@@ -36,11 +41,13 @@ test('docs checks repair missing and stale real previews, then generation reuses
       assert.ok(png.length > 1000);
     }
     assert.equal((await fs.stat(unchanged)).mtimeMs, before.mtimeMs, 'unaffected PNG must not be rewritten');
+    const verified = await checked();
+    assert.doesNotMatch(verified.stdout, /Captured \d+|> .*build:modules/);
     const reused = await generate();
     assert.doesNotMatch(reused.stdout, /Captured \d+|> .*build:modules/);
     assert.equal((reused.stdout.match(/preview is current/g) || []).length, discoverExamples().length);
   } finally {
-    // Restore the local preview cache after the repair checks.
+    // Restore the reviewed previews after the repair checks.
     for (const [index, id] of affected.entries()) {
       await fs.writeFile(path.join(previewDirectory, id + '.png'), originals[index]);
     }
