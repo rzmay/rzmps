@@ -29,7 +29,18 @@ export async function generatePreviews({ force = false } = {}) {
     try {
       const config = { ...settings.defaults, ...settings.examples[example.id], example:example.id, output };
       const options = capture.parseOptions(Object.entries(config).flatMap(([key,value]) => ['--'+key,String(value)]));
-      const result = await capture.capturePreview(options);
+      let result;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          result = await capture.capturePreview(options);
+          break;
+        } catch (error) {
+          if (options.backend !== 'webgpu' || attempt === 3
+            || !error?.message?.includes('A valid external Instance reference no longer exists')) throw error;
+          // capturePreview closes its browser before rejecting, so every retry starts fresh.
+          console.warn(`${example.id}: WebGPU device lost; retrying preview (${attempt + 1}/3) in a fresh browser.`);
+        }
+      }
       const image = await fs.readFile(path.join(output,'frame-000.png'));
       await fs.writeFile(destination,image);
       manifest.examples[example.id] = {

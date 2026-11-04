@@ -110,7 +110,10 @@ export async function capturePreview(options) {
     const address = server.httpServer.address();
     const args = ['--disable-dev-shm-usage', '--enable-unsafe-webgpu', '--autoplay-policy=no-user-gesture-required'];
     if (process.env.CI === 'true') {
-      args.push('--no-sandbox', '--disable-setuid-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader');
+      args.push(
+        '--no-sandbox', '--disable-setuid-sandbox', '--use-gl=angle', '--use-angle=swiftshader',
+        '--enable-unsafe-swiftshader', '--use-webgpu-adapter=swiftshader', '--use-gpu-in-tests',
+      );
     } else args.push('--use-angle=default');
     browser = await puppeteer.launch({
       headless: true,
