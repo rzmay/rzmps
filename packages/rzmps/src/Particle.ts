@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import * as THREE from 'three';
+import { transformParticleFrame } from './helpers/simulationFrame';
 import type { Tag } from './types/Tag';
 
 export interface ParticleOptions {
@@ -30,6 +31,8 @@ export interface ParticleNoiseValues {
   noise4d: number;
 }
 
+// Ownership stays outside serializable/cloned particle attributes.
+const eventOwners = new WeakMap<Particle, { emitEvent(id: string, event: string, data?: unknown): void }>();
 /** Mutable particle state with separate birth and cached permanent values. */
 class Particle {
   position: THREE.Vector3;
@@ -134,6 +137,17 @@ class Particle {
     this.data = {};
   }
 
+  /** Dispatches a named event through this simulated particle's owner. */
+  emitEvent(event: string, data?: unknown): this {
+    eventOwners.get(this)?.emitEvent(this.id, event, data);
+    return this;
+  }
+
+  /** @internal */
+  setEventOwner(owner: { emitEvent(id: string, event: string, data?: unknown): void }): void {
+    eventOwners.set(this, owner);
+  }
+
   cache() {
     this._cachedValues = this.writeValues(this._cachedValues);
   }
@@ -166,6 +180,13 @@ class Particle {
 
   snapshot(): ParticleCachedValues {
     return this.writeValues();
+  }
+
+  /** @internal Changes the reference frame without losing birth or cached permanent values. */
+  transformSimulationFrame(matrix: THREE.Matrix4): void {
+    transformParticleFrame(this, matrix);
+    transformParticleFrame(this._start, matrix);
+    if (this._cachedValues) transformParticleFrame(this._cachedValues, matrix);
   }
 
   kill(): void {

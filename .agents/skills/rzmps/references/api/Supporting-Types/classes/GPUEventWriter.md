@@ -15,7 +15,7 @@
 ### Constructor
 
 ```ts
-new GPUEventWriter(state): GPUEventWriter;
+new GPUEventWriter(state, origin?): GPUEventWriter;
 ```
 
 #### Parameters
@@ -23,6 +23,10 @@ new GPUEventWriter(state): GPUEventWriter;
 ##### state
 
 [`GPUEventBufferState`](../../classes/GPUEventBufferState.md)
+
+##### origin?
+
+`number` = `0`
 
 #### Returns
 
@@ -100,6 +104,38 @@ emitDeath(particle): void;
 ##### particle
 
 [`GPUParticleLike`](../../interfaces/GPUParticleLike.md)
+
+#### Returns
+
+`void`
+
+***
+
+<a id="emitparticleevent"></a>
+
+### emitParticleEvent()
+
+```ts
+emitParticleEvent(
+   type,
+   particle,
+   payload?
+): void;
+```
+
+#### Parameters
+
+##### type
+
+`number`
+
+##### particle
+
+[`GPUParticleLike`](../../interfaces/GPUParticleLike.md)
+
+##### payload?
+
+[`GPUEventPayload`](../../type-aliases/GPUEventPayload.md)
 
 #### Returns
 

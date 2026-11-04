@@ -94,6 +94,34 @@ Fraction of post-bounce velocity removed at contact, clamped from zero to one.
 
 ***
 
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`events`](EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
+
+***
+
 <a id="lifetimeloss"></a>
 
 ### lifetimeLoss
@@ -187,6 +215,32 @@ optional onCollision?: CollisionListener;
 ```
 
 Synchronous callback invoked for a reported particle contact.
+
+***
+
+<a id="prepare"></a>
+
+### prepare?
+
+```ts
+optional prepare?: (context) => void;
+```
+
+Shared preparation work, called once before processing particles.
+
+#### Parameters
+
+##### context
+
+[`ModuleExecutionContext`](ModuleExecutionContext.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`prepare`](ModuleOptions.md#prepare)
 
 ***
 

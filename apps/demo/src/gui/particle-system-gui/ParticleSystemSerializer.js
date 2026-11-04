@@ -8,6 +8,7 @@ import {
     EndBehavior,
     LightRenderer,
     MeshRenderer,
+    Module,
     NoiseModule,
     OrientToDirection,
     SpriteRenderer,
@@ -83,6 +84,9 @@ export class ParticleSystemSerializer {
             `  gravityModifier: ${this.serializeValue(system.gravityModifier)},`,
             `  inheritVelocity: ${this.serializeValue(system.inheritVelocity)},`,
             `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
+            `  simulationSpaceTransform: ${this.serializeValue(system.simulationSpaceTransform instanceof THREE.Object3D
+                ? system.simulationSpaceTransform.matrixWorld : system.simulationSpaceTransform)},`,
+            `  sourceLoss: ${JSON.stringify(system.sourceLoss)},`,
             `  useSpatialEffects: ${this.serializeValue(system.useSpatialEffects)},`,
             `  spatialEffectBoundsFiltering: ${this.serializeValue(system.spatialEffectBoundsFiltering)},`,
             `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
@@ -125,6 +129,7 @@ export class ParticleSystemSerializer {
 
     serializeSubSystemOptions(options) {
         return this.serializeValue({
+            eventScope: options.eventScope,
             shouldEmit: options.shouldEmit,
             ratio: options.ratio,
             emitContinuous: options.emitContinuous,
@@ -238,6 +243,25 @@ export class ParticleSystemSerializer {
                 ...this.getLODOptions(module),
                 tags: module.tags,
             })})`;
+        }
+
+        if (module.constructor === Module) {
+            // Export constructor inputs, never the live octree/grid and their cyclic particle references.
+            const options = this.serializeValue({
+                priority: module.priority,
+                tags: module.tags,
+                events: module.events,
+                eventScope: module.eventScope,
+                prepare: module._prepare,
+                condition: module.condition,
+                conditionGPU: module.conditionGPU,
+                modifyGPU: module.modifyGPU,
+                useOctree: module.useOctree,
+                octreeOptions: module.octreeOptions,
+                useSpatialGrid: module.useSpatialGrid,
+                spatialGridOptions: module.spatialGridOptions,
+            });
+            return `new Module(${this.serializeFunction(module._modify)}, ${options})`;
         }
 
         const runtime = module;
@@ -432,6 +456,7 @@ export class ParticleSystemSerializer {
 
     getSerializableRuntimeOptions(target) {
         const hidden = new Set([
+            'executionContext', 'gpuExecutionContext',
         ]);
         return Object.fromEntries(
             Object.entries(target).filter(([key]) => !key.startsWith('_') && !hidden.has(key)),
@@ -620,6 +645,8 @@ export class ParticleSystemSerializer {
             return String(value);
         if (typeof value === 'function')
             return this.serializeFunction(value);
+        if (value instanceof THREE.Matrix4)
+            return `new THREE.Matrix4().fromArray(${JSON.stringify(value.elements)})`;
         if (value instanceof THREE.Vector3)
             return `new THREE.Vector3(${value.x}, ${value.y}, ${value.z})`;
         if (value instanceof THREE.Box3)
@@ -650,7 +677,12 @@ export class ParticleSystemSerializer {
     }
 
     serializeFunction(value) {
-        const source = value.toString();
+        let source = value.toString();
+        // Object-method shorthand needs a function expression when emitted as a property value.
+        if (/^(?:async\s+)?[\w$]+\s*\([^)]*\)\s*\{/.test(source)
+            && !/^(?:async\s+)?function\b/.test(source)) {
+            source = source.replace(/^(async\s+)?/, '$1function ');
+        }
         if (/\bEasing\./.test(source)) {
             this.usesEasing = true;
         }

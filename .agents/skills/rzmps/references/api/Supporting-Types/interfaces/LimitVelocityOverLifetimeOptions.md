@@ -70,6 +70,34 @@ Velocity decay per second, optionally multiplied by size or speed.
 
 ***
 
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](../../interfaces/EventReceiverOptions.md).[`events`](../../interfaces/EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](../../interfaces/EventReceiverOptions.md).[`eventScope`](../../interfaces/EventReceiverOptions.md#eventscope)
+
+***
+
 <a id="limit"></a>
 
 ### limit
@@ -151,6 +179,32 @@ Configures and implicitly enables the managed CPU ParticleOctree.
 #### Inherited from
 
 [`ModuleOptions`](../../interfaces/ModuleOptions.md).[`octreeOptions`](../../interfaces/ModuleOptions.md#octreeoptions)
+
+***
+
+<a id="prepare"></a>
+
+### prepare?
+
+```ts
+optional prepare?: (context) => void;
+```
+
+Shared preparation work, called once before processing particles.
+
+#### Parameters
+
+##### context
+
+[`ModuleExecutionContext`](../../interfaces/ModuleExecutionContext.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`prepare`](../../interfaces/ModuleOptions.md#prepare)
 
 ***
 

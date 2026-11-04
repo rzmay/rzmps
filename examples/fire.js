@@ -7,7 +7,6 @@ import {
   EmissionSource,
   ForceOverLifetime,
   LightRenderer,
-  LimitVelocityOverLifetime,
   ParticleSystem,
   RotationOverLifetime,
   ScaleOverLifetime,
@@ -15,7 +14,6 @@ import {
   TransformByNoise,
   VelocityOverLifetime,
   Textures,
-  Module,
 } from '@rzmps/rzmps';
 import fireSprite from '../apps/demo/src/assets/images/fire_tile_8x4_n32.png?url';
 import warpNormal from '../apps/demo/src/assets/images/warp_norm.jpg?url';
@@ -73,7 +71,10 @@ export default async function createFire() {
       }),
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: (time) =>
+          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
         angularVelocity: [new THREE.Vector3(-0.5, 0, 0), new THREE.Vector3(0.5, 0, 0)],
@@ -166,10 +167,7 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
           scale: options.scale,
           velocity: new THREE.Vector3(0, options.velocity, 0),
           color: '#ffffff',
-          rotation: [
-            new THREE.Vector3(-Math.PI, 0, 0),
-            new THREE.Vector3(Math.PI, 0, 0),
-          ],
+          rotation: [-Math.PI, Math.PI],
         },
       }),
     ],
@@ -190,13 +188,11 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
         },
       }),
       new ColorOverLifetime({
-        alpha: (time) => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)) * (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
+        alpha: (time) => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0,
+          1)) * (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [
-          new THREE.Vector3(-0.45, 0, 0),
-          new THREE.Vector3(0.45, 0, 0),
-        ],
+        angularVelocity: [-0.45, 0.45],
       }),
     ],
     // #endregion docs:modules:2
@@ -222,7 +218,8 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
 export const metadata = {
   "id": "fire",
   "title": "Fire",
-  "description": "Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces.",
+  "description":
+    "Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces.",
   "tags": [
     "fire"
   ],

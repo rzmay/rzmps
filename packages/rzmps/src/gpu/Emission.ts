@@ -113,16 +113,16 @@ export class GPUEmissionRunBufferState {
   load(index: Node<'uint'> | number): GPUEmissionRunNode {
     const particle = this.snapshots.storage.createParticle(
       typeof index === 'number' ? uint(index) : index,
-      true,
+      false,
     );
     return {
       active: particle.alive,
-      eventType: particle.tagMask,
+      eventType: particle.lodPriority,
       elapsed: particle.realtime,
       duration: particle.lifetime,
-      collisionPoint: particle.acceleration,
-      collisionNormal: particle.angularAcceleration,
-      collisionImpulse: particle.scalarAcceleration,
+      collisionPoint: particle.orbitCenter,
+      collisionNormal: particle.rotation,
+      collisionImpulse: particle.scalarVelocity,
       particle,
     };
   }

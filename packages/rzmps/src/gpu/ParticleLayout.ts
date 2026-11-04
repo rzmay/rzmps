@@ -17,6 +17,7 @@ export enum ParticleFloatSlot {
   AngularAcceleration,
   ScalarAcceleration,
   Color,
+  SourceIdentity,
 }
 
 export enum ParticleRenderFloatSlot {

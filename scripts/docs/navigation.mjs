@@ -3,11 +3,19 @@ import path from 'node:path';
 
 // Reading order lives here; displayed titles always come from the article itself.
 export const guideSections = [
-  { text: 'Getting Started', description: 'Build an effect, then extend it with your own behavior.', pages: ['first-particle-system', 'first-module', 'first-spatial-effect'] },
-  { text: 'GPU Processing', description: 'Port custom behavior to GPU compute and understand the GPU execution model.', pages: ['first-gpu-module', 'first-gpu-spatial-effect', 'gpu-processing'] },
-  { text: 'Core Concepts', description: 'Understand how systems and their components work together.', pages: ['concepts', 'dynamic-values', 'module-priority', 'spatial-effects'] },
-  { text: 'Feature Guides', description: 'Apply individual features to an existing particle system.', pages: ['renderer-children-lod', 'tags', 'subsystems', 'collision-and-physics', 'decals', 'particle-octree'] },
-  { text: 'Project Guides', description: 'Set up local development, measure performance, validate effects, and use coding assistants.', pages: ['development', 'benchmarks', 'compatibility', 'ai-coding-assistants'] },
+  { text: 'Getting Started', description: 'Build an effect, then extend it with your own behavior.',
+    pages: ['first-particle-system', 'first-module', 'first-spatial-effect'] },
+  { text: 'GPU Processing',
+    description: 'Port custom behavior to GPU compute and understand the GPU execution model.',
+    pages: ['first-gpu-module', 'first-gpu-spatial-effect', 'gpu-processing'] },
+  { text: 'Core Concepts', description: 'Understand how systems and their components work together.',
+    pages: ['concepts', 'dynamic-values', 'module-priority', 'spatial-effects'] },
+  { text: 'Feature Guides', description: 'Apply individual features to an existing particle system.',
+    pages: ['renderer-children-lod', 'tags', 'subsystems', 'emission-sources-events', 'collision-and-physics',
+    'decals', 'particle-octree'] },
+  { text: 'Project Guides',
+    description: 'Set up local development, measure performance, validate effects, and use coding assistants.',
+    pages: ['development', 'benchmarks', 'compatibility', 'ai-coding-assistants'] },
 ];
 
 export function guideNavigation(directory, generated = new Map()) {
@@ -30,7 +38,9 @@ export function guideNavigation(directory, generated = new Map()) {
 }
 
 export function guideIndex(sections) {
-  return '# Guides\n\nStart with the tutorials, learn the core concepts, then choose the feature you need.\n\n' + sections.map(section =>
-    `## ${section.text}\n\n${section.description}\n\n` + section.items.map(item => `- [${item.text}](./${path.basename(item.link)}.md)`).join('\n'),
+  return '# Guides\n\nStart with the tutorials, learn the core concepts, then choose ' +
+    'the feature you need.\n\n' + sections.map(section =>
+    `## ${section.text}\n\n${section.description}\n\n` + section.items.map(item =>
+      `- [${item.text}](./${path.basename(item.link)}.md)`).join('\n'),
   ).join('\n\n') + '\n';
 }

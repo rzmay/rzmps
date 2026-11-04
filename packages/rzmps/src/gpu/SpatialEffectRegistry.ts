@@ -673,9 +673,9 @@ export class GPUSpatialEffectRegistry {
 
   private static getEffectWorldBounds(effect: SpatialEffect, system: ParticleSystem): THREE.Box3 {
     const world = effect.getWorldBounds();
-    if (system.simulationSpace === 'local') {
+    if (system.simulationSpace !== 'world') {
       system.updateWorldMatrix(true, false);
-      const inverse = system.matrixWorld.clone().invert();
+      const inverse = system.getSimulationToWorldMatrix().clone().invert();
       return world.applyMatrix4(inverse);
     }
 

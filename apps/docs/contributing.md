@@ -23,7 +23,9 @@ command follows the PR checklist and stops at the first failure:
 
 Benchmark regeneration precedes documentation generation so the published docs and
 agent references include the new README measurements. Review and commit those
-README and generated documentation updates alongside the source changes.
+README and generated documentation updates, including `apps/docs/public/previews/` images and
+their manifest, alongside the source changes. Build checks validate committed captures without
+launching Chrome; stale previews require local regeneration.
 
 Cross-branch PR benchmarks remain exclusively in the existing GitHub runner
 workflow, where both revisions are measured on the same runner. This local command

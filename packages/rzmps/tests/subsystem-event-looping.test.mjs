@@ -49,5 +49,5 @@ parent.deltaTime = 0.6;
 parent._updateSubSystems();
 
 assert.equal(child.particles.length, 1);
-assert.equal(child._emissionRuns.length, 0);
+assert.equal([...child._emitterInstances].filter(instance => instance.source.kind === 'snapshot').length, 0);
 assert.equal(child._elapsedTime, 0);

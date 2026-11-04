@@ -60,6 +60,28 @@ Starts child emission when a parent particle is born.
 
 ***
 
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+Exclusive event origins; an explicit attachment value overrides the emitter scope.
+
+***
+
 <a id="impulseaffectsalignment"></a>
 
 ### impulseAffectsAlignment
@@ -202,6 +224,18 @@ inheritVelocity: number;
 
 ***
 
+<a id="onevent"></a>
+
+### onEvent?
+
+```ts
+optional onEvent?: EventSubscriptions;
+```
+
+Named events, optionally with CPU and TSL context handlers.
+
+***
+
 <a id="ratio"></a>
 
 ### ratio
@@ -219,7 +253,19 @@ Fraction of eligible parent particles selected for subsystem emission.
 ### shouldEmit
 
 ```ts
-shouldEmit: boolean | ((particle) => boolean);
+shouldEmit: boolean | ((source) => boolean);
 ```
 
 Predicate or switch selecting whether a parent particle may trigger child emission.
+
+***
+
+<a id="tags"></a>
+
+### tags?
+
+```ts
+optional tags?: string[];
+```
+
+Select parent source tags, using the same intersection rule as modules/renderers.

@@ -1,3 +1,6 @@
+import type { GPUEventBatch } from './EventBatch';
+import type { GPUEventPayload } from '../Events';
+import type { Tag } from '../types/Tag';
 import {
   ParticleFloatSlot, ParticleRenderFloatSlot, FLOAT_SLOT_COUNT, RENDER_FLOAT_SLOT_COUNT, UINT_SLOT_COUNT,
   createAttributes, renderFloatElement, packedOffset, stateOffset, writeVectorAndScalar,
@@ -8,6 +11,7 @@ import { StorageBufferAttribute, IndirectStorageBufferAttribute, type ComputeNod
 import type { Node } from 'three/webgpu';
 import { float, uint, uvec2, Fn, instanceIndex, storage } from 'three/tsl';
 import Particle from '../Particle';
+import { getParticleSourceBinding } from '../ParticleSourceBindings';
 import type ParticleSystem from '../ParticleSystem';
 import type { GPUAllocationWriter } from './AllocationBuffer';
 import type { GPUCollisionEventWriter, GPUEventWriter } from './EventBuffer';
@@ -62,6 +66,8 @@ export interface GPUParticleBufferInitialization {
 }
 
 export interface GPUParticleUpdateContext {
+  /** Native event storage, frozen for the receiving component's execution. */
+  events?: GPUEventBatch;
   system: ParticleSystem;
   buffers: GPUParticleBufferState;
   deltaTime: number;
@@ -77,6 +83,13 @@ export interface GPUParticleUpdateContext {
 }
 
 export interface GPUParticleLike {
+  /** Marks this particle dead in the current GPU update. */
+  kill(): void;
+  emitEvent(event: string, payload?: GPUEventPayload): void;
+  /** Adds a tag registered by an emitter, module, renderer, spatial effect, or subsystem selector. */
+  addTag(tag: Tag): void;
+  /** Removes a registered tag while preserving all other tags. */
+  removeTag(tag: Tag): void;
   readonly id: Node<'uvec2'>;
   readonly isChild: Node<'bool'>;
   readonly parent: GPUParticleLike | null;
@@ -109,6 +122,27 @@ export interface GPUParticleLike {
 
 /** Shader-node view of one particle; unlike Particle, this is not a CPU value object. */
 export class GPUParticleContext implements GPUParticleLike {
+  /** Marks the particle dead and advances its age past its lifetime using finite GPU values. */
+  kill(): void {
+    this.realtime.assign(this.lifetime.mul(1000).add(1));
+    this.time.assign(float(1).add(float(0.001).div(this.lifetime.max(0.000001))));
+    this.alive.assign(uint(0));
+  }
+  /** Builds a tag mutation inside a system's GPU update callback. */
+  addTag(tag: Tag): void {
+    throw new Error(`Adding GPU tag '${tag}' requires a particle system update context.`);
+  }
+  /** Builds a tag mutation inside a system's GPU update callback. */
+  removeTag(tag: Tag): void {
+    throw new Error(`Removing GPU tag '${tag}' requires a particle system update context.`);
+  }
+  private eventDispatcher?: (event: string, payload?: GPUEventPayload) => void;
+  /** Builds an event-buffer write at this point in the TSL graph. */
+  emitEvent(event: string, payload?: GPUEventPayload): void { this.eventDispatcher?.(event, payload); }
+  /** @internal */
+  setEventDispatcher(dispatch: (event: string, payload?: GPUEventPayload) => void): void { this.eventDispatcher =
+    dispatch; }
+
   readonly contribution = float(1);
   readonly index: Node<'uint'>;
 
@@ -245,6 +279,11 @@ export class GPUParticleStorage {
 
   createStateNode(index: Node<'uint'> = instanceIndex): Node<'uvec4'> {
     return this.uintStorage.element(index.mul(UINT_SLOT_COUNT));
+  }
+
+  /** @internal Source slot, generation, kind, and initialization state, bit-packed into one vec4. */
+  createSourceIdentityNode(index: Node<'uint'> = instanceIndex): Node<'vec4'> {
+    return this.floatElement(ParticleFloatSlot.SourceIdentity, index);
   }
 
   createParticle(
@@ -721,6 +760,10 @@ export class GPUParticleBufferState {
     // The color slot stores RGB with an unused fourth component.
     const colorOffset = packedOffset(index, ParticleFloatSlot.Color);
     this.floatData.set([particle.color.r, particle.color.g, particle.color.b, 0], colorOffset);
+    const source = getParticleSourceBinding(particle);
+    const sourceOffset = (index * FLOAT_SLOT_COUNT + ParticleFloatSlot.SourceIdentity) * 16;
+    const sourceWords = new Uint32Array(this.floatData.buffer, sourceOffset, 4);
+    sourceWords.set(source ? [source.slot, source.generation, 2, 2] : [0, 0, 0, 0]);
 
     writeState(
       this.uintData,

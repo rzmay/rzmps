@@ -1,6 +1,6 @@
 import type { Matrix4 } from 'three';
 import type { Node } from 'three/webgpu';
-import { cos, sin, vec3, vec4 } from 'three/tsl';
+import { cos, sin, float, vec3, vec4 } from 'three/tsl';
 
 /** Transforms a point using a shader matrix, including its translation. */
 export function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
@@ -59,4 +59,41 @@ export function transformDirectionMatrixGPU(vector: Node<'vec3'>, matrix: Matrix
     vector.x.mul(e[1]).add(vector.y.mul(e[5])).add(vector.z.mul(e[9])),
     vector.x.mul(e[2]).add(vector.y.mul(e[6])).add(vector.z.mul(e[10])),
   ) as Node<'vec3'>;
+}
+
+export function rotateEulerYXZGPU(vector: Node<'vec3'>, rotation: Node<'vec3'>): Node<'vec3'> {
+  const a = cos(rotation.x);
+  const b = sin(rotation.x);
+  const c = cos(rotation.y);
+  const d = sin(rotation.y);
+  const e = cos(rotation.z);
+  const f = sin(rotation.z);
+
+  return vec3(
+    vector.x.mul(c.mul(e).add(d.mul(b).mul(f)))
+      .add(vector.y.mul(c.mul(f).negate().add(d.mul(b).mul(e))))
+      .add(vector.z.mul(d.mul(a))),
+    vector.x.mul(a.mul(f))
+      .add(vector.y.mul(a.mul(e)))
+      .sub(vector.z.mul(b)),
+    vector.x.mul(d.mul(e).negate().add(c.mul(b).mul(f)))
+      .add(vector.y.mul(d.mul(f).add(c.mul(b).mul(e))))
+      .add(vector.z.mul(c.mul(a))),
+  ) as Node<'vec3'>;
+}
+
+export function rotateFromYGPU(vector: Node<'vec3'>, direction: Node<'vec3'>): Node<'vec3'> {
+  const target = direction.normalize();
+  const quaternionVector = vec3(target.z, 0, target.x.negate());
+  const quaternionScalar = float(1).add(target.y);
+  const inverseLength = quaternionVector.lengthSq().add(quaternionScalar.mul(quaternionScalar))
+    .max(float(Number.EPSILON))
+    .sqrt()
+    .reciprocal();
+  const qVector = quaternionVector.mul(inverseLength);
+  const qScalar = quaternionScalar.mul(inverseLength);
+  const rotated = vector.add(qVector.cross(qVector.cross(vector).add(vector.mul(qScalar))).mul(2));
+  const antiparallel = vec3(vector.x, vector.y.negate(), vector.z.negate());
+
+  return target.y.lessThan(-0.9999).select(antiparallel, rotated) as Node<'vec3'>;
 }

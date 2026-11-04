@@ -1,3 +1,4 @@
+import type { Vector3Input } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -7,9 +8,10 @@ import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
 import { SpeedRange } from './ColorBySpeed';
 
 export interface RotationBySpeedOptions extends Partial<ModuleOptions> {
-    angle: ValueByParameter<THREE.Vector3>;
-    angularVelocity: ValueByParameter<THREE.Vector3>;
-    angularAcceleration: ValueByParameter<THREE.Vector3>;
+    /** Angular values are radians; scalar inputs expand uniformly across axes. */
+    angle: ValueByParameter<Vector3Input>;
+    angularVelocity: ValueByParameter<Vector3Input>;
+    angularAcceleration: ValueByParameter<Vector3Input>;
     /** Velocity-magnitude interval mapped to zero through one; values outside it are clamped. */
     speedRange: SpeedRange;
 }

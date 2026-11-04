@@ -8,6 +8,10 @@
 
 # Interface: RendererOptions
 
+## Extends
+
+- [`EventReceiverOptions`](EventReceiverOptions.md)
+
 ## Extended by
 
 - [`LightRendererOptions`](../Supporting-Types/interfaces/LightRendererOptions.md)
@@ -54,6 +58,34 @@ count: number;
 ```
 
 Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`events`](EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
 
 ***
 

@@ -8,6 +8,7 @@ import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { generateSkill } from './skill-source.mjs';
 import { buildArtifacts } from './artifacts.mjs';
+import { checksum, previewIsCurrent } from './preview-manifest.mjs';
 test('canonical documentation controls skill metadata, workflow, and portable reference links',()=>{
   const root=path.resolve(import.meta.dirname,'../..');
   const source=fs.readFileSync(path.join(root,'apps/docs/guides/ai-coding-assistants.md'),'utf8');
@@ -20,11 +21,12 @@ test('canonical documentation controls skill metadata, workflow, and portable re
   assert.doesNotMatch(changed,/\]\(\.\.\/api\//);
   assert.throws(()=>generateSkill(source.replace('<!-- skill:instructions:end -->','')),/Missing canonical skill region/);
 });
-test('rebuildable artifacts including previews are ignored; installable skill and authored guides stay tracked',()=>{
+test('rebuildable artifacts are ignored; previews, skill and authored guides stay tracked',()=>{
   const root=path.resolve(import.meta.dirname,'../..');
-  const artifacts=[...buildArtifacts.map(file=>file.endsWith('/')?file+'index.md':file),
-    'apps/docs/public/previews/fire.png','apps/docs/public/previews/manifest.json'];
-  const retained=['.agents/skills/rzmps/SKILL.md','.agents/skills/rzmps/references/api.md','apps/docs/guides/concepts.md','apps/docs/examples/fire.md','README.md'];
+  const artifacts=buildArtifacts.map(file=>file.endsWith('/')?file+'index.md':file);
+  const retained=['apps/docs/public/previews/fire.png','apps/docs/public/previews/manifest.json',
+    '.agents/skills/rzmps/SKILL.md','.agents/skills/rzmps/references/api.md','apps/docs/guides/concepts.md',
+    'apps/docs/examples/fire.md','README.md'];
   const ignored=execFileSync('git',['check-ignore','--no-index','--stdin'],{cwd:root,input:[...artifacts,...retained].join('\n')+'\n',encoding:'utf8'}).trim().split('\n');
   assert.deepEqual(ignored.sort(),artifacts.sort());
 });
@@ -62,4 +64,14 @@ test('skill format validates YAML and rejects broken references',()=>{
     assert.equal(validateSkill(file).name,'rzmps');
     fs.writeFileSync(file,'---\nname: [invalid\n---\n');assert.throws(()=>validateSkill(file),/invalid YAML/);
   } finally {fs.rmSync(directory,{recursive:true,force:true});}
+});
+
+test('preview validation requires matching inputs, manifest and image bytes', () => {
+  const image = Buffer.from('preview image');
+  const entry = { inputHash: 'current-source', imageHash: checksum(image) };
+  assert.equal(previewIsCurrent(entry, 'current-source', image), true);
+  assert.equal(previewIsCurrent(entry, 'edited-source', image), false);
+  assert.equal(previewIsCurrent(entry, 'current-source', Buffer.from('edited image')), false);
+  assert.equal(previewIsCurrent(entry, 'current-source', null), false);
+  assert.equal(previewIsCurrent(undefined, 'current-source', image), false);
 });

@@ -20,6 +20,26 @@ Local: "local";
 
 ***
 
+<a id="source"></a>
+
+### Source
+
+```ts
+Source: "source";
+```
+
+***
+
+<a id="transform"></a>
+
+### Transform
+
+```ts
+Transform: "transform";
+```
+
+***
+
 <a id="world"></a>
 
 ### World

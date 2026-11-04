@@ -63,7 +63,7 @@ assert.equal(system.acquireParticleSpatialGrid(explicit), explicit);
 
 // Function-defined CPU modules receive a lifecycle-managed, tag-filtered octree.
 let callbackOctree;
-const managedOctreeModule = new Module((_particle, _deltaTime, _system, octreeValue) => {
+const managedOctreeModule = new Module((_particle, _deltaTime, { octree: octreeValue }) => {
   callbackOctree = octreeValue;
 }, {
   tags: 'included',
@@ -82,8 +82,8 @@ const excluded = new Particle({
   tags: ['excluded'],
 });
 system.particles.push(included, excluded);
-managedOctreeModule.prepare(system, 1 / 60);
-managedOctreeModule.modify(system.particles, 1 / 60, system);
+managedOctreeModule.prepare(managedOctreeModule.beginExecution(system, 1 / 60));
+managedOctreeModule.modify(system.particles, 1 / 60, managedOctreeModule.executionContext);
 assert.equal(callbackOctree, managedOctreeModule.getParticleOctree());
 assert.deepEqual(callbackOctree.root.aggregate, {});
 assert.deepEqual(callbackOctree.particlesInRadius(new THREE.Vector3(), 10), [included]);
@@ -93,11 +93,11 @@ const sourceFilteredModule = new Module(() => {}, {
   tags: 'included',
   octreeOptions: { bounds: configuredBounds, tags: 'excluded' },
 });
-sourceFilteredModule.prepare(system, 0);
+sourceFilteredModule.prepare(sourceFilteredModule.beginExecution(system, 0));
 assert.deepEqual(sourceFilteredModule.getParticleOctree().root.aggregate, {});
 assert.deepEqual(sourceFilteredModule.getParticleOctree().particlesInRadius(new THREE.Vector3(), 10), [excluded]);
 sourceFilteredModule.octreeOptions.tags = [];
-sourceFilteredModule.prepare(system, 0);
+sourceFilteredModule.prepare(sourceFilteredModule.beginExecution(system, 0));
 assert.deepEqual(sourceFilteredModule.getParticleOctree().root.aggregate, {});
 assert.equal(sourceFilteredModule.getParticleOctree().particlesInRadius(new THREE.Vector3(), 10).length, 2);
 
@@ -106,13 +106,13 @@ let callbackGrid;
 const gridOptions = { brickSubdivisions: 1, cellSubdivisions: 2 };
 const managedGridModule = new Module(Module.CPU_UNSUPPORTED, {
   spatialGridOptions: gridOptions,
-  modifyGPU(_particle, _deltaTime, _context, gridValue) {
+  modifyGPU(_particle, _deltaTime, { spatialGrid: gridValue }) {
     callbackGrid = gridValue;
   },
 });
 const managedGrid = managedGridModule.getParticleSpatialGrid(system);
 assert.equal(managedGrid, system.acquireParticleSpatialGrid(gridOptions));
-managedGridModule.modifyGPU({}, {}, { system }, managedGrid);
+managedGridModule.modifyGPU({}, {}, { system, spatialGrid: managedGrid });
 assert.equal(callbackGrid, managedGrid);
 
 assert.equal(managedGridModule.useSpatialGrid, true);
@@ -132,7 +132,7 @@ assert.equal(boids.useOctree, true);
 assert.equal(boids.useSpatialGrid, true);
 assert.equal(boids.getParticleSpatialGrid(system), managedGrid);
 assert.equal(boids.spatialGrid, managedGrid);
-boids.prepare(system);
+boids.prepare(boids.beginExecution(system, 0));
 assert.equal(boids.getParticleOctree(), boids.octree);
 assert.ok(boids.octree.root.aggregate.particleAffectors instanceof Map);
 boids.cleanup();
@@ -142,7 +142,7 @@ assert.equal(boids.getParticleSpatialGrid(system), managedGrid);
 
 // No target tag filter means all boids participate, even when affector sources have tags.
 const unfilteredBoids = new Boids({ particleAffectors: { sourceTags: 'excluded' } });
-unfilteredBoids.prepare(system);
+unfilteredBoids.prepare(unfilteredBoids.beginExecution(system, 0));
 assert.equal(unfilteredBoids.octree.root.aggregate.count, system.particles.length);
 assert.equal(unfilteredBoids.octree.root.aggregate.particleAffectors.get(0).count, 1);
 

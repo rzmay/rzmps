@@ -68,7 +68,7 @@ elapsedTime: number;
 key: string;
 ```
 
-Stable root or subsystem run identity.
+Stable identity of this emitter execution.
 
 ***
 

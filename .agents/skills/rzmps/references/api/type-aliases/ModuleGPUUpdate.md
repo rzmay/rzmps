@@ -9,7 +9,7 @@
 # Type Alias: ModuleGPUUpdate
 
 ```ts
-type ModuleGPUUpdate = (particle, deltaTime, context, spatialGrid?) => void;
+type ModuleGPUUpdate = (particle, deltaTime, context) => void;
 ```
 
 ## Parameters
@@ -24,11 +24,7 @@ type ModuleGPUUpdate = (particle, deltaTime, context, spatialGrid?) => void;
 
 ### context
 
-[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
-
-### spatialGrid?
-
-[`ParticleSpatialGrid`](../classes/ParticleSpatialGrid.md)
+[`ModuleGPUExecutionContext`](../interfaces/ModuleGPUExecutionContext.md)
 
 ## Returns
 

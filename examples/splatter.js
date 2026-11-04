@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { Collision, DecalRenderer, Emitter, EmissionShape, ParticleSystem, SpriteRenderer, Textures } from '@rzmps/rzmps';
+import {
+  Collision, DecalRenderer, Emitter, EmissionShape, ParticleSystem, SpriteRenderer, Textures,
+} from '@rzmps/rzmps';
 import splatterTexture from '../apps/demo/src/assets/images/splat2.png?url';
 import splatterNormal from '../apps/demo/src/assets/images/splat2_norm.jpg?url';
 
@@ -92,6 +94,7 @@ createSplatter.author = 'rzmay';
 export const metadata = {
   id: 'splatter',
   title: 'Splatter',
+  // eslint-disable-next-line max-len -- Documentation discovery requires a single literal description.
   description: 'Matte, multicolored paintballs leave long-lived splatters matching their color and size, with randomized surface rotation. Select a scene with collision geometry, such as Checkerboard.',
   tags: ['splatter', 'paintballs', 'decals', 'collision'],
   category: 'effects',

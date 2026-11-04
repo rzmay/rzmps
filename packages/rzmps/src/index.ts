@@ -97,6 +97,10 @@ export type {
   SpawnBurst,
 } from './Emitter';
 export { EmissionSource } from './enums/EmissionSource';
+export { default as RegisteredEmissionSource } from './EmissionSource';
+export type { EmissionSourceData, SubSystemSource } from './EmissionSource';
+export type { CPUEventHandler, GPUEventHandler, GPUEventPayload, GPUEventData, GPUEmissionContext,
+  EventSubscriptions } from './Events';
 export { TagSelectionMethod } from './enums/TagSelectionMethod';
 
 // Renderers
@@ -108,7 +112,8 @@ export { default as MeshRenderer } from './renderers/MeshRenderer';
 export { default as SpriteRenderer } from './renderers/SpriteRenderer';
 export { default as AudioRenderer } from './renderers/AudioRenderer';
 export { default as DecalRenderer, DECAL_RENDERER_USER_DATA_KEY } from './renderers/DecalRenderer';
-export type { DecalRendererOptions, DecalDirectionSampler, DecalHitSelection } from './renderers/DecalRenderer';
+export type { DecalInstance, DecalRendererOptions, DecalDirectionSampler, DecalHitSelection }
+  from './renderers/DecalRenderer';
 export { SpriteMaterialType } from './enums/SpriteMaterialType';
 export { default as TrailRenderer } from './renderers/TrailRenderer';
 export { TrailMode } from './enums/TrailMode';
@@ -228,3 +233,10 @@ export * as Textures from './Textures';
 
 export { CompensationMode } from './Renderer';
 export type { RendererChildrenOptions } from './Renderer';
+
+export { default as EventReceiver } from './EventReceiver';
+export type {
+  EventOrigin, EventScope, SimulationEvent, EventExecutionContext, GPUEventExecutionContext, EventReceiverOptions,
+} from './EventReceiver';
+export type { ModuleExecutionContext, ModuleGPUExecutionContext } from './Module';
+export type { GPUEventBatch } from './gpu/EventBatch';

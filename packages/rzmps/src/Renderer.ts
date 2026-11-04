@@ -1,3 +1,4 @@
+import EventReceiver, { type EventReceiverOptions } from './EventReceiver';
 import Particle from './Particle';
 import groupRendererParticles, { rendererGroupCount } from './helpers/groupRendererParticles';
 import GPURendererGrouping from './gpu/RendererGrouping';
@@ -6,7 +7,7 @@ import type { StrictMultiple } from './types/Multiple';
 import type { Tag } from './types/Tag';
 import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
-import type { DynamicUntimedValue } from './types/DynamicValue';
+import type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
 import type { ValueByParameter } from './types/ValueByParameter';
 import { MathUtils, Vector3 } from 'three';
 import seedrandom from 'seedrandom';
@@ -28,7 +29,7 @@ export enum CompensationMode {
 export interface RendererChildrenOptions {
   /** Additional visual copies. Counts are floored and clamped to nonnegative integers. */
   count?: DynamicUntimedValue<number>;
-  radius?: number;
+  radius?: DynamicValue<number>;
   /** Radial multiplier; numeric values are constant. */
   scale?: ValueByParameter<number>;
   /** Radial multiplier; numeric values are constant. */
@@ -38,7 +39,7 @@ export interface RendererChildrenOptions {
   radialFalloff?: (parameter: number) => number;
 }
 
-export interface RendererOptions {
+export interface RendererOptions extends EventReceiverOptions {
   /** Desired representative cap. Negative or Infinity means unlimited. Defaults to -1. */
   count: number;
   /** Representative fraction, rounded with Math.round after applying count. Defaults to 1. */
@@ -54,7 +55,7 @@ export interface RendererOptions {
 }
 
 /** Base renderer that filters particles and applies renderer LOD before delegating to a backend-compatible view. */
-export default abstract class Renderer {
+export default abstract class Renderer extends EventReceiver {
   tags?: Tag[];
   protected _groupCount: number;
   ratio: number;
@@ -99,6 +100,7 @@ export default abstract class Renderer {
 
   /** Configures particle filtering, artistic children, and LOD compensation. */
   constructor(options: Partial<RendererOptions> = {}) {
+    super(options);
     this._groupCount = options.count ?? -1;
     this.ratio = options.ratio ?? 1;
     this.groupingRadius = options.groupingRadius ?? -1;
@@ -116,6 +118,9 @@ export default abstract class Renderer {
     system: ParticleSystem,
     deltaTime: number,
   ): void;
+
+  /** @internal CPU-readback renderers consume their batch when the CPU preprocessing actually executes. */
+  get supportsGPUEventInput(): boolean { return this.supportsGPUInput && !this.updateGPUUsesCPUReadback; }
 
   /** Whether this renderer can consume GPU particle buffers without a selective CPU readback. */
   get supportsGPUInput(): boolean {
@@ -172,6 +177,7 @@ export default abstract class Renderer {
     system: ParticleSystem,
     deltaTime: number = 0,
   ): void {
+    this.beginExecution(system, deltaTime);
     this._usesGPUChildren = false;
     const eligible = system.quality === 0 ? [] : particles.filter(particle => (
       particle.alive && (!this.tags || tagsIntersect(this.tags, particle.tags ?? []))
@@ -195,7 +201,21 @@ export default abstract class Renderer {
       const count = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
       childCounts[i] = count;
       for (let child = 0; child < count; child++) {
-        visible.push(this.generateChild(parent, child, Math.max(0, this.children.radius ?? 0), true));
+        visible.push(
+          this.generateChild(
+            parent,
+            child,
+            Math.max(
+              0,
+              evaluateDynamicNumber(
+                this.children.radius,
+                parent.time,
+                `${parent.id}:${child}`
+              ) ?? 0
+            ),
+            true
+          )
+        );
       }
     }
 
@@ -263,6 +283,10 @@ export default abstract class Renderer {
     deltaTime: number = 0,
   ): void {
     if (!this.supportsGPUInput) throw new Error('This particle renderer does not support GPU particle buffers.');
+    if (!this.updateGPUUsesCPUReadback) {
+      this.beginExecution(system, deltaTime);
+      this.beginGPUExecution(system);
+    }
     this._usesGPUChildren = !this.updateGPUUsesCPUReadback;
     // A non-reducing policy cannot benefit from grouping, including when only a
     // subset of GPU slots is eligible. Do not even construct the spatial helper.

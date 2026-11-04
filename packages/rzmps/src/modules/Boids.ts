@@ -1,6 +1,6 @@
 import { transformPointGPU, transformDirectionGPU } from '../helpers/gpuTransforms';
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
+import Module, { type ModuleExecutionContext, type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import ParticleSystem from '../ParticleSystem';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
@@ -215,7 +215,8 @@ class Boids extends Module {
     this.neighborRadius = options.neighborRadius ?? 1;
   }
 
-  public prepare(particleSystem: ParticleSystem): void {
+  public prepare(context: ModuleExecutionContext): void {
+    const { system: particleSystem } = context;
     // The managed tree includes both flock members and tagged particle-affector sources.
     this.octreeOptions.tags = this.tags?.length
       ? Array.from(new Set([
@@ -223,7 +224,7 @@ class Boids extends Module {
         ...this.particleAffectors.flatMap((affector) => acceptMultiple(affector.sourceTags) ?? []),
       ]))
       : undefined;
-    super.prepare(particleSystem, 0);
+    super.prepare(context);
     this.particleSystem = particleSystem;
 
     // BoidAffectors are sampled per particle, so keep their matrices fresh once per frame.
@@ -658,13 +659,13 @@ class Boids extends Module {
     target.set(0, 0, 0);
 
     const particleSystem = this.particleSystem;
-    const useLocalSimulationSpace = particleSystem?.simulationSpace === 'local';
+    const useLocalSimulationSpace = particleSystem?.simulationSpace !== 'world';
 
     if (useLocalSimulationSpace && particleSystem) {
       particleSystem.updateWorldMatrix(true, false);
       this.affectorSamplePosition.copy(particle.position);
-      particleSystem.localToWorld(this.affectorSamplePosition);
-      particleSystem.getWorldQuaternion(this.worldQuaternion);
+      particleSystem.simulationToWorld(this.affectorSamplePosition);
+      particleSystem.getSimulationWorldQuaternion(this.worldQuaternion);
       this.inverseWorldQuaternion.copy(this.worldQuaternion).invert();
     } else {
       this.affectorSamplePosition.copy(particle.position);

@@ -18,6 +18,9 @@ class GPUCapture extends Capture {
 const spatialGuard = new Proxy({}, {
   get(_target, key) {
     if (key === 'quality') return 1;
+    // EventReceiver still resolves receiver identity and batches when grouping is inactive.
+    if (key === 'uuid') return system.uuid;
+    if (key === 'beginGPUEventExecution') return system.beginGPUEventExecution.bind(system);
     if (key === 'getGPURendererTagMask') return () => undefined;
     throw new Error(`Inactive grouping accessed system.${String(key)}`);
   },

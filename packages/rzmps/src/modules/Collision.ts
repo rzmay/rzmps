@@ -1,4 +1,4 @@
-import { transformPointMatrixGPU, transformDirectionMatrixGPU } from '../helpers/gpuTransforms';
+import { transformPointGPU, transformDirectionGPU } from '../helpers/gpuTransforms';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import {
@@ -7,9 +7,10 @@ import {
   If,
   max,
   sqrt,
+  uniform,
 } from 'three/tsl';
 
-import Module, { type ModuleOptions } from '../Module';
+import Module, { type ModuleExecutionContext, type ModuleOptions } from '../Module';
 import Particle from '../Particle';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
@@ -123,7 +124,14 @@ class Collision extends Module {
     this.collisionListeners.forEach((listener) => listener(particle, collision));
   }
 
-  public prepare(system: ParticleSystem, deltaTime: number) {
+  private readonly _simulationToWorld = uniform(new THREE.Matrix4(), 'mat4');
+  private readonly _worldToSimulation = uniform(new THREE.Matrix4(), 'mat4');
+
+  public prepare(context: ModuleExecutionContext): void {
+    const { system, deltaTime } = context;
+    super.prepare(context);
+    this._simulationToWorld.value.copy(system.getSimulationToWorldMatrix());
+    this._worldToSimulation.value.copy(this._simulationToWorld.value).invert();
     this._system = system;
     if (!this._explicitBackend && system.scene) {
       const Backend = system.isGPUProcessingActive
@@ -298,7 +306,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return point;
 
     system.updateWorldMatrix(true, false);
-    return transformPointMatrixGPU(point, system.matrixWorld);
+    return transformPointGPU(point, this._simulationToWorld);
   }
 
   private gpuPointToSimulationSpace(
@@ -308,7 +316,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return point;
 
     system.updateWorldMatrix(true, false);
-    return transformPointMatrixGPU(point, system.matrixWorld.clone().invert());
+    return transformPointGPU(point, this._worldToSimulation);
   }
 
   private gpuDirectionToWorld(
@@ -318,7 +326,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return vector;
 
     system.updateWorldMatrix(true, false);
-    return transformDirectionMatrixGPU(vector, system.matrixWorld);
+    return transformDirectionGPU(vector, this._simulationToWorld);
   }
 
   private gpuDirectionToSimulationSpace(
@@ -328,7 +336,7 @@ class Collision extends Module {
     if (system.simulationSpace === SimulationSpace.World) return vector;
 
     system.updateWorldMatrix(true, false);
-    return transformDirectionMatrixGPU(vector, system.matrixWorld.clone().invert());
+    return transformDirectionGPU(vector, this._worldToSimulation);
   }
 
   private collide(particle: Particle, deltaTime: number): void {
@@ -344,10 +352,10 @@ class Collision extends Module {
 
     const start = this._system.simulationSpace === 'world'
       ? startPosition.clone()
-      : this._system.localToWorld(startPosition.clone());
+      : this._system.simulationToWorld(startPosition.clone());
     const end = this._system.simulationSpace === 'world'
       ? endPosition.clone()
-      : this._system.localToWorld(endPosition.clone());
+      : this._system.simulationToWorld(endPosition.clone());
     const velocity = this._system.simulationSpace === 'world'
       ? particle.velocity.clone()
       : this.localDirectionToWorld(particle.velocity);
@@ -366,14 +374,14 @@ class Collision extends Module {
 
     const worldHit = this.cloneHit(hit);
 
-    if (this._system.simulationSpace === 'local') {
-      const inverseWorld = this._system.matrixWorld.clone().invert();
+    if (this._system.simulationSpace !== 'world') {
+      const inverseWorld = this._system.getSimulationToWorldMatrix().clone().invert();
       const impulseLength = hit.impulse.length();
 
-      hit.point = this._system.worldToLocal(hit.point.clone());
+      hit.point = this._system.worldToSimulation(hit.point.clone());
 
       if (hit.position) {
-        hit.position = this._system.worldToLocal(hit.position.clone());
+        hit.position = this._system.worldToSimulation(hit.position.clone());
       }
 
       hit.normal = hit.normal
@@ -544,7 +552,7 @@ class Collision extends Module {
 
     return vector
       .clone()
-      .transformDirection(this._system.matrixWorld)
+      .transformDirection(this._system.getSimulationToWorldMatrix())
       .multiplyScalar(length);
   }
 

@@ -5,7 +5,6 @@ import {
   ParticleSystem,
   TrailRenderer,
   TrailMode,
-  TrailTextureMode,
 } from '@rzmps/rzmps';
 
 export default async function createRibbonTrail() {
@@ -35,7 +34,11 @@ export default async function createRibbonTrail() {
         ratio: 1,
         ribbonCount: 3,
         width: 0.15,
-        widthOverTrail: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        widthOverTrail: (time) => {
+          if (time < 0.2) return time / 0.2;
+          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
+          return 0.85 * (1 - ((time - 0.75) / 0.25));
+        },
         colorOverTrail: (time) => new THREE.Color().lerpColors(
           new THREE.Color('#fff'),
           new THREE.Color('#66e0ff'),

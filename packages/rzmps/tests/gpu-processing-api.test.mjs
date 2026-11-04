@@ -213,7 +213,7 @@ const buffers = createGPUParticleBufferState([particle], 4);
 
 assert.equal(buffers.count, 1);
 assert.equal(buffers.capacity, 4);
-assert.equal(buffers.attributes.floatData.count, 44);
+assert.equal(buffers.attributes.floatData.count, 48);
 assert.equal(buffers.attributes.floatData.array[0], 1);
 assert.equal(buffers.attributes.floatData.array[1], 2);
 assert.equal(buffers.attributes.floatData.array[2], 3);

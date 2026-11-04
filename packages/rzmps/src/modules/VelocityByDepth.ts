@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import Module, { ModuleOptions } from '../Module';
+import Module, { type ModuleExecutionContext, ModuleOptions } from '../Module';
 import Particle from '../Particle';
-import type ParticleSystem from '../ParticleSystem';
 import type { ValueByParameter } from '../types/ValueByParameter';
 import type { Node } from 'three/webgpu';
 import { uniform } from 'three/tsl';
@@ -91,14 +90,16 @@ class VelocityByDepth extends Module {
     this.depthRange = options.depthRange;
   }
 
-  public prepare(particleSystem: ParticleSystem): void {
+  public prepare(context: ModuleExecutionContext): void {
+    const { system: particleSystem } = context;
+    super.prepare(context);
     const camera = particleSystem.sceneCamera;
 
     if (camera) {
       camera.getWorldPosition(this.cameraPosition);
 
       if (particleSystem.simulationSpace !== 'world') {
-        particleSystem.worldToLocal(this.cameraPosition);
+        particleSystem.worldToSimulation(this.cameraPosition);
       }
 
       if (camera instanceof THREE.PerspectiveCamera || camera instanceof THREE.OrthographicCamera) {

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 export function parseOptions(args) {
   const names = [
     'example', 'backend', 'frames', 'interval', 'warmup', 'delta-time',
-    'width', 'height', 'output', 'seed', 'scene',
+    'width', 'height', 'output', 'seed', 'scene', 'scene-light-strength',
     'camera-position', 'camera-target', 'camera-fov',
   ];
   const { values } = parseArgs({
@@ -36,12 +36,18 @@ export function parseOptions(args) {
     height: Number(values.height ?? 600),
     seed: Number(values.seed ?? 1),
     scene: values.scene ?? null,
+    sceneLightStrength: values['scene-light-strength'] === undefined
+      ? undefined : Number(values['scene-light-strength']),
     cameraPosition: vector('camera-position', [8, 6, 12]),
     cameraTarget: vector('camera-target', [0, 2, 0]),
     cameraFov: Number(values['camera-fov'] ?? 50),
     output: path.resolve(values.output ?? `previews/${values.example ?? 'fire'}`),
   };
   if (!['webgl', 'webgpu'].includes(options.backend)) throw new Error('--backend must be webgl or webgpu');
+  if (options.sceneLightStrength !== undefined
+    && (!Number.isFinite(options.sceneLightStrength) || options.sceneLightStrength < 0)) {
+    throw new Error('--scene-light-strength must be a finite nonnegative number');
+  }
   for (const key of ['frames', 'interval', 'width', 'height']) {
     if (!Number.isSafeInteger(options[key]) || options[key] <= 0) throw new Error(`--${key} must be a positive integer`);
   }
@@ -104,7 +110,10 @@ export async function capturePreview(options) {
     const address = server.httpServer.address();
     const args = ['--disable-dev-shm-usage', '--enable-unsafe-webgpu', '--autoplay-policy=no-user-gesture-required'];
     if (process.env.CI === 'true') {
-      args.push('--no-sandbox', '--disable-setuid-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader');
+      args.push(
+        '--no-sandbox', '--disable-setuid-sandbox', '--use-gl=angle', '--use-angle=swiftshader',
+        '--enable-unsafe-swiftshader', '--use-webgpu-adapter=swiftshader', '--use-gpu-in-tests',
+      );
     } else args.push('--use-angle=default');
     browser = await puppeteer.launch({
       headless: true,
@@ -149,6 +158,7 @@ export async function capturePreview(options) {
       camera: result.camera,
       rendererInfo: result.rendererInfo,
       childValidation: result.childValidation,
+      frameValidation: result.frameValidation,
       shaderBindings: Object.values((result.shaderBindings ?? []).reduce((stages, entry) => {
         const key = `${entry.stage}:${entry.name}`;
         const stage = stages[key] ??= { stage: entry.stage, name: entry.name, pipelines: 0, maxStorageBuffers: 0 };

@@ -138,6 +138,46 @@ distanceAffectsSize: number;
 
 ***
 
+<a id="emissiontags"></a>
+
+### emissionTags?
+
+```ts
+optional emissionTags?: string[];
+```
+
+Registers each persistent decal as an emission source with these tags.
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`events`](EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
+
+***
+
 <a id="groupingradius"></a>
 
 ### groupingRadius?

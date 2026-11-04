@@ -12,6 +12,12 @@ export default function loadCheckerboard(scene) {
   const point = new THREE.PointLight(0xffffff, 260);
   point.position.set(10, 20, 0);
   point.castShadow = true;
+  const settings = { lightStrength: 1 };
+  const setLightStrength = strength => {
+    settings.lightStrength = Math.max(0, strength);
+    ambient.intensity = 0.35 * settings.lightStrength;
+    point.intensity = 260 * settings.lightStrength;
+  };
 
   const pixels = new Uint8Array([
     230, 230, 230, 255,
@@ -37,12 +43,18 @@ export default function loadCheckerboard(scene) {
 
   scene.add(ambient, point, floor);
 
-  return () => {
-    disposeSceneParticleRoot(scene, particleRoot);
-    scene.remove(ambient, point, floor);
-    floorGeometry.dispose();
-    floorMaterial.dispose();
-    checkerTexture.dispose();
+  return {
+    setLightStrength,
+    gui: folder => {
+      folder.add(settings, 'lightStrength', 0, 2, 0.01).name('Light Strength').onChange(setLightStrength);
+    },
+    cleanup: () => {
+      disposeSceneParticleRoot(scene, particleRoot);
+      scene.remove(ambient, point, floor);
+      floorGeometry.dispose();
+      floorMaterial.dispose();
+      checkerTexture.dispose();
+    },
   };
 }
 

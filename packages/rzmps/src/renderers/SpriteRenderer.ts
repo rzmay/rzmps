@@ -816,18 +816,18 @@ class SpriteRenderer extends Renderer {
       positionLocal.y.mul(particle.scale.y).mul(visible).mul(scaleMultiplier).mul(attenuationScale),
       float(0),
     );
-    // Roll the billboard quad before orienting it from camera space into simulation space.
-    const c = cos(particle.rotation.x);
+    // Roll the billboard before converting camera orientation into the resolved simulation frame.
+    const cosAngle = cos(particle.rotation.x);
     const sinAngle = sin(particle.rotation.x);
     const rolledQuad = vec3(
-      localQuad.x.mul(c).sub(localQuad.y.mul(sinAngle)),
-      localQuad.x.mul(sinAngle).add(localQuad.y.mul(c)),
+      localQuad.x.mul(cosAngle).sub(localQuad.y.mul(sinAngle)),
+      localQuad.x.mul(sinAngle).add(localQuad.y.mul(cosAngle)),
       localQuad.z,
     );
     const worldToSystemRotation = new THREE.Matrix4();
     if (system.simulationSpace !== 'world') {
       system.updateWorldMatrix(true, false);
-      worldToSystemRotation.extractRotation(system.matrixWorld).invert();
+      worldToSystemRotation.extractRotation(system.getSimulationToWorldMatrix()).invert();
     }
     const orientedQuad = this.billboard
       ? transformDirectionMatrixGPU(

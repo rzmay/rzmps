@@ -8,6 +8,11 @@
 
 # Interface: EmitterOptions
 
+## Extends
+
+- [`EventReceiverOptions`](EventReceiverOptions.md)
+- `Partial`\<`Omit`\<[`SubSystemOptions`](SubSystemOptions.md), `"tags"`\>\>
+
 ## Properties
 
 <a id="alignment"></a>
@@ -41,6 +46,288 @@ Supplying bursts changes the default continuous rate to zero.
 
 ***
 
+<a id="emitcontinuous"></a>
+
+### emitContinuous?
+
+```ts
+optional emitContinuous?: boolean;
+```
+
+Emits while a parent particle remains alive, using an independent emission context.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`emitContinuous`](SubSystemOptions.md#emitcontinuous)
+
+***
+
+<a id="emitoncollision"></a>
+
+### emitOnCollision?
+
+```ts
+optional emitOnCollision?: boolean;
+```
+
+Starts child emission from collision events reported by a Collision module.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`emitOnCollision`](SubSystemOptions.md#emitoncollision)
+
+***
+
+<a id="emitondeath"></a>
+
+### emitOnDeath?
+
+```ts
+optional emitOnDeath?: boolean;
+```
+
+Starts child emission when a parent particle expires.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`emitOnDeath`](SubSystemOptions.md#emitondeath)
+
+***
+
+<a id="emitonspawn"></a>
+
+### emitOnSpawn?
+
+```ts
+optional emitOnSpawn?: boolean;
+```
+
+Starts child emission when a parent particle is born.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`emitOnSpawn`](SubSystemOptions.md#emitonspawn)
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`events`](EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
+
+***
+
+<a id="impulseaffectsalignment"></a>
+
+### impulseAffectsAlignment?
+
+```ts
+optional impulseAffectsAlignment?: boolean;
+```
+
+Aligns child emission with collision impulse direction.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`impulseAffectsAlignment`](SubSystemOptions.md#impulseaffectsalignment)
+
+***
+
+<a id="impulseaffectslifetime"></a>
+
+### impulseAffectsLifetime?
+
+```ts
+optional impulseAffectsLifetime?: number;
+```
+
+Exponent controlling contact-impulse scaling of child lifetime.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`impulseAffectsLifetime`](SubSystemOptions.md#impulseaffectslifetime)
+
+***
+
+<a id="impulseaffectsmass"></a>
+
+### impulseAffectsMass?
+
+```ts
+optional impulseAffectsMass?: number;
+```
+
+Exponent controlling contact-impulse scaling of child mass.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`impulseAffectsMass`](SubSystemOptions.md#impulseaffectsmass)
+
+***
+
+<a id="impulseaffectsscale"></a>
+
+### impulseAffectsScale?
+
+```ts
+optional impulseAffectsScale?: number;
+```
+
+Exponent controlling contact-impulse scaling of child size.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`impulseAffectsScale`](SubSystemOptions.md#impulseaffectsscale)
+
+***
+
+<a id="impulseaffectsspeed"></a>
+
+### impulseAffectsSpeed?
+
+```ts
+optional impulseAffectsSpeed?: number;
+```
+
+Exponent controlling contact-impulse scaling of child velocity.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`impulseAffectsSpeed`](SubSystemOptions.md#impulseaffectsspeed)
+
+***
+
+<a id="impulsethreshold"></a>
+
+### impulseThreshold?
+
+```ts
+optional impulseThreshold?: number;
+```
+
+Minimum contact impulse needed to trigger collision emission.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`impulseThreshold`](SubSystemOptions.md#impulsethreshold)
+
+***
+
+<a id="inheritalpha"></a>
+
+### inheritAlpha?
+
+```ts
+optional inheritAlpha?: number;
+```
+
+Blends child alpha with the triggering particle alpha.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`inheritAlpha`](SubSystemOptions.md#inheritalpha)
+
+***
+
+<a id="inheritcolor"></a>
+
+### inheritColor?
+
+```ts
+optional inheritColor?: number;
+```
+
+Blends child color with the triggering particle color.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`inheritColor`](SubSystemOptions.md#inheritcolor)
+
+***
+
+<a id="inheritlifetime"></a>
+
+### inheritLifetime?
+
+```ts
+optional inheritLifetime?: number;
+```
+
+Blends child lifetime with the parent lifetime; zero retains independent child timing.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`inheritLifetime`](SubSystemOptions.md#inheritlifetime)
+
+***
+
+<a id="inheritmass"></a>
+
+### inheritMass?
+
+```ts
+optional inheritMass?: number;
+```
+
+Blends child mass with the triggering particle mass.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`inheritMass`](SubSystemOptions.md#inheritmass)
+
+***
+
+<a id="inheritscale"></a>
+
+### inheritScale?
+
+```ts
+optional inheritScale?: number;
+```
+
+Blends child scale with the triggering particle scale; zero retains child configuration.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`inheritScale`](SubSystemOptions.md#inheritscale)
+
+***
+
+<a id="inheritvelocity"></a>
+
+### inheritVelocity?
+
+```ts
+optional inheritVelocity?: number;
+```
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`inheritVelocity`](SubSystemOptions.md#inheritvelocity)
+
+***
+
 <a id="initialvalues"></a>
 
 ### initialValues
@@ -50,6 +337,22 @@ initialValues: Partial<InitialParticleValues>;
 ```
 
 Dynamic values sampled at birth; mutable values are isolated per particle.
+
+***
+
+<a id="onevent"></a>
+
+### onEvent?
+
+```ts
+optional onEvent?: EventSubscriptions;
+```
+
+Named events, optionally with CPU and TSL context handlers.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`onEvent`](SubSystemOptions.md#onevent)
 
 ***
 
@@ -101,6 +404,38 @@ Particles per world-space distance traveled by the emission context.
 
 ***
 
+<a id="ratio"></a>
+
+### ratio?
+
+```ts
+optional ratio?: number;
+```
+
+Fraction of eligible parent particles selected for subsystem emission.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`ratio`](SubSystemOptions.md#ratio)
+
+***
+
+<a id="shouldemit"></a>
+
+### shouldEmit?
+
+```ts
+optional shouldEmit?: boolean | ((source) => boolean);
+```
+
+Predicate or switch selecting whether a parent particle may trigger child emission.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`shouldEmit`](SubSystemOptions.md#shouldemit)
+
+***
+
 <a id="source"></a>
 
 ### source
@@ -110,6 +445,30 @@ source: EmissionShape;
 ```
 
 Geometry and sampling rule used to place particles. Defaults to a sphere.
+
+***
+
+<a id="sources"></a>
+
+### sources?
+
+```ts
+optional sources?: EmitterSources;
+```
+
+Registered source IDs, or a union of IDs and sources with any selected tag. Omission uses ordinary emission.
+
+***
+
+<a id="sourcetags"></a>
+
+### sourceTags?
+
+```ts
+optional sourceTags?: string[];
+```
+
+Tags selecting event origins; tags continues to assign tags at particle birth.
 
 ***
 

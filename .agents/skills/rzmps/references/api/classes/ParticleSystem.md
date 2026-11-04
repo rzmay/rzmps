@@ -278,6 +278,18 @@ simulationSpeed: number;
 
 ***
 
+<a id="sourceloss"></a>
+
+### sourceLoss
+
+```ts
+sourceLoss: "detach" | "kill" = 'detach';
+```
+
+Behavior when an attached source dies or its slot is reused. Defaults to detach.
+
+***
+
 <a id="spatialeffectboundsfiltering"></a>
 
 ### spatialEffectBoundsFiltering
@@ -607,6 +619,12 @@ overflowCount: number;
 
 ```ts
 pending: number;
+```
+
+###### readbackCount
+
+```ts
+readbackCount: number;
 ```
 
 ***
@@ -980,7 +998,7 @@ Active renderer captured by the context object during rendering.
 get simulationSpace(): SimulationSpace;
 ```
 
-Coordinate space of particle state; assigning a new space converts particles and propagates to subsystems.
+Selects the particle reference frame. Explicit child modes are preserved when parenting.
 
 ##### Returns
 
@@ -996,11 +1014,67 @@ set simulationSpace(value): void;
 
 ###### value
 
-[`SimulationSpace`](../enumerations/SimulationSpace.md)
+  \| `"source"`
+  \| `"transform"`
+  \| `"local"`
+  \| [`SimulationSpace`](../enumerations/SimulationSpace.md)
+  \| `"world"`
 
 ##### Returns
 
 `void`
+
+***
+
+<a id="simulationspacetransform"></a>
+
+### simulationSpaceTransform
+
+#### Get Signature
+
+```ts
+get simulationSpaceTransform(): Matrix4 | Object3D<Object3DEventMap> | null;
+```
+
+Live Object3D or caller-managed world matrix for Transform mode; null uses identity.
+
+##### Returns
+
+`Matrix4` \| `Object3D`\<`Object3DEventMap`\> \| `null`
+
+#### Set Signature
+
+```ts
+set simulationSpaceTransform(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`Matrix4` \| `Object3D`\<`Object3DEventMap`\> \| `null`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="subsystemparent"></a>
+
+### subSystemParent
+
+#### Get Signature
+
+```ts
+get subSystemParent(): ParticleSystem | undefined;
+```
+
+Immediate attachment parent; event scopes never traverse beyond this relationship.
+
+##### Returns
+
+`ParticleSystem` \| `undefined`
 
 ## Methods
 
@@ -1168,7 +1242,7 @@ Adds an explicit generic effect; avoid adding the same effect more than once.
 ### addSubSystem()
 
 ```ts
-addSubSystem(subSystem, options): this;
+addSubSystem(subSystem, options?): this;
 ```
 
 Adds a system to this system as a subsystem, using this system's particles as its emission points.
@@ -1179,9 +1253,9 @@ Adds a system to this system as a subsystem, using this system's particles as it
 
 `ParticleSystem`
 
-##### options
+##### options?
 
-`Partial`\<[`SubSystemOptions`](../interfaces/SubSystemOptions.md)\>
+`Partial`\<[`SubSystemOptions`](../interfaces/SubSystemOptions.md)\> = `{}`
 
 #### Returns
 
@@ -1272,6 +1346,64 @@ Permanently destroys this system and renderer resources; later update or advance
 
 ***
 
+<a id="emitevent"></a>
+
+### emitEvent()
+
+#### Call Signature
+
+```ts
+emitEvent(event, data?): void;
+```
+
+Targets either a registered source or a live simulated particle by its stable ID.
+
+##### Parameters
+
+###### event
+
+`string`
+
+###### data?
+
+`unknown`
+
+##### Returns
+
+`void`
+
+#### Call Signature
+
+```ts
+emitEvent(
+   id,
+   event,
+   data?
+): void;
+```
+
+Targets either a registered source or a live simulated particle by its stable ID.
+
+##### Parameters
+
+###### id
+
+`string`
+
+###### event
+
+`string`
+
+###### data?
+
+`unknown`
+
+##### Returns
+
+`void`
+
+***
+
 <a id="estimateparticlecount"></a>
 
 ### estimateParticleCount()
@@ -1294,6 +1426,28 @@ readonly `string`[]
 #### Returns
 
 `number`
+
+***
+
+<a id="getemitteroptions"></a>
+
+### getEmitterOptions()
+
+```ts
+getEmitterOptions(emitter): SubSystemOptions;
+```
+
+Effective configuration is attachment-specific and never changes emitter properties.
+
+#### Parameters
+
+##### emitter
+
+[`Emitter`](Emitter.md)
+
+#### Returns
+
+[`SubSystemOptions`](../interfaces/SubSystemOptions.md)
 
 ***
 
@@ -1392,6 +1546,50 @@ Values are keyed by simulation slot generation and never read back to CPU.
 
 ***
 
+<a id="getsimulationtoworldmatrix"></a>
+
+### getSimulationToWorldMatrix()
+
+```ts
+getSimulationToWorldMatrix(target?): Matrix4;
+```
+
+Resolves the common frame used by modules, spatial queries, renderers, and readback.
+
+#### Parameters
+
+##### target?
+
+`Matrix4` = `...`
+
+#### Returns
+
+`Matrix4`
+
+***
+
+<a id="getsimulationworldquaternion"></a>
+
+### getSimulationWorldQuaternion()
+
+```ts
+getSimulationWorldQuaternion(target?): Quaternion;
+```
+
+World orientation of the common simulation frame.
+
+#### Parameters
+
+##### target?
+
+`Quaternion` = `...`
+
+#### Returns
+
+`Quaternion`
+
+***
+
 <a id="notifycollision"></a>
 
 ### notifyCollision()
@@ -1462,6 +1660,32 @@ Registers a synchronous listener for particle expiry; returns the system for com
 
 ***
 
+<a id="onevent"></a>
+
+### onEvent()
+
+```ts
+onEvent(names, consume): () => void;
+```
+
+Subscribes to this system's events; returns an idempotent unsubscribe function.
+
+#### Parameters
+
+##### names
+
+`string` \| readonly `string`[]
+
+##### consume
+
+(`event`) => `void`
+
+#### Returns
+
+() => `void`
+
+***
+
 <a id="onspawn"></a>
 
 ### onSpawn()
@@ -1503,6 +1727,28 @@ Freezes emission and simulation while playing; propagates to subsystems and opti
 #### Returns
 
 `void`
+
+***
+
+<a id="registeremissionsource"></a>
+
+### registerEmissionSource()
+
+```ts
+registerEmissionSource(data): RegisteredEmissionSource;
+```
+
+Registers a persistent CPU-managed subsystem emission origin.
+
+#### Parameters
+
+##### data
+
+[`EmissionSourceData`](../interfaces/EmissionSourceData.md)
+
+#### Returns
+
+[`RegisteredEmissionSource`](RegisteredEmissionSource.md)
 
 ***
 
@@ -1704,6 +1950,32 @@ Stop, clear all CPU/GPU state and timing, then begin a fresh run.
 
 ***
 
+<a id="resolvesimulationframe"></a>
+
+### resolveSimulationFrame()
+
+```ts
+resolveSimulationFrame(particle?, target?): Matrix4;
+```
+
+Resolves an attached particle's source frame in world coordinates.
+
+#### Parameters
+
+##### particle?
+
+[`Particle`](Particle.md)
+
+##### target?
+
+`Matrix4` = `...`
+
+#### Returns
+
+`Matrix4`
+
+***
+
 <a id="selectivereadback"></a>
 
 ### selectiveReadback()
@@ -1730,6 +2002,28 @@ readonly [`GPUParticleReadbackField`](../type-aliases/GPUParticleReadbackField.m
 #### Returns
 
 `Promise`\<[`GPUSelectiveReadbackResult`](../interfaces/GPUSelectiveReadbackResult.md)[]\>
+
+***
+
+<a id="simulationtoworld"></a>
+
+### simulationToWorld()
+
+```ts
+simulationToWorld(position): Vector3;
+```
+
+Converts a position from the system's common simulation frame to world coordinates.
+
+#### Parameters
+
+##### position
+
+`Vector3`
+
+#### Returns
+
+`Vector3`
 
 ***
 
@@ -1781,6 +2075,28 @@ Stops emission and resets prewarm state. clearParticles chooses whether to remov
 
 ***
 
+<a id="unregisteremissionsource"></a>
+
+### unregisterEmissionSource()
+
+```ts
+unregisterEmissionSource(id): void;
+```
+
+Dispatches death once and releases continuous context state; event runs keep their snapshots.
+
+#### Parameters
+
+##### id
+
+`string`
+
+#### Returns
+
+`void`
+
+***
+
 <a id="update"></a>
 
 ### update()
@@ -1810,3 +2126,51 @@ Recomputes particle bounds used by spatial processing and renderer helpers.
 #### Returns
 
 `void`
+
+***
+
+<a id="updatesource"></a>
+
+### updateSource()
+
+```ts
+updateSource(id, changes): void;
+```
+
+Updates CPU attributes only; repeated updates coalesce at the next frame.
+
+#### Parameters
+
+##### id
+
+`string`
+
+##### changes
+
+`Partial`\<[`EmissionSourceData`](../interfaces/EmissionSourceData.md)\>
+
+#### Returns
+
+`void`
+
+***
+
+<a id="worldtosimulation"></a>
+
+### worldToSimulation()
+
+```ts
+worldToSimulation(position): Vector3;
+```
+
+Converts a world position to the system's common simulation frame.
+
+#### Parameters
+
+##### position
+
+`Vector3`
+
+#### Returns
+
+`Vector3`

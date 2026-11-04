@@ -15,7 +15,7 @@
 ### Constructor
 
 ```ts
-new GPUEventBufferState(capacity): GPUEventBufferState;
+new GPUEventBufferState(capacity, journal?): GPUEventBufferState;
 ```
 
 #### Parameters
@@ -23,6 +23,10 @@ new GPUEventBufferState(capacity): GPUEventBufferState;
 ##### capacity
 
 `number`
+
+##### journal?
+
+`boolean` = `false`
 
 #### Returns
 
@@ -50,12 +54,52 @@ counterAttribute: StorageBufferAttribute;
 
 ***
 
+<a id="counterlength"></a>
+
+### counterLength
+
+```ts
+readonly counterLength: number;
+```
+
+***
+
+<a id="eventfloatstorage"></a>
+
+### eventFloatStorage
+
+```ts
+readonly eventFloatStorage: PackedFloatStorage;
+```
+
+***
+
 <a id="floatattribute"></a>
 
 ### floatAttribute
 
 ```ts
 floatAttribute: StorageBufferAttribute;
+```
+
+***
+
+<a id="floatlength"></a>
+
+### floatLength
+
+```ts
+readonly floatLength: number;
+```
+
+***
+
+<a id="journal"></a>
+
+### journal
+
+```ts
+readonly journal: boolean = false;
 ```
 
 ***
@@ -85,8 +129,14 @@ readonly version: number;
 ### createReader()
 
 ```ts
-createReader(): GPUEventReader;
+createReader(receiverSlot?): GPUEventReader;
 ```
+
+#### Parameters
+
+##### receiverSlot?
+
+`number`
 
 #### Returns
 
@@ -99,8 +149,14 @@ createReader(): GPUEventReader;
 ### createWriter()
 
 ```ts
-createWriter(): GPUEventWriter;
+createWriter(origin?): GPUEventWriter;
 ```
+
+#### Parameters
+
+##### origin?
+
+`number` = `0`
 
 #### Returns
 
@@ -153,7 +209,11 @@ initialize(renderer): void;
 ### readback()
 
 ```ts
-readback(renderer, identityForEvent): Promise<GPUEventReadbackBatch>;
+readback(
+   renderer,
+   identityForEvent,
+   origin?
+): Promise<GPUEventReadbackBatch>;
 ```
 
 #### Parameters
@@ -165,6 +225,10 @@ readback(renderer, identityForEvent): Promise<GPUEventReadbackBatch>;
 ##### identityForEvent
 
 (`slot`, `generation`) => [`Particle`](Particle.md) \| `undefined`
+
+##### origin?
+
+`number`
 
 #### Returns
 

@@ -1,5 +1,8 @@
+import EmitterInstance from './EmitterInstance';
 import getAttributeVersion from './helpers/getAttributeVersion';
-import { transformPointGPU, transformDirectionGPU } from './helpers/gpuTransforms';
+import { transformPointGPU, transformDirectionGPU, rotateEulerYXZGPU, rotateFromYGPU } from './helpers/gpuTransforms';
+import EventReceiver, { type EventReceiverOptions } from './EventReceiver';
+import type { SubSystemOptions } from './ParticleSystem';
 import * as THREE from 'three';
 import { StorageBufferAttribute, type Node } from 'three/webgpu';
 import EmissionShape from './EmissionShape';
@@ -29,6 +32,10 @@ import {
   instanceIndex,
   int,
   mix,
+  inverse,
+  transpose,
+  mat3,
+  mat4,
   cos,
   shiftLeft,
   sin,
@@ -37,6 +44,7 @@ import {
   uint,
   uniform,
   vec3,
+  vec4,
 } from 'three/tsl';
 import {
   GPUDynamicParameterStore,
@@ -52,7 +60,12 @@ export type SpawnBurst = {
     fired?: boolean,
 };
 
-export interface EmitterOptions {
+export type EmitterSources = readonly string[] | { ids?: readonly string[]; tags?: readonly string[] };
+export interface EmitterOptions extends EventReceiverOptions, Partial<Omit<SubSystemOptions, 'tags'>> {
+    /** Registered source IDs, or a union of IDs and sources with any selected tag. Omission uses ordinary emission. */
+    sources?: EmitterSources;
+    /** Tags selecting event origins; tags continues to assign tags at particle birth. */
+    sourceTags?: Tag[];
     /** Dynamic values sampled at birth; mutable values are isolated per particle. */
     initialValues: Partial<InitialParticleValues>;
     /** Geometry and sampling rule used to place particles. Defaults to a sphere. */
@@ -80,17 +93,10 @@ export interface EmitterOptions {
 
 }
 
-interface EmitterContextState {
-  startTime: number;
-  lastSpawn: number;
-  distanceCredit: number;
-  burstCredit: number;
-  lastDistancePosition?: THREE.Vector3;
-  firedBursts: Set<number>;
-}
-
 export interface EmissionContext {
-  /** Stable root or subsystem run identity. */
+  /** @internal Live attachment source, separate from the event snapshot. */
+  source?: import('./EmissionSource').SubSystemSource;
+  /** Stable identity of this emitter execution. */
   key: string;
   transform: THREE.Matrix4;
   position: THREE.Vector3;
@@ -110,6 +116,10 @@ export interface EmissionContext {
 
 /** @internal Context used to construct the built-in GPU birth graph. */
 export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
+  /** @internal Native Source births are initialized in the emitting particle's reference frame. */
+  sourceRelative?: boolean;
+  resolveSourceIdentity?: (claimIndex: Node<'uint'>) => Node<'vec4'>;
+  emissionFrame?: Node<'mat4'>;
   /** Emitter whose birth graph is being constructed. */
   emitter: Emitter;
   /** Emitter position in the owning system's emitter array. */
@@ -121,7 +131,10 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
   normalizedTimeNode?: Node<'float'>;
   emitterPositionNode?: Node<'vec3'>;
   parentParticle?: GPUParticleLike;
+  resolveInheritedVelocity?: (claimIndex: Node<'uint'>) => Node<'vec3'>;
   resolveParentParticle?: (claimIndex: Node<'uint'>) => GPUParticleLike;
+  resolveDistortionStrength?: (claimIndex: Node<'uint'>) => Node<'float'>;
+  resolveEmissionTransform?: (claimIndex: Node<'uint'>) => Node<'mat4'>;
   resolveEmissionTime?: (claimIndex: Node<'uint'>) => Node<'float'>;
   resolveImpulseEffects?: (claimIndex: Node<'uint'>) => {
     scale: Node<'float'>;
@@ -144,7 +157,10 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
 export type GPUEmitterUpdate = (context: GPUEmitterUpdateContext) => void;
 
 /** Samples particle births from a shape using time, distance, and burst emission. */
-class Emitter {
+class Emitter extends EventReceiver {
+  /** Emitter-owned triggers and source inheritance, overlaid by attachment overrides at execution. */
+  emission: Partial<SubSystemOptions>;
+  sources?: EmitterSources;
   source: EmissionShape;
   rate: DynamicValue<number>;
   rateOverDistance: DynamicValue<number>;
@@ -182,8 +198,69 @@ class Emitter {
 
   private _lastTagIndex: number = 0;
 
-  // Used for subsystems
-  private _contextStates = new Map<string, EmitterContextState>();
+  // Owner-specific lookup; each entry is the execution itself, with no parallel context-state map.
+  private readonly _instances = new Map<number, Map<string, EmitterInstance>>();
+
+  get emitContinuous(): SubSystemOptions['emitContinuous'] | undefined { return this.emission.emitContinuous; }
+  set emitContinuous(value: SubSystemOptions['emitContinuous'] | undefined) { this.emission.emitContinuous = value; }
+  get emitOnSpawn(): SubSystemOptions['emitOnSpawn'] | undefined { return this.emission.emitOnSpawn; }
+  set emitOnSpawn(value: SubSystemOptions['emitOnSpawn'] | undefined) { this.emission.emitOnSpawn = value; }
+  get emitOnDeath(): SubSystemOptions['emitOnDeath'] | undefined { return this.emission.emitOnDeath; }
+  set emitOnDeath(value: SubSystemOptions['emitOnDeath'] | undefined) { this.emission.emitOnDeath = value; }
+  get emitOnCollision(): SubSystemOptions['emitOnCollision'] | undefined { return this.emission.emitOnCollision; }
+  set emitOnCollision(value: SubSystemOptions['emitOnCollision'] | undefined) { this.emission.emitOnCollision = value; }
+  get onEvent(): SubSystemOptions['onEvent'] | undefined { return this.emission.onEvent; }
+  set onEvent(value: SubSystemOptions['onEvent'] | undefined) { this.emission.onEvent = value; }
+  get shouldEmit(): SubSystemOptions['shouldEmit'] | undefined { return this.emission.shouldEmit; }
+  set shouldEmit(value: SubSystemOptions['shouldEmit'] | undefined) { this.emission.shouldEmit = value; }
+  get ratio(): SubSystemOptions['ratio'] | undefined { return this.emission.ratio; }
+  set ratio(value: SubSystemOptions['ratio'] | undefined) { this.emission.ratio = value; }
+  get inheritScale(): SubSystemOptions['inheritScale'] | undefined { return this.emission.inheritScale; }
+  set inheritScale(value: SubSystemOptions['inheritScale'] | undefined) { this.emission.inheritScale = value; }
+  get inheritColor(): SubSystemOptions['inheritColor'] | undefined { return this.emission.inheritColor; }
+  set inheritColor(value: SubSystemOptions['inheritColor'] | undefined) { this.emission.inheritColor = value; }
+  get inheritAlpha(): SubSystemOptions['inheritAlpha'] | undefined { return this.emission.inheritAlpha; }
+  set inheritAlpha(value: SubSystemOptions['inheritAlpha'] | undefined) { this.emission.inheritAlpha = value; }
+  get inheritMass(): SubSystemOptions['inheritMass'] | undefined { return this.emission.inheritMass; }
+  set inheritMass(value: SubSystemOptions['inheritMass'] | undefined) { this.emission.inheritMass = value; }
+  get inheritVelocity(): SubSystemOptions['inheritVelocity'] | undefined { return this.emission.inheritVelocity; }
+  set inheritVelocity(value: SubSystemOptions['inheritVelocity'] | undefined) { this.emission.inheritVelocity = value; }
+  get inheritLifetime(): SubSystemOptions['inheritLifetime'] | undefined { return this.emission.inheritLifetime; }
+  set inheritLifetime(value: SubSystemOptions['inheritLifetime'] | undefined) { this.emission.inheritLifetime = value; }
+  get impulseThreshold(): SubSystemOptions['impulseThreshold'] | undefined { return this.emission.impulseThreshold; }
+  set impulseThreshold(value: SubSystemOptions['impulseThreshold'] | undefined) {
+    this.emission.impulseThreshold = value;
+  }
+  get impulseAffectsScale(): SubSystemOptions['impulseAffectsScale'] | undefined {
+    return this.emission.impulseAffectsScale;
+  }
+  set impulseAffectsScale(value: SubSystemOptions['impulseAffectsScale'] | undefined) {
+    this.emission.impulseAffectsScale = value;
+  }
+  get impulseAffectsSpeed(): SubSystemOptions['impulseAffectsSpeed'] | undefined {
+    return this.emission.impulseAffectsSpeed;
+  }
+  set impulseAffectsSpeed(value: SubSystemOptions['impulseAffectsSpeed'] | undefined) {
+    this.emission.impulseAffectsSpeed = value;
+  }
+  get impulseAffectsMass(): SubSystemOptions['impulseAffectsMass'] | undefined {
+    return this.emission.impulseAffectsMass;
+  }
+  set impulseAffectsMass(value: SubSystemOptions['impulseAffectsMass'] | undefined) {
+    this.emission.impulseAffectsMass = value;
+  }
+  get impulseAffectsLifetime(): SubSystemOptions['impulseAffectsLifetime'] | undefined {
+    return this.emission.impulseAffectsLifetime;
+  }
+  set impulseAffectsLifetime(value: SubSystemOptions['impulseAffectsLifetime'] | undefined) {
+    this.emission.impulseAffectsLifetime = value;
+  }
+  get impulseAffectsAlignment(): SubSystemOptions['impulseAffectsAlignment'] | undefined {
+    return this.emission.impulseAffectsAlignment;
+  }
+  set impulseAffectsAlignment(value: SubSystemOptions['impulseAffectsAlignment'] | undefined) {
+    this.emission.impulseAffectsAlignment = value;
+  }
 
   /** Monotonic GPU configuration version used to invalidate compiled work. */
   get version(): number {
@@ -202,33 +279,43 @@ class Emitter {
   constructor(
     options: Partial<EmitterOptions> = {},
   ) {
-    this.source = options.source ?? EmissionShape.Sphere();
-    this.initialValues = options.initialValues ?? {};
+    const {
+      source, sources, sourceTags, initialValues, bursts, rate, rateOverDistance,
+      radialSpeed, alignment, tags, tagSelection, events, eventScope, ...emission
+    } = options;
 
-    this.bursts = acceptMultiple(options.bursts) ?? [];
+    super({ events, eventScope });
+
+    this.sources = sources;
+    this.emission = { ...emission, ...(sourceTags === undefined ? {} : { tags: sourceTags }) };
+    this.source = source ?? EmissionShape.Sphere();
+    this.initialValues = initialValues ?? {};
+
+    this.bursts = acceptMultiple(bursts) ?? [];
     this.normalizeBurstTimes();
-    this.rate = options.rate ?? (this.bursts.length > 0 ? 0 : 50);
-    this.rateOverDistance = options.rateOverDistance ?? 0;
+    this.rate = rate ?? (this.bursts.length > 0 ? 0 : 50);
+    this.rateOverDistance = rateOverDistance ?? 0;
 
-    this.radialSpeed = options.radialSpeed ?? 1
-    this.alignment = options.alignment ?? 0;
+    this.radialSpeed = radialSpeed ?? 1;
+    this.alignment = alignment ?? 0;
 
-    this.tags = acceptMultiple(options.tags);
-    this.tagSelection = (options.tagSelection as TagSelectionMethod) ?? this.tagSelection;
-
+    this.tags = acceptMultiple(tags);
+    this.tagSelection = (tagSelection as TagSelectionMethod) ?? this.tagSelection;
   }
 
   /*
     * CONTROLS
   */
 
-  /** Clears timed bursts, movement credit, LOD state, and per-context emission clocks. */
+  /** Clears timed bursts, movement credit, LOD state, and instance emission clocks. */
   public reset(): void {
     this.bursts.forEach((burst) => {
       burst.fired = false;
     });
 
-    this._contextStates.clear();
+    for (const instances of this._instances.values()) {
+      for (const instance of instances.values()) instance.reset();
+    }
   }
 
   /** Whether the current source and emission configuration support GPU-native births. */
@@ -395,30 +482,35 @@ class Emitter {
         const inheritance = context.inheritance;
         const parent = context.resolveParentParticle?.(claimIndex) ?? context.parentParticle;
         const impulseEffects = context.resolveImpulseEffects?.(claimIndex);
+        const emissionTransform = context.resolveEmissionTransform?.(claimIndex)
+          ?? (context.sourceRelative ? mat4(new THREE.Matrix4()) : context.emissionFrame);
         const inheritedTransformScale = parent && inheritance && inheritance.scale > 0
           ? mix(vec3(1, 1, 1), parent.scale, inheritance.scale)
           : vec3(1, 1, 1);
         const parentLocalPosition = localPosition.add(initialPosition).mul(inheritedTransformScale);
         const rotatedPosition = parent && impulseEffects?.alignmentDirection
           ? impulseEffects.alignmentDirection.length().greaterThan(float(0)).select(
-            this.rotateFromYGPU(parentLocalPosition, impulseEffects.alignmentDirection),
-            this.rotateEulerYXZGPU(parentLocalPosition, parent.rotation),
+            rotateFromYGPU(parentLocalPosition, impulseEffects.alignmentDirection),
+            rotateEulerYXZGPU(parentLocalPosition, parent.rotation),
           ) as Node<'vec3'>
           : parent
-            ? this.rotateEulerYXZGPU(parentLocalPosition, parent.rotation)
+            ? rotateEulerYXZGPU(parentLocalPosition, parent.rotation)
             : parentLocalPosition;
         const rotatedNormal = parent && impulseEffects?.alignmentDirection
           ? impulseEffects.alignmentDirection.length().greaterThan(float(0)).select(
-            this.rotateFromYGPU(normal, impulseEffects.alignmentDirection),
-            this.rotateEulerYXZGPU(normal, parent.rotation),
+            rotateFromYGPU(normal, impulseEffects.alignmentDirection),
+            rotateEulerYXZGPU(normal, parent.rotation),
           ) as Node<'vec3'>
           : parent
-            ? this.rotateEulerYXZGPU(normal, parent.rotation)
+            ? rotateEulerYXZGPU(normal, parent.rotation)
             : normal;
-        const emissionPosition = parent
+        const emissionPosition = emissionTransform ? transformPointGPU(localPosition.add(initialPosition),
+          emissionTransform) : parent
           ? rotatedPosition.add(parent.position)
           : parentLocalPosition.add(context.emitterPositionNode ?? vec3(0, 0, 0));
-        const emissionNormal = rotatedNormal.normalize();
+        const emissionNormal = emissionTransform
+          ? transpose(inverse(mat3(emissionTransform))).mul(normal).normalize() as Node<'vec3'>
+          : rotatedNormal.normalize();
         const initialVelocity = this._gpuParameters.vector(
           'initial.velocity',
           () => this.initialValues.velocity,
@@ -431,7 +523,8 @@ class Emitter {
         ).clamp(0, 1);
         const alignedRotation = vec3(
           asin(emissionNormal.y.clamp(-1, 1)).negate(),
-          atan(emissionNormal.x, emissionNormal.z),
+          atan(emissionNormal.x, emissionNormal.x.abs().add(emissionNormal.z.abs()).lessThan(1e-8)
+            .select(float(1), emissionNormal.z)),
           0,
         ).mul(alignment);
         const initialRotation = this.initialValues.rotation === undefined
@@ -524,9 +617,9 @@ class Emitter {
         const inheritedMass = parent && inheritance && inheritance.mass > 0
           ? mix(float(1), parent.mass, inheritance.mass)
           : float(1);
-        const inheritedVelocity = parent && inheritance && inheritance.velocity > 0
-          ? parent.velocity.mul(inheritance.velocity)
-          : vec3(0, 0, 0);
+        const inheritedVelocity = context.resolveInheritedVelocity?.(claimIndex)
+          ?? (parent && inheritance && inheritance.velocity > 0
+            ? parent.velocity.mul(inheritance.velocity) : vec3(0, 0, 0));
 
         particle.position.assign(emissionPosition);
         particle.orbitCenter.assign(vec3(0, 0, 0));
@@ -546,10 +639,15 @@ class Emitter {
         particle.speed.assign(initialSpeed);
         particle.alpha.assign(initialAlpha.mul(inheritedAlpha));
         particle.mass.assign(initialMass.mul(inheritedMass).mul(impulseEffects?.mass ?? float(1)));
-        particle.distortionStrength.assign(initialDistortion);
+        particle.distortionStrength.assign(
+          initialDistortion.mul(context.resolveDistortionStrength?.(claimIndex) ?? float(1)),
+        );
         particle.lifetime.assign(initialLifetime);
         particle.time.assign(float(0));
         particle.realtime.assign(float(0));
+        context.output.storage.createSourceIdentityNode(particle.index).assign(
+          context.resolveSourceIdentity?.(claimIndex) ?? vec4(0),
+        );
         const tagMasks = context.tagMasks ?? [];
         if (
           (this.tagSelection === TagSelectionMethod.Random
@@ -566,7 +664,6 @@ class Emitter {
         } else {
           particle.tagMask.assign(uint(tagMasks.reduce((mask, value) => mask | value, 0)));
         }
-        if (parent) particle.tagMask.assign(bitOr(particle.tagMask, parent.tagMask));
         context.allocationWriter?.markSpawned(particle);
       };
 
@@ -825,24 +922,41 @@ class Emitter {
   }
 
   /** Emits births for the supplied simulation context and returns the newly created particles. */
+  update(particles: Particle[], context: Partial<EmissionContext>, particleSystem: ParticleSystem): Particle[];
+  /** @internal The coordinator can reuse its resolved instance without another identity lookup. */
+  update(
+    particles: Particle[], context: Partial<EmissionContext>, particleSystem: ParticleSystem, instance: EmitterInstance,
+  ): Particle[];
   update(
     particles: Particle[],
     context: Partial<EmissionContext>,
     particleSystem: ParticleSystem,
+    instance?: EmitterInstance,
   ): Particle[] {
-    this.normalizeBurstTimes();
+    const state = instance ?? this.getInstance(particleSystem, context.key ?? '__default');
     const now = Date.now();
+    this.normalizeBurstTimes();
     const elapsedMilliseconds = context.elapsedTime === undefined
       ? undefined
       : context.elapsedTime * 1000;
-    const state = this.getContextState(context.key ?? '__default', elapsedMilliseconds ?? now);
+    if (state.startTime === undefined) {
+      state.startTime = elapsedMilliseconds ?? now;
+      state.lastSpawn = state.startTime;
+    }
     const duration = context.duration ?? particleSystem.duration;
     const elapsedTime = context.elapsedTime ?? ((now - state.startTime) / 1000);
-    const time = context.time ?? (duration <= 0 ? 1 : elapsedTime / duration);
+    let time = context.time ?? (duration <= 0 ? 1 : elapsedTime / duration);
     const looping = context.looping ?? particleSystem.looping;
     const spawned: Particle[] = [];
 
-    if (context.time === undefined && elapsedTime >= duration) {
+    const explicitLoopClock = context.elapsedTime !== undefined && context.time === undefined && looping &&
+      duration > 0;
+    if (explicitLoopClock) {
+      const cycle = Math.floor(elapsedTime / duration);
+      time = (elapsedTime % duration) / duration;
+      if (state.cycle !== cycle) { state.firedBursts.clear(); state.cycle = cycle; }
+    }
+    if (!explicitLoopClock && context.time === undefined && elapsedTime >= duration) {
       if (!looping) return spawned;
 
       state.startTime = now;
@@ -921,23 +1035,46 @@ class Emitter {
     });
   }
 
-  clearContext(key: string) {
-    this._contextStates.delete(key);
+  clearContext(key: string): void;
+  /** @internal Retires a binding without disturbing another owner of this emitter. */
+  clearContext(key: string, system: ParticleSystem): void;
+  clearContext(key: string, system?: ParticleSystem): void {
+    const owners = system ? [this._instances.get(system.id)] : this._instances.values();
+    for (const instances of owners) {
+      if (!instances) continue;
+      const instance = instances.get(key);
+      if (instance) instance.active = false;
+      instances.delete(key);
+    }
   }
 
-  private getContextState(key: string, startTime: number): EmitterContextState {
-    let state = this._contextStates.get(key);
-    if (!state) {
-      state = {
-        startTime,
-        lastSpawn: startTime,
-        distanceCredit: 0,
-        burstCredit: 0,
-        firedBursts: new Set<number>(),
-      };
-      this._contextStates.set(key, state);
+  /** @internal Returns the execution binding owned by this system and identity. */
+  getInstance(system: ParticleSystem, key: string): EmitterInstance {
+    let instances = this._instances.get(system.id);
+    if (!instances) {
+      instances = new Map();
+      this._instances.set(system.id, instances);
     }
-    return state;
+    let instance = instances.get(key);
+    if (!instance) {
+      instance = new EmitterInstance(this, key);
+      instances.set(key, instance);
+    }
+    return instance;
+  }
+
+  /** @internal Releases an execution without affecting another owner of this definition. */
+  releaseInstance(system: ParticleSystem, instance: EmitterInstance): void {
+    const instances = this._instances.get(system.id);
+    if (instances?.get(instance.key) === instance) instances.delete(instance.key);
+    if (instances?.size === 0) this._instances.delete(system.id);
+    instance.active = false;
+  }
+
+  /** @internal Releases this owner's clocks, including direct update() contexts. */
+  releaseInstances(system: ParticleSystem): void {
+    for (const instance of this._instances.get(system.id)?.values() ?? []) instance.active = false;
+    this._instances.delete(system.id);
   }
 
   private _getDistancePosition(context: Partial<EmissionContext>): THREE.Vector3 | undefined {
@@ -949,9 +1086,18 @@ class Emitter {
   private spawnParticle(
     particles: Particle[],
     time: number,
-    context: Partial<EmissionContext>,
+    emissionContext: Partial<EmissionContext>,
     particleSystem: ParticleSystem,
   ): Particle | undefined {
+    const sourceFrame = particleSystem.getSourceEmissionFrame(emissionContext.source);
+    if (emissionContext.source?.alive && particleSystem.isSubSystem
+      && particleSystem.simulationSpace === 'source' && !sourceFrame) return;
+    const toSource = sourceFrame?.clone().invert();
+    const context = toSource ? {
+      ...emissionContext,
+      transform: toSource.clone().multiply(emissionContext.transform ?? new THREE.Matrix4()),
+      velocity: emissionContext.velocity?.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(toSource)),
+    } : emissionContext;
     const point = this.source.getPoint();
     const position = point.position.clone().add(
       evaluateDynamicVector(this.initialValues.position ?? new THREE.Vector3(), time),
@@ -1051,8 +1197,11 @@ class Emitter {
       }),
     });
 
+    if (sourceFrame) particle.transformSimulationFrame(sourceFrame);
     particle.lodPriority = particleSystem.quality * Math.random();
-    return particleSystem.addParticle(particle, particles) ? particle : undefined;
+    if (!particleSystem.addParticle(particle, particles)) return undefined;
+    particleSystem.bindParticleSource(particle, context.source);
+    return particle;
   }
 
   private _selectTags(): Tag[] | undefined {
@@ -1070,44 +1219,7 @@ class Emitter {
     }
   }
 
-  // Shader rotation and recursive emission-option structure descriptions.
-  private rotateEulerYXZGPU(vector: Node<'vec3'>, rotation: Node<'vec3'>): Node<'vec3'> {
-    const a = cos(rotation.x);
-    const b = sin(rotation.x);
-    const c = cos(rotation.y);
-    const d = sin(rotation.y);
-    const e = cos(rotation.z);
-    const f = sin(rotation.z);
-
-    return vec3(
-      vector.x.mul(c.mul(e).add(d.mul(b).mul(f)))
-        .add(vector.y.mul(c.mul(f).negate().add(d.mul(b).mul(e))))
-        .add(vector.z.mul(d.mul(a))),
-      vector.x.mul(a.mul(f))
-        .add(vector.y.mul(a.mul(e)))
-        .sub(vector.z.mul(b)),
-      vector.x.mul(d.mul(e).negate().add(c.mul(b).mul(f)))
-        .add(vector.y.mul(d.mul(f).add(c.mul(b).mul(e))))
-        .add(vector.z.mul(c.mul(a))),
-    ) as Node<'vec3'>;
-  }
-
-  private rotateFromYGPU(vector: Node<'vec3'>, direction: Node<'vec3'>): Node<'vec3'> {
-    const target = direction.normalize();
-    const quaternionVector = vec3(target.z, 0, target.x.negate());
-    const quaternionScalar = float(1).add(target.y);
-    const inverseLength = quaternionVector.lengthSq().add(quaternionScalar.mul(quaternionScalar))
-      .max(float(Number.EPSILON))
-      .sqrt()
-      .reciprocal();
-    const qVector = quaternionVector.mul(inverseLength);
-    const qScalar = quaternionScalar.mul(inverseLength);
-    const rotated = vector.add(qVector.cross(qVector.cross(vector).add(vector.mul(qScalar))).mul(2));
-    const antiparallel = vec3(vector.x, vector.y.negate(), vector.z.negate());
-
-    return target.y.lessThan(-0.9999).select(antiparallel, rotated) as Node<'vec3'>;
-  }
-
+  // Recursively describe emission option structure for GPU configuration invalidation.
   private getDynamicStructure(value: unknown): string {
     if (value === undefined) return 'undefined';
     if (typeof value === 'number' || typeof value === 'function') return typeof value;
