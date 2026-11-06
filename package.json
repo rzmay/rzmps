@@ -28,7 +28,8 @@
     "site:check": "node scripts/docs/generate.mjs --check && node --test scripts/site/site.test.mjs scripts/site/dev.test.mjs",
     "site:browser-check": "node scripts/site/browser-check.mjs",
     "benchmark:atlas": "npm run build --workspace @rzmps/rzmps && node scripts/benchmark/textureAtlas.mjs",
-    "benchmark:lod": "npm run build --workspace @rzmps/rzmps && node packages/rzmps/tests/benchmark-lod.mjs"
+    "benchmark:lod": "npm run build --workspace @rzmps/rzmps && node packages/rzmps/tests/benchmark-lod.mjs",
+    "pr:prepare": "npm test && npm run build:modules && npm run benchmark:update-report && npm run docs:generate && npm run docs:check && npm run build --workspace demo && git diff --check && git diff --cached --check"
   },
   "devDependencies": {
     "skills": "^1.7.2",

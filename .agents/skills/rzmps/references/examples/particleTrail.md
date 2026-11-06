@@ -54,7 +54,11 @@ The 2-second loop continuously feeds particles with 2.5-second lifetimes. Gravit
         minimumVertexDistance: 0.05,
         dieWithParticles: false,
         width: 0.18,
-        widthOverTrail: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        widthOverTrail: (time) => {
+          if (time < 0.2) return time / 0.2;
+          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
+          return 0.85 * (1 - ((time - 0.75) / 0.25));
+        },
         colorOverTrail: (time) => new THREE.Color().lerpColors(
           new THREE.Color('#00d0ff'),
           new THREE.Color('#ff66ba'),
@@ -132,7 +136,11 @@ Particle mode gives every selected particle its own trail, with ratio 1. Trail l
         minimumVertexDistance: 0.05,
         dieWithParticles: false,
         width: 0.18,
-        widthOverTrail: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        widthOverTrail: (time) => {
+          if (time < 0.2) return time / 0.2;
+          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
+          return 0.85 * (1 - ((time - 0.75) / 0.25));
+        },
         colorOverTrail: (time) => new THREE.Color().lerpColors(
           new THREE.Color('#00d0ff'),
           new THREE.Color('#ff66ba'),

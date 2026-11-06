@@ -14,6 +14,18 @@
 
 ## Properties
 
+<a id="allocation"></a>
+
+### allocation
+
+```ts
+allocation: LightRendererAllocationOptions;
+```
+
+Predictive scene-light reservation and shrink hysteresis.
+
+***
+
 <a id="alphaaffectsintensity"></a>
 
 ### alphaAffectsIntensity
@@ -78,6 +90,12 @@ Visual approximation for population removed by system LOD. Defaults to none.
 count: number;
 ```
 
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Overrides
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`count`](../../interfaces/RendererOptions.md#count)
+
 ***
 
 <a id="decay"></a>
@@ -90,13 +108,47 @@ decay: number;
 
 ***
 
-<a id="groupingradiusratio"></a>
+<a id="events"></a>
 
-### groupingRadiusRatio
+### events?
 
 ```ts
-groupingRadiusRatio: number;
+optional events?: readonly string[];
 ```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`events`](../../interfaces/RendererOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`eventScope`](../../interfaces/RendererOptions.md#eventscope)
+
+***
+
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`groupingRadius`](../../interfaces/RendererOptions.md#groupingradius)
 
 ***
 
@@ -117,6 +169,34 @@ inheritParticleColor: boolean;
 ```ts
 lightOptions: PointLightOptions;
 ```
+
+***
+
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialComposite`](../../interfaces/RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCompositeGPU`](../../interfaces/RendererOptions.md#materialcompositegpu)
 
 ***
 
@@ -150,16 +230,6 @@ Optional surface whose appearance multiplies this renderer's configured appearan
 
 ***
 
-<a id="randomdistribution"></a>
-
-### randomDistribution
-
-```ts
-randomDistribution: boolean;
-```
-
-***
-
 <a id="rangemultiplier"></a>
 
 ### rangeMultiplier
@@ -177,6 +247,12 @@ rangeMultiplier: DynamicValue<number>;
 ```ts
 ratio: number;
 ```
+
+Representative fraction, rounded with Math.round after applying count. Defaults to 1.
+
+#### Overrides
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`ratio`](../../interfaces/RendererOptions.md#ratio)
 
 ***
 

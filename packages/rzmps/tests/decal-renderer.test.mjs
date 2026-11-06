@@ -287,7 +287,7 @@ test('capacity, repeated clear/setup/reset/destroy, tag filtering, unsupported t
   system._notifySpawn(p); assert.equal(renderer.count, 0);
   p.tags = ['mark'];
   renderer.setup(system); renderer.setup(system);
-  assert.equal(system._spawnListeners.length, 1);
+  assert.equal(renderer.subscriptions.filter(name => name === 'spawn').length, 1);
   for (let cycle = 0; cycle < 3; cycle++) {
     system._notifySpawn(p);
     const oldest = mark(floor);
@@ -566,4 +566,270 @@ test('decal options initialize public properties and clamp invalid numeric confi
   system._notifySpawn(source());
   assert.equal(live.count, 1);
   system.destroy();
+});
+
+test('Intersect sweeps only traveled distance, marks every entry/exit, and leaves motion unchanged', () => {
+  const { renderer, system, scene, floor } = fixture({ direction: (p, context) => DecalRenderer.Intersect()(p, context), onSpawn: false, continuousRate: 60,
+    hitSelection: DecalRenderer.All, maxDistance: 0.1, depth: 0.04, size: 0.2, inheritScale: 0 });
+  floor.removeFromParent();
+  const wallMaterial = new THREE.MeshBasicMaterial();
+  const geometry = new THREE.BoxGeometry(2, 2, 0.2);
+  const walls = [0, -2, -6].map(z => {
+    const wall = new THREE.Mesh(geometry, wallMaterial);
+    wall.position.set(0, 1, z);
+    scene.add(wall);
+    return wall;
+  });
+  scene.updateMatrixWorld(true);
+  const p = source();
+  p.position.z = 2;
+  p.velocity.set(0, 0, -50);
+  system._notifySpawn(p); renderer.update([p], system, 0);
+  assert.equal(renderer.count, 0, 'spawn must not project ahead of a moving bullet');
+  p.position.z = -4;
+  p.realtime = 120;
+  renderer.update([p], system, 0.12);
+  assert.equal(renderer.count, 4, 'two crossed boxes contribute entrance and exit marks');
+  assert.equal(walls[2].children.length, 0, 'a future surface remains unmarked');
+  assert.deepEqual(p.velocity.toArray(), [0, 0, -50]);
+  assert.deepEqual(p.position.toArray(), [0, 1, -4]);
+  renderer.update([p], system, 0.12);
+  assert.equal(renderer.count, 4, 'repeated snapshots must not replay a segment');
+  p.position.z = -8;
+  p.realtime = 200;
+  renderer.update([p], system, 0.08);
+  assert.equal(renderer.count, 6);
+  assert.equal(walls[2].children.length, 2);
+  renderer.clear();
+  assert.equal(renderer.continuousTicks.size, 0);
+  system.destroy(); geometry.dispose(); wallMaterial.dispose();
+});
+
+test('Intersect follows actual world-space motion in local simulation and respects selection caps', () => {
+  const { renderer, system, scene } = fixture({ direction: DecalRenderer.Intersect(), onSpawn: false, continuousRate: 60,
+    hitSelection: DecalRenderer.All, maxHits: 1, size: 0.2, inheritScale: 0 });
+  system.simulationSpace = 'local';
+  system.rotation.z = Math.PI / 2;
+  scene.updateMatrixWorld(true);
+  const p = source();
+  p.position.set(1, 0, 0);
+  p.velocity.set(-2, 0, 0);
+  system._notifySpawn(p); renderer.update([p], system, 0);
+  p.position.x = -1;
+  p.realtime = 1000;
+  renderer.update([p], system, 1);
+  assert.equal(renderer.count, 1);
+  assert.deepEqual(p.velocity.toArray(), [-2, 0, 0]);
+  system.destroy();
+});
+
+test('composited decals bind independent hit materials and surface UV charts without mutating the particle', () => {
+  const { renderer, system, scene, floor } = fixture({ direction: DecalRenderer.Intersect(), onSpawn: false, continuousRate: 60,
+    hitSelection: DecalRenderer.All, size: 0.25, depth: 0.03, inheritScale: 0,
+    materialComposite: (source, dest) => ({ color: source.color, opacity: dest.opacity }) });
+  floor.removeFromParent();
+  const materials = [new THREE.MeshStandardMaterial({ color: 'red' }),
+    new THREE.MeshStandardMaterial({ color: 'blue' })];
+  const geometry = new THREE.PlaneGeometry(2, 2);
+  const walls = materials.map((material, i) => {
+    const wall = new THREE.Mesh(geometry, material);
+    wall.position.set(0, 1, -i * 2);
+    scene.add(wall);
+    return wall;
+  });
+  scene.updateMatrixWorld(true);
+  const p = source();
+  p.position.z = 1;
+  p.velocity.set(0, 0, -4);
+  system._notifySpawn(p); renderer.update([p], system, 0);
+  p.position.z = -3;
+  p.realtime = 1000;
+  renderer.update([p], system, 1);
+  assert.equal(renderer.count, 2);
+  const ids = renderer.decals.map(decal => decal.appearanceParticle.materialCopy.x);
+  assert.notEqual(ids[0], ids[1]);
+  assert.equal(p.materialCopy.x, 0, 'renderer-only surface bindings must not recolor the bullet');
+  for (const [index, wall] of walls.entries()) {
+    const decal = mark(wall);
+    const binding = decal.geometry.getAttribute('materialCopy');
+    near(binding.getY(0), 0.5);
+    near(binding.getZ(0), 0.5);
+    const gradient = decal.geometry.getAttribute('materialCopyU');
+    near(gradient.getX(0), 0.5);
+    assert.equal(binding.getX(0), ids[index]);
+    assert.equal(decal.material.map, null, 'source maps must remain in the shared atlas path');
+  }
+  const before = ids.slice();
+  renderer.materialComposite = (source) => ({ color: source.color });
+  renderer.update([p], system, 0);
+  assert.deepEqual(renderer.decals.map(decal => decal.appearanceParticle.materialCopy.x), before);
+  system.destroy(); geometry.dispose(); materials.forEach(material => material.dispose());
+});
+
+test('Intersect uses GPU snapshots through continuousRate and never repeats completed segments', async () => {
+  const { renderer, system } = fixture({ direction: DecalRenderer.Intersect(), onSpawn: false, continuousRate: 60, hitSelection: DecalRenderer.All });
+  const p = source();
+  p.velocity.set(0, -2, 0);
+  system._notifySpawn(p); renderer.update([p], system, 0);
+  system.selectiveReadback = async () => [{ valid: true, particle: p }];
+  p.position.y = -1;
+  p.realtime = 1000;
+  renderer.updateGPU({ count: 1 }, system, 1);
+  await new Promise(setImmediate);
+  assert.equal(renderer.count, 1);
+  renderer.updateGPU({ count: 1 }, system, 1);
+  await new Promise(setImmediate);
+  assert.equal(renderer.count, 1);
+  system.destroy();
+});
+
+test('Intersect includes an exit exactly at the endpoint without repeating it in the next segment', () => {
+  const { renderer, system, scene, floor } = fixture({ direction: DecalRenderer.Intersect(), onSpawn: false, continuousRate: 60,
+    hitSelection: DecalRenderer.All, depth: 0.02, inheritScale: 0 });
+  floor.removeFromParent();
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 0.25), new THREE.MeshBasicMaterial());
+  wall.position.y = 1;
+  scene.add(wall);
+  scene.updateMatrixWorld(true);
+  const p = source();
+  p.position.z = 1;
+  p.velocity.set(0, 0, -1);
+  system._notifySpawn(p); renderer.update([p], system, 0);
+  p.position.z = -0.125;
+  p.realtime = 1125;
+  renderer.update([p], system, 1.125);
+  assert.equal(renderer.count, 2);
+  p.position.z = -1;
+  p.realtime = 2000;
+  renderer.update([p], system, 0.875);
+  assert.equal(renderer.count, 2);
+  system.destroy(); wall.geometry.dispose(); wall.material.dispose();
+});
+
+test('collision impulse thresholds gate only collision projection and include the threshold', () => {
+  const { renderer, system, floor } = fixture({ onSpawn: false, onCollision: true, impulseThreshold: 4 });
+  const particle = source();
+  const hit = { object: floor, point: new THREE.Vector3(), normal: new THREE.Vector3(0, 1, 0),
+    impulse: new THREE.Vector3(0, 3.99, 0) };
+  system.notifyCollision(particle, hit);
+  assert.equal(renderer.count, 0);
+  hit.impulse.y = 4;
+  system.notifyCollision(particle, hit);
+  assert.equal(renderer.count, 1);
+  hit.impulse.set(3, 4, 0);
+  system.notifyCollision(particle, hit);
+  assert.equal(renderer.count, 2, 'use vector magnitude, including tangential impulse');
+  renderer.onSpawn = true;
+  system._notifySpawn(particle);
+  assert.equal(renderer.count, 3, 'the collision threshold must not filter independent triggers');
+  system.destroy();
+});
+
+test('projector rotation is additive and randomized independently for marks from one particle', () => {
+  const { renderer, system } = fixture({ emissionTags: ['dust'], rotation: 0.7 });
+  const particle = source();
+  particle.rotation.z = 0.2;
+  system._notifySpawn(particle);
+  const orientation = new THREE.Quaternion().setFromRotationMatrix(renderer.decals[0].source.transform);
+  near(orientation.angleTo(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.9)), 0);
+  renderer.rotation = [-Math.PI, Math.PI];
+  for (let i = 0; i < 3; i++) system._notifySpawn(particle);
+  const turns = renderer.decals.slice(1).map(decal => new THREE.Quaternion()
+    .setFromRotationMatrix(decal.source.transform));
+  assert.ok(turns[0].angleTo(turns[1]) > 1e-5);
+  assert.ok(turns[1].angleTo(turns[2]) > 1e-5);
+  assert.equal(particle.rotation.z, 0.2, 'projector roll must not rotate the originating particle');
+  system.destroy();
+});
+
+test('composited decals borrow the hit material environment, intensity and rotation', () => {
+  const { renderer, system, floor } = fixture({
+    materialComposite: source => ({ color: source.color }),
+  });
+  floor.material.dispose();
+  floor.material = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
+  const environment = new THREE.CubeTexture();
+  let disposed = false;
+  environment.addEventListener('dispose', () => { disposed = true; });
+  floor.material.envMap = environment;
+  floor.material.envMapIntensity = 1.7;
+  floor.material.envMapRotation.set(0.1, 0.2, 0.3);
+  system._notifySpawn(source());
+  const material = renderer.decals[0].mesh.material;
+  assert.equal(material.envMap, environment);
+  assert.equal(material.envMapIntensity, 1.7);
+  assert.ok(material.envMapRotation.equals(floor.material.envMapRotation));
+  assert.notEqual(material.envMapRotation, floor.material.envMapRotation);
+  system.destroy();
+  assert.equal(disposed, false, 'decal cleanup must not dispose the surface capture');
+  environment.dispose();
+});
+
+
+test('material selection keeps map bundles paired and stable when composition changes', () => {
+  const templates = Array.from({ length: 6 }, () => new THREE.MeshStandardMaterial({
+    normalMap: new THREE.Texture(), alphaMap: new THREE.Texture(), aoMap: new THREE.Texture(),
+  }));
+  const { renderer, system } = fixture({ materialComposite: source => ({ color: source.color }) }, templates);
+  const particle = source();
+  particle.id = 'material-variants';
+
+  // Repeated impacts from the same source must be able to choose different templates.
+  for (let i = 0; i < 64; i++) system._notifySpawn(particle);
+  assert.equal(new Set(renderer.decals.map(decal => decal.materialTemplate)).size, 6);
+  const selected = renderer.decals.map(decal => decal.materialTemplate);
+  renderer.materialComposite = source => ({ color: source.color, roughness: source.roughness });
+
+  renderer.decals.forEach((decal, index) => {
+    assert.equal(decal.materialTemplate, selected[index]);
+    assert.notEqual(decal.mesh.material, selected[index]);
+    for (const key of ['normalMap', 'alphaMap', 'aoMap']) {
+      assert.equal(decal.mesh.material[key], selected[index][key]);
+    }
+  });
+
+  // Explicit choices override randomness, including a single-item list.
+  renderer.materialIndex = 3;
+  system._notifySpawn(particle);
+  assert.equal(renderer.decals.at(-1).materialTemplate, templates[3]);
+  renderer.material = [templates[0]];
+  system._notifySpawn(particle);
+  assert.equal(renderer.decals.at(-1).materialTemplate, templates[0]);
+  system.destroy();
+  templates.forEach(material => {
+    material.dispose();
+    for (const key of ['normalMap', 'alphaMap', 'aoMap']) material[key].dispose();
+  });
+});
+
+
+test('material images prepare before contact, once per renderer, without touching render targets', () => {
+  const shared = new THREE.Texture({ width: 4, height: 4 });
+  const pending = new THREE.Texture({ width: 0, height: 0 });
+  const target = new THREE.WebGLRenderTarget(4, 4);
+  const materials = [new THREE.MeshStandardMaterial({ normalMap: shared, alphaMap: pending, envMap: target.texture }),
+    new THREE.MeshStandardMaterial({ normalMap: shared })];
+  const { renderer, system } = fixture({}, materials);
+  const uploads = [];
+  system._renderer = { initTexture(texture) { uploads.push(texture); } };
+
+  renderer.update([], system, 0);
+  assert.deepEqual(uploads, [shared]);
+  assert.equal(renderer.count, 0, 'preparation does not require projecting a decal');
+  renderer._updateGPU({}, system, 0);
+  assert.deepEqual(uploads, [shared], 'CPU/GPU preparation shares the same upload cache');
+
+  pending.image = { width: 4, height: 4 };
+  renderer._updateGPU({}, system, 0);
+  assert.deepEqual(uploads, [shared, pending]);
+  renderer.update([], system, 0);
+  assert.deepEqual(uploads, [shared, pending]);
+
+  const replacement = [];
+  system._renderer = { initTexture(texture) { replacement.push(texture); } };
+  renderer.update([], system, 0);
+  assert.deepEqual(replacement, [shared, pending], 'a different renderer gets its own prepared resources');
+  system.destroy();
+  materials.forEach(material => material.dispose());
+  shared.dispose(); pending.dispose(); target.dispose();
 });

@@ -84,6 +84,28 @@ particle: GPUParticleRenderContext;
 
 ***
 
+<a id="spacingindex"></a>
+
+### spacingIndex?
+
+```ts
+optional spacingIndex?: (index) => Node<"uint">;
+```
+
+Source simulation slot for system-owned LOD spacing.
+
+#### Parameters
+
+##### index
+
+`Node`\<`"uint"`\>
+
+#### Returns
+
+`Node`\<`"uint"`\>
+
+***
+
 <a id="storage"></a>
 
 ### storage

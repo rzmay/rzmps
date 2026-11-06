@@ -163,6 +163,7 @@ createCollisionSubEmitters.author = "rzmay";
 export const metadata = {
   "id": "collisionSubEmitters",
   "title": "Metal Balls",
+  // eslint-disable-next-line max-len -- Documentation discovery requires a single literal description.
   "description": "Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces.",
   "tags": [
     "collisionSubEmitters"

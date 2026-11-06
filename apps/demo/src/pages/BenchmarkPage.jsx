@@ -2,7 +2,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { vec3 } from 'three/tsl';
+import { If, vec3, vec4 } from 'three/tsl';
 import {
   AmbientLightNode,
   DirectionalLightNode,
@@ -374,6 +374,7 @@ function summarize({
     gpuConfigurationStats: system.gpuConfigurationStats,
     spatialGridDiagnostics: system.__gridDiagnostics,
     dynamicSpatialDiagnostics: system.__dynamicSpatialDiagnostics,
+    emitterInstanceDiagnostics: system.__emitterInstanceDiagnostics,
   };
 }
 
@@ -401,6 +402,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     || suite === 'milestone2'
     || suite === 'milestone3'
     || suite === 'milestone4'
+    || suite === 'emitter-instances'
     || suite === 'doppler'
     || suite === 'runtime-config'
     || suite === 'dynamic-spatial'
@@ -1234,6 +1236,83 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }]);
     }
 
+    if (suite === 'emitter-instances') {
+      return pairBenchmarkCases([8, 256, 2048].flatMap(count => ['live', 'events'].map(kind => ({
+        name: `Emitter instances ${kind} ${count}`,
+        particleCount: 0,
+        create: () => ({
+          initialParticleCount: 0,
+          duration: 60,
+          maxParticles: count,
+          renderer: new NoopRenderer(),
+          emitters: [new Emitter({
+            source: EmissionShape.Sphere(1),
+            bursts: { time: 0, count },
+            radialSpeed: 0,
+            initialValues: { lifetime: 60 },
+          })],
+          modules: kind === 'events' ? [new Module((particle, dt) => {
+            if (Math.floor(particle.realtime / 750) > Math.floor(Math.max(0, particle.realtime - dt * 1000) / 750)) {
+              particle.emitEvent('pulse', 1);
+            }
+          }, { modifyGPU(particle, dt) {
+            If(particle.realtime.div(750).floor()
+              .greaterThan(particle.realtime.sub(dt.mul(1000)).max(0).div(750).floor()), () => {
+              particle.emitEvent('pulse', [vec4(1, 0, 0, 0)]);
+            });
+          } })] : [],
+        }),
+        configure: (system, mode) => {
+          system.duration = 60;
+          const child = new ParticleSystem({
+            gpuProcessing: mode === 'gpu',
+            gravityModifier: 0,
+            duration: 0.4,
+            maxParticles: count * 4,
+            emitters: [new Emitter({
+              source: EmissionShape.Sphere(0.01),
+              rate: kind === 'live' ? 12 : 0,
+              bursts: kind === 'events' ? [{ time: 0, count: 1 }, { time: 0.5, count: 1 }] : [],
+              radialSpeed: 0,
+              initialValues: { lifetime: 0.2 },
+            })],
+            renderers: [new NoopRenderer()],
+          });
+          // Fix output capacity so the comparison measures executions rather than pool growth.
+          child._getInitialGPUBufferCapacity = () => count * 4;
+          system.addSubSystem(child, {
+            emitContinuous: kind === 'live',
+            onEvent: kind === 'events' ? ['pulse'] : undefined,
+            inheritLifetime: 0,
+          });
+        },
+        validate: system => {
+          const child = [...system.subSystems.keys()][0];
+          if (!system.isGPUProcessingActive && !child.liveParticleCount && kind === 'live') {
+            throw new Error('Live instances did not emit.');
+          }
+          if (system.isGPUProcessingActive && (!child.isGPUProcessingActive || system.particles.length
+            || child.particles.length || system.gpuEventStats.readbackCount || child.gpuEventStats.readbackCount)) {
+            throw new Error('Emitter instances must stay GPU-native without event readback.');
+          }
+          const runtime = kind === 'live' ? child._gpuContinuousEmitterInstances : child._gpuEventEmitterInstances;
+          system.__emitterInstanceDiagnostics = {
+            childCapacity: child.gpuBufferStats.allocated,
+            instanceCapacity: runtime?.capacity ?? 0,
+            instanceBufferBytes: runtime ? runtime.floatAttribute.array.byteLength
+              + runtime.uintAttribute.array.byteLength + runtime.runtimeCounterAttribute.array.byteLength : 0,
+            snapshotBufferBytes: child._gpuEmissionRuns
+              ? child._gpuEmissionRuns.snapshots.attributes.floatData.array.byteLength
+                + child._gpuEmissionRuns.snapshots.attributes.uintData.array.byteLength : 0,
+            particleBufferBytes: child._gpuBuffers ? child._gpuBuffers.attributes.floatData.array.byteLength
+              + child._gpuBuffers.attributes.uintData.array.byteLength : 0,
+            childConfiguration: child.gpuConfigurationStats,
+            childEvents: child.gpuEventStats,
+          };
+        },
+      }))));
+    }
+
     if (suite === 'milestone4') {
       return pairBenchmarkCases([{
         name: 'Milestone 4 GPU-native lifecycle and subsystems',
@@ -1882,9 +1961,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
     const frameStart = performance.now();
     const updateStart = performance.now();
-    const computeDispatchesBefore = active.current.system.__rzmpsBenchmarkComputeDispatches
-      ?? gl.__rzmpsBenchmarkComputeDispatches
-      ?? 0;
+    const computeDispatchesBefore = suite === 'emitter-instances'
+      ? gl.__rzmpsBenchmarkComputeDispatches
+      : active.current.system.__rzmpsBenchmarkComputeDispatches ?? gl.__rzmpsBenchmarkComputeDispatches ?? 0;
     const simulationDispatchesBefore = active.current.system.__rzmpsBenchmarkSimulationDispatches ?? 0;
     const renderOutputDispatchesBefore = active.current.system.__rzmpsBenchmarkRenderOutputDispatches ?? 0;
     active.current.beforeUpdate?.(active.current.system, frameStart - active.current.phaseStartedAt);
@@ -1899,9 +1978,10 @@ function BenchmarkScene({ onComplete, onProgress }) {
       active.current.simulationNodeBuilds += 1;
       active.current.system.__rzmpsSimulationNodeBuilds = active.current.simulationNodeBuilds;
     }
-    const computeDispatchesAfter = active.current.system.__rzmpsBenchmarkComputeDispatches
-      ?? gl.__rzmpsBenchmarkComputeDispatches
-      ?? computeDispatchesBefore;
+    const computeDispatchesAfter = suite === 'emitter-instances'
+      ? gl.__rzmpsBenchmarkComputeDispatches
+      : active.current.system.__rzmpsBenchmarkComputeDispatches
+        ?? gl.__rzmpsBenchmarkComputeDispatches ?? computeDispatchesBefore;
     const simulationDispatchesAfter = active.current.system.__rzmpsBenchmarkSimulationDispatches
       ?? simulationDispatchesBefore;
     const renderOutputDispatchesAfter = active.current.system.__rzmpsBenchmarkRenderOutputDispatches

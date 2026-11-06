@@ -2,9 +2,12 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
   Collision,
+  DecalRenderer,
   Emitter,
   EmissionShape,
   MaterialCopySampleMode,
+  MaterialCopy,
+  MaterialCopySource,
   MeshRenderer,
   ParticleSystem,
   RotationBySpeed,
@@ -12,6 +15,30 @@ import {
 } from '@rzmps/rzmps';
 
 import { Easing } from 'eaz';
+import impact1Normal from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_01_normal.PNG?url';
+import impact1Opacity from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_01_opacity.PNG?url';
+import impact1AO from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_01_ambientocclusion.PNG?url';
+import impact1Roughness from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_01_roughness.PNG?url';
+import impact2Normal from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_02_normal.PNG?url';
+import impact2Opacity from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_02_opacity.PNG?url';
+import impact2AO from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_02_ambientocclusion.PNG?url';
+import impact2Roughness from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_02_roughness.PNG?url';
+import impact3Normal from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_03_normal.PNG?url';
+import impact3Opacity from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_03_opacity.PNG?url';
+import impact3AO from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_03_ambientocclusion.PNG?url';
+import impact3Roughness from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_03_roughness.PNG?url';
+import impact4Normal from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_04_normal.PNG?url';
+import impact4Opacity from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_04_opacity.PNG?url';
+import impact4AO from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_04_ambientocclusion.PNG?url';
+import impact4Roughness from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_04_roughness.PNG?url';
+import impact5Normal from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_05_normal.PNG?url';
+import impact5Opacity from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_05_opacity.PNG?url';
+import impact5AO from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_05_ambientocclusion.PNG?url';
+import impact5Roughness from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_05_roughness.PNG?url';
+import impact6Normal from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_06_normal.PNG?url';
+import impact6Opacity from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_06_opacity.PNG?url';
+import impact6AO from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_06_ambientocclusion.PNG?url';
+import impact6Roughness from '../apps/demo/src/assets/images/impact/512/T_concrete_impact_06_roughness.PNG?url';
 import destruction1 from '../apps/demo/src/assets/models/Destruction_1.glb?url';
 import destruction2 from '../apps/demo/src/assets/models/Destruction_2.glb?url';
 import destruction3 from '../apps/demo/src/assets/models/Destruction_3.glb?url';
@@ -44,7 +71,48 @@ async function loadFragments() {
 
 /** Metal ball impacts emit mesh fragments using UV patches from the contacted surface. */
 export default async function createDestruction() {
-  const fragments = await loadFragments();
+  const textureLoader = new THREE.TextureLoader();
+
+  // #region docs:renderers:3
+  // Load each matching map bundle together, then choose one whole material per impact.
+  const impactURLs = [
+    { normalMap: impact1Normal, alphaMap: impact1Opacity,
+      aoMap: impact1AO, roughnessMap: impact1Roughness },
+    { normalMap: impact2Normal, alphaMap: impact2Opacity,
+      aoMap: impact2AO, roughnessMap: impact2Roughness },
+    { normalMap: impact3Normal, alphaMap: impact3Opacity,
+      aoMap: impact3AO, roughnessMap: impact3Roughness },
+    { normalMap: impact4Normal, alphaMap: impact4Opacity,
+      aoMap: impact4AO, roughnessMap: impact4Roughness },
+    { normalMap: impact5Normal, alphaMap: impact5Opacity,
+      aoMap: impact5AO, roughnessMap: impact5Roughness },
+    { normalMap: impact6Normal, alphaMap: impact6Opacity,
+      aoMap: impact6AO, roughnessMap: impact6Roughness },
+  ];
+  const [fragments, impactTextures] = await Promise.all([
+    loadFragments(),
+    Promise.all(impactURLs.map(async urls => {
+      const entries = await Promise.all(Object.entries(urls).map(async ([key, url]) => {
+        const texture = await textureLoader.loadAsync(url);
+        texture.colorSpace = THREE.NoColorSpace;
+        texture.channel = 0;
+        return [key, texture];
+      }));
+      return Object.fromEntries(entries);
+    })),
+  ]);
+  const impactMaterials = impactTextures.map(maps => new THREE.MeshStandardMaterial({
+    ...maps,
+    normalScale: new THREE.Vector2(2, 2),
+    roughness: 1,
+    metalness: 0,
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+  }));
+  // #endregion docs:renderers:3
+
   const thicknesses = fragments.map(fragment => {
     fragment.geometry.computeBoundingBox();
     const size = fragment.geometry.boundingBox.getSize(new THREE.Vector3());
@@ -75,10 +143,47 @@ export default async function createDestruction() {
     modules: new Collision({ bounce: 0.55, dampen: 0.1 }),
     // #endregion docs:modules:1
     // #region docs:renderers:1
-    renderers: new MeshRenderer({
-      geometry: new THREE.SphereGeometry(0.5, 12, 8),
-      materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
-    }),
+    renderers: [
+      new MeshRenderer({
+        geometry: new THREE.SphereGeometry(0.5, 12, 8),
+        materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
+      }),
+      new DecalRenderer(impactMaterials, {
+        atlasOptions: { minCapacity: 4 },
+        textureCopyQuality: 1,
+        // The final opacity blend masks all damage lighting once, preserving soft edges.
+        materialComposite: (source, dest) => ({
+          color: source.color,
+          opacity: `${source.opacity} * ${dest.opacity}`,
+          normal: source.normal,
+          roughness: `${source.roughness} * ${dest.roughness}`,
+          metalness: source.metalness,
+        }),
+        materialCompositeGPU: (source, dest) => ({
+          color: source.color,
+          opacity: source.opacity.mul(dest.opacity),
+          normal: source.normal,
+          roughness: source.roughness.mul(dest.roughness),
+          metalness: source.metalness,
+        }),
+        onSpawn: false,
+        impulseThreshold: 4,
+        rotation: [-Math.PI, Math.PI],
+        size: 0.55,
+        impulseAffectsSize: 0.3,
+        onCollision: (hit, source, parameters) => ({
+          size: parameters.size.clone().clampScalar(0.5, 1.4),
+        }),
+        depth: 0.06,
+        maxDistance: 0.5,
+        inheritScale: 0,
+        inheritColor: 0,
+        inheritAlpha: 0,
+        lifetime: 60,
+        maxDecals: 384,
+        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1),
+      }),
+    ],
     // #endregion docs:renderers:1
   });
   // #endregion docs:system:1
@@ -105,6 +210,7 @@ export default async function createDestruction() {
     // #endregion docs:emitters:2
     // #region docs:modules:2
     modules: [
+      new MaterialCopy({ source: MaterialCopySource.Collision, sampleMode: MaterialCopySampleMode.UVPatch }),
       // Contact damping reduces sliding while allowing fragments to tumble and rebound.
       new Collision({ bounce: 0.3, dampen: [0.2, 0.5], radiusScale: collisionDiameter }),
       new RotationBySpeed({
@@ -120,8 +226,9 @@ export default async function createDestruction() {
     // Neutral factors preserve the source appearance. Render each fragment only once.
     renderers: new MeshRenderer({
       mesh: fragments,
+      atlasOptions: { minCapacity: 4 },
+      textureCopyQuality: 1,
       maxParticles: 512,
-      materialCopySampleMode: MaterialCopySampleMode.UVPatch,
       materialOptions: { roughness: 1, metalness: 1 },
     }),
     // #endregion docs:renderers:2
@@ -131,7 +238,6 @@ export default async function createDestruction() {
   // #region docs:system:3
   system.addSubSystem(debris, {
     emitOnCollision: true,
-    copyCollisionMaterial: true,
     inheritScale: 0,
     inheritColor: 0,
     inheritLifetime: 0,
@@ -144,6 +250,8 @@ export default async function createDestruction() {
   // #endregion docs:system:3
 
   system.addEventListener('destroyed', () => {
+    impactMaterials.forEach(material => material.dispose());
+    impactTextures.forEach(maps => Object.values(maps).forEach(texture => texture.dispose()));
     fragments.forEach(fragment => fragment.geometry.dispose());
     if (fragments.length) fragments[0].material.dispose();
   });
@@ -159,7 +267,8 @@ export const metadata = {
   id: 'destruction',
   title: 'Destruction',
   category: 'effects',
-  tags: ['collision', 'materials'],
-  description: 'Metal ball impacts emit fragments that inherit the collided surface material and UV footprint.',
+  tags: ['destruction', 'collision', 'debris', 'meshes', 'batching', 'materials', 'material-copy',
+    'uv-patch', 'decals', 'compositing', 'impulse'],
+  description: 'Metal ball impacts leave concrete cracks and fragments carrying the contacted surface UV footprint.',
 };
 createDestruction.description = metadata.description;

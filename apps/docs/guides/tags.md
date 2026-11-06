@@ -62,3 +62,39 @@ participate in the existing GPU tag registry and its 32-tag limit.
 
 The [Destruction example](../examples/destruction.md) supplies five meshes as a plain random-choice array.
 Wrap that array in a map such as `{ rock: { fracture: meshes } }` to require both tags instead.
+
+## Changing Tags During Updates
+
+CPU modules can modify `particle.tags` directly. GPU update callbacks can use `particle.addTag(name)` and
+`particle.removeTag(name)` to modify the particle's bitmask without assigning bit positions themselves:
+
+```ts
+const pulseTags = new Module(() => {}, {
+  modifyGPU(particle) {
+    If(particle.alpha.greaterThan(0.5), () => {
+      particle.addTag('glowing');
+    }).Else(() => {
+      particle.removeTag('glowing');
+    });
+  },
+});
+const lights = new LightRenderer({ tags: 'glowing', count: 16 });
+```
+
+Here `If` comes from `three/tsl`; `Module` and `LightRenderer` come from `@rzmps/rzmps`. The tag must already be
+registered by an emitter, module, renderer, spatial effect, or subsystem tag selector in the composition. The light
+renderer registers `glowing` in this example. Unknown names throw during shader construction, so typos cannot silently
+change unrelated bits. Repeated additions and removals are idempotent and preserve other tags, including bit 31.
+
+Use a permanent module priority when the change should persist into later simulation steps. A transient module's
+changes follow the existing transient-state rules. GPU event records are snapshots; their source views cannot use
+these helpers to mutate a live particle. GPU tag capacity remains 32 names per composition.
+
+The [Fireflies example](../examples/fireflies.md) gives its glow pulses their own particle system, allowing a light
+renderer to select that population directly without changing tags.
+
+
+Sub-particles do not automatically inherit tags from their source particle or registered source. Set the child
+emitter's `tags` explicitly. `sourceTags` filters event origins independently of the tags assigned to new particles;
+this makes it possible to select rocket deaths while producing sparkles that do not match the rocket filter.
+Tag inheritance is not required for Source simulation space or source tracking.

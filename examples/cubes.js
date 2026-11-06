@@ -5,7 +5,6 @@ import {
   MeshRenderer,
   ParticleSystem,
   RotationOverLifetime,
-  SpriteRenderer,
 } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 

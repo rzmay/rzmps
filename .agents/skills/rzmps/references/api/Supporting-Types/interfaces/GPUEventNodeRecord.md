@@ -40,12 +40,32 @@ collisionPoint: Node<"vec3">;
 
 ***
 
+<a id="data"></a>
+
+### data
+
+```ts
+data: GPUEventData;
+```
+
+***
+
 <a id="generation"></a>
 
 ### generation
 
 ```ts
 generation: Node<"uint">;
+```
+
+***
+
+<a id="hassource"></a>
+
+### hasSource
+
+```ts
+hasSource: Node<"bool">;
 ```
 
 ***
@@ -77,6 +97,18 @@ materialCopyU: Node<"vec4">;
 ```ts
 materialCopyV: Node<"vec4">;
 ```
+
+***
+
+<a id="origin"></a>
+
+### origin
+
+```ts
+origin: Node<"uint">;
+```
+
+Owning system's numeric Object3D identity; zero in legacy standalone buffers.
 
 ***
 

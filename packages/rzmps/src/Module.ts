@@ -1,4 +1,8 @@
-import Particle from './Particle';
+import EventReceiver, { type EventExecutionContext, type EventReceiverOptions } from './EventReceiver';
+import Particle, {
+  type ParticleInitializer, type GPUParticleInitializer,
+  type ParticleInitializationContext, type GPUParticleInitializationContext,
+} from './Particle';
 import ParticleSystem from './ParticleSystem';
 import type { Tag } from './types/Tag';
 import type { StrictMultiple } from './types/Multiple';
@@ -6,6 +10,7 @@ import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
 import SpatialEffect from './SpatialEffect';
 import Priority from './enums/Priority';
+import type { GPUEventBatch } from './gpu/EventBatch';
 import type { GPUParticleLike, GPUParticleUpdateContext } from './gpu/Particle';
 import type { Node } from 'three/webgpu';
 import { GPUDynamicParameterStore } from './helpers/evaluateDynamicGPU';
@@ -15,44 +20,48 @@ import ParticleOctree, {
   type OctreeConfig,
 } from './helpers/ParticleOctree';
 
-export interface ModuleOctreeAggregate {
-  count: number;
+export interface ModuleExecutionContext extends EventExecutionContext {
+  readonly octree?: ParticleOctree<unknown>;
+}
+export interface ModuleGPUExecutionContext extends GPUParticleUpdateContext {
+  readonly events: GPUEventBatch;
+  readonly spatialGrid?: ParticleSpatialGrid;
 }
 
 export type ModuleUpdate = (
   particle: Particle,
   deltaTime: number,
-  particleSystem?: ParticleSystem,
-  octree?: ParticleOctree<unknown>,
+  context: ModuleExecutionContext,
 ) => void;
 
 export type ModuleCondition = (
   particle: Particle,
   deltaTime: number,
-  particleSystem?: ParticleSystem,
-  octree?: ParticleOctree<unknown>,
+  context: ModuleExecutionContext,
 ) => boolean;
 
 export type ModuleGPUUpdate = (
   /** Shader-node particle view; mutate fields through TSL assignment methods. */
   particle: GPUParticleLike,
   deltaTime: Node<'float'>,
-  context: GPUParticleUpdateContext,
-  spatialGrid?: ParticleSpatialGrid,
+  context: ModuleGPUExecutionContext,
 ) => void;
 
 export type ModuleGPUCondition = (
   particle: GPUParticleLike,
   deltaTime: Node<'float'>,
-  context: GPUParticleUpdateContext,
-  spatialGrid?: ParticleSpatialGrid,
+  context: ModuleGPUExecutionContext,
 ) => Node<'bool'>;
 
 export type SpatialEffectConstructor<T extends SpatialEffect = SpatialEffect> = {
   new (...args: never[]): T;
 };
 
-export interface ModuleOptions {
+export interface ModuleOptions extends EventReceiverOptions {
+  initializeParticle?: ParticleInitializer;
+  initializeParticleGPU?: GPUParticleInitializer;
+  /** Shared preparation work, called once before processing particles. */
+  prepare: (context: ModuleExecutionContext) => void;
   // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
   /** Execution phase:
    * negative is permanent before movement,
@@ -89,7 +98,7 @@ export interface ModuleOptions {
 }
 
 /** Per-particle modifier with priority phases, tag filtering, and a once-per-update preparation hook. */
-export default class Module {
+export default class Module extends EventReceiver {
   public static readonly Priority = Priority;
 
   static CPU_UNSUPPORTED: ModuleUpdate = () => {
@@ -100,9 +109,19 @@ export default class Module {
     throw new Error('This particle module does not support GPU processing.');
   };
 
+  declare executionContext?: ModuleExecutionContext;
+
   // Sub-modules on which this module depends.
   // Useful for pre-processing or combining priority stages.
   public dependents: Module[] = [];
+  initializeParticle(_particle: Particle, _context: ParticleInitializationContext): void {
+    void _particle;
+    void _context;
+  }
+  initializeParticleGPU(_particle: GPUParticleLike, _context: GPUParticleInitializationContext): void {
+    void _particle;
+    void _context;
+  }
 
   tags?: Tag[];
   condition: ModuleCondition;
@@ -115,7 +134,7 @@ export default class Module {
   octree?: ParticleOctree<unknown>;
   readonly useOctree: boolean;
   readonly octreeOptions: Partial<OctreeConfig>;
-  readonly octreeAggregator: OctreeAggregator<unknown>;
+  readonly octreeAggregator?: OctreeAggregator<unknown>;
   readonly useSpatialGrid: boolean;
   spatialGridOptions?: Partial<ParticleSpatialGridOptions>;
   protected spatialGrid?: ParticleSpatialGrid;
@@ -140,10 +159,16 @@ export default class Module {
   }
 
   /** Wraps a per-particle callback; options select filtering, spatial collection, and priority. */
-  constructor(
-    public _modify: ModuleUpdate,
-    options: Partial<ModuleOptions> = {},
-  ) {
+  public _modify: ModuleUpdate;
+  /** @internal Function-defined preparation hook, preserved by demo serialization. */
+  public readonly _prepare?: (context: ModuleExecutionContext) => void;
+
+  constructor(modify: ModuleUpdate, options: Partial<ModuleOptions> = {}) {
+    super(options);
+    this._modify = modify;
+    this.initializeParticle = options.initializeParticle ?? this.initializeParticle;
+    this.initializeParticleGPU = options.initializeParticleGPU ?? this.initializeParticleGPU;
+    this._prepare = options.prepare;
     this.tags = acceptMultiple(options.tags);
     this._hasCustomCondition = options.condition !== undefined;
     this.condition = options.condition ?? (() => true);
@@ -155,14 +180,16 @@ export default class Module {
     this.requireSpatialEffects = acceptMultiple(options.requireSpatialEffects);
     this.useOctree = options.useOctree ?? options.octreeOptions !== undefined;
     this.octreeOptions = options.octreeOptions ?? {};
-    this.octreeAggregator = options.octreeAggregator ?? createDefaultOctreeAggregator();
+    this.octreeAggregator = options.octreeAggregator;
     this.useSpatialGrid = options.useSpatialGrid ?? options.spatialGridOptions !== undefined;
     this.spatialGridOptions = options.spatialGridOptions;
   }
 
   /** Whether both modification and any custom condition have GPU implementations. */
   get supportsGPU(): boolean {
-    return this.modifyGPU !== Module.GPU_UNSUPPORTED
+    return (this.initializeParticle === Module.prototype.initializeParticle
+      || this.initializeParticleGPU !== Module.prototype.initializeParticleGPU)
+      && this.modifyGPU !== Module.GPU_UNSUPPORTED
       && (!this._hasCustomCondition || this.conditionGPU !== undefined);
   }
 
@@ -174,7 +201,7 @@ export default class Module {
     }
 
     const options = (this as Module & { options?: unknown }).options;
-    const structureSignature = getGPUValueStructure(options);
+    const structureSignature = this.getGPUValueStructure(options);
     if (this._gpuStructureSignature && structureSignature !== this._gpuStructureSignature) {
       this._version += 1;
     }
@@ -182,13 +209,22 @@ export default class Module {
   }
 
   /** Applies tag and condition selection before invoking the particle callback. */
-  public modify(particles: Particle[], deltaTime: number, particleSystem?: ParticleSystem): void {
+  public modify(particles: Particle[], deltaTime: number, context: ModuleExecutionContext): void {
     particles.filter((p) => (
       p.alive
       && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
-      && this.condition(p, deltaTime, particleSystem, this.octree)
+      && this.condition(p, deltaTime, context)
     ))
-      .forEach((p) => this._modify(p, deltaTime, particleSystem, this.octree));
+      .forEach((p) => this._modify(p, deltaTime, context));
+  }
+
+  /** @internal Freezes one event batch for preparation, conditions, and all particle callbacks. */
+  protected override createExecutionContext(context: EventExecutionContext): ModuleExecutionContext {
+    // Preparation can create the managed tree; keep the shared context's octree access live.
+    return Object.freeze(Object.defineProperty({ ...context }, 'octree', {
+      enumerable: true,
+      get: () => this.octree,
+    }));
   }
 
   /** Flattens dependents before this module; priority sorting still determines execution phases. */
@@ -201,8 +237,12 @@ export default class Module {
   }
 
   /** Prepares shared work once per system update; the base implementation collects matching spatial effects. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public prepare(particleSystem: ParticleSystem, deltaTime: number) {
+  public prepare(context: ModuleExecutionContext): void {
+    this.prepareCollections(context.system);
+    this._prepare?.(context);
+  }
+
+  private prepareCollections(particleSystem: ParticleSystem): void {
     this.prepareSpatialEffects(particleSystem);
     if (!this.useOctree || particleSystem.isGPUProcessingActive) return;
 
@@ -268,27 +308,24 @@ export default class Module {
       ) this.spatialEffects.push(object);
     });
   }
-}
 
-function createDefaultOctreeAggregator(): OctreeAggregator<ModuleOctreeAggregate> {
-  return {
-    new: (particle) => ({ count: particle ? 1 : 0 }),
-    combine: (a, b) => ({ count: a.count + b.count }),
-  };
-}
+  // Recursively describe GPU option structure; numeric values stay in dynamic parameter storage.
+  private getGPUValueStructure(value: unknown): string {
+    if (value === undefined) return 'undefined';
+    if (value === null) return 'null';
+    if (typeof value === 'boolean' || typeof value === 'string') return `${typeof value}:${value}`;
+    if (typeof value === 'number' || typeof value === 'function') return typeof value;
+    if (Array.isArray(value) || value instanceof Set) {
+      const entries = Array.from(value).map(entry => this.getGPUValueStructure(entry));
+      return `${Array.isArray(value) ? 'array' : 'set'}:${entries.join(',')}`;
+    }
+    if (typeof value !== 'object') return typeof value;
 
-function getGPUValueStructure(value: unknown): string {
-  if (value === undefined) return 'undefined';
-  if (value === null) return 'null';
-  if (typeof value === 'boolean' || typeof value === 'string') return `${typeof value}:${value}`;
-  if (typeof value === 'number' || typeof value === 'function') return typeof value;
-  if (Array.isArray(value)) return `array:${value.map(getGPUValueStructure).join(',')}`;
-  if (value instanceof Set) return `set:${Array.from(value).map(getGPUValueStructure).join(',')}`;
-  if (typeof value !== 'object') return typeof value;
-
-  const record = value as Record<string, unknown>;
-  if ('isNode' in record) return 'node';
-  const constructorName = value.constructor?.name ?? 'Object';
-  if (constructorName !== 'Object') return constructorName;
-  return `object:${Object.keys(record).sort().map((key) => `${key}=${getGPUValueStructure(record[key])}`).join(',')}`;
+    const record = value as Record<string, unknown>;
+    if ('isNode' in record) return 'node';
+    const constructorName = value.constructor?.name ?? 'Object';
+    if (constructorName !== 'Object') return constructorName;
+    const entries = Object.keys(record).sort().map(key => `${key}=${this.getGPUValueStructure(record[key])}`);
+    return `object:${entries.join(',')}`;
+  }
 }

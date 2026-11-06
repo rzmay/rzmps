@@ -34,7 +34,7 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
           speed: 1,
           scale: 2.5,
           color: ['#ffffff', '#ffd166'],
-          rotation: [new THREE.Vector3(-90, 0, 0), new THREE.Vector3(90, 0, 0)],
+          rotation: [-90, 90],
           alpha: 1,
           velocity: new THREE.Vector3(0, 0, 0),
           radial: 0.45,
@@ -63,7 +63,6 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
       new LightRenderer({
         count: 18,
         ratio: 0.3,
-        randomDistribution: true,
         inheritParticleColor: true,
         sizeAffectsRange: true,
         alphaAffectsIntensity: true,
@@ -96,7 +95,7 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L137)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L136)
 
 ```js
   return new ParticleSystem({
@@ -112,10 +111,7 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
           scale: 6,
           velocity: new THREE.Vector3(0, 1.35, 0),
           color: '#ffffff',
-          rotation: [
-            new THREE.Vector3(-Math.PI, 0, 0),
-            new THREE.Vector3(Math.PI, 0, 0),
-          ],
+          rotation: [-Math.PI, Math.PI],
         },
       }),
     ],
@@ -134,13 +130,13 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
         scale: (time) => 2 * Easing.cubic.out(time),
       }),
       new ColorOverLifetime({
-        alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: (time) =>
+          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [
-          new THREE.Vector3(-0.45, 0, 0),
-          new THREE.Vector3(0.45, 0, 0),
-        ],
+        angularVelocity: [-0.45, 0.45],
       }),
     ],
     renderers: [
@@ -180,7 +176,7 @@ The main emitter has no continuous rate: five particles burst at time zero from 
           speed: 1,
           scale: 2.5,
           color: ['#ffffff', '#ffd166'],
-          rotation: [new THREE.Vector3(-90, 0, 0), new THREE.Vector3(90, 0, 0)],
+          rotation: [-90, 90],
           alpha: 1,
           velocity: new THREE.Vector3(0, 0, 0),
           radial: 0.45,
@@ -190,7 +186,7 @@ The main emitter has no continuous rate: five particles burst at time zero from 
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L141)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L140)
 
 ```js
     emitters: [
@@ -203,10 +199,7 @@ The main emitter has no continuous rate: five particles burst at time zero from 
           scale: 6,
           velocity: new THREE.Vector3(0, 1.35, 0),
           color: '#ffffff',
-          rotation: [
-            new THREE.Vector3(-Math.PI, 0, 0),
-            new THREE.Vector3(Math.PI, 0, 0),
-          ],
+          rotation: [-Math.PI, Math.PI],
         },
       }),
     ],
@@ -236,7 +229,7 @@ The main scale multiplier grows from 0.35 to 1.8, making the explosion expand ra
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L160)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L156)
 
 ```js
     modules: [
@@ -254,13 +247,13 @@ The main scale multiplier grows from 0.35 to 1.8, making the explosion expand ra
         scale: (time) => 2 * Easing.cubic.out(time),
       }),
       new ColorOverLifetime({
-        alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: (time) =>
+          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [
-          new THREE.Vector3(-0.45, 0, 0),
-          new THREE.Vector3(0.45, 0, 0),
-        ],
+        angularVelocity: [-0.45, 0.45],
       }),
     ],
 ```
@@ -284,7 +277,6 @@ The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft in
       new LightRenderer({
         count: 18,
         ratio: 0.3,
-        randomDistribution: true,
         inheritParticleColor: true,
         sizeAffectsRange: true,
         alphaAffectsIntensity: true,
@@ -316,7 +308,7 @@ The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft in
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L186)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireball.js#L182)
 
 ```js
     renderers: [

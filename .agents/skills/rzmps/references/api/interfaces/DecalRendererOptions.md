@@ -74,6 +74,22 @@ Projections per second per live particle, starting after one interval. Zero disa
 
 ***
 
+<a id="count"></a>
+
+### count?
+
+```ts
+optional count?: number;
+```
+
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`count`](RendererOptions.md#count)
+
+***
+
 <a id="depth"></a>
 
 ### depth
@@ -122,6 +138,62 @@ distanceAffectsSize: number;
 
 ***
 
+<a id="emissiontags"></a>
+
+### emissionTags?
+
+```ts
+optional emissionTags?: string[];
+```
+
+Registers each persistent decal as an emission source with these tags.
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`events`](EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
+
+***
+
+<a id="groupingradius"></a>
+
+### groupingRadius?
+
+```ts
+optional groupingRadius?: number;
+```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`groupingRadius`](RendererOptions.md#groupingradius)
+
+***
+
 <a id="hitselection"></a>
 
 ### hitSelection
@@ -131,6 +203,48 @@ hitSelection: DecalHitSelection;
 ```
 
 Defaults to Nearest. Receives all candidates and the optional maxHits unchanged.
+
+***
+
+<a id="impulseaffectslifetime"></a>
+
+### impulseAffectsLifetime
+
+```ts
+impulseAffectsLifetime: number;
+```
+
+***
+
+<a id="impulseaffectsopacity"></a>
+
+### impulseAffectsOpacity
+
+```ts
+impulseAffectsOpacity: number;
+```
+
+***
+
+<a id="impulseaffectssize"></a>
+
+### impulseAffectsSize
+
+```ts
+impulseAffectsSize: number;
+```
+
+***
+
+<a id="impulsethreshold"></a>
+
+### impulseThreshold
+
+```ts
+impulseThreshold: number;
+```
+
+Minimum collision impulse magnitude required for collision placement. Default 0.
 
 ***
 
@@ -178,6 +292,34 @@ Seconds, sampled at creation; nonpositive/nonfinite values produce no decal. Def
 
 ***
 
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialComposite`](RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialCompositeGPU`](RendererOptions.md#materialcompositegpu)
+
+***
+
 <a id="materialcopysamplemode"></a>
 
 ### materialCopySampleMode?
@@ -189,6 +331,18 @@ optional materialCopySampleMode?: MaterialCopySampleMode;
 #### Inherited from
 
 [`RendererOptions`](RendererOptions.md).[`materialCopySampleMode`](RendererOptions.md#materialcopysamplemode)
+
+***
+
+<a id="materialindex"></a>
+
+### materialIndex?
+
+```ts
+optional materialIndex?: DynamicValue<number>;
+```
+
+Optional zero-based material selector; otherwise choose randomly once per mark.
 
 ***
 
@@ -228,7 +382,7 @@ Active capacity; oldest decals are evicted first. Default 256.
 maxDistance: number;
 ```
 
-Maximum world-space ray length, independent of clipping depth. Default 2.
+Ordinary ray length, independent of clipping depth. Intersect uses actual traveled distance. Default 2.
 
 ***
 
@@ -261,7 +415,7 @@ World-space displacement of generated vertices along the outward normal. Default
 ### onCollision
 
 ```ts
-onCollision: boolean;
+onCollision: ParameterEventSubscription<DecalParameters, CollisionHit>;
 ```
 
 ***
@@ -271,7 +425,17 @@ onCollision: boolean;
 ### onDeath
 
 ```ts
-onDeath: boolean;
+onDeath: ParameterEventSubscription<DecalParameters>;
+```
+
+***
+
+<a id="onevent"></a>
+
+### onEvent?
+
+```ts
+optional onEvent?: ParameterEventSubscriptions<DecalParameters>;
 ```
 
 ***
@@ -281,7 +445,7 @@ onDeath: boolean;
 ### onSpawn
 
 ```ts
-onSpawn: boolean;
+onSpawn: ParameterEventSubscription<DecalParameters>;
 ```
 
 Defaults to true; collision and death default to false.
@@ -309,6 +473,22 @@ ratio: number;
 ```
 
 Fraction of particles that project decals, selected consistently by particle ID. Default 1.
+
+#### Overrides
+
+[`RendererOptions`](RendererOptions.md).[`ratio`](RendererOptions.md#ratio)
+
+***
+
+<a id="rotation"></a>
+
+### rotation
+
+```ts
+rotation: DynamicValue<number>;
+```
+
+Additional projector roll in radians, sampled independently for each mark. Default 0.
 
 ***
 

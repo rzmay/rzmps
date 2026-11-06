@@ -8,6 +8,9 @@
 
 # Class: GPUEmitterInstanceRuntime
 
+Indexed execution state: standalone entry, live source slot, or event snapshot slot.
+Bindings differ, but timing, request submission and retirement use the same runtime.
+
 ## Constructors
 
 <a id="constructor"></a>

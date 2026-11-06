@@ -9,7 +9,7 @@
 # Type Alias: ModuleGPUCondition
 
 ```ts
-type ModuleGPUCondition = (particle, deltaTime, context, spatialGrid?) => Node<"bool">;
+type ModuleGPUCondition = (particle, deltaTime, context) => Node<"bool">;
 ```
 
 ## Parameters
@@ -24,11 +24,7 @@ type ModuleGPUCondition = (particle, deltaTime, context, spatialGrid?) => Node<"
 
 ### context
 
-[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
-
-### spatialGrid?
-
-[`ParticleSpatialGrid`](../classes/ParticleSpatialGrid.md)
+[`ModuleGPUExecutionContext`](../interfaces/ModuleGPUExecutionContext.md)
 
 ## Returns
 

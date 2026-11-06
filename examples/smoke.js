@@ -57,10 +57,13 @@ export default async function createSmoke() {
       }),
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: (time) =>
+          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)],
+        angularVelocity: [-1, 1],
       }),
     ],
     // #endregion docs:modules:1

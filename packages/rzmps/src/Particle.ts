@@ -1,6 +1,13 @@
 import { nanoid } from 'nanoid';
 import * as THREE from 'three';
+import { transformParticleFrame } from './helpers/simulationFrame';
 import type { Tag } from './types/Tag';
+import type ParticleSystem from './ParticleSystem';
+import type { SubSystemSource } from './EmissionSource';
+import type { SimulationEvent } from './EventReceiver';
+import type { GPUParticleLike, GPUParticleUpdateContext } from './gpu/Particle';
+import type { GPUEventNodeRecord } from './gpu/EventBuffer';
+import type { Node } from 'three/webgpu';
 
 export interface ParticleOptions {
   position: THREE.Vector3;
@@ -30,6 +37,55 @@ export interface ParticleNoiseValues {
   noise4d: number;
 }
 
+/** Creation-time inputs, available synchronously before simulation and spawn observers. */
+export interface ParticleInitializationContext {
+  readonly system: ParticleSystem;
+  readonly source?: SubSystemSource;
+  readonly event?: SimulationEvent;
+  /** Snapshot of the event producer's simulation-to-world frame. */
+  readonly sourceToWorld?: THREE.Matrix4;
+  /** Frame interpreting the newborn particle attributes at this initialization boundary. */
+  readonly birthToWorld?: THREE.Matrix4;
+}
+
+/** Native GPU creation-time inputs; event snapshots stay in the existing run buffer. */
+export interface GPUParticleInitializationContext extends GPUParticleUpdateContext {
+  readonly source?: GPUParticleLike;
+  readonly event?: GPUEventNodeRecord;
+  readonly sourceToWorld?: Node<'mat4'>;
+  readonly birthToWorld?: Node<'mat4'>;
+}
+
+export type ParticleInitializer = (particle: Particle, context: ParticleInitializationContext) => void;
+export type GPUParticleInitializer = (particle: GPUParticleLike, context: GPUParticleInitializationContext) => void;
+
+/**
+ * @internal Source-space ownership survives event snapshots and emission-run lifetimes.
+ * CPU simulation applies transform deltas from this history; GPU history lives in gpu/SourceFrameBuffer.ts.
+ */
+export interface ParticleSourceBinding {
+  source: SubSystemSource;
+  previous: THREE.Matrix4;
+  slot: number;
+  generation: number;
+}
+
+// Weak ownership keeps runtime attachment data out of particle serialization and clones.
+const sourceBindings = new WeakMap<Particle, ParticleSourceBinding>();
+
+/** @internal Reads attachment state without adding serializable fields to the particle. */
+export function getParticleSourceBinding(particle: Particle): ParticleSourceBinding | undefined {
+  return sourceBindings.get(particle);
+}
+
+/** @internal Sets or releases the source transform history used by CPU simulation. */
+export function setParticleSourceBinding(particle: Particle, binding?: ParticleSourceBinding): void {
+  if (binding) sourceBindings.set(particle, binding);
+  else sourceBindings.delete(particle);
+}
+
+// Ownership stays outside serializable/cloned particle attributes.
+const eventOwners = new WeakMap<Particle, { emitEvent(id: string, event: string, data?: unknown): void }>();
 /** Mutable particle state with separate birth and cached permanent values. */
 class Particle {
   /** Material source ID, impact UV, and sampling mode. Zero source uses renderer defaults. */
@@ -63,6 +119,9 @@ class Particle {
   color: THREE.Color;
 
   alpha: number;
+
+  /** Extensive visual energy; simulation particles contribute one by default. */
+  contribution = 1;
 
   mass: number = 1;
 
@@ -137,6 +196,17 @@ class Particle {
     this.data = {};
   }
 
+  /** Dispatches a named event through this simulated particle's owner. */
+  emitEvent(event: string, data?: unknown): this {
+    eventOwners.get(this)?.emitEvent(this.id, event, data);
+    return this;
+  }
+
+  /** @internal */
+  setEventOwner(owner: { emitEvent(id: string, event: string, data?: unknown): void }): void {
+    eventOwners.set(this, owner);
+  }
+
   cache() {
     this._cachedValues = this.writeValues(this._cachedValues);
   }
@@ -171,6 +241,13 @@ class Particle {
     return this.writeValues();
   }
 
+  /** @internal Changes the reference frame without losing birth or cached permanent values. */
+  transformSimulationFrame(matrix: THREE.Matrix4): void {
+    transformParticleFrame(this, matrix);
+    transformParticleFrame(this._start, matrix);
+    if (this._cachedValues) transformParticleFrame(this._cachedValues, matrix);
+  }
+
   kill(): void {
     this.realtime = Number.POSITIVE_INFINITY;
     this.time = Number.POSITIVE_INFINITY;
@@ -191,6 +268,7 @@ class Particle {
     particle.materialCopyU.copy(this.materialCopyU);
     particle.materialCopyV.copy(this.materialCopyV);
     particle.parent = this.parent;
+    particle.contribution = this.contribution;
     particle.noise = { ...this.noise };
     particle.data = { ...this.data };
 

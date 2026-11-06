@@ -10,6 +10,10 @@
 
 Base renderer that filters particles and applies renderer LOD before delegating to a backend-compatible view.
 
+## Extends
+
+- [`EventReceiver`](EventReceiver.md)
+
 ## Extended by
 
 - [`LightRenderer`](LightRenderer.md)
@@ -41,6 +45,10 @@ Configures particle filtering, artistic children, and LOD compensation.
 
 `Renderer`
 
+#### Overrides
+
+[`EventReceiver`](EventReceiver.md).[`constructor`](EventReceiver.md#constructor)
+
 ## Properties
 
 <a id="children"></a>
@@ -67,6 +75,72 @@ compensation:
 
 ***
 
+<a id="events"></a>
+
+### events
+
+```ts
+events: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`events`](EventReceiver.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`eventScope`](EventReceiver.md#eventscope)
+
+***
+
+<a id="executioncontext"></a>
+
+### executionContext?
+
+```ts
+optional executionContext?: EventExecutionContext;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`executionContext`](EventReceiver.md#executioncontext)
+
+***
+
+<a id="gpuexecutioncontext"></a>
+
+### gpuExecutionContext
+
+```ts
+gpuExecutionContext: GPUEventExecutionContext;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`gpuExecutionContext`](EventReceiver.md#gpuexecutioncontext)
+
+***
+
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+***
+
 <a id="materialcopysamplemode"></a>
 
 ### materialCopySampleMode
@@ -87,6 +161,16 @@ optional materialTarget?: MaterialTarget;
 
 ***
 
+<a id="ratio"></a>
+
+### ratio
+
+```ts
+ratio: number;
+```
+
+***
+
 <a id="tags"></a>
 
 ### tags?
@@ -95,7 +179,79 @@ optional materialTarget?: MaterialTarget;
 optional tags?: string[];
 ```
 
+***
+
+<a id="capacity"></a>
+
+### CAPACITY
+
+```ts
+readonly static CAPACITY: 1024 = 1024;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`CAPACITY`](EventReceiver.md#capacity)
+
 ## Accessors
+
+<a id="count"></a>
+
+### count
+
+#### Get Signature
+
+```ts
+get count(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set count(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="gpunative"></a>
+
+### gpuNative
+
+#### Set Signature
+
+```ts
+set gpuNative(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`MaterialCopy`](MaterialCopy.md).[`gpuNative`](MaterialCopy.md#gpunative)
+
+***
 
 <a id="gpuparameteruploadcount"></a>
 
@@ -110,6 +266,78 @@ get gpuParameterUploadCount(): number;
 ##### Returns
 
 `number`
+
+***
+
+<a id="materialcomposite"></a>
+
+### materialComposite
+
+#### Get Signature
+
+```ts
+get materialComposite():
+  | MaterialCompositeCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialComposite(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU
+
+#### Get Signature
+
+```ts
+get materialCompositeGPU():
+  | MaterialCompositeGPUCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialCompositeGPU(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
 
 ***
 
@@ -135,6 +363,28 @@ set needsUpdate(value): void;
 
 ***
 
+<a id="overflowcount"></a>
+
+### overflowCount
+
+#### Get Signature
+
+```ts
+get overflowCount(): number;
+```
+
+Number of CPU events dropped when the pending batch reached capacity.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`overflowCount`](EventReceiver.md#overflowcount)
+
+***
+
 <a id="renderedchildcount"></a>
 
 ### renderedChildCount
@@ -150,6 +400,28 @@ Additional visual particles; GPU diagnostics refresh asynchronously when request
 ##### Returns
 
 `number`
+
+***
+
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`selectedEventNames`](EventReceiver.md#selectedeventnames)
 
 ***
 
@@ -205,6 +477,102 @@ get version(): number;
 
 ## Methods
 
+<a id="begin"></a>
+
+### begin()
+
+```ts
+begin(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Snapshots once per actual execution; events raised during execution remain pending.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`begin`](EventReceiver.md#begin)
+
+***
+
+<a id="beginexecution"></a>
+
+### beginExecution()
+
+```ts
+beginExecution(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Creates and retains the context shared by every callback in this execution.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`beginExecution`](EventReceiver.md#beginexecution)
+
+***
+
 <a id="clear"></a>
 
 ### clear()
@@ -256,6 +624,26 @@ Permanently releases owned rendering resources.
 #### Returns
 
 `void`
+
+***
+
+<a id="dispose"></a>
+
+### dispose()
+
+```ts
+dispose(): void;
+```
+
+Clears batches and unsubscribes when a component is removed or its system is destroyed.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`dispose`](EventReceiver.md#dispose)
 
 ***
 
@@ -379,3 +767,33 @@ Base-class GPU preprocessing; subclasses consume the resulting ordinary render v
 #### Returns
 
 `void`
+
+***
+
+<a id="visiblesystems"></a>
+
+### visibleSystems()
+
+```ts
+visibleSystems(system?, scope?): ParticleSystem[];
+```
+
+Selects producers without forwarding or traversing beyond immediate relatives.
+
+#### Parameters
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `...`
+
+#### Returns
+
+[`ParticleSystem`](ParticleSystem.md)[]
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`visibleSystems`](EventReceiver.md#visiblesystems)

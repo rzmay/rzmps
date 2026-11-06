@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 import { Fn, If, float, uint, vec4 } from 'three/tsl';
 import {
-  Collision, Emitter, EmissionShape, MeshRenderer, SpriteRenderer, Particle, ParticleSystem,
+  Collision, DecalRenderer, Emitter, EmissionShape, MeshRenderer, SpriteRenderer, Particle, ParticleSystem,
   createGPUParticleBufferState, GPUEmissionRunBufferState, Textures,
 } from '@rzmps/rzmps';
 
@@ -13,12 +13,42 @@ window.checkRendererSerialization = () => {
   const material = new THREE.MeshStandardMaterial();
   const sources = [new THREE.Mesh(geometry, material), new THREE.Mesh(new THREE.SphereGeometry(), material)];
   const mesh = new MeshRenderer({ mesh: { rock: { fracture: sources } }, maxParticles: 7, meshIndex: 1,
-    materialCopySampleMode: 1 });
+    materialCopySampleMode: 1, textureCopyQuality: 0.5, atlasOptions: { minCapacity: 4 } });
   const sprites = new SpriteRenderer({ rock: { fracture: [Textures.Circle, Textures.Simple] } },
-    { textureIndex: 1, materialCopySampleMode: 1 });
+    { textureIndex: 1, materialCopySampleMode: 1, textureCopyQuality: 0.5, atlasOptions: { minCapacity: 4 } });
   const serializer = new ParticleSystemSerializer({});
+  const holes = new DecalRenderer(new THREE.MeshBasicMaterial(), {
+    direction: DecalRenderer.Intersect(), continuousRate: 60, onSpawn: false,
+    hitSelection: DecalRenderer.All, atlasOptions: { minCapacity: 4 },
+    rotation: [-Math.PI, Math.PI], impulseThreshold: 4,
+  });
+  const restoredHoles = new Function('THREE', 'DecalRenderer',
+    `return ${serializer.serializeRenderer(holes)}`)(THREE, DecalRenderer);
+  if (!(restoredHoles.direction(new Particle()) instanceof THREE.Line3)
+    || restoredHoles.atlasOptions.minCapacity !== 4
+    || restoredHoles.hitSelection !== DecalRenderer.All
+    || restoredHoles.impulseThreshold !== 4 || restoredHoles.rotation[1] !== Math.PI) {
+    throw new Error('Serialization lost intersection projection');
+  }
+  holes.destroy(); restoredHoles.destroy();
+  const loader = new THREE.TextureLoader();
+  const circle = loader.load(Textures.Circle), simple = loader.load(Textures.Simple);
+  const impacts = new DecalRenderer([
+    new THREE.MeshStandardMaterial({ normalMap: circle, alphaMap: simple, aoMap: circle }),
+    new THREE.MeshStandardMaterial({ normalMap: simple, alphaMap: circle, aoMap: simple }),
+    new THREE.MeshStandardMaterial(),
+  ], { materialIndex: 1 });
+  const restoredImpacts = new Function('THREE', 'DecalRenderer',
+    `return ${serializer.serializeRenderer(impacts)}`)(THREE, DecalRenderer);
+  if (restoredImpacts.material.length !== 3 || restoredImpacts.materialIndex !== 1
+    || !restoredImpacts.material[0].normalMap || !restoredImpacts.material[0].alphaMap
+    || !restoredImpacts.material[0].aoMap || restoredImpacts.material[0].aoMap.channel !== 0) {
+    throw new Error('Serialization lost correlated decal map sets');
+  }
+  impacts.destroy(); restoredImpacts.destroy();
+  circle.dispose(); simple.dispose();
   const options = new Function(`return ${serializer.serializeSubSystemOptions({
-    copyCollisionMaterial: true, impulseAffectsCount: 0.5,
+    impulseAffectsCount: 0.5,
   })}`)();
   const restored = [mesh, sprites].map(view => new Function('THREE', 'MeshRenderer', 'SpriteRenderer', 'Textures',
     `return ${serializer.serializeRenderer(view)}`)(THREE, MeshRenderer, SpriteRenderer, Textures));
@@ -26,10 +56,11 @@ window.checkRendererSerialization = () => {
     if (!restored[0].instances.isBatchedMesh || restored[0].maxParticles !== 7
       || restored[0].meshes.length !== 2 || restored[0].meshIndex !== 1
       || restored[0].meshes[0].geometry.getAttribute('position').count !== geometry.getAttribute('position').count
-      || restored.some(view => view.materialCopySampleMode !== 1)
+      || restored.some(view => view.materialCopySampleMode !== 1 || view.textureCopyQuality !== 0.5
+        || view.atlasOptions.minCapacity !== 4)
       || restored.some(view => JSON.stringify(view.selectionTags) !== '["rock","fracture"]')
       || restored[1].textureIndex !== 1
-      || !options.copyCollisionMaterial || options.impulseAffectsCount !== 0.5
+      || options.impulseAffectsCount !== 0.5
       || !serializer.rendererUsesBuiltInTexture(sprites)) {
       throw new Error('Renderer serialization lost geometry choices, tags, capacity or material copying');
     }
@@ -311,7 +342,7 @@ window.checkImpulseCountEmission = async backend => {
           rate: 0, bursts: [{ time: 0, count: 1 }], radialSpeed: 0,
           initialValues: { position: new THREE.Vector3(0.5, 0.3, 0.25), velocity: new THREE.Vector3(0, -2, 0),
             scale: 0.1, mass: impulse / 2, lifetime: 3 } }),
-        modules: new Collision({ bounce: 0, dampen: 0 }), renderers: view(),
+        modules: new Collision({ bounce: 0, dampen: 0, lifetimeLoss: 1 }), renderers: view(),
       });
       const child = new ParticleSystem({ gpuProcessing: backend === 'webgpu', maxParticles: 128,
         gravityModifier: 0, duration: 1, looping: false,

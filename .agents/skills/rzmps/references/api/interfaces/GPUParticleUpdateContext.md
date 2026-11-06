@@ -8,6 +8,11 @@
 
 # Interface: GPUParticleUpdateContext
 
+## Extended by
+
+- [`ModuleGPUExecutionContext`](ModuleGPUExecutionContext.md)
+- [`GPUParticleInitializationContext`](GPUParticleInitializationContext.md)
+
 ## Properties
 
 <a id="allocationwriter"></a>
@@ -77,6 +82,18 @@ elapsedTimeNode: Node<"float">;
 ```ts
 optional emitterPositionNode?: Node<"vec3">;
 ```
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: GPUEventBatch;
+```
+
+Native event storage, frozen for the receiving component's execution.
 
 ***
 

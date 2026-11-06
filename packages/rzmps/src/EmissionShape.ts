@@ -1,3 +1,4 @@
+import getAttributeVersion from './helpers/getAttributeVersion';
 import * as THREE from 'three';
 import { BufferAttribute } from 'three';
 import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.js';
@@ -283,7 +284,7 @@ class EmissionShape extends THREE.Object3D {
       const signature = [
         this._version,
         position?.count ?? 0,
-        getAttributeVersion(position),
+        getAttributeVersion(position, 0),
         index?.count ?? 0,
         index?.version ?? 0,
       ].join(':');
@@ -327,12 +328,12 @@ class EmissionShape extends THREE.Object3D {
         const probeClosest = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 };
         for (let probe = 1; probe <= EmissionShape.AUTO_VOLUME_PROBES; probe += 1) {
           candidate.set(
-            THREE.MathUtils.lerp(bounds.min.x, bounds.max.x, halton(probe, 2)),
-            THREE.MathUtils.lerp(bounds.min.y, bounds.max.y, halton(probe, 3)),
-            THREE.MathUtils.lerp(bounds.min.z, bounds.max.z, halton(probe, 5)),
+            THREE.MathUtils.lerp(bounds.min.x, bounds.max.x, EmissionShape.halton(probe, 2)),
+            THREE.MathUtils.lerp(bounds.min.y, bounds.max.y, EmissionShape.halton(probe, 3)),
+            THREE.MathUtils.lerp(bounds.min.z, bounds.max.z, EmissionShape.halton(probe, 5)),
           );
-          const probeZ = halton(probe, 7) * 2 - 1;
-          const probeAngle = halton(probe, 11) * Math.PI * 2;
+          const probeZ = EmissionShape.halton(probe, 7) * 2 - 1;
+          const probeAngle = EmissionShape.halton(probe, 11) * Math.PI * 2;
           const probeRadial = Math.sqrt(Math.max(0, 1 - probeZ * probeZ));
           probeDirection.set(
             Math.cos(probeAngle) * probeRadial,
@@ -383,17 +384,17 @@ class EmissionShape extends THREE.Object3D {
             THREE.MathUtils.lerp(
               bounds.min.x,
               bounds.max.x,
-              (halton(sequencePoint, 2) + sequenceOffset.x) % 1,
+              (EmissionShape.halton(sequencePoint, 2) + sequenceOffset.x) % 1,
             ),
             THREE.MathUtils.lerp(
               bounds.min.y,
               bounds.max.y,
-              (halton(sequencePoint, 3) + sequenceOffset.y) % 1,
+              (EmissionShape.halton(sequencePoint, 3) + sequenceOffset.y) % 1,
             ),
             THREE.MathUtils.lerp(
               bounds.min.z,
               bounds.max.z,
-              (halton(sequencePoint, 5) + sequenceOffset.z) % 1,
+              (EmissionShape.halton(sequencePoint, 5) + sequenceOffset.z) % 1,
             ),
           );
           if (isPointInMesh(candidate, bvh, boundsDiagonal)) {
@@ -461,23 +462,19 @@ class EmissionShape extends THREE.Object3D {
       if (value === 'auto') return value;
       return Math.max(1, Math.floor(Number.isFinite(value) ? value : 256));
     }
-}
 
-function halton(index: number, base: number): number {
-  let result = 0;
-  let fraction = 1 / base;
-  let value = index;
-  while (value > 0) {
-    result += fraction * (value % base);
-    value = Math.floor(value / base);
-    fraction /= base;
-  }
-  return result;
-}
-
-function getAttributeVersion(attribute?: THREE.BufferAttribute | THREE.InterleavedBufferAttribute): number {
-  if (!attribute) return 0;
-  return 'data' in attribute ? attribute.data.version : attribute.version;
+    // Deterministic low-discrepancy samples for geometry emission.
+    private static halton(index: number, base: number): number {
+      let result = 0;
+      let fraction = 1 / base;
+      let value = index;
+      while (value > 0) {
+        result += fraction * (value % base);
+        value = Math.floor(value / base);
+        fraction /= base;
+      }
+      return result;
+    }
 }
 
 export default EmissionShape;

@@ -5,6 +5,7 @@
 
 Metal balls emit surface fragments only when they collide. The incoming balls keep their own
 metal material; the fragments inherit the impacted surface's maps and material parameters.
+Each impact also leaves a concrete crack blended into the surface's original UV chart.
 Choose the **UV debug** scene to inspect the texture footprint on its ramp, floor and wall.
 The particle preset contains no scene geometry.
 
@@ -16,12 +17,12 @@ Preset by [rzmay](https://github.com/rzmay).
 ## Particle System Configuration
 
 The setup follows Metal Balls: a bouncing parent starts a short burst on each impact.
-`copyCollisionMaterial: true` enables copying for that burst. Scale and color inheritance are
+The fragments' `MaterialCopy` module binds the triggering collision during initialization. Scale and color inheritance are
 zero so the small metal ball neither shrinks nor tints its surface fragments.
 Both systems request GPU processing; WebGL uses the CPU collision path.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L57)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L114)
 
 ```js
   const system = new ParticleSystem({
@@ -40,15 +41,37 @@ Both systems request GPU processing; WebGL uses the CPU collision path.
       },
     }),
     modules: new Collision({ bounce: 0.55, dampen: 0.1 }),
-    renderers: new MeshRenderer({
-      geometry: new THREE.SphereGeometry(0.5, 12, 8),
-      materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
-    }),
+    renderers: [
+      new MeshRenderer({
+        geometry: new THREE.SphereGeometry(0.5, 12, 8),
+        materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
+      }),
+      new DecalRenderer(cracks.materials, {
+        materialComposite: cracks.materialComposite,
+        materialCompositeGPU: cracks.materialCompositeGPU,
+        onSpawn: false,
+        impulseThreshold: 4,
+        rotation: [-Math.PI, Math.PI],
+        size: 0.55,
+        impulseAffectsSize: 0.3,
+        onCollision: (hit, source, parameters) => ({
+          size: parameters.size.clone().clampScalar(0.5, 1.4),
+        }),
+        depth: 0.06,
+        maxDistance: 0.5,
+        inheritScale: 0,
+        inheritColor: 0,
+        inheritAlpha: 0,
+        lifetime: 60,
+        maxDecals: 384,
+        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1),
+      }),
+    ],
   });
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L87)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L166)
 
 ```js
   const debris = new ParticleSystem({
@@ -69,6 +92,7 @@ Both systems request GPU processing; WebGL uses the CPU collision path.
       },
     }),
     modules: [
+      new MaterialCopy({ source: MaterialCopySource.Collision, sampleMode: MaterialCopySampleMode.UVPatch }),
       // Contact damping reduces sliding while allowing fragments to tumble and rebound.
       new Collision({ bounce: 0.3, dampen: [0.2, 0.5], radiusScale: collisionDiameter }),
       new RotationBySpeed({
@@ -83,19 +107,17 @@ Both systems request GPU processing; WebGL uses the CPU collision path.
     renderers: new MeshRenderer({
       mesh: fragments,
       maxParticles: 512,
-      materialCopySampleMode: MaterialCopySampleMode.UVPatch,
       materialOptions: { roughness: 1, metalness: 1 },
     }),
   });
 ```
 
 
-[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L132)
+[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L211)
 
 ```js
   system.addSubSystem(debris, {
     emitOnCollision: true,
-    copyCollisionMaterial: true,
     inheritScale: 0,
     inheritColor: 0,
     inheritLifetime: 0,
@@ -119,7 +141,7 @@ the five Destruction GLBs at their authored scale (about 0.08–0.16 units wide)
 The fragments have mass and two-to-three-second lifetimes; they are not normalized to unit size.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L61)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L118)
 
 ```js
     emitters: new Emitter({
@@ -137,7 +159,7 @@ The fragments have mass and two-to-three-second lifetimes; they are not normaliz
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L94)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L173)
 
 ```js
     emitters: new Emitter({
@@ -164,17 +186,18 @@ without rigid-body contact torque or a separate Coulomb-friction solver.
 Contacts retain the material, UV coordinates and world-space UV gradients of the hit triangle.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L75)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L132)
 
 ```js
     modules: new Collision({ bounce: 0.55, dampen: 0.1 }),
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L107)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L186)
 
 ```js
     modules: [
+      new MaterialCopy({ source: MaterialCopySource.Collision, sampleMode: MaterialCopySampleMode.UVPatch }),
       // Contact damping reduces sliding while allowing fragments to tumble and rebound.
       new Collision({ bounce: 0.3, dampen: [0.2, 0.5], radiusScale: collisionDiameter }),
       new RotationBySpeed({
@@ -192,33 +215,66 @@ Contacts retain the material, UV coordinates and world-space UV gradients of the
 
 The default batches Destruction_1 through Destruction_5, retaining their authored dimensions and UVs.
 Each particle renders one of the five mesh variants. The demo always uses UV patches.
+The parent also owns a collision-only DecalRenderer choosing from six complete impact materials.
+Each pairs its normal, opacity, roughness, and ambient-occlusion maps. Selection happens once per mark so those maps stay
+correlated. It preserves the sampled surface's color and metalness without loading impact albedo.
+The supplied opacity map blends the damage normals, roughness, and AO over the original surface together;
+AO uses the same projector UVs. Channels are not masked a second time, preserving soft edges.
+Surface UVs stay fixed while each projector gets an independent random roll.
+
+`impulseThreshold: 4` suppresses soft contacts, usually leaving marks on only the first one or two
+bounces. `impulseAffectsSize: 0.3` scales the base 0.55-unit size by impulse raised to 0.3; the
+`onCollision` parameter callback clamps the result to 0.5–1.4 units. This callback receives the
+same hit data used by subsystem emission and returns per-mark overrides. Marks last 60 seconds,
+fade in their final quarter, and have a cap of 384. They do not inherit the ball's small scale or tint.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L78)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L135)
 
 ```js
-    renderers: new MeshRenderer({
-      geometry: new THREE.SphereGeometry(0.5, 12, 8),
-      materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
-    }),
+    renderers: [
+      new MeshRenderer({
+        geometry: new THREE.SphereGeometry(0.5, 12, 8),
+        materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
+      }),
+      new DecalRenderer(cracks.materials, {
+        materialComposite: cracks.materialComposite,
+        materialCompositeGPU: cracks.materialCompositeGPU,
+        onSpawn: false,
+        impulseThreshold: 4,
+        rotation: [-Math.PI, Math.PI],
+        size: 0.55,
+        impulseAffectsSize: 0.3,
+        onCollision: (hit, source, parameters) => ({
+          size: parameters.size.clone().clampScalar(0.5, 1.4),
+        }),
+        depth: 0.06,
+        maxDistance: 0.5,
+        inheritScale: 0,
+        inheritColor: 0,
+        inheritAlpha: 0,
+        lifetime: 60,
+        maxDecals: 384,
+        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1),
+      }),
+    ],
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L120)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L200)
 
 ```js
     // Neutral factors preserve the source appearance. Render each fragment only once.
     renderers: new MeshRenderer({
       mesh: fragments,
       maxParticles: 512,
-      materialCopySampleMode: MaterialCopySampleMode.UVPatch,
       materialOptions: { roughness: 1, metalness: 1 },
     }),
 ```
 
 
 `MaterialCopySampleMode.UVPatch` extends the contact triangle's mapping across each fragment,
-retaining texture density and the impact UV. The renderer API also supports `Color`, which samples
+retaining texture density and the impact UV. The module also supports `Color`, which samples
 source maps at the contact UV, and `Texture`, which maps the source onto the fragment's own UVs.
 The demo keeps UV patch mode fixed. UV seams and other triangles are not reconstructed.
 
@@ -226,7 +282,7 @@ For an independent system, set `materialTarget` on its renderer or call
 `renderer.copyMaterial(material)`. Copied color, opacity, roughness and metalness multiply the
 configured particle values; white and one preserve the source. Normal maps perturb the destination
 normal. Sprite masks and animation UVs remain independent of copied maps. The built-in patch path
-supports UV0 and MeshRenderer/SpriteRenderer; custom backends can provide `material` and `surface`
+supports UV0, meshes, sprites and decals; custom backends can provide `material` and `surface`
 on `CollisionHit`, and custom renderers can implement copying hooks.
 
 Numeric values and transforms are snapshots cached until the system tree is destroyed. Source
@@ -269,3 +325,5 @@ per particle slot and masks unselected variants in the shader, preserving GPU-on
 LOD/children identities and material copying without readback or extra storage bindings. Its draw
 and vertex cost therefore grows with template count and GPU particle capacity. Keep the variant
 list and capacity modest; the single-mesh path retains the instanced indirect draw.
+
+For callback channels and custom-event sources, see [material copying and compositing](https://rzmps.rzmay.com/docs/guides/material-copying.html).

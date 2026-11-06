@@ -9,8 +9,10 @@ services:
     staticPublishPath: dist
     envVars:
       - key: NODE_VERSION
-        value: "22"
+        value: "24"
       - key: SKIP_INSTALL_DEPS
+        value: "true"
+      - key: PUPPETEER_SKIP_DOWNLOAD
         value: "true"
       - key: CI
         value: "true"

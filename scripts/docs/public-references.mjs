@@ -4,6 +4,18 @@ import { Converter, normalizePath } from 'typedoc';
  * That plugin also observes references from private members before TypeDoc hides them.
  */
 export function load(app) {
+  // TypeDoc 0.28 bypasses declaration-comment suppression when checking duplicate tags.
+  // Filter only that dependency diagnostic; project comments and all other warnings remain strict.
+  const warn = app.logger.warn.bind(app.logger);
+  app.logger.warn = (message, ...context) => {
+    const duplicateTag = /^At most one @(remarks|returns|inheritDoc) tag is expected in a comment,/.test(message);
+    const dependency = /(?:^|[\\/])node_modules[\\/].*\.d\.(?:ts|mts|cts):\d+$/.test(message);
+
+    if (duplicateTag && dependency && app.options.getValue('suppressCommentWarningsInDeclarationFiles')) return;
+
+    warn(message, ...context);
+  };
+
   app.converter.on(Converter.EVENT_RESOLVE_END, context => {
     const project = context.project;
     const module = project.children?.find(child => child.name === app.options.getValue('internalModule'));

@@ -4,7 +4,9 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { discoverExamples, root } from './examples.mjs';
-import { checksum, previewDirectory, previewInputs, readPreviewManifest } from './preview-manifest.mjs';
+import {
+  checksum, previewDirectory, previewInputs, readPreviewManifest, previewIsCurrent,
+} from './preview-manifest.mjs';
 export async function generatePreviews({ force = false } = {}) {
   const examples = discoverExamples();
   const inputs = previewInputs(examples);
@@ -16,7 +18,7 @@ export async function generatePreviews({ force = false } = {}) {
     const destination = path.join(previewDirectory,example.id+'.png');
     const entry = manifest.examples[example.id];
     const current = await fs.readFile(destination).catch(() => null);
-    if (!force && entry?.inputHash === inputs.get(example.id) && current && entry.imageHash === checksum(current)) {
+    if (!force && previewIsCurrent(entry, inputs.get(example.id), current)) {
       console.log(`${example.id}: preview is current`);
       continue;
     }
@@ -29,7 +31,18 @@ export async function generatePreviews({ force = false } = {}) {
     try {
       const config = { ...settings.defaults, ...settings.examples[example.id], example:example.id, output };
       const options = capture.parseOptions(Object.entries(config).flatMap(([key,value]) => ['--'+key,String(value)]));
-      const result = await capture.capturePreview(options);
+      let result;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          result = await capture.capturePreview(options);
+          break;
+        } catch (error) {
+          if (options.backend !== 'webgpu' || attempt === 3
+            || !error?.message?.includes('A valid external Instance reference no longer exists')) throw error;
+          // capturePreview closes its browser before rejecting, so every retry starts fresh.
+          console.warn(`${example.id}: WebGPU device lost; retrying preview (${attempt + 1}/3) in a fresh browser.`);
+        }
+      }
       const image = await fs.readFile(path.join(output,'frame-000.png'));
       await fs.writeFile(destination,image);
       manifest.examples[example.id] = {

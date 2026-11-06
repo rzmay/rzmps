@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type Particle from '../Particle';
 
 export enum MaterialCopySampleMode {
   UVPatch = 0,
@@ -12,6 +13,52 @@ export interface SurfacePatch {
   /** World-space UV gradients; degenerate UVs produce zero gradients. */
   u: THREE.Vector3;
   v: THREE.Vector3;
+}
+
+/** Accessible inputs at a world-space surface sample. */
+export interface SurfaceSample {
+  material?: THREE.Material;
+  surface?: SurfacePatch;
+  point: THREE.Vector3;
+}
+
+/** Reuses the triangle's UV chart rather than the projector's generated decal UVs. */
+export function intersectionSurface(hit: THREE.Intersection): SurfaceSample {
+  const mesh = hit.object as THREE.Mesh;
+  const material = Array.isArray(mesh.material) ? mesh.material[hit.face?.materialIndex ?? 0] : mesh.material;
+  const position = mesh.geometry.getAttribute('position');
+  const uv = mesh.geometry.getAttribute('uv');
+  const face = hit.face;
+  if (!uv || !face) return { material, point: hit.point };
+
+  const vertex = (index: number) => new THREE.Vector3().fromBufferAttribute(position, index)
+    .applyMatrix4(mesh.matrixWorld);
+  const coordinate = (index: number) => new THREE.Vector2(uv.getX(index), uv.getY(index));
+  return { material, point: hit.point,
+    surface: surfacePatch(hit.point, vertex(face.a), vertex(face.b), vertex(face.c),
+      coordinate(face.a), coordinate(face.b), coordinate(face.c)) };
+}
+
+/** Shared CPU binding math for module births and geometry consumers with a known surface sample. */
+export function bindSurface(particle: Particle, id: number, world: THREE.Matrix4,
+  sample: Pick<SurfaceSample, 'surface' | 'point'>, mode = MaterialCopySampleMode.UVPatch): void {
+  const surface = sample.surface;
+  particle.materialCopyU.set(0, 0, 0, 0);
+  particle.materialCopyV.set(0, 0, 0, 0);
+  if (!surface) {
+    particle.materialCopy.set(id, 0.5, 0.5, mode === MaterialCopySampleMode.Color ? mode : 2);
+    return;
+  }
+
+  // A color sample belongs to the source contact, even when an emitter spreads births around it.
+  const delta = mode === MaterialCopySampleMode.Color ? new THREE.Vector3()
+    : new THREE.Vector3().setFromMatrixPosition(world).sub(sample.point);
+  particle.materialCopy.set(id, surface.uv.x + surface.u.dot(delta), surface.uv.y + surface.v.dot(delta),
+    mode === MaterialCopySampleMode.UVPatch ? -1 : mode);
+  const e = world.elements;
+  const axis = (i: number) => new THREE.Vector3(e[i], e[i + 1], e[i + 2]);
+  particle.materialCopyU.set(surface.u.dot(axis(0)), surface.u.dot(axis(4)), surface.u.dot(axis(8)), 0);
+  particle.materialCopyV.set(surface.v.dot(axis(0)), surface.v.dot(axis(4)), surface.v.dot(axis(8)), 0);
 }
 
 /** Affine extension of one world-space triangle's UV mapping. */
@@ -60,7 +107,8 @@ export class MaterialCopyRegistry {
 
     // Snapshot scalar values and transforms, while retaining borrowed texture resources.
     const signature = [material.version, m.color?.r, m.color?.g, m.color?.b, m.normalScale?.x,
-      m.normalScale?.y, material.opacity, m.roughness, m.metalness,
+      m.normalScale?.y, m.normalMapType, material.opacity, m.roughness, m.metalness,
+      m.envMap?.uuid, m.envMapIntensity, m.envMapRotation?.toArray().join(','),
       ...['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'alphaMap'].map(key => {
         const t = (m as unknown as Record<string, THREE.Texture>)[key];
         if (!t) return '';

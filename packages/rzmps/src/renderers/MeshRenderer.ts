@@ -1,3 +1,5 @@
+import { copyMaterialEnvironment } from '../material-copy/Environment';
+import { applyMaterialCopies } from '../material-copy/Composite';
 import MeshBatch, { type AppearanceNodes } from './MeshBatch';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
 import type { DynamicValue } from '../types/DynamicValue';
@@ -5,10 +7,9 @@ import prepareTaggedSelection, { type TaggedSelection } from '../helpers/prepare
 import selectByTags from '../helpers/selectByTags';
 import selectByTagsGPU from '../helpers/selectByTagsGPU';
 import type { TaggedValue } from '../types/TaggedValue';
-import rotateXYZ from '../helpers/rotateParticleGPU';
-import type Appearance from '../material-copy/Appearance';
+import { rotateXYZ } from '../helpers/gpuTransforms';
 import * as THREE from 'three';
-import { attribute, materialNormal, positionView, materialColor, materialOpacity, materialRoughness,
+import { attribute, materialNormal, materialColor, materialOpacity, materialRoughness,
   materialMetalness, float } from 'three/tsl';
 import type { Node, WebGPURenderer } from 'three/webgpu';
 import { positionLocal, positionGeometry } from 'three/tsl';
@@ -63,6 +64,7 @@ class MeshRenderer extends Renderer {
     }
 
     private batch?: MeshBatch;
+    private ownsCopyMaterial = false;
     private instancedMesh!: THREE.InstancedMesh;
 
     castShadow: boolean = false;
@@ -86,11 +88,15 @@ class MeshRenderer extends Renderer {
       maskShadowNode: Node | null;
       opacityNode: Node | null;
       positionNode: Node | null;
+      normalNode: Node | null;
+      roughnessNode: Node | null;
+      metalnessNode: Node | null;
     }>();
 
     private materialEnvironmentState = new Map<THREE.Material, {
       envMap?: THREE.Texture | null;
       envMapIntensity?: number;
+      envMapRotation?: THREE.Euler;
     }>();
 
     constructor(options: Partial<MeshRendererOptions> = {}) {
@@ -115,7 +121,7 @@ class MeshRenderer extends Renderer {
       this.receiveShadow = options.receiveShadow ?? this.receiveShadow;
 
       if (this.meshes.length > 1) {
-        this.batch = new MeshBatch(this.meshes, options.maxParticles ?? 10000);
+        this.batch = new MeshBatch(this.meshes, options.maxParticles ?? 10000, this.atlasOptions);
         this.preprocessMaterial(this.batch.material);
         return;
       }
@@ -145,6 +151,7 @@ class MeshRenderer extends Renderer {
       }
 
       // Copying owns its shader changes; collision surfaces remain untouched.
+      const previous = this.mesh;
       const materials = Array.isArray(this.mesh.material) ? this.mesh.material.map(m => m.clone()) : this
         .mesh.material.clone();
       this.mesh = new THREE.Mesh(this.mesh.geometry.clone(), materials);
@@ -152,6 +159,14 @@ class MeshRenderer extends Renderer {
       this.instancedMesh.geometry = this.mesh.geometry;
       this.instancedMesh.material = materials;
       this.preprocessMaterial(materials);
+      if (this.ownsCopyMaterial) {
+        for (const material of Array.isArray(previous.material) ? previous.material : [previous.material]) {
+          this.materialNodeState.delete(material);
+          material.dispose();
+        }
+        previous.geometry.dispose();
+      }
+      this.ownsCopyMaterial = true;
     }
 
     setup(system: ParticleSystem): void {
@@ -254,6 +269,7 @@ class MeshRenderer extends Renderer {
     }
 
     destroy(): void {
+      super.reset();
         this.restoreCPUNodes();
         if (this.batch) {
           this.disposeMaterialCopy();
@@ -302,11 +318,16 @@ class MeshRenderer extends Renderer {
       if (Array.isArray(material)) return material.forEach((mat) => this.preprocessMaterial(mat));
 
       material.transparent = true;
+      this.appearance?.trackMaterial(material);
+
       const nodeMaterial = material as THREE.Material & {
         colorNode?: Node | null;
         maskShadowNode?: Node | null;
         opacityNode?: Node | null;
         positionNode?: Node | null;
+        normalNode?: Node | null;
+        roughnessNode?: Node | null;
+        metalnessNode?: Node | null;
       };
       if (!this.materialNodeState.has(material)) {
         // WebGPU copies these source-material properties into its internal node material.
@@ -316,23 +337,26 @@ class MeshRenderer extends Renderer {
           maskShadowNode: nodeMaterial.maskShadowNode ?? null,
           opacityNode: this.cpuOpacityNode,
           positionNode: nodeMaterial.positionNode ?? null,
+          normalNode: nodeMaterial.normalNode ?? null,
+          roughnessNode: nodeMaterial.roughnessNode ?? null,
+          metalnessNode: nodeMaterial.metalnessNode ?? null,
         });
       }
       if (this.batch) {
         const source = this.batch.sourceAppearance();
         const inherited = this.appearance ? this.batch.cpuCopyAppearance(this.appearance) : undefined;
         const copies = inherited ? [source, inherited] : [source];
-        nodeMaterial.colorNode = copies.reduce<Node<'vec3'>>((color, copy) => color.mul(copy.color), materialColor);
-        nodeMaterial.opacityNode = copies.reduce<Node<'float'>>(
-          (alpha, copy) => alpha.mul(copy.alpha), materialOpacity,
-        );
-        this.setAppearancePhysicalNodes(material, copies);
+        this.applyCopies(material, copies, materialColor, materialOpacity);
         this.materialNodeState.set(material, {
           colorNode: nodeMaterial.colorNode ?? null, opacityNode: nodeMaterial.opacityNode ?? null,
           positionNode: null, maskShadowNode: null,
+          normalNode: nodeMaterial.normalNode ?? null,
+          roughnessNode: nodeMaterial.roughnessNode ?? null,
+          metalnessNode: nodeMaterial.metalnessNode ?? null,
         });
         material.onBeforeCompile = shader => this.batch!.shader(shader, this.appearance);
-        material.customProgramCacheKey = () => `rzmps.batch:${this.batch!.parts.length}:${!!this.appearance}`;
+        material.customProgramCacheKey = () =>
+          `rzmps.batch:${this.batch!.parts.length}:${this.batch!.appearance.cacheKey}:${this.materialCopyCacheKey}`;
         material.needsUpdate = true;
         return;
       }
@@ -362,41 +386,22 @@ gl_FragColor.a *= vInstanceAlpha;`
         this.appearance?.shader(shader, true);
       };
       if (this.appearance) {
-        material.customProgramCacheKey = () => 'rzmps.mesh.copy';
+        material.customProgramCacheKey = () => `rzmps.mesh.copy:${this.materialCopyCacheKey}`;
         const copy = this.appearance.nodes(undefined, undefined, undefined, positionGeometry);
-        nodeMaterial.colorNode = materialColor.mul(copy.color);
-        nodeMaterial.opacityNode = this.cpuOpacityNode.mul(materialOpacity).mul(copy.alpha);
-        this.setCopiedPhysicalNodes(material, copy);
+        this.applyCopies(material, [copy], materialColor, this.cpuOpacityNode.mul(materialOpacity));
         this.materialNodeState.set(material, { ...this.materialNodeState.get(material)!,
-          colorNode: nodeMaterial.colorNode, opacityNode: nodeMaterial.opacityNode });
+          colorNode: nodeMaterial.colorNode ?? null, opacityNode: nodeMaterial.opacityNode ?? null,
+          normalNode: nodeMaterial.normalNode ?? null, roughnessNode: nodeMaterial.roughnessNode ?? null,
+          metalnessNode: nodeMaterial.metalnessNode ?? null });
       }
 
       material.needsUpdate = true;
     }
 
-    private setCopiedPhysicalNodes(material: THREE.Material, copy: ReturnType<Appearance['nodes']>): void {
-      this.setAppearancePhysicalNodes(material, [copy]);
-    }
-
-    private setAppearancePhysicalNodes(material: THREE.Material, copies: AppearanceNodes[]): void {
-      let normal: Node<'vec3'> = materialNormal;
-      let roughness: Node<'float'> = materialRoughness;
-      let metalness: Node<'float'> = materialMetalness;
-
-      for (const copy of copies) {
-        const q0 = positionView.dFdx();
-        const q1 = positionView.dFdy();
-        const st0 = copy.normalUV.dFdx();
-        const st1 = copy.normalUV.dFdy();
-        const tangent = q0.mul(st1.y).sub(q1.mul(st0.y));
-        const bitangent = q1.mul(st0.x).sub(q0.mul(st1.x));
-        const scale = tangent.dot(tangent).max(bitangent.dot(bitangent)).max(1e-12).sqrt().reciprocal();
-        const detail = tangent.mul(copy.normal.x).add(bitangent.mul(copy.normal.y)).mul(scale);
-        normal = detail.add(normal.mul(copy.normal.z)).normalize();
-        roughness = roughness.mul(copy.roughness);
-        metalness = metalness.mul(copy.metalness);
-      }
-      Object.assign(material, { roughnessNode: roughness, metalnessNode: metalness, normalNode: normal });
+    private applyCopies(material: THREE.Material, copies: AppearanceNodes[],
+      color: Node<'vec3'>, opacity: Node<'float'>): void {
+      applyMaterialCopies(material, copies, { color, opacity, normal: materialNormal,
+        roughness: materialRoughness, metalness: materialMetalness });
     }
 
     private selectMesh(particle: Particle): number {
@@ -432,11 +437,9 @@ gl_FragColor.a *= vInstanceAlpha;`
       Object.assign(batch.material, {
         positionNode: rotateXYZ(positionGeometry.mul(particle.scale).mul(this.getGPUScaleMultiplierNode()),
           particle.rotation).mul(visible).add(particle.position),
-        colorNode: copies.reduce<Node<'vec3'>>((color, copy) => color.mul(copy.color), particle.color),
-        opacityNode: copies.reduce<Node<'float'>>((alpha, copy) => alpha.mul(copy.alpha), particle.alpha.mul(visible)),
         maskShadowNode: visible.greaterThan(0),
       });
-      this.setAppearancePhysicalNodes(batch.material, copies);
+      this.applyCopies(batch.material, copies, particle.color, particle.alpha.mul(visible));
       batch.material.needsUpdate = true;
       this.gpuMaterialBuffer = buffers;
       this.gpuMaterialBufferVersion = buffers.version;
@@ -479,10 +482,12 @@ gl_FragColor.a *= vInstanceAlpha;`
         nodeMaterial.positionNode = localPosition;
         const copy = this.appearance?.nodes(particle.materialCopy, particle.materialCopyU,
           particle.materialCopyV, positionGeometry);
-        nodeMaterial.colorNode = copy ? particle.color.mul(materialColor).mul(copy.color) : particle.color;
-        nodeMaterial.opacityNode = copy ? particle.alpha.mul(visible).mul(materialOpacity).mul(copy.alpha)
-          : particle.alpha.mul(visible);
-        if (copy) this.setCopiedPhysicalNodes(material, copy);
+        if (copy) this.applyCopies(material, [copy], particle.color.mul(materialColor),
+          particle.alpha.mul(visible).mul(materialOpacity));
+        else {
+          nodeMaterial.colorNode = particle.color;
+          nodeMaterial.opacityNode = particle.alpha.mul(visible);
+        }
         nodeMaterial.maskShadowNode = visible.greaterThan(0);
         material.needsUpdate = true;
       });
@@ -527,9 +532,15 @@ gl_FragColor.a *= vInstanceAlpha;`
           maskShadowNode?: Node | null;
           opacityNode?: Node | null;
           positionNode?: Node | null;
+        normalNode?: Node | null;
+        roughnessNode?: Node | null;
+        metalnessNode?: Node | null;
         };
         const state = this.materialNodeState.get(material);
         nodeMaterial.positionNode = state?.positionNode ?? null;
+        nodeMaterial.normalNode = state?.normalNode ?? null;
+        nodeMaterial.roughnessNode = state?.roughnessNode ?? null;
+        nodeMaterial.metalnessNode = state?.metalnessNode ?? null;
         nodeMaterial.colorNode = state?.colorNode ?? null;
         nodeMaterial.opacityNode = state?.opacityNode ?? this.cpuOpacityNode;
         nodeMaterial.maskShadowNode = state?.maskShadowNode ?? null;
@@ -573,14 +584,7 @@ gl_FragColor.a *= vInstanceAlpha;`
 
     private restoreMaterialEnvironment(): void {
       this.materialEnvironmentState.forEach((original, material) => {
-        const envMaterial = material as THREE.Material & {
-          envMap?: THREE.Texture | null;
-          envMapIntensity?: number;
-        };
-
-        envMaterial.envMap = original.envMap;
-        envMaterial.envMapIntensity = original.envMapIntensity;
-        material.needsUpdate = true;
+        copyMaterialEnvironment(material, original);
       });
 
       this.materialEnvironmentState.clear();
@@ -590,6 +594,9 @@ gl_FragColor.a *= vInstanceAlpha;`
       material: THREE.Material,
       system: ParticleSystem,
     ): void {
+      // Reset can dispose a compiled material without replacing the material object.
+      this.appearance?.trackMaterial(material);
+
       const envMaterial = material as THREE.Material & {
         envMap?: THREE.Texture | null;
         envMapIntensity?: number;
@@ -601,38 +608,24 @@ gl_FragColor.a *= vInstanceAlpha;`
         this.materialEnvironmentState.set(material, {
           envMap: envMaterial.envMap,
           envMapIntensity: envMaterial.envMapIntensity,
+          envMapRotation: (envMaterial as THREE.MeshStandardMaterial).envMapRotation?.clone(),
         });
       }
 
       const original = this.materialEnvironmentState.get(material);
 
+      // A system capture takes precedence; copied surfaces otherwise supply their shared environment.
       if (system.useLiveCubemap) {
-        const nextMap = system.liveCubemap.map ?? null;
-
-        if (
-          envMaterial.envMap !== nextMap
-          || envMaterial.envMapIntensity !== system.liveCubemap.intensity
-        ) {
-          envMaterial.envMap = nextMap;
-          envMaterial.envMapIntensity = system.liveCubemap.intensity;
-          material.needsUpdate = true;
-        }
-
+        copyMaterialEnvironment(material, {
+          envMap: system.liveCubemap.map,
+          envMapIntensity: system.liveCubemap.intensity,
+          envMapRotation: original?.envMapRotation,
+        });
         return;
       }
 
-      if (!original) return;
-
-      if (
-        envMaterial.envMap !== original.envMap
-        || envMaterial.envMapIntensity !== original.envMapIntensity
-      ) {
-        envMaterial.envMap = original.envMap;
-        envMaterial.envMapIntensity = original.envMapIntensity;
-        material.needsUpdate = true;
-      }
+      copyMaterialEnvironment(material, this.appearance?.environment(this.materialTarget) ?? original);
     }
 }
-
 
 export default MeshRenderer;

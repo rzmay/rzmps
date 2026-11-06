@@ -8,6 +8,7 @@ import {
     EndBehavior,
     LightRenderer,
     MeshRenderer,
+    Module,
     NoiseModule,
     OrientToDirection,
     SpriteRenderer,
@@ -83,6 +84,9 @@ export class ParticleSystemSerializer {
             `  gravityModifier: ${this.serializeValue(system.gravityModifier)},`,
             `  inheritVelocity: ${this.serializeValue(system.inheritVelocity)},`,
             `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
+            `  simulationSpaceTransform: ${this.serializeValue(system.simulationSpaceTransform instanceof THREE.Object3D
+                ? system.simulationSpaceTransform.matrixWorld : system.simulationSpaceTransform)},`,
+            `  sourceLoss: ${JSON.stringify(system.sourceLoss)},`,
             `  useSpatialEffects: ${this.serializeValue(system.useSpatialEffects)},`,
             `  spatialEffectBoundsFiltering: ${this.serializeValue(system.spatialEffectBoundsFiltering)},`,
             `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
@@ -125,11 +129,11 @@ export class ParticleSystemSerializer {
 
     serializeSubSystemOptions(options) {
         return this.serializeValue({
+            eventScope: options.eventScope,
             shouldEmit: options.shouldEmit,
             ratio: options.ratio,
             emitContinuous: options.emitContinuous,
             emitOnCollision: options.emitOnCollision,
-            copyCollisionMaterial: options.copyCollisionMaterial,
             emitOnSpawn: options.emitOnSpawn,
             emitOnDeath: options.emitOnDeath,
             inheritScale: options.inheritScale,
@@ -242,6 +246,29 @@ export class ParticleSystemSerializer {
             })})`;
         }
 
+        if (module.constructor === Module) {
+            // Export constructor inputs, never the live octree/grid and their cyclic particle references.
+            const options = this.serializeValue({
+                priority: module.priority,
+                tags: module.tags,
+                events: module.events,
+                eventScope: module.eventScope,
+                prepare: module._prepare,
+                initializeParticle: module.initializeParticle === Module.prototype.initializeParticle
+                    ? undefined : module.initializeParticle,
+                initializeParticleGPU: module.initializeParticleGPU === Module.prototype.initializeParticleGPU
+                    ? undefined : module.initializeParticleGPU,
+                condition: module.condition,
+                conditionGPU: module.conditionGPU,
+                modifyGPU: module.modifyGPU,
+                useOctree: module.useOctree,
+                octreeOptions: module.octreeOptions,
+                useSpatialGrid: module.useSpatialGrid,
+                spatialGridOptions: module.spatialGridOptions,
+            });
+            return `new Module(${this.serializeFunction(module._modify)}, ${options})`;
+        }
+
         const runtime = module;
         const args = runtime.options !== undefined
             ? this.serializeValue({
@@ -255,8 +282,12 @@ export class ParticleSystemSerializer {
 
     serializeRenderer(renderer) {
         if (renderer instanceof DecalRenderer) {
-            const material = `new THREE.${renderer.material.type}(${this.serializeMaterialOptions(renderer.material, true)})`;
+            // Serialize each complete template so correlated maps survive a preset round trip.
+            const materials = [renderer.material].flat().map(material =>
+                `new THREE.${material.type}(${this.serializeMaterialOptions(material, true)})`);
+            const material = Array.isArray(renderer.material) ? `[${materials.join(', ')}]` : materials[0];
             const options = {
+                materialIndex: renderer.materialIndex,
                 direction: renderer.direction,
                 hitSelection: renderer.hitSelection,
                 maxHits: renderer.maxHits,
@@ -264,6 +295,7 @@ export class ParticleSystemSerializer {
                 depth: renderer.depth,
                 offset: renderer.offset,
                 size: renderer.size,
+                rotation: renderer.rotation,
                 color: renderer.color,
                 lifetime: renderer.lifetime,
                 opacity: renderer.opacity,
@@ -275,6 +307,14 @@ export class ParticleSystemSerializer {
                 maxDecals: renderer.maxDecals,
                 onSpawn: renderer.onSpawn,
                 onCollision: renderer.onCollision,
+                impulseThreshold: renderer.impulseThreshold,
+                impulseAffectsSize: renderer.impulseAffectsSize,
+                impulseAffectsOpacity: renderer.impulseAffectsOpacity,
+                impulseAffectsLifetime: renderer.impulseAffectsLifetime,
+                emissionTags: renderer.emissionTags,
+                onEvent: renderer.parameterEvents,
+                events: renderer.events,
+                eventScope: renderer.eventScope,
                 onDeath: renderer.onDeath,
                 continuousRate: renderer.continuousRate,
                 ratio: renderer.ratio,
@@ -292,6 +332,12 @@ export class ParticleSystemSerializer {
         if (renderer instanceof AudioRenderer) {
             const options = {
                 loop: renderer.loop,
+                onSpawn: renderer.onSpawn,
+                onDeath: renderer.onDeath,
+                onCollision: renderer.onCollision,
+                onEvent: renderer.parameterEvents,
+                events: renderer.events,
+                eventScope: renderer.eventScope,
                 maxClips: renderer.maxClips,
                 ratio: renderer.ratio,
                 collisionRatio: renderer.collisionRatio,
@@ -372,11 +418,11 @@ export class ParticleSystemSerializer {
             return `new LightRenderer(${this.serializeValue({
                 brightness: renderer.brightness,
                 rangeMultiplier: renderer.rangeMultiplier,
-                groupingRadiusRatio: renderer.groupingRadiusRatio,
+                groupingRadius: renderer.groupingRadius,
+                allocation: renderer.allocation,
                 decay: renderer.decay,
                 count: renderer.count,
                 ratio: renderer.ratio,
-                randomDistribution: renderer.randomDistribution,
                 inheritParticleColor: renderer.inheritParticleColor,
                 sizeAffectsRange: renderer.sizeAffectsRange,
                 alphaAffectsIntensity: renderer.alphaAffectsIntensity,
@@ -430,6 +476,14 @@ export class ParticleSystemSerializer {
 
     getLODOptions(target, includeCount = false, includeSize = false) {
         const options = {};
+        if ('materialComposite' in target) {
+            options.materialComposite = target.materialComposite;
+            options.materialCompositeGPU = target.materialCompositeGPU;
+            if (target.textureCopyQuality !== 1) options.textureCopyQuality = target.textureCopyQuality;
+            if (target.atlasOptions && Object.keys(target.atlasOptions).length) {
+                options.atlasOptions = target.atlasOptions;
+            }
+        }
         if (target.lod) options.lod = target.lod;
         if (target.children) options.children = target.children;
         if (target.compensation && target.compensation !== 'none') options.compensation = target.compensation;
@@ -443,6 +497,7 @@ export class ParticleSystemSerializer {
 
     getSerializableRuntimeOptions(target) {
         const hidden = new Set([
+            'executionContext', 'gpuExecutionContext',
         ]);
         return Object.fromEntries(
             Object.entries(target).filter(([key]) => !key.startsWith('_') && !hidden.has(key)),
@@ -481,12 +536,12 @@ export class ParticleSystemSerializer {
         const options = {};
 
         if (loadTextures) {
-            for (const key of ['map', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap']) {
+            for (const key of ['map', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap']) {
                 const texture = material[key];
                 if (!texture) continue;
                 options[key] = this.rawCode(
                     `Object.assign(new THREE.TextureLoader().load(${this.serializeTexture(texture)}), `
-                        + `{ colorSpace: ${this.serializeValue(texture.colorSpace)} })`,
+                        + `{ colorSpace: ${this.serializeValue(texture.colorSpace)}, channel: ${texture.channel} })`,
                 );
             }
             if (material.normalMap) options.normalScale = material.normalScale;
@@ -619,8 +674,9 @@ export class ParticleSystemSerializer {
         }
 
         if (renderer instanceof TrailRenderer || renderer instanceof DecalRenderer) {
-            return ['map', 'alphaMap', 'normalMap'].some(key =>
-                Boolean(this.textureReference(this.textureSource(renderer.material?.[key]))));
+            return [renderer.material].flat().some(material =>
+                ['map', 'alphaMap', 'normalMap', 'aoMap'].some(key =>
+                    Boolean(this.textureReference(this.textureSource(material?.[key])))));
         }
 
         return false;
@@ -648,6 +704,8 @@ export class ParticleSystemSerializer {
             return String(value);
         if (typeof value === 'function')
             return this.serializeFunction(value);
+        if (value instanceof THREE.Matrix4)
+            return `new THREE.Matrix4().fromArray(${JSON.stringify(value.elements)})`;
         if (value instanceof THREE.Vector3)
             return `new THREE.Vector3(${value.x}, ${value.y}, ${value.z})`;
         if (value instanceof THREE.Box3)
@@ -678,7 +736,12 @@ export class ParticleSystemSerializer {
     }
 
     serializeFunction(value) {
-        const source = value.toString();
+        let source = value.toString();
+        // Object-method shorthand needs a function expression when emitted as a property value.
+        if (/^(?:async\s+)?[\w$]+\s*\([^)]*\)\s*\{/.test(source)
+            && !/^(?:async\s+)?function\b/.test(source)) {
+            source = source.replace(/^(async\s+)?/, '$1function ');
+        }
         if (/\bEasing\./.test(source)) {
             this.usesEasing = true;
         }

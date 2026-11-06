@@ -16,7 +16,7 @@ Preset by [rzmay](https://github.com/rzmay).
 The 4-second loop supplies a continuous ribbon field. Each particle lasts one second, so its contribution remains near the current emitter rather than accumulating indefinitely. No gravity override is supplied; the system’s default gravity behavior still applies.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L13)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L12)
 
 ```js
   const ribbonTrail = new ParticleSystem({
@@ -40,7 +40,11 @@ The 4-second loop supplies a continuous ribbon field. Each particle lasts one se
         ratio: 1,
         ribbonCount: 3,
         width: 0.15,
-        widthOverTrail: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        widthOverTrail: (time) => {
+          if (time < 0.2) return time / 0.2;
+          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
+          return 0.85 * (1 - ((time - 0.75) / 0.25));
+        },
         colorOverTrail: (time) => new THREE.Color().lerpColors(
           new THREE.Color('#fff'),
           new THREE.Color('#66e0ff'),
@@ -62,7 +66,7 @@ The 4-second loop supplies a continuous ribbon field. Each particle lasts one se
 The torus source emits 50 particles per second with radial speed 5. A short one-second lifetime and scale 0.12 produce many closely spaced samples around the source. Increasing speed without increasing emission rate would separate those samples and visibly change the ribbon shape.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L19)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L18)
 
 ```js
     emitters: [
@@ -84,7 +88,7 @@ The torus source emits 50 particles per second with radial speed 5. A short one-
 No module array is supplied here; the system therefore uses its empty module default. The system configuration shown below is the actual source for that absence. Motion comes from initial radial velocity and default system integration, while width and color variation are handled by the trail renderer.
 
 
-[Source: modules:none](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L14)
+[Source: modules:none](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L13)
 
 ```js
   const ribbonTrail = new ParticleSystem({
@@ -108,7 +112,11 @@ No module array is supplied here; the system therefore uses its empty module def
         ratio: 1,
         ribbonCount: 3,
         width: 0.15,
-        widthOverTrail: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        widthOverTrail: (time) => {
+          if (time < 0.2) return time / 0.2;
+          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
+          return 0.85 * (1 - ((time - 0.75) / 0.25));
+        },
         colorOverTrail: (time) => new THREE.Color().lerpColors(
           new THREE.Color('#fff'),
           new THREE.Color('#66e0ff'),
@@ -130,7 +138,7 @@ No module array is supplied here; the system therefore uses its empty module def
 Ribbon mode connects particles into three ribbons rather than assigning an independent trail to each particle. Ratio 1 includes all samples and width 0.15 keeps the strands narrow. The width envelope tapers both ends and the white-to-cyan gradient distinguishes the length of the ribbon. Roughness and metalness zero create a clean nonmetallic surface response.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L32)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/ribbonTrail.js#L31)
 
 ```js
     renderers: [
@@ -139,7 +147,11 @@ Ribbon mode connects particles into three ribbons rather than assigning an indep
         ratio: 1,
         ribbonCount: 3,
         width: 0.15,
-        widthOverTrail: (time) => ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75 ? 1 - 0.15 * (((time) - 0.2) / 0.55) : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        widthOverTrail: (time) => {
+          if (time < 0.2) return time / 0.2;
+          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
+          return 0.85 * (1 - ((time - 0.75) / 0.25));
+        },
         colorOverTrail: (time) => new THREE.Color().lerpColors(
           new THREE.Color('#fff'),
           new THREE.Color('#66e0ff'),

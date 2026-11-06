@@ -1,4 +1,5 @@
 import { surfacePatch } from '../material-copy/Surface';
+import getAttributeVersion from '../helpers/getAttributeVersion';
 import * as THREE from 'three';
 import { Octree } from 'three/examples/jsm/math/Octree.js';
 import { Capsule } from 'three/examples/jsm/math/Capsule.js';
@@ -160,16 +161,16 @@ class ThreeCollisionBackend implements ICollisionBackend {
       const position = tracked.object.geometry.getAttribute('position');
       const index = tracked.object.geometry.index;
       const geometryChanged = tracked.geometry !== tracked.object.geometry
-        || tracked.positionVersion !== attributeVersion(position)
+        || tracked.positionVersion !== getAttributeVersion(position)
         || tracked.positionCount !== (position?.count ?? 0)
-        || tracked.indexVersion !== attributeVersion(index)
+        || tracked.indexVersion !== getAttributeVersion(index)
         || tracked.indexCount !== (index?.count ?? position?.count ?? 0)
         || this.invalidatedGeometry.has(tracked.object.uuid);
       if (geometryChanged) {
         tracked.geometry = tracked.object.geometry;
-        tracked.positionVersion = attributeVersion(position);
+        tracked.positionVersion = getAttributeVersion(position);
         tracked.positionCount = position?.count ?? 0;
-        tracked.indexVersion = attributeVersion(index);
+        tracked.indexVersion = getAttributeVersion(index);
         tracked.indexCount = index?.count ?? position?.count ?? 0;
         if (tracked.dynamic) dynamicMembershipChanged = true;
         else staticMembershipChanged = true;
@@ -530,11 +531,11 @@ class ThreeCollisionBackend implements ICollisionBackend {
       lastMovedAt: this.elapsedTime,
       geometry: previousTracked?.geometry ?? object.geometry,
       positionVersion: previousTracked?.positionVersion
-        ?? attributeVersion(object.geometry.getAttribute('position')),
+        ?? getAttributeVersion(object.geometry.getAttribute('position')),
       positionCount: previousTracked?.positionCount
         ?? object.geometry.getAttribute('position')?.count
         ?? 0,
-      indexVersion: previousTracked?.indexVersion ?? attributeVersion(object.geometry.index),
+      indexVersion: previousTracked?.indexVersion ?? getAttributeVersion(object.geometry.index),
       indexCount: previousTracked?.indexCount
         ?? object.geometry.index?.count
         ?? object.geometry.getAttribute('position')?.count
@@ -735,10 +736,3 @@ class ThreeCollisionBackend implements ICollisionBackend {
 }
 
 export default ThreeCollisionBackend;
-
-function attributeVersion(
-  attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined
-): number {
-  if (!attribute) return -1;
-  return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
-}

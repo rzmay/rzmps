@@ -30,7 +30,8 @@ import {
 } from 'three/tsl';
 import type { LitSpriteOptions } from './LitSprite';
 
-type WebGPULitSpriteOptions = LitSpriteOptions & {
+type WebGPULitSpriteOptions = Omit<LitSpriteOptions, 'atlasInset'> & {
+  atlasInset?: number | Node<'float'>;
   sceneDepthTexture: THREE.DepthTexture;
   spriteDataNode: Node<'vec4'>;
   colorNode: Node<'vec3'>;
@@ -89,9 +90,10 @@ const WebGPULitSprite = (
   } as THREE.MeshStandardMaterialParameters);
 
   const spriteData = spriteDataNode ?? attribute('instanceSpriteData', 'vec4');
+  const inset = typeof atlasInset === 'number' ? float(atlasInset) : atlasInset;
   const spriteUv = spritesheetUV(
     vec2(gridSize?.x ?? 1, gridSize?.y ?? 1),
-    uv().mul(1 - 2 * atlasInset).add(atlasInset),
+    uv().mul(float(1).sub(inset.mul(2))).add(inset),
     spriteData.x,
   );
 
@@ -156,12 +158,10 @@ const WebGPULitSprite = (
     material.normalNode = normalNode;
   }
 
-  if (materialCopyNodes) opacity = opacity.mul(materialCopyNodes.alpha);
-  const finalAlpha = opacity.clamp(0, 1).toVar();
+  const finalAlpha = opacity.clamp(0, 1);
 
   material.name = 'RZMPS WebGPU Lit Sprite';
   material.colorNode = colorNode ? spriteColor.rgb.mul(colorNode) : spriteColor.rgb;
-  if (materialCopyNodes) material.colorNode = material.colorNode.mul(materialCopyNodes.color);
   material.opacityNode = finalAlpha;
   material.alphaTest = 0.001;
   material.envMap = envMap ?? null;
@@ -174,9 +174,14 @@ const WebGPULitSprite = (
     : float(metalness);
 
   if (materialCopyNodes) {
-    material.roughnessNode = (material.roughnessNode as Node<'float'>).mul(materialCopyNodes.roughness);
-    material.metalnessNode = (material.metalnessNode as Node<'float'>).mul(materialCopyNodes.metalness);
-    material.normalNode = normalNode.add(materialCopyNodes.normal.sub(vec3(0, 0, 1))).normalize();
+    const result = materialCopyNodes.compositeGPU({ color: material.colorNode, opacity: finalAlpha,
+      normal: normalNode, roughness: material.roughnessNode as Node<'float'>,
+      metalness: material.metalnessNode as Node<'float'> }, spriteUv as Node<'vec2'>);
+    material.colorNode = result.color;
+    material.opacityNode = result.opacity;
+    material.roughnessNode = result.roughness;
+    material.metalnessNode = result.metalness;
+    material.normalNode = result.normal;
   }
   const transmissionAmount = transmission ?? (transmissionMap ? 1 : 0);
 

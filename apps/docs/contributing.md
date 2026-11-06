@@ -2,6 +2,36 @@
 
 Install workspace dependencies with `npm install`, then build packages with `npm run build:modules`. Run `npm test` for the library regression suite and `npm run build --workspace demo` for the interactive application.
 
+## Preparing a pull request
+
+From the repository root, run:
+
+```bash
+npm run pr:prepare
+```
+
+Install Puppeteer's browser once with `npx puppeteer browsers install chrome`. The
+command follows the PR checklist and stops at the first failure:
+
+1. Run core regression and TypeScript tests.
+2. Build all publishable packages.
+3. Run `benchmark:update-report` to measure and regenerate the root and package
+   README benchmark tables.
+4. Generate documentation, API references, the skill, and example previews from
+   the updated source and benchmark reports, then run documentation/link checks.
+5. Build the demo and check staged and unstaged whitespace.
+
+Benchmark regeneration precedes documentation generation so the published docs and
+agent references include the new README measurements. Review and commit those
+README and generated documentation updates, including `apps/docs/public/previews/` images and
+their manifest, alongside the source changes. Build checks validate committed captures without
+launching Chrome; stale previews require local regeneration.
+
+Cross-branch PR benchmarks remain exclusively in the existing GitHub runner
+workflow, where both revisions are measured on the same runner. This local command
+does not export PR comparison results, modify that workflow, merge, commit, push,
+or open a PR. Full benchmark/report generation can take several minutes.
+
 ## Adding or updating an example
 
 Keep the implementation in `examples/<id>.js` (TypeScript is also supported by the generator). Export its existing async default factory and a literal `metadata` object containing id, title, description, tags, and category. Keep configuration inside the factory; the registry is generated. Preserve factory author information and return a normal ParticleSystem so the demo GUI and serializer continue to work.

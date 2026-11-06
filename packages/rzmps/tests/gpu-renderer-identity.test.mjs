@@ -14,6 +14,7 @@ camera.position.set(0, 0, 10);
 camera.updateMatrixWorld(true);
 const rendererSystem = {
   cameraDistanceSq: 0,
+  beginGPUEventExecution: () => ({ forEach() {} }),
   sceneCamera: camera,
   useLiveCubemap: false,
   scene: undefined,
@@ -99,7 +100,7 @@ const ribbonParticles = [0, 1, 2].map((index) => {
 ribbonTrail._update(ribbonParticles, rendererSystem, 0.1);
 assert.ok(ribbonTrail.geometry.getAttribute('position').count > 4);
 
-const lightRenderer = new LightRenderer({ count: 1, randomDistribution: false });
+const lightRenderer = new LightRenderer({ count: 1 });
 const firstLightParticle = new Particle({ position: new THREE.Vector3(1, 2, 3) });
 firstLightParticle.id = 'gpu:0:1';
 lightRenderer._update([firstLightParticle]);
@@ -113,6 +114,7 @@ let resolveReadback;
 let readbackCalls = 0;
 let requestedLimit = 0;
 const selectiveSystem = {
+  getGPURendererTagMask() { return undefined; },
   cameraDistanceSq: 0,
   selectiveReadback(limit) {
     requestedLimit = limit;

@@ -62,6 +62,50 @@ Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
+<a id="count"></a>
+
+### count
+
+```ts
+count: number;
+```
+
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`count`](../../interfaces/RendererOptions.md#count)
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`events`](../../interfaces/RendererOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`eventScope`](../../interfaces/RendererOptions.md#eventscope)
+
+***
+
 <a id="geometry"></a>
 
 ### geometry
@@ -74,6 +118,22 @@ One geometry or static variants sharing the material; defaults to sphere geometr
 
 ***
 
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`groupingRadius`](../../interfaces/RendererOptions.md#groupingradius)
+
+***
+
 <a id="material"></a>
 
 ### material
@@ -83,6 +143,34 @@ material: MeshStandardMaterial;
 ```
 
 Shared material used when mesh is omitted; takes precedence over materialOptions.
+
+***
+
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialComposite`](../../interfaces/RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCompositeGPU`](../../interfaces/RendererOptions.md#materialcompositegpu)
 
 ***
 
@@ -161,6 +249,22 @@ optional meshIndex?: DynamicValue<number>;
 ```
 
 Geometry choice; omission chooses a stable random mesh per particle.
+
+***
+
+<a id="ratio"></a>
+
+### ratio
+
+```ts
+ratio: number;
+```
+
+Representative fraction, rounded with Math.round after applying count. Defaults to 1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`ratio`](../../interfaces/RendererOptions.md#ratio)
 
 ***
 

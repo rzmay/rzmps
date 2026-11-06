@@ -265,6 +265,13 @@ void main()
     vec3 finalColor =
         baseColor.rgb;
 
+    // Convert linear particle shading to the active output space before mixing framebuffer samples.
+    // The copied scene color is already encoded for that output and must not be converted twice.
+    gl_FragColor = vec4(finalColor, finalAlpha);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    finalColor = gl_FragColor.rgb;
+
     if (transmissionValue > 0.0)
     {
         vec2 colorResolution =
@@ -306,7 +313,7 @@ void main()
 
         finalColor =
             mix(
-                baseColor.rgb,
+                finalColor,
                 transmittedColor,
                 transmissionValue
             );

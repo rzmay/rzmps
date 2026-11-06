@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import Renderer, { type RendererOptions } from '../Renderer';
 import Particle from '../Particle';
+import type { SubSystemSource } from '../EmissionSource';
+import { eventNames, parameterEventHandler, subscribeParameterEvent, transformEventParameters,
+  type ParameterEventSubscription, type ParameterEventSubscriptions } from '../Events';
+import rendererEventParticle from '../helpers/rendererEventParticle';
+import tagsIntersect from '../helpers/tagsIntersect';
 import ParticleSystem from '../ParticleSystem';
 import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
@@ -8,12 +13,21 @@ import particleRatio from '../helpers/particleRatio';
 import type { StrictMultiple } from '../types/Multiple';
 import acceptMultiple from '../helpers/acceptMultiple';
 import { CollisionHit } from '../interfaces/ICollisionBackend';
-import type { CollisionListener } from '../modules/Collision';
-import type { ParticleListener } from '../ParticleSystem';
+import type { SimulationEvent } from '../EventReceiver';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
 import type { GPUParticleReadbackField } from '../gpu/SelectiveReadback';
 
 const AUDIO_LISTENER_KEY = "__rzmps_audioListener";
+
+/** Evaluated inputs for one event cue. Position is in the renderer system's simulation space. */
+export interface AudioParameters {
+  sound?: AudioBuffer;
+  position: THREE.Vector3;
+  pitch: number;
+  volume: number;
+  highPass: number;
+  lowPass: number;
+}
 
 export interface AudioRendererOptions extends Partial<RendererOptions> {
   /** Existing AudioListener; omission discovers or attaches a listener to the active camera. */
@@ -27,6 +41,11 @@ export interface AudioRendererOptions extends Partial<RendererOptions> {
   onSpawnSound: StrictMultiple<AudioBuffer>;
   /** Decoded buffers played on eligible particle deaths. */
   onDeathSound: StrictMultiple<AudioBuffer>;
+
+  onSpawn: ParameterEventSubscription<AudioParameters>;
+  onDeath: ParameterEventSubscription<AudioParameters>;
+  onCollision: ParameterEventSubscription<AudioParameters, CollisionHit>;
+  onEvent?: ParameterEventSubscriptions<AudioParameters>;
 
   /** Additional predicate selecting particles for sound playback. */
   shouldPlay: (particle: Particle) => boolean;
@@ -97,6 +116,7 @@ interface AudioFilters {
 
 /** Positional particle audio and lifecycle cues; requires audio playback permission and scene camera context. */
 export default class AudioRenderer extends Renderer {
+  protected get groupingRatio(): number { return 1; }
   listener?: THREE.AudioListener;
 
   sound?: AudioBuffer[];
@@ -104,11 +124,16 @@ export default class AudioRenderer extends Renderer {
   onSpawnSound?: AudioBuffer[];
   onDeathSound?: AudioBuffer[];
 
+  onSpawn: ParameterEventSubscription<AudioParameters> = true;
+  onDeath: ParameterEventSubscription<AudioParameters> = true;
+  onCollision: ParameterEventSubscription<AudioParameters, CollisionHit> = true;
+  private _parameterEventHandlers: ParameterEventSubscriptions<AudioParameters> = [];
+
   shouldPlay: (particle: Particle) => boolean = () => true;
 
   loop: boolean = true;
   maxClips: number;
-  ratio: number;
+
   collisionRatio: number;
 
   pitch: DynamicValue<number>;
@@ -146,10 +171,7 @@ export default class AudioRenderer extends Renderer {
   impulseThreshold: number;
 
   private _system?: ParticleSystem;
-  private _eventSystem?: ParticleSystem;
-  private _collisionListener?: CollisionListener;
-  private _deathListener?: ParticleListener;
-  private _spawnListener?: ParticleListener;
+
   private _particleAudio = new Map<string, ParticleAudio>();
   private _eventAudio = new Set<THREE.PositionalAudio>();
   private _cameraPosition = new THREE.Vector3();
@@ -163,6 +185,13 @@ export default class AudioRenderer extends Renderer {
 
   constructor(options: Partial<AudioRendererOptions> = {}) {
     super(options);
+    this._parameterEventHandlers = options.onEvent ?? [];
+    this.events = [...new Set([
+      ...this.events, ...eventNames(this._parameterEventHandlers),
+    ])];
+    this.onSpawn = options.onSpawn ?? true;
+    this.onDeath = options.onDeath ?? true;
+    this.onCollision = options.onCollision ?? true;
 
     this.listener = options.listener;
 
@@ -225,9 +254,47 @@ export default class AudioRenderer extends Renderer {
     this.gpuInterpolationRate = Math.max(0, options.gpuInterpolationRate ?? 20);
   }
 
+  onEvent(name: 'collision', handler: ParameterEventSubscription<AudioParameters, CollisionHit>): this;
+  onEvent(name: string, handler?: ParameterEventSubscription<AudioParameters>): this;
+  onEvent(name: string, handler: ParameterEventSubscription<AudioParameters>
+    | ParameterEventSubscription<AudioParameters, CollisionHit> = true): this {
+    this._parameterEventHandlers = subscribeParameterEvent(this._parameterEventHandlers, name,
+      handler as ParameterEventSubscription<AudioParameters>);
+    this.events = [...new Set([...this.events, name])];
+    return this;
+  }
+
+  get parameterEvents(): ParameterEventSubscriptions<AudioParameters> { return this._parameterEventHandlers; }
+
+  override get selectedEventNames(): readonly string[] {
+    return [...new Set([...this.events, ...eventNames(this._parameterEventHandlers),
+      ...[['spawn', this.onSpawn], ['death', this.onDeath], ['collision', this.onCollision]]
+        .filter(([, handler]) => handler).map(([name]) => name as string),
+    ])].filter(name => this.eventHandler(name));
+  }
+
+  private eventHandler(name: string): ParameterEventSubscription<AudioParameters> {
+    const handler = parameterEventHandler(this._parameterEventHandlers, name) ?? (name === 'spawn' ? this.onSpawn
+      : name === 'death' ? this.onDeath : name === 'collision' ? this.onCollision : true);
+    return handler as ParameterEventSubscription<AudioParameters>;
+  }
+
+  protected override receive(event: SimulationEvent): void {
+    const system = this._system;
+    if (!system || !this.eventHandler(event.name)) return;
+
+    // Resolve the source view once, then evaluate the selected cue's parameters.
+    const particle = rendererEventParticle(event, system);
+    const hit = event.name === 'collision' ? event.data as CollisionHit : undefined;
+    const cues = { spawn: this.onSpawnSound, death: this.onDeathSound,
+      collision: this.onCollisionSound }[event.name];
+    this._handleEvent(particle, cues, hit, event.name === 'collision' ? this.collisionRatio : this.ratio,
+      event.name, event.data, event.source ?? particle);
+  }
+
   public setup(system: ParticleSystem): void {
     this._system = system;
-    this._setupEventCallbacks(system);
+    this.synchronize(system);
     this._ensureListener(system);
   }
 
@@ -235,7 +302,7 @@ export default class AudioRenderer extends Renderer {
     this._system = system;
     this._deltaTime = deltaTime;
     this._updateCameraState(system);
-    this._setupEventCallbacks(system);
+    this.synchronize(system);
     this._ensureListener(system);
     this._cleanParticleAudio(particles);
 
@@ -251,6 +318,9 @@ export default class AudioRenderer extends Renderer {
   ): void {
     this._system = system;
     this._deltaTime = deltaTime;
+    this._updateCameraState(system);
+    this._ensureListener(system);
+    this.beginExecution(system, deltaTime);
     this._advanceGPUAudio(deltaTime);
     const ratio = Math.max(this.ratio, 0.01);
     const sampleLimit = Math.ceil(Math.max(this.maxClips, 1) / ratio) * 2;
@@ -278,7 +348,7 @@ export default class AudioRenderer extends Renderer {
       system.sceneCamera.getWorldPosition(this._cameraPosition);
 
       if (system.simulationSpace !== 'world') {
-        system.worldToLocal(this._cameraPosition);
+        system.worldToSimulation(this._cameraPosition);
       }
 
       if (
@@ -288,25 +358,6 @@ export default class AudioRenderer extends Renderer {
         this._cameraDepthRange = [system.sceneCamera.near, system.sceneCamera.far];
       }
     }
-  }
-
-  private _setupEventCallbacks(system: ParticleSystem): void {
-    if (this._eventSystem === system) return;
-
-    this._removeEventCallbacks();
-
-    this._collisionListener = (particle, collisionHit) => {
-      if (collisionHit.impulse.length() <= this.impulseThreshold) return;
-      this._handleEvent(particle, this.onCollisionSound, collisionHit, this.collisionRatio);
-    };
-    this._deathListener = (particle) => this._handleEvent(particle, this.onDeathSound, undefined, this.ratio);
-    this._spawnListener = (particle) => this._handleEvent(particle, this.onSpawnSound, undefined, this.ratio);
-
-    system.onCollision(this._collisionListener);
-    system.onDeath(this._deathListener);
-    system.onSpawn(this._spawnListener);
-
-    this._eventSystem = system;
   }
 
   private _ensureListener(system: ParticleSystem): void {
@@ -395,39 +446,54 @@ export default class AudioRenderer extends Renderer {
 
   private _handleEvent(
     particle: Particle,
-    audio?: AudioBuffer[],
+    buffers?: AudioBuffer[],
     collisionHit?: CollisionHit,
     ratio: number = this.ratio,
+    name = collisionHit ? 'collision' : 'spawn',
+    data: unknown = collisionHit,
+    source: SubSystemSource = particle,
   ): void {
-    if (
-      !audio
-      || audio?.length === 0
-      || !particleRatio(particle, ratio)
-      || !this.shouldPlay(particle)
-    ) {
-      return;
-    }
-
-    this._playOneShot(
-      audio[Math.floor(Math.random() * audio.length)],
-      particle,
-      collisionHit,
-    );
+    if (!particleRatio(particle, ratio) || !this.shouldPlay(particle)
+      || (this.tags && !tagsIntersect(particle.tags ?? [], this.tags))
+      || (collisionHit && collisionHit.impulse.length() <= this.impulseThreshold)) return;
+    const handler = this.eventHandler(name);
+    if (!handler) return;
+    const explicit = typeof handler === 'function'
+      || parameterEventHandler(this._parameterEventHandlers, name) !== undefined;
+    const cues = buffers?.length ? buffers : explicit ? this.sound : undefined;
+    const parameters = transformEventParameters(handler, data, source, {
+      sound: cues?.length ? cues[Math.floor(Math.random() * cues.length)] : undefined,
+      position: particle.position.clone(), pitch: this._getPitch(particle, collisionHit),
+      volume: this._getVolume(particle, collisionHit),
+      highPass: this._getHighPassFrequency(particle, collisionHit),
+      lowPass: this._getLowPassFrequency(particle, collisionHit),
+    });
+    if (!parameters?.sound || !parameters.position.toArray().every(Number.isFinite)
+      || ![parameters.pitch, parameters.volume, parameters.highPass, parameters.lowPass].every(Number.isFinite)) return;
+    this._playOneShot(parameters);
   }
 
-  private _playOneShot(clip: AudioBuffer, particle: Particle, collisionHit?: CollisionHit) {
-    if (!this.listener || !this._system) return;
+  private _playOneShot(parameters: AudioParameters): void {
+    if (!this.listener || !this._system || !parameters.sound) return;
     if (this._eventAudio.size >= this.maxClips) return;
 
     const audio = new THREE.PositionalAudio(this.listener);
 
-    audio.setBuffer(clip);
+    audio.setBuffer(parameters.sound);
     audio.setLoop(false);
 
-    audio.position.copy(particle.position);
-    audio.setPlaybackRate(this._getPitch(particle, collisionHit));
-    audio.setVolume(this._getVolume(particle, collisionHit));
-    this._applyFilters(audio, particle, collisionHit);
+    audio.position.copy(parameters.position);
+    audio.setPlaybackRate(Math.max(0, parameters.pitch));
+    audio.setVolume(Math.max(0, parameters.volume));
+    const filters: BiquadFilterNode[] = [];
+    for (const [type, frequency] of [['highpass', parameters.highPass], ['lowpass', parameters.lowPass]] as const) {
+      if (frequency <= 0) continue;
+      const filter = this._createFilter(type);
+      if (!filter) continue;
+      this._setFilterFrequency(filter, frequency);
+      filters.push(filter);
+    }
+    if (filters.length) audio.setFilters(filters);
 
     this._system.add(audio);
     this._eventAudio.add(audio);
@@ -685,30 +751,10 @@ export default class AudioRenderer extends Renderer {
     this._relativePositions.delete(id);
   }
 
-  private _removeEventCallbacks(): void {
-    if (!this._eventSystem) return;
-
-    if (this._collisionListener) {
-      this._eventSystem.removeCollisionListener(this._collisionListener);
-    }
-
-    if (this._deathListener) {
-      this._eventSystem.removeDeathListener(this._deathListener);
-    }
-
-    if (this._spawnListener) {
-      this._eventSystem.removeSpawnListener(this._spawnListener);
-    }
-
-    this._eventSystem = undefined;
-    this._collisionListener = undefined;
-    this._deathListener = undefined;
-    this._spawnListener = undefined;
-  }
-
   public destroy(): void {
+    super.reset();
+    this.dispose();
     this.cancelGPUSelectiveReadback();
-    this._removeEventCallbacks();
 
     this._particleAudio.forEach((_state, id) => {
       this._removeParticleAudio(id);

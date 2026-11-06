@@ -1,9 +1,10 @@
-import rotateXYZ from '../helpers/rotateParticleGPU';
+
 import TextureAtlas from '../TextureAtlas';
 import prepareTaggedSelection, { type TaggedSelection } from '../helpers/prepareTaggedSelection';
 import selectByTags from '../helpers/selectByTags';
 import selectByTagsGPU from '../helpers/selectByTagsGPU';
 import type { TaggedValue } from '../types/TaggedValue';
+import { rotateXYZ, transformDirectionGPU, transformDirectionMatrixGPU } from '../helpers/gpuTransforms';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import Renderer, { type RendererOptions } from '../Renderer';
@@ -225,7 +226,7 @@ class SpriteRenderer extends Renderer {
     if (choices.structured) this.textureSelection = choices;
     let sourceTexture = choices.values[0];
     if (!choices.single) {
-      this.textureAtlas = new TextureAtlas();
+      this.textureAtlas = new TextureAtlas(this.atlasOptions);
       const loaded = new Map<string, THREE.Texture>();
       this.textureAliases = choices.values.map(source => {
         if (typeof source !== 'string') return this.textureAtlas!.add(source);
@@ -359,7 +360,7 @@ class SpriteRenderer extends Renderer {
     const selectedParticles = this.textureSelection
       ? particles.filter(particle => this.getParticleFrame(particle) >= 0) : particles;
     this.setActiveRenderer(system.sceneRenderer);
-    this.textureAtlas?.update(system.sceneRenderer);
+    this.updateTextureAtlas(system.sceneRenderer);
     this.appearance?.attributes(this.geometry, selectedParticles, false);
     this.appearance?.attributes(this.webglQuadGeometry, selectedParticles, true);
     this.appearance?.attributes(this.webgpuGeometry, selectedParticles, true);
@@ -387,21 +388,22 @@ class SpriteRenderer extends Renderer {
     this.webglQuadMesh.castShadow = this.castShadow;
     this.webgpuMesh.castShadow = this.castShadow;
 
-    // Select environment
+    // Prefer explicit renderer settings, then the copied material's compatible reflection map.
+    const copiedEnvironment = this.appearance?.environment(this.materialTarget);
     let environment: THREE.Texture | undefined;
     if (this._materialOptions && 'envMap' in this._materialOptions) {
       environment = this._materialOptions.envMap;
     } else if (system.useLiveCubemap) {
       environment = system.liveCubemap.map;
     } else {
-      environment = system.scene?.environment ?? undefined;
+      environment = copiedEnvironment?.envMap ?? system.scene?.environment ?? undefined;
     }
 
     const envIntensity = system.useLiveCubemap && !('envMap' in (this._materialOptions ?? {}))
       ? system.liveCubemap.intensity
       : this._materialOptions && 'envIntensity' in this._materialOptions
         ? this._materialOptions.envIntensity ?? 1
-        : system.scene?.environmentIntensity ?? 1;
+        : copiedEnvironment?.envMapIntensity ?? system.scene?.environmentIntensity ?? 1;
 
     if (system.sceneRenderer instanceof WebGPURenderer) {
       this.updateWebGPUEnvironmentMap(environment ?? null, envIntensity);
@@ -480,7 +482,7 @@ class SpriteRenderer extends Renderer {
     buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
   ): void {
-    this.textureAtlas?.update(system.sceneRenderer);
+    this.updateTextureAtlas(system.sceneRenderer);
     this.ensureInstanceCapacity(buffers.count);
     this.prepareGPUVisibility(system);
     this.gpuCameraZoom.value = system.sceneCamera instanceof THREE.PerspectiveCamera
@@ -502,20 +504,21 @@ class SpriteRenderer extends Renderer {
     if ('bindIndirect' in buffers) buffers.bindIndirect(this.webgpuGeometry, system.sceneRenderer as WebGPURenderer);
     else this.webgpuGeometry.indirect = null;
 
+    const copiedEnvironment = this.appearance?.environment(this.materialTarget);
     let environment: THREE.Texture | undefined;
     if (this._materialOptions && 'envMap' in this._materialOptions) {
       environment = this._materialOptions.envMap;
     } else if (system.useLiveCubemap) {
       environment = system.liveCubemap.map;
     } else {
-      environment = system.scene?.environment ?? undefined;
+      environment = copiedEnvironment?.envMap ?? system.scene?.environment ?? undefined;
     }
 
     const envIntensity = system.useLiveCubemap && !('envMap' in (this._materialOptions ?? {}))
       ? system.liveCubemap.intensity
       : this._materialOptions && 'envIntensity' in this._materialOptions
         ? this._materialOptions.envIntensity ?? 1
-        : system.scene?.environmentIntensity ?? 1;
+        : copiedEnvironment?.envMapIntensity ?? system.scene?.environmentIntensity ?? 1;
 
     this.updateWebGPUEnvironmentMap(environment ?? null, envIntensity);
     this.updateWebGPUSoftParticles(
@@ -567,6 +570,7 @@ class SpriteRenderer extends Renderer {
 
   destroy(): void
   {
+    super.reset();
     this.environmentRenderTarget?.dispose();
     this.environmentRenderTarget = undefined;
 
@@ -604,6 +608,15 @@ class SpriteRenderer extends Renderer {
   protected onMaterialCopyChange(): void {
     if (!this.points) return;
     this.materialOptions = this._materialOptions;
+  }
+
+  private updateTextureAtlas(renderer: ParticleSystem['sceneRenderer']): void {
+    if (!this.textureAtlas) return;
+
+    this.textureAtlas.update(renderer);
+    this.gridSize.copy(this.textureAtlas.grid);
+    const inset = this.textureAtlas.padding / (this.textureAtlas.tileSize + 2 * this.textureAtlas.padding);
+    this.setUniformValue('atlasInset', inset);
   }
 
   private loadMaterial(
@@ -647,11 +660,10 @@ class SpriteRenderer extends Renderer {
   ) {
     const createMaterial = this.materialType === SpriteMaterialType.Lit ? WebGPULitSprite : WebGPUUnlitSprite;
 
-    return createMaterial(this.texture, {
+    const material = createMaterial(this.texture, {
       ...(options ?? {}),
 
-      atlasInset: this.textureAtlas ? this.textureAtlas.padding / (this.textureAtlas.tileSize + 2 * this
-        .textureAtlas.padding) : 0,
+      atlasInset: this.textureAtlas?.insetNode ?? 0,
       frames: this.frames,
       gridSize: this.gridSize,
       alphaMap: this.alphaMap,
@@ -660,6 +672,9 @@ class SpriteRenderer extends Renderer {
       ...(this.appearance && { materialCopyNodes: this.appearance.nodes() }),
       ...gpuNodes,
     });
+
+    this.appearance?.trackMaterial(material);
+    return material;
   }
 
   private hasTransmission(
@@ -862,7 +877,7 @@ class SpriteRenderer extends Renderer {
       this.softParticleDistance > 0 ? 1 : 0,
       this._materialOptions?.transmissionMap?.uuid ?? '',
       (this._materialOptions as { normalMap?: THREE.Texture } | undefined)?.normalMap?.uuid ?? '',
-      getGPUOptionSignature(this._materialOptions),
+      this.getGPUOptionSignature(this._materialOptions),
     ].join(':');
   }
 
@@ -894,11 +909,23 @@ class SpriteRenderer extends Renderer {
       positionGeometry.y.mul(particle.scale.y).mul(visible).mul(scaleMultiplier).mul(attenuationScale),
       float(0),
     );
-    const rolledQuad = rotateZ(localQuad, particle.rotation.x);
+    // Roll the billboard before converting camera orientation into the resolved simulation frame.
+    const cosAngle = cos(particle.rotation.x);
+    const sinAngle = sin(particle.rotation.x);
+    const rolledQuad = vec3(
+      localQuad.x.mul(cosAngle).sub(localQuad.y.mul(sinAngle)),
+      localQuad.x.mul(sinAngle).add(localQuad.y.mul(cosAngle)),
+      localQuad.z,
+    );
+    const worldToSystemRotation = new THREE.Matrix4();
+    if (system.simulationSpace !== 'world') {
+      system.updateWorldMatrix(true, false);
+      worldToSystemRotation.extractRotation(system.getSimulationToWorldMatrix()).invert();
+    }
     const orientedQuad = this.billboard
-      ? transformDirectionGPU(
-        transformDirectionNodeGPU(rolledQuad, cameraWorldMatrix),
-        getWorldToSystemRotationMatrix(system),
+      ? transformDirectionMatrixGPU(
+        transformDirectionGPU(rolledQuad, cameraWorldMatrix),
+        worldToSystemRotation,
       )
       : rotateXYZ(localQuad, particle.rotation);
 
@@ -1090,9 +1117,9 @@ class SpriteRenderer extends Renderer {
       return;
 
     if (
-      !force
-      &&
-      environment === this.environmentSource
+      // Published CubeUV maps already contain the latest capture; their sampler setup stays unchanged.
+      (!force || environment?.mapping === THREE.CubeUVReflectionMapping)
+      && environment === this.environmentSource
       && renderer === this.environmentRenderer
     ) {
       return;
@@ -1443,68 +1470,32 @@ class SpriteRenderer extends Renderer {
       object.visible = visible;
     });
   }
-}
 
+  // Recursively fingerprint material options for shader invalidation.
+  private getGPUOptionSignature(value: unknown, depth = 0): string {
+    if (value === undefined || value === null) return String(value);
+    if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
+      return `${typeof value}:${value}`;
+    }
+    if (typeof value === 'function') return 'function';
+    if (value instanceof THREE.Texture) return `texture:${value.uuid}`;
+    if (value instanceof THREE.Color) return `color:${value.getHexString()}`;
+    if (value instanceof THREE.Vector2 || value instanceof THREE.Vector3 || value instanceof THREE.Vector4) {
+      return `${value.constructor.name}:${value.toArray().join(',')}`;
+    }
+    if (Array.isArray(value)) {
+      return `array:${value.map((entry) => this.getGPUOptionSignature(entry, depth + 1)).join(',')}`;
+    }
+    if (typeof value !== 'object' || depth >= 2) {
+      return (value as { constructor?: { name?: string } }).constructor?.name ?? typeof value;
+    }
 
-function rotateZ(position: Node<'vec3'>, rotation: Node<'float'>): Node<'vec3'> {
-  const c = cos(rotation);
-  const s = sin(rotation);
-
-  return vec3(
-    position.x.mul(c).sub(position.y.mul(s)),
-    position.x.mul(s).add(position.y.mul(c)),
-    position.z,
-  );
-}
-
-function transformDirectionGPU(direction: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const e = matrix.elements;
-
-  return vec3(
-    direction.x.mul(e[0]).add(direction.y.mul(e[4])).add(direction.z.mul(e[8])),
-    direction.x.mul(e[1]).add(direction.y.mul(e[5])).add(direction.z.mul(e[9])),
-    direction.x.mul(e[2]).add(direction.y.mul(e[6])).add(direction.z.mul(e[10])),
-  ) as Node<'vec3'>;
-}
-
-function transformDirectionNodeGPU(direction: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
-  return matrix.mul(vec4(direction, float(0))).xyz as Node<'vec3'>;
-}
-
-function getWorldToSystemRotationMatrix(system: ParticleSystem): THREE.Matrix4 {
-  const matrix = new THREE.Matrix4();
-
-  if (system.simulationSpace !== 'world') {
-    system.updateWorldMatrix(true, false);
-    matrix.extractRotation(system.matrixWorld).invert();
+    const record = value as Record<string, unknown>;
+    return Object.keys(record)
+      .sort()
+      .map((key) => `${key}=${this.getGPUOptionSignature(record[key], depth + 1)}`)
+      .join(';');
   }
-
-  return matrix;
-}
-
-function getGPUOptionSignature(value: unknown, depth = 0): string {
-  if (value === undefined || value === null) return String(value);
-  if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
-    return `${typeof value}:${value}`;
-  }
-  if (typeof value === 'function') return 'function';
-  if (value instanceof THREE.Texture) return `texture:${value.uuid}`;
-  if (value instanceof THREE.Color) return `color:${value.getHexString()}`;
-  if (value instanceof THREE.Vector2 || value instanceof THREE.Vector3 || value instanceof THREE.Vector4) {
-    return `${value.constructor.name}:${value.toArray().join(',')}`;
-  }
-  if (Array.isArray(value)) {
-    return `array:${value.map((entry) => getGPUOptionSignature(entry, depth + 1)).join(',')}`;
-  }
-  if (typeof value !== 'object' || depth >= 2) {
-    return (value as { constructor?: { name?: string } }).constructor?.name ?? typeof value;
-  }
-
-  const record = value as Record<string, unknown>;
-  return Object.keys(record)
-    .sort()
-    .map((key) => `${key}=${getGPUOptionSignature(record[key], depth + 1)}`)
-    .join(';');
 }
 
 export default SpriteRenderer;

@@ -102,6 +102,22 @@ Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
+<a id="count"></a>
+
+### count?
+
+```ts
+optional count?: number;
+```
+
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`count`](../../interfaces/RendererOptions.md#count)
+
+***
+
 <a id="depthaffectshighpass"></a>
 
 ### depthAffectsHighPass
@@ -154,6 +170,34 @@ Strength of relative-velocity pitch shifting; zero disables the Doppler response
 
 ***
 
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](../../interfaces/EventReceiverOptions.md).[`events`](../../interfaces/EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](../../interfaces/EventReceiverOptions.md).[`eventScope`](../../interfaces/EventReceiverOptions.md#eventscope)
+
+***
+
 <a id="gpuinterpolationrate"></a>
 
 ### gpuInterpolationRate
@@ -161,6 +205,22 @@ Strength of relative-velocity pitch shifting; zero disables the Doppler response
 ```ts
 gpuInterpolationRate: number;
 ```
+
+***
+
+<a id="groupingradius"></a>
+
+### groupingRadius?
+
+```ts
+optional groupingRadius?: number;
+```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`groupingRadius`](../../interfaces/RendererOptions.md#groupingradius)
 
 ***
 
@@ -264,6 +324,34 @@ Low-pass cutoff in Hz, evaluated with normalized particle age.
 
 ***
 
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialComposite`](../../interfaces/RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCompositeGPU`](../../interfaces/RendererOptions.md#materialcompositegpu)
+
+***
+
 <a id="materialcopysamplemode"></a>
 
 ### materialCopySampleMode?
@@ -306,6 +394,16 @@ Maximum simultaneously managed positional clips; limits audio resource costs.
 
 ***
 
+<a id="oncollision"></a>
+
+### onCollision
+
+```ts
+onCollision: ParameterEventSubscription<AudioParameters, CollisionHit>;
+```
+
+***
+
 <a id="oncollisionsound"></a>
 
 ### onCollisionSound
@@ -318,6 +416,16 @@ Decoded buffers played on eligible collision events.
 
 ***
 
+<a id="ondeath"></a>
+
+### onDeath
+
+```ts
+onDeath: ParameterEventSubscription<AudioParameters>;
+```
+
+***
+
 <a id="ondeathsound"></a>
 
 ### onDeathSound
@@ -327,6 +435,26 @@ onDeathSound: StrictMultiple<AudioBuffer>;
 ```
 
 Decoded buffers played on eligible particle deaths.
+
+***
+
+<a id="onevent"></a>
+
+### onEvent?
+
+```ts
+optional onEvent?: ParameterEventSubscriptions<AudioParameters>;
+```
+
+***
+
+<a id="onspawn"></a>
+
+### onSpawn
+
+```ts
+onSpawn: ParameterEventSubscription<AudioParameters>;
+```
 
 ***
 
@@ -363,6 +491,10 @@ ratio: number;
 ```
 
 Fraction of eligible particles selected for continuous audio.
+
+#### Overrides
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`ratio`](../../interfaces/RendererOptions.md#ratio)
 
 ***
 

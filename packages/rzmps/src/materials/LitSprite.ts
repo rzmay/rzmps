@@ -42,9 +42,27 @@ const LitSprite = (
     ...materialOptions
   } = options;
 
+  // Runtime false uniforms still reserve sampler units on WebGL. Eliminate absent optional maps
+  // at shader creation, leaving environment and capture-time switches dynamic where needed.
+  const optionalMaps = { hasAlphaMap: alphaMap, hasNormalMap: normalMap,
+    hasRoughnessMap: roughnessMap, hasMetalnessMap: metalnessMap,
+    hasTransmissionMap: transmissionMap, hasDistortionMap: distortionMap ?? normalMap };
+  let fragmentShader = litSpriteFrag;
+  for (const [flag, map] of Object.entries(optionalMaps)) {
+    if (!map) fragmentShader = fragmentShader.replace(`uniform bool ${flag};`, `const bool ${flag} = false;`);
+  }
+
+  // These features are reconfigured by rebuilding materialOptions, not by retaining idle samplers.
+  if (!(transmission ?? (transmissionMap ? 1 : 0))) {
+    fragmentShader = fragmentShader.replace('uniform float transmission;', 'const float transmission = 0.0;');
+  }
+  if (!softParticleDistance) {
+    fragmentShader = fragmentShader.replace('uniform bool softParticles;', 'const bool softParticles = false;');
+  }
+
   return new THREE.ShaderMaterial({
     vertexShader: litSpriteVert,
-    fragmentShader: litSpriteFrag,
+    fragmentShader,
     uniforms: {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.lights),
         pointTexture: { value: texture },
@@ -62,7 +80,7 @@ const LitSprite = (
 
         // Normal lighting, if not already set, defaults to 1 if there is a normal map present and 0 if not.
         normalLighting: { value: normalLighting ?? (normalMap ? 1 : 0) },
-        sphericalNormals: { value: normalizeSphericalNormals(sphericalNormals) },
+        sphericalNormals: { value: THREE.MathUtils.clamp(Number(sphericalNormals ?? 0), 0, 1) },
 
         roughness: { value: roughness },
         roughnessMap: { value: roughnessMap ?? null },
@@ -106,9 +124,5 @@ const LitSprite = (
     ...materialOptions,
   });
 };
-
-function normalizeSphericalNormals(value: number | boolean | undefined): number {
-  return THREE.MathUtils.clamp(Number(value ?? 0), 0, 1);
-}
 
 export default LitSprite;

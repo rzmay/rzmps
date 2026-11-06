@@ -1,3 +1,4 @@
+import type { Vector3Input } from '../types/ValueInput';
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../Module';
 import Particle from '../Particle';
@@ -5,9 +6,10 @@ import type { DynamicValue } from '../types/DynamicValue';
 import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
 
 export interface RotationOverLifetimeOptions extends Partial<ModuleOptions> {
-    angle: DynamicValue<THREE.Vector3>;
-    angularVelocity: DynamicValue<THREE.Vector3>;
-    angularAcceleration: DynamicValue<THREE.Vector3>;
+    /** Angular values are radians; scalar inputs expand uniformly across axes. */
+    angle: DynamicValue<Vector3Input>;
+    angularVelocity: DynamicValue<Vector3Input>;
+    angularAcceleration: DynamicValue<Vector3Input>;
 }
 
 /** Adds age-dependent angle, angular velocity, and angular acceleration before movement as transient adjustments. */

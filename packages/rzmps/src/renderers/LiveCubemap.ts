@@ -6,7 +6,7 @@ export const LIVE_CUBEMAP_CAMERA_KEY = '__rzmps_liveCubemapCamera';
 export const PARTICLE_RENDERER_OBJECT_KEY = '__rzmps_particleRendererObject';
 
 export interface LiveCubemapOptions {
-  /** Capture size relative to renderer dimensions, rounded to a power of two. Defaults to 1 / 16. */
+  /** Capture size relative to the viewport, rounded to a power of two with a 16px minimum. Defaults to 1 / 16. */
   resolutionScale: number;
   /** Maximum scheduled capture frequency; rendering the six faces is additional work. Defaults to 24. */
   fps: number;
@@ -21,12 +21,6 @@ export interface LiveCubemapOptions {
 type HiddenObject = {
   object: THREE.Object3D;
   visible: boolean;
-};
-
-type HiddenMaterialState = {
-  material: THREE.Material;
-  colorWrite: boolean;
-  depthWrite: boolean;
 };
 
 /** Owns dynamic environment capture for both rendering backends; updates require a scene and initialized renderer. */
@@ -45,12 +39,14 @@ export default class LiveCubemap extends THREE.Object3D {
   excludeParent: boolean = false;
   excludeParticleRenderers: boolean = false;
 
-  get map(): THREE.Texture | undefined { return this._renderTarget?.texture }
+  get map(): THREE.Texture | undefined { return this._filteredTarget?.texture ?? this._renderTarget?.texture }
 
   private _updateAccumulator: number = 0;
 
   private _renderTarget?: THREE.WebGLCubeRenderTarget | CubeRenderTarget;
   private _cubeCamera?: THREE.CubeCamera;
+  private _pmremGenerator?: THREE.PMREMGenerator;
+  private _filteredTarget?: THREE.WebGLRenderTarget;
 
   constructor(options: Partial<LiveCubemapOptions> = {}) {
     super();
@@ -81,9 +77,10 @@ export default class LiveCubemap extends THREE.Object3D {
     renderer.getSize(rendererResolution);
     rendererResolution.multiplyScalar(this.resolutionScale);
 
-    const resolution = THREE.MathUtils.ceilPowerOfTwo(
-      Math.max(rendererResolution.x, rendererResolution.y)
-    );
+    // Three.js's PMREM filtering requires cube faces of at least 16 pixels.
+    const resolution = Math.max(16, THREE.MathUtils.ceilPowerOfTwo(
+      Math.max(rendererResolution.x, rendererResolution.y),
+    ));
 
     if (!this._renderTarget) {
       if (renderer instanceof WebGPURenderer) {
@@ -135,17 +132,29 @@ export default class LiveCubemap extends THREE.Object3D {
     }
 
     const excludedParent = this.excludeParent ? this.parent : undefined;
-    const hiddenParentMaterials = excludedParent
-      ? this.hideMaterialsFromColorPass(excludedParent)
-      : [];
+
+    // Skip the owner entirely: colorWrite alone still runs shaders and samples its live environment.
+    const hiddenParent = excludedParent ? [{ object: excludedParent, visible: excludedParent.visible }] : [];
+    if (excludedParent) excludedParent.visible = false;
+
     const hiddenParticleRenderers = this.excludeParticleRenderers
       ? this.hideParticleRenderers(scene)
       : [];
 
     try {
       this._cubeCamera.update(renderer, scene);
+
+      // Finish WebGL filtering before publishing the map. Lazy PMREM conversion inside a consumer's
+      // draw nests renderer.render() during uniform setup and can corrupt its texture-unit allocation.
+      if (renderer instanceof THREE.WebGLRenderer) {
+        this._pmremGenerator ??= new THREE.PMREMGenerator(renderer);
+        this._filteredTarget = this._pmremGenerator.fromCubemap(
+          this._renderTarget.texture as THREE.CubeTexture, this._filteredTarget,
+        );
+        this._filteredTarget.texture.pmremVersion = this._renderTarget.texture.pmremVersion;
+      }
     } finally {
-      this.restoreHiddenMaterials(hiddenParentMaterials);
+      this.restoreHiddenObjects(hiddenParent);
       this.restoreHiddenObjects(hiddenParticleRenderers);
 
       if (backgroundColor) {
@@ -156,7 +165,12 @@ export default class LiveCubemap extends THREE.Object3D {
   }
 
   dispose(): void {
+    this._filteredTarget?.dispose();
+    this._pmremGenerator?.dispose();
+    this._filteredTarget = undefined;
+    this._pmremGenerator = undefined;
     this._renderTarget?.dispose();
+    this._cubeCamera?.removeFromParent();
     this._renderTarget = undefined;
     this._cubeCamera = undefined;
   }
@@ -183,36 +197,4 @@ export default class LiveCubemap extends THREE.Object3D {
     });
   }
 
-  private hideMaterialsFromColorPass(object: THREE.Object3D): HiddenMaterialState[] {
-    const hidden: HiddenMaterialState[] = [];
-    const seen = new Set<THREE.Material>();
-
-    object.traverse((child) => {
-      const material = (child as THREE.Mesh | THREE.Line | THREE.Points).material;
-      const materials = Array.isArray(material) ? material : [material];
-
-      materials.forEach((entry) => {
-        if (!entry || seen.has(entry)) return;
-
-        seen.add(entry);
-        hidden.push({
-          material: entry,
-          colorWrite: entry.colorWrite,
-          depthWrite: entry.depthWrite,
-        });
-
-        entry.colorWrite = false;
-        entry.depthWrite = false;
-      });
-    });
-
-    return hidden;
-  }
-
-  private restoreHiddenMaterials(hidden: HiddenMaterialState[]): void {
-    hidden.forEach(({ material, colorWrite, depthWrite }) => {
-      material.colorWrite = colorWrite;
-      material.depthWrite = depthWrite;
-    });
-  }
 }

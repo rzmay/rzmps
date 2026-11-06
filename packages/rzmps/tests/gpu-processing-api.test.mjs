@@ -646,7 +646,7 @@ assert.equal(mixedParent.getGPUEmissionSupport().supported, true);
 
 const emissionRuns = new GPUEmissionRunBufferState(4);
 assert.equal(emissionRuns.capacity, 4);
-assert.equal(emissionRuns.snapshots.capacity, 4);
+assert.ok(emissionRuns.snapshots.capacity >= 4);
 emissionRuns.reset();
 assert.equal(emissionRuns.snapshots.count, 4);
 

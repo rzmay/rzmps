@@ -55,11 +55,7 @@ The system is offset to z=-6, with a 14-second loop and prewarm at 30 fps in the
         depthRange,
       }),
       new RotationByDepth({
-        angularVelocity: (t) => new THREE.Vector3(
-          THREE.MathUtils.lerp(0.12, 1.6, THREE.MathUtils.smoothstep(t, 0.15, 1)),
-          0,
-          0,
-        ),
+        angularVelocity: (t) => THREE.MathUtils.lerp(0.12, 1.6, THREE.MathUtils.smoothstep(t, 0.15, 1)),
         depthRange,
       }),
       new VelocityByDepth({
@@ -131,11 +127,7 @@ All five modules share depthRange [5, 24]. Distant particles shift from warm whi
         depthRange,
       }),
       new RotationByDepth({
-        angularVelocity: (t) => new THREE.Vector3(
-          THREE.MathUtils.lerp(0.12, 1.6, THREE.MathUtils.smoothstep(t, 0.15, 1)),
-          0,
-          0,
-        ),
+        angularVelocity: (t) => THREE.MathUtils.lerp(0.12, 1.6, THREE.MathUtils.smoothstep(t, 0.15, 1)),
         depthRange,
       }),
       new VelocityByDepth({
@@ -159,7 +151,7 @@ All five modules share depthRange [5, 24]. Distant particles shift from warm whi
 Unlit Circle sprites keep color differences independent of scene lighting. sizeAttenuation false suppresses ordinary perspective size falloff, allowing ScaleByDepth to provide the deliberate depth styling. Compare screenshots with a consistent camera to avoid mistaking camera changes for simulation differences.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/stylizedDepth.js#L81)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/stylizedDepth.js#L77)
 
 ```js
     renderers: [

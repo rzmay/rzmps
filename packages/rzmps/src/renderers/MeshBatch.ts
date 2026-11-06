@@ -1,3 +1,4 @@
+import type { TextureAtlasOptions } from '../TextureAtlas';
 import * as THREE from 'three';
 import {
   batchIndirectIndex, ivec2, positionGeometry, textureLoad, uniform, uniformArray, vec4,
@@ -22,7 +23,7 @@ export default class MeshBatch {
   readonly material: THREE.Material;
   readonly parts: Part[] = [];
   readonly registry = new MaterialCopyRegistry();
-  readonly appearance = new Appearance(this.registry);
+  readonly appearance: Appearance;
   readonly sourceIDs: number[] = [];
   readonly sourceNode: ReturnType<typeof uniformArray>;
   readonly data = new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType);
@@ -35,7 +36,9 @@ export default class MeshBatch {
   private readonly identity = new THREE.Matrix4();
   private readonly dummy = new THREE.Object3D();
 
-  constructor(readonly sources: readonly THREE.Mesh[], capacity: number) {
+  constructor(readonly sources: readonly THREE.Mesh[], capacity: number, atlasOptions: TextureAtlasOptions = {}) {
+    this.appearance = new Appearance(this.registry, undefined, atlasOptions);
+
     // Normalize owned copies, including material groups, without changing the source assets.
     sources.forEach((source, variant) => {
       const geometry = source.geometry;
@@ -140,6 +143,7 @@ export default class MeshBatch {
 
   sync(renderer?: THREE.WebGLRenderer | WebGPURenderer): void {
     this.parts.forEach((part, i) => { this.sourceIDs[i] = this.registry.register(part.material); });
+    this.appearance.trackMaterial(this.material, 'source');
     this.appearance.sync(undefined, MaterialCopySampleMode.Texture, renderer);
   }
 

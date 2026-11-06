@@ -1,0 +1,1441 @@
+{
+  "generatedBy": "npm run docs:previews",
+  "examples": {
+    "acid": {
+      "inputHash": "72292f9163f27c2560c341f877810826f0e6f34083782c5cf9d2d26c78392d7a",
+      "imageHash": "08b8da0e6861425f1d39fcb22f22b94fe888921b1866dd720966f7f2e4d540b6",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Acid",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 1,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "Pool Smoke",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 36,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "Pool Bubbles",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 6,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 15,
+        "step": 900,
+        "particles": 43,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 15
+      },
+      "camera": {
+        "position": [
+          6,
+          4,
+          9
+        ],
+        "target": [
+          0,
+          1,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "additiveSmoke": {
+      "inputHash": "08ca7acfeba51d3e4799fd80fa7eab44b038b7fc5da166c42f763add9a662d1f",
+      "imageHash": "b9d340c59a54c141daae8c215c722c0e6458855399bb99fc5f996dcb59b1b07c",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Smoke",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 89,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 89,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "boids": {
+      "inputHash": "eece2238511e59cdc07249a5e34bc68d12808a4875201707c0599ccd9ae5d595",
+      "imageHash": "3a4ef98cc1c7109351229a1a244f7209c4e335490209389547ee5a525e68b715",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Boids",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 94,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 94,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          20,
+          15,
+          30
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "bubbles": {
+      "inputHash": "26d4015ecb88a0e5b6611a8cc837dfd0677a679fa9a38e87cbbd6dfaa250a65c",
+      "imageHash": "45dbaa1ab9e96abc7d833d9bb9887d4d26823a32f462a1822039cd5abfe6be67",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Audio Bubbles",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 16,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 16,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "collision": {
+      "inputHash": "6fa7a00bb5edbedef51403b4f75e2596e403d06dd9bfa4573d6e267184fa1fab",
+      "imageHash": "96a335587796790678824c8c04dd4a85708cdc1fa744227844b878a7162e3fb7",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Collision",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 70,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 70,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "collisionSubEmitters": {
+      "inputHash": "cf09776da720bf4f73969d62b71f02a513674e90cc2c4482c025f97abefdb00e",
+      "imageHash": "93f5321371197369bc6ee4ef53a9ebcabb039ddc9b9e8a550247431ea78494cf",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Metal Balls",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 14,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "Metal Ball Sparks",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 18,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 32,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "cubes": {
+      "inputHash": "80bba76e1e908651be0164ee631924e8d901647922304f6a17ee1fcf936a18e0",
+      "imageHash": "065195e5aa3fee88b27cb473032913e74b589acc8c0da5a2bc2f25f08aed5d72",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Spheres",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 31,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 31,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "destruction": {
+      "inputHash": "a6d124720c2f302eafd33c5fdeee9aedc8e83d36f2e1e302e013bc346135d066",
+      "imageHash": "b44b6c1bf32413ad457aa9d6a0b9e191834a020bf4d52f2244348380091d7b18",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Destruction",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 7,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "Surface Fragments",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 204,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 2.5,
+        "step": 150,
+        "particles": 211,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 2.5
+      },
+      "camera": {
+        "position": [
+          7,
+          6,
+          10
+        ],
+        "target": [
+          0,
+          1,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "dopplerBullet": {
+      "inputHash": "d54678a70f501309ee22e8331fa2f1f7d6833a030f54e1baef497ecd05e76c9a",
+      "imageHash": "13866377f0cd6a4805057236dc8fe894f81eb51264b36b6e0e6147588bcace9c",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Doppler Bullet",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 2,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 227,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 3,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 0,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 0,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "Bullet Impact Dust",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 4,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 4,
+        "step": 240,
+        "particles": 236,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 4
+      },
+      "camera": {
+        "position": [
+          4,
+          3,
+          4
+        ],
+        "target": [
+          0,
+          0.5,
+          -4
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "fire": {
+      "inputHash": "7c59ceacd9d9958fe2b750158294ecd63e2a4468d7535dbd217756e01aa6db2c",
+      "imageHash": "8cdd33ae7de34953bf8670a2024bfeff6ea09077bdc5e23a8d27104da11434f6",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Fire",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 80,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 18,
+              "active": 18,
+              "peakIntensity": 1.6184430008390498
+            }
+          },
+          {
+            "name": "",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 0,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 80,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "fireball": {
+      "inputHash": "221f3d430b70c7cdfb0e6351cb3c14a6057c44e9d7cc7271743b61b900a041bc",
+      "imageHash": "c4e7670db608a94f389f184e001236f553a205d51fe8c6e5a80adf01e410dca6",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Fireball",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 5,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 2,
+              "active": 2,
+              "peakIntensity": 1.8073774005486936
+            }
+          },
+          {
+            "name": "",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 0,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 5,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "fireflies": {
+      "inputHash": "35a90a178577fc3abbc65f4b69c7253c205693dd977e0b387f4eb8b85745d494",
+      "imageHash": "b6814310130e3a56ed012082aaad50561b5869509a3b3e585b78105d32d95178",
+      "backend": "webgpu",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Fireflies",
+            "quality": 1,
+            "gpuProcessingActive": true,
+            "simulated": 96,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 1,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 361
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "Firefly Pulses",
+            "quality": 1,
+            "gpuProcessingActive": true,
+            "simulated": 13,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 3,
+              "active": 2,
+              "peakIntensity": 0.40577304110632406
+            }
+          }
+        ],
+        "attachmentValidation": {
+          "pulses": 13,
+          "maxDistance": 0.007344947375285435
+        },
+        "time": 6,
+        "step": 360,
+        "particles": 109,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 6
+      },
+      "camera": {
+        "position": [
+          15,
+          10,
+          23
+        ],
+        "target": [
+          0,
+          3,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": [
+        "THREE.AttributeNode: Vertex attribute \"position\" not found on geometry.",
+        "THREE.TSL: Return statement used in an inline 'Fn()'. Define a layout struct to allow return values. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'lodPriority' of 'uint' is a reserved keyword or already in use. Renamed to 'lodPriority_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particlePosition' of 'vec3' is a reserved keyword or already in use. Renamed to 'particlePosition_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleOrbitCenter' of 'vec3' is a reserved keyword or already in use. Renamed to 'particleOrbitCenter_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleRotation' of 'vec3' is a reserved keyword or already in use. Renamed to 'particleRotation_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleScale' of 'vec3' is a reserved keyword or already in use. Renamed to 'particleScale_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleVelocity' of 'vec3' is a reserved keyword or already in use. Renamed to 'particleVelocity_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleAngularVelocity' of 'vec3' is a reserved keyword or already in use. Renamed to 'particleAngularVelocity_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleScalarVelocity' of 'vec3' is a reserved keyword or already in use. Renamed to 'particleScalarVelocity_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleAcceleration' of 'vec3' is a reserved keyword or already in use. Renamed to 'particleAcceleration_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleAngularAcceleration' of 'vec3' is a reserved keyword or already in use. Renamed to 'particleAngularAcceleration_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleScalarAcceleration' of 'vec3' is a reserved keyword or already in use. Renamed to 'particleScalarAcceleration_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleColor' of 'vec3' is a reserved keyword or already in use. Renamed to 'particleColor_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleSpeed' of 'float' is a reserved keyword or already in use. Renamed to 'particleSpeed_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleAlpha' of 'float' is a reserved keyword or already in use. Renamed to 'particleAlpha_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleMass' of 'float' is a reserved keyword or already in use. Renamed to 'particleMass_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleDistortionStrength' of 'float' is a reserved keyword or already in use. Renamed to 'particleDistortionStrength_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleLifetime' of 'float' is a reserved keyword or already in use. Renamed to 'particleLifetime_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleTime' of 'float' is a reserved keyword or already in use. Renamed to 'particleTime_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleRealtime' of 'float' is a reserved keyword or already in use. Renamed to 'particleRealtime_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleAlive' of 'uint' is a reserved keyword or already in use. Renamed to 'particleAlive_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleTagMask' of 'uint' is a reserved keyword or already in use. Renamed to 'particleTagMask_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleGeneration' of 'uint' is a reserved keyword or already in use. Renamed to 'particleGeneration_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleEventIndex' of 'uint' is a reserved keyword or already in use. Renamed to 'particleEventIndex_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Return statement used in an inline 'Fn()'. Define a layout struct to allow return values. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.AttributeNode: Vertex attribute \"position\" not found on geometry."
+      ]
+    },
+    "fireworks": {
+      "inputHash": "94a471bccb22e3c83b98aa9d17856edc080b8ea2b7fc95175ad4d9a04b2ac288",
+      "imageHash": "6643c910259e18c5ec855328ffb17b200b8fdbb55a9869c6c163f5b741055234",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Fireworks",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 5,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "Rocket Smoke",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 25,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "Sparkles",
+            "quality": 0.46295959450732643,
+            "gpuProcessingActive": false,
+            "simulated": 150,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 10,
+              "active": 10,
+              "peakIntensity": 49.21373685433129
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 180,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          15,
+          32
+        ],
+        "target": [
+          0,
+          12,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "lodStress": {
+      "inputHash": "30bd2ca7f30b7576244d36ed6e1e0babb320a38838cd9cc527fd1b13bb1eccf3",
+      "imageHash": "8333fa994f431fda6a801294a0818bca613a8992409ba4d435c294e020f7bb52",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "LOD Stress Test",
+            "quality": 0.5728427269032347,
+            "gpuProcessingActive": false,
+            "simulated": 3018,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 3018,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "particleTrail": {
+      "inputHash": "1a7cb97f850a6862b0113fcd889c413fa39e24e963cb07818ed0e9304cbbe74f",
+      "imageHash": "bdc3241aaf6c02253ffaffd9e8db7bdd234782792c0a60c443e22e56eead120c",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Particle Trail",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 18,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 18,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "ribbonTrail": {
+      "inputHash": "98c75a4a11751760a77463c44d65fc8ce70fd7f734f65741b9212536bd164afe",
+      "imageHash": "29b528bee9060de76a306a2085019efd7770af3c2e1cfd9973dfa529a8912236",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Ribbon Trail",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 30,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 30,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "smoke": {
+      "inputHash": "270bed15fd5b114600da8dafdd4b0afa900a4f6d74b31821c52c9795f5660c24",
+      "imageHash": "401f82d72ffd7ce9c1973a791a33c6cc29c88a993d0b202b0b2202435237c914",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Smoke",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 89,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 89,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "snow": {
+      "inputHash": "5e8d016bc73dac45052247cb18c4d280f7f396e235010315b92b00a1c5b04da8",
+      "imageHash": "93c5936ae210b8a12f940ca91e5447ab68b2ff682be888f2c3cec5fd0541b31e",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Snow",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 179,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 179,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "spheres": {
+      "inputHash": "da7912ad649ad46fa9bd94c6e9ba70f13e0bf6ed6a2c4d7b09e4c1e31f09ae52",
+      "imageHash": "c101dc9614ee0fc4f7a090651d8f07569937b439fb61872c60777cc8b9575cb8",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Spheres",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 31,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 31,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "splatter": {
+      "inputHash": "a5540fbc6a0c9272b2fe6a12c407b0b0b08bacbdf5eaab4e154524da084477aa",
+      "imageHash": "a4823bd99d21e3eac4f3727c889d3a78021bc2053caa363718935424eacecf88",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Splatter",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 6,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 8,
+        "step": 480,
+        "particles": 6,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 8
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "stylizedDepth": {
+      "inputHash": "6ee43e094c87b0902f5693f56dcc6df8725a4edefb57a25db545268b679a1ea6",
+      "imageHash": "85e5690430cda51a7b8573f63b03ef7608a172fe17163771b258bd691f960509",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Stylized Depth",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 537,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 537,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "suzanne": {
+      "inputHash": "5ec67f8a6baade7bd94d877a8bfa3049140cbc30cef311411ff5fa6e7e779871",
+      "imageHash": "3df2e4ceba8d7238a240903b1e46f424ddaca020d50e54719273d8beb04dae45",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Suzanne",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 524,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 524,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "suzanneInstances": {
+      "inputHash": "c92cc6ea75c90119b2c7bc43077f26b2de74d91dceacf88e7815f4d28e48314c",
+      "imageHash": "743ad337497493404625a6ba87dfc7a55565cb342e2006c6542bb753d92f69ce",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Spheres",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 31,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 31,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
+    "tags": {
+      "inputHash": "7012777e7e8f68092fb38b86e467c2e61d7f150b143c5ad3358bc26793563991",
+      "imageHash": "0b520b5d7d6a30b452e2f88f00273947ed7d397a06e09a8982878104b7a5a492",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Spheres",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 31,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 3,
+        "step": 180,
+        "particles": 31,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 3
+      },
+      "camera": {
+        "position": [
+          8,
+          6,
+          12
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    }
+  }
+}

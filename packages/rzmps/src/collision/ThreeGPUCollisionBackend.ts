@@ -1,4 +1,5 @@
 import { MaterialCopyRegistry } from '../material-copy/Surface';
+import getAttributeVersion from '../helpers/getAttributeVersion';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import type { Node } from 'three/webgpu';
@@ -363,10 +364,10 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
         matrixWorld: mesh.matrixWorld.clone(),
         geometry,
         positionAttribute: position,
-        positionVersion: ThreeGPUCollisionBackend.attributeVersion(position),
+        positionVersion: getAttributeVersion(position),
         positionCount: position.count,
         indexAttribute: index,
-        indexVersion: ThreeGPUCollisionBackend.attributeVersion(index),
+        indexVersion: getAttributeVersion(index),
         indexCount: index?.count ?? position.count,
         drawRangeStart: geometry.drawRange.start,
         drawRangeCount: geometry.drawRange.count,
@@ -411,10 +412,4 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     return Array.from(arrays).reduce((bytes, array) => bytes + array.byteLength, 0);
   }
 
-  private static attributeVersion(
-    attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined,
-  ): number {
-    if (!attribute) return -1;
-    return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
-  }
 }

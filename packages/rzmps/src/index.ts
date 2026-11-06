@@ -97,17 +97,25 @@ export type {
   SpawnBurst,
 } from './Emitter';
 export { EmissionSource } from './enums/EmissionSource';
+export { default as RegisteredEmissionSource } from './EmissionSource';
+export type { EmissionSourceData, SubSystemSource } from './EmissionSource';
+export type { CPUEventHandler, GPUEventHandler, GPUEventPayload, GPUEventData, GPUEmissionContext,
+  EventSubscriptions, ParameterEventHandler, ParameterEventSubscription, ParameterEventSubscriptions } from './Events';
 export { TagSelectionMethod } from './enums/TagSelectionMethod';
 
 // Renderers
 export { default as Renderer } from './Renderer';
 export type { RendererOptions } from './Renderer';
 export { default as LightRenderer } from './renderers/LightRenderer';
+export type { LightRendererAllocationOptions } from './renderers/LightRenderer';
 export { default as MeshRenderer } from './renderers/MeshRenderer';
 export { default as SpriteRenderer } from './renderers/SpriteRenderer';
 export { default as AudioRenderer } from './renderers/AudioRenderer';
+export type { AudioParameters } from './renderers/AudioRenderer';
 export { default as DecalRenderer, DECAL_RENDERER_USER_DATA_KEY } from './renderers/DecalRenderer';
-export type { DecalRendererOptions, DecalDirectionSampler, DecalHitSelection } from './renderers/DecalRenderer';
+export type { DecalInstance, DecalRendererOptions, DecalDirectionSampler, DecalProjectionContext,
+  DecalDirection, DecalHitSelection, DecalParameters }
+  from './renderers/DecalRenderer';
 export { SpriteMaterialType } from './enums/SpriteMaterialType';
 export { default as TrailRenderer } from './renderers/TrailRenderer';
 export { TrailMode } from './enums/TrailMode';
@@ -121,7 +129,6 @@ export type {
   ModuleCondition,
   ModuleGPUCondition,
   ModuleGPUUpdate,
-  ModuleOctreeAggregate,
   ModuleOptions,
   ModuleUpdate,
   SpatialEffectConstructor,
@@ -210,6 +217,12 @@ export type {
   ParticleOctreeQueryOptions,
 } from './helpers/ParticleOctree';
 export { default as ParticleSpatialGrid } from './gpu/ParticleSpatialGrid';
+export type { GPUComputeRange } from './gpu/ComputeDispatch';
+export { SpatialLevels } from './enums/SpatialLevels';
+export type { SpatialLevelsInput, SpatialGridOptions } from './enums/SpatialLevels';
+export type { SpatialBackend, SpatialAggregator, SpatialAggregateLayout, SpatialAggregateType,
+  SpatialAggregateNodes, GPUSpatialRegion } from './types/SpatialAggregator';
+export type { GPUSpatialRegionRange, GPURegionParticleIndices } from './gpu/grid/Regions';
 export type {
   ParticleSpatialGridOptions,
   ParticleSpatialGridDiagnostics,
@@ -233,3 +246,19 @@ export { default as prepareTaggedSelection } from './helpers/prepareTaggedSelect
 export type { TaggedSelection } from './helpers/prepareTaggedSelection';
 export { default as selectByTags } from './helpers/selectByTags';
 export { default as selectByTagsGPU } from './helpers/selectByTagsGPU';
+export { default as EventReceiver } from './EventReceiver';
+export type {
+  EventOrigin, EventScope, SimulationEvent, EventExecutionContext, GPUEventExecutionContext, EventReceiverOptions,
+} from './EventReceiver';
+export type { ModuleExecutionContext, ModuleGPUExecutionContext } from './Module';
+export type { GPUEventBatch } from './gpu/EventBatch';
+
+export type { ParticleInitializationContext, GPUParticleInitializationContext,
+  ParticleInitializer, GPUParticleInitializer } from './Particle';
+
+export { default as MaterialCopy, MaterialCopySource } from './modules/MaterialCopy';
+export type { MaterialCopyOptions, MaterialCopyInput, GPUMaterialCopyInput } from './modules/MaterialCopy';
+
+export type { MaterialChannels, GPUMaterialChannels, MaterialChannel, MaterialCompositeCallback,
+  MaterialCompositeGPUCallback, MaterialCompositeContext, MaterialCompositeGPUContext }
+  from './material-copy/Composite';

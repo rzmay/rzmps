@@ -1,3 +1,9 @@
+const context = {
+  system: new ParticleSystem({ emitters: [], modules: [], renderers: [] }),
+  deltaTime: 0,
+  events: Object.freeze([]),
+};
+
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
@@ -5,6 +11,7 @@ import {
   DistortionBySpeed,
   DistortionOverLifetime,
   Particle,
+  ParticleSystem,
 } from '../build/index.mjs';
 
 /*
@@ -24,7 +31,7 @@ import {
   });
 
   particle.time = 0.5;
-  module.modify([particle], 0);
+  module.modify([particle], 0, context);
 
   assert.equal(particle.distortionStrength, 4);
 }
@@ -39,7 +46,7 @@ import {
     speedRange: [0, 10],
   });
 
-  module.modify([particle], 0);
+  module.modify([particle], 0, context);
 
   assert.equal(particle.distortionStrength, 4);
 }
@@ -54,7 +61,9 @@ import {
     depthRange: [0, 10],
   });
 
-  module.modify([particle], 0);
+  module.modify([particle], 0, context);
 
   assert.equal(particle.distortionStrength, 4);
 }
+
+context.system.destroy();

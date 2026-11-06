@@ -92,6 +92,18 @@ color: Color;
 
 ***
 
+<a id="contribution"></a>
+
+### contribution
+
+```ts
+contribution: number = 1;
+```
+
+Extensive visual energy; simulation particles contribute one by default.
+
+***
+
 <a id="data"></a>
 
 ### data
@@ -425,6 +437,32 @@ Copies current state with independent vectors, color, tags, and birth snapshot.
 #### Returns
 
 `Particle`
+
+***
+
+<a id="emitevent"></a>
+
+### emitEvent()
+
+```ts
+emitEvent(event, data?): this;
+```
+
+Dispatches a named event through this simulated particle's owner.
+
+#### Parameters
+
+##### event
+
+`string`
+
+##### data?
+
+`unknown`
+
+#### Returns
+
+`this`
 
 ***
 

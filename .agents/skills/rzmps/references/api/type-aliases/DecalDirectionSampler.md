@@ -9,7 +9,9 @@
 # Type Alias: DecalDirectionSampler
 
 ```ts
-type DecalDirectionSampler = (particle) => THREE.Vector3 | readonly THREE.Vector3[];
+type DecalDirectionSampler = (particle, context?) =>
+  | DecalDirection
+  | readonly DecalDirection[];
 ```
 
 ## Parameters
@@ -18,6 +20,11 @@ type DecalDirectionSampler = (particle) => THREE.Vector3 | readonly THREE.Vector
 
 [`Particle`](../classes/Particle.md)
 
+### context?
+
+[`DecalProjectionContext`](../interfaces/DecalProjectionContext.md)
+
 ## Returns
 
-`THREE.Vector3` \| readonly `THREE.Vector3`[]
+  \| [`DecalDirection`](DecalDirection.md)
+  \| readonly [`DecalDirection`](DecalDirection.md)[]

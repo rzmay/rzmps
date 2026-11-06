@@ -13,6 +13,7 @@ import {
   Fn,
   float,
   mix,
+  normalView,
   output,
   perspectiveDepthToViewZ,
   positionView,
@@ -27,7 +28,8 @@ import {
   viewportSharedTexture,
 } from 'three/tsl';
 
-type WebGPUUnlitSpriteOptions = UnlitSpriteOptions & {
+type WebGPUUnlitSpriteOptions = Omit<UnlitSpriteOptions, 'atlasInset'> & {
+  atlasInset?: number | Node<'float'>;
   sceneDepthTexture: THREE.DepthTexture;
   spriteDataNode: Node<'vec4'>;
   colorNode: Node<'vec3'>;
@@ -72,9 +74,10 @@ const WebGPUUnlitSprite = (
   } as THREE.MeshBasicMaterialParameters);
 
   const spriteData = spriteDataNode ?? attribute('instanceSpriteData', 'vec4');
+  const inset = typeof atlasInset === 'number' ? float(atlasInset) : atlasInset;
   const spriteUv = spritesheetUV(
     vec2(gridSize?.x ?? 1, gridSize?.y ?? 1),
-    uv().mul(1 - 2 * atlasInset).add(atlasInset),
+    uv().mul(float(1).sub(inset.mul(2))).add(inset),
     spriteData.x,
   );
 
@@ -103,14 +106,18 @@ const WebGPUUnlitSprite = (
     opacity = opacity.mul(fade);
   }
 
-  if (materialCopyNodes) opacity = opacity.mul(materialCopyNodes.alpha);
-  const finalAlpha = opacity.clamp(0, 1).toVar();
+  const finalAlpha = opacity.clamp(0, 1);
 
   material.name = 'RZMPS WebGPU Unlit Sprite';
   material.colorNode = colorNode ? spriteColor.rgb.mul(colorNode) : spriteColor.rgb;
-  if (materialCopyNodes) material.colorNode = material.colorNode.mul(materialCopyNodes.color);
   material.opacityNode = finalAlpha;
   material.alphaTest = 0.001;
+  if (materialCopyNodes) {
+    const result = materialCopyNodes.compositeGPU({ color: material.colorNode, opacity: finalAlpha,
+      normal: normalView, roughness: float(1), metalness: float(0) }, spriteUv as Node<'vec2'>);
+    material.colorNode = result.color;
+    material.opacityNode = result.opacity;
+  }
 
   const transmissionAmount = transmission ?? (transmissionMap ? 1 : 0);
 

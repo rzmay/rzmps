@@ -27,14 +27,20 @@ export function readPreviewManifest() {
   const file = path.join(previewDirectory,'manifest.json');
   return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file,'utf8')) : { generatedBy: 'npm run docs:previews', examples: {} };
 }
+/** Shared cache validation for explicit generation and browser-free build checks. */
+export function previewIsCurrent(entry, inputHash, image) {
+  return !!(entry && entry.inputHash === inputHash && image && entry.imageHash === checksum(image));
+}
 export function validatePreviews(examples) {
   const manifest = readPreviewManifest();
   const inputs = previewInputs(examples);
   for (const example of examples) {
     const entry = manifest.examples[example.id];
     const file = path.join(previewDirectory, example.id+'.png');
-    if (!entry || entry.inputHash !== inputs.get(example.id) || !fs.existsSync(file) || entry.imageHash !== checksum(fs.readFileSync(file))) {
-      throw new Error(`${example.id}: missing or stale generated preview; run npm run docs:generate`);
+    const image = fs.existsSync(file) ? fs.readFileSync(file) : null;
+    if (!previewIsCurrent(entry, inputs.get(example.id), image)) {
+      throw new Error(`${example.id}: missing or stale preview; run npm run docs:generate`
+        + ' and commit apps/docs/public/previews/ with your changes.');
     }
   }
   for (const id of Object.keys(manifest.examples)) if (!inputs.has(id)) throw new Error(`Stale preview for removed example ${id}; run npm run docs:generate`);
