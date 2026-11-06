@@ -651,7 +651,7 @@ readonly `string`[]
 get supportsGPU(): boolean;
 ```
 
-Whether both modification and any custom condition have GPU implementations.
+Whether modification, birth hooks and custom conditions support GPU processing.
 
 ##### Returns
 
@@ -870,19 +870,21 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 <a id="initializeparticle"></a>
 
-### initializeParticle()
+### initializeParticle()?
 
 ```ts
-initializeParticle(_particle, _context): void;
+optional initializeParticle(particle, context): void;
 ```
+
+Optional birth hooks; ordinary modifier modules do not run initialization work.
 
 #### Parameters
 
-##### \_particle
+##### particle
 
 [`Particle`](Particle.md)
 
-##### \_context
+##### context
 
 [`ParticleInitializationContext`](../interfaces/ParticleInitializationContext.md)
 
@@ -898,19 +900,19 @@ initializeParticle(_particle, _context): void;
 
 <a id="initializeparticlegpu"></a>
 
-### initializeParticleGPU()
+### initializeParticleGPU()?
 
 ```ts
-initializeParticleGPU(_particle, _context): void;
+optional initializeParticleGPU(particle, context): void;
 ```
 
 #### Parameters
 
-##### \_particle
+##### particle
 
 [`GPUParticleLike`](../interfaces/GPUParticleLike.md)
 
-##### \_context
+##### context
 
 [`GPUParticleInitializationContext`](../interfaces/GPUParticleInitializationContext.md)
 

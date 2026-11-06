@@ -166,40 +166,6 @@ mass: number = 1;
 
 ***
 
-<a id="materialcopy"></a>
-
-### materialCopy
-
-```ts
-materialCopy: Vector4;
-```
-
-Material source ID, impact UV, and sampling mode. Zero source uses renderer defaults.
-
-***
-
-<a id="materialcopyu"></a>
-
-### materialCopyU
-
-```ts
-materialCopyU: Vector4;
-```
-
-UV gradient rows, transformed into particle-local coordinates at birth.
-
-***
-
-<a id="materialcopyv"></a>
-
-### materialCopyV
-
-```ts
-materialCopyV: Vector4;
-```
-
-***
-
 <a id="noise"></a>
 
 ### noise
@@ -355,6 +321,106 @@ get isChild(): boolean;
 ##### Returns
 
 `boolean`
+
+***
+
+<a id="materialcopy"></a>
+
+### materialCopy
+
+#### Get Signature
+
+```ts
+get materialCopy(): Vector4;
+```
+
+Material source ID, impact UV, and sampling mode. Allocated on first access.
+
+##### Returns
+
+`Vector4`
+
+#### Set Signature
+
+```ts
+set materialCopy(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`Vector4`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="materialcopyu"></a>
+
+### materialCopyU
+
+#### Get Signature
+
+```ts
+get materialCopyU(): Vector4;
+```
+
+UV gradient rows, transformed into particle-local coordinates at birth. Allocated on first access.
+
+##### Returns
+
+`Vector4`
+
+#### Set Signature
+
+```ts
+set materialCopyU(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`Vector4`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="materialcopyv"></a>
+
+### materialCopyV
+
+#### Get Signature
+
+```ts
+get materialCopyV(): Vector4;
+```
+
+##### Returns
+
+`Vector4`
+
+#### Set Signature
+
+```ts
+set materialCopyV(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`Vector4`
+
+##### Returns
+
+`void`
 
 ***
 
