@@ -14,6 +14,22 @@
 
 ## Properties
 
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`atlasOptions`](../../interfaces/RendererOptions.md#atlasoptions)
+
+***
+
 <a id="castshadow"></a>
 
 ### castShadow
@@ -377,6 +393,22 @@ texture: string | Texture<unknown, TextureEventMap>;
 ```
 
 Trail texture or URL; defaults to the material map or the built-in sprite texture.
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`textureCopyQuality`](../../interfaces/RendererOptions.md#texturecopyquality)
 
 ***
 

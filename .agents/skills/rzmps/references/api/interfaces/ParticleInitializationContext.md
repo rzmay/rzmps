@@ -48,11 +48,11 @@ readonly optional source?: Readonly<Pick<Particle,
   | "position"
   | "scale"
   | "rotation"
-  | "tags"
   | "velocity"
-  | "lifetime"
   | "mass"
   | "distortionStrength"
+  | "tags"
+  | "lifetime"
 | "alive">>;
 ```
 

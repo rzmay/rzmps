@@ -54,6 +54,20 @@ optional alphaMap?: Texture<unknown, TextureEventMap>;
 
 ***
 
+<a id="atlasoptions"></a>
+
+### atlasOptions
+
+```ts
+readonly atlasOptions: TextureAtlasOptions;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`atlasOptions`](Renderer.md#atlasoptions)
+
+***
+
 <a id="billboard"></a>
 
 ### billboard
@@ -321,6 +335,20 @@ readonly optional textureAtlas?: TextureAtlas;
 ```
 
 Optional GPU atlas created from a texture list; invalidate dynamic sources here.
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality
+
+```ts
+readonly textureCopyQuality: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`textureCopyQuality`](Renderer.md#texturecopyquality)
 
 ***
 

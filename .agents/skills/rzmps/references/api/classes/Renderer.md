@@ -51,6 +51,16 @@ Configures particle filtering, artistic children, and LOD compensation.
 
 ## Properties
 
+<a id="atlasoptions"></a>
+
+### atlasOptions
+
+```ts
+readonly atlasOptions: TextureAtlasOptions;
+```
+
+***
+
 <a id="children"></a>
 
 ### children
@@ -177,6 +187,16 @@ ratio: number;
 
 ```ts
 optional tags?: string[];
+```
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality
+
+```ts
+readonly textureCopyQuality: number;
 ```
 
 ***

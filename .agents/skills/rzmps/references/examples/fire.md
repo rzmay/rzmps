@@ -60,9 +60,9 @@ The 10-second loop schedules a continuous flame; individual flame particles last
       new ColorOverLifetime({
         color: '#ffffff',
         alpha: (time) =>
-          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+          ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+          : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
         angularVelocity: [new THREE.Vector3(-0.5, 0, 0), new THREE.Vector3(0.5, 0, 0)],
@@ -92,6 +92,7 @@ The 10-second loop schedules a continuous flame; individual flame particles last
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
+        ratio: 0.25,
         continuousRate: 1.5,
         direction: (particle) => DecalRenderer.Radial(24)(particle),
         maxDistance: 3,
@@ -101,16 +102,16 @@ The 10-second loop schedules a continuous flame; individual flame particles last
         inheritScale: 0,
         inheritAlpha: 0,
         lifetime: 8,
-        opacity: (t) => 0.035 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+        opacity: (t) => 0.15 * THREE.MathUtils.smoothstep(t, 0, 0.01)
           * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
-        maxDecals: 384,
+        maxDecals: 100,
       }),
     ],
   });
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L156)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L157)
 
 ```js
   return new ParticleSystem({
@@ -199,7 +200,7 @@ Uniform scale values and color strings use the standard input shortcuts.
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L160)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L161)
 
 ```js
     emitters: [
@@ -247,9 +248,9 @@ Noise strength 2.1 and frequency 1.35 break up the regular rise. The additional 
       new ColorOverLifetime({
         color: '#ffffff',
         alpha: (time) =>
-          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+          ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+          : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
         angularVelocity: [new THREE.Vector3(-0.5, 0, 0), new THREE.Vector3(0.5, 0, 0)],
@@ -258,7 +259,7 @@ Noise strength 2.1 and frequency 1.35 break up the regular rise. The additional 
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L176)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L177)
 
 ```js
     modules: [
@@ -318,6 +319,7 @@ The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one anim
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
+        ratio: 0.25,
         continuousRate: 1.5,
         direction: (particle) => DecalRenderer.Radial(24)(particle),
         maxDistance: 3,
@@ -327,15 +329,15 @@ The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one anim
         inheritScale: 0,
         inheritAlpha: 0,
         lifetime: 8,
-        opacity: (t) => 0.035 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+        opacity: (t) => 0.15 * THREE.MathUtils.smoothstep(t, 0, 0.01)
           * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
-        maxDecals: 384,
+        maxDecals: 100,
       }),
     ],
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L200)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fire.js#L201)
 
 ```js
     renderers: [

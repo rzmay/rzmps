@@ -20,6 +20,30 @@ optional colorSpace?: ColorSpace;
 
 ***
 
+<a id="maxtilesize"></a>
+
+### maxTileSize?
+
+```ts
+optional maxTileSize?: number;
+```
+
+Maximum automatically selected interior tile resolution. Default 2048.
+
+***
+
+<a id="mincapacity"></a>
+
+### minCapacity?
+
+```ts
+optional minCapacity?: number;
+```
+
+Minimum reserved tile count, rounded up to power-of-two capacity. Default 0 allocates lazily.
+
+***
+
 <a id="padding"></a>
 
 ### padding?
@@ -40,4 +64,4 @@ Extruded border. Mipmaps are disabled to prevent cross-tile bleeding.
 optional tileSize?: number;
 ```
 
-Interior tile resolution. Sources are resampled on the GPU.
+Fixed interior tile resolution. Omit to preserve source resolution up to maxTileSize.

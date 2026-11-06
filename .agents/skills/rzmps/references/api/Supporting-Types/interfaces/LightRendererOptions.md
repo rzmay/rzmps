@@ -36,6 +36,22 @@ alphaAffectsIntensity: boolean;
 
 ***
 
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`atlasOptions`](../../interfaces/RendererOptions.md#atlasoptions)
+
+***
+
 <a id="brightness"></a>
 
 ### brightness
@@ -279,3 +295,19 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](../../interfaces/RendererOptions.md).[`tags`](../../interfaces/RendererOptions.md#tags)
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`textureCopyQuality`](../../interfaces/RendererOptions.md#texturecopyquality)

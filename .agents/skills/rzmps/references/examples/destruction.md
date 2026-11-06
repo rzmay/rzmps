@@ -22,7 +22,7 @@ zero so the small metal ball neither shrinks nor tints its surface fragments.
 Both systems request GPU processing; WebGL uses the CPU collision path.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L114)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L125)
 
 ```js
   const system = new ParticleSystem({
@@ -46,9 +46,24 @@ Both systems request GPU processing; WebGL uses the CPU collision path.
         geometry: new THREE.SphereGeometry(0.5, 12, 8),
         materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
       }),
-      new DecalRenderer(cracks.materials, {
-        materialComposite: cracks.materialComposite,
-        materialCompositeGPU: cracks.materialCompositeGPU,
+      new DecalRenderer(impactMaterials, {
+        atlasOptions: { minCapacity: 4 },
+        textureCopyQuality: 1,
+        // The final opacity blend masks all damage lighting once, preserving soft edges.
+        materialComposite: (source, dest) => ({
+          color: source.color,
+          opacity: `${source.opacity} * ${dest.opacity}`,
+          normal: source.normal,
+          roughness: `${source.roughness} * ${dest.roughness}`,
+          metalness: source.metalness,
+        }),
+        materialCompositeGPU: (source, dest) => ({
+          color: source.color,
+          opacity: source.opacity.mul(dest.opacity),
+          normal: source.normal,
+          roughness: source.roughness.mul(dest.roughness),
+          metalness: source.metalness,
+        }),
         onSpawn: false,
         impulseThreshold: 4,
         rotation: [-Math.PI, Math.PI],
@@ -71,7 +86,7 @@ Both systems request GPU processing; WebGL uses the CPU collision path.
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L166)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L192)
 
 ```js
   const debris = new ParticleSystem({
@@ -106,6 +121,8 @@ Both systems request GPU processing; WebGL uses the CPU collision path.
     // Neutral factors preserve the source appearance. Render each fragment only once.
     renderers: new MeshRenderer({
       mesh: fragments,
+      atlasOptions: { minCapacity: 4 },
+      textureCopyQuality: 1,
       maxParticles: 512,
       materialOptions: { roughness: 1, metalness: 1 },
     }),
@@ -113,7 +130,7 @@ Both systems request GPU processing; WebGL uses the CPU collision path.
 ```
 
 
-[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L211)
+[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L239)
 
 ```js
   system.addSubSystem(debris, {
@@ -141,7 +158,7 @@ the five Destruction GLBs at their authored scale (about 0.08–0.16 units wide)
 The fragments have mass and two-to-three-second lifetimes; they are not normalized to unit size.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L118)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L129)
 
 ```js
     emitters: new Emitter({
@@ -159,7 +176,7 @@ The fragments have mass and two-to-three-second lifetimes; they are not normaliz
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L173)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L199)
 
 ```js
     emitters: new Emitter({
@@ -179,21 +196,21 @@ The fragments have mass and two-to-three-second lifetimes; they are not normaliz
 ## Modules
 
 Both the incoming balls and fragments have gravity and collide with the scene.
-Fragments use bounce 0.3 and contact damping 0.3, then fade during the last fifth of their lifetime.
+Fragments use bounce 0.3 and contact damping sampled from 0.2–0.5, then fade during the last fifth of their lifetime.
 RotationBySpeed reduces spin as they settle. The collision diameter uses representative model thickness,
 so these small rocks do not inherit the former unit-sized collider. This remains a sphere approximation,
 without rigid-body contact torque or a separate Coulomb-friction solver.
 Contacts retain the material, UV coordinates and world-space UV gradients of the hit triangle.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L132)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L143)
 
 ```js
     modules: new Collision({ bounce: 0.55, dampen: 0.1 }),
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L186)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L212)
 
 ```js
     modules: [
@@ -216,11 +233,18 @@ Contacts retain the material, UV coordinates and world-space UV gradients of the
 The default batches Destruction_1 through Destruction_5, retaining their authored dimensions and UVs.
 Each particle renders one of the five mesh variants. The demo always uses UV patches.
 The parent also owns a collision-only DecalRenderer choosing from six complete impact materials.
-Each pairs its normal, opacity, roughness, and ambient-occlusion maps. Selection happens once per mark so those maps stay
-correlated. It preserves the sampled surface's color and metalness without loading impact albedo.
+Each pairs its normal, opacity, roughness, and ambient-occlusion maps. The demo loads 512×512 copies from
+`assets/images/impact/512`; the original 2048×2048 assets remain available. Selection happens once per mark,
+so those maps stay correlated. Decal material textures upload during normal renderer preparation, before their first impact draw;
+this avoids repeating uploads when a new variant is first chosen. The composition preserves the sampled surface's
+color and metalness without loading impact albedo.
 The supplied opacity map blends the damage normals, roughness, and AO over the original surface together;
-AO uses the same projector UVs. Channels are not masked a second time, preserving soft edges.
-Surface UVs stay fixed while each projector gets an independent random roll.
+AO uses the same projector UVs. Impact roughness multiplies the copied surface roughness before the opacity blend.
+All six materials use `normalScale: new THREE.Vector2(2, 2)` to strengthen their normal maps; adjust that shared
+material setting in the factory to tune the effect. Map loading, materials, and both compositor callbacks are
+inline in this example, including the code shown below. Channels are not masked a second time, preserving soft edges.
+Surface UVs stay fixed while each projector gets an independent random roll. Each decal copies its hit mesh's
+`receiveShadow` setting at creation and inherits the copied material's environment map where applicable.
 
 `impulseThreshold: 4` suppresses soft contacts, usually leaving marks on only the first one or two
 bounces. `impulseAffectsSize: 0.3` scales the base 0.55-unit size by impulse raised to 0.3; the
@@ -229,7 +253,50 @@ same hit data used by subsystem emission and returns per-mark overrides. Marks l
 fade in their final quarter, and have a cap of 384. They do not inherit the ball's small scale or tint.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L135)
+[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L77)
+
+```js
+  // Load each matching map bundle together, then choose one whole material per impact.
+  const impactURLs = [
+    { normalMap: impact1Normal, alphaMap: impact1Opacity,
+      aoMap: impact1AO, roughnessMap: impact1Roughness },
+    { normalMap: impact2Normal, alphaMap: impact2Opacity,
+      aoMap: impact2AO, roughnessMap: impact2Roughness },
+    { normalMap: impact3Normal, alphaMap: impact3Opacity,
+      aoMap: impact3AO, roughnessMap: impact3Roughness },
+    { normalMap: impact4Normal, alphaMap: impact4Opacity,
+      aoMap: impact4AO, roughnessMap: impact4Roughness },
+    { normalMap: impact5Normal, alphaMap: impact5Opacity,
+      aoMap: impact5AO, roughnessMap: impact5Roughness },
+    { normalMap: impact6Normal, alphaMap: impact6Opacity,
+      aoMap: impact6AO, roughnessMap: impact6Roughness },
+  ];
+  const [fragments, impactTextures] = await Promise.all([
+    loadFragments(),
+    Promise.all(impactURLs.map(async urls => {
+      const entries = await Promise.all(Object.entries(urls).map(async ([key, url]) => {
+        const texture = await textureLoader.loadAsync(url);
+        texture.colorSpace = THREE.NoColorSpace;
+        texture.channel = 0;
+        return [key, texture];
+      }));
+      return Object.fromEntries(entries);
+    })),
+  ]);
+  const impactMaterials = impactTextures.map(maps => new THREE.MeshStandardMaterial({
+    ...maps,
+    normalScale: new THREE.Vector2(2, 2),
+    roughness: 1,
+    metalness: 0,
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+  }));
+```
+
+
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L146)
 
 ```js
     renderers: [
@@ -237,9 +304,24 @@ fade in their final quarter, and have a cap of 384. They do not inherit the ball
         geometry: new THREE.SphereGeometry(0.5, 12, 8),
         materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
       }),
-      new DecalRenderer(cracks.materials, {
-        materialComposite: cracks.materialComposite,
-        materialCompositeGPU: cracks.materialCompositeGPU,
+      new DecalRenderer(impactMaterials, {
+        atlasOptions: { minCapacity: 4 },
+        textureCopyQuality: 1,
+        // The final opacity blend masks all damage lighting once, preserving soft edges.
+        materialComposite: (source, dest) => ({
+          color: source.color,
+          opacity: `${source.opacity} * ${dest.opacity}`,
+          normal: source.normal,
+          roughness: `${source.roughness} * ${dest.roughness}`,
+          metalness: source.metalness,
+        }),
+        materialCompositeGPU: (source, dest) => ({
+          color: source.color,
+          opacity: source.opacity.mul(dest.opacity),
+          normal: source.normal,
+          roughness: source.roughness.mul(dest.roughness),
+          metalness: source.metalness,
+        }),
         onSpawn: false,
         impulseThreshold: 4,
         rotation: [-Math.PI, Math.PI],
@@ -261,12 +343,14 @@ fade in their final quarter, and have a cap of 384. They do not inherit the ball
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L200)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L226)
 
 ```js
     // Neutral factors preserve the source appearance. Render each fragment only once.
     renderers: new MeshRenderer({
       mesh: fragments,
+      atlasOptions: { minCapacity: 4 },
+      textureCopyQuality: 1,
       maxParticles: 512,
       materialOptions: { roughness: 1, metalness: 1 },
     }),
@@ -289,10 +373,19 @@ Numeric values and transforms are snapshots cached until the system tree is dest
 textures remain shared. Color mode samples during rendering, so rebaked texture changes remain visible.
 Billboard patches preserve chart density and shear in the sprite plane.
 
-TextureAtlas bakes GPU tiles with extruded borders, fixed resolution and no mipmaps. Repeated texture
+TextureAtlas bakes GPU tiles with extruded borders and no mipmaps. By default tiles preserve source resolution
+up to `atlasOptions.maxTileSize: 2048`, growing to the largest image in each map channel.
+Use `atlasOptions.tileSize` for a fixed resolution or renderer `textureCopyQuality` (default `1`) to scale copied
+textures before the cap. The example retains full quality so UV debug details remain sharp.
+Capacity grows to the next power of two in tile count above the requested count, reserving spare cells;
+adding another source within that capacity keeps existing tile UVs and baked pixels unchanged when tile resolution stays the same.
+Both the decal and fragment renderers set `atlasOptions: { minCapacity: 4 }`, forwarding `minCapacity: 4` to each
+copied-map atlas. Those atlases reserve layout before sampling a surface and accept the first four
+unique textures without capacity growth. Larger images can still trigger a resolution increase and rebake. Other renderers retain lazy allocation by default. Repeated texture
 objects alias existing tiles. Unchanged updates issue no atlas draw calls. Render-target textures
 require `atlas.invalidate(texture)` before `update(renderer)` when their contents change externally.
 No CPU pixel readback is used. Each atlas belongs to one initialized Three.js renderer.
+WebGL bake shaders keep image dimensions in uniforms, so adding differently sized maps reuses the bake program.
 Its `sample(tile, coordinates)` method exposes a TSL node with dynamic tile selection.
 
 Independently, a SpriteRenderer texture list builds an atlas and chooses a stable texture per particle;

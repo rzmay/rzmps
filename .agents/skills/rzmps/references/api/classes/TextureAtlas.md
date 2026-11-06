@@ -42,6 +42,26 @@ readonly grid: Vector2;
 
 ***
 
+<a id="maxtilesize"></a>
+
+### maxTileSize
+
+```ts
+readonly maxTileSize: number;
+```
+
+***
+
+<a id="mincapacity"></a>
+
+### minCapacity
+
+```ts
+readonly minCapacity: number;
+```
+
+***
+
 <a id="padding"></a>
 
 ### padding
@@ -70,17 +90,25 @@ readonly sources: Texture<unknown, TextureEventMap>[] = [];
 readonly target: WebGLRenderTarget;
 ```
 
-***
+## Accessors
 
-<a id="tilesize"></a>
+<a id="insetnode"></a>
 
-### tileSize
+### insetNode
+
+#### Get Signature
 
 ```ts
-readonly tileSize: number;
+get insetNode(): Node<"float">;
 ```
 
-## Accessors
+Dynamic padding for consumers whose shader graph outlives atlas resolution changes.
+
+##### Returns
+
+`Node`\<`"float"`\>
+
+***
 
 <a id="texture"></a>
 
@@ -95,6 +123,22 @@ get texture(): Texture;
 ##### Returns
 
 `Texture`
+
+***
+
+<a id="tilesize"></a>
+
+### tileSize
+
+#### Get Signature
+
+```ts
+get tileSize(): number;
+```
+
+##### Returns
+
+`number`
 
 ***
 
@@ -121,16 +165,20 @@ Changes when layout or baked content changes.
 ### add()
 
 ```ts
-add(source): number;
+add(source, resolutionScale?): number;
 ```
 
-Stable tile index. Passing a source again aliases its existing tile.
+Stable tile index. Aliases retain the highest requested resolution scale for that source.
 
 #### Parameters
 
 ##### source
 
 `Texture`
+
+##### resolutionScale?
+
+`number` = `1`
 
 #### Returns
 

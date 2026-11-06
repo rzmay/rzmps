@@ -14,6 +14,22 @@
 
 ## Properties
 
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`atlasOptions`](RendererOptions.md#atlasoptions)
+
+***
+
 <a id="children"></a>
 
 ### children?
@@ -517,3 +533,19 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](RendererOptions.md).[`tags`](RendererOptions.md#tags)
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`textureCopyQuality`](RendererOptions.md#texturecopyquality)

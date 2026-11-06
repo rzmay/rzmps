@@ -40,6 +40,20 @@ new TrailRenderer(options?): TrailRenderer;
 
 ## Properties
 
+<a id="atlasoptions"></a>
+
+### atlasOptions
+
+```ts
+readonly atlasOptions: TextureAtlasOptions;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`atlasOptions`](Renderer.md#atlasoptions)
+
+***
+
 <a id="castshadow"></a>
 
 ### castShadow
@@ -355,6 +369,20 @@ optional tags?: string[];
 ```ts
 texture: Texture;
 ```
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality
+
+```ts
+readonly textureCopyQuality: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`textureCopyQuality`](Renderer.md#texturecopyquality)
 
 ***
 

@@ -80,6 +80,20 @@ alphaAffectsVolume: number;
 
 ***
 
+<a id="atlasoptions"></a>
+
+### atlasOptions
+
+```ts
+readonly atlasOptions: TextureAtlasOptions;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`atlasOptions`](Renderer.md#atlasoptions)
+
+***
+
 <a id="children"></a>
 
 ### children
@@ -585,6 +599,20 @@ optional tags?: string[];
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`tags`](Renderer.md#tags)
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality
+
+```ts
+readonly textureCopyQuality: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`textureCopyQuality`](Renderer.md#texturecopyquality)
 
 ***
 

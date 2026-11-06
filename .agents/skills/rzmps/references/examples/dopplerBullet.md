@@ -16,7 +16,7 @@ Preset by [rzmay](https://github.com/rzmay).
 The root loops over 5.5 seconds, caps at eight particles, and disables gravity for nearly straight flight. Five subsystems provide smoke wake, heat wake, muzzle flash, spawn shockwave, and impact dust. Their inheritance factors are zeroed so the small fast bullet does not force every secondary effect to copy its scale or velocity.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L48)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L66)
 
 ```js
   const bulletSystem = new ParticleSystem({
@@ -52,15 +52,28 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
     ],
     renderers: [
       // Sweep the traveled segment: bullets keep flying through every marked surface.
-      new DecalRenderer(holes.material, {
+      new DecalRenderer(holeMaterial, {
         direction: DecalRenderer.Intersect(),
         continuousRate: 60,
         onSpawn: false,
         emissionTags: ['bullet-hole'],
         rotation: [-Math.PI, Math.PI],
         hitSelection: DecalRenderer.All,
-        materialComposite: holes.materialComposite,
-        materialCompositeGPU: holes.materialCompositeGPU,
+        // Surface color and normal detail remain tied to the hit, independently of projector UVs.
+        materialComposite: (source, dest) => ({
+          color: `${source.color} * clamp(${dest.color} * 4.0, 0.0, 1.0)`,
+          opacity: `${source.opacity} * ${dest.opacity}`,
+          normal: source.normal,
+          roughness: dest.roughness,
+          metalness: dest.metalness,
+        }),
+        materialCompositeGPU: (source, dest) => ({
+          color: source.color.mul(dest.color.mul(4).clamp(0, 1)),
+          opacity: source.opacity.mul(dest.opacity),
+          normal: source.normal,
+          roughness: dest.roughness,
+          metalness: dest.metalness,
+        }),
         size: 0.55,
         depth: 0.04,
         offset: 0.002,
@@ -116,7 +129,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:6](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L193)
+[Source: system:6](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L224)
 
 ```js
   bulletSystem.addSubSystem(createImpactDust(), {
@@ -138,7 +151,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L223)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L259)
 
 ```js
   return new ParticleSystem({
@@ -206,7 +219,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L296)
+[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L332)
 
 ```js
   return new ParticleSystem({
@@ -265,7 +278,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L360)
+[Source: system:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L396)
 
 ```js
   return new ParticleSystem({
@@ -327,7 +340,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L427)
+[Source: system:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L463)
 
 ```js
   return new ParticleSystem({
@@ -380,7 +393,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:7](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L485)
+[Source: system:7](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L521)
 
 ```js
   const dust = new ParticleSystem({
@@ -427,7 +440,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 to -36. Its source cone is placed near z=34, giving it a long path across the scene. Smoke uses rateOverDistance 5, maintaining wake spacing as the bullet moves; flash and shockwave use time-zero bursts rather than continuous emission.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L60)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L78)
 
 ```js
     emitters: [
@@ -453,7 +466,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L229)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L265)
 
 ```js
     emitters: [
@@ -480,7 +493,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L301)
+[Source: emitters:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L337)
 
 ```js
     emitters: [
@@ -505,7 +518,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L365)
+[Source: emitters:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L401)
 
 ```js
     emitters: [
@@ -533,7 +546,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L432)
+[Source: emitters:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L468)
 
 ```js
     emitters: [
@@ -555,7 +568,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:6](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L491)
+[Source: emitters:6](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L527)
 
 ```js
     emitters: new Emitter({
@@ -578,7 +591,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 The root has no explicit module list; piercing marks use no Collision module and never change bullet velocity. Secondary smoke uses force, noise, growth, rotation, and a fade envelope. Heat and shockwave systems grow while distortion fades; flash color shifts from pale yellow to orange. These separate timing curves keep the initial flash brief while the slower wake remains visible.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L252)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L288)
 
 ```js
     modules: [
@@ -607,7 +620,7 @@ The root has no explicit module list; piercing marks use no Collision module and
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L322)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L358)
 
 ```js
     modules: [
@@ -628,7 +641,7 @@ The root has no explicit module list; piercing marks use no Collision module and
 ```
 
 
-[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L389)
+[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L425)
 
 ```js
     modules: [
@@ -651,7 +664,7 @@ The root has no explicit module list; piercing marks use no Collision module and
 ```
 
 
-[Source: modules:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L450)
+[Source: modules:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L486)
 
 ```js
     modules: [
@@ -669,7 +682,7 @@ The root has no explicit module list; piercing marks use no Collision module and
 ```
 
 
-[Source: modules:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L505)
+[Source: modules:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L541)
 
 ```js
     modules: [
@@ -691,8 +704,12 @@ to sweep each traveled segment and mark entry and exit faces. Its 0.55-unit bull
 last 24 seconds and fade during the final fifth, with a cap of 128 marks. Albedo alpha, normal
 and roughness maps combine with the hit surface through shared GLSL/TSL compositing. The albedo's alpha
 masks every damage channel together through transparent blending, rather than using fixed normal/roughness blend weights.
-The surface's own normal detail is layered onto the bullet-hole normal before lighting.
-Each hole uses an independently randomized projector roll. Surface UVs stay independent of the damage projector UVs.
+The surface's own normal detail is layered onto the bullet-hole normal before lighting. Within the mark,
+roughness comes from the bullet-hole map; destruction impacts instead multiply their roughness map by the surface value.
+Both WebGL and WebGPU preserve the albedo alpha during compositing. Each hole copies its hit mesh's
+`receiveShadow` setting at creation and borrows the surface's environment map where applicable.
+Texture loading, the bullet-hole material, and both compositor callbacks are defined inline in the factory,
+so the source excerpts include the complete damage setup. Each hole uses an independently randomized projector roll. Surface UVs stay independent of the damage projector UVs.
 Each hole registers a source tagged `bullet-hole`, carrying the original surface material and impact
 UV in its metadata. Source birth triggers one burst of 5–8 smoke particles, with 0.4–0.65-second
 lifetimes, 0.28–0.44-unit starting sizes, and 30–45% initial opacity. The puff starts just outside the surface and moves outward;
@@ -700,8 +717,12 @@ a short 0.025-unit soft-particle fade keeps it visible near the wall.
 A named spawn transformer derives the outward velocity from the decal source frame, instead of
 using a world-up initial velocity. `MaterialCopySource.Source` with `MaterialCopySampleMode.Color` samples
 that fixed impact UV, so each puff has a uniform surface color instead of a UV patch or the dark
-bullet-hole albedo. Its composition callback overrides only color, retaining the smoke's own mask
-and lighting. The source's +Y axis points outward, directing the puff away from the surface.
+bullet-hole albedo or projectile tint. Its composition callback overrides only color, retaining the smoke's own mask
+and lighting. WebGL sprites apply Three.js tone mapping and output color conversion before display;
+otherwise linear cream surface colors look dark and bronze despite a correct material binding.
+Dust reuses the decal's original surface metadata instead of casting another ray; projection excludes
+particle-renderer geometry, including the bullet's instanced mesh.
+The source's +Y axis points outward, directing the puff away from the surface.
 
 The primary emitter tags bullets `projectile`. The flash, shockwave and continuous wake relationships
 select that tag, while dust selects `bullet-hole`. Registering a hole is a source spawn event; these
@@ -710,20 +731,53 @@ filters keep that event from replaying the gunshot effects or leaving a wake on 
 Choose **UV debug** to see the holes on its wall and ramp. The preset itself adds no scene geometry.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L82)
+[Source: renderers:7](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L49)
+
+```js
+  // Damage maps use projector UVs; the albedo alpha masks their combined lighting.
+  holeMap.colorSpace = THREE.SRGBColorSpace;
+  holeNormalMap.colorSpace = holeRoughnessMap.colorSpace = THREE.NoColorSpace;
+  const holeMaterial = new THREE.MeshStandardMaterial({
+    map: holeMap,
+    normalMap: holeNormalMap,
+    roughnessMap: holeRoughnessMap,
+    roughness: 1,
+    metalness: 0,
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+  });
+```
+
+
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L100)
 
 ```js
     renderers: [
       // Sweep the traveled segment: bullets keep flying through every marked surface.
-      new DecalRenderer(holes.material, {
+      new DecalRenderer(holeMaterial, {
         direction: DecalRenderer.Intersect(),
         continuousRate: 60,
         onSpawn: false,
         emissionTags: ['bullet-hole'],
         rotation: [-Math.PI, Math.PI],
         hitSelection: DecalRenderer.All,
-        materialComposite: holes.materialComposite,
-        materialCompositeGPU: holes.materialCompositeGPU,
+        // Surface color and normal detail remain tied to the hit, independently of projector UVs.
+        materialComposite: (source, dest) => ({
+          color: `${source.color} * clamp(${dest.color} * 4.0, 0.0, 1.0)`,
+          opacity: `${source.opacity} * ${dest.opacity}`,
+          normal: source.normal,
+          roughness: dest.roughness,
+          metalness: dest.metalness,
+        }),
+        materialCompositeGPU: (source, dest) => ({
+          color: source.color.mul(dest.color.mul(4).clamp(0, 1)),
+          opacity: source.opacity.mul(dest.opacity),
+          normal: source.normal,
+          roughness: dest.roughness,
+          metalness: dest.metalness,
+        }),
         size: 0.55,
         depth: 0.04,
         offset: 0.002,
@@ -778,7 +832,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L277)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L313)
 
 ```js
     renderers: [
@@ -796,7 +850,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L339)
+[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L375)
 
 ```js
     renderers: [
@@ -816,7 +870,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L408)
+[Source: renderers:4](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L444)
 
 ```js
     renderers: [
@@ -834,7 +888,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L464)
+[Source: renderers:5](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L500)
 
 ```js
     renderers: [
@@ -854,7 +908,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:6](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L513)
+[Source: renderers:6](https://github.com/rzmay/rzmps/blob/develop/examples/dopplerBullet.js#L549)
 
 ```js
     renderers: new SpriteRenderer(Textures.Default, {

@@ -492,8 +492,8 @@ lerp(target, alpha): this;
 
 ##### target
 
-  \| [`ParticleCachedValues`](../Supporting-Types/type-aliases/ParticleCachedValues.md)
   \| `Particle`
+  \| [`ParticleCachedValues`](../Supporting-Types/type-aliases/ParticleCachedValues.md)
 
 ##### alpha
 
