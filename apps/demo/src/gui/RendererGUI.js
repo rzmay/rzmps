@@ -48,11 +48,12 @@ export class RendererGUI extends GUIEditorBase {
         } else if (renderer instanceof DecalRenderer) {
             // Only edit configuration. Renderer internals include the owning system/scene.
             for (const key of [
-                'direction', 'hitSelection', 'maxHits', 'maxDistance',
-                'depth', 'offset', 'size', 'color',
+                'materialIndex', 'direction', 'hitSelection', 'maxHits', 'maxDistance',
+                'depth', 'offset', 'size', 'rotation', 'color',
                 'lifetime', 'opacity', 'inheritColor', 'inheritScale',
                 'inheritAlpha', 'distanceAffectsOpacity', 'distanceAffectsSize', 'maxDecals',
-                'onSpawn', 'onCollision', 'onDeath', 'continuousRate', 'ratio',
+                'onSpawn', 'onCollision', 'impulseThreshold', 'onDeath', 'continuousRate', 'ratio',
+                'impulseAffectsSize', 'impulseAffectsOpacity', 'impulseAffectsLifetime',
             ]) {
                 this.addValue(folder, renderer, key, this.prettyName(key));
             }
@@ -242,7 +243,7 @@ export class RendererGUI extends GUIEditorBase {
             material: Array.isArray(renderer.mesh.material)
                 ? `${renderer.mesh.material.length} materials`
                 : renderer.mesh.material.type,
-            capacity: renderer.instances.instanceMatrix.count,
+            capacity: renderer.maxParticles,
         };
         folder.add(info, 'mesh').name('Mesh').disable();
         folder.add(info, 'geometry').name('Geometry').disable();

@@ -14,6 +14,22 @@
 
 ## Properties
 
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`atlasOptions`](../../interfaces/RendererOptions.md#atlasoptions)
+
+***
+
 <a id="castshadow"></a>
 
 ### castShadow
@@ -194,6 +210,48 @@ Custom material; omission creates a transparent double-sided MeshStandardMateria
 
 ***
 
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialComposite`](../../interfaces/RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCompositeGPU`](../../interfaces/RendererOptions.md#materialcompositegpu)
+
+***
+
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCopySampleMode`](../../interfaces/RendererOptions.md#materialcopysamplemode)
+
+***
+
 <a id="materialoptions"></a>
 
 ### materialOptions
@@ -203,6 +261,22 @@ materialOptions: MeshStandardMaterialParameters;
 ```
 
 Construction options for the default material; ignored when material is supplied.
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialTarget`](../../interfaces/RendererOptions.md#materialtarget)
 
 ***
 
@@ -322,6 +396,22 @@ Trail texture or URL; defaults to the material map or the built-in sprite textur
 
 ***
 
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`textureCopyQuality`](../../interfaces/RendererOptions.md#texturecopyquality)
+
+***
+
 <a id="texturemode"></a>
 
 ### textureMode
@@ -329,9 +419,9 @@ Trail texture or URL; defaults to the material map or the built-in sprite textur
 ```ts
 textureMode:
   | "repeat"
+  | "distribute"
   | "stretch"
   | "tile"
-  | "distribute"
   | TrailTextureMode;
 ```
 

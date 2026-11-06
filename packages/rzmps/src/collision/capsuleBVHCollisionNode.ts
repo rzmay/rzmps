@@ -31,6 +31,10 @@ export const capsuleHitStruct = new StructTypeNode({
   distanceSq: 'float',
   side: 'float',
   objectIndex: 'uint',
+  sourceId: 'uint',
+  hitUV: 'vec2f',
+  gradientU: 'vec3f',
+  gradientV: 'vec3f',
 }, 'RZMPSCapsuleHit');
 
 class CapsuleQueryCallNode extends Node {
@@ -160,6 +164,21 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
             result.capsulePoint = capsulePoint;
             result.distanceSq = bestDistanceSq;
             result.side = select(1.0, sign(dot(delta, fallbackNormal)), bestDistanceSq > 1e-12);
+            let uvA = ${attributes}[i0].uv;
+            let uvB = ${attributes}[i1].uv;
+            let uvC = ${attributes}[i2].uv;
+            let bary = ${closestPointToTriangle}(trianglePoint, a, b, c);
+            result.hitUV = uvA * bary.x + uvB * bary.y + uvC * bary.z;
+            let e1 = b - a; let e2 = c - a;
+            let aa = dot(e1,e1); let ab = dot(e1,e2); let bb = dot(e2,e2);
+            let determinant = aa * bb - ab * ab;
+            result.gradientU = vec3f(0.0); result.gradientV = vec3f(0.0);
+            if (abs(determinant) > 1e-16) {
+              let d1 = (e1 * bb - e2 * ab) / determinant;
+              let d2 = (e2 * aa - e1 * ab) / determinant;
+              result.gradientU = d1 * (uvB.x - uvA.x) + d2 * (uvC.x - uvA.x);
+              result.gradientV = d1 * (uvB.y - uvA.y) + d2 * (uvC.y - uvA.y);
+            }
             result.found = true;
             didHit = true;
           }
@@ -216,6 +235,7 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
     transformResultFn: wgslTagFn/* wgsl */`
       fn rzmpsCapsuleResult(result: ptr<function, ${capsuleHitStruct}>, objectIndex: u32) -> void {
         result.objectIndex = objectIndex;
+        result.sourceId = ${transforms}[objectIndex]._alignment0;
       }
     `,
   });
@@ -232,6 +252,8 @@ export default function capsuleBVHCollisionNode(data: BVHComputeDataLike) {
       result.distanceSq = 3.402823466e+38;
       result.side = 1.0;
       result.objectIndex = 0u;
+      result.sourceId = 0u;
+      result.hitUV = vec2f(0.0); result.gradientU = vec3f(0.0); result.gradientV = vec3f(0.0);
       result.found = ${shapecast}(shape, &result);
       return result;
     }

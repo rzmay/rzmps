@@ -31,6 +31,12 @@ Average update time measures \`ParticleSystem.update()\`; frame time includes th
 
 CI builds and runs the complete benchmark page from each revision against its matching library. Three samples per revision run in interleaved ABBAAB order; the comparison uses the median for each metric and includes only case names present in both revisions.
 
+Case transitions pause rendering and drain submitted GPU work outside the measurement windows. The runner
+also releases the benchmark renderer before closing Chromium. A device loss during measurement, or the
+known small mapped-buffer allocation failure, discards the entire sample and permits one fresh-browser retry.
+Validation failures and application errors are not retried. Output metadata records \`sampleAttempts\`, and
+failed-attempt diagnostics remain alongside the successful sample; partial results never enter aggregation.
+
 GitHub-hosted runners use software WebGL. The CI profile uses a 640×360 viewport, browser frame pacing, and a 2,000-particle low polygon box workload for the mesh case. Its results are useful for relative comparisons on that runner and should be interpreted separately from the published hardware results above. Completed samples, environment metadata, and available timeout diagnostics are uploaded as workflow artifacts even when a run fails.
 `;
 }

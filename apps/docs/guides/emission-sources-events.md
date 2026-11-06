@@ -179,7 +179,7 @@ system.addSubSystem(splash, {
   onEvent: {
     bubble: (data, source, context) => {
       if (typeof data !== 'object' || data === null
-        || !('strength' in data) || typeof data.strength !== 'number') return;
+        || !('strength' in data) || typeof data.strength !== 'number') return false;
       return {
         scale: context.scale * data.strength,
         velocity: context.velocity.clone().add(new THREE.Vector3(0, data.strength, 0)),
@@ -190,7 +190,9 @@ system.addSubSystem(splash, {
 ```
 
 CPU handlers execute immediately at dispatch, receive an arbitrary JavaScript payload typed as `unknown`, a common
-source view, and the inherited `EmissionContext`, and may return partial overrides. Applications narrow or assert their
+source view, and the inherited `EmissionContext`, and may return partial overrides. Return `false` to cancel that
+emission run, including all of its bursts and rate emission; returning nothing keeps the default context.
+Cancellation affects only this subscription, so other consumers and subsequent events still run. Applications narrow or assert their
 own payload schema; the library never needs to know it. Event contexts own their mutable values. Changing an event
 context never changes persistent source attributes. A run captures the resolved values, so later source updates or
 disposal do not alter that event.
@@ -211,7 +213,7 @@ system.addSubSystem(splash, {
   onEvent: {
     explode: (data, source, context) => {
       if (typeof data !== 'object' || data === null
-        || !('strength' in data) || typeof data.strength !== 'number') return;
+        || !('strength' in data) || typeof data.strength !== 'number') return false;
       return { scale: context.scale * data.strength };
     },
     gpu: {
@@ -225,7 +227,10 @@ system.addSubSystem(splash, {
 ```
 
 GPU handlers are JavaScript callbacks that **build TSL expressions during kernel compilation**. They are not JavaScript
-callbacks executed per particle or per event at runtime. Return TSL nodes for context overrides. GPU context includes
+callbacks executed per particle or per event at runtime. Return TSL nodes for context overrides.
+Return `false` to reject every matching event, or a boolean TSL node such as
+`data[0].x.greaterThan(0)` to accept or reject each event at runtime. A false result cancels the entire run
+without allocating a persistent run slot; other subscribers still receive the event. GPU context includes
 `transform` (a matrix node), `position`, `color`, `alpha`, `mass`, `velocity`, `scale`, `velocityScale`, and `duration`;
 transform and position overrides use the same translation precedence as CPU contexts. Full affine transforms are
 preserved in persistent GPU event runs.
@@ -374,3 +379,35 @@ fading smoke.
 Use [Source simulation space](./subsystems.md#simulation-frames) when emitted particles should remain attached to their
 origin as it moves, rotates, or scales. Ordinary Local/World subsystem emission samples the origin at birth; Source
 space retains the live source relationship for the child's lifetime.
+
+## Renderer Parameter Subscriptions
+
+DecalRenderer and AudioRenderer reuse the same event names, source handles, scope selection and
+frozen CPU event batches. Their callbacks transform output parameters instead of EmissionContext:
+`(data, source, parameters) => partialParameters`, or `false` to cancel. Both accept the constructor
+`onEvent` map/list and chainable `.onEvent(name, callback)`. Built-in `spawn`, `death`, and `collision`
+callbacks can also be assigned through `onSpawn`, `onDeath`, and `onCollision`.
+
+Decal callbacks run per selected hit after dynamic defaults, inheritance and impulse scaling.
+[Surface decals](decals.md#event-parameters-and-impulse-controls) describes their world-space geometry
+parameters and collision controls. Audio callbacks run per event cue after pitch, volume, distance,
+Doppler, filters and impulse effects are evaluated:
+
+```ts
+const audio = new AudioRenderer({
+  onCollisionSound: impactBuffer,
+  impulseAffectsVolume: 0.5,
+  onCollision: (hit, source, parameters) => ({ volume: Math.min(parameters.volume, 0.8) }),
+});
+audio.onEvent('bell', (data, source, parameters) => ({ pitch: parameters.pitch * 1.2 }));
+```
+
+`AudioParameters` contains one chosen `sound` buffer, simulation-space `position`, `pitch`, `volume`,
+`highPass` and `lowPass`. Custom subscriptions can select or replace the sound; otherwise they fall
+back to the renderer's `sound` buffers. Legacy onSpawnSound/onDeathSound/onCollisionSound remain
+supported. Continuous loop audio retains its existing update controls.
+
+Explicit onEvent entries override corresponding lifecycle aliases rather than adding a second
+invocation. All renderer parameter subscriptions run at named-event dispatch, including particle lifecycle,
+custom, relative, and registered-source events. Native GPU events use the existing CPU snapshot path.
+Boolean lifecycle aliases and callbacks subscribe to the same names; tags filter which sources are accepted. No new compute buffers or renderer-specific event bus are introduced.

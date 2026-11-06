@@ -7,6 +7,8 @@ import {
   If,
   max,
   sqrt,
+  vec3,
+  vec4,
   uniform,
 } from 'three/tsl';
 
@@ -121,6 +123,9 @@ class Collision extends Module {
   }
 
   public notifyGPUCollision(particle: Particle, collision: CollisionHit): void {
+    if (collision.materialSourceId && !collision.material) {
+      collision.material = this._system?.materialCopyRegistry.sources[collision.materialSourceId];
+    }
     this.collisionListeners.forEach((listener) => listener(particle, collision));
   }
 
@@ -144,6 +149,9 @@ class Collision extends Module {
       }
     }
 
+    if (this._backend instanceof ThreeGPUCollisionBackend) {
+      this._backend.materialRegistry = system.materialCopyRegistry;
+    }
     this._backend?.setGPUProcessingActive?.(system.isGPUProcessingActive);
     this._backend?.update?.(deltaTime);
   }
@@ -225,6 +233,9 @@ class Collision extends Module {
         this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
         this.gpuDirectionToSimulationSpace(worldNormal, context.system).normalize(),
         this.gpuDirectionToSimulationSpace(impulse, context.system),
+        vec4(float(hit.get('sourceId') as Node<'uint'>), hit.get('hitUV') as Node<'vec2'>, 0),
+        vec4(hit.get('gradientU') as Node<'vec3'>, 0),
+        vec4(hit.get('gradientV') as Node<'vec3'>, 0),
       );
     });
   }

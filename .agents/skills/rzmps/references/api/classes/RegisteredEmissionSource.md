@@ -138,6 +138,16 @@ mass: number = 1;
 
 ***
 
+<a id="metadata"></a>
+
+### metadata?
+
+```ts
+optional metadata?: unknown;
+```
+
+***
+
 <a id="position"></a>
 
 ### position

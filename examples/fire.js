@@ -72,9 +72,9 @@ export default async function createFire() {
       new ColorOverLifetime({
         color: '#ffffff',
         alpha: (time) =>
-          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+          ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+          : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
         angularVelocity: [new THREE.Vector3(-0.5, 0, 0), new THREE.Vector3(0.5, 0, 0)],
@@ -106,6 +106,7 @@ export default async function createFire() {
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
+        ratio: 0.25,
         continuousRate: 1.5,
         direction: (particle) => DecalRenderer.Radial(24)(particle),
         maxDistance: 3,
@@ -115,9 +116,9 @@ export default async function createFire() {
         inheritScale: 0,
         inheritAlpha: 0,
         lifetime: 8,
-        opacity: (t) => 0.035 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+        opacity: (t) => 0.15 * THREE.MathUtils.smoothstep(t, 0, 0.01)
           * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
-        maxDecals: 384,
+        maxDecals: 100,
       }),
     ],
     // #endregion docs:renderers:1
@@ -221,7 +222,7 @@ export const metadata = {
   "description":
     "Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces.",
   "tags": [
-    "fire"
+    "fire", "flames", "sprites", "sprite-sheet", "lights", "distortion", "decals", "scorch"
   ],
   "category": "effects"
 };

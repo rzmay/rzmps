@@ -3,6 +3,7 @@ import unlitSpriteVert from '../shaders/UnlitSprite.vert';
 import unlitSpriteFrag from '../shaders/UnlitSprite.frag';
 
 export interface UnlitSpriteOptions extends THREE.ShaderMaterialParameters {
+  atlasInset?: number;
   gridSize: {x: number, y: number};
   frames: number;
   alphaMap: THREE.Texture;
@@ -19,6 +20,7 @@ const UnlitSprite = (
 ) => {
   const {
     gridSize,
+    atlasInset = 0,
     frames,
     alphaMap,
     softParticleDistance = 0,
@@ -34,6 +36,7 @@ const UnlitSprite = (
     fragmentShader: unlitSpriteFrag,
     uniforms: {
       pointTexture: { value: texture },
+      atlasInset: { value: atlasInset },
       gridSize: { value: gridSize ?? { x: 1, y: 1 } },
       n_frames: { value: frames ?? 1 },
       alphaMap: { value: alphaMap ?? null },

@@ -14,6 +14,22 @@
 
 ## Properties
 
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`atlasOptions`](RendererOptions.md#atlasoptions)
+
+***
+
 <a id="children"></a>
 
 ### children?
@@ -206,6 +222,48 @@ Defaults to Nearest. Receives all candidates and the optional maxHits unchanged.
 
 ***
 
+<a id="impulseaffectslifetime"></a>
+
+### impulseAffectsLifetime
+
+```ts
+impulseAffectsLifetime: number;
+```
+
+***
+
+<a id="impulseaffectsopacity"></a>
+
+### impulseAffectsOpacity
+
+```ts
+impulseAffectsOpacity: number;
+```
+
+***
+
+<a id="impulseaffectssize"></a>
+
+### impulseAffectsSize
+
+```ts
+impulseAffectsSize: number;
+```
+
+***
+
+<a id="impulsethreshold"></a>
+
+### impulseThreshold
+
+```ts
+impulseThreshold: number;
+```
+
+Minimum collision impulse magnitude required for collision placement. Default 0.
+
+***
+
 <a id="inheritalpha"></a>
 
 ### inheritAlpha
@@ -250,6 +308,76 @@ Seconds, sampled at creation; nonpositive/nonfinite values produce no decal. Def
 
 ***
 
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialComposite`](RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialCompositeGPU`](RendererOptions.md#materialcompositegpu)
+
+***
+
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialCopySampleMode`](RendererOptions.md#materialcopysamplemode)
+
+***
+
+<a id="materialindex"></a>
+
+### materialIndex?
+
+```ts
+optional materialIndex?: DynamicValue<number>;
+```
+
+Optional zero-based material selector; otherwise choose randomly once per mark.
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialTarget`](RendererOptions.md#materialtarget)
+
+***
+
 <a id="maxdecals"></a>
 
 ### maxDecals
@@ -270,7 +398,7 @@ Active capacity; oldest decals are evicted first. Default 256.
 maxDistance: number;
 ```
 
-Maximum world-space ray length, independent of clipping depth. Default 2.
+Ordinary ray length, independent of clipping depth. Intersect uses actual traveled distance. Default 2.
 
 ***
 
@@ -303,7 +431,7 @@ World-space displacement of generated vertices along the outward normal. Default
 ### onCollision
 
 ```ts
-onCollision: boolean;
+onCollision: ParameterEventSubscription<DecalParameters, CollisionHit>;
 ```
 
 ***
@@ -313,7 +441,17 @@ onCollision: boolean;
 ### onDeath
 
 ```ts
-onDeath: boolean;
+onDeath: ParameterEventSubscription<DecalParameters>;
+```
+
+***
+
+<a id="onevent"></a>
+
+### onEvent?
+
+```ts
+optional onEvent?: ParameterEventSubscriptions<DecalParameters>;
 ```
 
 ***
@@ -323,7 +461,7 @@ onDeath: boolean;
 ### onSpawn
 
 ```ts
-onSpawn: boolean;
+onSpawn: ParameterEventSubscription<DecalParameters>;
 ```
 
 Defaults to true; collision and death default to false.
@@ -358,6 +496,18 @@ Fraction of particles that project decals, selected consistently by particle ID.
 
 ***
 
+<a id="rotation"></a>
+
+### rotation
+
+```ts
+rotation: DynamicValue<number>;
+```
+
+Additional projector roll in radians, sampled independently for each mark. Default 0.
+
+***
+
 <a id="size"></a>
 
 ### size
@@ -383,3 +533,19 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](RendererOptions.md).[`tags`](RendererOptions.md#tags)
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`textureCopyQuality`](RendererOptions.md#texturecopyquality)

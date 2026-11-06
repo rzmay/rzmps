@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {
   AudioRenderer,
   Particle,
+  ParticleSystem,
 } from '../build/index.mjs';
 
 /*
@@ -103,54 +104,19 @@ const particle = new Particle({
 }
 
 {
-  const listeners = {
-    collision: [],
-    death: [],
-    spawn: [],
-  };
-  const system = {
-    onCollision(listener) {
-      listeners.collision.push(listener);
-      return this;
-    },
-    removeCollisionListener(listener) {
-      listeners.collision = listeners.collision.filter((value) => value !== listener);
-      return this;
-    },
-    onDeath(listener) {
-      listeners.death.push(listener);
-      return this;
-    },
-    removeDeathListener(listener) {
-      listeners.death = listeners.death.filter((value) => value !== listener);
-      return this;
-    },
-    onSpawn(listener) {
-      listeners.spawn.push(listener);
-      return this;
-    },
-    removeSpawnListener(listener) {
-      listeners.spawn = listeners.spawn.filter((value) => value !== listener);
-      return this;
-    },
-  };
-  const audio = new AudioRenderer();
-
-  audio.setup(system);
-
-  assert.equal(listeners.collision.length, 1);
-  assert.equal(listeners.death.length, 1);
-  assert.equal(listeners.spawn.length, 1);
+  const audio = new AudioRenderer({ onSpawnSound: {} });
+  const system = new ParticleSystem({ emitters: [], renderers: audio });
+  let cues = 0;
+  audio._playOneShot = () => { cues++; };
+  system.registerEmissionSource({ transform: new THREE.Matrix4() });
+  assert.equal(cues, 1);
 
   audio.clear();
-
-  assert.equal(listeners.collision.length, 1);
-  assert.equal(listeners.death.length, 1);
-  assert.equal(listeners.spawn.length, 1);
+  system.registerEmissionSource({ transform: new THREE.Matrix4() });
+  assert.equal(cues, 2, 'clear keeps the named event subscription');
 
   audio.destroy();
-
-  assert.equal(listeners.collision.length, 0);
-  assert.equal(listeners.death.length, 0);
-  assert.equal(listeners.spawn.length, 0);
+  system.registerEmissionSource({ transform: new THREE.Matrix4() });
+  assert.equal(cues, 2, 'destroy releases the named event subscription');
+  system.destroy();
 }

@@ -18,6 +18,9 @@ export enum ParticleFloatSlot {
   ScalarAcceleration,
   Color,
   SourceIdentity,
+  MaterialCopy,
+  MaterialCopyU,
+  MaterialCopyV,
 }
 
 export enum ParticleRenderFloatSlot {
@@ -26,6 +29,9 @@ export enum ParticleRenderFloatSlot {
   ScaleRealtime,
   ColorTime,
   Contribution,
+  MaterialCopy,
+  MaterialCopyU,
+  MaterialCopyV,
 }
 
 export const FLOAT_SLOT_COUNT = enumValueCount(ParticleFloatSlot);

@@ -13,7 +13,7 @@ type DynamicValue<T> =
 type Multiple<T> = T | T[];
 
 // Multiple with least one value
-type StrictMultiple<T> = T | [T, ...[T]];
+type StrictMultiple<T> = T | [T, ...T[]];
 
 // In RZMPS, tags are natively strings
 type Tag = string;

@@ -72,7 +72,8 @@ export default class EmitterInstance {
     const change = frame && binding.frame ? frame.multiply(binding.frame.clone().invert()) : undefined;
     const inputs = binding.inputs;
     return {
-      source: binding.source,
+      source: binding.source ?? inputs.event?.source,
+      event: inputs.event, sourceToWorld: inputs.sourceToWorld, countScale: inputs.countScale,
       key: this.key,
       time: binding.elapsed / binding.duration,
       elapsedTime: binding.elapsed,

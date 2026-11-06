@@ -1,3 +1,7 @@
+import type { MaterialCompositeCallback, MaterialCompositeGPUCallback } from './material-copy/Composite';
+import Appearance from './material-copy/Appearance';
+import type { TextureAtlasOptions } from './TextureAtlas';
+import { MaterialCopyRegistry, MaterialCopySampleMode, type MaterialTarget } from './material-copy/Surface';
 import EventReceiver, { type EventReceiverOptions } from './EventReceiver';
 import Particle from './Particle';
 import groupRendererParticles, { rendererGroupCount } from './helpers/groupRendererParticles';
@@ -9,7 +13,7 @@ import acceptMultiple from './helpers/acceptMultiple';
 import tagsIntersect from './helpers/tagsIntersect';
 import type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
 import type { ValueByParameter } from './types/ValueByParameter';
-import { MathUtils, Vector3 } from 'three';
+import { MathUtils, Texture, Vector3, type Material } from 'three';
 import seedrandom from 'seedrandom';
 import evaluateDynamicNumber from './helpers/evaluateDynamicNumber';
 import evaluateByParameterNumber from './helpers/evaluateByParameterNumber';
@@ -40,12 +44,21 @@ export interface RendererChildrenOptions {
 }
 
 export interface RendererOptions extends EventReceiverOptions {
+  materialComposite?: MaterialCompositeCallback;
+  materialCompositeGPU?: MaterialCompositeGPUCallback;
   /** Desired representative cap. Negative or Infinity means unlimited. Defaults to -1. */
   count: number;
   /** Representative fraction, rounded with Math.round after applying count. Defaults to 1. */
   ratio: number;
   /** Maximum world-space assignment distance. Negative means unbounded (default -1). */
   groupingRadius: number;
+  /** Optional surface whose appearance multiplies this renderer's configured appearance. */
+  materialTarget?: MaterialTarget;
+  materialCopySampleMode?: MaterialCopySampleMode;
+  /** Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1. */
+  textureCopyQuality?: number;
+  /** Creation options shared by texture-choice, batched-mesh, and copied-material atlases. */
+  atlasOptions?: TextureAtlasOptions;
   /** Filters the simulated population by tag before rendering. */
   tags: StrictMultiple<Tag>;
   /** Artistic render-only copies, generated before LOD children. */
@@ -56,6 +69,118 @@ export interface RendererOptions extends EventReceiverOptions {
 
 /** Base renderer that filters particles and applies renderer LOD before delegating to a backend-compatible view. */
 export default abstract class Renderer extends EventReceiver {
+  materialTarget?: MaterialTarget;
+  materialCopySampleMode: MaterialCopySampleMode;
+  readonly textureCopyQuality: number;
+  readonly atlasOptions: TextureAtlasOptions;
+  protected appearance?: Appearance;
+  private _materialCopyRequested = false;
+  private _materialComposite?: MaterialCompositeCallback;
+  private _materialCompositeGPU?: MaterialCompositeGPUCallback;
+  private _appearanceDirty = false;
+  private _appearanceBackend?: 'webgl' | 'webgpu';
+  get materialComposite(): MaterialCompositeCallback | undefined { return this._materialComposite; }
+  set materialComposite(value: MaterialCompositeCallback | undefined) {
+    this._materialComposite = value;
+    this._appearanceDirty = true;
+    this.needsUpdate = true;
+  }
+  get materialCompositeGPU(): MaterialCompositeGPUCallback | undefined { return this._materialCompositeGPU; }
+  set materialCompositeGPU(value: MaterialCompositeGPUCallback | undefined) {
+    this._materialCompositeGPU = value;
+    this._appearanceDirty = true;
+    this.needsUpdate = true;
+  }
+  protected get materialCopyCacheKey(): string { return this.appearance?.cacheKey ?? `${this.version}`; }
+
+  private readonly _preparedMaterialTextures = new WeakMap<
+    NonNullable<ParticleSystem['sceneRenderer']>, WeakSet<Texture>
+  >();
+
+  /** Upload ready material images during normal preparation, before a deferred variant is first drawn. */
+  protected prepareMaterialTextures(system: ParticleSystem, materials: readonly Material[]): void {
+    const renderer = system.sceneRenderer;
+    if (!renderer) return;
+
+    let prepared = this._preparedMaterialTextures.get(renderer);
+    if (!prepared) {
+      prepared = new WeakSet();
+      this._preparedMaterialTextures.set(renderer, prepared);
+    }
+
+    // Render targets belong to their producers; pending images can be retried on a later update.
+    for (const material of materials) {
+      for (const value of Object.values(material)) {
+        if (!(value instanceof Texture) || value.isRenderTargetTexture || prepared.has(value)) continue;
+
+        const image = value.image as { width?: number; height?: number } | undefined;
+        if (!image?.width || !image.height) continue;
+
+        renderer.initTexture(value);
+        prepared.add(value);
+      }
+    }
+  }
+
+  /** Shared source/palette and shader invalidation for material-capable subclasses. */
+  protected prepareAppearance(system: ParticleSystem): void {
+    if (!this.supportsMaterialCopy) return;
+
+    if (this.materialTarget || this._materialComposite || this._materialCompositeGPU || this._materialCopyRequested
+      || system.hasMaterialCopySources) {
+      this.enableMaterialCopy(system.materialCopyRegistry, system.sceneRenderer);
+    }
+    if (this._appearanceDirty && this.appearance) {
+      this.onMaterialCopyChange();
+      this._appearanceDirty = false;
+    }
+    this.appearance?.sync(this.materialTarget, this.materialCopySampleMode, system.sceneRenderer);
+  }
+
+  /** @internal Enables copying within the owning system registry without adding GPU storage bindings. */
+  public enableMaterialCopy(registry?: MaterialCopyRegistry, renderer?: ParticleSystem['sceneRenderer']): void {
+    if (!this.supportsMaterialCopy) return;
+    this._materialCopyRequested = true;
+    if (renderer) {
+      const backend = 'isWebGPURenderer' in renderer ? 'webgpu' : 'webgl';
+      if (backend !== this._appearanceBackend) this._appearanceDirty = true;
+      this._appearanceBackend = backend;
+    }
+    if (!registry || this.appearance?.registry === registry) return;
+
+    this.appearance?.dispose();
+    this.appearance = new Appearance(registry, () => ({
+      materialComposite: this._appearanceBackend === 'webgl' ? this.materialComposite : undefined,
+      materialCompositeGPU: this._appearanceBackend === 'webgpu' ? this.materialCompositeGPU : undefined,
+      version: this.version }), this.atlasOptions, this.textureCopyQuality);
+    this.onMaterialCopyChange();
+    this.needsUpdate = true;
+  }
+
+  /** Renderer-specific translation retains the destination shader and rendering settings. */
+  public copyMaterial(source: MaterialTarget | undefined): this {
+    this.materialTarget = source;
+    if (source) this.enableMaterialCopy();
+    return this;
+  }
+
+  /** Custom renderer subclasses opt in by implementing onMaterialCopyChange. */
+  get supportsMaterialCopy(): boolean {
+    return this.onMaterialCopyChange !== Renderer.prototype.onMaterialCopyChange;
+  }
+
+  protected onMaterialCopyChange(): void { }
+
+  protected disposeMaterialCopy(): void {
+    this.appearance?.dispose();
+    this.appearance = undefined;
+  }
+
+  /** @internal Tags referenced by renderer resource choices, separate from the renderer's tag filter. */
+  get selectionTags(): readonly Tag[] {
+    return [];
+  }
+
   tags?: Tag[];
   protected _groupCount: number;
   ratio: number;
@@ -94,6 +219,7 @@ export default abstract class Renderer extends EventReceiver {
   set needsUpdate(value: boolean) {
     if (value) {
       this._version += 1;
+      if (this._materialComposite || this._materialCompositeGPU) this._appearanceDirty = true;
       this.onGPUConfigurationChange();
     }
   }
@@ -101,9 +227,23 @@ export default abstract class Renderer extends EventReceiver {
   /** Configures particle filtering, artistic children, and LOD compensation. */
   constructor(options: Partial<RendererOptions> = {}) {
     super(options);
+    this._materialComposite = options.materialComposite;
+    this._materialCompositeGPU = options.materialCompositeGPU;
     this._groupCount = options.count ?? -1;
     this.ratio = options.ratio ?? 1;
     this.groupingRadius = options.groupingRadius ?? -1;
+    const capacity = options.atlasOptions?.minCapacity ?? 0;
+    if (!Number.isFinite(capacity) || capacity < 0) {
+      throw new RangeError('atlasOptions.minCapacity must be a nonnegative finite number.');
+    }
+    const quality = options.textureCopyQuality ?? 1;
+    if (!Number.isFinite(quality) || quality <= 0 || quality > 1) {
+      throw new RangeError('textureCopyQuality must be greater than 0 and at most 1.');
+    }
+    this.textureCopyQuality = quality;
+    this.atlasOptions = { ...options.atlasOptions };
+    this.materialTarget = options.materialTarget;
+    this.materialCopySampleMode = options.materialCopySampleMode ?? MaterialCopySampleMode.UVPatch;
     this.tags = acceptMultiple(options.tags);
     this.children = options.children ?? {};
     this.compensation = options.compensation ?? CompensationMode.None;
@@ -177,6 +317,8 @@ export default abstract class Renderer extends EventReceiver {
     system: ParticleSystem,
     deltaTime: number = 0,
   ): void {
+    this.prepareAppearance(system);
+
     this.beginExecution(system, deltaTime);
     this._usesGPUChildren = false;
     const eligible = system.quality === 0 ? [] : particles.filter(particle => (
@@ -282,6 +424,8 @@ export default abstract class Renderer extends EventReceiver {
     system: ParticleSystem,
     deltaTime: number = 0,
   ): void {
+    this.prepareAppearance(system);
+
     if (!this.supportsGPUInput) throw new Error('This particle renderer does not support GPU particle buffers.');
     if (!this.updateGPUUsesCPUReadback) {
       this.beginExecution(system, deltaTime);

@@ -28,6 +28,7 @@ export default function overrideEmitterOptions(
     inheritMass: value.inheritMass ?? (subsystem ? 1 : 0),
     inheritVelocity: value.inheritVelocity ?? 0,
     impulseThreshold: value.impulseThreshold ?? 0,
+    impulseAffectsCount: value.impulseAffectsCount ?? 0,
     impulseAffectsScale: value.impulseAffectsScale ?? 0,
     impulseAffectsSpeed: value.impulseAffectsSpeed ?? 0,
     impulseAffectsMass: value.impulseAffectsMass ?? 0,

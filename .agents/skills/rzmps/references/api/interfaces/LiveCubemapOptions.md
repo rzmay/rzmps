@@ -66,4 +66,4 @@ Reflection intensity supplied to consuming materials. Defaults to 1.
 resolutionScale: number;
 ```
 
-Capture size relative to renderer dimensions, rounded to a power of two. Defaults to 1 / 16.
+Capture size relative to the viewport, rounded to a power of two with a 16px minimum. Defaults to 1 / 16.

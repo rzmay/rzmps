@@ -1,5 +1,5 @@
 /* eslint-disable react/no-unknown-property */
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { If, vec3, vec4 } from 'three/tsl';
@@ -379,13 +379,31 @@ function summarize({
 }
 
 function BenchmarkScene({ onComplete, onProgress }) {
-  const { scene, gl, camera } = useThree();
+  const { scene, gl, camera, setFrameloop } = useThree();
   const active = useRef(null);
   const starting = useRef(false);
   const failed = useRef(false);
   const caseIndex = useRef(-1);
   const results = useRef([]);
   const lastFrame = useRef();
+
+  useEffect(() => {
+    const shutdown = async () => {
+      failed.current = true;
+      setFrameloop('never');
+      try {
+        await gl.backend.device.queue.onSubmittedWorkDone();
+      } finally {
+        active.current?.system.destroy();
+        active.current?.sceneObjects?.forEach(object => object.removeFromParent());
+        active.current = null;
+        gl.dispose();
+      }
+    };
+    window.__RZMPS_BENCHMARK_SHUTDOWN__ = shutdown;
+    return () => { delete window.__RZMPS_BENCHMARK_SHUTDOWN__; };
+  }, [gl, setFrameloop]);
+
   const fail = (error) => {
     failed.current = true;
     window.__RZMPS_BENCHMARK_DONE__ = true;
@@ -1876,8 +1894,13 @@ function BenchmarkScene({ onComplete, onProgress }) {
   const startNextCase = async () => {
     if (starting.current) return;
     starting.current = true;
+    setFrameloop('never');
+    // Let the current render callback finish submitting before draining its work.
+    await Promise.resolve();
     window.__RZMPS_BENCHMARK_CASES__ = cases.map(entry => entry.name);
     if (active.current?.system) {
+      // Case transitions are outside measurement; reclaim storage only after queued work completes.
+      await gl.backend.device.queue.onSubmittedWorkDone();
       active.current.system.destroy();
       active.current.sceneObjects?.forEach((object) => object.removeFromParent());
       active.current = null;
@@ -1946,11 +1969,12 @@ function BenchmarkScene({ onComplete, onProgress }) {
     lastFrame.current = undefined;
     onProgress(nextCase.name);
     starting.current = false;
+    setFrameloop('always');
     window.__RZMPS_BENCHMARK_PROGRESS__ = { activeCase: nextCase.name, phase: 'warmup', completed: results.current.length };
   };
 
   useFrame(() => {
-    if (failed.current) return;
+    if (failed.current || starting.current) return;
 
     if (!active.current) {
       void startNextCase().catch((error) => {
@@ -2059,7 +2083,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       window.__RZMPS_BENCHMARK_RESULTS__ = [...results.current];
       gl.info.reset();
       void startNextCase().catch((error) => {
-        setTimeout(() => { throw error; });
+        setTimeout(() => fail(error));
       });
     }
   });

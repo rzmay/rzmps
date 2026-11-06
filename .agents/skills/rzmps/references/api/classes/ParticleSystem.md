@@ -283,7 +283,7 @@ simulationSpeed: number;
 ### sourceLoss
 
 ```ts
-sourceLoss: "detach" | "kill" = 'detach';
+sourceLoss: "kill" | "detach" = 'detach';
 ```
 
 Behavior when an attached source dies or its slot is reused. Defaults to detach.

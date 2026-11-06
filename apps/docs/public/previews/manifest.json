@@ -2,8 +2,8 @@
   "generatedBy": "npm run docs:previews",
   "examples": {
     "acid": {
-      "inputHash": "7ccce749ad721123c8cc9d817c3482adddbe971c0c07aa87e83e15462d22822b",
-      "imageHash": "96b87b480d9ed602b2d8fbf0ffaff528fc52ecea753e49cd2a72dda1a6022ee4",
+      "inputHash": "f18a91ff6108f30087126046e79a6ac78fb47e5fdd0bdaa693c4dc9c8783e150",
+      "imageHash": "7949ff4bac5c25beab659bc21fb82a5046c75102463cb905be47c7ef725f41e4",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -31,7 +31,7 @@
             "name": "Pool Smoke",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 38,
+            "simulated": 36,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -49,7 +49,7 @@
             "name": "Pool Bubbles",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 3,
+            "simulated": 6,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -66,7 +66,7 @@
         ],
         "time": 15,
         "step": 900,
-        "particles": 42,
+        "particles": 43,
         "simulationSpeed": 1,
         "simulatedSeconds": 15
       },
@@ -86,8 +86,8 @@
       "warnings": []
     },
     "additiveSmoke": {
-      "inputHash": "1ed411b931d5cb1bcc037b29feb9540aa28ea2c42db8140cdfac1e18a5e9066a",
-      "imageHash": "f3fabf497f49c56d62088231b713aeb2580875f2e08c4f199d0bb134aad8a33d",
+      "inputHash": "22741e5db729eae51efb3233cc23409af6705bb9ff27f4753279e2e34c0f6045",
+      "imageHash": "6c5344b3e3c8f2960594eacafe8be8839e9b233d0a962c756e27c0661f0e35f7",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -134,7 +134,7 @@
       "warnings": []
     },
     "boids": {
-      "inputHash": "1bf0ae8d803fd4fc4be4f0744f1a7f716ce24cad4a94e8039af602df1e1307ac",
+      "inputHash": "576b3cc5ac221c48dff337edec75cb65a44934595c4bf97a730c36b3b7ade243",
       "imageHash": "3a4ef98cc1c7109351229a1a244f7209c4e335490209389547ee5a525e68b715",
       "backend": "webgl",
       "width": 640,
@@ -182,8 +182,8 @@
       "warnings": []
     },
     "bubbles": {
-      "inputHash": "9de1c6e14748fbd3a6e78feeccec339de2c1f4ff086fabcbc49de3b30ff65d32",
-      "imageHash": "e81375b3dfd68c47c3445413571d504305708a0bc9fc6165530479fffe32bdcc",
+      "inputHash": "ecc9ee87c3c8c716492809099d5825c2af52f511bd9659f41511cfa7d4142460",
+      "imageHash": "81ddbb89d0ecfaf1eeb4f3727f9bc830e177fc827d03d1502fe9ac49a6007dec",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -193,7 +193,7 @@
             "name": "Audio Bubbles",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 19,
+            "simulated": 17,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -210,7 +210,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 19,
+        "particles": 17,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -230,8 +230,8 @@
       "warnings": []
     },
     "collision": {
-      "inputHash": "b7239add2ca8f67f50863d0430bb74edab5efaeca8601e138912459e7a57ae7a",
-      "imageHash": "a93066745df2aafc38fa53dbfbbba6d9a50e67f8cbab158d34c2483a6199a261",
+      "inputHash": "0a25510d50b6c6198757079cba4655bd70db84a4b1cd85f4af69c28bf2fcedfa",
+      "imageHash": "4c1268adecdd3bc0e4f7e6a20a802e0c16dc8bc63668614c31b41f02019f5115",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -278,8 +278,8 @@
       "warnings": []
     },
     "collisionSubEmitters": {
-      "inputHash": "530705032084e2e39a8ef07af8e65a935d7fc33b244ac9825eab8b2bc5ca5799",
-      "imageHash": "b11306c0aa93b4dd9e87b358c2710d58abe57711351fbf4846bb7f5d9451f034",
+      "inputHash": "6391f19e4488268140e05bdb7f1b2438dea87460ff3b981858349ae8c4ee8a5d",
+      "imageHash": "e395b8daef5d2e611941abbe91f123af63cb0a99a0062e90acbcd4f585297617",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -307,7 +307,7 @@
             "name": "Metal Ball Sparks",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 5,
+            "simulated": 18,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -324,7 +324,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 19,
+        "particles": 32,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -344,8 +344,8 @@
       "warnings": []
     },
     "cubes": {
-      "inputHash": "4894f341f8976ef562eaf36602aa3329cf3ee5466ee4d6a5b2e43dd2acf3a481",
-      "imageHash": "4017cb8957db8e7d7501fe24627b0e9eab01d4fe684bf11447ed6a2bc552c2d4",
+      "inputHash": "04520a838ae97aa60299dfad5af25de002af966c9c23e2bfe5bf8d046b62bdc8",
+      "imageHash": "2d9fa0a1691a7e738b347ceee63b33f0bb4005dba1329e3908ad14c622db4ffa",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -391,9 +391,75 @@
       },
       "warnings": []
     },
+    "destruction": {
+      "inputHash": "00f05320948a629608076dfcb907b1af6b15a0b052e3b8a74644e7de2a920d9f",
+      "imageHash": "d219eb8fca4752ebc85da411a8d560efcbbc4b5b3368d9c2823263cc8ac94207",
+      "backend": "webgl",
+      "width": 640,
+      "height": 400,
+      "capture": {
+        "systems": [
+          {
+            "name": "Destruction",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 7,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          },
+          {
+            "name": "Surface Fragments",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 161,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
+          }
+        ],
+        "time": 2.5,
+        "step": 150,
+        "particles": 168,
+        "simulationSpeed": 1,
+        "simulatedSeconds": 2.5
+      },
+      "camera": {
+        "position": [
+          7,
+          6,
+          10
+        ],
+        "target": [
+          0,
+          1,
+          0
+        ],
+        "fov": 50
+      },
+      "warnings": []
+    },
     "dopplerBullet": {
-      "inputHash": "c8b6f487cc236bd6086f8e2265bed4387ffbd2a979b9c4198053e0deaa3eb137",
-      "imageHash": "6a14ead871cbfb57099e1799dbd34739d01baa5b39116bd19fa191a6379dae12",
+      "inputHash": "67b07c60ee05425a379732c486407a8ec0148a41836507683f55381bb43b43be",
+      "imageHash": "137d82327e3d8042286578e4b20195599f02e5652295d4c63f7caf66c168e39e",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -421,7 +487,7 @@
             "name": "",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 239,
+            "simulated": 215,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -488,32 +554,50 @@
               "active": 0,
               "peakIntensity": 0
             }
+          },
+          {
+            "name": "Bullet Impact Dust",
+            "quality": 1,
+            "gpuProcessingActive": false,
+            "simulated": 5,
+            "events": {
+              "readbackCount": 0,
+              "buffers": 0,
+              "pending": 0,
+              "overflowCount": 0,
+              "nextDispatchSequence": 1
+            },
+            "lights": {
+              "count": 0,
+              "active": 0,
+              "peakIntensity": 0
+            }
           }
         ],
-        "time": 3,
-        "step": 180,
-        "particles": 243,
+        "time": 4,
+        "step": 240,
+        "particles": 224,
         "simulationSpeed": 1,
-        "simulatedSeconds": 3
+        "simulatedSeconds": 4
       },
       "camera": {
         "position": [
-          25,
-          12,
-          45
+          4,
+          3,
+          4
         ],
         "target": [
           0,
-          2,
-          4
+          0.5,
+          -4
         ],
         "fov": 50
       },
       "warnings": []
     },
     "fire": {
-      "inputHash": "8ae458ecd27dcf8ce1a9b5b60cdf5a4232c22ba4b45df5a5f1cc3892af767532",
-      "imageHash": "296fd61b1004c90b9df0a3950f6fc7b5f307046db84f7ffeb968008894ecf8af",
+      "inputHash": "db20823b7d2fbc0fcb168ea96270913bdb408e21da50e4dfd269cdeb7175fce6",
+      "imageHash": "20bd6fe4b715fa06cb36b967cf06c6103687a17778439f57fac01ab12710ce2e",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -534,7 +618,7 @@
             "lights": {
               "count": 18,
               "active": 18,
-              "peakIntensity": 1.619030303030303
+              "peakIntensity": 1.636851003828557
             }
           },
           {
@@ -578,8 +662,8 @@
       "warnings": []
     },
     "fireball": {
-      "inputHash": "0e5173a13c1239979cb98c2996fc0c6b2533a55caba2e82998d8fc6bc03e1505",
-      "imageHash": "63870b8caa3196d6b33aeb17c518c7e20bd50133ae570b1ee45bdeb6498fde8c",
+      "inputHash": "61709918cf67fd4e793710e438c69930d295f29ee1622ec9eab06de8a295684b",
+      "imageHash": "2f4c4b0c23898774746be7e972bba54f94707efe9faa143a7e57b8ab13ab146c",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -600,7 +684,7 @@
             "lights": {
               "count": 2,
               "active": 2,
-              "peakIntensity": 1.807377400548694
+              "peakIntensity": 1.8073774005486936
             }
           },
           {
@@ -644,8 +728,8 @@
       "warnings": []
     },
     "fireflies": {
-      "inputHash": "d5f0e2040750952a122b63a8518648c8d0dcb8c143b7518c1c2d09db85ad663e",
-      "imageHash": "9fd056c0a475d59315038dd226d07cffffb0ce1cc43c51e2894ecfe0ebf8e515",
+      "inputHash": "60f086e14d2e5d226335a8d0d92a2a2812fe630b157a2df55c85a98b7857bb63",
+      "imageHash": "4104fef20f68e2253b09ec4afffc4b8106666670aad455b9edc29123b2b53da7",
       "backend": "webgpu",
       "width": 640,
       "height": 400,
@@ -683,14 +767,14 @@
             },
             "lights": {
               "count": 5,
-              "active": 3,
-              "peakIntensity": 0.4416438291881357
+              "active": 2,
+              "peakIntensity": 0.36892500410550033
             }
           }
         ],
         "attachmentValidation": {
           "pulses": 9,
-          "maxDistance": 0.006372751314841431
+          "maxDistance": 0.006370102376871114
         },
         "time": 6,
         "step": 360,
@@ -742,8 +826,8 @@
       ]
     },
     "fireworks": {
-      "inputHash": "c31f3e1afa12f1b2f70554bf55526e17b8dc0ccffda12911f4c8d5ad7cf06623",
-      "imageHash": "290f3f5f8be10056a997b23f74a4bd6fe0818ca2480bec99220e9d0e170c74b2",
+      "inputHash": "e605e26e280ad16fdcf9730e146bb940c9b16fcb455833196e26b6e45fc50846",
+      "imageHash": "d6054033c71a17e3d4b610204bcb05dee2d7c669a8995a66e0fe01a5f225139f",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -789,7 +873,7 @@
             "name": "Sparkles",
             "quality": 0.46295959450732643,
             "gpuProcessingActive": false,
-            "simulated": 113,
+            "simulated": 138,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -800,13 +884,13 @@
             "lights": {
               "count": 10,
               "active": 10,
-              "peakIntensity": 48.76013760631462
+              "peakIntensity": 49.16506814507257
             }
           }
         ],
         "time": 3,
         "step": 180,
-        "particles": 136,
+        "particles": 161,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -826,8 +910,8 @@
       "warnings": []
     },
     "lodStress": {
-      "inputHash": "d94a41bea79a3ea2b9634a0896b2398d8e54163972d83555215eb6cf3c43f6b3",
-      "imageHash": "0aa769dfc61f03e29cee748ec1bec33024adabb79769a82a1a44d72465809138",
+      "inputHash": "6777f866791d0b8bd917154e26ce106266174bd57174292aa6089ec01a74490c",
+      "imageHash": "7810639a533568aa2177e2f507e45e2a3c7e87fa4f8992b51a231a81cd608877",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -837,7 +921,7 @@
             "name": "LOD Stress Test",
             "quality": 0.5728427269032347,
             "gpuProcessingActive": false,
-            "simulated": 3024,
+            "simulated": 3018,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -854,7 +938,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 3024,
+        "particles": 3018,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -874,8 +958,8 @@
       "warnings": []
     },
     "particleTrail": {
-      "inputHash": "0ca128c9079b36555648d485c2380e6c098424f98891dc3053c628f938a58711",
-      "imageHash": "ef91c862c22c86bc9675beb13fc98c1fd63b4058795b02b6b03d2dc2fc15ddad",
+      "inputHash": "9464038ca153aa55ff74879e4b0cbdbb586c54736313d44318e702e5742f19b3",
+      "imageHash": "9bc8bcb4af277c9855dc39cbef08afa888c508bab3500766e4222ef2df291839",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -922,7 +1006,7 @@
       "warnings": []
     },
     "ribbonTrail": {
-      "inputHash": "158156c929112d03983f807dfaa2c5e75dd48f813f0194bda7365cd76c4de56e",
+      "inputHash": "ec1d3613d841783f0e9c5c3b406141f3c2149dcaa532b2c3a9ea055b994bc1e4",
       "imageHash": "29b528bee9060de76a306a2085019efd7770af3c2e1cfd9973dfa529a8912236",
       "backend": "webgl",
       "width": 640,
@@ -970,8 +1054,8 @@
       "warnings": []
     },
     "smoke": {
-      "inputHash": "f78f566d1b6964bbade4031b7758a913561e678b91a1d17c066add7d299623f3",
-      "imageHash": "e453e0ec949748838d888973fa4de3cb89baa46312a0fc0cde3f0e427e94aee3",
+      "inputHash": "eb3abf49ed9af5ea45eab5301f2db3004de6d1f70c7622bc73ab77728bf65385",
+      "imageHash": "7641567b6b3b9ca961badad53a1c8ccd9cf30f010be306d3ddd77ad953bb4f7e",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1018,8 +1102,8 @@
       "warnings": []
     },
     "snow": {
-      "inputHash": "1abae0196e9e725aab777f81f39bc94d874fbd35ce47a843260a21822588783a",
-      "imageHash": "e8584fc392eae6d512762b97793713b66caffe4c93cb2c2c4457d6bd67bc3a18",
+      "inputHash": "4cce234ee3e7719826451fe7d410927c7b708f5b62a6630b58c543dc1f6092cb",
+      "imageHash": "b2bade454b19e3d648c0d94db54888cba7feca3d3c97d9f964ddf4a72b06804c",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1066,8 +1150,8 @@
       "warnings": []
     },
     "spheres": {
-      "inputHash": "eb745694c1a5d46335bc2de335c4ab94f5323fc5315aafbc7d94fb2ca3a6de3f",
-      "imageHash": "7b5d33b03ee96541d17adb161edbe4549e2737cb33cea3eb6a86b33c7dcf87dc",
+      "inputHash": "66a330414a246a4d93c2f9be726060826b2426dbad4e14dc513fb92c80a91043",
+      "imageHash": "5a2550beb216a285565bf862af5eb16001b2cdbf9aed0cafb09b8d80cc0de27e",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1114,8 +1198,8 @@
       "warnings": []
     },
     "splatter": {
-      "inputHash": "3cd65732abd4082ba883afdb8991c5e7e1757d8b080acd988563333223c85961",
-      "imageHash": "29efaf97311632fc7c39e9c258cdd935589622ea84897c104df5bf829dca5cde",
+      "inputHash": "5d40d596adde6dffe78bfb24fdaee905b4b784dde7fbba994775b9d4f7193b47",
+      "imageHash": "861d18cbce2ca250d03ad192d678a8899aa1d64ec10e8133a8fb7e06c8297246",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1162,8 +1246,8 @@
       "warnings": []
     },
     "stylizedDepth": {
-      "inputHash": "30d8d136b70d2e4ede25642fde9eda0e5249706c52bbdd0ef9592e662e432dd4",
-      "imageHash": "85e5690430cda51a7b8573f63b03ef7608a172fe17163771b258bd691f960509",
+      "inputHash": "a56111af3b3400328022856aad52944679f7de735c717b859df7b6cdf3f7a5d5",
+      "imageHash": "70322ecd2a07848e3d4d08b37f51db2fe864e93a7d9ad0b4040db24f3c9e8e9b",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1210,8 +1294,8 @@
       "warnings": []
     },
     "suzanne": {
-      "inputHash": "ec5781bbe61d68374dbabbb344a3ee5fff06c4361535b6a5676f9879f0546171",
-      "imageHash": "a75d3324c9d9ccd17bcead1032e503ab7ea9da0cc9f1fe925345d289eb62c659",
+      "inputHash": "e8105f0225bcd6a47141452da1f9a69c5c337cc6df7824136ce13b074d13307d",
+      "imageHash": "a208e4d93cab160fe374c8bd838055896c49d23183d49ca085ba6249a7769c69",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1258,7 +1342,7 @@
       "warnings": []
     },
     "suzanneInstances": {
-      "inputHash": "0a5a2f90b5f36e73cc73ced0388e7cb5f0b4a4575cdeab63c06f566978013eeb",
+      "inputHash": "ea0aa0ce58d825407325ba903c3988548e5aefdfb8b5b91b29d3c5ecf6456bb8",
       "imageHash": "743ad337497493404625a6ba87dfc7a55565cb342e2006c6542bb753d92f69ce",
       "backend": "webgl",
       "width": 640,
@@ -1306,8 +1390,8 @@
       "warnings": []
     },
     "tags": {
-      "inputHash": "9acca53d674c45acb66b550b0f1727a23bfbc262a954cd253182fc79bead146f",
-      "imageHash": "4e46615d74b610b854c30a4345100b9d30390ab496209f82ad554e95d66380db",
+      "inputHash": "8bc22ecf8db9d6e54cec87d50f4ca26dc97f6f99adb0317f34df0f119d6249f3",
+      "imageHash": "1736bf2768559ff60534e202f0089ca7125f64da7eea9fbbdb2039cc96b653c0",
       "backend": "webgl",
       "width": 640,
       "height": 400,

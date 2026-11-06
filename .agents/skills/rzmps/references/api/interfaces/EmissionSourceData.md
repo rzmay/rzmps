@@ -52,6 +52,18 @@ optional mass?: number;
 
 ***
 
+<a id="metadata"></a>
+
+### metadata?
+
+```ts
+optional metadata?: unknown;
+```
+
+Application metadata exposed to synchronous particle initializers.
+
+***
+
 <a id="scale"></a>
 
 ### scale?

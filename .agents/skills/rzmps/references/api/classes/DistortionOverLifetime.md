@@ -509,6 +509,28 @@ Number of CPU events dropped when the pending batch reached capacity.
 
 ***
 
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
+#### Inherited from
+
+[`Module`](Module.md).[`selectedEventNames`](Module.md#selectedeventnames)
+
+***
+
 <a id="supportsgpu"></a>
 
 ### supportsGPU
@@ -519,7 +541,7 @@ Number of CPU events dropped when the pending batch reached capacity.
 get supportsGPU(): boolean;
 ```
 
-Whether both modification and any custom condition have GPU implementations.
+Whether modification, birth hooks and custom conditions support GPU processing.
 
 ##### Returns
 
@@ -733,6 +755,64 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 #### Inherited from
 
 [`Module`](Module.md).[`getParticleSpatialGrid`](Module.md#getparticlespatialgrid)
+
+***
+
+<a id="initializeparticle"></a>
+
+### initializeParticle()?
+
+```ts
+optional initializeParticle(particle, context): void;
+```
+
+Optional birth hooks; ordinary modifier modules do not run initialization work.
+
+#### Parameters
+
+##### particle
+
+[`Particle`](Particle.md)
+
+##### context
+
+[`ParticleInitializationContext`](../interfaces/ParticleInitializationContext.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Module`](Module.md).[`initializeParticle`](Module.md#initializeparticle)
+
+***
+
+<a id="initializeparticlegpu"></a>
+
+### initializeParticleGPU()?
+
+```ts
+optional initializeParticleGPU(particle, context): void;
+```
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+##### context
+
+[`GPUParticleInitializationContext`](../interfaces/GPUParticleInitializationContext.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Module`](Module.md).[`initializeParticleGPU`](Module.md#initializeparticlegpu)
 
 ***
 

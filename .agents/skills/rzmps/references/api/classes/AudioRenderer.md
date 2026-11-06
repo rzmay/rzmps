@@ -80,6 +80,20 @@ alphaAffectsVolume: number;
 
 ***
 
+<a id="atlasoptions"></a>
+
+### atlasOptions
+
+```ts
+readonly atlasOptions: TextureAtlasOptions;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`atlasOptions`](Renderer.md#atlasoptions)
+
+***
+
 <a id="children"></a>
 
 ### children
@@ -342,12 +356,50 @@ lowPass: DynamicValue<number>;
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode
+
+```ts
+materialCopySampleMode: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialCopySampleMode`](Renderer.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialTarget`](Renderer.md#materialtarget)
+
+***
+
 <a id="maxclips"></a>
 
 ### maxClips
 
 ```ts
 maxClips: number;
+```
+
+***
+
+<a id="oncollision"></a>
+
+### onCollision
+
+```ts
+onCollision: ParameterEventSubscription<AudioParameters, CollisionHit> = true;
 ```
 
 ***
@@ -362,12 +414,32 @@ optional onCollisionSound?: AudioBuffer[];
 
 ***
 
+<a id="ondeath"></a>
+
+### onDeath
+
+```ts
+onDeath: ParameterEventSubscription<AudioParameters> = true;
+```
+
+***
+
 <a id="ondeathsound"></a>
 
 ### onDeathSound?
 
 ```ts
 optional onDeathSound?: AudioBuffer[];
+```
+
+***
+
+<a id="onspawn"></a>
+
+### onSpawn
+
+```ts
+onSpawn: ParameterEventSubscription<AudioParameters> = true;
 ```
 
 ***
@@ -530,6 +602,20 @@ optional tags?: string[];
 
 ***
 
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality
+
+```ts
+readonly textureCopyQuality: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`textureCopyQuality`](Renderer.md#texturecopyquality)
+
+***
+
 <a id="volume"></a>
 
 ### volume
@@ -638,6 +724,90 @@ get gpuParameterUploadCount(): number;
 
 ***
 
+<a id="materialcomposite"></a>
+
+### materialComposite
+
+#### Get Signature
+
+```ts
+get materialComposite():
+  | MaterialCompositeCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialComposite(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.materialComposite
+```
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU
+
+#### Get Signature
+
+```ts
+get materialCompositeGPU():
+  | MaterialCompositeGPUCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialCompositeGPU(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.materialCompositeGPU
+```
+
+***
+
 <a id="needsupdate"></a>
 
 ### needsUpdate
@@ -660,9 +830,7 @@ set needsUpdate(value): void;
 
 #### Inherited from
 
-```ts
-Renderer.needsUpdate
-```
+[`Renderer`](Renderer.md).[`needsUpdate`](Renderer.md#needsupdate)
 
 ***
 
@@ -688,6 +856,22 @@ Number of CPU events dropped when the pending batch reached capacity.
 
 ***
 
+<a id="parameterevents"></a>
+
+### parameterEvents
+
+#### Get Signature
+
+```ts
+get parameterEvents(): ParameterEventSubscriptions<AudioParameters>;
+```
+
+##### Returns
+
+[`ParameterEventSubscriptions`](../type-aliases/ParameterEventSubscriptions.md)\<[`AudioParameters`](../interfaces/AudioParameters.md)\>
+
+***
+
 <a id="renderedchildcount"></a>
 
 ### renderedChildCount
@@ -710,6 +894,28 @@ Additional visual particles; GPU diagnostics refresh asynchronously when request
 
 ***
 
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
+#### Overrides
+
+[`Renderer`](Renderer.md).[`selectedEventNames`](Renderer.md#selectedeventnames)
+
+***
+
 <a id="supportsgpuinput"></a>
 
 ### supportsGPUInput
@@ -729,6 +935,28 @@ Whether this renderer can consume GPU particle buffers without a selective CPU r
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`supportsGPUInput`](Renderer.md#supportsgpuinput)
+
+***
+
+<a id="supportsmaterialcopy"></a>
+
+### supportsMaterialCopy
+
+#### Get Signature
+
+```ts
+get supportsMaterialCopy(): boolean;
+```
+
+Custom renderer subclasses opt in by implementing onMaterialCopyChange.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`supportsMaterialCopy`](Renderer.md#supportsmaterialcopy)
 
 ***
 
@@ -868,6 +1096,32 @@ Removes displayed particles while retaining resources for reuse.
 
 ***
 
+<a id="copymaterial"></a>
+
+### copyMaterial()
+
+```ts
+copyMaterial(source): this;
+```
+
+Renderer-specific translation retains the destination shader and rendering settings.
+
+#### Parameters
+
+##### source
+
+[`MaterialTarget`](../type-aliases/MaterialTarget.md) \| `undefined`
+
+#### Returns
+
+`this`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`copyMaterial`](Renderer.md#copymaterial)
+
+***
+
 <a id="destroy"></a>
 
 ### destroy()
@@ -905,6 +1159,52 @@ Clears batches and unsubscribes when a component is removed or its system is des
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`dispose`](Renderer.md#dispose)
+
+***
+
+<a id="onevent"></a>
+
+### onEvent()
+
+#### Call Signature
+
+```ts
+onEvent(name, handler): this;
+```
+
+##### Parameters
+
+###### name
+
+`"collision"`
+
+###### handler
+
+[`ParameterEventSubscription`](../type-aliases/ParameterEventSubscription.md)\<[`AudioParameters`](../interfaces/AudioParameters.md), [`CollisionHit`](../interfaces/CollisionHit.md)\>
+
+##### Returns
+
+`this`
+
+#### Call Signature
+
+```ts
+onEvent(name, handler?): this;
+```
+
+##### Parameters
+
+###### name
+
+`string`
+
+###### handler?
+
+[`ParameterEventSubscription`](../type-aliases/ParameterEventSubscription.md)\<[`AudioParameters`](../interfaces/AudioParameters.md)\>
+
+##### Returns
+
+`this`
 
 ***
 

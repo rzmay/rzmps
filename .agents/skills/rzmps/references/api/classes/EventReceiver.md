@@ -126,6 +126,24 @@ Number of CPU events dropped when the pending batch reached capacity.
 
 `number`
 
+***
+
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
 ## Methods
 
 <a id="begin"></a>

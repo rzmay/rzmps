@@ -21,6 +21,7 @@ const LitSprite = (
 ) => {
   const {
     gridSize,
+    atlasInset = 0,
     frames,
     alphaMap,
     normalMap,
@@ -41,13 +42,31 @@ const LitSprite = (
     ...materialOptions
   } = options;
 
+  // Runtime false uniforms still reserve sampler units on WebGL. Eliminate absent optional maps
+  // at shader creation, leaving environment and capture-time switches dynamic where needed.
+  const optionalMaps = { hasAlphaMap: alphaMap, hasNormalMap: normalMap,
+    hasRoughnessMap: roughnessMap, hasMetalnessMap: metalnessMap,
+    hasTransmissionMap: transmissionMap, hasDistortionMap: distortionMap ?? normalMap };
+  let fragmentShader = litSpriteFrag;
+  for (const [flag, map] of Object.entries(optionalMaps)) {
+    if (!map) fragmentShader = fragmentShader.replace(`uniform bool ${flag};`, `const bool ${flag} = false;`);
+  }
+
+  // These features are reconfigured by rebuilding materialOptions, not by retaining idle samplers.
+  if (!(transmission ?? (transmissionMap ? 1 : 0))) {
+    fragmentShader = fragmentShader.replace('uniform float transmission;', 'const float transmission = 0.0;');
+  }
+  if (!softParticleDistance) {
+    fragmentShader = fragmentShader.replace('uniform bool softParticles;', 'const bool softParticles = false;');
+  }
+
   return new THREE.ShaderMaterial({
     vertexShader: litSpriteVert,
-    fragmentShader: litSpriteFrag,
-    uniforms: THREE.UniformsUtils.merge([
-      THREE.UniformsLib.lights,
-      {
+    fragmentShader,
+    uniforms: {
+      ...THREE.UniformsUtils.clone(THREE.UniformsLib.lights),
         pointTexture: { value: texture },
+        atlasInset: { value: atlasInset },
 
         gridSize: { value: gridSize ?? { x: 1, y: 1 } },
         n_frames: { value: frames ?? 1 },
@@ -95,8 +114,7 @@ const LitSprite = (
         depthResolution: { value: new THREE.Vector2() },
         depthCameraNear: { value: 0.1 },
         depthCameraFar: { value: 2000 },
-      },
-    ]),
+    },
 
     depthTest: true,
     depthWrite: false,

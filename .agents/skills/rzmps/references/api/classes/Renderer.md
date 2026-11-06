@@ -51,6 +51,16 @@ Configures particle filtering, artistic children, and LOD compensation.
 
 ## Properties
 
+<a id="atlasoptions"></a>
+
+### atlasOptions
+
+```ts
+readonly atlasOptions: TextureAtlasOptions;
+```
+
+***
+
 <a id="children"></a>
 
 ### children
@@ -141,6 +151,26 @@ groupingRadius: number;
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode
+
+```ts
+materialCopySampleMode: MaterialCopySampleMode;
+```
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+***
+
 <a id="ratio"></a>
 
 ### ratio
@@ -157,6 +187,16 @@ ratio: number;
 
 ```ts
 optional tags?: string[];
+```
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality
+
+```ts
+readonly textureCopyQuality: number;
 ```
 
 ***
@@ -229,7 +269,7 @@ set gpuNative(value): void;
 
 #### Inherited from
 
-[`LightRenderer`](LightRenderer.md).[`gpuNative`](LightRenderer.md#gpunative)
+[`MaterialCopy`](MaterialCopy.md).[`gpuNative`](MaterialCopy.md#gpunative)
 
 ***
 
@@ -246,6 +286,78 @@ get gpuParameterUploadCount(): number;
 ##### Returns
 
 `number`
+
+***
+
+<a id="materialcomposite"></a>
+
+### materialComposite
+
+#### Get Signature
+
+```ts
+get materialComposite():
+  | MaterialCompositeCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialComposite(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU
+
+#### Get Signature
+
+```ts
+get materialCompositeGPU():
+  | MaterialCompositeGPUCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialCompositeGPU(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
 
 ***
 
@@ -311,6 +423,28 @@ Additional visual particles; GPU diagnostics refresh asynchronously when request
 
 ***
 
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`selectedEventNames`](EventReceiver.md#selectedeventnames)
+
+***
+
 <a id="supportsgpuinput"></a>
 
 ### supportsGPUInput
@@ -322,6 +456,24 @@ get supportsGPUInput(): boolean;
 ```
 
 Whether this renderer can consume GPU particle buffers without a selective CPU readback.
+
+##### Returns
+
+`boolean`
+
+***
+
+<a id="supportsmaterialcopy"></a>
+
+### supportsMaterialCopy
+
+#### Get Signature
+
+```ts
+get supportsMaterialCopy(): boolean;
+```
+
+Custom renderer subclasses opt in by implementing onMaterialCopyChange.
 
 ##### Returns
 
@@ -454,6 +606,28 @@ Removes displayed particles while retaining resources for reuse.
 #### Returns
 
 `void`
+
+***
+
+<a id="copymaterial"></a>
+
+### copyMaterial()
+
+```ts
+copyMaterial(source): this;
+```
+
+Renderer-specific translation retains the destination shader and rendering settings.
+
+#### Parameters
+
+##### source
+
+[`MaterialTarget`](../type-aliases/MaterialTarget.md) \| `undefined`
+
+#### Returns
+
+`this`
 
 ***
 

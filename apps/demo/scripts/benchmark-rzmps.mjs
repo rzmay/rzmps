@@ -6,6 +6,7 @@ import { validateBenchmark } from '../../../scripts/benchmark-payload.mjs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
+import { isExpectedWebGPUTeardownError, runBenchmarkWithRetry } from '../../../scripts/benchmark-failures.mjs';
 
 const host = '127.0.0.1';
 const port = Number(process.env.RZMPS_BENCHMARK_PORT ?? 0);
@@ -37,13 +38,6 @@ function formatNumber(value, digits = 1) {
   return Number.isFinite(value) ? value.toFixed(digits) : 'n/a';
 }
 
-function isExpectedWebGPUTeardownError(error) {
-  const description = typeof error === 'string'
-    ? error
-    : `${error?.name ?? ''}: ${error?.message ?? String(error)}`;
-  return description.includes('OperationError')
-    && description.includes('Instance dropped in popErrorScope');
-}
 
 function getChromeArgs() {
   const args = [
@@ -52,9 +46,13 @@ function getChromeArgs() {
   ];
 
   if (process.env.CI === 'true') {
+    // Software shader compilation can trip Chromium's GPU watchdog before warmup finishes.
+    // Three.js uses the same workaround: https://github.com/mrdoob/three.js/pull/33650
+    // The sample timeout still bounds hangs, and device/validation failures remain fatal.
     args.push(
       '--no-sandbox',
       '--disable-setuid-sandbox',
+      '--disable-gpu-watchdog',
       '--use-gl=angle',
       '--use-angle=swiftshader',
       '--enable-unsafe-swiftshader',
@@ -133,7 +131,7 @@ async function collectBrowserHardware(page) {
   });
 }
 
-async function runBenchmark() {
+async function runBenchmark(attempt = 1) {
   const server = createSiteServer(directory);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -143,6 +141,16 @@ async function runBenchmark() {
   let browser;
   let pageError;
   let benchmarkValidated = false;
+  let closing = false;
+  let rejectMeasurement;
+  const measurementFailure = new Promise((_resolve, reject) => { rejectMeasurement = reject; });
+  // A browser can fail during navigation, before the completion waiter has been attached.
+  void measurementFailure.catch(() => {});
+  const failMeasurement = error => {
+    pageError ??= error;
+    rejectMeasurement(pageError);
+  };
+  const deviceLossChecks = [];
   const gpuValidationErrors = [];
   let page;
 
@@ -162,23 +170,32 @@ async function runBenchmark() {
         console.error(`[browser ${message.type()}] ${value}`);
         if (/GPUValidationError|Compute pipeline creation failed/.test(value)) {
           gpuValidationErrors.push(value);
+          if (!closing) failMeasurement(new Error(`WebGPU validation failed: ${value}`));
+        }
+        if (/WebGPU.*Device Lost/i.test(value) && !closing) {
+          // Completion is recorded in the page before Chromium may report shutdown-related device loss.
+          const check = page.evaluate(() => window.__RZMPS_BENCHMARK_DONE__ === true).then(done => {
+            if (!done) failMeasurement(new Error(value));
+          }).catch(error => { if (!closing) failMeasurement(error); });
+          deviceLossChecks.push(check);
         }
       }
     });
     page.on('error', (error) => {
-      if (!isExpectedWebGPUTeardownError(error)) pageError = error;
+      if (!closing || !isExpectedWebGPUTeardownError(error)) failMeasurement(error);
     });
     page.on('pageerror', (error) => {
-      if (isExpectedWebGPUTeardownError(error)) return;
-      pageError = error;
+      if (closing && isExpectedWebGPUTeardownError(error)) return;
+      failMeasurement(error);
       console.error(`[browser pageerror] ${error.stack ?? error.message}`);
     });
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     const browserHardware = await collectBrowserHardware(page);
-    await page.waitForFunction(
-      'window.__RZMPS_BENCHMARK_DONE__ === true',
-      { timeout: timeoutMs, polling: 1000 },
-    );
+    await Promise.race([
+      page.waitForFunction('window.__RZMPS_BENCHMARK_DONE__ === true', { timeout: timeoutMs, polling: 1000 }),
+      measurementFailure,
+    ]);
+    await Promise.all(deviceLossChecks);
 
     const results = await page.evaluate(() => window.__RZMPS_BENCHMARK_RESULTS__ ?? []);
     if (pageError) throw pageError;
@@ -193,6 +210,7 @@ async function runBenchmark() {
     const metadata = {
       browser: browserVersion,
       harnessVersion: 1,
+      sampleAttempts: attempt,
       profile,
       viewport,
       durationMs,
@@ -298,12 +316,24 @@ async function runBenchmark() {
 
     if (values.output) {
       await fs.mkdir(path.dirname(path.resolve(values.output)), { recursive: true });
-      await fs.writeFile(`${values.output}.failure.json`, JSON.stringify({ url, progress, error: String(error), pageError: String(pageError ?? '') }, null, 2));
-      await page?.screenshot({ path: `${values.output}.failure.png`, timeout: 5000 }).catch(() => {});
+      const failureOutput = `${values.output}.attempt-${attempt}`;
+      const diagnostics = { url, attempt, progress, error: String(error),
+        pageError: String(pageError ?? ''), gpuValidationErrors };
+      await fs.writeFile(`${failureOutput}.failure.json`, JSON.stringify(diagnostics, null, 2));
+      await page?.screenshot({ path: `${failureOutput}.failure.png`, timeout: 5000 }).catch(() => {});
     }
     throw pageError ?? error;
   } finally {
+    closing = true;
     try {
+      // Stop rendering, drain submitted work and release the device before closing Chromium.
+      await page?.evaluate(async () => {
+        if (!window.__RZMPS_BENCHMARK_SHUTDOWN__) return;
+        await Promise.race([
+          window.__RZMPS_BENCHMARK_SHUTDOWN__(),
+          new Promise(resolve => setTimeout(resolve, 2000)),
+        ]);
+      }).catch(() => {});
       if (browser) {
         try {
           await browser.close();
@@ -320,7 +350,9 @@ async function runBenchmark() {
   }
 }
 
-runBenchmark().catch((error) => {
+runBenchmarkWithRetry(runBenchmark, error => {
+  console.warn(`Discarding failed sample and retrying once in a fresh browser: ${error.message ?? error}`);
+}).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

@@ -204,7 +204,7 @@ export const metadata = {
   "description":
     "Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks.",
   "tags": [
-    "fireball"
+    "fireball", "explosion", "bursts", "sprites", "sprite-sheet", "lights", "distortion", "decals", "scorch"
   ],
   "category": "effects"
 };

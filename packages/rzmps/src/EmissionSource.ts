@@ -6,6 +6,8 @@ import type { Tag } from './types/Tag';
 
 /** CPU-managed attributes in the owning system's simulation space. */
 export interface EmissionSourceData {
+  /** Application metadata exposed to synchronous particle initializers. */
+  metadata?: unknown;
   transform: THREE.Matrix4;
   tags?: Tag[];
   color?: THREE.Color;
@@ -40,6 +42,7 @@ export default class EmissionSource implements SubSystemSource {
   realtime = 0;
   alive = true;
   private scalarScale = 1;
+  metadata?: unknown;
 
   constructor(readonly system: ParticleSystem, data: EmissionSourceData) {
     this.apply(data);
@@ -47,7 +50,7 @@ export default class EmissionSource implements SubSystemSource {
 
   /** Snapshot of canonical attributes; mutable values are copied. */
   get data(): EmissionSourceData {
-    return { transform: this.transform.clone(), tags: this.tags?.slice(),
+    return { metadata: this.metadata, transform: this.transform.clone(), tags: this.tags?.slice(),
       color: this.color.clone(), alpha: this.alpha, scale: this.scalarScale,
       velocity: this.velocity.clone(), mass: this.mass, distortionStrength: this.distortionStrength };
   }
@@ -58,6 +61,7 @@ export default class EmissionSource implements SubSystemSource {
 
   /** @internal CPU-only mutation; synchronization is deferred to the system update. */
   apply(data: Partial<EmissionSourceData>): void {
+    if ('metadata' in data) this.metadata = data.metadata;
     if (data.transform) this.transform.copy(data.transform);
     if ('tags' in data) this.tags = data.tags?.slice();
     if (data.color) this.color.copy(data.color);

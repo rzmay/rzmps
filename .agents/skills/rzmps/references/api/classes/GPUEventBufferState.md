@@ -114,6 +114,16 @@ sequence: number = 0;
 
 ***
 
+<a id="sequencenode"></a>
+
+### sequenceNode
+
+```ts
+readonly sequenceNode: UniformNode<"uint", number>;
+```
+
+***
+
 <a id="version"></a>
 
 ### version
@@ -212,7 +222,8 @@ initialize(renderer): void;
 readback(
    renderer,
    identityForEvent,
-   origin?
+   origin?,
+   materialForSource?
 ): Promise<GPUEventReadbackBatch>;
 ```
 
@@ -229,6 +240,10 @@ readback(
 ##### origin?
 
 `number`
+
+##### materialForSource?
+
+(`id`) => `Material`\<`MaterialEventMap`\> \| `undefined`
 
 #### Returns
 

@@ -43,3 +43,12 @@ new ParticleSystem({ simulationSpace: 'transform', simulationSpaceTransform: new
 
 parent.simulationSpace = 'source';
 parent.simulationSpaceTransform = new Object3D();
+
+parent.addSubSystem(new ParticleSystem({ renderers: [] }), { onEvent: {
+  rejected: () => false,
+  filtered: data => data === 'skip' ? false : { scale: 2 },
+  gpu: {
+    rejected: () => false,
+    filtered: data => data[0].x.greaterThan(0),
+  },
+} });

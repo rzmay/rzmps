@@ -154,6 +154,22 @@ Aligns child emission with collision impulse direction.
 
 ***
 
+<a id="impulseaffectscount"></a>
+
+### impulseAffectsCount?
+
+```ts
+optional impulseAffectsCount?: number;
+```
+
+Exponent scaling burst counts and emission rates by contact impulse; zero disables scaling.
+
+#### Inherited from
+
+[`SubSystemOptions`](SubSystemOptions.md).[`impulseAffectsCount`](SubSystemOptions.md#impulseaffectscount)
+
+***
+
 <a id="impulseaffectslifetime"></a>
 
 ### impulseAffectsLifetime?

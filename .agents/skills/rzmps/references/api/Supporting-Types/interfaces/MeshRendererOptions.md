@@ -14,6 +14,22 @@
 
 ## Properties
 
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`atlasOptions`](../../interfaces/RendererOptions.md#atlasoptions)
+
+***
+
 <a id="castshadow"></a>
 
 ### castShadow
@@ -111,10 +127,10 @@ optional eventScope?: EventScope;
 ### geometry
 
 ```ts
-geometry: BufferGeometry;
+geometry: TaggedValue<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>>;
 ```
 
-Shared geometry used when mesh is omitted; defaults to sphere geometry.
+One geometry or static variants sharing the material; defaults to sphere geometry.
 
 ***
 
@@ -146,6 +162,48 @@ Shared material used when mesh is omitted; takes precedence over materialOptions
 
 ***
 
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialComposite`](../../interfaces/RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCompositeGPU`](../../interfaces/RendererOptions.md#materialcompositegpu)
+
+***
+
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCopySampleMode`](../../interfaces/RendererOptions.md#materialcopysamplemode)
+
+***
+
 <a id="materialoptions"></a>
 
 ### materialOptions
@@ -155,6 +213,22 @@ materialOptions: MeshStandardMaterialParameters;
 ```
 
 Construction options for a default MeshStandardMaterial.
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialTarget`](../../interfaces/RendererOptions.md#materialtarget)
 
 ***
 
@@ -175,10 +249,22 @@ Allocated instance capacity; size it for the maximum visible population. Default
 ### mesh
 
 ```ts
-mesh: Mesh;
+mesh: TaggedValue<Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, Material<MaterialEventMap> | Material<MaterialEventMap>[], Object3DEventMap>>;
 ```
 
-Shared source geometry/material; takes precedence over geometry, material, and materialOptions.
+One source mesh or static mesh templates; takes precedence over geometry and material options.
+
+***
+
+<a id="meshindex"></a>
+
+### meshIndex?
+
+```ts
+optional meshIndex?: DynamicValue<number>;
+```
+
+Geometry choice; omission chooses a stable random mesh per particle.
 
 ***
 
@@ -223,3 +309,19 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](../../interfaces/RendererOptions.md).[`tags`](../../interfaces/RendererOptions.md#tags)
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`textureCopyQuality`](../../interfaces/RendererOptions.md#texturecopyquality)

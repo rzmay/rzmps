@@ -1,9 +1,12 @@
+import { matrixColumnGPU } from '../helpers/simulationFrame';
 import type EmissionShape from '../EmissionShape';
 import type Emitter from '../Emitter';
 import { EmissionSource } from '../enums/EmissionSource';
 import { TagSelectionMethod } from '../enums/TagSelectionMethod';
 import type { Node } from 'three/webgpu';
-import { uint } from 'three/tsl';
+import { uint, mat4 } from 'three/tsl';
+import { FLOAT_SLOT_COUNT } from './ParticleLayout';
+import { GPU_EVENT_FLOAT_SLOT_COUNT, readGPUEvent, type GPUEventNodeRecord } from './EventBuffer';
 import {
   createEmptyGPUParticleBufferState,
   type GPUParticleBufferState,
@@ -97,7 +100,8 @@ export class GPUEmissionRunBufferState {
 
   constructor(capacity: number) {
     this.capacity = Math.max(1, Math.floor(capacity));
-    this.snapshots = createEmptyGPUParticleBufferState(this.capacity);
+    this.snapshots = createEmptyGPUParticleBufferState(Math.ceil(this.capacity
+      * (FLOAT_SLOT_COUNT + GPU_EVENT_FLOAT_SLOT_COUNT + 4) / FLOAT_SLOT_COUNT));
     this.snapshots.ensureCount(this.capacity);
   }
 
@@ -125,6 +129,31 @@ export class GPUEmissionRunBufferState {
       collisionImpulse: particle.scalarVelocity,
       particle,
     };
+  }
+
+  /** @internal Persist the original event and producer frame in the existing run float buffer. */
+  storeEvent(index: Node<'uint'>, event: GPUEventNodeRecord, sourceToWorld: Node<'mat4'>): void {
+    const base = this.eventBase(index);
+    event.snapshot(this.snapshots.storage.floatStorage, base);
+    for (let i = 0; i < 4; i++) {
+      this.snapshots.storage.floatStorage.element(base.add(GPU_EVENT_FLOAT_SLOT_COUNT + i))
+        .assign(matrixColumnGPU(sourceToWorld, i));
+    }
+  }
+
+  event(index: Node<'uint'>): GPUEventNodeRecord {
+    return readGPUEvent(this.snapshots.storage.floatStorage, this.eventBase(index));
+  }
+
+  sourceToWorld(index: Node<'uint'>): Node<'mat4'> {
+    const base = this.eventBase(index).add(GPU_EVENT_FLOAT_SLOT_COUNT);
+    const storage = this.snapshots.storage.floatStorage;
+    return mat4(storage.element(base), storage.element(base.add(1)),
+      storage.element(base.add(2)), storage.element(base.add(3)));
+  }
+
+  private eventBase(index: Node<'uint'>): Node<'uint'> {
+    return index.mul(GPU_EVENT_FLOAT_SLOT_COUNT + 4).add(this.capacity * FLOAT_SLOT_COUNT);
   }
 
   storeParticle(index: Node<'uint'>, particle: GPUParticleLike): void {

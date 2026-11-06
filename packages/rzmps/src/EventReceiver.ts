@@ -51,6 +51,10 @@ export default class EventReceiver {
   private _receiverSystem?: ParticleSystem;
   private _eventNames: readonly string[] = [];
   private _eventSignature = '';
+  private _selectionCache?: {
+    system: ParticleSystem; scope: string; names: readonly string[];
+    parent?: ParticleSystem; children: ParticleSystem[];
+  };
   private _eventResolvedScope?: EventScope;
   private _eventDefaultScope: EventScope = 'local';
   private _eventRevision = 0;
@@ -88,6 +92,11 @@ export default class EventReceiver {
     this._eventGPUNative = value;
   }
 
+  /** Names selected by this component, including callback subscriptions supplied by subclasses. */
+  get selectedEventNames(): readonly string[] {
+    return this.events;
+  }
+
   /** @internal Event names selected after applying relationship overrides and emitter triggers. */
   get subscriptions(): readonly string[] {
     return this._eventNames;
@@ -99,9 +108,21 @@ export default class EventReceiver {
   synchronize(
     system: ParticleSystem,
     defaultScope: EventScope = 'local',
-    names = this.events,
+    names = this.selectedEventNames,
     scope: EventScope = this.eventScope ?? defaultScope,
   ): void {
+    const scopeKey = typeof scope === 'string' ? scope : scope.join('|');
+    const cached = this._selectionCache;
+    const includes = (origin: EventOrigin) => typeof scope === 'string' ? scope === origin : scope.includes(origin);
+    const children = includes('child') ? system.subSystems : undefined;
+    const parent = includes('parent') ? system.subSystemParent : undefined;
+    if (cached?.system === system && cached.scope === scopeKey && cached.parent === parent
+      && cached.names.length === names.length && cached.names.every((name, index) => name === names[index])
+      && cached.children.length === (children?.size ?? 0)
+      && cached.children.every(child => children?.has(child))) return;
+
+    this._selectionCache = { system, scope: scopeKey, names: [...names], parent,
+      children: children ? [...children.keys()] : [] };
     this._receiverSystem = system;
     this._eventNames = names;
     this._eventDefaultScope = defaultScope;
@@ -149,7 +170,7 @@ export default class EventReceiver {
     system: ParticleSystem,
     deltaTime: number,
     defaultScope: EventScope = 'local',
-    names = this.events,
+    names = this.selectedEventNames,
     scope?: EventScope,
   ): EventExecutionContext {
     this.synchronize(system, defaultScope, names, scope);
@@ -163,7 +184,7 @@ export default class EventReceiver {
     system: ParticleSystem,
     deltaTime: number,
     defaultScope: EventScope = 'local',
-    names = this.events,
+    names = this.selectedEventNames,
     scope?: EventScope,
   ): EventExecutionContext {
     this.executionContext = this.createExecutionContext(this.begin(system, deltaTime, defaultScope, names, scope));
@@ -183,7 +204,8 @@ export default class EventReceiver {
 
   // Pending CPU delivery: deduplicate by event identity and retain a bounded queue.
 
-  private receive(event: SimulationEvent): void {
+  /** Components may handle named events immediately; the default retains an execution batch. */
+  protected receive(event: SimulationEvent): void {
     // A dispatcher delivers once; identity also protects explicit forwarding of the same event.
     if (this._eventPending.some(value => value.id === event.id)) return;
 
@@ -216,6 +238,7 @@ export default class EventReceiver {
     this._eventPending = [];
     this._eventBatch = Object.freeze([]);
     this._eventSignature = '';
+    this._selectionCache = undefined;
     this._receiverSystem = undefined;
     this._eventResolvedScope = undefined;
 

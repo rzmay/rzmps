@@ -74,7 +74,10 @@ emit(
    point,
    position,
    normal,
-   impulse
+   impulse,
+   materialCopy?,
+   materialCopyU?,
+   materialCopyV?
 ): void;
 ```
 
@@ -99,6 +102,18 @@ emit(
 ##### impulse
 
 `Node`\<`"vec3"`\>
+
+##### materialCopy?
+
+`Node`\<`"vec4"`\> = `...`
+
+##### materialCopyU?
+
+`Node`\<`"vec4"`\> = `...`
+
+##### materialCopyV?
+
+`Node`\<`"vec4"`\> = `...`
 
 #### Returns
 

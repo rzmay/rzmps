@@ -30,6 +30,16 @@ alpha: number;
 
 ***
 
+<a id="appearanceframe"></a>
+
+### appearanceFrame?
+
+```ts
+optional appearanceFrame?: Matrix4;
+```
+
+***
+
 <a id="emissiontransform"></a>
 
 ### emissionTransform?
@@ -49,6 +59,18 @@ Surface-local emission frame; +Y points out of the decal.
 ```ts
 lifetime: number;
 ```
+
+***
+
+<a id="materialtemplate"></a>
+
+### materialTemplate
+
+```ts
+materialTemplate: Material;
+```
+
+Caller-owned template selected when this mark was created.
 
 ***
 

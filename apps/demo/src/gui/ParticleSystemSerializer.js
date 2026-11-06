@@ -138,6 +138,7 @@ export class ParticleSystemSerializer {
             inheritAlpha: options.inheritAlpha,
             inheritMass: options.inheritMass,
             inheritVelocity: options.inheritVelocity,
+            impulseAffectsCount: options.impulseAffectsCount,
             impulseAffectsScale: options.impulseAffectsScale,
             impulseAffectsSpeed: options.impulseAffectsSpeed,
             impulseAffectsLifetime: options.impulseAffectsLifetime,
@@ -253,8 +254,12 @@ export class ParticleSystemSerializer {
 
     serializeRenderer(renderer) {
         if (renderer instanceof DecalRenderer) {
-            const material = `new THREE.${renderer.material.type}(${this.serializeMaterialOptions(renderer.material, true)})`;
+            // Serialize each complete template so correlated maps survive a preset round trip.
+            const materials = [renderer.material].flat().map(material =>
+                `new THREE.${material.type}(${this.serializeMaterialOptions(material, true)})`);
+            const material = Array.isArray(renderer.material) ? `[${materials.join(', ')}]` : materials[0];
             const options = {
+                materialIndex: renderer.materialIndex,
                 direction: renderer.direction,
                 hitSelection: renderer.hitSelection,
                 maxHits: renderer.maxHits,
@@ -262,6 +267,7 @@ export class ParticleSystemSerializer {
                 depth: renderer.depth,
                 offset: renderer.offset,
                 size: renderer.size,
+                rotation: renderer.rotation,
                 color: renderer.color,
                 lifetime: renderer.lifetime,
                 opacity: renderer.opacity,
@@ -273,6 +279,14 @@ export class ParticleSystemSerializer {
                 maxDecals: renderer.maxDecals,
                 onSpawn: renderer.onSpawn,
                 onCollision: renderer.onCollision,
+                impulseThreshold: renderer.impulseThreshold,
+                impulseAffectsSize: renderer.impulseAffectsSize,
+                impulseAffectsOpacity: renderer.impulseAffectsOpacity,
+                impulseAffectsLifetime: renderer.impulseAffectsLifetime,
+                emissionTags: renderer.emissionTags,
+                onEvent: renderer.parameterEvents,
+                events: renderer.events,
+                eventScope: renderer.eventScope,
                 onDeath: renderer.onDeath,
                 continuousRate: renderer.continuousRate,
                 ratio: renderer.ratio,
@@ -290,6 +304,12 @@ export class ParticleSystemSerializer {
         if (renderer instanceof AudioRenderer) {
             const options = {
                 loop: renderer.loop,
+                onSpawn: renderer.onSpawn,
+                onDeath: renderer.onDeath,
+                onCollision: renderer.onCollision,
+                onEvent: renderer.parameterEvents,
+                events: renderer.events,
+                eventScope: renderer.eventScope,
                 maxClips: renderer.maxClips,
                 ratio: renderer.ratio,
                 collisionRatio: renderer.collisionRatio,
@@ -342,9 +362,14 @@ export class ParticleSystemSerializer {
             return `new AudioRenderer(${this.serializeValue(options)})`;
         }
         if (renderer instanceof SpriteRenderer) {
-            const texture = this.serializeTexture(renderer.texture);
+            const texture = this.serializeResourceTree(renderer.textureSource,
+                value => typeof value === 'string' || value?.isTexture,
+                value => typeof value === 'string' ? this.textureReference(value) ?? JSON.stringify(value)
+                    : this.serializeTexture(value));
             const options = this.serializeValue({
                 fps: renderer.fps,
+                textureIndex: renderer.textureIndex,
+                materialCopySampleMode: renderer.materialCopySampleMode,
                 billboard: renderer.billboard,
                 tileSize: renderer.tileSize,
                 tileMargin: renderer.tileMargin,
@@ -379,8 +404,12 @@ export class ParticleSystemSerializer {
         }
         if (renderer instanceof MeshRenderer) {
             return `new MeshRenderer(${this.serializeValue({
-                mesh: this.rawCode(this.serializeMesh(renderer.mesh)),
-                maxParticles: renderer.instances.instanceMatrix.count,
+                mesh: this.rawCode(this.serializeResourceTree(renderer.meshSource,
+                    value => value?.isMesh || value?.isBufferGeometry,
+                    value => this.serializeMesh(value.isMesh ? value : new THREE.Mesh(value, renderer.mesh.material)))),
+                meshIndex: renderer.meshIndex,
+                maxParticles: renderer.maxParticles,
+                materialCopySampleMode: renderer.materialCopySampleMode,
                 castShadow: renderer.castShadow,
                 receiveShadow: renderer.receiveShadow,
                 ...this.getLODOptions(renderer, true, true),
@@ -418,6 +447,14 @@ export class ParticleSystemSerializer {
 
     getLODOptions(target, includeCount = false, includeSize = false) {
         const options = {};
+        if ('materialComposite' in target) {
+            options.materialComposite = target.materialComposite;
+            options.materialCompositeGPU = target.materialCompositeGPU;
+            if (target.textureCopyQuality !== 1) options.textureCopyQuality = target.textureCopyQuality;
+            if (target.atlasOptions && Object.keys(target.atlasOptions).length) {
+                options.atlasOptions = target.atlasOptions;
+            }
+        }
         if (target.lod) options.lod = target.lod;
         if (target.children) options.children = target.children;
         if (target.compensation && target.compensation !== 'none') options.compensation = target.compensation;
@@ -438,17 +475,27 @@ export class ParticleSystemSerializer {
         );
     }
 
+    serializeResourceTree(value, isLeaf, serializeLeaf) {
+        if (isLeaf(value)) return serializeLeaf(value);
+        if (Array.isArray(value)) {
+            return `[${value.map(child => this.serializeResourceTree(child, isLeaf, serializeLeaf)).join(', ')}]`;
+        }
+        return `{ ${Object.entries(value).map(([tag, child]) =>
+            `${this.serializeKey(tag)}: ${this.serializeResourceTree(child, isLeaf, serializeLeaf)}`).join(', ')} }`;
+    }
+
     serializeMesh(mesh) {
         const geometry = mesh.geometry;
         const geometryCtor = geometry.type;
         const params = geometry.parameters;
-        const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         const geometryExpression = params
             ? `new THREE.${geometryCtor}(${Object.values(params).map((value) => this.serializeValue(value)).join(', ')})`
-            : `new THREE.BufferGeometry() /* replace with ${geometry.type} */`;
-        const materialExpression = material
-            ? `new THREE.${material.type}(${this.serializeMaterialOptions(material)})`
-            : 'new THREE.MeshStandardMaterial()';
+            : `new THREE.BufferGeometryLoader().parse(${JSON.stringify(geometry.toJSON())})`;
+        const expressions = materials.map(material => material
+            ? `new THREE.${material.type}(${this.serializeMaterialOptions(material, true)})`
+            : 'new THREE.MeshStandardMaterial()');
+        const materialExpression = Array.isArray(mesh.material) ? `[${expressions.join(', ')}]` : expressions[0];
         return `new THREE.Mesh(${geometryExpression}, ${materialExpression})`;
     }
 
@@ -460,11 +507,12 @@ export class ParticleSystemSerializer {
         const options = {};
 
         if (loadTextures) {
-            for (const key of ['map', 'alphaMap', 'normalMap']) {
+            for (const key of ['map', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap']) {
                 const texture = material[key];
                 if (!texture) continue;
                 options[key] = this.rawCode(
-                    `Object.assign(new THREE.TextureLoader().load(${this.serializeTexture(texture)}), { colorSpace: ${this.serializeValue(texture.colorSpace)} })`,
+                    `Object.assign(new THREE.TextureLoader().load(${this.serializeTexture(texture)}), `
+                        + `{ colorSpace: ${this.serializeValue(texture.colorSpace)}, channel: ${texture.channel} })`,
                 );
             }
             if (material.normalMap) options.normalScale = material.normalScale;
@@ -582,17 +630,24 @@ export class ParticleSystemSerializer {
             .find(([, value]) => value === source)?.[0];
     }
 
+    resourceTreeUsesBuiltInTexture(value) {
+        if (typeof value === 'string') return Boolean(this.textureReference(value));
+        if (value?.isTexture) return Boolean(this.textureReference(this.textureSource(value)));
+        return Object.values(value ?? {}).some(child => this.resourceTreeUsesBuiltInTexture(child));
+    }
+
     rendererUsesBuiltInTexture(renderer) {
         if (renderer instanceof SpriteRenderer) {
             return Boolean(
-                this.textureReference(this.textureSource(renderer.texture))
+                this.resourceTreeUsesBuiltInTexture(renderer.textureSource)
                 || this.textureReference(this.textureSource(renderer.alphaMap)),
             );
         }
 
         if (renderer instanceof TrailRenderer || renderer instanceof DecalRenderer) {
-            return ['map', 'alphaMap', 'normalMap'].some(key =>
-                Boolean(this.textureReference(this.textureSource(renderer.material?.[key]))));
+            return [renderer.material].flat().some(material =>
+                ['map', 'alphaMap', 'normalMap', 'aoMap'].some(key =>
+                    Boolean(this.textureReference(this.textureSource(material?.[key])))));
         }
 
         return false;

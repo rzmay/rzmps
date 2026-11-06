@@ -41,16 +41,19 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
     page.on('requestfailed', request => pending.delete(request));
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => {
-      if (message.type() === 'error') consoleErrors.push(message.text());
+      if (message.type() === 'error' || /texture units|too many samplers/i.test(message.text())) {
+        consoleErrors.push(message.text());
+      }
     });
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-    const cases = ['Snow', 'LOD Stress Test', 'Fireworks', 'Fire', 'Fireflies'].map(preset => [preset, 'webgl']);
-    cases.push(['Fireflies', 'webgpu']);
+    const cases = ['Snow', 'LOD Stress Test', 'Fireworks', 'Fire', 'Fireflies', 'Destruction'].map(preset => [preset, 'webgl']);
+    cases.push(['Fireflies', 'webgpu'], ['Doppler Bullet', 'webgl']);
     for (const [preset, backend] of cases.filter(([name]) => (
       !process.env.RZMPS_GUI_PRESET || name === process.env.RZMPS_GUI_PRESET
     ))) {
       try {
-        await page.goto(`${origin}/?preset=${encodeURIComponent(preset)}&renderer=${backend}`, {
+        const scene = preset === 'Doppler Bullet' ? '&scene=Cornell%20Box' : '';
+        await page.goto(`${origin}/?preset=${encodeURIComponent(preset)}&renderer=${backend}${scene}`, {
           // The selectors and monitor checks below establish readiness without waiting for decorative assets.
           waitUntil: 'domcontentloaded',
         });
@@ -69,6 +72,35 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
       const folders = await page.$$eval('.lil-gui .lil-title', elements => (
         elements.map(element => element.textContent)
       ));
+      if (preset === 'Destruction') {
+        // Scene setup follows GUI construction and code export; both used to throw for BatchedMesh.
+        await page.evaluate(() => {
+          const select = [...document.querySelectorAll('.psgui-demo select')]
+            .find(element => [...element.options].some(option => option.text === 'UV debug'));
+          select.value = [...select.options].find(option => option.text === 'UV debug').value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await page.waitForFunction(() => new URL(location.href).searchParams.get('scene') === 'UV debug');
+        await page.waitForNetworkIdle();
+      }
+      if (preset === 'Doppler Bullet') {
+        await page.waitForNetworkIdle();
+        for (const name of ['Fire', 'Doppler Bullet']) {
+          await page.evaluate(name => {
+            const select = [...document.querySelectorAll('.psgui-demo select')]
+              .find(element => [...element.options].some(option => option.text === 'Doppler Bullet'));
+            select.value = [...select.options].find(option => option.text === name).value;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+          }, name);
+          await page.waitForFunction(name => new URL(location.href).searchParams.get('preset') === name, {}, name);
+          await page.waitForNetworkIdle();
+          assert.equal(new URL(page.url()).searchParams.get('scene'), 'Cornell Box');
+        }
+        const renderingErrors = consoleErrors.filter(text => (
+          /texture units|too many samplers|THREE\.|WebGL/.test(text)
+        ));
+        assert.deepEqual(renderingErrors, [], 'Cornell/Bullet startup and replacement must not overflow samplers');
+      }
       assert.ok(folders.includes('LOD'), `${preset}: population LOD controls`);
       assert.ok(folders.includes('Renderer Children'), `${preset}: renderer children controls`);
       if (preset === 'Fireflies') {

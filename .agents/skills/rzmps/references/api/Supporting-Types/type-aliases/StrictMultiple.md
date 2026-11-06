@@ -9,7 +9,7 @@
 # Type Alias: StrictMultiple\<T\>
 
 ```ts
-type StrictMultiple<T> = T | [T, ...[T]];
+type StrictMultiple<T> = T | [T, ...T[]];
 ```
 
 ## Type Parameters

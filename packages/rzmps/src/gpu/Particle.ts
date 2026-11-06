@@ -9,9 +9,8 @@ import {
 import * as THREE from 'three';
 import { StorageBufferAttribute, IndirectStorageBufferAttribute, type ComputeNode } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
-import { float, uint, uvec2, Fn, instanceIndex, storage } from 'three/tsl';
-import Particle from '../Particle';
-import { getParticleSourceBinding } from '../ParticleSourceBindings';
+import { vec4, float, uint, uvec2, Fn, instanceIndex, storage } from 'three/tsl';
+import Particle, { getParticleSourceBinding } from '../Particle';
 import type ParticleSystem from '../ParticleSystem';
 import type { GPUAllocationWriter } from './AllocationBuffer';
 import type { GPUCollisionEventWriter, GPUEventWriter } from './EventBuffer';
@@ -83,6 +82,9 @@ export interface GPUParticleUpdateContext {
 }
 
 export interface GPUParticleLike {
+  readonly materialCopy?: Node<'vec4'>;
+  readonly materialCopyU?: Node<'vec4'>;
+  readonly materialCopyV?: Node<'vec4'>;
   /** Marks this particle dead in the current GPU update. */
   kill(): void;
   emitEvent(event: string, payload?: GPUEventPayload): void;
@@ -122,6 +124,9 @@ export interface GPUParticleLike {
 
 /** Shader-node view of one particle; unlike Particle, this is not a CPU value object. */
 export class GPUParticleContext implements GPUParticleLike {
+  readonly materialCopy: Node<'vec4'>;
+  readonly materialCopyU: Node<'vec4'>;
+  readonly materialCopyV: Node<'vec4'>;
   /** Marks the particle dead and advances its age past its lifetime using finite GPU values. */
   kill(): void {
     this.realtime.assign(this.lifetime.mul(1000).add(1));
@@ -199,7 +204,11 @@ export class GPUParticleContext implements GPUParticleLike {
     generation: Node<'uint'>,
     materializeLocals = false,
     lodPriority: Node<'uint'> = uint(0),
+    appearance: Node<'vec4'>[] = [vec4(0), vec4(0), vec4(0)],
   ) {
+    this.materialCopy = materializeLocals ? appearance[0].toVar() : appearance[0];
+    this.materialCopyU = materializeLocals ? appearance[1].toVar() : appearance[1];
+    this.materialCopyV = materializeLocals ? appearance[2].toVar() : appearance[2];
     this.lodPriority = materializeLocals ? lodPriority.toVar('lodPriority') : lodPriority;
     this.index = index;
     this.position = materializeLocals ? vectors.position.toVar('particlePosition') : vectors.position;
@@ -238,7 +247,8 @@ export class GPUParticleContext implements GPUParticleLike {
 }
 
 export class GPUParticleStorage {
-  private readonly floatStorage: PackedFloatStorage;
+  /** @internal Shared packed storage for schema-compatible emission snapshots. */
+  readonly floatStorage: PackedFloatStorage;
   private readonly uintStorage: PackedUintStorage;
 
   constructor(
@@ -300,6 +310,9 @@ export class GPUParticleStorage {
       state.z,
       materializeLocals,
       state.w,
+      [this.floatElement(ParticleFloatSlot.MaterialCopy, index),
+        this.floatElement(ParticleFloatSlot.MaterialCopyU, index),
+        this.floatElement(ParticleFloatSlot.MaterialCopyV, index)],
     );
   }
 
@@ -334,10 +347,16 @@ export class GPUParticleStorage {
     state.y.assign(particle.tagMask);
     state.z.assign(particle.generation);
     state.w.assign(particle.lodPriority);
+    this.floatElement(ParticleFloatSlot.MaterialCopy, particle.index).assign(particle.materialCopy ?? vec4(0));
+    this.floatElement(ParticleFloatSlot.MaterialCopyU, particle.index).assign(particle.materialCopyU ?? vec4(0));
+    this.floatElement(ParticleFloatSlot.MaterialCopyV, particle.index).assign(particle.materialCopyV ?? vec4(0));
   }
 }
 
 export class GPUParticleRenderContext {
+  get materialCopy(): Node<'vec4'> { return this.owner?.appearance(this.index, 0) ?? vec4(0); }
+  get materialCopyU(): Node<'vec4'> { return this.owner?.appearance(this.index, 1) ?? vec4(0); }
+  get materialCopyV(): Node<'vec4'> { return this.owner?.appearance(this.index, 2) ?? vec4(0); }
   readonly velocity: Node<'vec3'>;
   readonly contribution: Node<'float'>;
   readonly index: Node<'uint'>;
@@ -407,6 +426,9 @@ export class GPUParticleRenderContext {
 
 /** Accesses the compact particle attributes consumed by renderer compute/material nodes. */
 export class GPUParticleRenderStorage {
+  appearance(index: Node<'uint'>, row: number): Node<'vec4'> {
+    return renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.MaterialCopy + row, index);
+  }
   hierarchy?: {
     mapping: { element(index: Node | number): Node<'uvec2'> };
     originalCount: Node<'uint'>;
@@ -504,11 +526,15 @@ export class GPUParticleRenderStorage {
     state.y.assign(particle.tagMask);
     state.z.assign(particle.generation);
     state.w.assign(particle.lodPriority);
+    this.appearance(particle.index, 0).assign(particle.materialCopy ?? vec4(0));
+    this.appearance(particle.index, 1).assign(particle.materialCopyU ?? vec4(0));
+    this.appearance(particle.index, 2).assign(particle.materialCopyV ?? vec4(0));
   }
 }
 
 /** Owns the canonical simulation attributes and their CPU synchronization paths. */
 export class GPUParticleBufferState {
+  readonly floatStride = FLOAT_SLOT_COUNT * 4;
   count = 0;
   capacity: number;
   version = 0;
@@ -696,6 +722,9 @@ export class GPUParticleBufferState {
       particle.realtime = readScalar(this.floatData, index, ParticleFloatSlot.ScalarVelocityRealtime);
       particle.alive = this.uintData[stateOffset(index)] !== 0;
       particle.lodPriority = this.uintData[stateOffset(index) + 3] / 4294967296;
+      particle.materialCopy.fromArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopy));
+      particle.materialCopyU.fromArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopyU));
+      particle.materialCopyV.fromArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopyV));
       particle.cache();
     }
   }
@@ -764,6 +793,7 @@ export class GPUParticleBufferState {
     const sourceOffset = (index * FLOAT_SLOT_COUNT + ParticleFloatSlot.SourceIdentity) * 16;
     const sourceWords = new Uint32Array(this.floatData.buffer, sourceOffset, 4);
     sourceWords.set(source ? [source.slot, source.generation, 2, 2] : [0, 0, 0, 0]);
+    particle.writeMaterialCopy(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopy));
 
     writeState(
       this.uintData,
@@ -778,6 +808,7 @@ export class GPUParticleBufferState {
 
 /** Owns compact render-only attributes produced from the canonical simulation buffer. */
 export class GPUParticleRenderBufferState {
+  readonly floatStride = RENDER_FLOAT_SLOT_COUNT * 4;
   /** Actual GPU-produced visual range, including original simulation slots. */
   instanceCountNode?: Node<'uint'>;
   /** Source simulation slot for system-owned LOD spacing. */
@@ -904,4 +935,12 @@ export function destroyGPUStorageAttribute(
   attribute: StorageBufferAttribute,
 ): void {
   destroyStorageAttribute(renderer, attribute);
+}
+
+
+/** @internal Reset schema-owned optional birth attributes when a storage slot is recycled. */
+export function resetInitializationAttributesGPU(particle: GPUParticleLike): void {
+  particle.materialCopy?.assign(vec4(0));
+  particle.materialCopyU?.assign(vec4(0));
+  particle.materialCopyV?.assign(vec4(0));
 }
