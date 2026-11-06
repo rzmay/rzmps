@@ -46,9 +46,13 @@ function getChromeArgs() {
   ];
 
   if (process.env.CI === 'true') {
+    // Software shader compilation can trip Chromium's GPU watchdog before warmup finishes.
+    // Three.js uses the same workaround: https://github.com/mrdoob/three.js/pull/33650
+    // The sample timeout still bounds hangs, and device/validation failures remain fatal.
     args.push(
       '--no-sandbox',
       '--disable-setuid-sandbox',
+      '--disable-gpu-watchdog',
       '--use-gl=angle',
       '--use-angle=swiftshader',
       '--enable-unsafe-swiftshader',
