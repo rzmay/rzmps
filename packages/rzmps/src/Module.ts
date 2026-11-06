@@ -114,14 +114,9 @@ export default class Module extends EventReceiver {
   // Sub-modules on which this module depends.
   // Useful for pre-processing or combining priority stages.
   public dependents: Module[] = [];
-  initializeParticle(_particle: Particle, _context: ParticleInitializationContext): void {
-    void _particle;
-    void _context;
-  }
-  initializeParticleGPU(_particle: GPUParticleLike, _context: GPUParticleInitializationContext): void {
-    void _particle;
-    void _context;
-  }
+  /** Optional birth hooks; ordinary modifier modules do not run initialization work. */
+  initializeParticle?(particle: Particle, context: ParticleInitializationContext): void;
+  initializeParticleGPU?(particle: GPUParticleLike, context: GPUParticleInitializationContext): void;
 
   tags?: Tag[];
   condition: ModuleCondition;
@@ -185,10 +180,9 @@ export default class Module extends EventReceiver {
     this.spatialGridOptions = options.spatialGridOptions;
   }
 
-  /** Whether both modification and any custom condition have GPU implementations. */
+  /** Whether modification, birth hooks and custom conditions support GPU processing. */
   get supportsGPU(): boolean {
-    return (this.initializeParticle === Module.prototype.initializeParticle
-      || this.initializeParticleGPU !== Module.prototype.initializeParticleGPU)
+    return (!this.initializeParticle || !!this.initializeParticleGPU)
       && this.modifyGPU !== Module.GPU_UNSUPPORTED
       && (!this._hasCustomCondition || this.conditionGPU !== undefined);
   }

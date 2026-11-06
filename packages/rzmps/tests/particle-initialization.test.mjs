@@ -3,6 +3,49 @@ import * as THREE from 'three';
 import { Emitter, Module, ParticleSystem, MaterialCopy, MaterialCopySource, MaterialCopySampleMode }
   from '../build/index.mjs';
 
+// Ordinary modifiers have no birth hooks or extra birth-state cache to populate.
+{
+  const { Particle } = await import('../build/index.mjs');
+  const ordinary = new Module(() => {}, { modifyGPU() {} });
+  assert.equal(ordinary.initializeParticle, undefined);
+  assert.equal(ordinary.initializeParticleGPU, undefined);
+  assert.equal(ordinary.supportsGPU, true);
+  ordinary.initializeParticle = () => {};
+  assert.equal(ordinary.supportsGPU, false, 'CPU-only initialization requires a CPU fallback');
+  ordinary.initializeParticleGPU = () => {};
+  assert.equal(ordinary.supportsGPU, true);
+  ordinary.initializeParticle = undefined;
+  ordinary.initializeParticleGPU = undefined;
+
+  const owner = new ParticleSystem({ emitters: [], renderers: [], modules: ordinary });
+  const newborn = new Particle();
+  newborn.cache = () => { throw new Error('Unused initialization cached particle state'); };
+  owner.initializeParticle(newborn, { system: owner });
+  ordinary.initializeParticle = () => { throw new Error('Tag filtering was skipped'); };
+  ordinary.tags = ['selected'];
+  owner.initializeParticle(newborn, { system: owner });
+
+  // Birth context and dependent ordering remain synchronous; replacement hooks affect later births.
+  const calls = [];
+  const first = new Module(() => {}, { initializeParticle: (_particle, context) => calls.push(context) });
+  const dependent = new Module(() => {}, { initializeParticle: (_particle, context) => calls.push(context) });
+  first.dependents = [dependent];
+  owner.modules = [ordinary, first];
+  const selected = new Particle();
+  let caches = 0;
+  selected.cache = () => { caches++; };
+  owner.initializeParticle(selected, { system: owner });
+  owner.initializeParticle(selected, { system: owner });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0], calls[1], 'selected hooks share the resolved birth context');
+  assert.equal(caches, 1);
+  first.initializeParticle = undefined;
+  dependent.initializeParticle = () => calls.push('replacement');
+  owner.initializeParticle(new Particle(), { system: owner });
+  assert.equal(calls.at(-1), 'replacement');
+  owner.destroy();
+}
+
 const order = [];
 const system = new ParticleSystem({ emitters: new Emitter({ rate: 0, bursts: [{ time: 0, count: 1 }],
   initialValues: { lifetime: 10, mass: 3 } }), renderers: [], gravityModifier: 0,

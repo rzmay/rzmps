@@ -193,9 +193,7 @@ export default class MeshBatch {
       this.dummy.scale.copy(particle.scale);
       this.dummy.updateMatrix();
       this.color.set(particle.color.r, particle.color.g, particle.color.b, particle.alpha);
-      particle.materialCopy.toArray(data, slot * 12);
-      particle.materialCopyU.toArray(data, slot * 12 + 4);
-      particle.materialCopyV.toArray(data, slot * 12 + 8);
+      particle.writeMaterialCopy(data, slot * 12);
 
       this.parts.forEach((part, candidate) => {
         const id = slot * this.parts.length + candidate;

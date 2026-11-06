@@ -5,6 +5,46 @@ import {
   ThreeCollisionBackend, Emitter, createGPUParticleBufferState, GPUEventBufferState, GPUEventType, SpriteRenderer,
 } from '../build/index.mjs';
 
+// Ordinary particles, clones, uploads and renderer updates must not allocate appearance vectors.
+{
+  const ordinary = new Particle();
+  const assertLazy = particle => {
+    assert.equal(particle._materialCopy, undefined);
+    assert.equal(particle._materialCopyU, undefined);
+    assert.equal(particle._materialCopyV, undefined);
+  };
+  assertLazy(ordinary);
+  assertLazy(ordinary.clone());
+  const upload = new Float32Array(16).fill(9);
+  ordinary.writeMaterialCopy(upload, 4);
+  assert.deepEqual([...upload], [9, 9, 9, 9, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  assertLazy(ordinary);
+  const buffers = createGPUParticleBufferState([ordinary]);
+  buffers.upload([ordinary]);
+  assertLazy(ordinary);
+  buffers.dispose();
+
+  const view = new MeshRenderer();
+  const owner = new ParticleSystem({ emitters: [], renderers: view });
+  view.update([ordinary], owner);
+  assertLazy(ordinary);
+  assert.equal(owner._materialCopyRegistry, undefined, 'ordinary rendering does not create a registry');
+  assert.equal(view.appearance, undefined);
+
+  // Explicitly registered bindings still activate appearance without an inspection pass over particles.
+  const source = new THREE.MeshStandardMaterial({ color: 'red' });
+  ordinary.materialCopy.set(owner.materialCopyRegistry.register(source), 0.5, 0.5, MaterialCopySampleMode.Color);
+  view.update([ordinary], owner);
+  assert.ok(view.appearance);
+  ordinary.materialCopyU = new THREE.Vector4(1, 2, 3, 4);
+  const clone = ordinary.clone();
+  assert.notEqual(clone.materialCopy, ordinary.materialCopy);
+  assert.deepEqual(clone.materialCopyU.toArray(), [1, 2, 3, 4]);
+  clone.materialCopyU.x++;
+  assert.equal(ordinary.materialCopyU.x, 1);
+  owner.destroy(); source.dispose();
+}
+
 // GPU baking has no CPU image reads; aliases issue one draw, and ordinary frames issue none.
 const atlas = new TextureAtlas({ tileSize: 16, padding: 2 });
 const source = new THREE.Texture({ width: 64, height: 32 });

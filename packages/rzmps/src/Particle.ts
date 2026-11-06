@@ -88,11 +88,29 @@ export function setParticleSourceBinding(particle: Particle, binding?: ParticleS
 const eventOwners = new WeakMap<Particle, { emitEvent(id: string, event: string, data?: unknown): void }>();
 /** Mutable particle state with separate birth and cached permanent values. */
 class Particle {
-  /** Material source ID, impact UV, and sampling mode. Zero source uses renderer defaults. */
-  materialCopy = new THREE.Vector4();
-  /** UV gradient rows, transformed into particle-local coordinates at birth. */
-  materialCopyU = new THREE.Vector4();
-  materialCopyV = new THREE.Vector4();
+  private _materialCopy?: THREE.Vector4;
+  private _materialCopyU?: THREE.Vector4;
+  private _materialCopyV?: THREE.Vector4;
+
+  /** Material source ID, impact UV, and sampling mode. Allocated on first access. */
+  get materialCopy(): THREE.Vector4 { return this._materialCopy ??= new THREE.Vector4(); }
+  set materialCopy(value: THREE.Vector4) { this._materialCopy = value; }
+
+  /** UV gradient rows, transformed into particle-local coordinates at birth. Allocated on first access. */
+  get materialCopyU(): THREE.Vector4 { return this._materialCopyU ??= new THREE.Vector4(); }
+  set materialCopyU(value: THREE.Vector4) { this._materialCopyU = value; }
+  get materialCopyV(): THREE.Vector4 { return this._materialCopyV ??= new THREE.Vector4(); }
+  set materialCopyV(value: THREE.Vector4) { this._materialCopyV = value; }
+
+  /** @internal Uploads appearance without allocating unused CPU vectors. */
+  writeMaterialCopy(target: Float32Array, offset: number): void {
+    // Match Vector4 defaults for untouched CPU particles, including its fourth component.
+    target.fill(0, offset, offset + 12);
+    target[offset + 3] = target[offset + 7] = target[offset + 11] = 1;
+    this._materialCopy?.toArray(target, offset);
+    this._materialCopyU?.toArray(target, offset + 4);
+    this._materialCopyV?.toArray(target, offset + 8);
+  }
 
   position: THREE.Vector3;
 
@@ -264,9 +282,9 @@ class Particle {
     particle.alive = this.alive;
     particle.id = this.id;
     particle.lodPriority = this.lodPriority;
-    particle.materialCopy.copy(this.materialCopy);
-    particle.materialCopyU.copy(this.materialCopyU);
-    particle.materialCopyV.copy(this.materialCopyV);
+    if (this._materialCopy) particle.materialCopy = this._materialCopy.clone();
+    if (this._materialCopyU) particle.materialCopyU = this._materialCopyU.clone();
+    if (this._materialCopyV) particle.materialCopyV = this._materialCopyV.clone();
     particle.parent = this.parent;
     particle.contribution = this.contribution;
     particle.noise = { ...this.noise };

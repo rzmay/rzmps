@@ -124,7 +124,10 @@ export default abstract class Renderer extends EventReceiver {
 
   /** Shared source/palette and shader invalidation for material-capable subclasses. */
   protected prepareAppearance(system: ParticleSystem): void {
-    if (this.materialTarget || this._materialComposite || this._materialCompositeGPU || this._materialCopyRequested) {
+    if (!this.supportsMaterialCopy) return;
+
+    if (this.materialTarget || this._materialComposite || this._materialCompositeGPU || this._materialCopyRequested
+      || system.hasMaterialCopySources) {
       this.enableMaterialCopy(system.materialCopyRegistry, system.sceneRenderer);
     }
     if (this._appearanceDirty && this.appearance) {
@@ -314,9 +317,6 @@ export default abstract class Renderer extends EventReceiver {
     system: ParticleSystem,
     deltaTime: number = 0,
   ): void {
-    if (this._materialCopyRequested || this.materialTarget || particles.some(p => p.materialCopy.x > 0)) {
-      this.enableMaterialCopy(system.materialCopyRegistry, system.sceneRenderer);
-    }
     this.prepareAppearance(system);
 
     this.beginExecution(system, deltaTime);

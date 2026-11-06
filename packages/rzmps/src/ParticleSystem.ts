@@ -271,6 +271,11 @@ class ParticleSystem extends THREE.Object3D {
     return this._materialCopyRegistry ??= new MaterialCopyRegistry();
   }
 
+  /** @internal Detects registered appearances without scanning particles or creating an unused registry. */
+  get hasMaterialCopySources(): boolean {
+    return this._subSystemParent?.hasMaterialCopySources ?? (this._materialCopyRegistry?.sources.length ?? 0) > 1;
+  }
+
   subSystems = new Map<ParticleSystem, SubSystemOptions>();
   boundingBox = new THREE.Box3();
 
@@ -5527,7 +5532,7 @@ class ParticleSystem extends THREE.Object3D {
 
   private _getParticleInitializationSignature(): string {
     return this.modules.flatMap(module => module.withDependents())
-      .filter(module => module.initializeParticleGPU !== Module.prototype.initializeParticleGPU)
+      .filter(module => module.initializeParticleGPU !== undefined)
       .map(module => `${this._getObjectSignature(module)}:${module.version}:${module.tags?.join(',') ?? ''}:`
         + this._getObjectSignature(module.initializeParticleGPU!)).join('|');
   }
@@ -5537,28 +5542,42 @@ class ParticleSystem extends THREE.Object3D {
   /** @internal Coordinates configured module order, independently of deferred event dispatch. */
   initializeParticle(particle: Particle, context: ParticleInitializationContext): void {
     if (this._initializedParticles.has(particle)) return;
+
+    const initializers = this.modules.flatMap(module => module.withDependents())
+      .filter(module => module.initializeParticle !== undefined);
+    if (!initializers.length) return;
+
     this._initializedParticles.add(particle);
-    for (const module of this.modules.flatMap(module => module.withDependents())) {
-      if (!module.tags || tagsIntersect(module.tags, particle.tags ?? [])) {
-        module.initializeParticle(particle, { ...context,
-          birthToWorld: context.birthToWorld ?? this.getSimulationToWorldMatrix() });
-      }
+    let initializationContext: ParticleInitializationContext | undefined;
+
+    // Resolve the birth frame once, only if a selected initializer needs it.
+    for (const module of initializers) {
+      if (module.tags && !tagsIntersect(module.tags, particle.tags ?? [])) continue;
+
+      initializationContext ??= { ...context,
+        birthToWorld: context.birthToWorld ?? this.getSimulationToWorldMatrix() };
+      module.initializeParticle!(particle, initializationContext);
     }
-    particle.cache();
+
+    // No-op and unmatched modules must not allocate a redundant permanent-state snapshot.
+    if (initializationContext) particle.cache();
   }
 
   /** @internal Called by native birth graphs after attributes are assigned, before spawn events. */
   initializeParticleGPU(particle: GPUParticleLike, context: GPUParticleInitializationContext): void {
     resetInitializationAttributesGPU(particle);
+    const initializers = this.modules.flatMap(module => module.withDependents())
+      .filter(module => module.initializeParticleGPU !== undefined);
+    if (!initializers.length) return;
+
     this._configureParticleGPU(particle, context);
-    for (const module of this.modules.flatMap(module => module.withDependents())) {
-      if (!module.initializeParticleGPU) continue;
+    for (const module of initializers) {
       const mask = this.getGPURendererTagMask(module.tags);
       if (module.tags) {
         If(particle.tagMask.bitAnd(uint(mask ?? 0)).notEqual(0), () => {
-          module.initializeParticleGPU(particle, context);
+          module.initializeParticleGPU!(particle, context);
         });
-      } else module.initializeParticleGPU(particle, context);
+      } else module.initializeParticleGPU!(particle, context);
     }
   }
 

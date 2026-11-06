@@ -793,9 +793,7 @@ export class GPUParticleBufferState {
     const sourceOffset = (index * FLOAT_SLOT_COUNT + ParticleFloatSlot.SourceIdentity) * 16;
     const sourceWords = new Uint32Array(this.floatData.buffer, sourceOffset, 4);
     sourceWords.set(source ? [source.slot, source.generation, 2, 2] : [0, 0, 0, 0]);
-    particle.materialCopy.toArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopy));
-    particle.materialCopyU.toArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopyU));
-    particle.materialCopyV.toArray(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopyV));
+    particle.writeMaterialCopy(this.floatData, packedOffset(index, ParticleFloatSlot.MaterialCopy));
 
     writeState(
       this.uintData,

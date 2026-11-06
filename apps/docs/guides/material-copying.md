@@ -3,7 +3,9 @@
 Material copying binds accessible surface inputs to a particle. Compositing combines those inputs
 with the renderer's configured material. It copies color, opacity, tangent-space normal maps,
 roughness, metalness, and compatible environment inputs; it does not evaluate the source's lighting, custom GLSL, or TSL graph.
-Source materials and textures remain caller-owned and unchanged.
+Source materials and textures remain caller-owned and unchanged. CPU particle copying vectors allocate only
+on first access; ordinary particles, clones, and uploads avoid those allocations. Registered source materials
+enable renderer copying without scanning the particle population.
 
 ## Environment Maps
 
