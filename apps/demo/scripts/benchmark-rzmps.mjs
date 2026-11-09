@@ -2,11 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { createSiteServer } from '../../../scripts/site/serve.mjs';
-import { validateBenchmark } from '../../../scripts/benchmark-payload.mjs';
+import { validateBenchmark, validateBenchmarkCompletion } from '../../../scripts/benchmark-payload.mjs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
-import { isExpectedWebGPUTeardownError, runBenchmarkWithRetry } from '../../../scripts/benchmark-failures.mjs';
+import { isExpectedWebGPUTeardownError, runBenchmarkWithRetry, withBenchmarkTimeout, cleanupBenchmark } from '../../../scripts/benchmark-failures.mjs';
 
 const host = '127.0.0.1';
 const port = Number(process.env.RZMPS_BENCHMARK_PORT ?? 0);
@@ -146,6 +146,8 @@ async function runBenchmark(attempt = 1) {
   let browser;
   let pageError;
   let benchmarkValidated = false;
+  let outputWritten = false;
+  let primaryError;
   let closing = false;
   let rejectMeasurement;
   const measurementFailure = new Promise((_resolve, reject) => { rejectMeasurement = reject; });
@@ -155,6 +157,12 @@ async function runBenchmark(attempt = 1) {
     pageError ??= error;
     rejectMeasurement(pageError);
   };
+  const observe = operation => Promise.race([Promise.resolve().then(operation), measurementFailure]);
+  // One deadline covers launch, navigation, hardware probes and measurement. It
+  // does not depend on a responsive page or an attached waitForFunction call.
+  const deadline = setTimeout(() => {
+    failMeasurement(new Error(`Benchmark attempt timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
   const deviceLossChecks = [];
   const gpuValidationErrors = [];
   let page;
@@ -169,15 +177,22 @@ async function runBenchmark(attempt = 1) {
   heartbeat.unref();
 
   try {
-    browser = await puppeteer.launch({
-      headless: openBrowser ? false : 'new',
-      args: getChromeArgs(),
-      defaultViewport: viewport,
-      // waitForFunction keeps a CDP call open for the measurement window.
-      protocolTimeout: timeoutMs + 15_000,
+    await observe(async () => {
+      browser = await puppeteer.launch({
+        headless: openBrowser ? false : 'new',
+        args: getChromeArgs(),
+        defaultViewport: viewport,
+        // waitForFunction keeps a CDP call open for the measurement window.
+        protocolTimeout: timeoutMs + 15_000,
+      });
+      // If launch completed after the deadline, cleanup may already have run.
+      if (primaryError) {
+        browser.process()?.kill('SIGKILL');
+        throw primaryError;
+      }
     });
 
-    page = await browser.newPage();
+    page = await observe(() => browser.newPage());
     page.on('console', (message) => {
       if (message.text().startsWith('[benchmark] Case ')) {
         stage = message.text().slice('[benchmark] '.length);
@@ -209,24 +224,26 @@ async function runBenchmark(attempt = 1) {
     });
     stage = 'Loading benchmark page';
     logProgress(stage);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    const browserHardware = await collectBrowserHardware(page);
+    await observe(() => page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 }));
+    const browserHardware = await observe(() => collectBrowserHardware(page));
     await Promise.race([
-      page.waitForFunction('window.__RZMPS_BENCHMARK_DONE__ === true', { timeout: timeoutMs, polling: 1000 }),
+      page.waitForFunction('window.__RZMPS_BENCHMARK_DONE__ === true || !!window.__RZMPS_BENCHMARK_ERROR__',
+        { timeout: timeoutMs, polling: 1000 }),
       measurementFailure,
     ]);
-    await Promise.all(deviceLossChecks);
+    await observe(() => Promise.all(deviceLossChecks));
 
-    const results = await page.evaluate(() => window.__RZMPS_BENCHMARK_RESULTS__ ?? []);
+    const completion = await observe(() => page.evaluate(() => ({
+      error: window.__RZMPS_BENCHMARK_ERROR__,
+      expected: window.__RZMPS_BENCHMARK_CASES__,
+      results: window.__RZMPS_BENCHMARK_RESULTS__,
+    })));
     if (pageError) throw pageError;
     if (gpuValidationErrors.length > 0) {
       throw new Error(`WebGPU validation failed: ${gpuValidationErrors[0]}`);
     }
-    const expected = await page.evaluate(() => window.__RZMPS_BENCHMARK_CASES__);
-    if (!expected?.length || JSON.stringify(expected) !== JSON.stringify(results.map(row => row.name))) {
-      throw new Error('Benchmark returned an incomplete case list');
-    }
-    const browserVersion = await browser.version();
+    const results = validateBenchmarkCompletion(completion);
+    const browserVersion = await observe(() => browser.version());
     const metadata = {
       browser: browserVersion,
       harnessVersion: 1,
@@ -246,11 +263,13 @@ async function runBenchmark(attempt = 1) {
     };
     validateBenchmark({ metadata, results });
     benchmarkValidated = true;
+    clearTimeout(deadline);
     logProgress(`Validated ${results.length} cases in ${((performance.now() - startedAt) / 1000).toFixed(1)}s`);
 
     if (values.output) {
       await fs.mkdir(path.dirname(path.resolve(values.output)), { recursive: true });
       await fs.writeFile(values.output, `${JSON.stringify({ metadata, results }, null, 2)}\n`);
+      outputWritten = true;
       console.log(`RZMPS benchmark complete: wrote ${results.length} cases to ${path.resolve(values.output)}`);
       return;
     }
@@ -321,14 +340,16 @@ async function runBenchmark(attempt = 1) {
     console.log('RZMPS_BENCHMARK_JSON_END');
   } catch (error) {
     if (benchmarkValidated && isExpectedWebGPUTeardownError(error)) return;
+    primaryError = error;
+    clearTimeout(deadline);
 
-    const progress = await page?.evaluate(() => ({
+    const progress = await withBenchmarkTimeout(() => page?.evaluate(() => ({
       ...window.__RZMPS_BENCHMARK_PROGRESS__,
       activeCase: document.querySelector('.benchmark-status span')?.textContent,
       status: document.querySelector('.benchmark-status small')?.textContent,
       completedResults: window.__RZMPS_BENCHMARK_RESULTS__?.length ?? 0,
       lastCompletedCase: window.__RZMPS_BENCHMARK_RESULTS__?.at(-1)?.name,
-    })).catch(() => null);
+    })), 5000, 'Reading failure progress').catch(() => null);
 
     if (progress) {
       console.error('Benchmark failed with page progress:');
@@ -336,39 +357,55 @@ async function runBenchmark(attempt = 1) {
     }
 
     if (values.output) {
-      await fs.mkdir(path.dirname(path.resolve(values.output)), { recursive: true });
-      const failureOutput = `${values.output}.attempt-${attempt}`;
-      const diagnostics = { url, attempt, progress, error: String(error),
-        pageError: String(pageError ?? ''), gpuValidationErrors };
-      await fs.writeFile(`${failureOutput}.failure.json`, JSON.stringify(diagnostics, null, 2));
-      await page?.screenshot({ path: `${failureOutput}.failure.png`, timeout: 5000 }).catch(() => {});
+      try {
+        await fs.mkdir(path.dirname(path.resolve(values.output)), { recursive: true });
+        const failureOutput = `${values.output}.attempt-${attempt}`;
+        const diagnostics = { url, attempt, progress, error: String(error),
+          pageError: String(pageError ?? ''), gpuValidationErrors };
+        await fs.writeFile(`${failureOutput}.failure.json`, JSON.stringify(diagnostics, null, 2));
+        await withBenchmarkTimeout(() => page?.screenshot({ path: `${failureOutput}.failure.png`, timeout: 5000 }),
+          5000, 'Saving failure screenshot').catch(() => {});
+      } catch (diagnosticError) {
+        logProgress(`Could not save failure diagnostics: ${diagnosticError.message ?? diagnosticError}`);
+      }
     }
-    throw pageError ?? error;
+    throw error;
   } finally {
+    clearTimeout(deadline);
     clearInterval(heartbeat);
     logProgress('Closing browser and test server');
     closing = true;
+    let cleanupError;
     try {
-      // Stop rendering, drain submitted work and release the device before closing Chromium.
-      await page?.evaluate(async () => {
-        if (!window.__RZMPS_BENCHMARK_SHUTDOWN__) return;
-        await Promise.race([
-          window.__RZMPS_BENCHMARK_SHUTDOWN__(),
-          new Promise(resolve => setTimeout(resolve, 2000)),
-        ]);
-      }).catch(() => {});
-      if (browser) {
-        try {
-          await browser.close();
-        } catch (error) {
-          // Chromium/SwiftShader can reject WebGPU error-scope cleanup after all
-          // benchmark results have already been collected and validated.
-          if (!isExpectedWebGPUTeardownError(error)) throw error;
-        }
-      }
-    } finally {
-      server.closeAllConnections();
-      await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      await cleanupBenchmark([
+        { name: 'Draining browser work', run: () => withBenchmarkTimeout(() => page?.evaluate(async () => {
+          await window.__RZMPS_BENCHMARK_SHUTDOWN__?.();
+        }), 3000, 'Draining browser work').catch(error => {
+          logProgress(`Browser drain incomplete: ${error.message ?? error}`);
+        }) },
+        { name: 'Closing browser', run: async () => {
+          if (!browser) return;
+          try { await withBenchmarkTimeout(() => browser.close(), 5000, 'Closing browser'); }
+          catch (error) {
+            browser.process()?.kill('SIGKILL');
+            if (!isExpectedWebGPUTeardownError(error)) throw error;
+          }
+        } },
+        { name: 'Closing test server', run: () => withBenchmarkTimeout(() => {
+          server.closeAllConnections();
+          return new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+        }, 5000, 'Closing test server') },
+      ], primaryError, (name, error) => logProgress(`${name}: ${error.message ?? error}`));
+    } catch (error) { cleanupError = error; }
+    // GPU errors can arrive while draining the final submitted work. They remain
+    // fatal even if a results snapshot was already read and saved.
+    const lateError = primaryError ? undefined : gpuValidationErrors.length
+      ? new Error(`WebGPU validation failed: ${gpuValidationErrors[0]}`) : pageError ?? cleanupError;
+    if (lateError) {
+      if (outputWritten) await fs.rm(values.output, { force: true }).catch(error => {
+        logProgress(`Could not remove invalid output: ${error.message ?? error}`);
+      });
+      throw lateError;
     }
   }
 }

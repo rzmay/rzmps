@@ -31,8 +31,12 @@ Average update time measures \`ParticleSystem.update()\`; frame time includes th
 
 CI builds and runs the complete benchmark page from each revision against its matching library. Three samples per revision run in interleaved ABBAAB order; the comparison uses the median for each metric and includes only case names present in both revisions.
 
-Case transitions pause rendering and drain submitted GPU work outside the measurement windows. The runner
-also releases the benchmark renderer before closing Chromium. A device loss during measurement, or the
+Each case measures for at least the configured duration and three frames. Event-drain work is excluded
+from frame samples and measured duration. Case transitions pause rendering and drain submitted GPU work
+outside the measurement windows. The attempt deadline covers browser startup, hardware probes, and
+measurement; failure diagnostics and cleanup have separate short deadlines. Cleanup preserves the original
+measurement error and attempts to close every resource. Late GPU validation failures invalidate saved
+results. The runner also releases the benchmark renderer before closing Chromium. A device loss during measurement, or the
 known small mapped-buffer allocation failure, discards the entire sample and permits one fresh-browser retry.
 Validation failures and application errors are not retried. Output metadata records \`sampleAttempts\`, and
 failed-attempt diagnostics remain alongside the successful sample; partial results never enter aggregation.

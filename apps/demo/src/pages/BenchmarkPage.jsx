@@ -1,6 +1,8 @@
 /* eslint-disable react/no-unknown-property */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { isBenchmarkMeasurementComplete } from '../../../../scripts/benchmark-payload.mjs';
+import { recordBenchmarkFrame } from '../../../../scripts/benchmark-measurement.mjs';
 import * as THREE from 'three';
 import { If, vec3, vec4 } from 'three/tsl';
 import {
@@ -406,7 +408,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
   const fail = (error) => {
     failed.current = true;
-    window.__RZMPS_BENCHMARK_DONE__ = true;
+    setFrameloop('never');
+    window.__RZMPS_BENCHMARK_ERROR__ = { message: error.message ?? String(error), stack: error.stack };
+    window.__RZMPS_BENCHMARK_PROGRESS__ = {
+      ...window.__RZMPS_BENCHMARK_PROGRESS__, phase: 'failed', error: error.message ?? String(error),
+    };
     throw error;
   };
   const durationMs = getNumberParam('durationMs', DEFAULT_DURATION_MS);
@@ -1911,6 +1917,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
     const nextCase = cases[caseIndex.current];
     if (!nextCase) {
       window.__RZMPS_BENCHMARK_RESULTS__ = results.current;
+      window.__RZMPS_BENCHMARK_PROGRESS__ = {
+        ...window.__RZMPS_BENCHMARK_PROGRESS__, phase: 'complete', completed: results.current.length,
+      };
       window.__RZMPS_BENCHMARK_DONE__ = true;
       onComplete(results.current);
       starting.current = false;
@@ -2035,20 +2044,15 @@ function BenchmarkScene({ onComplete, onProgress }) {
         lastFrame.current = frameStart;
         return;
       }
-      elapsed = caseDurationMs;
+      elapsed = active.current.measuredDurationMs;
     }
 
-    if (lastFrame.current !== undefined) {
-      active.current.frameSamples.push(frameStart - lastFrame.current);
-    }
-
+    recordBenchmarkFrame(active.current, lastFrame.current, frameStart, updateMs, {
+      compute: computeDispatchesAfter - computeDispatchesBefore,
+      simulation: simulationDispatchesAfter - simulationDispatchesBefore,
+      renderOutput: renderOutputDispatchesAfter - renderOutputDispatchesBefore,
+    });
     lastFrame.current = frameStart;
-    active.current.updateSamples.push(updateMs);
-    active.current.computeDispatchSamples.push(computeDispatchesAfter - computeDispatchesBefore);
-    active.current.simulationDispatchSamples.push(simulationDispatchesAfter - simulationDispatchesBefore);
-    active.current.renderOutputDispatchSamples.push(renderOutputDispatchesAfter - renderOutputDispatchesBefore);
-    active.current.particleSamples.push(active.current.system.liveParticleCount ?? active.current.system.particles.length);
-    active.current.gpuActiveSamples.push(active.current.system.isGPUProcessingActive);
 
     if (active.current.requireGPU && !active.current.system.isGPUProcessingActive) {
       fail(new Error(`${active.current.name} did not activate GPU processing.`));
@@ -2059,7 +2063,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
       active.current.maxHeapMB = Math.max(active.current.maxHeapMB, heapBytes / (1024 * 1024));
     }
 
-    if (elapsed >= caseDurationMs) {
+    // Software rendering or a delayed frame can consume the entire time window.
+    // Keep measuring until the payload validator's minimum frame count is met.
+    if (isBenchmarkMeasurementComplete(elapsed, caseDurationMs, active.current.frameSamples.length)) {
       if (
         active.current.phase === 'measure'
         && awaitingExpectedEvents
@@ -2082,7 +2088,6 @@ function BenchmarkScene({ onComplete, onProgress }) {
       } catch (error) {
         fail(error);
       }
-      active.current.measuredDurationMs = elapsed;
       results.current.push(summarize(active.current));
       window.__RZMPS_BENCHMARK_RESULTS__ = [...results.current];
       gl.info.reset();

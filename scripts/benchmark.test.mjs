@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawn } from 'node:child_process';
-import { validateBenchmark, assertComparable } from './benchmark-payload.mjs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { validateBenchmark, assertComparable, isBenchmarkMeasurementComplete,
+  MIN_BENCHMARK_FRAMES, validateBenchmarkCompletion } from './benchmark-payload.mjs';
 import { benchmarkGuide } from './docs/benchmarks.mjs';
+import { recordBenchmarkFrame } from './benchmark-measurement.mjs';
+import { withBenchmarkTimeout, cleanupBenchmark } from './benchmark-failures.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const snapshot = JSON.parse(fs.readFileSync(path.join(root, 'benchmark/result.json'), 'utf8'));
@@ -19,6 +22,94 @@ test('benchmark reports reject incomplete, invalid, and incompatible measurement
   assert.throws(() => validateBenchmark(changed(p => { p.results[0].frames = 1; })), /insufficient/);
   assert.throws(() => assertComparable(snapshot, changed(p => { p.metadata.profile = 'ci'; })), /measurement settings/);
   assert.throws(() => assertComparable(snapshot, changed(p => { p.results.reverse(); })), /case ordering/);
+});
+
+test('measurement windows wait for enough frames when CI rendering is slow', () => {
+  const duration = 1500;
+  // One long frame can cross the entire requested window; it remains a measured
+  // slow frame while the harness collects the additional frames validation needs.
+  for (let frames = 0; frames < MIN_BENCHMARK_FRAMES; frames++) {
+    assert.equal(isBenchmarkMeasurementComplete(5000, duration, frames), false);
+    const payload = structuredClone(snapshot);
+    payload.results[0].frames = frames;
+    assert.throws(() => validateBenchmark(payload), /insufficient measured frames/);
+  }
+  assert.equal(isBenchmarkMeasurementComplete(5000, duration, MIN_BENCHMARK_FRAMES), true);
+  const complete = structuredClone(snapshot);
+  complete.results[0].frames = MIN_BENCHMARK_FRAMES;
+  validateBenchmark(complete);
+  assert.equal(isBenchmarkMeasurementComplete(1000, duration, 90), false);
+  assert.equal(isBenchmarkMeasurementComplete(duration, duration, 90), true);
+});
+
+test('event drains do not add frames or replace the actual measured duration', () => {
+  const measurement = {
+    phase: 'warmup', phaseStartedAt: 0,
+    system: { liveParticleCount: 10, particles: [], isGPUProcessingActive: true },
+    frameSamples: [], updateSamples: [], computeDispatchSamples: [], simulationDispatchSamples: [],
+    renderOutputDispatchSamples: [], particleSamples: [], gpuActiveSamples: [],
+  };
+  const dispatches = { compute: 2, simulation: 1, renderOutput: 1 };
+  recordBenchmarkFrame(measurement, 0, 100, 2, dispatches);
+  assert.deepEqual(measurement.frameSamples, []);
+  measurement.phase = 'measure';
+  recordBenchmarkFrame(measurement, 0, 500, 2, dispatches);
+  recordBenchmarkFrame(measurement, 500, 1500, 2, dispatches);
+  recordBenchmarkFrame(measurement, 1500, 2300, 2, dispatches);
+  const measured = structuredClone(measurement);
+  measurement.phase = 'drain';
+  measurement.phaseStartedAt = 2300;
+  recordBenchmarkFrame(measurement, 2300, 3000, 500, dispatches);
+  recordBenchmarkFrame(measurement, 3000, 7300, 500, dispatches);
+  for (const field of ['frameSamples', 'updateSamples', 'computeDispatchSamples', 'particleSamples', 'gpuActiveSamples']) {
+    assert.deepEqual(measurement[field], measured[field]);
+  }
+  assert.equal(measurement.measuredDurationMs, 2300, 'retain overshoot instead of truncating to the requested window');
+  assert.equal(measurement.frameSamples.reduce((a,b) => a+b,0), measurement.measuredDurationMs);
+});
+
+test('explicit page failures cannot be mistaken for completed measurements', () => {
+  const complete = { expected: snapshot.results.map(row => row.name), results: snapshot.results };
+  assert.equal(validateBenchmarkCompletion(complete), snapshot.results);
+  assert.throws(() => validateBenchmarkCompletion({ ...complete, error: { message: 'shader failed' } }), /shader failed/);
+  assert.throws(() => validateBenchmarkCompletion({ ...complete, error: 'page failed' }), /page failed/);
+  assert.throws(() => validateBenchmarkCompletion({ ...complete, results: [] }), /incomplete case list/);
+  assert.throws(() => validateBenchmarkCompletion({ ...complete, expected: undefined }), /incomplete case list/);
+  assert.throws(() => validateBenchmarkCompletion({ ...complete, results: null }), /incomplete case list/);
+});
+
+test('browser diagnostics and teardown have independent deadlines', async () => {
+  assert.equal(await withBenchmarkTimeout(() => 42, 1000, 'healthy operation'), 42);
+  const original = new Error('original failure');
+  await assert.rejects(withBenchmarkTimeout(() => { throw original; }, 1000, 'failed operation'), error => error === original);
+  await assert.rejects(withBenchmarkTimeout(() => new Promise(() => {}), 2, 'unresponsive browser'),
+    /unresponsive browser timed out after 2ms/);
+});
+
+test('teardown attempts all resources and preserves the measurement failure', async () => {
+  const measurementError = new Error('GPUValidationError: shader failed');
+  const closeError = new Error('browser close failed');
+  const calls = [], warnings = [];
+  const steps = [
+    { name: 'browser', run: () => { calls.push('browser'); throw closeError; } },
+    { name: 'server', run: () => { calls.push('server'); } },
+  ];
+  await assert.rejects(async () => {
+    try { throw measurementError; }
+    finally { await cleanupBenchmark(steps, measurementError, (name,error) => warnings.push([name,error])); }
+  }, error => error === measurementError);
+  assert.deepEqual(calls, ['browser', 'server']);
+  assert.deepEqual(warnings, [['browser', closeError]]);
+  calls.length = 0;
+  await assert.rejects(cleanupBenchmark(steps), error => error === closeError);
+  assert.deepEqual(calls, ['browser', 'server']);
+});
+
+test('viewport JSON property order does not make identical measurements incompatible', () => {
+  const head = structuredClone(snapshot);
+  const { width, height } = head.metadata.viewport;
+  head.metadata.viewport = { height, width };
+  assertComparable(snapshot, head);
 });
 
 test('aggregation and comparison use medians and preserve measurement metadata', () => {
@@ -98,6 +189,23 @@ test('cross-revision comparison maps legacy case names to CPU cases', () => {
     assert.deepEqual(filteredHead.metadata.caseIntersection.headOnly, [`${legacyName} [GPU]`]);
     assertComparable(filteredBase, filteredHead);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('legacy CPU case mapping also works when the PR restores unsuffixed names', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rzmps-benchmark-reverse-legacy-'));
+  try {
+    const base = structuredClone(snapshot), head = structuredClone(snapshot);
+    const name = base.results[0].name;
+    base.results = [{ ...base.results[0], name: `${name} [CPU]` },
+      { ...base.results[0], name: `${name} [GPU]` }];
+    head.results = [{ ...head.results[0], name }];
+    const basePath = path.join(directory,'base.json'), headPath = path.join(directory,'head.json');
+    fs.writeFileSync(basePath,JSON.stringify(base)); fs.writeFileSync(headPath,JSON.stringify(head));
+    execFileSync(process.execPath,[path.join(root,'scripts/intersect-benchmarks.mjs'),basePath,headPath]);
+    const filteredBase = JSON.parse(fs.readFileSync(basePath)), filteredHead = JSON.parse(fs.readFileSync(headPath));
+    assert.deepEqual(filteredBase.results.map(row=>row.name),[`${name} [CPU]`]);
+    assertComparable(filteredBase,filteredHead);
+  } finally { fs.rmSync(directory,{recursive:true,force:true}); }
 });
 
 test('documentation includes the current published table without a second maintained snapshot', () => {
@@ -206,5 +314,39 @@ const timer = setInterval(() => {
     assert.notEqual(failure.code, 0);
     assert.match(failure.stderr, /Benchmark command failed \(exit code 7\)/);
     assert.equal(fs.existsSync(output), false, 'failed measurements must not write a report');
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the real CLI handles success, page-error races, early crashes and teardown errors', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rzmps-benchmark-lifecycle-'));
+  try {
+    for (const scenario of ['success', 'page-error-close-error', 'early-crash', 'teardown-error', 'late-validation']) {
+      const output = path.join(directory, `${scenario}.json`);
+      const result = spawnSync(process.execPath, [
+        '--import', path.join(root, 'scripts/fixtures/benchmark-loader.mjs'),
+        path.join(root, 'apps/demo/scripts/benchmark-rzmps.mjs'), '--output', output,
+      ], { encoding: 'utf8', timeout: 5000,
+        env: { ...process.env, RZMPS_BENCHMARK_TEST_SCENARIO: scenario,
+          RZMPS_BENCHMARK_PROFILE: 'ci', RZMPS_BENCHMARK_TIMEOUT_MS: '2000',
+          RZMPS_BENCHMARK_DURATION_MS: '1500', RZMPS_BENCHMARK_WARMUP_MS: '500' } });
+      assert.equal(result.error, undefined, result.error?.message);
+      assert.match(result.stderr, /\[fixture\] browser closed/);
+      assert.match(result.stderr, /\[fixture\] server closed/);
+      if (scenario === 'success' || scenario === 'teardown-error') {
+        assert.equal(result.status, 0, result.stderr);
+        assert.deepEqual(JSON.parse(fs.readFileSync(output)).results, snapshot.results);
+      } else if (scenario === 'late-validation') {
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /fixture late shader failure/);
+        assert.equal(fs.existsSync(output), false, 'late GPU errors invalidate saved measurements');
+      } else {
+        assert.notEqual(result.status, 0);
+        assert.equal(fs.existsSync(output), false, 'application errors must not publish a measurement');
+        const error = scenario === 'early-crash' ? 'fixture early crash' : 'fixture application failure';
+        const diagnostics = JSON.parse(fs.readFileSync(`${output}.attempt-1.failure.json`));
+        assert.ok(diagnostics.error.includes(error), diagnostics.error);
+        assert.ok(result.stderr.trimEnd().split('\n').slice(-12).join('\n').includes(error), result.stderr);
+      }
+    }
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
