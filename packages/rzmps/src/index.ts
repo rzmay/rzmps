@@ -100,7 +100,7 @@ export { EmissionSource } from './enums/EmissionSource';
 export { default as RegisteredEmissionSource } from './EmissionSource';
 export type { EmissionSourceData, SubSystemSource } from './EmissionSource';
 export type { CPUEventHandler, GPUEventHandler, GPUEventPayload, GPUEventData, GPUEmissionContext,
-  EventSubscriptions } from './Events';
+  EventSubscriptions, ParameterEventHandler, ParameterEventSubscription, ParameterEventSubscriptions } from './Events';
 export { TagSelectionMethod } from './enums/TagSelectionMethod';
 
 // Renderers
@@ -111,8 +111,10 @@ export type { LightRendererAllocationOptions } from './renderers/LightRenderer';
 export { default as MeshRenderer } from './renderers/MeshRenderer';
 export { default as SpriteRenderer } from './renderers/SpriteRenderer';
 export { default as AudioRenderer } from './renderers/AudioRenderer';
+export type { AudioParameters } from './renderers/AudioRenderer';
 export { default as DecalRenderer, DECAL_RENDERER_USER_DATA_KEY } from './renderers/DecalRenderer';
-export type { DecalInstance, DecalRendererOptions, DecalDirectionSampler, DecalHitSelection }
+export type { DecalInstance, DecalRendererOptions, DecalDirectionSampler, DecalProjectionContext,
+  DecalDirection, DecalHitSelection, DecalParameters }
   from './renderers/DecalRenderer';
 export { SpriteMaterialType } from './enums/SpriteMaterialType';
 export { default as TrailRenderer } from './renderers/TrailRenderer';
@@ -234,9 +236,29 @@ export * as Textures from './Textures';
 export { CompensationMode } from './Renderer';
 export type { RendererChildrenOptions } from './Renderer';
 
+export { default as TextureAtlas } from './TextureAtlas';
+export type { TextureAtlasOptions } from './TextureAtlas';
+export { MaterialCopySampleMode } from './material-copy/Surface';
+export type { MaterialTarget, SurfacePatch } from './material-copy/Surface';
+
+export type { TaggedValue } from './types/TaggedValue';
+export { default as prepareTaggedSelection } from './helpers/prepareTaggedSelection';
+export type { TaggedSelection } from './helpers/prepareTaggedSelection';
+export { default as selectByTags } from './helpers/selectByTags';
+export { default as selectByTagsGPU } from './helpers/selectByTagsGPU';
 export { default as EventReceiver } from './EventReceiver';
 export type {
   EventOrigin, EventScope, SimulationEvent, EventExecutionContext, GPUEventExecutionContext, EventReceiverOptions,
 } from './EventReceiver';
 export type { ModuleExecutionContext, ModuleGPUExecutionContext } from './Module';
 export type { GPUEventBatch } from './gpu/EventBatch';
+
+export type { ParticleInitializationContext, GPUParticleInitializationContext,
+  ParticleInitializer, GPUParticleInitializer } from './Particle';
+
+export { default as MaterialCopy, MaterialCopySource } from './modules/MaterialCopy';
+export type { MaterialCopyOptions, MaterialCopyInput, GPUMaterialCopyInput } from './modules/MaterialCopy';
+
+export type { MaterialChannels, GPUMaterialChannels, MaterialChannel, MaterialCompositeCallback,
+  MaterialCompositeGPUCallback, MaterialCompositeContext, MaterialCompositeGPUContext }
+  from './material-copy/Composite';

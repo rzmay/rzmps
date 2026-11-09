@@ -2,7 +2,7 @@
  * GPU storage for Source-space simulation: per-particle matrix history plus managed source
  * transforms and slot generations. CPU-managed sources upload through refresh(); GPU particle
  * sources are resolved directly from their producer buffers by ParticleSystem's compute pass.
- * CPU particles track their own previous transforms in ParticleSourceBindings.ts; their bindings
+ * CPU particles track their own previous transforms in Particle.ts; their bindings
  * retain the managed slot/generation needed when staging births into this buffer's source table.
  */
 import type { Matrix4 } from 'three';

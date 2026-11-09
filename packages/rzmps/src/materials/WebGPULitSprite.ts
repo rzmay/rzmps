@@ -1,3 +1,4 @@
+import type Appearance from '../material-copy/Appearance';
 import * as THREE from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
@@ -29,10 +30,12 @@ import {
 } from 'three/tsl';
 import type { LitSpriteOptions } from './LitSprite';
 
-type WebGPULitSpriteOptions = LitSpriteOptions & {
+type WebGPULitSpriteOptions = Omit<LitSpriteOptions, 'atlasInset'> & {
+  atlasInset?: number | Node<'float'>;
   sceneDepthTexture: THREE.DepthTexture;
   spriteDataNode: Node<'vec4'>;
   colorNode: Node<'vec3'>;
+  materialCopyNodes: ReturnType<Appearance['nodes']>;
 };
 
 type TSLMatrix4Node = {
@@ -46,6 +49,7 @@ const WebGPULitSprite = (
 ) => {
   const {
     gridSize,
+    atlasInset = 0,
     frames,
     alphaMap,
     normalMap,
@@ -67,6 +71,7 @@ const WebGPULitSprite = (
     distortionStrength,
     spriteDataNode,
     colorNode,
+    materialCopyNodes,
     ...materialOptions
   } = options;
 
@@ -85,9 +90,10 @@ const WebGPULitSprite = (
   } as THREE.MeshStandardMaterialParameters);
 
   const spriteData = spriteDataNode ?? attribute('instanceSpriteData', 'vec4');
+  const inset = typeof atlasInset === 'number' ? float(atlasInset) : atlasInset;
   const spriteUv = spritesheetUV(
     vec2(gridSize?.x ?? 1, gridSize?.y ?? 1),
-    uv(),
+    uv().mul(float(1).sub(inset.mul(2))).add(inset),
     spriteData.x,
   );
 
@@ -152,7 +158,7 @@ const WebGPULitSprite = (
     material.normalNode = normalNode;
   }
 
-  const finalAlpha = opacity.clamp(0, 1).toVar();
+  const finalAlpha = opacity.clamp(0, 1);
 
   material.name = 'RZMPS WebGPU Lit Sprite';
   material.colorNode = colorNode ? spriteColor.rgb.mul(colorNode) : spriteColor.rgb;
@@ -167,6 +173,16 @@ const WebGPULitSprite = (
     ? texture(metalnessMap, spriteUv).r.mul(metalness)
     : float(metalness);
 
+  if (materialCopyNodes) {
+    const result = materialCopyNodes.compositeGPU({ color: material.colorNode, opacity: finalAlpha,
+      normal: normalNode, roughness: material.roughnessNode as Node<'float'>,
+      metalness: material.metalnessNode as Node<'float'> }, spriteUv as Node<'vec2'>);
+    material.colorNode = result.color;
+    material.opacityNode = result.opacity;
+    material.roughnessNode = result.roughness;
+    material.metalnessNode = result.metalness;
+    material.normalNode = result.normal;
+  }
   const transmissionAmount = transmission ?? (transmissionMap ? 1 : 0);
 
   if (transmissionAmount > 0) {

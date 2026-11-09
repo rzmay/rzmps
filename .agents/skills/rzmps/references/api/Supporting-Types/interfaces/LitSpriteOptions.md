@@ -29,6 +29,20 @@ alphaMap: Texture;
 
 ***
 
+<a id="atlasinset"></a>
+
+### atlasInset?
+
+```ts
+optional atlasInset?: number;
+```
+
+#### Inherited from
+
+[`UnlitSpriteOptions`](UnlitSpriteOptions.md).[`atlasInset`](UnlitSpriteOptions.md#atlasinset)
+
+***
+
 <a id="distortionmap"></a>
 
 ### distortionMap

@@ -35,6 +35,7 @@ import {
     LightRenderer,
     TrailRenderer,
     Collision,
+    MaterialCopy,
 } from '@rzmps/rzmps';
 
 export const AUDIO_BUFFER_SOURCE_KEY = '__rzmpsAudioBufferSource';
@@ -60,6 +61,7 @@ export const INITIAL_VALUE_DEFAULTS = {
 };
 
 export const DEFAULT_MODULE_FACTORIES = {
+    'Material Copy': () => new MaterialCopy(),
     'Velocity Over Lifetime': () => new VelocityOverLifetime({ linear: new THREE.Vector3() }),
     'Speed Over Lifetime': () => new SpeedOverLifetime({ speed: 1 }),
     'Force Over Lifetime': () => new ForceOverLifetime({ force: new THREE.Vector3() }),

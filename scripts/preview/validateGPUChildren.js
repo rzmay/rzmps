@@ -49,7 +49,7 @@ export async function validateGPUChildren(system, renderer) {
       for (let index = 0; index < end; index++) {
         if (!states[index * 4]) continue;
         const parent = parentIndex(index), root = parentIndex(parent);
-        const offset = Math.hypot(...[0, 1, 2].map(axis => floats[index * 16 + axis] - floats[parent * 16 + axis]));
+        const offset = Math.hypot(...[0, 1, 2].map(axis => floats[index * output.floatStride + axis] - floats[parent * output.floatStride + axis]));
         if (index >= lodStart) maxLODOffset = Math.max(maxLODOffset, offset);
         else if (index >= originals) maxArtisticOffset = Math.max(maxArtisticOffset, offset);
         if (index < originals) originalAlive++;
@@ -65,9 +65,17 @@ export async function validateGPUChildren(system, renderer) {
         const identity = `${expected[0]}:${expected[1]}`;
         if (unique.has(identity)) throw new Error('Duplicate GPU particle identity');
         unique.add(identity);
+        if (index >= originals) {
+          for (let component = 16; component < output.floatStride; component++) {
+            if (floats[index * output.floatStride + component]
+              !== floats[parent * output.floatStride + component]) {
+              throw new Error('Renderer child lost its material appearance or UV patch');
+            }
+          }
+        }
         if (index >= lodStart) {
           for (const component of [3, 8, 9, 10]) {
-            if (floats[index * 16 + component] !== floats[parent * 16 + component]) throw new Error('LOD child reapplied artistic modifiers');
+            if (floats[index * output.floatStride + component] !== floats[parent * output.floatStride + component]) throw new Error('LOD child reapplied artistic modifiers');
           }
         }
       }

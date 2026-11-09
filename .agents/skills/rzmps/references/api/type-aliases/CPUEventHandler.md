@@ -11,6 +11,7 @@
 ```ts
 type CPUEventHandler = (data, source, context) =>
   | Partial<EmissionContext>
+  | false
   | void;
 ```
 
@@ -31,4 +32,5 @@ type CPUEventHandler = (data, source, context) =>
 ## Returns
 
   \| `Partial`\<[`EmissionContext`](../interfaces/EmissionContext.md)\>
+  \| `false`
   \| `void`

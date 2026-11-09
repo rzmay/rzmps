@@ -9,7 +9,8 @@
 - [Collision](examples/./collision.md) — Particle collision with automatic mesh detection and sorting between static and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, Rapier, and Ammo can be used as external physics backends, allowing particles to affect other physics objects in the scene. Preset by [rzmay](https://github.com/rzmay).
 - [Metal Balls](examples/./collisionSubEmitters.md) — Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces. Preset by [rzmay](https://github.com/rzmay).
 - [Cube Instances](examples/./cubes.md) — Instanced mesh rendering with randomized cube particles and simple lifetime rotation and fade-out. Preset by [rzmay](https://github.com/rzmay).
-- [Doppler Bullet](examples/./dopplerBullet.md) — Doppler audio on a fast bullet, with smoke, faint trails, spawn blasts, and distortion wake subsystems. Preset by [rzmay](https://github.com/rzmay).
+- [Destruction](examples/./destruction.md) — Metal ball impacts leave concrete cracks and fragments carrying the contacted surface UV footprint. Preset by [rzmay](https://github.com/rzmay).
+- [Doppler Bullet](examples/./dopplerBullet.md) — A fast, piercing bullet leaves surface-blended bullet holes, with Doppler audio, smoke, trails, and distortion. Preset by [rzmay](https://github.com/rzmay).
 - [Fire](examples/./fire.md) — Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces. Preset by [rzmay](https://github.com/rzmay).
 - [Fireball](examples/./fireball.md) — Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks. Preset by [rzmay](https://github.com/rzmay).
 - [Fireflies](examples/./fireflies.md) — Fireflies use spatial queries and native events to emit attached glow pulses and small lights. Preset by [rzmay](https://github.com/rzmay).

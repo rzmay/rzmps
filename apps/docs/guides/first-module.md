@@ -62,6 +62,39 @@ Use `Module.Priority.PreMovementTransient` when a temporary velocity adjustment 
 Render-time transient modules run after movement. See [module priority](module-priority.md) before combining several
 modules that assign the same property.
 
+## Particle Initialization
+
+Use `initializeParticle(particle, context)` to establish state once after emitter attributes are
+assigned, before the first simulation/render and before external spawn listeners. Hooks follow
+configured module order and tag filters, independently of update priority and update conditions.
+They run for ordinary and subsystem births. Initialization is distinct from subscribed events.
+Both hooks default to `undefined`; modules without an initializer do no birth-hook work.
+CPU-only initializers require CPU processing unless `initializeParticleGPU` is also provided.
+
+```ts
+const birthMass = new Module(() => {}, {
+  initializeParticle(particle, context) {
+    particle.mass = context.event ? 2 : 1;
+  },
+  initializeParticleGPU(particle, context) {
+    particle.mass.assign(context.event ? 2 : 1);
+  },
+  modifyGPU() {},
+});
+```
+
+The CPU context exposes `system`, optional `source` and the original triggering `event`.
+The GPU context provides node-compatible source attributes and event snapshots; native hooks
+execute inline in the emission kernel without readback. A CPU-only initializer requires a GPU
+implementation before native GPU simulation is supported. Class-based modules can override the
+same methods. GPU hook JavaScript constructs a compute graph, so use TSL operations for
+per-particle branches and mutations.
+
+`sourceToWorld` interprets source/event simulation coordinates. `birthToWorld` interprets the
+newborn attributes at initialization, including Source-space births that will subsequently be
+resolved through their source frame. Hooks that calculate world-space coordinates should use
+these supplied frames. See [material copying](material-copying.md) for a built-in initializer.
+
 ## System Update Hooks
 
 `prepare(context)` can also run effect-level scheduling once per simulation step, even when a module does

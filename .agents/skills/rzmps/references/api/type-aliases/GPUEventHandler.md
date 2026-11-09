@@ -11,6 +11,8 @@
 ```ts
 type GPUEventHandler = (data, particle, context) =>
   | Partial<GPUEmissionContext>
+  | false
+  | Node<"bool">
   | void;
 ```
 
@@ -31,4 +33,6 @@ type GPUEventHandler = (data, particle, context) =>
 ## Returns
 
   \| `Partial`\<[`GPUEmissionContext`](../interfaces/GPUEmissionContext.md)\>
+  \| `false`
+  \| `Node`\<`"bool"`\>
   \| `void`

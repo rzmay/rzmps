@@ -66,6 +66,26 @@ optional eventScope?: EventScope;
 
 ***
 
+<a id="initializeparticle"></a>
+
+### initializeParticle?
+
+```ts
+optional initializeParticle?: ParticleInitializer;
+```
+
+***
+
+<a id="initializeparticlegpu"></a>
+
+### initializeParticleGPU?
+
+```ts
+optional initializeParticleGPU?: GPUParticleInitializer;
+```
+
+***
+
 <a id="modifygpu"></a>
 
 ### modifyGPU

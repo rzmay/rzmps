@@ -1,5 +1,8 @@
 import EventReceiver, { type EventExecutionContext, type EventReceiverOptions } from './EventReceiver';
-import Particle from './Particle';
+import Particle, {
+  type ParticleInitializer, type GPUParticleInitializer,
+  type ParticleInitializationContext, type GPUParticleInitializationContext,
+} from './Particle';
 import ParticleSystem from './ParticleSystem';
 import type { Tag } from './types/Tag';
 import type { StrictMultiple } from './types/Multiple';
@@ -55,6 +58,8 @@ export type SpatialEffectConstructor<T extends SpatialEffect = SpatialEffect> = 
 };
 
 export interface ModuleOptions extends EventReceiverOptions {
+  initializeParticle?: ParticleInitializer;
+  initializeParticleGPU?: GPUParticleInitializer;
   /** Shared preparation work, called once before processing particles. */
   prepare: (context: ModuleExecutionContext) => void;
   // <0 runs as permanent pre-movement, 0..1 as transient pre-movement, >=1 as transient render-time.
@@ -109,6 +114,9 @@ export default class Module extends EventReceiver {
   // Sub-modules on which this module depends.
   // Useful for pre-processing or combining priority stages.
   public dependents: Module[] = [];
+  /** Optional birth hooks; ordinary modifier modules do not run initialization work. */
+  initializeParticle?(particle: Particle, context: ParticleInitializationContext): void;
+  initializeParticleGPU?(particle: GPUParticleLike, context: GPUParticleInitializationContext): void;
 
   tags?: Tag[];
   condition: ModuleCondition;
@@ -153,6 +161,8 @@ export default class Module extends EventReceiver {
   constructor(modify: ModuleUpdate, options: Partial<ModuleOptions> = {}) {
     super(options);
     this._modify = modify;
+    this.initializeParticle = options.initializeParticle ?? this.initializeParticle;
+    this.initializeParticleGPU = options.initializeParticleGPU ?? this.initializeParticleGPU;
     this._prepare = options.prepare;
     this.tags = acceptMultiple(options.tags);
     this._hasCustomCondition = options.condition !== undefined;
@@ -170,9 +180,10 @@ export default class Module extends EventReceiver {
     this.spatialGridOptions = options.spatialGridOptions;
   }
 
-  /** Whether both modification and any custom condition have GPU implementations. */
+  /** Whether modification, birth hooks and custom conditions support GPU processing. */
   get supportsGPU(): boolean {
-    return this.modifyGPU !== Module.GPU_UNSUPPORTED
+    return (!this.initializeParticle || !!this.initializeParticleGPU)
+      && this.modifyGPU !== Module.GPU_UNSUPPORTED
       && (!this._hasCustomCondition || this.conditionGPU !== undefined);
   }
 

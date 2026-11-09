@@ -12,7 +12,7 @@ export const guideSections = [
     pages: ['concepts', 'dynamic-values', 'module-priority', 'spatial-effects'] },
   { text: 'Feature Guides', description: 'Apply individual features to an existing particle system.',
     pages: ['renderer-children-lod', 'tags', 'subsystems', 'emission-sources-events', 'collision-and-physics',
-    'decals', 'particle-octree'] },
+    'decals', 'material-copying', 'particle-octree'] },
   { text: 'Project Guides',
     description: 'Set up local development, measure performance, validate effects, and use coding assistants.',
     pages: ['development', 'benchmarks', 'compatibility', 'ai-coding-assistants'] },

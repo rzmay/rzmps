@@ -80,6 +80,30 @@ originalCount: Node<"uint">;
 
 ## Methods
 
+<a id="appearance"></a>
+
+### appearance()
+
+```ts
+appearance(index, row): Node<"vec4">;
+```
+
+#### Parameters
+
+##### index
+
+`Node`\<`"uint"`\>
+
+##### row
+
+`number`
+
+#### Returns
+
+`Node`\<`"vec4"`\>
+
+***
+
 <a id="createparticle"></a>
 
 ### createParticle()

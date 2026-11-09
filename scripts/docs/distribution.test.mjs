@@ -9,6 +9,37 @@ import { execFileSync } from 'node:child_process';
 import { generateSkill } from './skill-source.mjs';
 import { buildArtifacts } from './artifacts.mjs';
 import { checksum, previewIsCurrent } from './preview-manifest.mjs';
+import { load as loadPublicReferences } from './public-references.mjs';
+
+test('dependency duplicate-tag diagnostics respect declaration suppression without hiding project warnings', () => {
+  const warnings = [];
+  let suppressDeclarations = true;
+  const app = {
+    logger: { warn: (...args) => warnings.push(args) },
+    options: { getValue: () => suppressDeclarations },
+    converter: { on() {} },
+  };
+  loadPublicReferences(app);
+  const message = file => 'At most one @remarks tag is expected in a comment, '
+    + `ignoring all but the first in comment at ${file}:14`;
+
+  app.logger.warn(message('./node_modules/@types/three/PMREMGenerator.d.ts'));
+  app.logger.warn(message('C:\\repo\\node_modules\\dependency\\index.d.mts'));
+  assert.equal(warnings.length, 0);
+
+  const sourceWarning = message('./packages/rzmps/src/Particle.ts');
+  const declarationWarning = message('./packages/rzmps/src/Particle.d.ts');
+  app.logger.warn(sourceWarning, 'context');
+  app.logger.warn(declarationWarning);
+  app.logger.warn('An unrelated dependency warning at ./node_modules/dependency/index.d.ts:14');
+  assert.deepEqual(warnings, [[sourceWarning, 'context'], [declarationWarning],
+    ['An unrelated dependency warning at ./node_modules/dependency/index.d.ts:14']]);
+
+  suppressDeclarations = false;
+  app.logger.warn(message('./node_modules/dependency/index.d.ts'));
+  assert.equal(warnings.length, 4);
+});
+
 test('canonical documentation controls skill metadata, workflow, and portable reference links',()=>{
   const root=path.resolve(import.meta.dirname,'../..');
   const source=fs.readFileSync(path.join(root,'apps/docs/guides/ai-coding-assistants.md'),'utf8');

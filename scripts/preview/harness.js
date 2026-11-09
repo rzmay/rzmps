@@ -77,7 +77,7 @@ async function capture(options) {
         sceneHandle.setLightStrength(options.sceneLightStrength);
       }
     }
-    system = await example.create();
+    system = await example.create(options.exampleOptions);
     system.traverse(object => {
       for (const view of object.renderers ?? []) {
         if (!Array.isArray(view.lights)) continue;

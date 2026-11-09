@@ -54,6 +54,22 @@ alphaAffectsVolume: number;
 
 ***
 
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`atlasOptions`](../../interfaces/RendererOptions.md#atlasoptions)
+
+***
+
 <a id="children"></a>
 
 ### children?
@@ -324,6 +340,64 @@ Low-pass cutoff in Hz, evaluated with normalized particle age.
 
 ***
 
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialComposite`](../../interfaces/RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCompositeGPU`](../../interfaces/RendererOptions.md#materialcompositegpu)
+
+***
+
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCopySampleMode`](../../interfaces/RendererOptions.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialTarget`](../../interfaces/RendererOptions.md#materialtarget)
+
+***
+
 <a id="maxclips"></a>
 
 ### maxClips
@@ -333,6 +407,16 @@ maxClips: number;
 ```
 
 Maximum simultaneously managed positional clips; limits audio resource costs.
+
+***
+
+<a id="oncollision"></a>
+
+### onCollision
+
+```ts
+onCollision: ParameterEventSubscription<AudioParameters, CollisionHit>;
+```
 
 ***
 
@@ -348,6 +432,16 @@ Decoded buffers played on eligible collision events.
 
 ***
 
+<a id="ondeath"></a>
+
+### onDeath
+
+```ts
+onDeath: ParameterEventSubscription<AudioParameters>;
+```
+
+***
+
 <a id="ondeathsound"></a>
 
 ### onDeathSound
@@ -357,6 +451,26 @@ onDeathSound: StrictMultiple<AudioBuffer>;
 ```
 
 Decoded buffers played on eligible particle deaths.
+
+***
+
+<a id="onevent"></a>
+
+### onEvent?
+
+```ts
+optional onEvent?: ParameterEventSubscriptions<AudioParameters>;
+```
+
+***
+
+<a id="onspawn"></a>
+
+### onSpawn
+
+```ts
+onSpawn: ParameterEventSubscription<AudioParameters>;
+```
 
 ***
 
@@ -527,6 +641,22 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](../../interfaces/RendererOptions.md).[`tags`](../../interfaces/RendererOptions.md#tags)
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`textureCopyQuality`](../../interfaces/RendererOptions.md#texturecopyquality)
 
 ***
 

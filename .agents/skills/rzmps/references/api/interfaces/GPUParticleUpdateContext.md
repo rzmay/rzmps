@@ -11,6 +11,7 @@
 ## Extended by
 
 - [`ModuleGPUExecutionContext`](ModuleGPUExecutionContext.md)
+- [`GPUParticleInitializationContext`](GPUParticleInitializationContext.md)
 
 ## Properties
 

@@ -21,6 +21,18 @@
 
 ## Properties
 
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+***
+
 <a id="children"></a>
 
 ### children
@@ -101,6 +113,48 @@ Maximum world-space assignment distance. Negative means unbounded (default -1).
 
 ***
 
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+***
+
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+***
+
 <a id="ratio"></a>
 
 ### ratio
@@ -122,3 +176,15 @@ tags: StrictMultiple<string>;
 ```
 
 Filters the simulated population by tag before rendering.
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.

@@ -181,15 +181,15 @@ test('automatic discovery includes gpu-only events, preserves built-in IDs, and 
   system.destroy();
 });
 
-test('GPU event ABI retains 15 vec4 slots, full payloads, distinct records, snapshots and generation IDs', async () => {
-  assert.equal(GPU_EVENT_FLOAT_SLOT_COUNT, 15);
+test('GPU event ABI retains payload and appearance slots, full payloads, distinct records, snapshots and generation IDs', async () => {
+  assert.equal(GPU_EVENT_FLOAT_SLOT_COUNT, 22);
   const buffer = new GPUEventBufferState(2);
   buffer.reset(7);
   buffer.counterAttribute.array.set([3, 1]);
   const floats = buffer.floatAttribute.array;
   const uints = new Uint32Array(floats.buffer);
   for (let i = 0; i < 2; i++) {
-    const base = i * 60;
+    const base = i * GPU_EVENT_FLOAT_SLOT_COUNT * 4;
     floats[base] = 5 + i;
     floats.set(Array.from({ length: 12 }, (_, k) => k + 1 + i * 20), base + 44);
     uints.set([4 + i, 9, 123, 0], base + 56);
@@ -488,5 +488,25 @@ test('instance orchestration preserves custom emitter update overrides', () => {
   system.advanceFrames(2);
   assert.equal(emitter.calls, 2);
   assert.equal(system.particles.length, 1);
+  system.destroy();
+});
+
+
+test('false event transforms cancel whole runs without suppressing other subscribers or future events', () => {
+  const system = root();
+  const filtered = effect({ rate: 10, bursts: [{ time: 0, count: 2 }, { time: 0.5, count: 2 }] });
+  const unfiltered = effect();
+  system.addSubSystem(filtered, { onEvent: { impact: data => data.accept ? { scale: 2 } : false } });
+  system.addSubSystem(unfiltered, { onEvent: ['impact'] });
+  const source = origin(system);
+  source.emitEvent('impact', { accept: false });
+  assert.equal(filtered._emitterInstances.size, 0);
+  frame(system, 0.6);
+  assert.equal(filtered.particles.length, 0, 'cancelled bursts and rate must not start later');
+  assert.equal(unfiltered.particles.length, 1, 'cancellation must be local to a subscriber');
+  source.emitEvent('impact', { accept: true });
+  frame(system, 0.1);
+  assert.ok(filtered.particles.length > 0, 'accepted events must still create runs');
+  assert.equal(filtered.particles[0].scale.x, 2);
   system.destroy();
 });

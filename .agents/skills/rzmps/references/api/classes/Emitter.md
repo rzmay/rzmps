@@ -84,7 +84,7 @@ events: readonly string[];
 
 #### Inherited from
 
-[`EventReceiver`](EventReceiver.md).[`events`](EventReceiver.md#events)
+[`MaterialCopy`](MaterialCopy.md).[`events`](MaterialCopy.md#events)
 
 ***
 
@@ -374,7 +374,7 @@ set gpuNative(value): void;
 
 #### Inherited from
 
-[`EventReceiver`](EventReceiver.md).[`gpuNative`](EventReceiver.md#gpunative)
+[`MaterialCopy`](MaterialCopy.md).[`gpuNative`](MaterialCopy.md#gpunative)
 
 ***
 
@@ -887,6 +887,28 @@ set ratio(value): void;
 ##### Returns
 
 `void`
+
+***
+
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
+#### Inherited from
+
+[`MaterialCopy`](MaterialCopy.md).[`selectedEventNames`](MaterialCopy.md#selectedeventnames)
 
 ***
 

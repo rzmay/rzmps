@@ -40,6 +40,20 @@ new TrailRenderer(options?): TrailRenderer;
 
 ## Properties
 
+<a id="atlasoptions"></a>
+
+### atlasOptions
+
+```ts
+readonly atlasOptions: TextureAtlasOptions;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`atlasOptions`](Renderer.md#atlasoptions)
+
+***
+
 <a id="castshadow"></a>
 
 ### castShadow
@@ -222,6 +236,34 @@ material: Material<MaterialEventMap> | Material<MaterialEventMap>[];
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode
+
+```ts
+materialCopySampleMode: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialCopySampleMode`](Renderer.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialTarget`](Renderer.md#materialtarget)
+
+***
+
 <a id="mesh"></a>
 
 ### mesh
@@ -330,6 +372,20 @@ texture: Texture;
 
 ***
 
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality
+
+```ts
+readonly textureCopyQuality: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`textureCopyQuality`](Renderer.md#texturecopyquality)
+
+***
+
 <a id="texturemode"></a>
 
 ### textureMode
@@ -434,7 +490,7 @@ set gpuNative(value): void;
 
 #### Inherited from
 
-[`LightRenderer`](LightRenderer.md).[`gpuNative`](LightRenderer.md#gpunative)
+[`MaterialCopy`](MaterialCopy.md).[`gpuNative`](MaterialCopy.md#gpunative)
 
 ***
 
@@ -455,6 +511,90 @@ get gpuParameterUploadCount(): number;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`gpuParameterUploadCount`](Renderer.md#gpuparameteruploadcount)
+
+***
+
+<a id="materialcomposite"></a>
+
+### materialComposite
+
+#### Get Signature
+
+```ts
+get materialComposite():
+  | MaterialCompositeCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialComposite(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.materialComposite
+```
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU
+
+#### Get Signature
+
+```ts
+get materialCompositeGPU():
+  | MaterialCompositeGPUCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialCompositeGPU(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.materialCompositeGPU
+```
 
 ***
 
@@ -480,9 +620,7 @@ set needsUpdate(value): void;
 
 #### Inherited from
 
-```ts
-Renderer.needsUpdate
-```
+[`Renderer`](Renderer.md).[`needsUpdate`](Renderer.md#needsupdate)
 
 ***
 
@@ -530,6 +668,28 @@ Additional visual particles; GPU diagnostics refresh asynchronously when request
 
 ***
 
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`selectedEventNames`](Renderer.md#selectedeventnames)
+
+***
+
 <a id="supportsgpuinput"></a>
 
 ### supportsGPUInput
@@ -549,6 +709,28 @@ Whether this renderer can consume GPU particle buffers without a selective CPU r
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`supportsGPUInput`](Renderer.md#supportsgpuinput)
+
+***
+
+<a id="supportsmaterialcopy"></a>
+
+### supportsMaterialCopy
+
+#### Get Signature
+
+```ts
+get supportsMaterialCopy(): boolean;
+```
+
+Custom renderer subclasses opt in by implementing onMaterialCopyChange.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`supportsMaterialCopy`](Renderer.md#supportsmaterialcopy)
 
 ***
 
@@ -723,6 +905,32 @@ Removes displayed particles while retaining resources for reuse.
 #### Overrides
 
 [`Renderer`](Renderer.md).[`clear`](Renderer.md#clear)
+
+***
+
+<a id="copymaterial"></a>
+
+### copyMaterial()
+
+```ts
+copyMaterial(source): this;
+```
+
+Renderer-specific translation retains the destination shader and rendering settings.
+
+#### Parameters
+
+##### source
+
+[`MaterialTarget`](../type-aliases/MaterialTarget.md) \| `undefined`
+
+#### Returns
+
+`this`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`copyMaterial`](Renderer.md#copymaterial)
 
 ***
 

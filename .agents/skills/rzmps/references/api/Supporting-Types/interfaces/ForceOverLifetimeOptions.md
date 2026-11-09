@@ -86,6 +86,34 @@ Force sampled by normalized age; velocity change is force times delta seconds di
 
 ***
 
+<a id="initializeparticle"></a>
+
+### initializeParticle?
+
+```ts
+optional initializeParticle?: ParticleInitializer;
+```
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`initializeParticle`](../../interfaces/ModuleOptions.md#initializeparticle)
+
+***
+
+<a id="initializeparticlegpu"></a>
+
+### initializeParticleGPU?
+
+```ts
+optional initializeParticleGPU?: GPUParticleInitializer;
+```
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`initializeParticleGPU`](../../interfaces/ModuleOptions.md#initializeparticlegpu)
+
+***
+
 <a id="modifygpu"></a>
 
 ### modifyGPU?

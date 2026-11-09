@@ -52,6 +52,26 @@ readonly snapshots: GPUParticleBufferState;
 
 ## Methods
 
+<a id="event"></a>
+
+### event()
+
+```ts
+event(index): GPUEventNodeRecord;
+```
+
+#### Parameters
+
+##### index
+
+`Node`\<`"uint"`\>
+
+#### Returns
+
+[`GPUEventNodeRecord`](../Supporting-Types/interfaces/GPUEventNodeRecord.md)
+
+***
+
 <a id="initialize"></a>
 
 ### initialize()
@@ -103,6 +123,26 @@ reset(): void;
 #### Returns
 
 `void`
+
+***
+
+<a id="sourcetoworld"></a>
+
+### sourceToWorld()
+
+```ts
+sourceToWorld(index): Node<"mat4">;
+```
+
+#### Parameters
+
+##### index
+
+`Node`\<`"uint"`\>
+
+#### Returns
+
+`Node`\<`"mat4"`\>
 
 ***
 

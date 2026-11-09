@@ -109,3 +109,42 @@ test('documentation includes the current published table without a second mainta
   assert.match(page, /npm run benchmark:update-report/);
   assert.throws(() => benchmarkGuide('# No report'), /missing/);
 });
+
+test('benchmark retries only transient GPU failures and discards failed sample results', async () => {
+  const { isRetryableBenchmarkError, runBenchmarkWithRetry } = await import('./benchmark-failures.mjs');
+  const allocation = size => new RangeError(`Failed to execute 'createBuffer' on 'GPUDevice': `
+    + `createBuffer failed, size (${size}) is too large for the implementation when mappedAtCreation == true`);
+  assert.equal(isRetryableBenchmarkError(allocation(2048)), true);
+  assert.equal(isRetryableBenchmarkError(allocation(1024 ** 3)), false);
+  assert.equal(isRetryableBenchmarkError(new Error('WebGPU Device Lost: A valid external Instance reference '
+    + 'no longer exists.')), true);
+  assert.equal(isRetryableBenchmarkError(new Error('GPUValidationError: invalid binding')), false);
+  assert.equal(isRetryableBenchmarkError(new Error('Compute pipeline creation failed')), false);
+  assert.equal(isRetryableBenchmarkError(new Error('Spatial kill zones did not activate GPU processing')), false);
+
+  const attempts = [];
+  const retries = [];
+  const successful = { complete: true, results: ['complete sample'] };
+  const result = await runBenchmarkWithRetry(async attempt => {
+    attempts.push(attempt);
+    if (attempt === 1) throw allocation(2048);
+    return successful;
+  }, error => retries.push(error));
+  assert.equal(result, successful);
+  assert.deepEqual(attempts, [1, 2]);
+  assert.equal(retries.length, 1);
+
+  let failures = 0;
+  await assert.rejects(runBenchmarkWithRetry(async () => {
+    failures++;
+    throw allocation(2048);
+  }), /createBuffer failed/);
+  assert.equal(failures, 2, 'persistent device failures must remain failures');
+
+  failures = 0;
+  await assert.rejects(runBenchmarkWithRetry(async () => {
+    failures++;
+    throw new Error('GPUValidationError: invalid binding');
+  }), /GPUValidationError/);
+  assert.equal(failures, 1, 'validation failures must not trigger a new sample');
+});

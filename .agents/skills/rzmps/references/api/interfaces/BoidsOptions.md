@@ -144,6 +144,34 @@ optional eventScope?: EventScope;
 
 ***
 
+<a id="initializeparticle"></a>
+
+### initializeParticle?
+
+```ts
+optional initializeParticle?: ParticleInitializer;
+```
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`initializeParticle`](ModuleOptions.md#initializeparticle)
+
+***
+
+<a id="initializeparticlegpu"></a>
+
+### initializeParticleGPU?
+
+```ts
+optional initializeParticleGPU?: GPUParticleInitializer;
+```
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`initializeParticleGPU`](ModuleOptions.md#initializeparticlegpu)
+
+***
+
 <a id="maintainspeed"></a>
 
 ### maintainSpeed

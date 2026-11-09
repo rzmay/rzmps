@@ -1,29 +1,32 @@
+import { copyMaterialEnvironment } from '../material-copy/Environment';
+import { applyMaterialCopies } from '../material-copy/Composite';
+import MeshBatch, { type AppearanceNodes } from './MeshBatch';
+import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
+import type { DynamicValue } from '../types/DynamicValue';
+import prepareTaggedSelection, { type TaggedSelection } from '../helpers/prepareTaggedSelection';
+import selectByTags from '../helpers/selectByTags';
+import selectByTagsGPU from '../helpers/selectByTagsGPU';
+import type { TaggedValue } from '../types/TaggedValue';
 import { rotateXYZ } from '../helpers/gpuTransforms';
 import * as THREE from 'three';
-import { attribute } from 'three/tsl';
+import { attribute, materialNormal, materialColor, materialOpacity, materialRoughness,
+  materialMetalness, float } from 'three/tsl';
 import type { Node, WebGPURenderer } from 'three/webgpu';
-import { positionLocal } from 'three/tsl';
+import { positionLocal, positionGeometry } from 'three/tsl';
 import Renderer, { type RendererOptions } from '../Renderer';
 import ParticleSystem from '../ParticleSystem';
 import Particle from '../Particle';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../gpu/Particle';
 
-/*
-  * A mesh can be passed, including geometry and a material.
-  * Alternatively, geometry can be passed with no material,
-  * or material options for a MeshStandardMaterial can be passed in.
-  * For flexibility's sake, a MeshStandardMaterial itself can also
-  * be passed.
-  * mesh will take precedent over geometry, material, and materialOptions.
-  * material will take precedent over materialOptions.
-*/
 export interface MeshRendererOptions extends RendererOptions {
-    /** Shared source geometry/material; takes precedence over geometry, material, and materialOptions. */
-    mesh: THREE.Mesh;
+    /** One source mesh or static mesh templates; takes precedence over geometry and material options. */
+    mesh: TaggedValue<THREE.Mesh>;
+    /** Geometry choice; omission chooses a stable random mesh per particle. */
+    meshIndex?: DynamicValue<number>;
     /** Allocated instance capacity; size it for the maximum visible population. Defaults to 10000. */
     maxParticles: number;
-    /** Shared geometry used when mesh is omitted; defaults to sphere geometry. */
-    geometry: THREE.BufferGeometry,
+    /** One geometry or static variants sharing the material; defaults to sphere geometry. */
+    geometry: TaggedValue<THREE.BufferGeometry>,
     /** Shared material used when mesh is omitted; takes precedence over materialOptions. */
     material: THREE.MeshStandardMaterial,
     /** Construction options for a default MeshStandardMaterial. */
@@ -34,17 +37,41 @@ export interface MeshRendererOptions extends RendererOptions {
     receiveShadow: boolean,
 }
 
-/** Instances shared mesh geometry and material across particles; geometry complexity multiplies by population. */
+/** Instances a single source mesh, or batches multiple mesh variants with atlas-backed material factors. */
 class MeshRenderer extends Renderer {
     mesh: THREE.Mesh;
+    /** Original resource tree, retained for tooling and serialization. */
+    readonly meshSource: TaggedValue<THREE.Mesh | THREE.BufferGeometry>;
 
-    instances: THREE.InstancedMesh;
+    /** Particle capacity, independent of the number of batched geometry parts. */
+    get maxParticles(): number {
+      return this.batch ? Math.floor(this.batch.mesh.maxInstanceCount / this.batch.parts.length)
+        : this.instancedMesh.instanceMatrix.count;
+    }
+
+    /** Single geometry uses instancing; multiple source meshes use batching. */
+    get instances(): THREE.InstancedMesh | THREE.BatchedMesh {
+      return this.batch?.mesh ?? this.instancedMesh;
+    }
+
+    /** Source templates used by the batched path. Source transforms are not particle transforms. */
+    readonly meshes: readonly THREE.Mesh[];
+    meshIndex?: DynamicValue<number>;
+    private readonly meshSelection: TaggedSelection<THREE.Mesh | THREE.BufferGeometry>;
+
+    override get selectionTags(): readonly string[] {
+      return this.meshSelection?.tags ?? [];
+    }
+
+    private batch?: MeshBatch;
+    private ownsCopyMaterial = false;
+    private instancedMesh!: THREE.InstancedMesh;
 
     castShadow: boolean = false;
 
     receiveShadow: boolean = false;
 
-    private _alphaAttr: THREE.InstancedBufferAttribute;
+    private _alphaAttr!: THREE.InstancedBufferAttribute;
 
     private dummy: THREE.Object3D;
     private identityMatrixCapacity = 0;
@@ -61,28 +88,49 @@ class MeshRenderer extends Renderer {
       maskShadowNode: Node | null;
       opacityNode: Node | null;
       positionNode: Node | null;
+      normalNode: Node | null;
+      roughnessNode: Node | null;
+      metalnessNode: Node | null;
     }>();
 
     private materialEnvironmentState = new Map<THREE.Material, {
       envMap?: THREE.Texture | null;
       envMapIntensity?: number;
+      envMapRotation?: THREE.Euler;
     }>();
 
     constructor(options: Partial<MeshRendererOptions> = {}) {
       super(options);
 
-      this.mesh = options.mesh ?? new THREE.Mesh(
-        options.geometry ?? new THREE.SphereGeometry(),
-        options.material ?? new THREE.MeshStandardMaterial(options.materialOptions),
+      if (options.maxParticles !== undefined && (!Number.isSafeInteger(options.maxParticles)
+        || options.maxParticles < 1)) throw new RangeError('maxParticles must be a positive integer.');
+      this.meshSource = options.mesh ?? options.geometry ?? new THREE.SphereGeometry();
+      this.meshSelection = prepareTaggedSelection<THREE.Mesh | THREE.BufferGeometry>(
+        this.meshSource,
+        (value): value is THREE.Mesh | THREE.BufferGeometry => options.mesh
+          ? value instanceof THREE.Mesh : value instanceof THREE.BufferGeometry,
       );
-
-      this.instances = new THREE.InstancedMesh(this.mesh.geometry, this.mesh.material, options.maxParticles ?? 10000);
-      this.instances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      this.instances.frustumCulled = false;
-      this.instances.setColorAt(0, new THREE.Color(1, 1, 1));
-
+      const material = options.mesh ? undefined
+        : options.material ?? new THREE.MeshStandardMaterial(options.materialOptions);
+      this.meshes = this.meshSelection.values.map(source => source instanceof THREE.Mesh
+        ? source : new THREE.Mesh(source, material));
+      this.mesh = this.meshes[0];
+      this.meshIndex = options.meshIndex;
+      this.dummy = new THREE.Object3D();
       this.castShadow = options.castShadow ?? this.castShadow;
       this.receiveShadow = options.receiveShadow ?? this.receiveShadow;
+
+      if (this.meshes.length > 1) {
+        this.batch = new MeshBatch(this.meshes, options.maxParticles ?? 10000, this.atlasOptions);
+        this.preprocessMaterial(this.batch.material);
+        return;
+      }
+
+      this.instancedMesh = new THREE.InstancedMesh(this.mesh.geometry, this.mesh.material,
+        options.maxParticles ?? 10000);
+      this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.instancedMesh.frustumCulled = false;
+      this.instancedMesh.setColorAt(0, new THREE.Color(1, 1, 1));
 
       this._alphaAttr = new THREE.InstancedBufferAttribute(
         new Float32Array(options.maxParticles ?? 10000),
@@ -93,9 +141,32 @@ class MeshRenderer extends Renderer {
         this._alphaAttr,
       );
 
-      this.dummy = new THREE.Object3D();
-
       this.preprocessMaterial(this.mesh.material);
+    }
+
+    protected onMaterialCopyChange(): void {
+      if (this.batch) {
+        this.preprocessMaterial(this.batch.material);
+        return;
+      }
+
+      // Copying owns its shader changes; collision surfaces remain untouched.
+      const previous = this.mesh;
+      const materials = Array.isArray(this.mesh.material) ? this.mesh.material.map(m => m.clone()) : this
+        .mesh.material.clone();
+      this.mesh = new THREE.Mesh(this.mesh.geometry.clone(), materials);
+      this.mesh.geometry.setAttribute('instanceAlpha', this._alphaAttr);
+      this.instancedMesh.geometry = this.mesh.geometry;
+      this.instancedMesh.material = materials;
+      this.preprocessMaterial(materials);
+      if (this.ownsCopyMaterial) {
+        for (const material of Array.isArray(previous.material) ? previous.material : [previous.material]) {
+          this.materialNodeState.delete(material);
+          material.dispose();
+        }
+        previous.geometry.dispose();
+      }
+      this.ownsCopyMaterial = true;
     }
 
     setup(system: ParticleSystem): void {
@@ -103,48 +174,61 @@ class MeshRenderer extends Renderer {
     }
 
     private ensureInstanceCapacity(count: number): void {
-      if (count <= this.instances.instanceMatrix.count) return;
+      if (count <= this.instancedMesh.instanceMatrix.count) return;
       const capacity = 2 ** Math.ceil(Math.log2(count));
-      this.instances.dispose();
-      this.instances.instanceMatrix = new THREE.InstancedBufferAttribute(
+      this.instancedMesh.dispose();
+      this.instancedMesh.instanceMatrix = new THREE.InstancedBufferAttribute(
         new Float32Array(capacity * 16), 16,
       ).setUsage(THREE.DynamicDrawUsage);
-      this.instances.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
+      this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
       this._alphaAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
       this.mesh.geometry.setAttribute('instanceAlpha', this._alphaAttr);
       this.identityMatrixCapacity = 0;
     }
 
     _update(particles: Particle[], system: ParticleSystem): void {
-      this.ensureInstanceCapacity(particles.length);
+      if (this.batch) {
+        this.restoreCPUNodes();
+        this.batch.sync(system.sceneRenderer);
+        this.batch.updateCPU(particles, particle => this.selectMesh(particle));
+        this.instances.castShadow = this.castShadow;
+        this.instances.receiveShadow = this.receiveShadow;
+        this.updateMaterialEnvironment(system);
+        return;
+      }
+
+      const selectedParticles = this.meshSelection.structured
+        ? particles.filter(particle => this.selectMesh(particle) >= 0) : particles;
+      this.ensureInstanceCapacity(selectedParticles.length);
+      this.appearance?.attributes(this.mesh.geometry, selectedParticles, true);
       this.restoreCPUNodes();
 
       // CPU rendering owns the instance transforms until GPU mode restores
       // identity matrices and applies particle storage in the node material.
       this.identityMatrixCapacity = 0;
       this.instancesUseCPUTransforms = true;
-      this.instances.geometry.indirect = null;
-      this.instances.count = particles.length;
+      this.instancedMesh.geometry.indirect = null;
+      this.instancedMesh.count = selectedParticles.length;
 
-      this.instances.castShadow = this.castShadow;
-      this.instances.receiveShadow = this.receiveShadow;
+      this.instancedMesh.castShadow = this.castShadow;
+      this.instancedMesh.receiveShadow = this.receiveShadow;
       this.updateMaterialEnvironment(system);
 
-      particles.forEach((particle, i) => {
+      selectedParticles.forEach((particle, i) => {
         this.dummy.position.copy(particle.position);
         this.dummy.rotation.setFromVector3(particle.rotation);
         this.dummy.scale.copy(particle.scale);
 
         this.dummy.updateMatrix();
 
-        this.instances.setMatrixAt(i, this.dummy.matrix);
-        this.instances.setColorAt(i, particle.color);
+        this.instancedMesh.setMatrixAt(i, this.dummy.matrix);
+        this.instancedMesh.setColorAt(i, particle.color);
 
         this._alphaAttr.setX(i, particle.alpha);
       });
 
-      if (this.instances.instanceColor) this.instances.instanceColor.needsUpdate = true;
-      this.instances.instanceMatrix.needsUpdate = true;
+      if (this.instancedMesh.instanceColor) this.instancedMesh.instanceColor.needsUpdate = true;
+      this.instancedMesh.instanceMatrix.needsUpdate = true;
       this._alphaAttr.needsUpdate = true;
     }
 
@@ -152,31 +236,55 @@ class MeshRenderer extends Renderer {
       buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
       system: ParticleSystem,
     ): void {
+      if (this.batch) {
+        this.prepareGPUVisibility(system);
+        this.batch.sync(system.sceneRenderer);
+        this.batch.updateGPU(buffers.count);
+        this.instances.castShadow = this.castShadow;
+        this.instances.receiveShadow = this.receiveShadow;
+        this.updateMaterialEnvironment(system);
+        this.applyBatchGPUNodes(buffers, system);
+        return;
+      }
+
       this.ensureInstanceCapacity(buffers.count);
       this.prepareGPUVisibility(system);
-      this.instances.count = buffers.count;
+      this.instancedMesh.count = buffers.count;
 
-      this.instances.castShadow = this.castShadow;
-      this.instances.receiveShadow = this.receiveShadow;
+      this.instancedMesh.castShadow = this.castShadow;
+      this.instancedMesh.receiveShadow = this.receiveShadow;
       this.updateMaterialEnvironment(system);
       if (this.gpuMaterialBuffer !== buffers) this.identityMatrixCapacity = 0;
       this.syncIdentityInstanceMatrices(buffers.count);
       if (this.instancesUseCPUTransforms) {
-        this.instances.instanceMatrix.needsUpdate = true;
+        this.instancedMesh.instanceMatrix.needsUpdate = true;
         this.instancesUseCPUTransforms = false;
       }
       this.applyGPUNodes(buffers, system);
-    if ('bindIndirect' in buffers) {
-      buffers.bindIndirect(this.instances.geometry, system.sceneRenderer as WebGPURenderer);
-    }
-    else this.instances.geometry.indirect = null;
+      if ('bindIndirect' in buffers) {
+        buffers.bindIndirect(this.instancedMesh.geometry, system.sceneRenderer as WebGPURenderer);
+      } else {
+        this.instancedMesh.geometry.indirect = null;
+      }
     }
 
     destroy(): void {
       super.reset();
-      this.restoreCPUNodes();
-      this.restoreMaterialEnvironment();
-      this.instances.removeFromParent();
+        this.restoreCPUNodes();
+        if (this.batch) {
+          this.disposeMaterialCopy();
+          this.restoreMaterialEnvironment();
+          this.batch.dispose();
+          return;
+        }
+        if (this.appearance) {
+          const materials = Array.isArray(this.mesh.material) ? this.mesh.material : [this.mesh.material];
+          materials.forEach(m => m.dispose());
+          this.mesh.geometry.dispose();
+        }
+        this.disposeMaterialCopy();
+        this.restoreMaterialEnvironment();
+        this.instancedMesh.removeFromParent();
     }
 
     override reset(): void {
@@ -191,8 +299,12 @@ class MeshRenderer extends Renderer {
 
     clear(): void {
       this.restoreCPUNodes();
-      this.instances.count = 0;
-      this.instances.geometry.indirect = null;
+      if (this.batch) {
+        this.batch.clear();
+        return;
+      }
+      this.instancedMesh.count = 0;
+      this.instancedMesh.geometry.indirect = null;
       this.identityMatrixCapacity = 0;
       this.gpuMaterialBuffer = undefined;
       this.gpuMaterialBufferVersion = -1;
@@ -206,11 +318,16 @@ class MeshRenderer extends Renderer {
       if (Array.isArray(material)) return material.forEach((mat) => this.preprocessMaterial(mat));
 
       material.transparent = true;
+      this.appearance?.trackMaterial(material);
+
       const nodeMaterial = material as THREE.Material & {
         colorNode?: Node | null;
         maskShadowNode?: Node | null;
         opacityNode?: Node | null;
         positionNode?: Node | null;
+        normalNode?: Node | null;
+        roughnessNode?: Node | null;
+        metalnessNode?: Node | null;
       };
       if (!this.materialNodeState.has(material)) {
         // WebGPU copies these source-material properties into its internal node material.
@@ -220,8 +337,30 @@ class MeshRenderer extends Renderer {
           maskShadowNode: nodeMaterial.maskShadowNode ?? null,
           opacityNode: this.cpuOpacityNode,
           positionNode: nodeMaterial.positionNode ?? null,
+          normalNode: nodeMaterial.normalNode ?? null,
+          roughnessNode: nodeMaterial.roughnessNode ?? null,
+          metalnessNode: nodeMaterial.metalnessNode ?? null,
         });
       }
+      if (this.batch) {
+        const source = this.batch.sourceAppearance();
+        const inherited = this.appearance ? this.batch.cpuCopyAppearance(this.appearance) : undefined;
+        const copies = inherited ? [source, inherited] : [source];
+        this.applyCopies(material, copies, materialColor, materialOpacity);
+        this.materialNodeState.set(material, {
+          colorNode: nodeMaterial.colorNode ?? null, opacityNode: nodeMaterial.opacityNode ?? null,
+          positionNode: null, maskShadowNode: null,
+          normalNode: nodeMaterial.normalNode ?? null,
+          roughnessNode: nodeMaterial.roughnessNode ?? null,
+          metalnessNode: nodeMaterial.metalnessNode ?? null,
+        });
+        material.onBeforeCompile = shader => this.batch!.shader(shader, this.appearance);
+        material.customProgramCacheKey = () =>
+          `rzmps.batch:${this.batch!.parts.length}:${this.batch!.appearance.cacheKey}:${this.materialCopyCacheKey}`;
+        material.needsUpdate = true;
+        return;
+      }
+
       nodeMaterial.opacityNode = this.cpuOpacityNode;
       material.onBeforeCompile = (shader) => {
         shader.vertexShader = `
@@ -244,9 +383,68 @@ ${shader.fragmentShader}
 #include <opaque_fragment>
 gl_FragColor.a *= vInstanceAlpha;`
         );
+        this.appearance?.shader(shader, true);
       };
+      if (this.appearance) {
+        material.customProgramCacheKey = () => `rzmps.mesh.copy:${this.materialCopyCacheKey}`;
+        const copy = this.appearance.nodes(undefined, undefined, undefined, positionGeometry);
+        this.applyCopies(material, [copy], materialColor, this.cpuOpacityNode.mul(materialOpacity));
+        this.materialNodeState.set(material, { ...this.materialNodeState.get(material)!,
+          colorNode: nodeMaterial.colorNode ?? null, opacityNode: nodeMaterial.opacityNode ?? null,
+          normalNode: nodeMaterial.normalNode ?? null, roughnessNode: nodeMaterial.roughnessNode ?? null,
+          metalnessNode: nodeMaterial.metalnessNode ?? null });
+      }
 
       material.needsUpdate = true;
+    }
+
+    private applyCopies(material: THREE.Material, copies: AppearanceNodes[],
+      color: Node<'vec3'>, opacity: Node<'float'>): void {
+      applyMaterialCopies(material, copies, { color, opacity, normal: materialNormal,
+        roughness: materialRoughness, metalness: materialMetalness });
+    }
+
+    private selectMesh(particle: Particle): number {
+      return selectByTags(this.meshSelection, particle.tags, particle.id, this.meshIndex === undefined
+        ? undefined : evaluateDynamicNumber(this.meshIndex, particle.time, particle.id));
+    }
+
+    private selectMeshGPU(particle: {
+      id: Node<'uvec2'>; tagMask: Node<'uint'>; time: Node<'float'>; index: Node<'uint'>;
+    }, system: ParticleSystem): Node<'float'> {
+      const index = this.meshIndex === undefined ? undefined
+        : this.gpuParameters.number('meshIndex', () => this.meshIndex, particle.time, 0, particle.index);
+      return selectByTagsGPU(this.meshSelection, particle.tagMask, tag => system.getGPURendererTagMask([tag]) ?? 0,
+        particle.id.x.bitXor(particle.id.y), index);
+    }
+
+    private applyBatchGPUNodes(
+      buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+      system: ParticleSystem,
+    ): void {
+      const batch = this.batch!;
+      if (this.gpuMaterialBuffer === buffers && this.gpuMaterialBufferVersion === buffers.version
+        && this.gpuMaterialRendererVersion === this.version) return;
+
+      // BatchedMesh addresses draws, not instances. Candidate parts share one particle slot.
+      const particle = buffers.storage.createParticle(batch.slot);
+      const index = this.selectMeshGPU(particle, system);
+      const visible = this.getGPUVisibilityNode(particle, system).mul(batch.variant.equal(index).select(1, 0));
+      const source = batch.sourceAppearance();
+      const inherited = this.appearance?.nodes(particle.materialCopy, particle.materialCopyU,
+        particle.materialCopyV, positionGeometry);
+      const copies = inherited ? [source, inherited] : [source];
+      Object.assign(batch.material, {
+        positionNode: rotateXYZ(positionGeometry.mul(particle.scale).mul(this.getGPUScaleMultiplierNode()),
+          particle.rotation).mul(visible).add(particle.position),
+        maskShadowNode: visible.greaterThan(0),
+      });
+      this.applyCopies(batch.material, copies, particle.color, particle.alpha.mul(visible));
+      batch.material.needsUpdate = true;
+      this.gpuMaterialBuffer = buffers;
+      this.gpuMaterialBufferVersion = buffers.version;
+      this.gpuMaterialRendererVersion = this.version;
+      this.gpuNodesApplied = true;
     }
 
     private applyGPUNodes(
@@ -260,7 +458,9 @@ gl_FragColor.a *= vInstanceAlpha;`
       ) return;
 
       const particle = buffers.particle;
-      const visible = this.getGPUVisibilityNode(particle, system);
+      const selected = this.meshSelection.structured
+        ? this.selectMeshGPU(particle, system).greaterThanEqual(0).select(1, 0) : float(1);
+      const visible = this.getGPUVisibilityNode(particle, system).mul(selected);
       const scaleMultiplier = this.getGPUScaleMultiplierNode();
       const localPosition = rotateXYZ(
         positionLocal.mul(particle.scale).mul(visible).mul(scaleMultiplier),
@@ -280,8 +480,14 @@ gl_FragColor.a *= vInstanceAlpha;`
         };
 
         nodeMaterial.positionNode = localPosition;
-        nodeMaterial.colorNode = particle.color;
-        nodeMaterial.opacityNode = particle.alpha.mul(visible);
+        const copy = this.appearance?.nodes(particle.materialCopy, particle.materialCopyU,
+          particle.materialCopyV, positionGeometry);
+        if (copy) this.applyCopies(material, [copy], particle.color.mul(materialColor),
+          particle.alpha.mul(visible).mul(materialOpacity));
+        else {
+          nodeMaterial.colorNode = particle.color;
+          nodeMaterial.opacityNode = particle.alpha.mul(visible);
+        }
         nodeMaterial.maskShadowNode = visible.greaterThan(0);
         material.needsUpdate = true;
       });
@@ -293,14 +499,21 @@ gl_FragColor.a *= vInstanceAlpha;`
     }
 
     protected getGPUConfigurationSignature(): string {
+      if (this.batch) {
+        return `${String(this.meshIndex)}:${this.batch.mesh.geometry.uuid}`;
+      }
       const materials = Array.isArray(this.mesh.material) ? this.mesh.material : [this.mesh.material];
       return `${this.mesh.geometry.uuid}:${materials.map((material) => material.uuid).join(',')}`;
     }
 
     protected onGPUConfigurationChange(): void {
       this.restoreCPUNodes();
-      this.instances.geometry = this.mesh.geometry;
-      this.instances.material = this.mesh.material;
+      if (this.batch) {
+        this.preprocessMaterial(this.batch.material);
+        return;
+      }
+      this.instancedMesh.geometry = this.mesh.geometry;
+      this.instancedMesh.material = this.mesh.material;
       this.preprocessMaterial(this.mesh.material);
       this.gpuMaterialBuffer = undefined;
       this.gpuMaterialBufferVersion = -1;
@@ -319,9 +532,15 @@ gl_FragColor.a *= vInstanceAlpha;`
           maskShadowNode?: Node | null;
           opacityNode?: Node | null;
           positionNode?: Node | null;
+        normalNode?: Node | null;
+        roughnessNode?: Node | null;
+        metalnessNode?: Node | null;
         };
         const state = this.materialNodeState.get(material);
         nodeMaterial.positionNode = state?.positionNode ?? null;
+        nodeMaterial.normalNode = state?.normalNode ?? null;
+        nodeMaterial.roughnessNode = state?.roughnessNode ?? null;
+        nodeMaterial.metalnessNode = state?.metalnessNode ?? null;
         nodeMaterial.colorNode = state?.colorNode ?? null;
         nodeMaterial.opacityNode = state?.opacityNode ?? this.cpuOpacityNode;
         nodeMaterial.maskShadowNode = state?.maskShadowNode ?? null;
@@ -329,6 +548,7 @@ gl_FragColor.a *= vInstanceAlpha;`
       });
 
       this.gpuNodesApplied = false;
+      if (this.batch) this.preprocessMaterial(this.batch.material);
       this.gpuMaterialBuffer = undefined;
       this.gpuMaterialBufferVersion = -1;
       this.gpuMaterialRendererVersion = -1;
@@ -343,14 +563,14 @@ gl_FragColor.a *= vInstanceAlpha;`
       this.dummy.updateMatrix();
 
       for (let index = this.identityMatrixCapacity; index < count; index += 1) {
-        this.instances.setMatrixAt(index, this.dummy.matrix);
-        this.instances.setColorAt(index, this.gpuInstanceColor);
+        this.instancedMesh.setMatrixAt(index, this.dummy.matrix);
+        this.instancedMesh.setColorAt(index, this.gpuInstanceColor);
         this._alphaAttr.setX(index, 1);
       }
 
       this.identityMatrixCapacity = count;
-      if (this.instances.instanceColor) this.instances.instanceColor.needsUpdate = true;
-      this.instances.instanceMatrix.needsUpdate = true;
+      if (this.instancedMesh.instanceColor) this.instancedMesh.instanceColor.needsUpdate = true;
+      this.instancedMesh.instanceMatrix.needsUpdate = true;
       this._alphaAttr.needsUpdate = true;
     }
 
@@ -364,14 +584,7 @@ gl_FragColor.a *= vInstanceAlpha;`
 
     private restoreMaterialEnvironment(): void {
       this.materialEnvironmentState.forEach((original, material) => {
-        const envMaterial = material as THREE.Material & {
-          envMap?: THREE.Texture | null;
-          envMapIntensity?: number;
-        };
-
-        envMaterial.envMap = original.envMap;
-        envMaterial.envMapIntensity = original.envMapIntensity;
-        material.needsUpdate = true;
+        copyMaterialEnvironment(material, original);
       });
 
       this.materialEnvironmentState.clear();
@@ -381,6 +594,9 @@ gl_FragColor.a *= vInstanceAlpha;`
       material: THREE.Material,
       system: ParticleSystem,
     ): void {
+      // Reset can dispose a compiled material without replacing the material object.
+      this.appearance?.trackMaterial(material);
+
       const envMaterial = material as THREE.Material & {
         envMap?: THREE.Texture | null;
         envMapIntensity?: number;
@@ -392,36 +608,23 @@ gl_FragColor.a *= vInstanceAlpha;`
         this.materialEnvironmentState.set(material, {
           envMap: envMaterial.envMap,
           envMapIntensity: envMaterial.envMapIntensity,
+          envMapRotation: (envMaterial as THREE.MeshStandardMaterial).envMapRotation?.clone(),
         });
       }
 
       const original = this.materialEnvironmentState.get(material);
 
+      // A system capture takes precedence; copied surfaces otherwise supply their shared environment.
       if (system.useLiveCubemap) {
-        const nextMap = system.liveCubemap.map ?? null;
-
-        if (
-          envMaterial.envMap !== nextMap
-          || envMaterial.envMapIntensity !== system.liveCubemap.intensity
-        ) {
-          envMaterial.envMap = nextMap;
-          envMaterial.envMapIntensity = system.liveCubemap.intensity;
-          material.needsUpdate = true;
-        }
-
+        copyMaterialEnvironment(material, {
+          envMap: system.liveCubemap.map,
+          envMapIntensity: system.liveCubemap.intensity,
+          envMapRotation: original?.envMapRotation,
+        });
         return;
       }
 
-      if (!original) return;
-
-      if (
-        envMaterial.envMap !== original.envMap
-        || envMaterial.envMapIntensity !== original.envMapIntensity
-      ) {
-        envMaterial.envMap = original.envMap;
-        envMaterial.envMapIntensity = original.envMapIntensity;
-        material.needsUpdate = true;
-      }
+      copyMaterialEnvironment(material, this.appearance?.environment(this.materialTarget) ?? original);
     }
 }
 

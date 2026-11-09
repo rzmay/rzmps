@@ -8,7 +8,7 @@
 
 # Class: MeshRenderer
 
-Instances shared mesh geometry and material across particles; geometry complexity multiplies by population.
+Instances a single source mesh, or batches multiple mesh variants with atlas-backed material factors.
 
 ## Extends
 
@@ -39,6 +39,20 @@ new MeshRenderer(options?): MeshRenderer;
 [`Renderer`](Renderer.md).[`constructor`](Renderer.md#constructor)
 
 ## Properties
+
+<a id="atlasoptions"></a>
+
+### atlasOptions
+
+```ts
+readonly atlasOptions: TextureAtlasOptions;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`atlasOptions`](Renderer.md#atlasoptions)
+
+***
 
 <a id="castshadow"></a>
 
@@ -152,13 +166,31 @@ groupingRadius: number;
 
 ***
 
-<a id="instances"></a>
+<a id="materialcopysamplemode"></a>
 
-### instances
+### materialCopySampleMode
 
 ```ts
-instances: InstancedMesh;
+materialCopySampleMode: MaterialCopySampleMode;
 ```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialCopySampleMode`](Renderer.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialTarget`](Renderer.md#materialtarget)
 
 ***
 
@@ -169,6 +201,42 @@ instances: InstancedMesh;
 ```ts
 mesh: Mesh;
 ```
+
+***
+
+<a id="meshes"></a>
+
+### meshes
+
+```ts
+readonly meshes: readonly Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, Material<MaterialEventMap> | Material<MaterialEventMap>[], Object3DEventMap>[];
+```
+
+Source templates used by the batched path. Source transforms are not particle transforms.
+
+***
+
+<a id="meshindex"></a>
+
+### meshIndex?
+
+```ts
+optional meshIndex?: DynamicValue<number>;
+```
+
+***
+
+<a id="meshsource"></a>
+
+### meshSource
+
+```ts
+readonly meshSource: TaggedValue<
+  | BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
+| Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, Material<MaterialEventMap> | Material<MaterialEventMap>[], Object3DEventMap>>;
+```
+
+Original resource tree, retained for tooling and serialization.
 
 ***
 
@@ -207,6 +275,20 @@ optional tags?: string[];
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`tags`](Renderer.md#tags)
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality
+
+```ts
+readonly textureCopyQuality: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`textureCopyQuality`](Renderer.md#texturecopyquality)
 
 ***
 
@@ -308,6 +390,129 @@ get gpuParameterUploadCount(): number;
 
 ***
 
+<a id="instances"></a>
+
+### instances
+
+#### Get Signature
+
+```ts
+get instances():
+  | BatchedMesh
+| InstancedMesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, Material<MaterialEventMap> | Material<MaterialEventMap>[], Object3DEventMap>;
+```
+
+Single geometry uses instancing; multiple source meshes use batching.
+
+##### Returns
+
+  \| `BatchedMesh`
+  \| `InstancedMesh`\<`BufferGeometry`\<`NormalBufferAttributes`, `BufferGeometryEventMap`\>, `Material`\<`MaterialEventMap`\> \| `Material`\<`MaterialEventMap`\>[], `Object3DEventMap`\>
+
+***
+
+<a id="materialcomposite"></a>
+
+### materialComposite
+
+#### Get Signature
+
+```ts
+get materialComposite():
+  | MaterialCompositeCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialComposite(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.materialComposite
+```
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU
+
+#### Get Signature
+
+```ts
+get materialCompositeGPU():
+  | MaterialCompositeGPUCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialCompositeGPU(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.materialCompositeGPU
+```
+
+***
+
+<a id="maxparticles"></a>
+
+### maxParticles
+
+#### Get Signature
+
+```ts
+get maxParticles(): number;
+```
+
+Particle capacity, independent of the number of batched geometry parts.
+
+##### Returns
+
+`number`
+
+***
+
 <a id="needsupdate"></a>
 
 ### needsUpdate
@@ -330,9 +535,7 @@ set needsUpdate(value): void;
 
 #### Inherited from
 
-```ts
-Renderer.needsUpdate
-```
+[`Renderer`](Renderer.md).[`needsUpdate`](Renderer.md#needsupdate)
 
 ***
 
@@ -380,6 +583,28 @@ Additional visual particles; GPU diagnostics refresh asynchronously when request
 
 ***
 
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`selectedEventNames`](Renderer.md#selectedeventnames)
+
+***
+
 <a id="supportsgpuinput"></a>
 
 ### supportsGPUInput
@@ -399,6 +624,28 @@ Whether this renderer can consume GPU particle buffers without a selective CPU r
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`supportsGPUInput`](Renderer.md#supportsgpuinput)
+
+***
+
+<a id="supportsmaterialcopy"></a>
+
+### supportsMaterialCopy
+
+#### Get Signature
+
+```ts
+get supportsMaterialCopy(): boolean;
+```
+
+Custom renderer subclasses opt in by implementing onMaterialCopyChange.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`supportsMaterialCopy`](Renderer.md#supportsmaterialcopy)
 
 ***
 
@@ -565,6 +812,32 @@ Removes displayed particles while retaining resources for reuse.
 #### Overrides
 
 [`Renderer`](Renderer.md).[`clear`](Renderer.md#clear)
+
+***
+
+<a id="copymaterial"></a>
+
+### copyMaterial()
+
+```ts
+copyMaterial(source): this;
+```
+
+Renderer-specific translation retains the destination shader and rendering settings.
+
+#### Parameters
+
+##### source
+
+[`MaterialTarget`](../type-aliases/MaterialTarget.md) \| `undefined`
+
+#### Returns
+
+`this`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`copyMaterial`](Renderer.md#copymaterial)
 
 ***
 

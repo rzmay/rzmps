@@ -63,7 +63,10 @@ emitCollision(
    particle,
    point,
    normal,
-   impulse
+   impulse,
+   materialCopy?,
+   materialCopyU?,
+   materialCopyV?
 ): void;
 ```
 
@@ -84,6 +87,18 @@ emitCollision(
 ##### impulse
 
 `Node`\<`"vec3"`\>
+
+##### materialCopy?
+
+`Node`\<`"vec4"`\> = `...`
+
+##### materialCopyU?
+
+`Node`\<`"vec4"`\> = `...`
+
+##### materialCopyV?
+
+`Node`\<`"vec4"`\> = `...`
 
 #### Returns
 
@@ -119,7 +134,8 @@ emitDeath(particle): void;
 emitParticleEvent(
    type,
    particle,
-   payload?
+   payload?,
+   surface?
 ): void;
 ```
 
@@ -136,6 +152,10 @@ emitParticleEvent(
 ##### payload?
 
 [`GPUEventPayload`](../../type-aliases/GPUEventPayload.md)
+
+##### surface?
+
+readonly `Node`\<`"vec4"`\>[]
 
 #### Returns
 

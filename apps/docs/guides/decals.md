@@ -1,8 +1,10 @@
 # Surface Decals
 
-`DecalRenderer` clips persistent geometry onto rigid scene meshes with Three.js `DecalGeometry`. Pass a material first
+`DecalRenderer` clips persistent geometry onto rigid scene meshes with Three.js `DecalGeometry`. Pass a material or a nonempty list of materials first
 and an optional options object. Each mark owns a material clone and geometry; your material, textures, and target
 geometry remain caller-owned. Standard Three.js materials work with WebGL and WebGPU rendering.
+Each decal copies the hit mesh's `receiveShadow` setting at creation, so lit decal materials receive the same
+scene shadows as their surface.
 
 ```ts
 import * as THREE from 'three';
@@ -19,6 +21,20 @@ const decals = new DecalRenderer(material, {
 });
 // Supply decals in a ParticleSystem's renderers collection.
 ```
+
+Pass `[impact1, impact2, impact3]` to choose a complete material randomly for each mark. Normal, roughness, alpha, and AO maps
+stay paired because selection happens once before cloning the material. Repeated hits from the same particle can
+choose different templates. `materialIndex` optionally selects a zero-based index (a dynamic number); it is rounded down
+and clamped to the available range. Existing marks retain their selected template when composition callbacks change.
+Templates and textures remain caller-owned. This uses `StrictMultiple<THREE.Material>` and adds no GPU storage buffers.
+Ready image textures on the supplied materials upload once per Three.js renderer during normal updates,
+before a collision needs a new variant. Pending images are retried when ready; render-target textures stay under
+their producer's control. This requires no separate atlas initialization or loading API.
+
+For a normal-only impact, put its matching mask in `alphaMap`. Optional `aoMap` is supported by standard materials;
+set `aoMap.channel = 0` to use the same projector UVs. Keep these data maps in `THREE.NoColorSpace`.
+Adjust a template's `normalScale` to control its normal-map strength; `material.normalScale.setScalar(2)` doubles
+both tangent-plane components. This is independent of `DecalRenderer.size` and particle scale inheritance.
 
 Spawn projection is enabled by default. Set `onSpawn: false, onCollision: true` for contact marks, or `onDeath: true` to
 search from the final particle position. Triggers are independent; enabling two can deliberately create two sets of
@@ -65,7 +81,60 @@ Forward follows orientation; use `OrientToDirection` when orientation should fol
 sampler, a rotated local simulation needs a callback that transforms the returned direction to world space using the
 system's world matrix. Samplers leave particle state and caller-owned vectors unchanged.
 
-Each ray contributes its first supported intersection. Search uses a configured `ThreeCollisionBackend`'s current
+## Marks Along a Moving Particle's Path
+
+`DecalRenderer.Intersect()` is a direction sampler alongside Forward and Radial. It returns a bounded
+`THREE.Line3` from the ordinary projection context's previous position to its current position,
+so a fast projectile can pass through a thin wall without a Collision module or any velocity change.
+Use `hitSelection: DecalRenderer.All` to mark every crossed entry and exit surface:
+
+```ts
+const holes = new DecalRenderer(bulletHoleMaterial, {
+  direction: DecalRenderer.Intersect(),
+  continuousRate: 60,
+  onSpawn: false,
+  hitSelection: DecalRenderer.All,
+  size: 0.55,
+  depth: 0.04,
+  inheritScale: 0,
+  inheritColor: 0,
+  lifetime: 24,
+});
+```
+
+The existing `continuousRate` controls sampling; no separate intersection mode or lifecycle tracking is installed.
+Movement segments use simulation-space coordinates and are transformed to world space for querying.
+Custom samplers may also return `THREE.Line3` or arrays mixing segments and world-space direction vectors.
+They receive an optional second `DecalProjectionContext` argument containing `deltaTime`, `position`,
+and `previousPosition`. Continuous projection tracks this history for every sampler, including skipped frames.
+Ordinary `maxDistance` limits direction rays; a segment defines its own range. `maxHits`, tags, ratio,
+capacity and lifetime still apply. Use All to select each crossed entry and exit.
+
+A reverse ray finds outward-facing exit faces without modifying target materials or shaders.
+Triangle-seam duplicates are removed, while distinct entry/exit points on one mesh remain separate.
+Meshes keep their existing raycast side rules. Each sampled segment is straight, so a curved path
+is approximated by its successive samples. Native GPU simulation uses asynchronous selective
+particle snapshots, with no added compute buffers. Velocity estimates the first interval when no
+previous projection position is available.
+
+## Blend with the Marked Surface
+
+With `materialComposite` / `materialCompositeGPU`, a decal without an explicit `materialTarget`
+or a preassigned particle binding uses its hit surface as the source. The shared appearance pipeline
+registers the face's material and extends its triangle UV chart across the clipped geometry.
+Each mark keeps an independent binding; the projectile's material and the target's material are
+unchanged. A compatible decal material also borrows the source environment map, intensity, and rotation,
+so a mark on reflective metal retains its reflections. Destination maps retain the projector UVs, so a crack or hole can blend into the original
+surface pattern without stretching that pattern to the decal footprint.
+
+The [Destruction example](../examples/destruction.md) uses collision-triggered concrete cracks;
+[Doppler Bullet](../examples/dopplerBullet.md) uses Intersect with albedo, normal and roughness maps.
+Destruction instead uses only damage normals over the original material. Its opacity mask compares
+the mapped normal with `context.geometricNormal` and multiplies by `context.destMapAlpha`, so flat
+normal regions and transparent map pixels do not cover the target. The supplied height maps do not
+displace geometry. See [material compositing](material-copying.md) for callback semantics.
+
+Each direction ray contributes its first supported intersection; bounded segments include entry and exit faces. Search uses a configured `ThreeCollisionBackend`'s current
 membership, including explicit object lists and filters; without that backend it scans scene meshes using the shared
 collision exclusions. Particle renderer objects and decal meshes are excluded. Other physics backends supply contacts
 directly when their `CollisionHit.object` is a supported mesh; otherwise search falls back to scene geometry. A valid
@@ -154,6 +223,51 @@ and scale. The [Fire example](../examples/fire.md) uses continuous radial projec
 Short-lived, low-opacity marks fade in and accumulate into textured scorch patches. [Fireball](../examples/fireball.md)
 uses the same texture with a higher continuous rate suited to its brief bursts.
 
+## Event Parameters and Impulse Controls
+
+`onSpawn`, `onCollision` and `onDeath` accept booleans or parameter callbacks. A callback receives
+`(data, source, parameters)` and returns per-mark overrides; return `false` to cancel that mark.
+Collision data is a `CollisionHit`. Spawn/death data is normally undefined. The source is the
+original particle or registered handle; evaluated parameters are independent of it and the template.
+
+```ts
+const marks = new DecalRenderer(material, {
+  onSpawn: false,
+  impulseThreshold: 4,
+  impulseAffectsSize: 0.3,
+  impulseAffectsOpacity: 0.1,
+  impulseAffectsLifetime: 0.2,
+  onCollision: (hit, source, parameters) => ({
+    size: parameters.size.clone().clampScalar(0.5, 1.4),
+  }),
+});
+marks.onEvent('splash', (data, source, parameters) => ({ lifetime: parameters.lifetime * 2 }));
+// The constructor form is onEvent: { splash: callback }, or onEvent: ['splash'] for default parameters.
+```
+
+Impulse multipliers are `magnitude ** amount`, with zero amounts neutral. The collision threshold
+runs first; dynamic values, inheritance, proximity and impulse effects are evaluated before the
+callback. `DecalParameters` exposes world-space `position` and `normal`, world-space XY `size`,
+`rotation`, `color`, base `opacity`, `lifetime`, `depth` and `offset`. The age-dependent renderer
+`opacity` envelope still multiplies the mark's base opacity. Each selected hit gets its own snapshot;
+selection, tag/ratio filtering and capacity checks still apply. Position overrides remain clipped to
+the selected target mesh.
+
+`rotation` is additional roll in radians, default zero. A range such as `[-Math.PI, Math.PI]` is
+sampled independently per mark, including entry and exit marks from the same particle. The registered
+source frame uses the same roll as the geometry. Source particles are never rotated.
+
+Built-in event names are `spawn`, `death` and `collision`. `marks.onEvent('collision', callback)`
+selects the same trigger as `onCollision: callback`; an explicit onEvent entry takes precedence,
+so the same event is not processed twice. Calling onEvent again replaces that name's handler.
+`onEvent('continuous', callback)` transforms parameters for continuous projections, including Intersect
+samples. Direction samplers do not publish particle collisions.
+
+All named events use the same EventReceiver subscription path and `eventScope` rules. Lifecycle aliases
+select the corresponding `spawn`, `death`, or `collision` name, including registered-source events.
+Parameter callbacks run once at dispatch, retaining synchronous CPU placement and the existing native
+GPU snapshot delivery. Use tags to filter sources and avoid feeding a decal source back into itself.
+
 ## Emitting from Persistent Decals
 
 Set `emissionTags: ['acid-pool']` to register each successful decal as an emission source.
@@ -162,6 +276,14 @@ from application scheduling code. Sources follow decal transforms, rigid surface
 color and opacity, and are disposed on expiry, eviction, clear or renderer destruction.
 A child with `{ tags: ['acid-pool'], emitContinuous: true, inheritLifetime: 0 }` can emit smoke
 from every pool; another with `onEvent: ['bubble']` can produce splashes.
+
+Sources also expose `metadata.material`, `metadata.surface` (impact UV and world-space UV gradients),
+and `metadata.point` in the producing system's simulation frame. A source-born particle can use
+`MaterialCopy({ source: MaterialCopySource.Source, sampleMode: MaterialCopySampleMode.Color })`
+to sample a single surface color. Color mode holds the impact UV fixed even when births spread
+around the source. Doppler Bullet combines this with `{ tags: ['bullet-hole'], emitOnSpawn: true,
+inheritLifetime: 0 }` for one brief puff per persistent hole. Filter other spawn-triggered effects
+by their projectile tag so a registered source birth does not replay those effects.
 
 See [Emission Sources and Custom Events](./emission-sources-events.md) for handle APIs and deferred
 synchronization, and [Acid](../examples/acid.md) for the complete effect.

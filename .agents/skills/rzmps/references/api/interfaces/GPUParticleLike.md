@@ -150,6 +150,36 @@ readonly mass: Node<"float">;
 
 ***
 
+<a id="materialcopy"></a>
+
+### materialCopy?
+
+```ts
+readonly optional materialCopy?: Node<"vec4">;
+```
+
+***
+
+<a id="materialcopyu"></a>
+
+### materialCopyU?
+
+```ts
+readonly optional materialCopyU?: Node<"vec4">;
+```
+
+***
+
+<a id="materialcopyv"></a>
+
+### materialCopyV?
+
+```ts
+readonly optional materialCopyV?: Node<"vec4">;
+```
+
+***
+
 <a id="orbitcenter"></a>
 
 ### orbitCenter

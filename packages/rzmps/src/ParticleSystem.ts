@@ -1,3 +1,4 @@
+import { MaterialCopyRegistry } from './material-copy/Surface';
 import EmitterInstance from './EmitterInstance';
 import { SharedGPUEventBatch, emptyGPUEvents, type GPUEventBatch } from './gpu/EventBatch';
 import overrideEmitterOptions from './helpers/overrideEmitterOptions';
@@ -7,9 +8,11 @@ import * as THREE from 'three';
 import EmissionSource, { type EmissionSourceData, type SubSystemSource } from './EmissionSource';
 import { eventNames, cpuEventHandler, type EventSubscriptions, type GPUEmissionContext } from './Events';
 import tagsIntersect from './helpers/tagsIntersect';
-import { setParticleSourceBinding, getParticleSourceBinding } from './ParticleSourceBindings';
 import { matrixColumnGPU, particleFrameGPU, transformParticleFrameGPU } from './helpers/simulationFrame';
-import Particle, { type ParticleCachedValues } from './Particle';
+import Particle, {
+  setParticleSourceBinding, getParticleSourceBinding, type ParticleCachedValues,
+  type ParticleInitializationContext, type GPUParticleInitializationContext,
+} from './Particle';
 import Emitter, { type EmissionContext } from './Emitter';
 import { rotateFromYGPU } from './helpers/gpuTransforms';
 import type { GPUEmissionSupportReport } from './gpu/Emission';
@@ -30,13 +33,14 @@ import { EndBehavior } from './enums/EndBehavior';
 import { SimulationSpace } from './enums/SimulationSpace';
 import { MaxCulling } from './enums/MaxCulling';
 import { WebGPURenderer, type ComputeNode, type Node, StorageBufferAttribute } from 'three/webgpu';
-import { float, Fn, hash, If, instanceIndex, Loop, Break, mix, pow, storage, uint, uniform, vec3, vec4, mat4,
+import { float, Fn, hash, If, instanceIndex, Loop, Break, Continue, mix, pow, storage, uint, uniform, vec3, vec4, mat4,
   inverse, determinant, bitcast, uvec4, abs, min, mat3 }
   from 'three/tsl';
 import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY, type LiveCubemapOptions } from './renderers/LiveCubemap';
 import LODHelper, { type LODSettings } from './LODHelper';
 import {
   destroyGPUStorageAttribute,
+  resetInitializationAttributesGPU,
   createGPUParticleBufferState,
   createEmptyGPUParticleBufferState,
   createGPUParticleRenderBufferState,
@@ -183,6 +187,8 @@ export interface SubSystemOptions {
   inheritMass: number;
   inheritVelocity: number;
 
+  /** Exponent scaling burst counts and emission rates by contact impulse; zero disables scaling. */
+  impulseAffectsCount?: number;
   /** Exponent controlling contact-impulse scaling of child size. */
 
   impulseAffectsScale: number;
@@ -258,6 +264,18 @@ class ParticleSystem extends THREE.Object3D {
   modules: Module[] = [];
   spatialEffects: SpatialEffect[] = [];
   renderers: Renderer[] = [];
+  private _materialCopyRegistry?: MaterialCopyRegistry;
+  /** @internal Appearance snapshots are shared only within this owned subsystem tree. */
+  get materialCopyRegistry(): MaterialCopyRegistry {
+    if (this._subSystemParent) return this._subSystemParent.materialCopyRegistry;
+    return this._materialCopyRegistry ??= new MaterialCopyRegistry();
+  }
+
+  /** @internal Detects registered appearances without scanning particles or creating an unused registry. */
+  get hasMaterialCopySources(): boolean {
+    return this._subSystemParent?.hasMaterialCopySources ?? (this._materialCopyRegistry?.sources.length ?? 0) > 1;
+  }
+
   subSystems = new Map<ParticleSystem, SubSystemOptions>();
   boundingBox = new THREE.Box3();
 
@@ -852,10 +870,15 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _emitterEventNames(emitter: Emitter): string[] {
-    const options = this.getEmitterOptions(emitter);
-    return [...new Set([...(options.events ?? emitter.events), ...eventNames(options.onEvent),
-      ...(options.emitOnSpawn ? ['spawn'] : []), ...(options.emitOnDeath ? ['death'] : []),
-      ...(options.emitOnCollision ? ['collision'] : [])])];
+    // Subscription reconciliation only needs selectors, not the full inherited emission configuration.
+    const overrides = this._subSystemParent?._subSystemOverrides.get(this);
+    const own = emitter.emission;
+    return [...new Set([...(overrides?.events ?? own.events ?? emitter.events),
+      ...eventNames(overrides?.onEvent ?? own.onEvent),
+      ...((overrides?.emitOnSpawn ?? own.emitOnSpawn) ? ['spawn'] : []),
+      ...((overrides?.emitOnDeath ?? own.emitOnDeath) ? ['death'] : []),
+      ...((overrides?.emitOnCollision ?? own.emitOnCollision) ? ['collision'] : []),
+    ])];
   }
 
   private _subSystemParent?: ParticleSystem;
@@ -894,7 +917,7 @@ class ParticleSystem extends THREE.Object3D {
         const hit = event.name === 'collision' ? event.data as CollisionHit : undefined;
         if (hit && hit.impulse.length() <= options.impulseThreshold) continue;
         owner._activateEventEmitterInstances(emitter, source, options, hit,
-          cpuEventHandler(options.onEvent, event.name), event.data, event.origin);
+          cpuEventHandler(options.onEvent, event.name), event.data, event.origin, event);
       }
       owner.subSystems.forEach((_options, child) => route(child));
     };
@@ -912,19 +935,22 @@ class ParticleSystem extends THREE.Object3D {
   private _reconcileEventReceivers(): void {
     const root = this._eventRoot();
     const reconcile = (system: ParticleSystem) => {
-      for (const component of [...system.modules.flatMap(module => module.withDependents()),
-        ...system.renderers, ...system.emitters]) {
-        // Empty receivers need no producer resolution. Retain reconciliation when clearing subscriptions.
-        if (!component.events.length && !component.subscriptions.length
-          && (!(component instanceof Emitter) || !system._emitterHasEvents(component))) continue;
+      const synchronize = (component: EventReceiver) => {
+        const emitter = component instanceof Emitter;
+        if (emitter && !component.subscriptions.length && !system._emitterHasEvents(component)) return;
+        const names = emitter ? system._emitterEventNames(component) : component.selectedEventNames;
+        if (!names.length && !component.subscriptions.length) return;
         component.gpuNative = system.gpuProcessing
           && ParticleSystem.isWebGPURenderer(system.sceneRenderer ?? root.sceneRenderer)
           && (component instanceof Renderer ? component.supportsGPUEventInput
             : system.modules.every(module => module.supportsGPU));
-        component.synchronize(system, component instanceof Emitter && system.isSubSystem
-          ? 'parent' : 'local', component instanceof Emitter ? system._emitterEventNames(component) : component.events,
-          component instanceof Emitter ? system.getEmitterOptions(component).eventScope : undefined);
-      }
+        component.synchronize(system, emitter && system.isSubSystem ? 'parent' : 'local', names,
+          emitter ? system._subSystemParent?._subSystemOverrides.get(system)?.eventScope
+            ?? component.eventScope : undefined);
+      };
+      for (const module of system.modules) for (const dependent of module.withDependents()) synchronize(dependent);
+      for (const renderer of system.renderers) synchronize(renderer);
+      for (const emitter of system.emitters) synchronize(emitter);
       system.subSystems.forEach((_options, child) => reconcile(child));
     };
     reconcile(root);
@@ -2017,6 +2043,7 @@ class ParticleSystem extends THREE.Object3D {
       'emission',
       `reclaim:${reclaimOld}`,
       `buffer:${buffers.version}:${buffers.capacity}`,
+      `initializers:${this._getParticleInitializationSignature()}`,
       `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
 
@@ -2067,6 +2094,7 @@ class ParticleSystem extends THREE.Object3D {
       'old-emission-selection',
       `buffer:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
+      `initializers:${this._getParticleInitializationSignature()}`,
       `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
     if (this._gpuOldSelectionComputeCache?.key !== selectionKey) {
@@ -2094,6 +2122,7 @@ class ParticleSystem extends THREE.Object3D {
       'old-emission-initialization',
       `buffer:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
+      `initializers:${this._getParticleInitializationSignature()}`,
       `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
     if (this._gpuOldEmissionComputeCache?.key !== initializationKey) {
@@ -2202,6 +2231,7 @@ class ParticleSystem extends THREE.Object3D {
       `instances:${emitterInstances.capacity}`,
       `culling:${this.maxCullingMode}`,
       `defer:${context.buffers.capacity < this.maxParticles}`,
+      `initializers:${this._getParticleInitializationSignature()}`,
       `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
     if (this._gpuEmissionFinalizeComputeCache?.key === cacheKey) {
@@ -2239,6 +2269,7 @@ class ParticleSystem extends THREE.Object3D {
     const cacheKey = [
       'emission-prepare',
       `instances:${emitterInstances.capacity}`,
+      `initializers:${this._getParticleInitializationSignature()}`,
       `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
 
@@ -2329,6 +2360,7 @@ class ParticleSystem extends THREE.Object3D {
       `child:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
       `options:${emitters.map(emitter => this._getSubSystemGPUOptionsSignature(this.getEmitterOptions(emitter)))}`,
+      `initializers:${this._getParticleInitializationSignature()}`,
       `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
 
@@ -2428,6 +2460,12 @@ class ParticleSystem extends THREE.Object3D {
                   .mul(particleFrameGPU(source, options.inheritScale))).mul(velocity) : velocity)
                 .xyz.mul(options.inheritVelocity);
             },
+            resolveInitializationContext: claim => {
+              const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
+              const sourceToWorld = input.parent._gpuSimulationToWorldNode;
+              return { source, sourceToWorld, birthToWorld: this.simulationSpace === SimulationSpace.Source
+                ? sourceToWorld.mul(particleFrameGPU(source, options.inheritScale)) : context.simulationToWorldNode };
+            },
             sourceRelative: this.simulationSpace === SimulationSpace.Source,
             resolveSourceIdentity: this.simulationSpace === SimulationSpace.Source ? claim => {
               const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
@@ -2493,6 +2531,7 @@ class ParticleSystem extends THREE.Object3D {
       `options:${configurations.map(options => this._getSubSystemGPUOptionsSignature(options)).join('|')}`,
       `producers:${origins.map(values => values.map(owner => `${owner.id}:${[...owner._eventTypes]}`)).join('|')}`,
       `ranges:${readers.map(reader => reader.versionKey).join('|')}`,
+      `initializers:${this._getParticleInitializationSignature()}`,
       `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
 
@@ -2606,7 +2645,11 @@ class ParticleSystem extends THREE.Object3D {
                       }
                       If(matches, () => {
                         const overrides = handler(event.data, event.particle, contextValues);
-                        if (overrides) {
+                        if (overrides === false) {
+                          Continue();
+                        } else if (overrides && 'isNode' in overrides) {
+                          If((overrides as Node<'bool'>).not(), () => { Continue(); });
+                        } else if (overrides) {
                           for (const [key, value] of Object.entries(overrides)) {
                             (contextValues[key as keyof GPUEmissionContext] as Node).assign(value);
                           }
@@ -2636,6 +2679,7 @@ class ParticleSystem extends THREE.Object3D {
                       runs.snapshots.storage.createSourceIdentityNode(runIndex).assign(vec4(0));
                     });
                   }
+                  runs.storeEvent(runIndex, event, producerFrame);
                   runs.storeParticle(runIndex, {
                     ...event.particle,
                     alive: uint(1),
@@ -2671,6 +2715,7 @@ class ParticleSystem extends THREE.Object3D {
       })().compute(runs.capacity));
 
       emitters.forEach((emitter, emitterIndex) => {
+        const options = this.getEmitterOptions(emitter);
         const globalRuntime = emitterInstances.createRuntime(contextCount + emitterIndex);
         nodes.push(Fn(() => globalRuntime.resetRequestCount(uint(0)))().compute(1));
         nodes.push(Fn(() => {
@@ -2684,6 +2729,9 @@ class ParticleSystem extends THREE.Object3D {
               elapsedTimeNode: run.elapsed,
               durationNode: run.duration,
               emitterPositionNode: run.particle.position,
+              countScaleNode: (options.impulseAffectsCount ?? 0) > 0
+                ? run.eventType.equal(uint(GPUEventType.Collision)).select(
+                  pow(run.collisionImpulse.length().max(0), options.impulseAffectsCount ?? 0), float(1)) : undefined,
               emitter,
               emitterIndex,
               output: context.buffers,
@@ -2711,6 +2759,16 @@ class ParticleSystem extends THREE.Object3D {
             inheritance: { color: 1, alpha: 1, mass: 1, velocity: 1, scale: 1 },
             resolveSourceIdentity: this.simulationSpace === SimulationSpace.Source ? claim =>
               runs.snapshots.storage.createSourceIdentityNode(resolveRunIndex(claim)) : undefined,
+            resolveInitializationContext: claim => {
+              const index = resolveRunIndex(claim);
+              const event = runs.event(index);
+              const sourceToWorld = runs.sourceToWorld(index);
+              const birthToWorld = this.simulationSpace === SimulationSpace.Source
+                ? event.type.notEqual(uint(GPUEventType.Death)).select(
+                  sourceToWorld.mul(particleFrameGPU(event.particle, options.inheritScale)),
+                  context.simulationToWorldNode) as Node<'mat4'> : context.simulationToWorldNode;
+              return { event, source: event.particle, sourceToWorld, birthToWorld };
+            },
             resolveParentParticle: (claimIndex) => runs.load(resolveRunIndex(claimIndex)).particle,
             resolveDistortionStrength: claimIndex => runs.load(resolveRunIndex(claimIndex)).particle.time,
             resolveEmissionTransform: claimIndex => {
@@ -2955,7 +3013,7 @@ class ParticleSystem extends THREE.Object3D {
           particle,
           event.point,
           event.normal,
-          event.impulse,
+          event.impulse, event.materialCopy, event.materialCopyU, event.materialCopyV,
         );
         marker.clear(particle.index);
       });
@@ -3349,6 +3407,9 @@ class ParticleSystem extends THREE.Object3D {
       tagMask: particle.tagMask.toVar('baseTagMask'),
       generation: particle.generation.toVar('baseGeneration'),
       lodPriority: particle.lodPriority,
+      materialCopy: particle.materialCopy,
+      materialCopyU: particle.materialCopyU,
+      materialCopyV: particle.materialCopyV,
     };
   }
 
@@ -3487,11 +3548,7 @@ class ParticleSystem extends THREE.Object3D {
     If(alive.and(particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0))), applySpatialEffect);
   }
 
-  private _applyGPUModifiers(
-    modifiers: Array<Module | SpatialEffect>,
-    particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
-  ): void {
+  private _configureParticleGPU(particle: GPUParticleLike, context: GPUParticleUpdateContext): void {
     const registeredTagMask = (tag: Tag): number => {
       const index = this._gpuTagRegistry.get(tag);
       if (index === undefined) throw new Error(`GPU particle tag "${tag}" is not registered in this system.`);
@@ -3509,6 +3566,14 @@ class ParticleSystem extends THREE.Object3D {
       const type = this._eventTypes.get(event);
       if (type !== undefined) context.eventWriter?.emitParticleEvent(type, particle, payload);
     };
+  }
+
+  private _applyGPUModifiers(
+    modifiers: Array<Module | SpatialEffect>,
+    particle: GPUParticleLike,
+    context: GPUParticleUpdateContext,
+  ): void {
+    this._configureParticleGPU(particle, context);
     for (let index = 0; index < modifiers.length;) {
       const modifier = modifiers[index];
       const firstRecord = modifier instanceof SpatialEffect && isBatchableEffect(modifier)
@@ -3763,6 +3828,7 @@ class ParticleSystem extends THREE.Object3D {
       });
       system.renderers.forEach((renderer) => {
         renderer.tags?.forEach((tag) => this._registerGPUTag(tag));
+        renderer.selectionTags.forEach((tag) => this._registerGPUTag(tag));
       });
       system.subSystems.forEach((options, child) => {
         options.tags?.forEach(tag => this._registerGPUTag(tag));
@@ -3897,6 +3963,7 @@ class ParticleSystem extends THREE.Object3D {
       options.inheritAlpha,
       options.inheritMass,
       options.inheritVelocity,
+      options.impulseAffectsCount,
       options.impulseAffectsScale,
       options.impulseAffectsSpeed,
       options.impulseAffectsLifetime,
@@ -4800,6 +4867,7 @@ class ParticleSystem extends THREE.Object3D {
     handler?: import('./Events').CPUEventHandler,
     data?: unknown,
     origin?: ParticleSystem,
+    initializationEvent?: SimulationEvent,
   ): void {
     const collision = collisionHit && {
       ...collisionHit,
@@ -4809,11 +4877,6 @@ class ParticleSystem extends THREE.Object3D {
     };
     const now = Date.now();
     if (origin) this._sourceProducers.set(particle, origin);
-
-    this._playing = true;
-    this._paused = false;
-    this._ended = false;
-    this.lastFrame = now;
 
     const impulse = collision?.impulse;
     const transform = this.getParticleEmissionTransform(
@@ -4836,11 +4899,19 @@ class ParticleSystem extends THREE.Object3D {
         options.impulseAffectsScale),
       velocityScale: this._getImpulseEffect(collision, options.impulseAffectsSpeed),
       duration, time: 0, elapsedTime: 0, looping: false, distortionStrength: 1,
+      countScale: this._getImpulseEffect(collision, Math.max(0, options.impulseAffectsCount ?? 0)),
       tags: [],
       mass: (inherited.mass ?? 1) * (options.impulseAffectsMass > 0 ? this._getImpulseEffect(collision,
         options.impulseAffectsMass) : 1),
     } as EmissionContext;
     const overrides = handler?.(data, particle, baseContext);
+    if (overrides === false) return;
+
+    this._playing = true;
+    this._paused = false;
+    this._ended = false;
+    this.lastFrame = now;
+
     const eventContext = handler ? { ...baseContext, ...overrides } : undefined;
     if (eventContext) {
       eventContext.transform = eventContext.transform.clone();
@@ -4859,6 +4930,9 @@ class ParticleSystem extends THREE.Object3D {
       source: particle.alive && !particle.id.startsWith('system:') ? particle : undefined,
       frame: this.getSourceEmissionFrame(particle),
       inputs: {
+        event: initializationEvent,
+        sourceToWorld: origin?.getSimulationToWorldMatrix().clone(),
+        countScale: context.countScale,
         transform: context.transform,
         position: context.position,
         looping: context.looping,
@@ -5098,6 +5172,8 @@ class ParticleSystem extends THREE.Object3D {
 
     this.removeFromParent();
     this.cleanup();
+    this._materialCopyRegistry?.dispose();
+    this._materialCopyRegistry = undefined;
     this.dispatchEvent({ type: 'destroyed' } as unknown as Parameters<typeof this.dispatchEvent>[0]);
   }
 
@@ -5452,6 +5528,57 @@ class ParticleSystem extends THREE.Object3D {
   private _notifyDeath(particle: Particle, skipGPUConsumers = false): void {
     this._deathListeners.forEach(listener => listener(particle));
     this._dispatchSourceEvent(particle, 'death', undefined, skipGPUConsumers);
+  }
+
+  private _getParticleInitializationSignature(): string {
+    return this.modules.flatMap(module => module.withDependents())
+      .filter(module => module.initializeParticleGPU !== undefined)
+      .map(module => `${this._getObjectSignature(module)}:${module.version}:${module.tags?.join(',') ?? ''}:`
+        + this._getObjectSignature(module.initializeParticleGPU!)).join('|');
+  }
+
+  private readonly _initializedParticles = new WeakSet<Particle>();
+
+  /** @internal Coordinates configured module order, independently of deferred event dispatch. */
+  initializeParticle(particle: Particle, context: ParticleInitializationContext): void {
+    if (this._initializedParticles.has(particle)) return;
+
+    const initializers = this.modules.flatMap(module => module.withDependents())
+      .filter(module => module.initializeParticle !== undefined);
+    if (!initializers.length) return;
+
+    this._initializedParticles.add(particle);
+    let initializationContext: ParticleInitializationContext | undefined;
+
+    // Resolve the birth frame once, only if a selected initializer needs it.
+    for (const module of initializers) {
+      if (module.tags && !tagsIntersect(module.tags, particle.tags ?? [])) continue;
+
+      initializationContext ??= { ...context,
+        birthToWorld: context.birthToWorld ?? this.getSimulationToWorldMatrix() };
+      module.initializeParticle!(particle, initializationContext);
+    }
+
+    // No-op and unmatched modules must not allocate a redundant permanent-state snapshot.
+    if (initializationContext) particle.cache();
+  }
+
+  /** @internal Called by native birth graphs after attributes are assigned, before spawn events. */
+  initializeParticleGPU(particle: GPUParticleLike, context: GPUParticleInitializationContext): void {
+    resetInitializationAttributesGPU(particle);
+    const initializers = this.modules.flatMap(module => module.withDependents())
+      .filter(module => module.initializeParticleGPU !== undefined);
+    if (!initializers.length) return;
+
+    this._configureParticleGPU(particle, context);
+    for (const module of initializers) {
+      const mask = this.getGPURendererTagMask(module.tags);
+      if (module.tags) {
+        If(particle.tagMask.bitAnd(uint(mask ?? 0)).notEqual(0), () => {
+          module.initializeParticleGPU!(particle, context);
+        });
+      } else module.initializeParticleGPU!(particle, context);
+    }
   }
 
   private _notifySpawn(particle: Particle): void {

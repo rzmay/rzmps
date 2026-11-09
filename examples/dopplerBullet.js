@@ -2,11 +2,15 @@ import * as THREE from 'three';
 import {
   AudioRenderer,
   ColorOverLifetime,
+  DecalRenderer,
   DistortionOverLifetime,
   Emitter,
   EmissionShape,
   EmissionSource,
   ForceOverLifetime,
+  MaterialCopy,
+  MaterialCopySampleMode,
+  MaterialCopySource,
   MeshRenderer,
   ParticleSystem,
   RotationOverLifetime,
@@ -24,16 +28,39 @@ import smokeAlpha from '../apps/demo/src/assets/images/smoke_alpha.jpg?url';
 import bulletShootUrl from '../apps/demo/src/assets/audio/bullet_shoot.mp3?url';
 import bulletWhizzUrl from '../apps/demo/src/assets/audio/bullet_whizz.wav?url';
 import { Easing } from 'eaz';
+import holeAlbedo from '../apps/demo/src/assets/images/bullet-hole/bullet-hole_albedo.png?url';
+import holeNormal from '../apps/demo/src/assets/images/bullet-hole/bullet-hole_normal.png?url';
+import holeRoughness from '../apps/demo/src/assets/images/bullet-hole/bullet-hole_roughness.png?url';
 
 export default async function createDopplerBullet() {
   const textureLoader = new THREE.TextureLoader();
   const simpleSpriteTexture = textureLoader.load(Textures.Simple);
   const shockwaveDistortion = textureLoader.load(shockwaveNormal);
-  const [bulletMesh, bulletLoopSound, gunshotSound] = await Promise.all([
+  const [bulletMesh, bulletLoopSound, gunshotSound, holeMap, holeNormalMap, holeRoughnessMap] = await Promise.all([
     Promise.resolve(createBulletMesh()),
     new THREE.AudioLoader().loadAsync(bulletWhizzUrl),
     new THREE.AudioLoader().loadAsync(bulletShootUrl),
+    textureLoader.loadAsync(holeAlbedo),
+    textureLoader.loadAsync(holeNormal),
+    textureLoader.loadAsync(holeRoughness),
   ]);
+
+  // #region docs:renderers:7
+  // Damage maps use projector UVs; the albedo alpha masks their combined lighting.
+  holeMap.colorSpace = THREE.SRGBColorSpace;
+  holeNormalMap.colorSpace = holeRoughnessMap.colorSpace = THREE.NoColorSpace;
+  const holeMaterial = new THREE.MeshStandardMaterial({
+    map: holeMap,
+    normalMap: holeNormalMap,
+    roughnessMap: holeRoughnessMap,
+    roughness: 1,
+    metalness: 0,
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+  });
+  // #endregion docs:renderers:7
 
   // #region docs:system:1
   const bulletSystem = new ParticleSystem({
@@ -51,6 +78,7 @@ export default async function createDopplerBullet() {
     emitters: [
       new Emitter({
         source: bulletEmissionCone(),
+        tags: ['projectile'],
         rate: 0.9,
         radialSpeed: [0.1, 0.35],
         alignment: 1,
@@ -70,8 +98,42 @@ export default async function createDopplerBullet() {
     // #endregion docs:emitters:1
     // #region docs:renderers:1
     renderers: [
+      // Sweep the traveled segment: bullets keep flying through every marked surface.
+      new DecalRenderer(holeMaterial, {
+        direction: DecalRenderer.Intersect(),
+        continuousRate: 60,
+        onSpawn: false,
+        emissionTags: ['bullet-hole'],
+        rotation: [-Math.PI, Math.PI],
+        hitSelection: DecalRenderer.All,
+        // Surface color and normal detail remain tied to the hit, independently of projector UVs.
+        materialComposite: (source, dest) => ({
+          color: `${source.color} * clamp(${dest.color} * 4.0, 0.0, 1.0)`,
+          opacity: `${source.opacity} * ${dest.opacity}`,
+          normal: source.normal,
+          roughness: dest.roughness,
+          metalness: dest.metalness,
+        }),
+        materialCompositeGPU: (source, dest) => ({
+          color: source.color.mul(dest.color.mul(4).clamp(0, 1)),
+          opacity: source.opacity.mul(dest.opacity),
+          normal: source.normal,
+          roughness: dest.roughness,
+          metalness: dest.metalness,
+        }),
+        size: 0.55,
+        depth: 0.04,
+        offset: 0.002,
+        inheritScale: 0,
+        inheritColor: 0,
+        inheritAlpha: 0,
+        lifetime: 24,
+        maxDecals: 128,
+        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.8, 1),
+      }),
       new AudioRenderer({
         sound: bulletLoopSound,
+        tags: ['projectile'],
         onSpawnSound: gunshotSound,
         loop: true,
         maxClips: 8,
@@ -109,24 +171,13 @@ export default async function createDopplerBullet() {
           roughness: 0.9,
         },
       }),
-      new AudioRenderer({
-        sound: bulletLoopSound,
-        onSpawnSound: gunshotSound,
-        loop: true,
-        maxClips: 8,
-        volume: 3.5,
-        pitch: [0.82, 1.24],
-        lowPass: 14000,
-        speedAffectsVolume: 0.12,
-        depthAffectsVolume: 0.45,
-        dopplerEffect: 2.4,
-      }),
     ],
     // #endregion docs:renderers:1
   });
   // #endregion docs:system:1
 
   bulletSystem.addSubSystem(createSmokeWake(), {
+    tags: ['projectile'],
     inheritScale: 0,
     inheritLifetime: 0,
     inheritColor: 0,
@@ -137,6 +188,7 @@ export default async function createDopplerBullet() {
   });
 
   bulletSystem.addSubSystem(createHeatWake(Textures.Simple, shockwaveDistortion), {
+    tags: ['projectile'],
     inheritScale: 0,
     inheritLifetime: 0,
     inheritColor: 0,
@@ -147,6 +199,7 @@ export default async function createDopplerBullet() {
   });
 
   bulletSystem.addSubSystem(createMuzzleFlash(fireballSprite), {
+    tags: ['projectile'],
     emitOnSpawn: true,
     inheritScale: 0,
     inheritLifetime: 0,
@@ -157,6 +210,7 @@ export default async function createDopplerBullet() {
   });
 
   bulletSystem.addSubSystem(createSpawnShockwave(Textures.Simple, shockwaveDistortion), {
+    tags: ['projectile'],
     emitOnSpawn: true,
     inheritScale: 0,
     inheritLifetime: 0,
@@ -164,6 +218,32 @@ export default async function createDopplerBullet() {
     inheritAlpha: 0,
     inheritMass: 0,
     inheritVelocity: 0,
+  });
+
+  // #region docs:system:6
+  bulletSystem.addSubSystem(createImpactDust(), {
+    tags: ['bullet-hole'],
+    onEvent: {
+      spawn: (_data, _source, context) => ({
+        // Initial velocity is in simulation space; derive the puff's outward direction from the source frame.
+        velocity: new THREE.Vector3(0, 1, 0).transformDirection(context.transform).multiplyScalar(0.65),
+      }),
+    },
+    emitContinuous: false,
+    inheritScale: 0,
+    inheritLifetime: 0,
+    inheritColor: 0,
+    inheritAlpha: 0,
+    inheritMass: 0,
+    inheritVelocity: 0,
+  });
+  // #endregion docs:system:6
+
+  bulletSystem.addEventListener('destroyed', () => {
+    holeMaterial.dispose();
+    holeMap.dispose();
+    holeNormalMap.dispose();
+    holeRoughnessMap.dispose();
   });
 
   bulletSystem.name = 'Doppler Bullet';
@@ -178,6 +258,7 @@ function createSmokeWake() {
   // #region docs:system:2
   return new ParticleSystem({
     duration: 1.1,
+    maxParticles: 256,
     looping: true,
     gravity: new THREE.Vector3(0, 0.2, 0),
     // #region docs:emitters:2
@@ -250,6 +331,7 @@ function createHeatWake(alphaMap, distortionMap) {
   // #region docs:system:3
   return new ParticleSystem({
     duration: 0.7,
+    maxParticles: 128,
     looping: true,
     // #region docs:emitters:3
     emitters: [
@@ -313,6 +395,7 @@ function createMuzzleFlash(texture) {
   // #region docs:system:4
   return new ParticleSystem({
     duration: 0.45,
+    maxParticles: 64,
     looping: true,
     // #region docs:emitters:4
     emitters: [
@@ -379,6 +462,7 @@ function createSpawnShockwave(alphaMap, distortionMap) {
   // #region docs:system:5
   return new ParticleSystem({
     duration: 0.65,
+    maxParticles: 64,
     looping: true,
     // #region docs:emitters:5
     emitters: [
@@ -432,6 +516,53 @@ function createSpawnShockwave(alphaMap, distortionMap) {
   // #endregion docs:system:5
 }
 
+function createImpactDust() {
+  // #region docs:system:7
+  const dust = new ParticleSystem({
+    duration: 0.12,
+    looping: false,
+    maxParticles: 128,
+    gravityModifier: -0.02,
+    // #region docs:emitters:6
+    emitters: new Emitter({
+      source: EmissionShape.Sphere(0.025),
+      rate: 0,
+      bursts: [{ time: 0, count: [5, 8] }],
+      radialSpeed: [0.1, 0.25],
+      initialValues: {
+        position: new THREE.Vector3(0, 0.045, 0),
+        lifetime: [0.4, 0.65],
+        scale: [0.28, 0.44],
+        alpha: [0.3, 0.45],
+      },
+    }),
+    // #endregion docs:emitters:6
+    // #region docs:modules:5
+    modules: [
+      new MaterialCopy({ source: MaterialCopySource.Source, sampleMode: MaterialCopySampleMode.Color }),
+      new ScaleOverLifetime({ scale: t => 0.7 + 1.4 * t }),
+      new ColorOverLifetime({ alpha: t => 1 - t }),
+      new RotationOverLifetime({ angularVelocity: [-0.7, 0.7] }),
+    ],
+    // #endregion docs:modules:5
+    // #region docs:renderers:6
+    renderers: new SpriteRenderer(Textures.Default, {
+      material: 'lit',
+      alphaMap: smokeAlpha,
+      // A broad depth fade erased these small puffs while they were still close to the impact surface.
+      softParticleDistance: 0.025,
+      // Smoke takes only the sampled surface color; its mask, opacity and lighting remain its own.
+      materialComposite: source => ({ color: source.color }),
+      materialCompositeGPU: source => ({ color: source.color }),
+      materialOptions: { roughness: 1, depthWrite: false },
+    }),
+    // #endregion docs:renderers:6
+  });
+  dust.name = 'Bullet Impact Dust';
+  return dust;
+  // #endregion docs:system:7
+}
+
 function createBulletMesh() {
   return new THREE.Mesh(
     new THREE.SphereGeometry(0.5, 24, 16),
@@ -479,9 +610,10 @@ export const metadata = {
   "id": "dopplerBullet",
   "title": "Doppler Bullet",
   "description":
-    "Doppler audio on a fast bullet, with smoke, faint trails, spawn blasts, and distortion wake subsystems.",
+    "A fast, piercing bullet leaves surface-blended bullet holes, with Doppler audio, smoke, trails, and distortion.",
   "tags": [
-    "dopplerBullet"
+    "dopplerBullet", "bullet", "projectile", "piercing", "decals", "materials", "compositing",
+    "sources", "events", "dust", "smoke", "audio", "doppler", "trails", "distortion"
   ],
   "category": "effects"
 };

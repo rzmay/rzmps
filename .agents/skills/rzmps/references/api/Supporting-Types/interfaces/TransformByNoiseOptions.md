@@ -103,6 +103,34 @@ Spatial frequency of the noise; larger values produce smaller features. Defaults
 
 ***
 
+<a id="initializeparticle"></a>
+
+### initializeParticle?
+
+```ts
+optional initializeParticle?: ParticleInitializer;
+```
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`initializeParticle`](../../interfaces/ModuleOptions.md#initializeparticle)
+
+***
+
+<a id="initializeparticlegpu"></a>
+
+### initializeParticleGPU?
+
+```ts
+optional initializeParticleGPU?: GPUParticleInitializer;
+```
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`initializeParticleGPU`](../../interfaces/ModuleOptions.md#initializeparticlegpu)
+
+***
+
 <a id="lacunarity"></a>
 
 ### lacunarity

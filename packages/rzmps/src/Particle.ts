@@ -2,6 +2,12 @@ import { nanoid } from 'nanoid';
 import * as THREE from 'three';
 import { transformParticleFrame } from './helpers/simulationFrame';
 import type { Tag } from './types/Tag';
+import type ParticleSystem from './ParticleSystem';
+import type { SubSystemSource } from './EmissionSource';
+import type { SimulationEvent } from './EventReceiver';
+import type { GPUParticleLike, GPUParticleUpdateContext } from './gpu/Particle';
+import type { GPUEventNodeRecord } from './gpu/EventBuffer';
+import type { Node } from 'three/webgpu';
 
 export interface ParticleOptions {
   position: THREE.Vector3;
@@ -31,10 +37,81 @@ export interface ParticleNoiseValues {
   noise4d: number;
 }
 
+/** Creation-time inputs, available synchronously before simulation and spawn observers. */
+export interface ParticleInitializationContext {
+  readonly system: ParticleSystem;
+  readonly source?: SubSystemSource;
+  readonly event?: SimulationEvent;
+  /** Snapshot of the event producer's simulation-to-world frame. */
+  readonly sourceToWorld?: THREE.Matrix4;
+  /** Frame interpreting the newborn particle attributes at this initialization boundary. */
+  readonly birthToWorld?: THREE.Matrix4;
+}
+
+/** Native GPU creation-time inputs; event snapshots stay in the existing run buffer. */
+export interface GPUParticleInitializationContext extends GPUParticleUpdateContext {
+  readonly source?: GPUParticleLike;
+  readonly event?: GPUEventNodeRecord;
+  readonly sourceToWorld?: Node<'mat4'>;
+  readonly birthToWorld?: Node<'mat4'>;
+}
+
+export type ParticleInitializer = (particle: Particle, context: ParticleInitializationContext) => void;
+export type GPUParticleInitializer = (particle: GPUParticleLike, context: GPUParticleInitializationContext) => void;
+
+/**
+ * @internal Source-space ownership survives event snapshots and emission-run lifetimes.
+ * CPU simulation applies transform deltas from this history; GPU history lives in gpu/SourceFrameBuffer.ts.
+ */
+export interface ParticleSourceBinding {
+  source: SubSystemSource;
+  previous: THREE.Matrix4;
+  slot: number;
+  generation: number;
+}
+
+// Weak ownership keeps runtime attachment data out of particle serialization and clones.
+const sourceBindings = new WeakMap<Particle, ParticleSourceBinding>();
+
+/** @internal Reads attachment state without adding serializable fields to the particle. */
+export function getParticleSourceBinding(particle: Particle): ParticleSourceBinding | undefined {
+  return sourceBindings.get(particle);
+}
+
+/** @internal Sets or releases the source transform history used by CPU simulation. */
+export function setParticleSourceBinding(particle: Particle, binding?: ParticleSourceBinding): void {
+  if (binding) sourceBindings.set(particle, binding);
+  else sourceBindings.delete(particle);
+}
+
 // Ownership stays outside serializable/cloned particle attributes.
 const eventOwners = new WeakMap<Particle, { emitEvent(id: string, event: string, data?: unknown): void }>();
 /** Mutable particle state with separate birth and cached permanent values. */
 class Particle {
+  private _materialCopy?: THREE.Vector4;
+  private _materialCopyU?: THREE.Vector4;
+  private _materialCopyV?: THREE.Vector4;
+
+  /** Material source ID, impact UV, and sampling mode. Allocated on first access. */
+  get materialCopy(): THREE.Vector4 { return this._materialCopy ??= new THREE.Vector4(); }
+  set materialCopy(value: THREE.Vector4) { this._materialCopy = value; }
+
+  /** UV gradient rows, transformed into particle-local coordinates at birth. Allocated on first access. */
+  get materialCopyU(): THREE.Vector4 { return this._materialCopyU ??= new THREE.Vector4(); }
+  set materialCopyU(value: THREE.Vector4) { this._materialCopyU = value; }
+  get materialCopyV(): THREE.Vector4 { return this._materialCopyV ??= new THREE.Vector4(); }
+  set materialCopyV(value: THREE.Vector4) { this._materialCopyV = value; }
+
+  /** @internal Uploads appearance without allocating unused CPU vectors. */
+  writeMaterialCopy(target: Float32Array, offset: number): void {
+    // Match Vector4 defaults for untouched CPU particles, including its fourth component.
+    target.fill(0, offset, offset + 12);
+    target[offset + 3] = target[offset + 7] = target[offset + 11] = 1;
+    this._materialCopy?.toArray(target, offset);
+    this._materialCopyU?.toArray(target, offset + 4);
+    this._materialCopyV?.toArray(target, offset + 8);
+  }
+
   position: THREE.Vector3;
 
   orbitCenter: THREE.Vector3;
@@ -205,6 +282,9 @@ class Particle {
     particle.alive = this.alive;
     particle.id = this.id;
     particle.lodPriority = this.lodPriority;
+    if (this._materialCopy) particle.materialCopy = this._materialCopy.clone();
+    if (this._materialCopyU) particle.materialCopyU = this._materialCopyU.clone();
+    if (this._materialCopyV) particle.materialCopyV = this._materialCopyV.clone();
     particle.parent = this.parent;
     particle.contribution = this.contribution;
     particle.noise = { ...this.noise };

@@ -1,3 +1,4 @@
+import type Appearance from '../material-copy/Appearance';
 import * as THREE from 'three';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
@@ -12,6 +13,7 @@ import {
   Fn,
   float,
   mix,
+  normalView,
   output,
   perspectiveDepthToViewZ,
   positionView,
@@ -26,10 +28,12 @@ import {
   viewportSharedTexture,
 } from 'three/tsl';
 
-type WebGPUUnlitSpriteOptions = UnlitSpriteOptions & {
+type WebGPUUnlitSpriteOptions = Omit<UnlitSpriteOptions, 'atlasInset'> & {
+  atlasInset?: number | Node<'float'>;
   sceneDepthTexture: THREE.DepthTexture;
   spriteDataNode: Node<'vec4'>;
   colorNode: Node<'vec3'>;
+  materialCopyNodes: ReturnType<Appearance['nodes']>;
 };
 
 type TSLMatrix4Node = {
@@ -43,6 +47,7 @@ const WebGPUUnlitSprite = (
 ) => {
   const {
     gridSize,
+    atlasInset = 0,
     frames,
     alphaMap,
     softParticles,
@@ -54,6 +59,7 @@ const WebGPUUnlitSprite = (
     distortionStrength,
     spriteDataNode,
     colorNode,
+    materialCopyNodes,
     ...materialOptions
   } = options;
   const finalDistortionStrength = distortionStrength ?? (distortionMap ? 1 : 0);
@@ -68,9 +74,10 @@ const WebGPUUnlitSprite = (
   } as THREE.MeshBasicMaterialParameters);
 
   const spriteData = spriteDataNode ?? attribute('instanceSpriteData', 'vec4');
+  const inset = typeof atlasInset === 'number' ? float(atlasInset) : atlasInset;
   const spriteUv = spritesheetUV(
     vec2(gridSize?.x ?? 1, gridSize?.y ?? 1),
-    uv(),
+    uv().mul(float(1).sub(inset.mul(2))).add(inset),
     spriteData.x,
   );
 
@@ -99,12 +106,18 @@ const WebGPUUnlitSprite = (
     opacity = opacity.mul(fade);
   }
 
-  const finalAlpha = opacity.clamp(0, 1).toVar();
+  const finalAlpha = opacity.clamp(0, 1);
 
   material.name = 'RZMPS WebGPU Unlit Sprite';
   material.colorNode = colorNode ? spriteColor.rgb.mul(colorNode) : spriteColor.rgb;
   material.opacityNode = finalAlpha;
   material.alphaTest = 0.001;
+  if (materialCopyNodes) {
+    const result = materialCopyNodes.compositeGPU({ color: material.colorNode, opacity: finalAlpha,
+      normal: normalView, roughness: float(1), metalness: float(0) }, spriteUv as Node<'vec2'>);
+    material.colorNode = result.color;
+    material.opacityNode = result.opacity;
+  }
 
   const transmissionAmount = transmission ?? (transmissionMap ? 1 : 0);
 

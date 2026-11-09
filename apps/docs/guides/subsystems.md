@@ -15,6 +15,17 @@ samples which parent particles emit; lowering it reduces child population and re
 
 ## A death-triggered burst
 
+Set `impulseAffectsCount` to scale every emitter in a collision run by
+`impulseMagnitude ** impulseAffectsCount`. The default `0` leaves emission unchanged; `1` is linear
+and `0.5` uses a square root. This multiplier applies to burst counts, rate and rate over distance,
+and combines with population LOD before integer counts are allocated. Fractional emission credit
+is retained within the emission context. Spawn/death events and continuous parent-following emission
+keep their configured counts. The multiplier uses the triggering impact for the whole emission run.
+[Destruction](../examples/destruction.md) uses square-root scaling to shed fewer fragments on weak impacts.
+Both CPU and native GPU processing support this without additional storage buffers.
+
+[Fireworks](../examples/fireworks.md) combines continuous rocket smoke and a death burst. [Metal Balls](../examples/collisionSubEmitters.md) combines collision sparks and collision audio. Inspect their source-linked system regions as well as their emitter regions: the child's lifetime, gravity, and looping choices are independent of the parent.
+
 This child emits once for each parent death. Only the root needs an update call:
 
 ```ts
