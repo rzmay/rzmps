@@ -17,14 +17,14 @@ command follows the PR checklist and stops at the first failure:
 2. Build all publishable packages.
 3. Run `benchmark:update-report` to measure and regenerate the root and package
    README benchmark tables.
-4. Generate documentation, API references, the skill, and example previews from
+4. Generate documentation, API references, the skill from
    the updated source and benchmark reports, then run documentation/link checks.
 5. Build the demo and check staged and unstaged whitespace.
 
 Benchmark regeneration precedes documentation generation so the published docs and
 agent references include the new README measurements. Review and commit README and
 published skill updates alongside source changes. Generated documentation and preview
-images are ignored; CI and deployment regenerate them before validation.
+media are ignored; deployment generates and validates them separately from source checks.
 
 Cross-branch PR benchmarks remain exclusively in the existing GitHub runner
 workflow, where both revisions are measured on the same runner. Routine PR comparisons run
@@ -70,13 +70,13 @@ their generated outputs. The skill's metadata and workflow come from the marked 
 | --- | --- | --- |
 | `.agents/skills/rzmps/SKILL.md` and `references/` | Generated and committed for GitHub installation | Canonical guides, examples, and API declarations |
 | Root and npm README guidance blocks | Generated and committed for direct GitHub/npm readers | AI Coding Assistants guide |
-| `apps/docs/public/previews/` and manifest | Generated, ignored, and rebuilt before site validation | Example factories and capture settings |
+| `apps/docs/public/previews/` and manifest | Generated, ignored, and validated during deployment | Example factories and capture settings |
 | `apps/docs/api/`, guide/example index pages, navigation JSON | Generated and ignored | Source declarations, guides, and examples |
 | `apps/docs/public/llms.txt` and `llms-full.txt` | Generated and ignored | Canonical docs and skill installation guidance |
 | `examples/index.js` and `examples/scenes/index.js` | Authored automatic discovery | `factory.metadata` on each factory |
 | `packages/rzmps/AGENTS.md` | Generated and ignored, included in npm | `scripts/docs/templates/npm-agents.md` |
 
-Commit updated `.agents` files, README guidance, and reviewed preview assets alongside their
+Commit updated `.agents` files, README guidance, alongside their
 source changes. Other artifacts are rebuilt before documentation/demo builds; package builds
 also regenerate npm `AGENTS.md`. No consumer installation hook runs any of this generation.
 TypeDoc validates comment syntax and links; generation fails on warnings.
@@ -110,20 +110,36 @@ Include the example checklist in pull requests adding or substantially changing 
 Keep author attribution in the existing factory's literal `.metadata.author` property (a GitHub
 username or an object with `name` and optional `url`). `<ExampleAttribution />` resolves that
 source at build time; changing the author updates the site and generated agent Markdown.
-Use `<ExamplePreview />` for the generated poster without copying its URL into authored prose.
+Use `<ExamplePreview />` for the generated video and poster without copying its URL into authored prose.
 
-After adding or changing an example, run `npm run docs:generate`. It automatically builds the
-local packages and captures missing or stale example images; unchanged images are reused.
-Install Chrome once with `npx puppeteer browsers install chrome` if needed.
-Generated PNGs and their source-hash manifest in `apps/docs/public/previews` are ignored.
+After adding or changing an example, run `npm run docs:generate` to update documentation
+source and the published skill. This never launches a browser or generates media.
+Ordinary `site:build`, `docs:check`, and local development also avoid media generation.
+
+For an explicit local video capture, install FFmpeg/FFprobe and Puppeteer's browser,
+then run `npm run preview -- --example fire --format mp4 --duration 4 --fps 30`.
+Use `--format webm`, `--crf`, `--width`, and `--height` to configure encoding. PNG
+contact sheets remain the default for the preview command. Video frames are written
+incrementally to disk and deleted after successful encoding; a PNG poster is retained.
+
+Deployment runs `npm run site:deploy`: validate source, restore the optional cache,
+generate stale/missing videos and posters, validate decoded media, build and assemble,
+and validate the published copies. GitHub Actions caches the ignored preview directory;
+Render can restore hash-checked assets from the previous public deployment. The manifest
+includes source hashes, encoder configuration, FFmpeg/FFprobe versions, and pinned Chrome.
+Media, manifests, and all intermediate captures remain ignored.
+
 Set per-example overrides on `metadata.previewSettings` in the example itself. Use
 camelCase fields such as `warmup`, `cameraPosition: [8, 6, 12]` and `cameraTarget`.
-For a preferred scene, import its factory and set `scene: createCheckerboard`; do not
+For a preferred scene, import its factory and set `scene: checkerboardScene`; do not
 store its display name. Omitted fields use shared defaults from
 `scripts/docs/preview-settings.mjs`, including the neutral scene and WebGL backend.
 An explicit `preview --scene` selection overrides the example's preferred scene.
-`docs:check` rejects missing, modified, or stale images. CI and deployment install Chrome
-and generate captures before checking them.
+`docs:assets:check` rejects missing, modified, stale, blank, or undecodable media.
+Source CI uses `docs:generate -- --check` without Chrome, FFmpeg, or preview assets.
+Documentation players load near the viewport, pause offscreen, and show a poster until
+explicit playback when reduced motion is enabled. Category and tags are visible and
+indexed by VitePress local search; the demo sidebar filters the same metadata.
 
 The canonical agent installation guide is [AI Coding Assistants](guides/ai-coding-assistants.md).
 It supplies generated README guidance blocks. The full skill stays in `.agents/skills/rzmps`;
@@ -199,3 +215,9 @@ Attach metadata as `factory.metadata` (including `id`, `title` and `author`); pr
 metadata also includes `description`, `tags` and `category`. Source URLs come from
 the factory's filename. Shared media lives in `examples/assets/` and helpers in
 `examples/utils/`. The demo consumes the catalogs directly.
+
+Interactive example links also support `/example/<id>`, for example `/example/fire`.
+These initialize the preset with its imported `previewSettings.scene` and preferred
+backend. Explicit `?scene=` and `?renderer=` selections take precedence. The lil-gui
+preset and scene controls remain available, and legacy `?preset=` links still work.
+Each interactive route points its canonical URL at the corresponding documentation page.

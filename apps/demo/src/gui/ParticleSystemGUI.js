@@ -1,3 +1,4 @@
+import { filterExamples } from 'examples/utils/search.js';
 import GUI from 'lil-gui';
 import { Fragment, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -171,6 +172,7 @@ export class ParticleSystemGUI {
     }
 
     destroy() {
+        ++this.presetLoadVersion;
         this.sceneCleanup?.();
         this.sceneUpdate = undefined;
         this.system.removeEventListener?.('destroyed', this.handleSystemDestroyed);
@@ -239,6 +241,19 @@ export class ParticleSystemGUI {
     // -------------------------------------------------------------------------
     // Demo / scene controls
     // -------------------------------------------------------------------------
+    async loadPreset(name) {
+        const factory = this.getPresetFactory(this.presets[name]);
+        if (!factory) return;
+        const version = ++this.presetLoadVersion;
+        const next = await factory();
+        if (version !== this.presetLoadVersion) { next.destroy(); return; }
+        this.setSystem(next, name);
+    }
+    filterPresets(query) {
+        this.presetQuery = query;
+        const entries = Object.entries(this.presets).map(([title, entry]) => ({ ...entry, title }));
+        this.presetController?.options(['(current)', ...filterExamples(entries, query).map(entry => entry.title)]);
+    }
     buildDemoSelectors(root) {
         if (Object.keys(this.presets).length === 0 && Object.keys(this.scenes).length === 0)
             return;
@@ -248,19 +263,13 @@ export class ParticleSystemGUI {
         const presetNames = Object.keys(this.presets);
         if (presetNames.length > 0) {
             const state = { preset: this.currentPresetName ?? '(current)' };
-            folder.add(state, 'preset', ['(current)', ...presetNames]).name('Preset').onChange(async (name) => {
+            this.presetController = folder.add(state, 'preset', ['(current)', ...presetNames]).name('Preset').onChange(async (name) => {
                 if (name === '(current)')
                     return;
-                const presetFactory = this.getPresetFactory(this.presets[name]);
-                if (!presetFactory)
-                    return;
-                const version = ++this.presetLoadVersion;
-                const next = await presetFactory();
-                if (version !== this.presetLoadVersion)
-                    return;
-                this.setSystem(next, name);
+                await this.loadPreset(name);
             });
         }
+        this.filterPresets(this.presetQuery ?? '');
         const sceneNames = Object.keys(this.scenes);
         if (sceneNames.length > 0 && this.scene) {
             const state = { scene: this.currentSceneName ?? '(current)' };

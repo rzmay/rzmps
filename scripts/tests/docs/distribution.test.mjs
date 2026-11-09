@@ -96,12 +96,15 @@ test('skill format validates YAML and rejects broken references',()=>{
   } finally {fs.rmSync(directory,{recursive:true,force:true});}
 });
 
-test('preview validation requires matching inputs, manifest and image bytes', () => {
-  const image = Buffer.from('preview image');
-  const entry = { inputHash: 'current-source', imageHash: checksum(image) };
-  assert.equal(previewIsCurrent(entry, 'current-source', image), true);
-  assert.equal(previewIsCurrent(entry, 'edited-source', image), false);
-  assert.equal(previewIsCurrent(entry, 'current-source', Buffer.from('edited image')), false);
-  assert.equal(previewIsCurrent(entry, 'current-source', null), false);
-  assert.equal(previewIsCurrent(undefined, 'current-source', image), false);
+test('preview cache validation requires current inputs, actual backend, poster and video checksums', () => {
+  const image = Buffer.from('preview image'), video = Buffer.from('video');
+  const entry = { inputHash: 'current-source', backend:'webgpu', actualBackend:'webgpu', format:'mp4',
+    files: {'example.png':checksum(image),'example.mp4':checksum(video)} };
+  const files = {'example.png':image,'example.mp4':video};
+  assert.equal(previewIsCurrent(entry, 'current-source', files), true);
+  assert.equal(previewIsCurrent(entry, 'edited-source', files), false);
+  assert.equal(previewIsCurrent(entry, 'current-source', {...files,'example.png':Buffer.from('edited')}), false);
+  assert.equal(previewIsCurrent(entry, 'current-source', {'example.png':image}), false);
+  assert.equal(previewIsCurrent({...entry,actualBackend:'webgl'}, 'current-source',files), false);
+  assert.equal(previewIsCurrent(undefined, 'current-source', files), false);
 });

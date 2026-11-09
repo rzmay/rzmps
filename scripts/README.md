@@ -25,3 +25,11 @@ Run fast benchmark and dependency reporting tests with `npm run test:benchmarks`
 and `npm run test:dependencies`. Documentation tests live in `tests/docs/` and run
 through `npm run docs:check`. `npm run preview:smoke` runs the optional browser suite;
 `npm run site:browser-check` checks the assembled site.
+
+Preview media is generated only by explicit `preview`, `docs:previews`, or deployment
+commands. `site:deploy` needs FFmpeg/FFprobe and the Chrome version shipped with the
+pinned Puppeteer dependency. Source checks and `site:build` do not need these tools.
+`npm run test:preview-media` runs focused metadata/encoding tests (tiny synthetic frames,
+with encoding tests skipped if FFmpeg is absent). The separate
+`node --test scripts/tests/preview/backend.test.mjs` checks real headless WebGPU
+texture readback and runs as a required deployment gate.

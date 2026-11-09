@@ -9,6 +9,11 @@ on:
         "examples/**",
         "packages/rzmps/**",
         "scripts/docs/**",
+        "scripts/preview/**",
+        "apps/demo/**",
+        "packages/ammo/**",
+        "packages/jolt/**",
+        "packages/rapier/**",
         "scripts/site/**",
         "typedoc.json",
         "package*.json",
@@ -20,7 +25,7 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PUPPETEER_SKIP_DOWNLOAD: "true"
     steps:
@@ -30,8 +35,25 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx puppeteer browsers install chrome
-      - run: npm run site:build
+      - name: Validate documentation source before generating assets
+        run: npm run build:modules && npm run docs:generate -- --check
+      - name: Install FFmpeg and pinned Puppeteer browser
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          npx puppeteer browsers install chrome --install-deps
+      - name: Verify headless WebGPU capture
+        run: node --test scripts/tests/preview/backend.test.mjs scripts/tests/preview/player.test.mjs
+      - name: Restore generated previews
+        uses: actions/cache@v4
+        with:
+          path: apps/docs/public/previews
+          key: previews-v2-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            previews-v2-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+            previews-v2-${{ runner.os }}-
+      - name: Generate, validate, and assemble deployment
+        run: npm run site:deploy
       - run: npm run site:check
       - uses: actions/upload-artifact@v4
         with:

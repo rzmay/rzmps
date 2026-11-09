@@ -30,6 +30,9 @@ test('Vite resolves workspace imports and all relocated scene modules and assets
     for (const file of ['examples/index.js', 'examples/scenes/index.js']) {
       assert.ok((await server.transformRequest('/@fs/' + path.join(root, file)))?.code);
     }
+    for (const file of ['pages/index.jsx','components/LandingLayout.jsx','components/ParticleSystemDisplay.jsx','gui/ParticleSystemGUI.js']) {
+      assert.ok((await server.transformRequest('/src/' + file))?.code, `demo ${file} transforms`);
+    }
     for (const directory of ['presets', 'scenes', 'utils']) {
       for (const file of fs.readdirSync(path.join(root, 'examples', directory)).filter(file => file.endsWith('.js'))) {
         const result = await server.transformRequest('/@fs/' + path.join(root, 'examples', directory, file));

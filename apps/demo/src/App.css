@@ -36,3 +36,9 @@
     transform: rotate(360deg);
   }
 }
+
+.example-search { margin: 1rem 0; }
+.example-search input { width: 100%; padding: .5rem; color: inherit; background: #ffffff12; border: 1px solid #ffffff40; border-radius: 4px; }
+.example-search ul { max-height: 12rem; overflow: auto; list-style: none; padding: 0; }
+.example-search button { color: inherit; cursor: pointer; background: transparent; border: 0; padding: .3rem; text-align: left; }
+.example-search button[aria-pressed="true"] { text-decoration: underline; }

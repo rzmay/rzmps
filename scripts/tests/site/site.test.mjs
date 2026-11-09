@@ -17,7 +17,7 @@ test('one static output serves demo and both docs entry paths, assets and deep l
     await assembleSite({demoDirectory,docsDirectory,output});
     server=createSiteServer(output);await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
     const origin=`http://127.0.0.1:${server.address().port}`;
-    for(const [url,body]of [['/','demo'],['/docs','🧅 docs'],['/docs/','🧅 docs'],['/docs?x=1','🧅 docs'],['/docs/guides/start','guide'],['/docs/guides/start.html','guide'],['/docs/previews/fire.png','PNG'],['/llms.txt','discovery'],['/docs/llms-full.txt','full docs']]){
+    for(const [url,body]of [['/','demo'],['/example/fire','demo'],['/example/fire/','demo'],['/example/fire.html','demo'],['/docs','🧅 docs'],['/docs/','🧅 docs'],['/docs?x=1','🧅 docs'],['/docs/guides/start','guide'],['/docs/guides/start.html','guide'],['/docs/previews/fire.png','PNG'],['/llms.txt','discovery'],['/docs/llms-full.txt','full docs']]){
       const response=await fetch(origin+url,{redirect:'manual'});assert.equal(response.status,200,url);assert.equal(response.headers.get('location'),null,url);assert.equal(await response.text(),body,url);
     }
     assert.equal((await fetch(origin+'/docs/absent')).status,404);

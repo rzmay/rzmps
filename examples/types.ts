@@ -15,6 +15,10 @@ export interface ExampleMetadata {
 /** Example-specific overrides for the shared documentation capture defaults. */
 export interface ExamplePreviewSettings {
   backend?: 'webgl' | 'webgpu';
+  format?: 'mp4' | 'webm';
+  duration?: number;
+  fps?: number;
+  crf?: number;
   frames?: number;
   interval?: number;
   warmup?: number;

@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   preview:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -13,9 +13,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx puppeteer browsers install chrome
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npx puppeteer browsers install chrome --install-deps
+      - run: node --test scripts/tests/preview/backend.test.mjs
       - run: npm run build:modules
-      - run: npm run site:build
+      - run: npm run site:deploy
       - run: npm run site:browser-check
       - run: npm run preview:smoke
         env:

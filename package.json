@@ -32,7 +32,11 @@
     "benchmark:lod": "npm run build --workspace @rzmps/rzmps && node packages/rzmps/tests/spatial/benchmark-lod.mjs",
     "pr:prepare": "npm test && npm run build:modules && npm run benchmark:update-report && npm run docs:generate && npm run docs:check && npm run build --workspace demo && git --no-pager diff --check && git --no-pager diff --cached --check",
     "check:dependencies": "depcruise --config .dependency-cruiser.cjs --output-type err-long packages/rzmps/src",
-    "test:dependencies": "node --test scripts/tests/dependencies/report.test.mjs"
+    "test:dependencies": "node --test scripts/tests/dependencies/report.test.mjs",
+    "docs:assets:check": "node scripts/docs/validate-assets.mjs",
+    "site:deploy": "npm run build:modules && npm run docs:generate -- --check && npm run docs:cache && npm run docs:previews && npm run docs:assets:check && npm run docs:check && npm run build --workspace demo && node scripts/site/assemble.mjs && node scripts/docs/validate-assets.mjs dist/docs/previews",
+    "test:preview-media": "node --test scripts/tests/preview/media.test.mjs scripts/tests/docs/seo.test.mjs",
+    "docs:cache": "node scripts/docs/restore-previews.mjs"
   },
   "devDependencies": {
     "dependency-cruiser": "^18.7.2",

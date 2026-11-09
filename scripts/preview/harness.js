@@ -1,3 +1,4 @@
+import { readTargetPNG } from './readTargetPNG.mjs';
 import * as THREE from 'three';
 import { resolveScene } from './resolveScene.mjs';
 import { validateGPUChildren } from './validateGPUChildren.js';
@@ -20,7 +21,8 @@ async function capture(options) {
     t ^= t + Math.imul(t ^ t >>> 7, 61 | t);
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
-  let renderer, system, sceneHandle;
+  let renderer, system, sceneHandle, captureTarget;
+  let deviceLost;
   const shaderBindings = [];
   const scene = new THREE.Scene();
   const assetErrors = [];
@@ -49,6 +51,7 @@ async function capture(options) {
       renderer = await createWebGPURenderer({ antialias:true, forceWebGL:false });
       if (!renderer.backend.isWebGPUBackend) throw new Error('WebGPU initialization used an unexpected backend');
       const backend = renderer.backend;
+      backend.device.lost.then(info => { deviceLost = new Error(`WebGPU device lost: ${info.reason}: ${info.message}`); });
       for (const method of ['createComputePipeline', 'createRenderPipeline']) {
         const original = backend[method].bind(backend);
         backend[method] = (input, ...args) => {
@@ -67,6 +70,11 @@ async function capture(options) {
     renderer.setPixelRatio(1);
     renderer.setSize(options.width,options.height);
     renderer.shadowMap.enabled = true;
+    if (options.backend === 'webgpu') {
+      // Explicit texture readback bypasses the headless compositor and canvas presentation lifecycle.
+      captureTarget = new THREE.RenderTarget(options.width, options.height);
+      captureTarget.texture.colorSpace = THREE.SRGBColorSpace;
+    }
     document.body.replaceChildren(renderer.domElement);
     const sceneFactory = resolveScene(options.scene, example.previewSettings?.scene, scenePresets);
     if (!sceneFactory) scene.add(new THREE.AmbientLight(0xffffff, 0.8), light);
@@ -101,8 +109,10 @@ async function capture(options) {
     await waitForAssets();
     if(assetErrors.length)throw new Error(`Failed assets: ${assetErrors.join(', ')}`);
     const render = async () => {
+      if (deviceLost) throw deviceLost;
       scene.updateMatrixWorld(true);
       if(options.backend==='webgpu') {
+        renderer.setRenderTarget(captureTarget);
         renderer.render(scene,camera);
         await renderer.backend.device.queue.onSubmittedWorkDone();
       } else {
@@ -112,15 +122,16 @@ async function capture(options) {
         if(error!==0)throw new Error(`WebGL error: ${error}`);
       }
     };
+    if (options.backend === 'webgpu') await renderer.compileAsync(scene, camera);
     await render(); // Establish RZMPS camera/renderer context before the first step.
     let step=0;
-    async function advance(count) {
+    async function advance(count, deltaTime = options.deltaTime) {
       for(let i=0;i<count;i++){
-        sceneHandle?.update?.(options.deltaTime);
+        sceneHandle?.update?.(deltaTime);
         scene.updateMatrixWorld(true);
         const roots=[];
         scene.traverse(object=>{if(typeof object.advanceFrames==='function'&&!object.isSubSystem)roots.push(object);});
-        for(const root of roots)root.advanceFrames(1,options.deltaTime);
+        for(const root of roots)root.advanceFrames(1,deltaTime);
         step++;
         // Let asynchronous GPU lifecycle consumers (including persistent decals)
         // observe frames during warmup, as they do in a real animation loop.
@@ -133,7 +144,16 @@ async function capture(options) {
     await advance(options.warmup);
     const frames=[];
     for(let index=0;index<options.frames;index++) {
-      if(index>0)await advance(options.interval);
+      if(index>0) {
+        if (options.format && options.format !== 'png') {
+          // Step to exact presentation time, including a fractional last simulation step.
+          let remaining = 1 / options.fps;
+          while (remaining > 1e-10) {
+            const dt = Math.min(options.deltaTime, remaining);
+            await advance(1, dt); remaining -= dt;
+          }
+        } else await advance(options.interval);
+      }
       // Live reflections are renderer work, deferred by advanceFrames, so refresh only for captures.
       system.traverse(object=>{
         if(object.useLiveCubemap) {
@@ -156,8 +176,12 @@ async function capture(options) {
           await render();
         }
       }
-      const data=renderer.domElement.toDataURL('image/png');
-      if(!data.startsWith('data:image/png;base64,'))throw new Error('Canvas PNG export failed');
+      const video = options.format && options.format !== 'png';
+      let data;
+      if (captureTarget) {
+        data = await readTargetPNG(renderer, captureTarget, options.width, options.height);
+      } else data = renderer.domElement.toDataURL('image/png');
+      if (!data.startsWith('data:image/png;base64,')) throw new Error('PNG export failed');
       // Preview metadata is an explicit observation, so inspect GPU state rather
       // than reporting the runtime diagnostic's intentionally delayed count.
       const gpuCounts = new Map();
@@ -197,14 +221,18 @@ async function capture(options) {
       });
       const attachmentValidation = options.example === 'fireflies'
         ? await validateFireflyAttachments(system) : undefined;
-      frames.push({data,systems,attachmentValidation,time:step*options.deltaTime,step,particles,
+      const time = video ? options.warmup * options.deltaTime + index / options.fps : step * options.deltaTime;
+      const observation = {systems,attachmentValidation,time,step,particles,
         simulationSpeed:system.simulationSpeed,
-        simulatedSeconds:step*options.deltaTime*Math.max(0,system.simulationSpeed)});
+        simulatedSeconds:time*Math.max(0,system.simulationSpeed)};
+      if (options.streamFrames) await window.rzmpsWriteFrame(index, observation, data);
+      frames.push({ ...observation, ...(!video ? { data } : {}) });
     }
     const childValidation = options.backend === 'webgpu' ? await validateGPUChildren(system, renderer) : [];
     const frameValidation = await system.userData.validateSimulationFrames?.(renderer) ?? [];
-    const contactSheet=await makeContactSheet(frames,options);
-    return {frames,contactSheet,shaderBindings,childValidation,frameValidation,
+    const contactSheet = options.format && options.format !== 'png' ? null : await makeContactSheet(frames,options);
+    if (options.streamFrames) for (const frame of frames) delete frame.data;
+    return {backend: renderer.backend?.isWebGPUBackend ? 'webgpu' : 'webgl',frames,contactSheet,shaderBindings,childValidation,frameValidation,
       scene: options.scene ?? sceneFactory?.name ?? null,
       camera:{position:camera.position.toArray(),
       target:options.cameraTarget,fov:options.cameraFov},rendererInfo:{calls:renderer.info.render.calls,
@@ -213,6 +241,7 @@ async function capture(options) {
     try {
       system?.destroy();
       if(typeof sceneHandle==='function')sceneHandle();else sceneHandle?.cleanup?.();
+      captureTarget?.dispose();
       renderer?.dispose();
     } finally {
       THREE.DefaultLoadingManager.onError=oldOnError;

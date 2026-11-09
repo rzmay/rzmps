@@ -4,7 +4,7 @@ import { createReadStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.txt':'text/plain; charset=utf-8','.md':'text/markdown; charset=utf-8','.wasm':'application/wasm','.mp3':'audio/mpeg','.wav':'audio/wav'};
+const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.txt':'text/plain; charset=utf-8','.md':'text/markdown; charset=utf-8','.mp4':'video/mp4','.webm':'video/webm','.wasm':'application/wasm','.mp3':'audio/mpeg','.wav':'audio/wav'};
 export function createSiteServer(directory=path.resolve(import.meta.dirname,'../../dist')) {
   const root=path.resolve(directory);
   return http.createServer(async(req,res)=>{

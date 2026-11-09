@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { demoUrl } from './site.mjs';
+import { previewDefaults } from './preview-settings.mjs';
 import path from 'node:path';
 import ts from 'typescript';
 export const root = path.resolve(import.meta.dirname, '../..');
@@ -149,7 +150,10 @@ export function validateGuide(markdown, example, strict = true) {
 export function resolveExample(markdown, example) {
   const author = example.author;
   const credit = author?.url ? `Preset by [${author.name}](${author.url}).` : `Preset by ${author?.name ?? 'unknown author'}.`;
+  const settings = { ...previewDefaults, ...example.previewSettings };
+  const escape = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+  const terms = `Category: ${escape(example.category ?? '')}. Tags: ${(example.tags ?? []).map(escape).join(', ')}.`;
   return resolveCode(markdown, example)
-    .replace(/<ExampleAttribution\s*\/>/g, credit)
-    .replace(/<ExamplePreview\s*\/>/g, `![Generated preview of ${example.title}](/previews/${example.id}.png)`);
+    .replace(/<ExampleAttribution\s*\/>/g, () => `${credit}\n\n${terms}`)
+    .replace(/<ExamplePreview\s*\/>/g, () => `<ExampleVideo source="/previews/${example.id}.${settings.format}" poster="/previews/${example.id}.png" label="${escape(example.title)} preview" :width="${settings.width}" :height="${settings.height}" />`);
 }

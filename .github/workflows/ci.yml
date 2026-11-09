@@ -53,6 +53,9 @@ jobs:
       - name: Test dependency reporting
         run: npm run test:dependencies
 
+      - name: Validate preview and SEO unit tests
+        run: npm run test:preview-media
+
       - name: Run core tests
         run: npm test
 
@@ -62,11 +65,8 @@ jobs:
       - name: Build packages
         run: npm run build:modules
 
-      - name: Install preview browser
-        run: npx puppeteer browsers install chrome
-
-      - name: Generate documentation and preview artifacts
-        run: npm run docs:generate
+      - name: Validate documentation source
+        run: npm run docs:generate -- --check
 
       - name: Build demo
         run: npm run build --workspace demo

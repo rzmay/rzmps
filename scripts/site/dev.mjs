@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
-import { spawn } from 'node:child_process';
 import { createServer as createDemoServer } from 'vite';
 import { createServer as createDocsServer } from 'vitepress';
 
@@ -119,25 +118,11 @@ export async function startSiteDev({
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  let site, previewProcess;
+  let site;
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, async () => {
-    previewProcess?.kill(signal);
     await site?.close();
     process.exit(0);
   });
-  site = await startSiteDev({
-    prepareDocs: async (demo) => {
-      console.log(`Demo: http://localhost:${demo.httpServer.address().port}/ — Generating documentation previews…`);
-      await new Promise((resolve, reject) => {
-        previewProcess = spawn('npm', ['run', 'docs:previews'], { cwd: root, stdio: 'inherit' });
-        previewProcess.once('error', reject);
-        previewProcess.once('exit', (code, signal) => {
-          previewProcess = undefined;
-          if (code === 0) resolve();
-          else reject(new Error(`Documentation previews failed (${signal ?? code})`));
-        });
-      });
-    },
-  });
+  site = await startSiteDev();
   console.log(`Documentation: http://localhost:${site.demo.httpServer.address().port}/docs/`);
 }

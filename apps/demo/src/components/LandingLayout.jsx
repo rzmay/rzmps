@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { filterExamples } from 'examples/utils/search.js';
+import { examples } from 'examples/index.js';
 import { ChevronLeft, Menu } from 'lucide-react';
 
 // Top contributors from GitHub. Keep this curated list free of runtime API requests.
 const CONTRIBUTORS = ['rzmay'];
 
-export default function LandingLayout({ children }) {
+export default function LandingLayout({ children, searchQuery = '', onSearchChange, onExampleSelect, selectedExample }) {
   const [open, setOpen] = useState(true);
   const toggleRef = useRef(null);
 
@@ -48,6 +50,23 @@ export default function LandingLayout({ children }) {
           </h1>
           <p>A modular <a href="https://threejs.org/" target="_blank" rel="noreferrer">Three.js</a> particle system. Compose emitters, lifetime modules, spatial effects, renderers, and event-triggered subsystems using WebGL or WebGPU rendering.</p>
         </header>
+
+        <section className="example-search" aria-label="Find examples">
+          <h2>Examples</h2>
+          <label htmlFor="example-search">Search examples and tags</label>
+          <div>
+            <input id="example-search" type="search" value={searchQuery}
+              onChange={event => onSearchChange(event.target.value)} />
+            {searchQuery && <button type="button" onClick={() => onSearchChange('')}>Clear</button>}
+          </div>
+          <ul>
+            {filterExamples(examples, searchQuery).map(example => (
+              <li key={example.id}><button type="button" aria-pressed={selectedExample === example.title}
+                onClick={() => onExampleSelect(example.title)}>{example.title}</button></li>
+            ))}
+          </ul>
+          {filterExamples(examples, searchQuery).length === 0 && <p role="status">No matching examples.</p>}
+        </section>
 
         <nav aria-label="Project resources">
           <h2>Learn</h2>

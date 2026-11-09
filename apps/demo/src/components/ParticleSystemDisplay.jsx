@@ -40,6 +40,7 @@ function collectSystemStats(system, visited = new Set()) {
 
 function ParticleSystemDisplay({
   initialPreset,
+  searchQuery = '',
   initialScene,
   onCodeChange,
   onMetadataChange,
@@ -52,6 +53,15 @@ function ParticleSystemDisplay({
 }) {
   const particleSystem = useRef(null);
   const guiRef = useRef(null);
+  const searchRef = useRef(searchQuery);
+  const selectionRef = useRef(initialPreset);
+  searchRef.current = searchQuery;
+  selectionRef.current = initialPreset;
+  useEffect(() => { guiRef.current?.filterPresets(searchQuery); }, [searchQuery]);
+  useEffect(() => {
+    const gui = guiRef.current;
+    if (gui && gui.currentPresetName !== initialPreset) void gui.loadPreset(initialPreset);
+  }, [initialPreset]);
   const { gl, scene } = useThree();
 
   useEffect(() => {
@@ -60,7 +70,7 @@ function ParticleSystemDisplay({
     async function initialize() {
       const system = await particlePresets[initialPreset].create();
 
-      if (cancelled) return;
+      if (cancelled) { system.destroy(); return; }
 
       particleSystem.current = system;
       getSceneParticleRoot(scene).add(system);
@@ -88,6 +98,8 @@ function ParticleSystemDisplay({
       });
 
       guiRef.current = gui;
+      gui.filterPresets(searchRef.current);
+      if (selectionRef.current !== initialPreset) void gui.loadPreset(selectionRef.current);
     }
 
     initialize();
@@ -124,6 +136,7 @@ function ParticleSystemDisplay({
 
 ParticleSystemDisplay.propTypes = {
   initialPreset: PropTypes.string.isRequired,
+  searchQuery: PropTypes.string,
   initialScene: PropTypes.string.isRequired,
   onCodeChange: PropTypes.func.isRequired,
   onMetadataChange: PropTypes.func.isRequired,

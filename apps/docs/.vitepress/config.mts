@@ -1,4 +1,6 @@
 import { defineConfig } from 'vitepress';
+import { renderSearchPage } from '../../../scripts/docs/search.mjs';
+import { exampleSEO } from '../../../scripts/docs/seo.mjs';
 import { docsUrl } from '../../../scripts/docs/site.mjs';
 import path from 'node:path';
 import { discoverExamples, resolveExample, exampleSourcePath } from '../../../scripts/docs/examples.mjs';
@@ -18,8 +20,15 @@ export default defineConfig({
   base: new URL(docsUrl).pathname,
   sitemap: { hostname: docsUrl },
   head: [['meta', {name:'theme-color',content:'#3451b2'}], ['link', {rel:'icon',type:'image/png',href: `${new URL(docsUrl).pathname}favicon.png`}]],
-  transformHead: ({ pageData }) => [['link', { rel:'canonical', href:`${hostname}/${pageData.relativePath.replace(/\.md$/,'.html')}` }]],
-  transformPageData(pageData) { pageData.frontmatter.lastUpdated = false; },
+  transformHead: ({ pageData }) => {
+    const example = discoverExamples().find(entry => entry.id === pageData.frontmatter.example);
+    return example ? exampleSEO(example) : [['link', { rel:'canonical', href:`${hostname}/${pageData.relativePath.replace(/\.md$/,'.html')}` }]];
+  },
+  transformPageData(pageData) {
+    pageData.frontmatter.lastUpdated = false;
+    const example = discoverExamples().find(entry => entry.id === pageData.frontmatter.example);
+    if (example) { pageData.title = example.title; pageData.description = example.description; }
+  },
   vite: {
     server: { port: 5174, strictPort: true },
     plugins: [{
@@ -45,7 +54,7 @@ export default defineConfig({
   },
   themeConfig: {
     siteTitle: 'RZMPS',
-    search: { provider: 'local' },
+    search: { provider: 'local', options: { _render: renderSearchPage } },
     nav: [
       { text:'Getting Started', link:'/guides/first-particle-system' },
       { text:'Guides', link:'/guides/' },
