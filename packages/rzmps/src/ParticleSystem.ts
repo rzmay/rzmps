@@ -106,6 +106,34 @@ export interface ParticleSystemOptions {
   /** Fixed prewarm steps per second; invalid values fall back to 24.
    * @defaultValue 24 */
   prewarmFPS: number;
+  /**
+   * Whether to divide large simulation intervals into smaller steps.
+   *
+   * When enabled (default), elapsed time is simulated in increments of at most
+   * substepDeltaTime. Each increment performs normal emission, particle updates,
+   * and spatial interactions, improving collisions, forces, emission timing, and
+   * other time-dependent behavior after irregular or delayed frames.
+   *
+   * Substepping is more computationally expensive because multiple simulation
+   * updates may occur during one rendered frame. Only the most recent maxCatchup
+   * seconds are simulated; null estimates this limit from emitter lifetimes and
+   * system duration. An internal step-count safeguard also bounds work.
+   *
+   * When disabled, the entire elapsed interval is processed in one simulation
+   * step. Continuous births still receive distributed spawn times and per-particle
+   * deltas, but spatial interactions, collisions, and nonlinear motion may be
+   * inaccurate over large intervals. This is faster and may suit simple effects
+   * or performance-sensitive applications.
+   *
+   * Neither mode guarantees exact reconstruction of missed frames.
+   * @default true
+   */
+  substep: boolean;
+  /** Maximum simulation step in seconds. Defaults to 1 / prewarmFPS. */
+  substepDeltaTime: number;
+  /** Maximum simulation seconds recovered per interval; null uses duration and finite emitter lifetimes.
+   * @default null */
+  maxCatchup: number | null;
   /** Restarts the emission cycle after duration.
    * @defaultValue true */
   looping: boolean;
@@ -289,6 +317,34 @@ class ParticleSystem extends THREE.Object3D {
   duration: number;
   prewarm: boolean;
   prewarmFPS: number;
+  /**
+   * Whether to divide large simulation intervals into smaller steps.
+   *
+   * When enabled (default), elapsed time is simulated in increments of at most
+   * substepDeltaTime. Each increment performs normal emission, particle updates,
+   * and spatial interactions, improving collisions, forces, emission timing, and
+   * other time-dependent behavior after irregular or delayed frames.
+   *
+   * Substepping is more computationally expensive because multiple simulation
+   * updates may occur during one rendered frame. Only the most recent maxCatchup
+   * seconds are simulated; null estimates this limit from emitter lifetimes and
+   * system duration. An internal step-count safeguard also bounds work.
+   *
+   * When disabled, the entire elapsed interval is processed in one simulation
+   * step. Continuous births still receive distributed spawn times and per-particle
+   * deltas, but spatial interactions, collisions, and nonlinear motion may be
+   * inaccurate over large intervals. This is faster and may suit simple effects
+   * or performance-sensitive applications.
+   *
+   * Neither mode guarantees exact reconstruction of missed frames.
+   * @default true
+   */
+  substep: boolean;
+  /** Maximum simulation step in seconds. Defaults to 1 / prewarmFPS. */
+  substepDeltaTime: number;
+  /** Maximum simulation seconds recovered per interval; null uses duration and finite emitter lifetimes.
+   * @default null */
+  maxCatchup: number | null;
   looping: boolean;
   endBehavior: EndBehavior;
 
@@ -1198,6 +1254,10 @@ class ParticleSystem extends THREE.Object3D {
     this.duration = options.duration ?? 10;
     this.prewarm = options.prewarm ?? false;
     this.prewarmFPS = options.prewarmFPS ?? 24;
+    this.substep = options.substep ?? true;
+    this.maxCatchup = options.maxCatchup ?? null;
+    this.substepDeltaTime = options.substepDeltaTime ?? 1 / (
+      Number.isFinite(this.prewarmFPS) && this.prewarmFPS > 0 ? this.prewarmFPS : 24);
     this.looping = options.looping ?? true;
     this.endBehavior = (options.endBehavior as EndBehavior) ?? EndBehavior.None;
 
@@ -1300,7 +1360,7 @@ class ParticleSystem extends THREE.Object3D {
 
     this._prewarm();
 
-    this._advanceSimulationStep(false);
+    this._advanceSimulationInterval(false);
 
     // Cubemap updates require a renderer and run only on normal display updates.
     this._updateLiveCubemaps();
@@ -1341,7 +1401,7 @@ class ParticleSystem extends THREE.Object3D {
         this._cameraDistanceSq = this._getSimulationDistanceSq();
         this.syncRendererParents();
         this._updateEmitterContextVelocity();
-        this._advanceSimulationStep();
+        this._advanceSimulationInterval();
       }
     } finally {
       this.deltaTime = previousDeltaTime;
@@ -1384,6 +1444,116 @@ class ParticleSystem extends THREE.Object3D {
     if (handleEndBehavior) this._handleEndBehavior();
   }
 
+  private _skipIntermediateRender = false;
+  private _particlesIntegrated = false;
+
+  /** @internal Shared by CPU modules and spatial effects, including conditions. */
+  getParticleDeltaTime(particle: Particle, deltaTime: number): number {
+    return particle.getSimulationDeltaTime(deltaTime, this._particlesIntegrated);
+  }
+
+  private _advanceSimulationInterval(handleEndBehavior = true): void {
+    const elapsed = this.deltaTime;
+    const step = this.substepDeltaTime;
+    if (!this.substep || !Number.isFinite(step) || step <= 0) {
+      this._advanceSimulationStep(handleEndBehavior);
+      return;
+    }
+    // Read definitions directly so runtime edits to lifetimes/duration take effect immediately.
+    const automatic = Math.max(0, this.duration,
+      ...this.emitters.map(emitter => emitter.getMaxLifetime() ?? 0));
+    const configured = this.maxCatchup === null ? automatic : this.maxCatchup;
+    const budget = Math.min(240 * step, Number.isNaN(configured) ? automatic : Math.max(0, configured));
+    if (elapsed <= Math.min(step, budget)) {
+      this._advanceSimulationStep(handleEndBehavior);
+      return;
+    }
+    let remaining = Math.min(elapsed, budget);
+    const discarded = Math.max(0, elapsed - remaining);
+    try {
+      if (discarded > 0) this._skipSimulationTime(discarded);
+      do {
+        this.deltaTime = Math.min(step, remaining);
+        remaining = Math.max(0, remaining - this.deltaTime);
+        this._skipIntermediateRender = remaining > 1e-12;
+        this._advanceSimulationStep(handleEndBehavior || this._skipIntermediateRender);
+        this._clearSkippedSimulationTime();
+      } while (remaining > 1e-12 && !this._destroyed && !this._paused);
+    } finally {
+      this.deltaTime = elapsed;
+      this._skipIntermediateRender = false;
+      this._clearSkippedSimulationTime();
+    }
+  }
+
+  private _discardingTime = false;
+  private _skippedTime = 0;
+  private _skippedClockWrap = 0;
+  private readonly _gpuSkippedTimeNode = uniform(0);
+  private readonly _gpuSkippedClockWrapNode = uniform(0);
+  private _gpuSkipTimeCompute?: { buffers: GPUParticleBufferState; version: number; count: number; node: ComputeNode };
+
+  /** Advances only clocks over discarded history. No modifiers, events, births or rendering. */
+  private _skipSimulationTime(seconds: number, parentSources?: Iterable<SubSystemSource>): void {
+    if (this._paused || this._destroyed || seconds <= 0) return;
+    const previousDelta = this.deltaTime;
+    this.deltaTime = seconds;
+    this._skippedTime += seconds;
+    this._discardingTime = true;
+    try {
+      if (this._playing) {
+        this._elapsedTime += seconds;
+        if (this.looping && this.duration > 0 && Number.isFinite(this.duration)) {
+          this._skippedClockWrap = Math.floor(this._elapsedTime / this.duration) * this.duration;
+          this._elapsedTime -= this._skippedClockWrap;
+        } else if (!this.looping && !this.isSubSystem && this._elapsedTime >= this.duration) {
+          this._elapsedTime = this.duration;
+          // Finish lifecycle normally at the next retained step.
+          this._ended = true;
+        }
+      }
+      this._updateEmitterInstances(parentSources);
+      for (const source of this._emissionSources.values()) {
+        source.realtime += seconds * 1000;
+        source.time = source.realtime / (Math.max(this.duration, Number.EPSILON) * 1000);
+      }
+      const buffers = this._gpuBuffers;
+      const renderer = this.sceneRenderer;
+      if (this._isGPUProcessingActive && buffers && ParticleSystem.isWebGPURenderer(renderer)) {
+        this._gpuSkippedTimeNode.value = this._skippedTime;
+        if (!this._gpuSkipTimeCompute || this._gpuSkipTimeCompute.buffers !== buffers
+          || this._gpuSkipTimeCompute.version !== buffers.version
+          || this._gpuSkipTimeCompute.count !== buffers.count) {
+          this._gpuSkipTimeCompute?.node.dispose();
+          const node = Fn(() => {
+            const particle = buffers.storage.createParticle(undefined, true);
+            If(particle.alive.notEqual(uint(0)), () => {
+              particle.realtime.addAssign(this._gpuSkippedTimeNode.mul(1000));
+              particle.time.assign(particle.realtime.div(1000).div(particle.lifetime));
+              buffers.storage.storeParticle(particle);
+            });
+          })().compute(buffers.count);
+          this._gpuSkipTimeCompute = { buffers, version: buffers.version, count: buffers.count, node };
+        }
+        renderer.compute(this._gpuSkipTimeCompute.node);
+      } else this.particles.forEach(particle => {
+        particle.advanceAge(seconds);
+        particle.time = particle.realtime / 1000 / particle.lifetime;
+      });
+      const sources = [...this.particles, ...this._emissionSources.values()];
+      this.subSystems.forEach((_options, child) => child._skipSimulationTime(child._scaleDeltaTime(seconds), sources));
+    } finally {
+      this.deltaTime = previousDelta;
+      this._discardingTime = false;
+    }
+  }
+
+  private _clearSkippedSimulationTime(): void {
+    this._skippedTime = 0;
+    this._skippedClockWrap = 0;
+    this.subSystems.forEach((_options, child) => child._clearSkippedSimulationTime());
+  }
+
   private _scaleDeltaTime(deltaTime: number): number {
     const speed = Number.isFinite(this.simulationSpeed)
       ? Math.max(0, this.simulationSpeed)
@@ -1393,6 +1563,7 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _processParticles() {
+    this._particlesIntegrated = false;
     this._renderFrameToken = {};
     this._updateLODQuality();
     // LOD destruction is deliberately separate from lifecycle death notification.
@@ -1486,6 +1657,7 @@ class ParticleSystem extends THREE.Object3D {
 
     // Update particles, caching permanent state before render-time transients.
     this._updateParticles(transientBaseValues);
+    this._particlesIntegrated = true;
 
     if (!transientBaseValues) {
       this.particles.forEach((particle) => particle.cache());
@@ -1494,7 +1666,7 @@ class ParticleSystem extends THREE.Object3D {
     // Prewarming advances authoritative simulation state only. Rendering these
     // intermediate CPU frames mutates instance matrices immediately before a
     // GPU restart and has no effect on the resulting simulation.
-    if (!this._isPrewarming) {
+    if (!this._isPrewarming && !this._skipIntermediateRender) {
       transientRenderModifiers
         .forEach((modifier) => modifier instanceof Module
           ? modifier.modify(this.particles, this.deltaTime, modifier.executionContext!)
@@ -1504,6 +1676,7 @@ class ParticleSystem extends THREE.Object3D {
         renderer.update(this.particles, this, this.deltaTime);
       });
     }
+    this._particlesIntegrated = false;
   }
 
   private _canProcessParticlesOnGPU(modules: Module[], spatialEffects: SpatialEffect[]): boolean {
@@ -1671,6 +1844,7 @@ class ParticleSystem extends THREE.Object3D {
       buffers: this._gpuBuffers,
       deltaTime: this.deltaTime,
       deltaTimeNode: this._gpuDeltaTimeNode,
+      skippedTimeNode: this._gpuSkippedTimeNode,
       elapsedTimeNode: this._gpuElapsedTimeNode,
       emitterPositionNode: this._gpuEmitterPositionNode,
       gravityNode: this._gpuGravityNode,
@@ -1751,7 +1925,7 @@ class ParticleSystem extends THREE.Object3D {
       this._scheduleGPUEventReadback(eventBuffer, sceneRenderer);
     }
 
-    const shouldRequestReadback = !gpuNativeEmission
+    const shouldRequestReadback = !this._skipIntermediateRender && !gpuNativeEmission
       && !hasPendingReadback
       && this._shouldRequestGPUReadback();
     const readbackSequence = shouldRequestReadback ? this._gpuReadbackSequence + 1 : 0;
@@ -1786,6 +1960,11 @@ class ParticleSystem extends THREE.Object3D {
         particleCount: this.particles.length,
         gpuCount: this._gpuBuffers.count,
       });
+    }
+
+    if (this._skipIntermediateRender) {
+      this._endGPUDebugFrame(debugFrame);
+      return;
     }
 
     const cpuInputRenderers = this.renderers.filter((renderer) => !renderer.supportsGPUInput);
@@ -2291,6 +2470,7 @@ class ParticleSystem extends THREE.Object3D {
         output: context.buffers,
         emitterRuntime: emitterInstances.createRuntime(emitterIndex),
         durationNode: this._gpuDurationNode,
+        skippedClockWrapNode: this._gpuSkippedClockWrapNode,
         tagMasks: this._getGPUEmitterTagMasks(emitter),
       });
     })().compute(1));
@@ -2405,9 +2585,13 @@ class ParticleSystem extends THREE.Object3D {
               runtime.identity.w.assign(uint(emitterIndex));
             });
 
+            const sourceSkipped = runtime.identity.x.notEqual(uint(0)).select(
+              context.skippedTimeNode ?? float(0), float(0)).toVar('sourceSkippedTime');
             emitter.prepareBuiltInGPUEmission({
               ...context,
-              elapsedTimeNode: runtime.timing.w.add(context.deltaTimeNode),
+              skippedTimeNode: sourceSkipped,
+              loopingClock: options.inheritLifetime <= 0 && this.looping,
+              elapsedTimeNode: runtime.timing.w.add(context.deltaTimeNode).add(sourceSkipped),
               durationNode: mix(
                 this._gpuDurationNode,
                 parent.lifetime,
@@ -2476,6 +2660,11 @@ class ParticleSystem extends THREE.Object3D {
               const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
               return this._gpuParentToSimulationNode.mul(particleFrameGPU(source, options.inheritScale));
             },
+            resolveBirthOffset: claim => {
+              const runtime = emitterInstances.createRuntime(
+                resolveParentSlot(claim).mul(emitters.length).add(emitterIndex));
+              return runtime.birthOffset(claim.sub(uint(runtime.birthSchedule(0).w)), emitter.bursts.length);
+            },
             resolveEmissionTime: (claimIndex) => {
               const parentSlot = resolveParentSlot(claimIndex);
               if (options.inheritLifetime > 0) {
@@ -2539,6 +2728,12 @@ class ParticleSystem extends THREE.Object3D {
       this._gpuPipelineBuildCount += 1;
       this._gpuEventSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
       const nodes: ComputeNode[] = [];
+      nodes.push(Fn(() => {
+        const run = runs.load(instanceIndex);
+        If(run.active.notEqual(uint(0)), () => {
+          run.elapsed.addAssign(context.skippedTimeNode ?? float(0));
+        });
+      })().compute(runs.capacity));
 
       emitters.forEach((_emitter, emitterIndex) => {
         const options = configurations[emitterIndex];
@@ -2727,6 +2922,8 @@ class ParticleSystem extends THREE.Object3D {
             emitter.prepareBuiltInGPUEmission({
               ...context,
               elapsedTimeNode: run.elapsed,
+              skippedTimeNode: runtime.identity.x.notEqual(uint(0)).select(
+                context.skippedTimeNode ?? float(0), float(0)),
               durationNode: run.duration,
               emitterPositionNode: run.particle.position,
               countScaleNode: (options.impulseAffectsCount ?? 0) > 0
@@ -2775,6 +2972,10 @@ class ParticleSystem extends THREE.Object3D {
               const p = runs.load(resolveRunIndex(claimIndex)).particle;
               return mat4(vec4(p.acceleration, 0), vec4(p.angularAcceleration, 0),
                 vec4(p.scalarAcceleration, 0), vec4(p.angularVelocity, 1));
+            },
+            resolveBirthOffset: claim => {
+              const runtime = emitterInstances.createRuntime(resolveRunIndex(claim));
+              return runtime.birthOffset(claim.sub(uint(runtime.birthSchedule(0).w)), emitter.bursts.length);
             },
             resolveEmissionTime: (claimIndex) => {
               const run = runs.load(resolveRunIndex(claimIndex));
@@ -2926,7 +3127,7 @@ class ParticleSystem extends THREE.Object3D {
         : particle.alive.notEqual(uint(0))
           .and(particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)));
       If(matches, () => {
-        collision.modifyGPUCollision(particle, context);
+        collision.modifyGPUCollision(particle, this._particleGPUContext(particle, context));
         buffers.storage.storeParticle(particle);
       });
     })().compute(buffers.count);
@@ -2957,7 +3158,7 @@ class ParticleSystem extends THREE.Object3D {
         ? particle.alive.notEqual(uint(0))
         : particle.alive.notEqual(uint(0))
           .and(particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)));
-      If(matches, () => collision.detectGPUCollision(particle, context));
+      If(matches, () => collision.detectGPUCollision(particle, this._particleGPUContext(particle, context)));
     })().compute(buffers.count);
     this._gpuModifierComputeCaches.set(key, { key, node });
     return node;
@@ -2979,10 +3180,11 @@ class ParticleSystem extends THREE.Object3D {
     if (cached) return cached.node;
 
     const node = Fn(() => {
-      const particle = buffers.storage.createParticle();
+      const particle = buffers.storage.createParticle(undefined, true);
       const event = marker.load(particle.index);
       If(particle.alive.notEqual(uint(0)).and(event.active), () => {
-        collision.resolveGPUCollision(particle, context, event.position, event.normal);
+        collision.resolveGPUCollision(particle, this._particleGPUContext(particle, context), event.position, event.normal);
+        buffers.storage.storeParticle(particle);
       });
     })().compute(buffers.count);
     this._gpuModifierComputeCaches.set(key, { key, node });
@@ -3059,11 +3261,13 @@ class ParticleSystem extends THREE.Object3D {
 
         this._applyGPUModifiers(transientPreMovementModifiers, particle, context);
 
-        this._integrateGPUParticle(particle, context);
+        const particleContext = this._particleGPUContext(particle, context);
+        // Freeze the effective delta before consuming the encoded age.
+        const effectiveDelta = particleContext.deltaTimeNode.toVar('effectiveDelta');
+        this._integrateGPUParticle(particle, { ...context, deltaTimeNode: effectiveDelta });
 
-        if (base) {
-          this._commitGPUTransientParticle(particle, base);
-        }
+        if (base) this._commitGPUTransientParticle(particle, base, effectiveDelta);
+        particle.birthOffset?.assign(0);
 
         If(wasAlive.notEqual(uint(0)).and(particle.alive.equal(uint(0))), () => {
           context.eventWriter?.emitDeath(particle);
@@ -3129,7 +3333,7 @@ class ParticleSystem extends THREE.Object3D {
     const computeNode = Fn(() => {
       const particle = source.storage.createParticle(undefined, true);
 
-      this._applyGPUModifiers(modifiers, particle, context);
+      this._applyGPUModifiers(modifiers, particle, this._particleGPUContext(particle, context, true));
 
       target.storage.storeParticle(particle);
     })().compute(source.count);
@@ -3145,6 +3349,8 @@ class ParticleSystem extends THREE.Object3D {
 
   private _updateGPURuntimeUniforms(): void {
     this._gpuDeltaTimeNode.value = this.deltaTime;
+    this._gpuSkippedTimeNode.value = this._skippedTime;
+    this._gpuSkippedClockWrapNode.value = this._skippedClockWrap;
     this._gpuElapsedTimeNode.value = this._elapsedTime;
     this._gpuDurationNode.value = Math.max(this.duration, Number.EPSILON);
     this._gpuGravityNode.value.copy(this.gravity);
@@ -3291,7 +3497,7 @@ class ParticleSystem extends THREE.Object3D {
     particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
   ): void {
-    const deltaTime = this._gpuDeltaTimeNode;
+    const deltaTime = context.deltaTimeNode;
     const gravity = this._gpuGravityNode;
     const gravityModifier = this._gpuParameters.number(
       'gravityModifier.integrate',
@@ -3413,8 +3619,7 @@ class ParticleSystem extends THREE.Object3D {
     };
   }
 
-  private _commitGPUTransientParticle(frame: GPUParticleLike, base: GPUParticleLike): void {
-    const deltaTime = this._gpuDeltaTimeNode;
+  private _commitGPUTransientParticle(frame: GPUParticleLike, base: GPUParticleLike, deltaTime: Node<'float'>): void {
     const gravity = this._gpuGravityNode;
     const frameStep = deltaTime.mul(frame.speed);
     const baseStep = deltaTime.mul(base.speed);
@@ -3488,11 +3693,20 @@ class ParticleSystem extends THREE.Object3D {
     });
   }
 
+  private _particleGPUContext(particle: GPUParticleLike, context: GPUParticleUpdateContext,
+    integrated = false): GPUParticleUpdateContext {
+    const deltaTimeNode = integrated
+      ? context.deltaTimeNode.min(particle.realtime.div(1000).max(0))
+      : context.deltaTimeNode.sub(particle.birthOffset ?? float(0)).max(0);
+    return { ...context, deltaTimeNode };
+  }
+
   private _applyGPUModifier(
     modifier: Module | SpatialEffect,
     particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
   ): void {
+    context = this._particleGPUContext(particle, context);
     const alive = particle.alive.notEqual(uint(0));
 
     if (modifier instanceof Module) {
@@ -3597,7 +3811,7 @@ class ParticleSystem extends THREE.Object3D {
       this._gpuSpatialRegistry.applySegment(
         firstRecord.segmentId,
         particle,
-        context,
+        this._particleGPUContext(particle, context),
       );
       index = nextIndex;
     }
@@ -4100,6 +4314,7 @@ class ParticleSystem extends THREE.Object3D {
       !instances
       || instances.capacity !== requiredCapacity
       || instances.burstWordCount !== requiredBurstWordCount
+      || instances.maxBurstCount !== maxBurstCount
     ) {
       this._gpuResourceBuildCount += 1;
       instances = new GPUEmitterInstanceBufferState(requiredCapacity, maxBurstCount);
@@ -4537,26 +4752,28 @@ class ParticleSystem extends THREE.Object3D {
         continue;
       }
 
+      const deltaTime = p.getSimulationDeltaTime(this.deltaTime);
+
       // Apply gravity
-      const gravityScale = this.deltaTime * evaluateDynamicNumber(this.gravityModifier, p.time, p.id);
+      const gravityScale = deltaTime * evaluateDynamicNumber(this.gravityModifier, p.time, p.id);
       p.velocity.addScaledVector(
         this.gravity,
         gravityScale,
       );
 
       // Update time
-      p.realtime += this.deltaTime * 1000;
+      p.advanceAge(this.deltaTime);
       p.time = (p.realtime / 1000) / p.lifetime;
 
       // Update transform
-      p.position.addScaledVector(p.velocity, this.deltaTime * p.speed);
-      p.rotation.addScaledVector(p.angularVelocity, this.deltaTime * p.speed);
-      p.scale.addScaledVector(p.scalarVelocity, this.deltaTime * p.speed);
+      p.position.addScaledVector(p.velocity, deltaTime * p.speed);
+      p.rotation.addScaledVector(p.angularVelocity, deltaTime * p.speed);
+      p.scale.addScaledVector(p.scalarVelocity, deltaTime * p.speed);
 
       // Update velocities
-      p.velocity.addScaledVector(p.acceleration, this.deltaTime * p.speed);
-      p.angularVelocity.addScaledVector(p.angularAcceleration, this.deltaTime * p.speed);
-      p.scalarVelocity.addScaledVector(p.scalarAcceleration, this.deltaTime * p.speed);
+      p.velocity.addScaledVector(p.acceleration, deltaTime * p.speed);
+      p.angularVelocity.addScaledVector(p.angularAcceleration, deltaTime * p.speed);
+      p.scalarVelocity.addScaledVector(p.scalarAcceleration, deltaTime * p.speed);
 
       // Kill old particles
       if (p.realtime > p.lifetime * 1000) {
@@ -4566,7 +4783,7 @@ class ParticleSystem extends THREE.Object3D {
       }
 
       if (transientBase && transientFrame) {
-        p.cacheValues(this._getAdvancedPermanentValues(p, transientBase, transientFrame, gravityScale));
+        p.cacheValues(this._getAdvancedPermanentValues(p, transientBase, transientFrame, gravityScale, deltaTime));
       }
 
       particles[writeIndex] = p;
@@ -4627,21 +4844,22 @@ class ParticleSystem extends THREE.Object3D {
     base: ParticleCachedValues,
     frame: ParticleCachedValues,
     gravityScale: number,
+    deltaTime: number,
   ): ParticleCachedValues {
     const next = particle.snapshot();
     const frameVelocity = frame.velocity.clone().addScaledVector(this.gravity, gravityScale);
     const baseVelocity = base.velocity.clone().addScaledVector(this.gravity, gravityScale);
 
     next.lifetime = base.lifetime;
-    next.position.copy(base.position).addScaledVector(frameVelocity, this.deltaTime * frame.speed);
+    next.position.copy(base.position).addScaledVector(frameVelocity, deltaTime * frame.speed);
     next.orbitCenter.copy(base.orbitCenter);
-    next.rotation.copy(base.rotation).addScaledVector(frame.angularVelocity, this.deltaTime * frame.speed);
-    next.scale.copy(base.scale).addScaledVector(frame.scalarVelocity, this.deltaTime * frame.speed);
-    next.velocity.copy(baseVelocity).addScaledVector(base.acceleration, this.deltaTime * base.speed);
+    next.rotation.copy(base.rotation).addScaledVector(frame.angularVelocity, deltaTime * frame.speed);
+    next.scale.copy(base.scale).addScaledVector(frame.scalarVelocity, deltaTime * frame.speed);
+    next.velocity.copy(baseVelocity).addScaledVector(base.acceleration, deltaTime * base.speed);
     next.angularVelocity
       .copy(base.angularVelocity)
-      .addScaledVector(base.angularAcceleration, this.deltaTime * base.speed);
-    next.scalarVelocity.copy(base.scalarVelocity).addScaledVector(base.scalarAcceleration, this.deltaTime * base.speed);
+      .addScaledVector(base.angularAcceleration, deltaTime * base.speed);
+    next.scalarVelocity.copy(base.scalarVelocity).addScaledVector(base.scalarAcceleration, deltaTime * base.speed);
     next.acceleration.copy(base.acceleration);
     next.angularAcceleration.copy(base.angularAcceleration);
     next.scalarAcceleration.copy(base.scalarAcceleration);
@@ -4727,6 +4945,7 @@ class ParticleSystem extends THREE.Object3D {
     }
 
     const nextDeltaTime = this._scaleDeltaTime(parentDeltaTime);
+    this._skipIntermediateRender = this._subSystemParent?._skipIntermediateRender ?? false;
     this.syncRendererParents();
     this.deltaTime = nextDeltaTime;
     if (options.emitContinuous) this._prewarm();
@@ -4755,6 +4974,7 @@ class ParticleSystem extends THREE.Object3D {
     }
 
     const nextDeltaTime = this._scaleDeltaTime(parentDeltaTime);
+    this._skipIntermediateRender = this._subSystemParent?._skipIntermediateRender ?? false;
     this.syncRendererParents();
     this.deltaTime = nextDeltaTime;
     if (options.emitContinuous) this._prewarm();
@@ -4792,9 +5012,15 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _advanceEmitterInstance(instance: EmitterInstance, options?: SubSystemOptions): void {
+    if (this._discardingTime && instance.source.kind === 'snapshot' && instance.startTime === undefined) return;
     const context = instance.prepare(this, this.deltaTime, options);
     if (!context) {
       this._retireEmitterInstance(instance);
+      return;
+    }
+    if (this._discardingTime) {
+      instance.emitter.advanceClock(context, this, instance, this.deltaTime,
+        instance.source.kind === 'standalone' ? this._skippedClockWrap : 0);
       return;
     }
     // CPU-bound sources stage a single birth batch when the simulation runs on GPU.
@@ -4803,7 +5029,7 @@ class ParticleSystem extends THREE.Object3D {
     const stage = (parent && relationship && this._canUpdateAsGPUSubSystem(parent, relationship))
       || (!this.isSubSystem && this._shouldExecuteEmittersOnGPU());
     const particles = instance.emitter.update(
-      stage ? this._stagedBirths : this.particles, context, this, instance,
+      stage ? this._stagedBirths : this.particles, { ...context, deltaTime: this.deltaTime }, this, instance,
     );
     if (!stage) particles.forEach(p => this._notifySpawn(p));
   }
@@ -4813,7 +5039,7 @@ class ParticleSystem extends THREE.Object3D {
     // Open every receiver before emitting, so births cannot alter another receiver's current batch.
     const configurations = this.emitters.map(emitter => {
       const options = this.getEmitterOptions(emitter);
-      emitter.beginExecution(this, this.deltaTime,
+      if (!this._discardingTime) emitter.beginExecution(this, this.deltaTime,
         this.isSubSystem ? 'parent' : 'local', this._emitterEventNames(emitter), options.eventScope);
       return options;
     });
@@ -4908,7 +5134,6 @@ class ParticleSystem extends THREE.Object3D {
     if (overrides === false) return;
 
     this._playing = true;
-    this._paused = false;
     this._ended = false;
     this.lastFrame = now;
 
@@ -5078,6 +5303,8 @@ class ParticleSystem extends THREE.Object3D {
     }
     this._isGPUProcessingActive = false;
     this._processingMode = undefined;
+    this._gpuSkipTimeCompute?.node.dispose();
+    this._gpuSkipTimeCompute = undefined;
     this._gpuBuffers?.dispose(gpuRenderer);
     this._gpuRenderOutputBuffers?.dispose(gpuRenderer);
     this._gpuBuffers = undefined;
@@ -5671,8 +5898,14 @@ class ParticleSystem extends THREE.Object3D {
     this._elapsedTime += this.deltaTime;
 
     if (this.looping) {
-      while (this.duration > 0 && this._elapsedTime >= this.duration) {
-        this._elapsedTime -= this.duration;
+      if (this.duration > 0 && this._elapsedTime >= this.duration) {
+        const wrap = Math.floor(this._elapsedTime / this.duration) * this.duration;
+        this._elapsedTime -= wrap;
+        if (this._skippedTime > 0) {
+          this._skippedClockWrap += wrap;
+          this.emitters.forEach(emitter => emitter.clearContext('__default', this));
+          return;
+        }
         // The system cycle owns ordinary emission only; source/event contexts have independent clocks.
         this.emitters.forEach((emitter) => emitter.clearContext('__default', this));
         this._gpuStandaloneEmitterInstances?.reset();

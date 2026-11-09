@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { GPUAllocationWriter } from './AllocationBuffer';
 import { StorageBufferAttribute } from 'three/webgpu';
 import type { Node } from 'three/webgpu';
-import { atomicAdd, atomicLoad, atomicStore, Loop, storage, uint } from 'three/tsl';
+import { atomicAdd, atomicLoad, atomicStore, Loop, storage, uint, float } from 'three/tsl';
 import {
   enumValueCount,
   initializeStorageAttribute,
@@ -62,6 +62,7 @@ export class GPUEmitterInstanceRuntime {
   readonly identity: Node<'uvec4'>;
   readonly burstState: Node<'uvec4'>;
 
+  private readonly index: Node<'uint'> | number;
   private readonly state: GPUEmitterInstanceBufferState;
   private readonly uintOffset: Node<'uint'> | number;
   private readonly counters: AtomicUintStorage;
@@ -69,12 +70,13 @@ export class GPUEmitterInstanceRuntime {
 
   constructor(state: GPUEmitterInstanceBufferState, index: Node<'uint'> | number) {
     this.state = state;
+    this.index = index;
     const floatStorage = state.floatStorage;
     const uintStorage = state.uintStorage;
 
     const floatIndex = typeof index === 'number'
-      ? index * FLOAT_SLOT_COUNT
-      : index.mul(FLOAT_SLOT_COUNT);
+      ? index * state.floatSlotCount
+      : index.mul(state.floatSlotCount);
     const uintIndex = typeof index === 'number'
       ? index * state.uintSlotCount
       : index.mul(state.uintSlotCount);
@@ -99,6 +101,29 @@ export class GPUEmitterInstanceRuntime {
       : index.mul(RUNTIME_COUNTER_COUNT);
   }
 
+  /** Per-step request groups live in the existing emitter buffer, never particle storage.
+   * [exclusive request end, first birth offset, interval, unused]. */
+  birthSchedule(group: number): Node<'vec4'> {
+    const slot = FLOAT_SLOT_COUNT + group;
+    return this.state.floatStorage.element(typeof this.index === 'number'
+      ? this.index * this.state.floatSlotCount + slot
+      : this.index.mul(this.state.floatSlotCount).add(slot));
+  }
+
+  birthOffset(claim: Node<'uint'>, burstCount: number): Node<'float'> {
+    const offset = float(0).toVar('birthOffset');
+    let previous = float(0) as Node<'float'>;
+    for (let group = 0; group < burstCount + 3; group += 1) {
+      const schedule = this.birthSchedule(group);
+      const request = float(claim);
+      // A select expression keeps empty groups harmless without another storage binding.
+      offset.assign(request.greaterThanEqual(previous).and(request.lessThan(schedule.x)).select(
+        schedule.y.add(request.sub(previous).mul(schedule.z)), offset));
+      previous = schedule.x;
+    }
+    return offset;
+  }
+
   firedBurstWord(index: number): Node<'uint'> {
     if (index < 0 || index >= this.state.burstWordCount) {
       throw new Error(`GPU emitter burst word ${index} is outside capacity ${this.state.burstWordCount}.`);
@@ -119,6 +144,7 @@ export class GPUEmitterInstanceRuntime {
   queueBirths(writer: GPUAllocationWriter, destination: GPUEmitterInstanceRuntime, sourceIndex: Node<'uint'>): void {
     const count = this.requestCount();
     const offset = destination.reserveRequestCount(count);
+    this.birthSchedule(0).w.assign(float(offset));
     Loop({ start: 0, end: count, type: 'uint' }, ({ i }) => {
       writer.storeEmissionSource(offset.add(i), sourceIndex);
     });
@@ -199,6 +225,7 @@ export class GPUEmitterInstanceBufferState {
   readonly capacity: number;
   readonly burstWordCount: number;
   readonly uintSlotCount: number;
+  readonly floatSlotCount: number;
   readonly floatAttribute: StorageBufferAttribute;
   readonly uintAttribute: StorageBufferAttribute;
   readonly runtimeCounterAttribute: StorageBufferAttribute;
@@ -210,11 +237,12 @@ export class GPUEmitterInstanceBufferState {
   private readonly uintData: Uint32Array;
   private readonly runtimeCounterData: Uint32Array;
 
-  constructor(capacity: number, maxBurstCount = 0) {
+  constructor(capacity: number, readonly maxBurstCount = 0) {
     this.capacity = Math.max(1, Math.floor(capacity));
+    this.floatSlotCount = FLOAT_SLOT_COUNT + maxBurstCount + 3;
     this.burstWordCount = Math.max(1, Math.ceil(Math.max(0, maxBurstCount) / 32));
     this.uintSlotCount = BASE_UINT_SLOT_COUNT + Math.ceil((this.burstWordCount - 1) / 4);
-    this.floatData = new Float32Array(this.capacity * FLOAT_SLOT_COUNT * 4);
+    this.floatData = new Float32Array(this.capacity * this.floatSlotCount * 4);
     this.uintData = new Uint32Array(this.capacity * this.uintSlotCount * 4);
     this.runtimeCounterData = new Uint32Array(this.capacity * RUNTIME_COUNTER_COUNT);
     this.floatAttribute = new StorageBufferAttribute(this.floatData, 4);
@@ -223,7 +251,7 @@ export class GPUEmitterInstanceBufferState {
     this.floatStorage = storage(
       this.floatAttribute,
       'vec4',
-      this.capacity * FLOAT_SLOT_COUNT,
+      this.capacity * this.floatSlotCount,
     ) as PackedFloatStorage;
     this.uintStorage = storage(
       this.uintAttribute,
@@ -280,14 +308,14 @@ export class GPUEmitterInstanceBufferState {
       this.floatData,
       index,
       EmitterFloatSlot.Timing,
-      FLOAT_SLOT_COUNT,
+      this.floatSlotCount,
       [record.startTime, record.lastSpawn, record.distanceCredit, record.elapsedTime],
     );
     writePackedVec4(
       this.floatData,
       index,
       EmitterFloatSlot.LastDistancePositionDuration,
-      FLOAT_SLOT_COUNT,
+      this.floatSlotCount,
       [record.lastDistancePosition.x, record.lastDistancePosition.y, record.lastDistancePosition.z, record.duration],
     );
     writePackedVec4(
@@ -341,8 +369,8 @@ export class GPUEmitterInstanceBufferState {
         },
       )];
 
-      const timing = readPackedVec4(floats, index, EmitterFloatSlot.Timing, FLOAT_SLOT_COUNT);
-      const distance = readPackedVec4(floats, index, EmitterFloatSlot.LastDistancePositionDuration, FLOAT_SLOT_COUNT);
+      const timing = readPackedVec4(floats, index, EmitterFloatSlot.Timing, this.floatSlotCount);
+      const distance = readPackedVec4(floats, index, EmitterFloatSlot.LastDistancePositionDuration, this.floatSlotCount);
 
       records.push({
         active: true,

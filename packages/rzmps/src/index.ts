@@ -206,6 +206,13 @@ export type {
 } from './collision/ThreeGPUCollisionBackend';
 
 // Dynamic Value
+export { default as sampleDynamicValue } from './helpers/sampleDynamicValue';
+export { default as maxDynamicNumber } from './helpers/maxDynamicNumber';
+export { default as minDynamicNumber } from './helpers/minDynamicNumber';
+export { default as maxDynamicVector } from './helpers/maxDynamicVector';
+export { default as minDynamicVector } from './helpers/minDynamicVector';
+export { default as maxDynamicColor } from './helpers/maxDynamicColor';
+export { default as minDynamicColor } from './helpers/minDynamicColor';
 export type { ColorInput, Vector3Input } from './types/ValueInput';
 export type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
 export type { ValueByParameter } from './types/ValueByParameter';

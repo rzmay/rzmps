@@ -71,6 +71,8 @@ export interface GPUParticleUpdateContext {
   buffers: GPUParticleBufferState;
   deltaTime: number;
   deltaTimeNode: Node<'float'>;
+  /** @internal Discarded simulation time consumed by emitter clocks only. */
+  skippedTimeNode?: Node<'float'>;
   elapsedTimeNode: Node<'float'>;
   emitterPositionNode?: Node<'vec3'>;
   gravityNode: Node<'vec3'>;
@@ -82,6 +84,8 @@ export interface GPUParticleUpdateContext {
 }
 
 export interface GPUParticleLike {
+  /** @internal Shader-local birth offset decoded from packed age; not a particle attribute. */
+  readonly birthOffset?: Node<'float'>;
   readonly materialCopy?: Node<'vec4'>;
   readonly materialCopyU?: Node<'vec4'>;
   readonly materialCopyV?: Node<'vec4'>;
@@ -124,6 +128,7 @@ export interface GPUParticleLike {
 
 /** Shader-node view of one particle; unlike Particle, this is not a CPU value object. */
 export class GPUParticleContext implements GPUParticleLike {
+  readonly birthOffset?: Node<'float'>;
   readonly materialCopy: Node<'vec4'>;
   readonly materialCopyU: Node<'vec4'>;
   readonly materialCopyV: Node<'vec4'>;
@@ -239,7 +244,10 @@ export class GPUParticleContext implements GPUParticleLike {
       : scalars.distortionStrength;
     this.lifetime = materializeLocals ? scalars.lifetime.toVar('particleLifetime') : scalars.lifetime;
     this.time = materializeLocals ? scalars.time.toVar('particleTime') : scalars.time;
-    this.realtime = materializeLocals ? scalars.realtime.toVar('particleRealtime') : scalars.realtime;
+    if (materializeLocals) {
+      this.birthOffset = scalars.realtime.min(0).negate().div(1000).toVar('particleBirthOffset');
+      this.realtime = scalars.realtime.max(0).toVar('particleRealtime');
+    } else this.realtime = scalars.realtime;
     this.alive = materializeLocals ? alive.toVar('particleAlive') : alive;
     this.tagMask = materializeLocals ? tagMask.toVar('particleTagMask') : tagMask;
     this.generation = materializeLocals ? generation.toVar('particleGeneration') : generation;
@@ -342,7 +350,8 @@ export class GPUParticleStorage {
     scalars.distortionStrength.assign(particle.distortionStrength);
     scalars.lifetime.assign(particle.lifetime);
     scalars.time.assign(particle.time);
-    scalars.realtime.assign(particle.realtime);
+    scalars.realtime.assign(particle.birthOffset
+      ? particle.realtime.sub(particle.birthOffset.mul(1000)) : particle.realtime);
     state.x.assign(particle.alive);
     state.y.assign(particle.tagMask);
     state.z.assign(particle.generation);
@@ -781,7 +790,7 @@ export class GPUParticleBufferState {
     );
     writeVectorAndScalar(
       this.floatData, index, ParticleFloatSlot.ScalarVelocityRealtime,
-      particle.scalarVelocity, particle.realtime,
+      particle.scalarVelocity, particle.simulationAge,
     );
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.Acceleration, particle.acceleration, 0);
     writeVectorAndScalar(this.floatData, index, ParticleFloatSlot.AngularAcceleration, particle.angularAcceleration, 0);

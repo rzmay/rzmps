@@ -297,9 +297,9 @@ function createDynamicBinding(
 }
 
 function sampleByKind(kind: DynamicKind, value: DynamicParameter): Array<number | THREE.Vector3> {
-  if (kind === 'number') return sampleDynamicValue(value as DynamicValue<number>, evaluateDynamicNumber);
-  if (kind === 'vector') return sampleDynamicValue(value as DynamicValue<Vector3Input>, evaluateDynamicVector);
-  return sampleDynamicValue(value as DynamicValue<ColorInput>, evaluateDynamicColor)
+  if (kind === 'number') return sampleDynamicFrames(value as DynamicValue<number>, evaluateDynamicNumber);
+  if (kind === 'vector') return sampleDynamicFrames(value as DynamicValue<Vector3Input>, evaluateDynamicVector);
+  return sampleDynamicFrames(value as DynamicValue<ColorInput>, evaluateDynamicColor)
     .map((sample) => new THREE.Vector3(sample.r, sample.g, sample.b));
 }
 
@@ -518,7 +518,7 @@ function sampleDynamicNumberGPU(
   value: DynamicValue<number>,
   time: Node<'float'>,
 ): Node<'float'> {
-  const samples = sampleDynamicValue(value, evaluateDynamicNumber);
+  const samples = sampleDynamicFrames(value, evaluateDynamicNumber);
   return sampleNumberArrayGPU(samples, time);
 }
 
@@ -526,7 +526,7 @@ function sampleDynamicVectorGPU(
   value: DynamicValue<Vector3Input>,
   time: Node<'float'>,
 ): Node<'vec3'> {
-  const samples = sampleDynamicValue(value, evaluateDynamicVector);
+  const samples = sampleDynamicFrames(value, evaluateDynamicVector);
   return sampleVectorArrayGPU(samples, time);
 }
 
@@ -534,12 +534,12 @@ function sampleDynamicColorGPU(
   value: DynamicValue<ColorInput>,
   time: Node<'float'>,
 ): Node<'vec3'> {
-  const samples = sampleDynamicValue(value, evaluateDynamicColor)
+  const samples = sampleDynamicFrames(value, evaluateDynamicColor)
     .map((sample) => new THREE.Vector3(sample.r, sample.g, sample.b));
   return sampleVectorArrayGPU(samples, time);
 }
 
-function sampleDynamicValue<T, Input = T>(
+function sampleDynamicFrames<T, Input = T>(
   value: DynamicValue<Input>,
   evaluate: (value: DynamicValue<Input>, time: number, seed?: string) => T,
 ): T[] {

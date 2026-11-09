@@ -29,7 +29,7 @@ function simulate(fps) {
   return particles.length;
 }
 
-assert.deepEqual([30, 60, 120].map(simulate), [34, 34, 34]);
+assert.deepEqual([30, 60, 120].map(simulate), [38, 38, 38]);
 
 const burstEmitter = new Emitter({
   rate: 0,

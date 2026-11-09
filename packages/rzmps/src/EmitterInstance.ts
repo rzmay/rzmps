@@ -30,6 +30,7 @@ export default class EmitterInstance {
   // Rate, distance and burst state is shared by every kind of execution.
   startTime: number | undefined = undefined;
   lastSpawn = 0;
+  elapsed = 0;
   distanceCredit = 0;
   burstCredit = 0;
   lastDistancePosition: THREE.Vector3 | undefined = undefined;
@@ -47,6 +48,7 @@ export default class EmitterInstance {
   reset(): void {
     this.startTime = undefined;
     this.lastSpawn = 0;
+    this.elapsed = 0;
     this.distanceCredit = 0;
     this.burstCredit = 0;
     this.lastDistancePosition = undefined;
@@ -61,7 +63,13 @@ export default class EmitterInstance {
     if (binding.kind === 'standalone') return system.getEmitterContext();
     if (binding.kind === 'live') {
       if (!binding.source.alive) return;
-      return EmitterInstance.sourceContext(system, binding.source, options!);
+      this.elapsed += deltaTime;
+      const context = EmitterInstance.sourceContext(system, binding.source, options!);
+      // Owned registered sources advance after emission; parent sources already carry
+      // their parent's end-of-step clock when a subsystem is processed.
+      const elapsedTime = context.elapsedTime === undefined ? this.elapsed
+        : context.elapsedTime + (system.getSourceProducer(binding.source) === system ? deltaTime : 0);
+      return { ...context, elapsedTime };
     }
 
     if (system.simulationSpace === SimulationSpace.Source && binding.source && !binding.source.alive) return;

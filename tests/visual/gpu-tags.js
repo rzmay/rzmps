@@ -62,10 +62,10 @@ async function verify() {
       check(masks[slot * 2] === (tag === 'spheres' ? 1 : 0), `Wrong sprite mask at slot ${slot}`);
       check(masks[slot * 2 + 1] === (tag === 'cubes' ? 1 : 0), `Wrong mesh mask at slot ${slot}`);
       const alpha = tag === 'cubes' ? 0.25 : 1;
-      check(Math.abs(renderData[slot * 20 + 3] - alpha) < 0.0001,
-        `The alpha module must affect only cubes at slot ${slot}: ${renderData[slot * 20 + 3]} vs ${alpha}`);
+      check(Math.abs(renderData[slot * buffers.floatStride + 3] - alpha) < 0.0001,
+        `The alpha module must affect only cubes at slot ${slot}: ${renderData[slot * buffers.floatStride + 3]} vs ${alpha}`);
       const scale = tag === 'spheres' ? 2 : 1;
-      check(Math.abs(renderData[slot * 20 + 8] - particle.scale.x * scale) < 0.0001,
+      check(Math.abs(renderData[slot * buffers.floatStride + 8] - particle.scale.x * scale) < 0.0001,
         `The scale module must affect only spheres at slot ${slot}`);
     }
     check(counts.spheres > 3 && counts.cubes > 3, 'Both renderers must receive many particles');
