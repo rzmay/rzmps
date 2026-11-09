@@ -1917,6 +1917,10 @@ function BenchmarkScene({ onComplete, onProgress }) {
       return;
     }
 
+    // Report case transitions outside measurement so CLI users can see progress
+    // without polling the measured browser render loop.
+    console.info(`[benchmark] Case ${caseIndex.current + 1}/${cases.length}: ${nextCase.name} (${warmupMs / 1000}s warmup, ${
+      Math.max(durationMs, nextCase.minimumDurationMs ?? 0) / 1000}s measurement)`);
     const system = nextCase.createSystem
       ? await nextCase.createSystem()
       : createSystem({

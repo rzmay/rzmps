@@ -1,4 +1,5 @@
-import { execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
 import {
   mkdirSync,
   readFileSync,
@@ -31,15 +32,31 @@ if (jsonOnly && !jsonOutput) {
   );
 }
 
-const output = execFileSync(
-  'npm',
-  ['run', 'benchmark:run', '--workspace', 'demo'],
-  {
+const startedAt = performance.now();
+console.log('[benchmark:update-report] Building the library and benchmark page, then running browser measurements...');
+
+// Stream build output immediately while retaining the report for parsing. The
+// final table/JSON goes into the generated files rather than flooding the terminal.
+const output = await new Promise((resolveOutput, reject) => {
+  const child = spawn('npm', ['run', 'benchmark:run', '--workspace', 'demo'], {
     cwd: root,
-    encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
-  },
-);
+  });
+  const lines = [];
+  let reportStarted = false;
+  const reader = createInterface({ input: child.stdout });
+  reader.on('line', line => {
+    lines.push(line);
+    if (line === 'RZMPS browser benchmark') reportStarted = true;
+    if (!reportStarted) console.log(line);
+  });
+  child.once('error', reject);
+  child.once('close', (code, signal) => {
+    reader.close();
+    if (code === 0) resolveOutput(lines.join('\n'));
+    else reject(new Error(`Benchmark command failed (${signal ? `signal ${signal}` : `exit code ${code}`}).`));
+  });
+});
 
 const benchmarkStart = output.indexOf('RZMPS browser benchmark');
 
@@ -80,6 +97,9 @@ if (!Array.isArray(results) || results.length === 0) {
     'Benchmark output did not contain benchmark rows.',
   );
 }
+
+console.log(`[benchmark:update-report] Measurements complete: ${results.length} cases in ${
+  ((performance.now() - startedAt) / 1000).toFixed(1)}s. ${jsonOnly ? 'Exporting JSON' : 'Updating README tables'}...`);
 
 // CI/export mode.
 if (jsonOnly) {
@@ -284,7 +304,10 @@ function updateReadme(path) {
   );
 }
 
-targets.forEach(updateReadme);
+targets.forEach(path => {
+  updateReadme(path);
+  console.log(`[benchmark:update-report] Updated ${path}`);
+});
 
 console.log(
   `Updated benchmark report in ${targets.length} READMEs.`,
