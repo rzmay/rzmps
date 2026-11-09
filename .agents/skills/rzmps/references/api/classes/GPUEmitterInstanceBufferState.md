@@ -64,12 +64,32 @@ readonly floatAttribute: StorageBufferAttribute;
 
 ***
 
+<a id="floatslotcount"></a>
+
+### floatSlotCount
+
+```ts
+readonly floatSlotCount: number;
+```
+
+***
+
 <a id="floatstorage"></a>
 
 ### floatStorage
 
 ```ts
 readonly floatStorage: PackedFloatStorage;
+```
+
+***
+
+<a id="maxburstcount"></a>
+
+### maxBurstCount
+
+```ts
+readonly maxBurstCount: number = 0;
 ```
 
 ***

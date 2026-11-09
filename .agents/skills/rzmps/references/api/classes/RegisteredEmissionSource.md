@@ -172,7 +172,9 @@ realtime: number = 0;
 
 #### Implementation of
 
-[`Particle`](Particle.md).[`realtime`](Particle.md#realtime)
+```ts
+SubSystemSource.realtime
+```
 
 ***
 
