@@ -60,6 +60,11 @@ function getChromeArgs() {
       '--use-webgpu-adapter=swiftshader',
       '--use-gpu-in-tests',
     );
+
+    if (process.platform === 'linux') {
+      // ANGLE and WebGPU must share Vulkan-backed images for the canvas swapchain on software CI.
+      args.push('--enable-features=Vulkan', '--use-vulkan=swiftshader', '--disable-vulkan-surface');
+    }
   } else {
     args.push('--use-angle=default');
   }
