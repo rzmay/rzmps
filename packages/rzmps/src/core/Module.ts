@@ -9,7 +9,7 @@ import type { StrictMultiple } from '../types/multiple.types';
 import acceptMultiple from '../utils/acceptMultiple';
 import tagsIntersect from './tags/tagsIntersect';
 import SpatialEffect from '../spatial/effects/SpatialEffect';
-import Priority from '../enums/priority';
+import Priority from '../enums/Priority';
 import type { GPUEventBatch } from '../events/gpu/EventBatch';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 import type { Node } from 'three/webgpu';

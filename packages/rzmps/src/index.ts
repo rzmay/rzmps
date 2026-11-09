@@ -78,9 +78,9 @@ export type {
 } from './emission/gpu/Emission';
 export { default as LODHelper } from './core/LODHelper';
 export type { LODSettings, LODSettingsOptions } from './core/LODHelper';
-export { EndBehavior } from './enums/endBehavior';
-export { SimulationSpace } from './enums/simulationSpace';
-export { MaxCulling } from './enums/maxCulling';
+export { EndBehavior } from './enums/EndBehavior';
+export { SimulationSpace } from './enums/SimulationSpace';
+export { MaxCulling } from './enums/MaxCulling';
 
 // Emitter
 export { default as EmissionShape } from './emission/EmissionShape';
@@ -96,12 +96,12 @@ export type {
   EmitterOptions,
   SpawnBurst,
 } from './emission/Emitter';
-export { EmissionSource } from './enums/emissionSource';
+export { EmissionSource } from './enums/EmissionSource';
 export { default as RegisteredEmissionSource } from './emission/EmissionSource';
 export type { EmissionSourceData, SubSystemSource } from './emission/EmissionSource';
 export type { CPUEventHandler, GPUEventHandler, GPUEventPayload, GPUEventData, GPUEmissionContext,
   EventSubscriptions, ParameterEventHandler, ParameterEventSubscription, ParameterEventSubscriptions } from './events/events.utils';
-export { TagSelectionMethod } from './enums/tagSelectionMethod';
+export { TagSelectionMethod } from './enums/TagSelectionMethod';
 
 // Renderers
 export { default as Renderer } from './core/Renderer';
@@ -116,10 +116,10 @@ export { default as DecalRenderer, DECAL_RENDERER_USER_DATA_KEY } from './render
 export type { DecalInstance, DecalRendererOptions, DecalDirectionSampler, DecalProjectionContext,
   DecalDirection, DecalHitSelection, DecalParameters }
   from './rendering/renderers/DecalRenderer';
-export { SpriteMaterialType } from './enums/spriteMaterialType';
+export { SpriteMaterialType } from './enums/SpriteMaterialType';
 export { default as TrailRenderer } from './rendering/renderers/TrailRenderer';
-export { TrailMode } from './enums/trailMode';
-export { TrailTextureMode } from './enums/trailTextureMode';
+export { TrailMode } from './enums/TrailMode';
+export { TrailTextureMode } from './enums/TrailTextureMode';
 export { default as LiveCubemap } from './rendering/renderers/LiveCubemap';
 export type { LiveCubemapOptions } from './rendering/renderers/LiveCubemap';
 

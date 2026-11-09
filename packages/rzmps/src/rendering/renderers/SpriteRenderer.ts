@@ -20,7 +20,7 @@ import litSpriteQuadVert from '../shaders/LitSpriteQuad.vert';
 import type { DynamicValue } from '../../values/dynamicValue.types';
 import evaluateDynamicNumber from '../../values/evaluateDynamicNumber';
 import seedrandom from 'seedrandom';
-import { SpriteMaterialType } from '../../enums/spriteMaterialType';
+import { SpriteMaterialType } from '../../enums/SpriteMaterialType';
 import { TRAIL_RENDERER_USER_DATA_KEY } from './TrailRenderer';
 import LiveCubemap from './LiveCubemap';
 import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';

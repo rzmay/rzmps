@@ -4,7 +4,7 @@ import type { EmissionContext } from './Emitter';
 import EmissionSource, { type SubSystemSource } from './EmissionSource';
 import type ParticleSystem from '../core/ParticleSystem';
 import type { SubSystemOptions } from '../core/ParticleSystem';
-import { SimulationSpace } from '../enums/simulationSpace';
+import { SimulationSpace } from '../enums/SimulationSpace';
 
 /** @internal
  * Internal bindings; snapshots retain event inputs rather than entire particles. */

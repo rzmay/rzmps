@@ -20,7 +20,7 @@ import type { ICollisionBackend, CollisionHit } from '../collision/collision.typ
 import ThreeCollisionBackend from '../collision/ThreeCollisionBackend';
 import ThreeGPUCollisionBackend from '../collision/ThreeGPUCollisionBackend';
 import ParticleSystem from '../core/ParticleSystem';
-import { SimulationSpace } from '../enums/simulationSpace';
+import { SimulationSpace } from '../enums/SimulationSpace';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 
 export type CollisionListener = (particle: Particle, collision: CollisionHit) => void;

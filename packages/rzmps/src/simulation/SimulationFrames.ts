@@ -4,7 +4,7 @@ import type { ComputeNode, Node, WebGPURenderer } from 'three/webgpu';
 import Particle, { getParticleSourceBinding, setParticleSourceBinding } from '../core/Particle';
 import type ParticleSystem from '../core/ParticleSystem';
 import EmissionSource, { type SubSystemSource } from '../emission/EmissionSource';
-import { SimulationSpace } from '../enums/simulationSpace';
+import { SimulationSpace } from '../enums/SimulationSpace';
 import { isWebGPURenderer } from '../utils/gpu/isWebGPURenderer';
 import type { GPUParticleUpdateContext } from './gpu/Particle';
 import type { GPUSelectiveReadbackRequest, GPUSelectiveReadbackResult } from './gpu/SelectiveReadback';

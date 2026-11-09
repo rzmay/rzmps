@@ -11,9 +11,9 @@ import EmissionSource, { type EmissionSourceData, type SubSystemSource } from '.
 import Emitter, { type EmissionContext } from '../emission/Emitter';
 import type { GPUEmissionSupportReport } from '../emission/gpu/Emission';
 import overrideEmitterOptions from '../emission/options.utils';
-import { EndBehavior } from '../enums/endBehavior';
-import { MaxCulling } from '../enums/maxCulling';
-import { SimulationSpace } from '../enums/simulationSpace';
+import { EndBehavior } from '../enums/EndBehavior';
+import { MaxCulling } from '../enums/MaxCulling';
+import { SimulationSpace } from '../enums/SimulationSpace';
 import EventReceiver, { type EventScope, type SimulationEvent } from '../events/EventReceiver';
 import EventRuntime from '../events/EventRuntime';
 import { cpuEventHandler, eventNames, type EventSubscriptions } from '../events/events.utils';

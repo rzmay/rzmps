@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { BufferAttribute } from 'three';
 import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.js';
 import { MeshBVH } from 'three-mesh-bvh';
-import { EmissionSource } from '../enums/emissionSource';
+import { EmissionSource } from '../enums/EmissionSource';
 import { getGPUEmissionShapeSupport, type GPUEmissionSupportReport } from './gpu/Emission';
 import isPointInMesh, {
   countDistinctRayHits,

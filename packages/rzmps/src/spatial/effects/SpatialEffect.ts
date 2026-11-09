@@ -26,9 +26,9 @@ import isPointInMesh from '../../utils/isPointInMesh';
 import tagsIntersect from '../../core/tags/tagsIntersect';
 import type { StrictMultiple } from '../../types/multiple.types';
 import type { Tag } from '../../types/tag.types';
-import Priority from '../../enums/priority';
+import Priority from '../../enums/Priority';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../../simulation/gpu/Particle';
-import { SimulationSpace } from '../../enums/simulationSpace';
+import { SimulationSpace } from '../../enums/SimulationSpace';
 import type {
   GPUSpatialEffectType,
   GPUSpatialParameterAccessor,
