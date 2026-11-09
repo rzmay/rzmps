@@ -28,7 +28,11 @@ their manifest, alongside the source changes. Build checks validate committed ca
 launching Chrome; stale previews require local regeneration.
 
 Cross-branch PR benchmarks remain exclusively in the existing GitHub runner
-workflow, where both revisions are measured on the same runner. This local command
+workflow, where both revisions are measured on the same runner. Routine PR comparisons run
+16 selected CPU/GPU cases (including TrailRenderer) and update one comment after each
+ABBAAB pair. Add the `benchmark:full` label or use manual workflow dispatch for all
+33 cases. PR comparisons use a fixed simulation interval; manual wall-clock runs
+remain available for catch-up investigations. This local command
 does not export PR comparison results, modify that workflow, merge, commit, push,
 or open a PR. Full benchmark/report generation can take several minutes. The report
 command streams build logs and shows the active browser case, timing settings, and

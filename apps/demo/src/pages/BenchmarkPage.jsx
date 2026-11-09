@@ -1,6 +1,8 @@
 /* eslint-disable react/no-unknown-property */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { selectBenchmarkCases, readBenchmarkOptions, updateBenchmarkSystem, benchmarkCaseId }
+  from '../../../../scripts/benchmark-selection.mjs';
 import { isBenchmarkMeasurementComplete } from '../../../../scripts/benchmark-payload.mjs';
 import { recordBenchmarkFrame } from '../../../../scripts/benchmark-measurement.mjs';
 import * as THREE from 'three';
@@ -70,6 +72,8 @@ import createFireworks from '../../../../examples/fireworks.js';
 import createBoids from '../../../../examples/boids.js';
 import createSnow from '../../../../examples/snow.js';
 
+const benchmarkOptions = readBenchmarkOptions(window.location.search);
+
 class NoopRenderer extends Renderer {
   setup() {}
   _update() {}
@@ -90,6 +94,8 @@ function pairBenchmarkCases(cases) {
       const gpuProcessing = mode === 'gpu';
       return {
         ...benchmarkCase,
+        id: benchmarkCase.id ? `${benchmarkCase.id}:${mode}`
+          : benchmarkCaseId({ name: `${benchmarkCase.name} [${mode.toUpperCase()}]` }),
         name: `${benchmarkCase.name} [${mode.toUpperCase()}]`,
         benchmarkMode: mode,
         requireGPU: gpuProcessing,
@@ -1686,11 +1692,13 @@ function BenchmarkScene({ onComplete, onProgress }) {
     }
 
     return pairBenchmarkCases([{
+      id: 'baseline-10k',
       name: 'Baseline 10k simulation only',
       particleCount: 10_000,
       create: () => ({ modules: [] }),
     },
     {
+      id: 'baseline-50k',
       name: 'Baseline 50k simulation only',
       particleCount: 50_000,
       create: () => ({ modules: [] }),
@@ -1709,6 +1717,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }),
     },
     {
+      id: 'heavy-modules-10k',
       name: 'Heavy modules 10k',
       particleCount: 10_000,
       requireGPU: true,
@@ -1730,6 +1739,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }),
     },
     {
+      id: 'spatial-kill-zones-10k',
       name: 'Spatial kill zones 10k',
       particleCount: 10_000,
       requireGPU: true,
@@ -1776,6 +1786,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }),
     },
     {
+      id: 'spawn-churn',
       name: 'Spawn churn 2k/sec simulation only',
       particleCount: 10_000,
       create: () => ({
@@ -1867,6 +1878,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
     },
     {
+      id: 'sprite-10k',
       name: 'SpriteRenderer 10k rendered',
       particleCount: 10_000,
       create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
@@ -1877,6 +1889,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
     },
     {
+      id: 'mesh-rendered',
       name: ciProfile ? 'MeshRenderer 2k rendered (low-poly)' : 'MeshRenderer 10k rendered',
       particleCount: ciProfile ? 2_000 : 10_000,
       create: () => ({ renderer: new MeshRenderer({
@@ -1885,17 +1898,17 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }) }),
     },
     {
+      id: 'trail-2k',
       name: 'TrailRenderer 2k rendered',
       particleCount: 2_000,
       create: () => ({ renderer: new TrailRenderer({ texture: createParticleTexture() }) }),
     },
     ]);
   }, [suite, ciProfile]);
-  const cases = useMemo(() => (
-    caseFilter
-      ? allCases.filter(({ name }) => name.toLowerCase().includes(caseFilter))
-      : allCases
-  ), [allCases, caseFilter]);
+  const cases = useMemo(() => {
+    const selected = selectBenchmarkCases(allCases, benchmarkOptions.selection);
+    return caseFilter ? selected.filter(({ name }) => name.toLowerCase().includes(caseFilter)) : selected;
+  }, [allCases, caseFilter]);
 
   const startNextCase = async () => {
     if (starting.current) return;
@@ -2005,7 +2018,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     const renderOutputDispatchesBefore = active.current.system.__rzmpsBenchmarkRenderOutputDispatches ?? 0;
     active.current.beforeUpdate?.(active.current.system, frameStart - active.current.phaseStartedAt);
     try {
-      active.current.system.update();
+      updateBenchmarkSystem(active.current.system, benchmarkOptions.simulationClock);
     } catch (error) {
       fail(error);
     }

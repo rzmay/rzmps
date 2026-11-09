@@ -1,3 +1,4 @@
+import { readBenchmarkOptions } from '../../../scripts/benchmark-selection.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -12,8 +13,12 @@ const host = '127.0.0.1';
 const port = Number(process.env.RZMPS_BENCHMARK_PORT ?? 0);
 const { values } = parseArgs({ options: {
   dist: { type: 'string' }, output: { type: 'string' },
+  selection: { type: 'string', default: 'full' }, 'simulation-clock': { type: 'string', default: 'wall' },
   open: { type: 'boolean' }, headed: { type: 'boolean' }, vsync: { type: 'boolean' },
 } });
+const { selection, simulationClock } = readBenchmarkOptions(new URLSearchParams({
+  selection: values.selection, simulationClock: values['simulation-clock'],
+}).toString());
 const profile = process.env.RZMPS_BENCHMARK_PROFILE ?? 'default';
 if (!['default', 'ci'].includes(profile)) throw new Error('Unknown benchmark profile');
 const durationMs = Number(process.env.RZMPS_BENCHMARK_DURATION_MS ?? 4000);
@@ -142,7 +147,7 @@ async function runBenchmark(attempt = 1) {
     server.once('error', reject);
     server.listen(port, host, resolve);
   });
-  const url = `http://${host}:${server.address().port}/benchmark.html?benchmark=1&profile=${profile}&durationMs=${durationMs}&warmupMs=${warmupMs}${suite ? `&suite=${encodeURIComponent(suite)}` : ''}${caseFilter ? `&case=${encodeURIComponent(caseFilter)}` : ''}`;
+  const url = `http://${host}:${server.address().port}/benchmark.html?benchmark=1&profile=${profile}&durationMs=${durationMs}&warmupMs=${warmupMs}&selection=${selection}&simulationClock=${simulationClock}${suite ? `&suite=${encodeURIComponent(suite)}` : ''}${caseFilter ? `&case=${encodeURIComponent(caseFilter)}` : ''}`;
   let browser;
   let pageError;
   let benchmarkValidated = false;
@@ -247,6 +252,8 @@ async function runBenchmark(attempt = 1) {
     const metadata = {
       browser: browserVersion,
       harnessVersion: 1,
+      selection, simulationClock, suite, caseFilter,
+      simulationDeltaTime: simulationClock === 'fixed' ? 1 / 60 : undefined,
       sampleAttempts: attempt,
       profile,
       viewport,

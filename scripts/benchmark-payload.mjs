@@ -44,6 +44,10 @@ export function assertComparable(base, head) {
     durationMs: metadata.durationMs,
     warmupMs: metadata.warmupMs,
     framePacing: metadata.framePacing,
+    selection: metadata.selection ?? 'full',
+    simulationClock: metadata.simulationClock ?? 'wall',
+    simulationDeltaTime: metadata.simulationDeltaTime,
+    suite: metadata.suite ?? '', caseFilter: metadata.caseFilter ?? '',
   });
   if (JSON.stringify(settings(base.metadata)) !== JSON.stringify(settings(head.metadata))) {
     throw new Error('Cannot compare benchmarks with different harnesses or measurement settings');
