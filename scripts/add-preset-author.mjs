@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import ts from 'typescript';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
-const presetPattern = /^(?:examples\/|apps\/demo\/src\/presets\/scenes\/)(?!index\.js|background\.js|createCollisionObjects\.js)(.+)\.js$/;
+const presetPattern = /^examples\/(?:presets|scenes)\/(?!index\.js$)[^/]+\.js$/;
 
 function parseArgs(argv) {
   const args = {};
@@ -42,31 +43,22 @@ function addedFiles(base) {
   return git(['diff', '--name-only', '--diff-filter=A', '--cached']).split('\n').filter(Boolean);
 }
 
-function hasAuthorMetadata(source) {
-  return /\.author\s*=/.test(source);
-}
-
-function defaultExportName(source) {
-  return source.match(/\bexport\s+default\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\b/)?.[1]
-    ?? source.match(/\bexport\s+default\s+([A-Za-z_$][\w$]*)\s*;?/)?.[1];
-}
-
 function appendAuthor(path, username) {
   const absolute = resolve(root, path);
   const source = readFileSync(absolute, 'utf8');
-
-  if (hasAuthorMetadata(source)) {
+  const ast = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+  const factoryName = ast.statements.find(node => ts.isFunctionDeclaration(node)
+    && node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword))?.name?.text
+    ?? ast.statements.find(ts.isExportAssignment)?.expression.getText(ast);
+  const metadata = ast.statements.filter(ts.isExpressionStatement).map(node => node.expression)
+    .find(node => ts.isBinaryExpression(node) && node.left.getText(ast) === `${factoryName}.metadata`)?.right;
+  if (!metadata || !ts.isObjectLiteralExpression(metadata)) {
+    console.warn(`Skipping ${path}: provide a literal factory.metadata object first.`);
     return false;
   }
-
-  const name = defaultExportName(source);
-  if (!name) {
-    console.warn(`Skipping ${path}: could not find a named default export to attach author metadata.`);
-    return false;
-  }
-
-  const metadata = `${name}.author = "${username}";\n`;
-  writeFileSync(absolute, `${source.trimEnd()}\n\n${metadata}`);
+  if (metadata.properties.some(property => property.name?.getText(ast).replace(/['"]/g, '') === 'author')) return false;
+  const offset = metadata.getStart(ast) + 1;
+  writeFileSync(absolute, source.slice(0, offset) + `\n  author: ${JSON.stringify(username)},` + source.slice(offset));
   return true;
 }
 

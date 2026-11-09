@@ -18,11 +18,11 @@ registered emission source after its original droplet dies. Each source disappea
 emitted smoke and splash particles finish their own lifetimes. Update only the root system.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/acid.js#L26)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L27)
 
 ```js
   // Reuse Splatter's collision scene conventions and owned texture/material lifecycle.
-  const acid = await createSplatter();
+  const acid = await splatterPreset();
   acid.name = 'Acid';
   acid.prewarm = true;
   acid.emitters[0].rate = 0.3;
@@ -180,7 +180,7 @@ bubble systems use the same emitter contexts on CPU; GPU children receive batche
 slots.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/acid.js#L40)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L41)
 
 ```js
   // Shape points become offsets within each pool's emission frame, including its scale.
@@ -281,7 +281,7 @@ state, and ordinary source updates do not restart countdowns. No interval callba
 alive.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/acid.js#L120)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L121)
 
 ```js
   class PoolBubbling extends Module {
@@ -327,7 +327,7 @@ The bubble subsystem owns a live cubemap; normal root updates refresh subsystem 
 The factory disposes both bubble material textures with the root.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/acid.js#L148)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L149)
 
 ```js
   smoke.name = 'Pool Smoke';

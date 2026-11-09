@@ -1,13 +1,13 @@
-import type { Vector3Input } from '../types/ValueInput';
+import type { Vector3Input } from '../values/valueInput.types';
 import * as THREE from 'three';
-import type { ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
-import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
-import { generateGPUParticleNoise4D, generateParticleNoise4D } from '../helpers/noise';
+import type { ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { DynamicValue } from '../values/dynamicValue.types';
+import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
+import evaluateDynamicVector from '../values/evaluateDynamicVector3';
+import { generateGPUParticleNoise4D, generateParticleNoise4D } from '../utils/noise.utils';
 import NoiseModule, { NoiseOptions } from './NoiseModule';
-import type { GPUParticleLike } from '../gpu/Particle';
+import type { GPUParticleLike } from '../simulation/gpu/Particle';
 import type { Node } from 'three/webgpu';
 import { vec3 } from 'three/tsl';
 
@@ -48,7 +48,7 @@ class TransformByNoise extends NoiseModule {
       }, {
         ...options,
         modifyGPU: (particle: GPUParticleLike, deltaTime) => {
-          let strength = this.gpuParameters.vector(
+          let strength = this.evaluateDynamicGPU.vector(
             'strength',
             () => this.options.strength,
             particle.time,
@@ -58,7 +58,7 @@ class TransformByNoise extends NoiseModule {
           if (this.options.damping) {
             strength = strength.div(Math.max(this.options.frequency ?? 1, 1));
           }
-          const scrollSpeed = this.gpuParameters.number(
+          const scrollSpeed = this.evaluateDynamicGPU.number(
             'scrollSpeed',
             () => this.options.scrollSpeed,
             particle.time,

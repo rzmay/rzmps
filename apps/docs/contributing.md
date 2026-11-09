@@ -22,10 +22,9 @@ command follows the PR checklist and stops at the first failure:
 5. Build the demo and check staged and unstaged whitespace.
 
 Benchmark regeneration precedes documentation generation so the published docs and
-agent references include the new README measurements. Review and commit those
-README and generated documentation updates, including `apps/docs/public/previews/` images and
-their manifest, alongside the source changes. Build checks validate committed captures without
-launching Chrome; stale previews require local regeneration.
+agent references include the new README measurements. Review and commit README and
+published skill updates alongside source changes. Generated documentation and preview
+images are ignored; CI and deployment regenerate them before validation.
 
 Cross-branch PR benchmarks remain exclusively in the existing GitHub runner
 workflow, where both revisions are measured on the same runner. Routine PR comparisons run
@@ -42,7 +41,7 @@ opening an interactive pager.
 
 ## Adding or updating an example
 
-Keep the implementation in `examples/<id>.js` (TypeScript is also supported by the generator). Export its existing async default factory and a literal `metadata` object containing id, title, description, tags, and category. Keep configuration inside the factory; the registry is generated. Preserve factory author information and return a normal ParticleSystem so the demo GUI and serializer continue to work.
+Keep the implementation in `examples/presets/<id>.js` (TypeScript is also supported by the generator). Export its existing async default factory and attach a literal `factory.metadata` object containing id, title, author, description, tags, and category. Keep configuration inside the factory; the registry discovers files automatically. Preserve factory author information and return a normal ParticleSystem so the demo GUI and serializer continue to work.
 
 Mark actual source using balanced `// #region docs:system`, `docs:emitters`, `docs:modules`, and `docs:renderers` comments, closing each with the matching `// #endregion docs:...`. Named suffixes select individual systems or setup blocks. Nested regions are supported; interleaved closures are errors. Repeated region names concatenate their source blocks. If an optional module list is absent, mark a relevant system declaration and explain its absence.
 
@@ -71,10 +70,10 @@ their generated outputs. The skill's metadata and workflow come from the marked 
 | --- | --- | --- |
 | `.agents/skills/rzmps/SKILL.md` and `references/` | Generated and committed for GitHub installation | Canonical guides, examples, and API declarations |
 | Root and npm README guidance blocks | Generated and committed for direct GitHub/npm readers | AI Coding Assistants guide |
-| `apps/docs/public/previews/` and manifest | Generated and committed for visual review and browser-free deployment | Example factories and capture settings |
+| `apps/docs/public/previews/` and manifest | Generated, ignored, and rebuilt before site validation | Example factories and capture settings |
 | `apps/docs/api/`, guide/example index pages, navigation JSON | Generated and ignored | Source declarations, guides, and examples |
 | `apps/docs/public/llms.txt` and `llms-full.txt` | Generated and ignored | Canonical docs and skill installation guidance |
-| `examples/index.js` | Generated and ignored | Example factory metadata |
+| `examples/index.js` and `examples/scenes/index.js` | Authored automatic discovery | `factory.metadata` on each factory |
 | `packages/rzmps/AGENTS.md` | Generated and ignored, included in npm | `scripts/docs/templates/npm-agents.md` |
 
 Commit updated `.agents` files, README guidance, and reviewed preview assets alongside their
@@ -108,7 +107,7 @@ Include the example checklist in pull requests adding or substantially changing 
 
 ## Author credits and generated posters
 
-Keep author attribution in the existing factory's literal `.author` assignment (a GitHub
+Keep author attribution in the existing factory's literal `.metadata.author` property (a GitHub
 username or an object with `name` and optional `url`). `<ExampleAttribution />` resolves that
 source at build time; changing the author updates the site and generated agent Markdown.
 Use `<ExamplePreview />` for the generated poster without copying its URL into authored prose.
@@ -116,11 +115,87 @@ Use `<ExamplePreview />` for the generated poster without copying its URL into a
 After adding or changing an example, run `npm run docs:generate`. It automatically builds the
 local packages and captures missing or stale example images; unchanged images are reused.
 Install Chrome once with `npx puppeteer browsers install chrome` if needed.
-Review and commit each generated PNG and the source-hash manifest in `apps/docs/public/previews`.
-Capture defaults and scene/camera overrides live in `scripts/docs/preview-settings.json`.
-`docs:check` rejects missing, modified, or stale images without requiring a browser in CI.
+Generated PNGs and their source-hash manifest in `apps/docs/public/previews` are ignored.
+Set per-example overrides on `metadata.previewSettings` in the example itself. Use
+camelCase fields such as `warmup`, `cameraPosition: [8, 6, 12]` and `cameraTarget`.
+For a preferred scene, import its factory and set `scene: createCheckerboard`; do not
+store its display name. Omitted fields use shared defaults from
+`scripts/docs/preview-settings.mjs`, including the neutral scene and WebGL backend.
+An explicit `preview --scene` selection overrides the example's preferred scene.
+`docs:check` rejects missing, modified, or stale images. CI and deployment install Chrome
+and generate captures before checking them.
 
 The canonical agent installation guide is [AI Coding Assistants](guides/ai-coding-assistants.md).
 It supplies generated README guidance blocks. The full skill stays in `.agents/skills/rzmps`;
 only the short template-derived `AGENTS.md` is included in npm. Run `npm run agents:check`
 to validate format, reference links, temporary skill installs, and package contents.
+
+## Architecture and ownership
+
+Library sources in `packages/rzmps/src/` are grouped by feature. Place emission code
+in `emission/`, frame conversion and GPU simulation in `simulation/`, event transport
+in `events/`, spatial indexes in `spatial/structures/` and effects in `spatial/effects/`, and renderers, materials and grouping in
+`rendering/`. Built-in behavior modules stay in `modules/`; DynamicValue evaluation
+and sampling belong in `values/`. Put backend-specific implementations under the
+owning feature's `gpu/` directory. Place shared storage and compute infrastructure in `utils/gpu/` and other small,
+domain-independent helpers in `utils/`. Material sampling and compositing belong
+in `rendering/compositing/`.
+
+`core/ParticleSystem` owns public configuration, scene integration, component
+registration, lifecycle entry points and update sequencing. It delegates GPU storage
+and compute execution to `GPUSimulation`, emitter-instance scheduling and source
+bindings to `EmissionRuntime`, event subscriptions and transport to `EventRuntime`,
+spatial caches to `SpatialRuntime`, and source frames/rebasing to `SimulationFrames`.
+Emitters retain emission configuration and emitter instances retain execution clocks.
+Renderers own their output resources, grouping and child rendering state. Components
+use `this.evaluateDynamicGPU.number/vector/color` (and parameter variants) for
+persistent GPU DynamicValue bindings; evaluation does not depend on `ParticleSystem`.
+
+Prefer dependencies from orchestration to feature implementations to shared
+infrastructure and general types/utilities. Collaborate through explicit methods,
+public configuration and narrow execution callbacks; avoid accessing another
+feature's caches or introducing duplicate configuration. Keep allocation,
+invalidation, synchronization and disposal with the resource or cache owner.
+
+Tests live centrally in `packages/rzmps/tests/`, mirroring feature directories.
+Put cross-feature lifecycle tests in `tests/integration/`; maintained browser checks and their fixtures live
+in `scripts/tests/preview/`. All repository script tests mirror their owning script
+directory under `scripts/tests/`. Update test runners when moving tests.
+
+Run `npm run check:dependencies` from the repository root to inspect architectural
+warnings, including import paths and rule names. The Test and build CI job compares
+PR and base revisions using the same current rules. It uploads complete JSON results
+and a trusted reporting workflow updates one PR comment with new, resolved and
+existing warnings after CI completes. Full details remain in the Actions logs and
+`dependency-report-<attempt>` artifact. The commenting workflow must first be merged
+into the default branch to run. All architecture rules have warning severity;
+configuration, parsing and execution failures still fail the analysis step.
+Run `npm run test:dependencies` to test comparison and comment reporting. Inspect whether a warning exposes misplaced
+ownership before adding an exception. For an intentional dependency, document the
+reason beside the import or narrow the relevant rule in `.dependency-cruiser.cjs`;
+avoid blanket exclusions or suppressing the command's exit status.
+
+Use PascalCase filenames for exported classes. Name a single-function helper after
+its function in camelCase; use `{category}.utils.ts` for helper collections and
+`{category}.types.ts` for type-only contracts.
+
+Process-wide tuning controls live in `core/GlobalSettings.ts`. Internal code imports
+`GlobalSettings` directly; consumers use `ParticleSystem.Settings.SETTING`. Add new
+settings there instead of adding individual aliases to `ParticleSystem`. Instance
+configuration still belongs on the system or its owning component.
+
+The root `benchmark/` directory is ignored scratch output, created only when needed.
+Benchmark implementation lives in `scripts/` and `apps/demo/`; deterministic test data
+lives in `scripts/tests/benchmark/fixtures/`. Fixtures are tracked test inputs, not
+generated benchmark reports. See `scripts/README.md` for script ownership. Generated docs, builds and preview images are ignored.
+The published `.agents/skills/rzmps` distribution remains tracked for GitHub installs.
+
+Particle presets live in `examples/presets/`; scene presets and their shared helpers live in
+`examples/scenes/`. The private `examples` workspace exports `examples/*`, so browser
+code can import `examples/index.js`, `examples/scenes/index.js`, or an individual
+scene directly. Run `npm install` after workspace changes to refresh local links.
+Both catalog indexes discover factories automatically with `import.meta.glob`.
+Attach metadata as `factory.metadata` (including `id`, `title` and `author`); preset
+metadata also includes `description`, `tags` and `category`. Source URLs come from
+the factory's filename. Shared media lives in `examples/assets/` and helpers in
+`examples/utils/`. The demo consumes the catalogs directly.

@@ -1,0 +1,824 @@
+import * as THREE from 'three';
+import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
+import {
+  Break,
+  Fn,
+  If,
+  Loop,
+  atomicFunc,
+  atomicLoad,
+  atomicMax,
+  atomicMin,
+  atomicStore,
+  clamp,
+  ceil,
+  exp2,
+  float,
+  floor,
+  instanceIndex,
+  int,
+  ivec3,
+  ivec4,
+  log2,
+  max,
+  min,
+  storage,
+  uint,
+  vec3,
+  vec4,
+} from 'three/tsl';
+import {
+  destroyGPUStorageAttribute,
+  type GPUParticleBufferState,
+  type GPUParticleLike,
+} from '../../simulation/gpu/Particle';
+import {
+  nextPowerOfTwo,
+  orderedFloatNode,
+  unorderedFloatNode,
+  type AtomicUintStorage,
+  type GPUReadbackRenderer,
+  type GPUStorageBufferRenderer,
+  type PackedFloatStorage,
+  type PackedIntStorage,
+} from '../../utils/gpu/storage.utils';
+import { computeRange, type GPUComputeRange } from '../../utils/gpu/computeDispatch.utils';
+import { SpatialLevels, resolveSpatialLevels, type SpatialGridOptions } from '../../enums/resolveSpatialLevels';
+import type { GPUSpatialRegion, SpatialAggregator, SpatialAggregateLayout } from '../../types/spatialAggregator.types';
+import GPUSpatialRegions from './gpu/GPUSpatialRegions';
+
+const EMPTY_LINK = 0;
+enum BoundsReduction {
+  MinimumX,
+  MinimumY,
+  MinimumZ,
+  MaximumX,
+  MaximumY,
+  MaximumZ,
+  HasParticles,
+}
+const REDUCTION_WORDS = Object.keys(BoundsReduction).filter((key) => Number.isNaN(Number(key))).length;
+const DEFAULT_BOUNDS = new THREE.Box3(
+  new THREE.Vector3(-0.5, -0.5, -0.5),
+  new THREE.Vector3(0.5, 0.5, 0.5),
+);
+
+export interface ParticleSpatialGridOptions extends SpatialGridOptions {
+  /** Simulation-space bounds used to map positions to cells. */
+  bounds: THREE.Box3;
+  /** Coarse hash subdivisions per axis, expressed as a power-of-two depth. */
+  brickSubdivisions: number;
+  /** Fine cell subdivisions inside each brick, expressed as a power-of-two depth. */
+  cellSubdivisions: number;
+  /** Expands normalized bounds to stable powers of two. Defaults to true. */
+  powerOfTwoBounds: boolean;
+  /** Expands GPU bounds when live particles leave the configured volume. Defaults to true. */
+  autoExpand: boolean;
+  /** Fractional padding added when automatic expansion occurs. Defaults to 0.125. */
+  expansionHysteresis: number;
+  /** Rebuild frequency from greater than zero through one. Defaults to one. */
+  timeQuality: number;
+  /** Zero means exact, unbounded traversal. A positive value explicitly truncates each query. */
+  maxQuerySteps: number;
+}
+
+export interface ParticleSpatialGridQueryOptions {
+  /** Particle slot omitted from the query, normally the caller's own slot. */
+  excludeIndex?: Node<'uint'>;
+  /** Bit mask requiring at least one matching particle tag. */
+  tagMask?: number;
+}
+
+export type ParticleSpatialGridVisitor = (
+  /** Shader-node view of a matching particle. */
+  particle: GPUParticleLike,
+  /** Squared simulation-space distance from the query center. */
+  distanceSquared: Node<'float'>,
+) => void;
+
+export interface ParticleSpatialGridRenderer extends GPUStorageBufferRenderer {
+  compute(node: ComputeNode | ComputeNode[]): void;
+}
+
+/** Optional production profiling data used to detect hash saturation and long chains. */
+export interface ParticleSpatialGridDiagnostics {
+  bounds: THREE.Box3;
+  nonEmptyBuckets: number;
+  referencedSlots: number;
+  maxChainLength: number;
+  sampleCoordinates: number[][];
+}
+
+/**
+ * Sparse GPU particle spatial hash. The logical brick/cell resolution is fixed;
+ * storage scales with particle capacity rather than world volume.
+ */
+export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = SpatialAggregateLayout> {
+  readonly bounds: THREE.Box3;
+  readonly brickSubdivisions: number;
+  readonly cellSubdivisions: number;
+  readonly powerOfTwoBounds: boolean;
+  readonly autoExpand: boolean;
+  readonly expansionHysteresis: number;
+  readonly timeQuality: number;
+  readonly maxQuerySteps: number;
+
+  readonly cellsPerAxis: number;
+  readonly maxDepth: number;
+  /** Maintained depths, normalized and including the mandatory finest neighbor index. */
+  readonly levels: readonly number[];
+  private regions?: GPUSpatialRegions<L>;
+  private readonly maintainRegions: boolean;
+
+  private capacity = 0;
+  private hashCapacity = 0;
+  private version = 0;
+  private updateAccumulator = 0;
+  private lastBufferVersion = -1;
+  private lastBuildToken: unknown;
+
+  private headAttribute?: StorageBufferAttribute;
+  private linkAttribute?: StorageBufferAttribute;
+  private coordinateAttribute?: StorageBufferAttribute;
+  private boundsAttribute?: StorageBufferAttribute;
+  private reductionAttribute?: StorageBufferAttribute;
+  private diagnosticAttribute?: StorageBufferAttribute;
+
+  private heads?: AtomicUintStorage;
+  private coordinates?: PackedIntStorage;
+  private gpuBounds?: PackedFloatStorage;
+  private reductions?: AtomicUintStorage;
+  private diagnostics?: AtomicUintStorage;
+
+  /** Creates a sparse grid whose storage grows with particle capacity, not world volume. */
+  constructor(options: Partial<ParticleSpatialGridOptions> = {},
+    private readonly aggregator?: SpatialAggregator<L, 'gpu'>) {
+    this.brickSubdivisions = ParticleSpatialGrid.clampDepth(options.brickSubdivisions ?? 3);
+    this.cellSubdivisions = ParticleSpatialGrid.clampDepth(options.cellSubdivisions ?? 4);
+    this.maxDepth = this.brickSubdivisions + this.cellSubdivisions;
+    this.cellsPerAxis = 2 ** this.maxDepth;
+    this.levels = Object.freeze(resolveSpatialLevels(options.levels, this.brickSubdivisions, this.cellSubdivisions));
+    this.maintainRegions = aggregator !== undefined || (options.levels !== undefined
+      && options.levels !== SpatialLevels.None && options.levels !== 'None');
+    this.powerOfTwoBounds = options.powerOfTwoBounds ?? true;
+    this.bounds = ParticleSpatialGrid.normalizeBounds(
+      options.bounds ?? DEFAULT_BOUNDS,
+      this.powerOfTwoBounds,
+    );
+    this.autoExpand = options.autoExpand ?? true;
+    this.expansionHysteresis = Math.max(0, options.expansionHysteresis ?? 0.125);
+    this.timeQuality = THREE.MathUtils.clamp(
+      options.timeQuality ?? 1,
+      Number.EPSILON,
+      1,
+    );
+    this.maxQuerySteps = Math.max(0, Math.floor(options.maxQuerySteps ?? 0));
+  }
+
+  /**
+   * Changes bounds and invalidates assignments. This remains a method to mirror
+   * ParticleOctree.setBounds and to make the deferred GPU rebuild explicit.
+   */
+  setBounds(bounds?: THREE.Box3): this {
+    this.bounds.copy(this.resolveBounds(bounds ?? DEFAULT_BOUNDS));
+    this.lastBufferVersion = -1;
+    if (this.boundsAttribute) this.writeInitialBounds();
+    return this;
+  }
+
+  /** Returns the logical cell coordinate using the currently configured CPU-side bounds. */
+  locate(position: THREE.Vector3, depth = this.maxDepth): THREE.Vector3 {
+    if (!Number.isInteger(depth) || depth < 0 || depth > this.maxDepth) throw new RangeError('Invalid spatial depth.');
+    return ParticleSpatialGrid.locate(position, this.bounds, 2 ** depth);
+  }
+
+  /** GPU bounds from the current index; CPU `bounds` does not include automatic GPU expansion. */
+  getBoundsNode(): { min: Node<'vec3'>; max: Node<'vec3'> } {
+    if (!this.gpuBounds) throw new Error('Initialize the spatial grid before creating GPU bounds expressions.');
+    return { min: this.gpuBounds.element(0).xyz, max: this.gpuBounds.element(1).xyz };
+  }
+
+  getBounds(region: GPUSpatialRegion): { min: Node<'vec3'>; max: Node<'vec3'> } {
+    const bounds = this.getBoundsNode();
+    const size = bounds.max.sub(bounds.min).div(2 ** region.depth);
+    const min = bounds.min.add(vec3(this.regionDirectory.getCoordinate(region)).mul(size));
+    return { min, max: min.add(size) };
+  }
+
+  locateNode(position: Node<'vec3'>, depth = this.maxDepth): GPUSpatialRegion {
+    return this.regionDirectory.locate(position, depth);
+  }
+
+  getAggregate(region: GPUSpatialRegion) {
+    return this.regionDirectory.getAggregate(region);
+  }
+
+  getChildren(region: GPUSpatialRegion) {
+    return this.regionDirectory.getChildren(region);
+  }
+
+  getRegions(depth: number) {
+    return this.regionDirectory.getRegions(depth);
+  }
+
+  getParticleIndices(region: GPUSpatialRegion) {
+    return this.regionDirectory.getParticleIndices(region);
+  }
+
+  computeRegions(depth: number, callback: (region: GPUSpatialRegion) => void): ComputeNode {
+    return this.regionDirectory.computeRegions(depth, callback);
+  }
+
+  private get regionDirectory(): GPUSpatialRegions<L> {
+    if (!this.regions) throw new Error('Request levels or an aggregator and initialize the spatial grid first.');
+    return this.regions;
+  }
+
+  /** Allocates reusable grid storage before shader query graphs are constructed. */
+  initialize(renderer: ParticleSpatialGridRenderer, buffers: GPUParticleBufferState): void {
+    this.ensureCapacity(renderer, buffers.capacity);
+    if (this.currentBuffers !== buffers) {
+      this.buildNodes?.forEach(node => node.dispose());
+      this.buildNodes = undefined;
+      this.buildBufferVersion = -1;
+    }
+    this.currentBuffers = buffers;
+  }
+
+  /** Alias matching the CPU utility's rebuild terminology. */
+  rebuild(
+    renderer: ParticleSpatialGridRenderer,
+    buffers: GPUParticleBufferState,
+    buildToken?: unknown,
+    range?: GPUComputeRange,
+  ): boolean {
+    if (buildToken !== undefined && this.lastBuildToken === buildToken && this.lastBufferVersion === buffers.version) {
+      return false;
+    }
+    this.updateAccumulator += this.timeQuality;
+    if (
+      this.lastBufferVersion === buffers.version
+      && this.lastBuildToken === buildToken
+      && this.updateAccumulator < 1
+    ) return false;
+
+    if (this.updateAccumulator >= 1) this.updateAccumulator -= 1;
+    this.ensureCapacity(renderer, buffers.capacity);
+    this.lastBufferVersion = buffers.version;
+    this.lastBuildToken = buildToken;
+
+    const nodes = this.getBuildNodes(buffers, range);
+    if (!range) {
+      for (const node of nodes) {
+        if (node.name === 'rzmps.grid.reduce' || node.name === 'rzmps.grid.insert') node.count = buffers.count;
+      }
+    }
+    renderer.compute(nodes);
+    this.regions?.rebuild(renderer, buffers, range);
+    return true;
+  }
+
+  /** Builds particle work over the current CPU range or a caller-scheduled GPU compact range.
+   * The caller owns indirect arguments and must write them before dispatching the returned kernel.
+   * Callers of CPU-sized kernels can update ComputeNode.count without rebuilding the graph.
+   */
+  computeParticles(callback: (particle: GPUParticleLike) => void, range?: GPUComputeRange): ComputeNode {
+    this.assertReady();
+    const visit = () => callback(this.currentBuffers!.storage.createParticle(undefined, true));
+    return range ? computeRange(range, visit) : Fn(visit)().compute(this.currentBuffers!.count);
+  }
+
+  /**
+   * Emits a shader-side exact-radius query. The callback receives a loaded particle
+   * and may read all particle attributes. No JavaScript particle array is created.
+   */
+  /** GPU-resolved cell extent, including automatic bounds expansion. */
+  getCellSizeNode(): Node<'vec3'> {
+    this.assertReady();
+    return this.gpuBounds!.element(1).xyz
+      .sub(this.gpuBounds!.element(0).xyz)
+      .div(float(this.cellsPerAxis)) as Node<'vec3'>;
+  }
+
+  /**
+   * Bounded nearest-neighbor spacing for visual density compensation. Searches
+   * the containing cell first, so distant clusters cannot consume the query
+   * budget before the caller's own cluster. Sparse fallback uses visual size,
+   * never the size of the grid's accumulated world bounds.
+   */
+  estimateLocalSpacingNode(
+    position: Node<'vec3'>,
+    excludeIndex: Node<'uint'>,
+    fallbackRadius: Node<'float'>,
+  ): Node<'float'> {
+    this.assertReady();
+    const boundsMin = this.gpuBounds!.element(0).xyz;
+    const size = this.gpuBounds!.element(1).xyz.sub(boundsMin).max(vec3(1e-6));
+    const coordinate = ivec3(clamp(
+      floor(position.sub(boundsMin).div(size).mul(float(this.cellsPerAxis))),
+      vec3(0),
+      vec3(this.cellsPerAxis - 1),
+    )).toVar();
+    const reachSquared = fallbackRadius.max(0.001).mul(8).pow(2);
+    const nearest = reachSquared.add(1).toVar();
+    const found = uint(0).toVar();
+    const visit = (cell: Node<'ivec3'>, budget: number) => {
+      const encoded = atomicLoad(this.heads!.element(this.hashCoordinateNode(cell))).toVar();
+      const visited = uint(0).toVar();
+      Loop(() => {
+        If(encoded.equal(uint(0)).or(visited.greaterThanEqual(uint(budget))), () => {
+          Break();
+        });
+        const slot = encoded.sub(1).toVar();
+        If(slot.greaterThanEqual(uint(this.capacity)), () => {
+          Break();
+        });
+        const record = this.coordinates!.element(slot);
+        const particle = this.currentBuffers!.storage.createParticle(slot);
+        const exact = record.x.equal(cell.x).and(record.y.equal(cell.y)).and(record.z.equal(cell.z));
+        const accepted = exact.and(slot.notEqual(excludeIndex))
+          .and(particle.alive.notEqual(uint(0)))
+          .and(particle.generation.equal(uint(record.w)));
+        If(accepted, () => {
+          const distanceSquared = particle.position.sub(position).lengthSq();
+          If(distanceSquared.lessThanEqual(reachSquared), () => {
+            nearest.assign(nearest.min(distanceSquared));
+            found.assign(uint(1));
+          });
+        });
+        encoded.assign(atomicLoad(this.heads!.element(slot.add(this.hashCapacity))));
+        visited.addAssign(1);
+      });
+    };
+    visit(coordinate, 64);
+    If(found.equal(uint(0)), () => {
+      for (const [x, y, z] of [[-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1]]) {
+        const neighbor = coordinate.add(ivec3(x, y, z));
+        const inside = neighbor.x.greaterThanEqual(int(0))
+          .and(neighbor.y.greaterThanEqual(int(0)))
+          .and(neighbor.z.greaterThanEqual(int(0)))
+          .and(neighbor.x.lessThan(int(this.cellsPerAxis)))
+          .and(neighbor.y.lessThan(int(this.cellsPerAxis)))
+          .and(neighbor.z.lessThan(int(this.cellsPerAxis)));
+        If(inside, () => visit(neighbor, 16));
+      }
+    });
+    return found.notEqual(uint(0)).select(nearest.max(0).sqrt().mul(0.5), fallbackRadius) as Node<'float'>;
+  }
+
+  forEachParticleInRadius(
+    position: Node<'vec3'>,
+    radius: Node<'float'>,
+    callback: ParticleSpatialGridVisitor,
+    options: ParticleSpatialGridQueryOptions = {},
+  ): void {
+    this.assertReady();
+    const boundsMin = vec3(this.gpuBounds!.element(0).xyz);
+    const boundsMax = vec3(this.gpuBounds!.element(1).xyz);
+    const cellSize = vec3(boundsMax.sub(boundsMin).div(float(this.cellsPerAxis)));
+    const queryMin = ivec3(clamp(
+      floor(position.sub(radius).sub(boundsMin).div(cellSize)),
+      vec3(0),
+      vec3(this.cellsPerAxis - 1),
+    ));
+    const queryMax = ivec3(clamp(
+      floor(position.add(radius).sub(boundsMin).div(cellSize)),
+      vec3(0),
+      vec3(this.cellsPerAxis - 1),
+    ));
+    const radiusSquared = float(radius.mul(radius));
+    const visited = uint(0).toVar('spatialGridVisited');
+
+    Loop(
+      { start: queryMin.x, end: queryMax.x.add(1) },
+      { start: queryMin.y, end: queryMax.y.add(1) },
+      ({ i: gridX, j: gridY }) => {
+        const gridZ = int(queryMin.z).toVar('spatialGridZ');
+        Loop(() => {
+          If(gridZ.greaterThan(queryMax.z), () => {
+            Break();
+          });
+          if (this.maxQuerySteps > 0) {
+            If(visited.greaterThanEqual(uint(this.maxQuerySteps)), () => {
+              Break();
+            });
+          }
+          const coordinate = ivec3(int(gridX), int(gridY), int(gridZ));
+          const bucket = this.hashCoordinateNode(coordinate);
+          const encoded = atomicLoad(this.heads!.element(bucket)).toVar('spatialGridLink');
+
+          Loop(() => {
+            If(encoded.equal(uint(EMPTY_LINK)), () => {
+              Break();
+            });
+            const slot = encoded.sub(1).toVar('spatialGridSlot');
+            If(slot.greaterThanEqual(uint(this.capacity)), () => {
+              Break();
+            });
+
+            const record = this.coordinates!.element(slot);
+            const exactCell = record.x.equal(coordinate.x)
+              .and(record.y.equal(coordinate.y))
+              .and(record.z.equal(coordinate.z));
+            const particle = this.currentBuffers!.storage.createParticle(slot, true);
+            const currentGeneration = uint(record.w);
+            const acceptedTag = options.tagMask === undefined
+              ? particle.alive.notEqual(uint(0))
+              : particle.alive.notEqual(uint(0))
+                .and(particle.tagMask.bitAnd(uint(options.tagMask)).notEqual(uint(0)));
+            const notSelf = options.excludeIndex === undefined
+              ? acceptedTag
+              : acceptedTag.and(slot.notEqual(options.excludeIndex));
+            const offset = vec3(particle.position.sub(position));
+            const distanceSquared = float(offset.lengthSq());
+
+            If(
+              exactCell
+                .and(notSelf)
+                .and(particle.generation.equal(currentGeneration))
+                .and(distanceSquared.lessThanEqual(radiusSquared)),
+              () => callback(particle, distanceSquared),
+            );
+
+            visited.addAssign(1);
+            if (this.maxQuerySteps > 0) {
+              If(visited.greaterThanEqual(uint(this.maxQuerySteps)), () => {
+                If(visited.equal(uint(this.maxQuerySteps)), () => {
+                  atomicFunc('atomicAdd', this.diagnostics!.element(0), uint(1));
+                });
+                Break();
+              });
+            }
+            encoded.assign(atomicLoad(this.heads!.element(slot.add(this.hashCapacity))));
+          });
+          gridZ.addAssign(1);
+        });
+      },
+    );
+  }
+
+  /** Emits a GPU bounds update for a grid whose caller already reduced the population.
+   * Set autoExpand to false when supplying fresh bounds this way each frame.
+   */
+  setBoundsNode(minimum: Node<'vec3'>, maximum: Node<'vec3'>): void {
+    this.assertReady();
+    const size = maximum.sub(minimum).max(vec3(1e-6));
+    this.gpuBounds!.element(0).assign(vec4(minimum.sub(size.mul(0.001)), 0));
+    this.gpuBounds!.element(1).assign(vec4(minimum.add(size.mul(1.001)), 0));
+  }
+
+  /** Exact nearest neighbor, pruning hash cells against the current best distance.
+   * Returns 0xffffffff when no particle lies within radius; negative radius is unbounded.
+   * Use a coarse grid for small representative populations. No per-query traversal cap applies.
+   */
+  nearestParticleIndexNode(position: Node<'vec3'>, radius: Node<'float'>): Node<'uint'> {
+    this.assertReady();
+    const minimum = this.gpuBounds!.element(0).xyz;
+    const cellSize = this.getCellSizeNode();
+    const coordinate = ivec3(clamp(floor(position.sub(minimum).div(cellSize)),
+      vec3(0), vec3(this.cellsPerAxis - 1))).toVar();
+    const best = radius.lessThan(0).select(float(3.402823e38), radius.mul(radius)).toVar();
+
+    const result = uint(0xffffffff).toVar();
+    const visit = (cell: Node<'ivec3'>) => {
+      const lower = minimum.add(vec3(cell).mul(cellSize));
+      const delta = lower.sub(position).max(position.sub(lower.add(cellSize))).max(vec3(0));
+
+      If(delta.lengthSq().lessThanEqual(best), () => {
+        const encoded = atomicLoad(this.heads!.element(this.hashCoordinateNode(cell))).toVar();
+
+        Loop(() => {
+          If(encoded.equal(uint(0)), () => { Break(); });
+
+          const slot = encoded.sub(1).toVar();
+          const record = this.coordinates!.element(slot);
+          const p = this.currentBuffers!.storage.createParticle(slot);
+          const exact = record.x.equal(cell.x).and(record.y.equal(cell.y)).and(record.z.equal(cell.z));
+
+          If(exact.and(p.alive.notEqual(uint(0))).and(p.generation.equal(uint(record.w))), () => {
+
+            const distance = p.position.sub(position).lengthSq();
+
+            If(distance.lessThan(best).or(distance.equal(best).and(slot.lessThan(result))), () => {
+              best.assign(distance); result.assign(slot);
+            });
+          });
+
+          encoded.assign(atomicLoad(this.heads!.element(slot.add(this.hashCapacity))));
+        });
+      });
+    };
+
+    visit(coordinate);
+
+    Loop(this.cellsPerAxis ** 3, ({ i }) => {
+      const cell = ivec3(int(i).mod(this.cellsPerAxis), int(i).div(this.cellsPerAxis).mod(this.cellsPerAxis),
+        int(i).div(this.cellsPerAxis ** 2));
+
+      If(cell.x.notEqual(coordinate.x).or(cell.y.notEqual(coordinate.y)).or(cell.z.notEqual(coordinate.z)), () => {
+        visit(cell);
+      });
+    });
+    return result;
+  }
+
+  /** Releases GPU attributes owned by this grid. Explicitly shared grids remain caller-owned. */
+  dispose(renderer?: GPUStorageBufferRenderer): void {
+    this.regions?.dispose(renderer);
+    this.regions = undefined;
+    this.buildNodes?.forEach(node => node.dispose());
+    this.buildNodes = undefined;
+    this.buildBufferVersion = -1;
+    this.buildRange = undefined;
+    this.lastBuildToken = undefined;
+    this.lastBufferVersion = -1;
+    [
+      this.headAttribute,
+      this.coordinateAttribute,
+      this.boundsAttribute,
+      this.reductionAttribute,
+      this.diagnosticAttribute,
+    ].forEach((attribute) => {
+      if (attribute) destroyGPUStorageAttribute(renderer, attribute);
+    });
+    this.capacity = 0;
+    this.hashCapacity = 0;
+    this.headAttribute = undefined;
+    this.linkAttribute = undefined;
+    this.coordinateAttribute = undefined;
+    this.boundsAttribute = undefined;
+    this.reductionAttribute = undefined;
+    this.diagnosticAttribute = undefined;
+    this.heads = undefined;
+    this.coordinates = undefined;
+    this.gpuBounds = undefined;
+    this.reductions = undefined;
+    this.diagnostics = undefined;
+    this.currentBuffers = undefined;
+  }
+
+  destroy(renderer?: GPUStorageBufferRenderer): void {
+    this.dispose(renderer);
+  }
+
+  /** Reads hash metadata for validation and profiling without reading particle state. */
+  async readDiagnostics(renderer: GPUReadbackRenderer): Promise<ParticleSpatialGridDiagnostics> {
+    if (
+      !this.headAttribute
+      || !this.linkAttribute
+      || !this.coordinateAttribute
+      || !this.boundsAttribute
+    ) {
+      throw new Error('ParticleSpatialGrid must be rebuilt before reading diagnostics.');
+    }
+
+    const [headBuffer, linkBuffer, coordinateBuffer, boundsBuffer] = await Promise.all([
+      renderer.getArrayBufferAsync(this.headAttribute),
+      renderer.getArrayBufferAsync(this.linkAttribute),
+      renderer.getArrayBufferAsync(this.coordinateAttribute),
+      renderer.getArrayBufferAsync(this.boundsAttribute),
+    ]);
+    const heads = new Uint32Array(headBuffer).subarray(0, this.hashCapacity);
+    const links = new Uint32Array(linkBuffer).subarray(this.hashCapacity);
+    const coordinates = new Int32Array(coordinateBuffer);
+    const bounds = new Float32Array(boundsBuffer);
+    const referenced = new Set<number>();
+    let nonEmptyBuckets = 0;
+    let maxChainLength = 0;
+
+    heads.forEach((head) => {
+      if (head === EMPTY_LINK) return;
+      nonEmptyBuckets += 1;
+      let encoded = head;
+      let chainLength = 0;
+      while (encoded !== EMPTY_LINK && chainLength <= this.capacity) {
+        const slot = encoded - 1;
+        if (slot >= this.capacity) break;
+        referenced.add(slot);
+        chainLength += 1;
+        encoded = links[slot];
+      }
+      maxChainLength = Math.max(maxChainLength, chainLength);
+    });
+
+    return {
+      bounds: new THREE.Box3(
+        new THREE.Vector3(bounds[0], bounds[1], bounds[2]),
+        new THREE.Vector3(bounds[4], bounds[5], bounds[6]),
+      ),
+      nonEmptyBuckets,
+      referencedSlots: referenced.size,
+      maxChainLength,
+      sampleCoordinates: Array.from(referenced).slice(0, 8).map((slot) => (
+        Array.from(coordinates.subarray(slot * 4, slot * 4 + 4))
+      )),
+    };
+  }
+
+  static locate(position: THREE.Vector3, bounds: THREE.Box3, cellsPerAxis: number): THREE.Vector3 {
+    const size = bounds.getSize(new THREE.Vector3());
+    return new THREE.Vector3(
+      Math.floor((position.x - bounds.min.x) / Math.max(size.x, Number.EPSILON) * cellsPerAxis),
+      Math.floor((position.y - bounds.min.y) / Math.max(size.y, Number.EPSILON) * cellsPerAxis),
+      Math.floor((position.z - bounds.min.z) / Math.max(size.z, Number.EPSILON) * cellsPerAxis),
+    ).clampScalar(0, cellsPerAxis - 1);
+  }
+
+  static hashCoordinate(coordinate: THREE.Vector3, hashCapacity: number): number {
+    const x = coordinate.x | 0;
+    const y = coordinate.y | 0;
+    const z = coordinate.z | 0;
+    return (((x * 73856093) ^ (y * 19349663) ^ (z * 83492791)) >>> 0)
+      & (hashCapacity - 1);
+  }
+
+  static normalizeBounds(bounds: THREE.Box3, powerOfTwo: boolean): THREE.Box3 {
+    const result = bounds.clone();
+    if (!powerOfTwo) return result;
+    const center = result.getCenter(new THREE.Vector3());
+    const size = result.getSize(new THREE.Vector3());
+    size.set(
+      nextPowerOfTwo(size.x),
+      nextPowerOfTwo(size.y),
+      nextPowerOfTwo(size.z),
+    );
+    return result.setFromCenterAndSize(center, size);
+  }
+
+  private currentBuffers?: GPUParticleBufferState;
+  private buildNodes?: ComputeNode[];
+  private buildBufferVersion = -1;
+  private buildRange?: GPUComputeRange;
+
+  private ensureCapacity(renderer: GPUStorageBufferRenderer, capacity: number): void {
+    if (capacity === this.capacity && this.headAttribute) return;
+    this.dispose(renderer);
+    this.capacity = Math.max(1, capacity);
+    this.hashCapacity = nextPowerOfTwo(this.capacity * 2);
+    this.version += 1;
+
+    this.headAttribute = new StorageBufferAttribute(new Uint32Array(this.hashCapacity + this.capacity), 1);
+    this.linkAttribute = this.headAttribute;
+    this.coordinateAttribute = new StorageBufferAttribute(new Int32Array(this.capacity * 4), 4);
+    this.boundsAttribute = new StorageBufferAttribute(new Float32Array(8), 4);
+    this.reductionAttribute = new StorageBufferAttribute(new Uint32Array(REDUCTION_WORDS), 1);
+    this.diagnosticAttribute = new StorageBufferAttribute(new Uint32Array(1), 1);
+    this.writeInitialBounds();
+
+    this.heads = storage(this.headAttribute, 'uint', this.hashCapacity + this.capacity).toAtomic() as AtomicUintStorage;
+    this.coordinates = storage(this.coordinateAttribute, 'ivec4', this.capacity) as PackedIntStorage;
+    this.gpuBounds = storage(this.boundsAttribute, 'vec4', 2) as PackedFloatStorage;
+    this.reductions = storage(this.reductionAttribute, 'uint', REDUCTION_WORDS).toAtomic() as AtomicUintStorage;
+    this.diagnostics = storage(this.diagnosticAttribute, 'uint', 1).toAtomic() as AtomicUintStorage;
+    if (this.maintainRegions) {
+      this.regions = new GPUSpatialRegions(this, this.capacity, this.levels, this.aggregator, renderer);
+    }
+  }
+
+  private getBuildNodes(buffers: GPUParticleBufferState, range?: GPUComputeRange): ComputeNode[] {
+    if (this.currentBuffers === buffers && this.buildBufferVersion === buffers.version && this.buildNodes
+      && this.buildRange?.count === range?.count
+      && this.buildRange?.dispatch === range?.dispatch) return this.buildNodes;
+    this.buildNodes?.forEach(node => node.dispose());
+    this.currentBuffers = buffers;
+    this.buildBufferVersion = buffers.version;
+    this.buildRange = range;
+    const reset = Fn(() => {
+      If(instanceIndex.lessThan(uint(this.hashCapacity)), () => {
+        atomicStore(this.heads!.element(instanceIndex), uint(EMPTY_LINK));
+      });
+
+      If(instanceIndex.lessThan(uint(REDUCTION_WORDS)), () => {
+        const initial = instanceIndex.lessThan(uint(3)).select(uint(0xffffffff), uint(0));
+        atomicStore(this.reductions!.element(instanceIndex), initial);
+      });
+
+      If(instanceIndex.equal(uint(0)), () => {
+        atomicStore(this.diagnostics!.element(0), uint(0));
+      });
+    })().compute(Math.max(this.hashCapacity, REDUCTION_WORDS)).setName('rzmps.grid.reset');
+
+    const reduce = this.computeParticles(particle => {
+      If(particle.alive.notEqual(uint(0)), () => {
+        atomicMin(this.reductions!.element(BoundsReduction.MinimumX), orderedFloatNode(particle.position.x));
+        atomicMin(this.reductions!.element(BoundsReduction.MinimumY), orderedFloatNode(particle.position.y));
+        atomicMin(this.reductions!.element(BoundsReduction.MinimumZ), orderedFloatNode(particle.position.z));
+        atomicMax(this.reductions!.element(BoundsReduction.MaximumX), orderedFloatNode(particle.position.x));
+        atomicMax(this.reductions!.element(BoundsReduction.MaximumY), orderedFloatNode(particle.position.y));
+        atomicMax(this.reductions!.element(BoundsReduction.MaximumZ), orderedFloatNode(particle.position.z));
+        atomicStore(this.reductions!.element(BoundsReduction.HasParticles), uint(1));
+      });
+    }, range).setName('rzmps.grid.reduce');
+
+    const finalize = Fn(() => {
+      if (!this.autoExpand) return;
+
+      If(atomicLoad(this.reductions!.element(BoundsReduction.HasParticles)).notEqual(uint(0)), () => {
+        const previousMin = vec3(this.gpuBounds!.element(0).xyz);
+        const previousMax = vec3(this.gpuBounds!.element(1).xyz);
+        const reducedMin = vec3(
+          unorderedFloatNode(atomicLoad(this.reductions!.element(BoundsReduction.MinimumX))),
+          unorderedFloatNode(atomicLoad(this.reductions!.element(BoundsReduction.MinimumY))),
+          unorderedFloatNode(atomicLoad(this.reductions!.element(BoundsReduction.MinimumZ))),
+        );
+        const reducedMax = vec3(
+          unorderedFloatNode(atomicLoad(this.reductions!.element(BoundsReduction.MaximumX))),
+          unorderedFloatNode(atomicLoad(this.reductions!.element(BoundsReduction.MaximumY))),
+          unorderedFloatNode(atomicLoad(this.reductions!.element(BoundsReduction.MaximumZ))),
+        );
+        const outside = reducedMin.lessThan(previousMin).any()
+          .or(reducedMax.greaterThan(previousMax).any());
+
+        If(outside, () => {
+          const wantedMin = vec3(min(previousMin, reducedMin));
+          const wantedMax = vec3(max(previousMax, reducedMax));
+          const padding = vec3(wantedMax.sub(wantedMin).mul(this.expansionHysteresis));
+          const expandedMin = vec3(wantedMin.sub(padding)).toVar('spatialGridExpandedMin');
+          const expandedMax = vec3(wantedMax.add(padding)).toVar('spatialGridExpandedMax');
+
+          if (this.powerOfTwoBounds) {
+            const center = vec3(expandedMin.add(expandedMax).mul(0.5));
+            const size = vec3(exp2(ceil(log2(expandedMax.sub(expandedMin).max(vec3(Number.EPSILON))))));
+            expandedMin.assign(center.sub(size.mul(0.5)));
+            expandedMax.assign(center.add(size.mul(0.5)));
+          }
+
+          this.gpuBounds!.element(0).assign(vec4(expandedMin, 0));
+          this.gpuBounds!.element(1).assign(vec4(expandedMax, 0));
+        });
+      });
+    })().compute(1).setName('rzmps.grid.bounds');
+
+    const insert = this.computeParticles(particle => {
+      If(particle.alive.notEqual(uint(0)), () => {
+        const boundsMin = vec3(this.gpuBounds!.element(0).xyz);
+        const boundsMax = vec3(this.gpuBounds!.element(1).xyz);
+        const inside = particle.position.greaterThanEqual(boundsMin).all()
+          .and(particle.position.lessThanEqual(boundsMax).all());
+
+        If(inside, () => {
+          const coordinate = ivec3(clamp(
+            floor(
+              particle.position.sub(boundsMin)
+                .div(boundsMax.sub(boundsMin).max(vec3(Number.EPSILON)))
+                .mul(float(this.cellsPerAxis)),
+            ),
+            vec3(0),
+            vec3(this.cellsPerAxis - 1),
+          ));
+
+          const bucket = this.hashCoordinateNode(coordinate);
+          const encoded = particle.index.add(uint(1));
+          const previous = atomicFunc(
+            'atomicExchange' as Parameters<typeof atomicFunc>[0],
+            this.heads!.element(bucket),
+            encoded,
+          );
+
+          atomicStore(this.heads!.element(particle.index.add(this.hashCapacity)), previous);
+
+          this.coordinates!.element(particle.index).assign(
+            ivec4(coordinate.x, coordinate.y, coordinate.z, int(particle.generation)),
+          );
+        });
+      });
+    }, range).setName('rzmps.grid.insert');
+
+    this.buildNodes = this.autoExpand ? [reset, reduce, finalize, insert] : [reset, insert];
+    return this.buildNodes;
+  }
+
+  private hashCoordinateNode(coordinate: Node<'ivec3'>): Node<'uint'> {
+    return uint(coordinate.x).mul(73856093)
+      .bitXor(uint(coordinate.y).mul(19349663))
+      .bitXor(uint(coordinate.z).mul(83492791))
+      .bitAnd(uint(this.hashCapacity - 1));
+  }
+
+  private resolveBounds(bounds: THREE.Box3): THREE.Box3 {
+    const resolved = bounds.isEmpty() ? DEFAULT_BOUNDS : bounds;
+    return ParticleSpatialGrid.normalizeBounds(resolved, this?.powerOfTwoBounds ?? false);
+  }
+
+  private writeInitialBounds(): void {
+    if (!this.boundsAttribute) return;
+    const resolved = ParticleSpatialGrid.normalizeBounds(this.bounds, this.powerOfTwoBounds);
+    const array = this.boundsAttribute.array as Float32Array;
+    array.set([resolved.min.x, resolved.min.y, resolved.min.z, 0], 0);
+    array.set([resolved.max.x, resolved.max.y, resolved.max.z, 0], 4);
+    this.boundsAttribute.needsUpdate = true;
+  }
+
+  private assertReady(): void {
+    if (!this.currentBuffers || !this.heads || !this.coordinates || !this.gpuBounds) {
+      throw new Error('ParticleSpatialGrid must be rebuilt before creating query nodes.');
+    }
+  }
+
+  // Bound subdivision depth before allocating coordinate storage.
+  private static clampDepth(value: number): number {
+    return THREE.MathUtils.clamp(Math.floor(value), 0, 10);
+  }
+}
+
+/** Grid subdivision depths are bounded to avoid impractical coordinate ranges. */

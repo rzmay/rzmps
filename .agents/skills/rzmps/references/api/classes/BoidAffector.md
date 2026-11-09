@@ -332,16 +332,6 @@ static GPU_UNSUPPORTED: SpatialEffectGPUUpdate;
 
 ***
 
-<a id="range_influence_threshold"></a>
-
-### RANGE\_INFLUENCE\_THRESHOLD
-
-```ts
-static RANGE_INFLUENCE_THRESHOLD: number = 1e-6;
-```
-
-***
-
 <a id="weight-1"></a>
 
 ### Weight

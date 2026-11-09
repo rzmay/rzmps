@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { If, mat3, mat4, vec2, vec3, vec4, transpose, inverse, uniform } from 'three/tsl';
 import type { Node } from 'three/webgpu';
-import Module, { type ModuleOptions, type ModuleExecutionContext } from '../Module';
-import Particle, { type ParticleInitializationContext, type GPUParticleInitializationContext } from '../Particle';
-import type { GPUParticleLike } from '../gpu/Particle';
-import type { SurfacePatch, MaterialTarget } from '../material-copy/Surface';
-import { bindSurface, MaterialCopySampleMode, targetMaterial } from '../material-copy/Surface';
-import { particleFrameGPU, matrixColumnGPU } from '../helpers/simulationFrame';
+import Module, { type ModuleOptions, type ModuleExecutionContext } from '../core/Module';
+import Particle, { type ParticleInitializationContext, type GPUParticleInitializationContext } from '../core/Particle';
+import type { GPUParticleLike } from '../simulation/gpu/Particle';
+import type { SurfacePatch, MaterialTarget } from '../rendering/compositing/MaterialCopyRegistry';
+import { bindSurface, MaterialCopySampleMode, targetMaterial } from '../rendering/compositing/MaterialCopyRegistry';
+import { particleFrameGPU, matrixColumnGPU } from '../simulation/simulationFrame.utils';
 
 export enum MaterialCopySource {
   Collision = 'collision',

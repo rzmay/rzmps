@@ -458,7 +458,6 @@ apps/docs/.vitepress/.temp/
 /apps/docs/public/llms.txt
 /apps/docs/public/llms-full.txt
 /apps/docs/public/favicon.png
-/examples/index.js
 /packages/rzmps/AGENTS.md
 
 # Isolated benchmark bundles and CI diagnostics
@@ -466,3 +465,9 @@ apps/docs/.vitepress/.temp/
 /benchmark-results/
 
 /apps/docs/guides/benchmarks.md
+
+# Disposable reports and documentation captures (the published skill stays tracked).
+/benchmark/
+/apps/docs/public/previews/
+
+/.dependency-report/

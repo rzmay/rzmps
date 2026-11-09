@@ -23,17 +23,18 @@ function exportSources(source) {
 
 function classSection(name, source) {
   if (/^GPU/.test(name) || name === 'ParticleSpatialGrid') return 'GPU Infrastructure';
-  if (['./ParticleSystem', './Particle', './EmissionSource', './EventReceiver'].includes(source)) {
+  if (name === 'GlobalSettings') return 'Particle Systems';
+  if (['./core/ParticleSystem', './core/Particle', './emission/EmissionSource', './events/EventReceiver'].includes(source)) {
     return 'Particle Systems';
   }
-  if (['./Emitter', './EmissionShape'].includes(source)) return 'Emitters';
-  if (source === './Module' || source?.startsWith('./modules/')) return 'Modules';
-  if (source === './Renderer' || (source?.startsWith('./renderers/') && name !== 'LiveCubemap')) return 'Renderers';
-  if (source?.startsWith('./gpu/')) return 'GPU Infrastructure';
-  if (name === 'MaterialCopyRegistry' || source?.startsWith('./material-copy/')) return 'Helpers';
+  if (['./emission/Emitter', './emission/EmissionShape'].includes(source)) return 'Emitters';
+  if (source === './core/Module' || source?.startsWith('./modules/')) return 'Modules';
+  if (source === './core/Renderer' || (source?.startsWith('./rendering/renderers/') && name !== 'LiveCubemap')) return 'Renderers';
+  if (source?.startsWith('./utils/gpu/')) return 'GPU Infrastructure';
+  if (name === 'MaterialCopyRegistry' || source?.startsWith('./rendering/compositing/')) return 'Helpers';
   if (name === 'TextureAtlas') return 'Helpers';
-  if (name.endsWith('Helper') || name === 'LiveCubemap' || source?.startsWith('./helpers/') || source?.startsWith('./collision/')) return 'Helpers';
-  if (source === './SpatialEffect' || source?.startsWith('./spatial/')) return 'Spatial Effects';
+  if (name.endsWith('Helper') || name === 'LiveCubemap' || name === 'ParticleOctree' || source?.startsWith('./collision/')) return 'Helpers';
+  if (source === './spatial/effects/SpatialEffect' || source?.startsWith('./spatial/')) return 'Spatial Effects';
   throw new Error(`API class needs a navigation section: ${name} (${source})`);
 }
 

@@ -1,13 +1,13 @@
-import { MaterialCopyRegistry } from '../material-copy/Surface';
-import getAttributeVersion from '../helpers/getAttributeVersion';
+import { MaterialCopyRegistry } from '../rendering/compositing/MaterialCopyRegistry';
+import getAttributeVersion from '../utils/getAttributeVersion';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import type { Node } from 'three/webgpu';
 // Use the focused entry point so unrelated WebGPU helper exports cannot collide.
 // @ts-expect-error three-mesh-bvh does not publish declarations for deep imports.
 import { BVHComputeData } from 'three-mesh-bvh/src/webgpu/BVHComputeData.js';
-import type { CollisionQuery, ICollisionBackend } from '../interfaces/ICollisionBackend';
-import { isIgnoredCollisionObject } from './CollisionSceneUtils';
+import type { CollisionQuery, ICollisionBackend } from './collision.types';
+import { isIgnoredCollisionObject } from './isIgnoredCollisionObject';
 import capsuleBVHCollisionNode, {
   CapsuleQuery,
 } from './capsuleBVHCollisionNode';

@@ -16,7 +16,7 @@ Preset by [rzmay](https://github.com/rzmay).
 The 10-second loop shares emission and zero-gravity integration between cubes and spheres. This demonstrates how one system can own several appearances without maintaining two independent simulations. Lifetimes 6–12 seconds leave time to compare the tagged behaviors.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/tags.js#L24)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/tags.js#L24)
 
 ```js
   const system = new ParticleSystem({
@@ -93,7 +93,7 @@ The 10-second loop shares emission and zero-gravity integration between cubes an
 The emitter assigns spheres and cubes with tagSelection distribute instead of giving every particle both tags. CPU emission alternates births; GPU emission selects by buffer slot modulo the number of tags, without a shared emission counter. Slots retain that selection when reused, so the live mix depends on which slots are occupied. Rate 12 yields roughly six per second in each group as the population fills. Scale 0.1–0.25 and a discrete four-color Set vary appearance while keeping particle motion comparable.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/tags.js#L31)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/tags.js#L31)
 
 ```js
     emitters: [
@@ -122,7 +122,7 @@ The emitter assigns spheres and cubes with tagSelection distribute instead of gi
 Only cubes receive rotation and cubic alpha fade. Only spheres receive growth from multiplier 0.35 to 1.8 and a Collision module. Matching tags on each module prevents accidental cross-group changes. Add collision scene geometry to see the sphere-only contact response.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/tags.js#L52)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/tags.js#L52)
 
 ```js
     modules: [
@@ -151,7 +151,7 @@ Only cubes receive rotation and cubic alpha fade. Only spheres receive growth fr
 The sphere renderer filters to spheres and uses a lit Circle sprite with spherical normals. The cube renderer filters to cubes and instances BoxGeometry with MeshStandardMaterial. Both enable shadow casting, and cubes also receive shadows. Distributed tags avoid drawing both a mesh and a sprite for every particle.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/tags.js#L73)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/tags.js#L73)
 
 ```js
     renderers: [

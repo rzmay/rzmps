@@ -16,7 +16,7 @@ Preset by [rzmay](https://github.com/rzmay).
 The 24-second loop and lifetimes up to 22 seconds sustain two interacting populations. Gravity is disabled so steering controls their paths. maxParticles 700 bounds the flocking workload; the estimated full-lifetime population can approach that cap as both populations build up.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/boids.js#L69)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L70)
 
 ```js
   const system = new ParticleSystem({
@@ -104,7 +104,7 @@ The 24-second loop and lifetimes up to 22 seconds sustain two interacting popula
 The main flock emits 38 particles per second from a radius-12 sphere, while two hazards per second begin on a torus. Tags separate their rules. Main lifetimes 9–16 and hazard lifetimes 14–22 make the hazards persist longer; hazards are also larger (0.65–1.05 versus 0.34–0.48), making pursuit and avoidance visible.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/boids.js#L77)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L78)
 
 ```js
     emitters: [
@@ -149,7 +149,7 @@ The main flock emits 38 particles per second from a radius-12 sphere, while two 
 Two Boids modules use opposite particle-affector roles: hazards repel boids as obstacles, while boids act as targets for hazards. Main separation weight 2.4 exceeds cohesion 1.35 to resist clumping. Hazard affector weight 5.5 makes target seeking strong. OrientToDirection aligns cone geometry with motion so heading remains readable.
 
 
-[Source: modules:setup](https://github.com/rzmay/rzmps/blob/develop/examples/boids.js#L27)
+[Source: modules:setup](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L28)
 
 ```js
   const boids = new Boids({
@@ -173,7 +173,7 @@ Two Boids modules use opposite particle-affector roles: hazards repel boids as o
 ```
 
 
-[Source: modules:setup](https://github.com/rzmay/rzmps/blob/develop/examples/boids.js#L48)
+[Source: modules:setup](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L49)
 
 ```js
   const hazardBoids = new Boids({
@@ -197,7 +197,7 @@ Two Boids modules use opposite particle-affector roles: hazards repel boids as o
 ```
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/boids.js#L114)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L115)
 
 ```js
     modules: [
@@ -215,7 +215,7 @@ Two Boids modules use opposite particle-affector roles: hazards repel boids as o
 Two tag-filtered MeshRenderers use cone meshes and separate materials. Cool flock colors contrast with red/orange hazards, whose material has stronger emissive intensity 0.55. The geometric cone points reveal direction more clearly than a circular billboard would.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/boids.js#L124)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L125)
 
 ```js
     renderers: [

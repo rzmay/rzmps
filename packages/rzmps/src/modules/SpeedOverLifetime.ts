@@ -1,7 +1,7 @@
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { DynamicValue } from '../values/dynamicValue.types';
+import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
 
 export interface SpeedOverLifetimeOptions extends Partial<ModuleOptions> {
     speed: DynamicValue<number>;
@@ -25,7 +25,7 @@ class SpeedOverLifetime extends Module {
       priority: Module.Priority.PreMovementTransient,
       modifyGPU: (particle) => {
           particle.speed.assign(
-            particle.speed.mul(this.gpuParameters.number(
+            particle.speed.mul(this.evaluateDynamicGPU.number(
               'speed', () => this.options.speed, particle.time, 1, particle.index,
             )),
           );

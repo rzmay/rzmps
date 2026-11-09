@@ -128,7 +128,7 @@ jobs:
 
       - name: Measure AB and compare 1 sample(s) per revision
         working-directory: head
-        run: node scripts/run-pr-benchmarks.mjs --stage 1 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
+        run: node scripts/benchmark/run-pr-benchmarks.mjs --stage 1 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
 
       - name: Publish preliminary checkpoint
         uses: actions/upload-artifact@v4
@@ -140,7 +140,7 @@ jobs:
 
       - name: Measure BA and compare 2 sample(s) per revision
         working-directory: head
-        run: node scripts/run-pr-benchmarks.mjs --stage 2 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
+        run: node scripts/benchmark/run-pr-benchmarks.mjs --stage 2 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
 
       - name: Publish intermediate checkpoint
         uses: actions/upload-artifact@v4
@@ -152,7 +152,7 @@ jobs:
 
       - name: Measure AB and compare 3 sample(s) per revision
         working-directory: head
-        run: node scripts/run-pr-benchmarks.mjs --stage 3 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
+        run: node scripts/benchmark/run-pr-benchmarks.mjs --stage 3 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
 
       - name: Publish final checkpoint
         uses: actions/upload-artifact@v4

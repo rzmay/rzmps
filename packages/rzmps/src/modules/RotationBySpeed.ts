@@ -1,10 +1,10 @@
-import type { Vector3Input } from '../types/ValueInput';
+import type { Vector3Input } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
-import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
+import evaluateByParameterVector from '../values/evaluateByParameterVector3';
 import { SpeedRange } from './ColorBySpeed';
 
 export interface RotationBySpeedOptions extends Partial<ModuleOptions> {
@@ -50,19 +50,19 @@ class RotationBySpeed extends Module {
           const time = this.getSpeedTimeGPU(particle.velocity.length());
 
           particle.rotation.assign(
-            particle.rotation.add(this.gpuParameters.parameterVector(
+            particle.rotation.add(this.evaluateDynamicGPU.parameterVector(
               'angle', () => this.options.angle,
               time,
             )),
           );
           particle.angularVelocity.assign(
-            particle.angularVelocity.add(this.gpuParameters.parameterVector(
+            particle.angularVelocity.add(this.evaluateDynamicGPU.parameterVector(
               'angularVelocity', () => this.options.angularVelocity,
               time,
             )),
           );
           particle.angularAcceleration.assign(
-            particle.angularAcceleration.add(this.gpuParameters.parameterVector(
+            particle.angularAcceleration.add(this.evaluateDynamicGPU.parameterVector(
               'angularAcceleration', () => this.options.angularAcceleration,
               time,
             )),
@@ -80,10 +80,10 @@ class RotationBySpeed extends Module {
   }
 
   private getSpeedTimeGPU(speed: Node<'float'>) {
-    const min = this.gpuParameters.number('speedRange.min', () => (
+    const min = this.evaluateDynamicGPU.number('speedRange.min', () => (
       Array.isArray(this.options.speedRange) ? this.options.speedRange[0] : this.options.speedRange?.min
     ), speed, 0);
-    const max = this.gpuParameters.number('speedRange.max', () => (
+    const max = this.evaluateDynamicGPU.number('speedRange.max', () => (
       Array.isArray(this.options.speedRange) ? this.options.speedRange[1] : this.options.speedRange?.max
     ), speed, 1);
     return speed.sub(min).div(max.sub(min).max(Number.EPSILON)).clamp(0, 1);

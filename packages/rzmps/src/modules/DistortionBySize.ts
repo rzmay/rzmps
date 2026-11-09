@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
-import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 import { SizeRange } from './ColorBySize';
 
 export interface DistortionBySizeOptions extends Partial<ModuleOptions> {
@@ -30,7 +30,7 @@ class DistortionBySize extends Module {
       priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           particle.distortionStrength.assign(
-            particle.distortionStrength.mul(this.gpuParameters.parameterNumber(
+            particle.distortionStrength.mul(this.evaluateDynamicGPU.parameterNumber(
               'distortionStrength',
               () => this.options.distortionStrength,
               this.getSizeTimeGPU(particle.scale.length()),
@@ -50,10 +50,10 @@ class DistortionBySize extends Module {
   }
 
   private getSizeTimeGPU(size: Node<'float'>) {
-    const min = this.gpuParameters.number('sizeRange.min', () => (
+    const min = this.evaluateDynamicGPU.number('sizeRange.min', () => (
       Array.isArray(this.options.sizeRange) ? this.options.sizeRange[0] : this.options.sizeRange?.min
     ), size, 0);
-    const max = this.gpuParameters.number('sizeRange.max', () => (
+    const max = this.evaluateDynamicGPU.number('sizeRange.max', () => (
       Array.isArray(this.options.sizeRange) ? this.options.sizeRange[1] : this.options.sizeRange?.max
     ), size, 1);
     return size.sub(min).div(max.sub(min).max(Number.EPSILON)).clamp(0, 1);

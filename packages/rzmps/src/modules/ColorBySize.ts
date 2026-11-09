@@ -1,11 +1,11 @@
-import type { ColorInput } from '../types/ValueInput';
+import type { ColorInput } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
-import evaluateByParameterColor from '../helpers/evaluateByParameterColor';
-import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import evaluateByParameterColor from '../values/evaluateByParameterColor';
+import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 
 export type SizeRange = [number, number] | { min: number; max: number };
 
@@ -41,14 +41,14 @@ class ColorBySize extends Module {
 
           if (this.options.color !== undefined) {
             particle.color.assign(
-              particle.color.mul(this.gpuParameters.parameterColor(
+              particle.color.mul(this.evaluateDynamicGPU.parameterColor(
                 'color', () => this.options.color, t,
               )),
             );
           }
           if (this.options.alpha !== undefined) {
             particle.alpha.assign(
-              particle.alpha.mul(this.gpuParameters.parameterNumber(
+              particle.alpha.mul(this.evaluateDynamicGPU.parameterNumber(
                 'alpha', () => this.options.alpha, t, 1,
               )),
             );
@@ -66,10 +66,10 @@ class ColorBySize extends Module {
   }
 
   private getSizeTimeGPU(size: Node<'float'>) {
-    const min = this.gpuParameters.number('sizeRange.min', () => (
+    const min = this.evaluateDynamicGPU.number('sizeRange.min', () => (
       Array.isArray(this.options.sizeRange) ? this.options.sizeRange[0] : this.options.sizeRange?.min
     ), size, 0);
-    const max = this.gpuParameters.number('sizeRange.max', () => (
+    const max = this.evaluateDynamicGPU.number('sizeRange.max', () => (
       Array.isArray(this.options.sizeRange) ? this.options.sizeRange[1] : this.options.sizeRange?.max
     ), size, 1);
     return size.sub(min).div(max.sub(min).max(Number.EPSILON)).clamp(0, 1);

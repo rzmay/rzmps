@@ -1,4 +1,4 @@
-import { transformPointGPU, transformDirectionGPU } from '../helpers/gpuTransforms';
+import { transformPointGPU, transformDirectionGPU } from '../simulation/gpu/transforms.utils';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import {
@@ -12,16 +12,16 @@ import {
   uniform,
 } from 'three/tsl';
 
-import Module, { type ModuleExecutionContext, type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
-import type { ICollisionBackend, CollisionHit } from '../interfaces/ICollisionBackend';
+import Module, { type ModuleExecutionContext, type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { DynamicValue } from '../values/dynamicValue.types';
+import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
+import type { ICollisionBackend, CollisionHit } from '../collision/collision.types';
 import ThreeCollisionBackend from '../collision/ThreeCollisionBackend';
 import ThreeGPUCollisionBackend from '../collision/ThreeGPUCollisionBackend';
-import ParticleSystem from '../ParticleSystem';
-import { SimulationSpace } from '../enums/SimulationSpace';
-import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
+import ParticleSystem from '../core/ParticleSystem';
+import { SimulationSpace } from '../enums/simulationSpace';
+import type { GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 
 export type CollisionListener = (particle: Particle, collision: CollisionHit) => void;
 
@@ -250,10 +250,10 @@ class Collision extends Module {
 
     particle.position.assign(hitPosition);
 
-    const bounce = this.gpuParameters.number(
+    const bounce = this.evaluateDynamicGPU.number(
       'bounce', () => this.bounce, particle.time, 1, particle.index,
     ).clamp(0, 1);
-    const dampen = this.gpuParameters.number(
+    const dampen = this.evaluateDynamicGPU.number(
       'dampen', () => this.dampen, particle.time, 0, particle.index,
     ).clamp(0, 1);
     const normalSpeed = particle.velocity.dot(hitNormal);
@@ -267,7 +267,7 @@ class Collision extends Module {
       normalSpeed.lessThan(float(0)).select(resolvedVelocity, particle.velocity),
     );
 
-    const lifetimeLoss = this.gpuParameters.number(
+    const lifetimeLoss = this.evaluateDynamicGPU.number(
       'lifetimeLoss',
       () => this.lifetimeLoss,
       particle.time,

@@ -1,0 +1,314 @@
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import {
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+
+const targets = [
+  resolve(root, 'README.md'),
+  resolve(root, 'packages/rzmps/README.md'),
+];
+
+const startMarker = '<!-- RZMPS_BENCHMARKS_START -->';
+const endMarker = '<!-- RZMPS_BENCHMARKS_END -->';
+
+const args = process.argv.slice(2);
+const jsonOnlyIndex = args.indexOf('--json-only');
+
+const jsonOnly = jsonOnlyIndex !== -1;
+const jsonOutput = jsonOnly
+  ? args[jsonOnlyIndex + 1]
+  : undefined;
+
+if (jsonOnly && !jsonOutput) {
+  throw new Error(
+    'Usage: update-benchmark-report.mjs --json-only <output.json>',
+  );
+}
+
+const startedAt = performance.now();
+console.log('[benchmark:update-report] Building the library and benchmark page, then running browser measurements...');
+
+// Stream build output immediately while retaining the report for parsing. The
+// final table/JSON goes into the generated files rather than flooding the terminal.
+const output = await new Promise((resolveOutput, reject) => {
+  const child = spawn('npm', ['run', 'benchmark:run', '--workspace', 'demo'], {
+    cwd: root,
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  const lines = [];
+  let reportStarted = false;
+  const reader = createInterface({ input: child.stdout });
+  reader.on('line', line => {
+    lines.push(line);
+    if (line === 'RZMPS browser benchmark') reportStarted = true;
+    if (!reportStarted) console.log(line);
+  });
+  child.once('error', reject);
+  child.once('close', (code, signal) => {
+    reader.close();
+    if (code === 0) resolveOutput(lines.join('\n'));
+    else reject(new Error(`Benchmark command failed (${signal ? `signal ${signal}` : `exit code ${code}`}).`));
+  });
+});
+
+const benchmarkStart = output.indexOf('RZMPS browser benchmark');
+
+if (benchmarkStart === -1) {
+  throw new Error(
+    'Benchmark output did not contain the expected report heading.',
+  );
+}
+
+const report = output.slice(benchmarkStart).trim();
+const reportLines = report.split('\n');
+const heading = reportLines[0];
+
+const jsonStart = report.indexOf('RZMPS_BENCHMARK_JSON_START');
+const jsonEnd = report.indexOf('RZMPS_BENCHMARK_JSON_END');
+
+if (
+  jsonStart === -1
+  || jsonEnd === -1
+  || jsonEnd <= jsonStart
+) {
+  throw new Error(
+    'Benchmark output did not contain the expected JSON report.',
+  );
+}
+
+const payload = JSON.parse(
+  report.slice(
+    jsonStart + 'RZMPS_BENCHMARK_JSON_START'.length,
+    jsonEnd,
+  ).trim(),
+);
+
+const { metadata, results } = payload;
+
+if (!Array.isArray(results) || results.length === 0) {
+  throw new Error(
+    'Benchmark output did not contain benchmark rows.',
+  );
+}
+
+console.log(`[benchmark:update-report] Measurements complete: ${results.length} cases in ${
+  ((performance.now() - startedAt) / 1000).toFixed(1)}s. ${jsonOnly ? 'Exporting JSON' : 'Updating README tables'}...`);
+
+// CI/export mode.
+if (jsonOnly) {
+  const outputPath = resolve(root, jsonOutput);
+
+  mkdirSync(dirname(outputPath), {
+    recursive: true,
+  });
+
+  writeFileSync(
+    outputPath,
+    `${JSON.stringify(payload, null, 2)}\n`,
+  );
+
+  console.log(`Wrote benchmark JSON to ${outputPath}`);
+  process.exit(0);
+}
+
+function escapeCell(value) {
+  return String(value).replaceAll('|', '\\|');
+}
+
+function markdownTable(headers, rows) {
+  return [
+    `| ${headers.join(' | ')} |`,
+    `| ${headers.map(() => '---').join(' | ')} |`,
+    ...rows.map(
+      (row) => `| ${row.map(escapeCell).join(' | ')} |`,
+    ),
+  ].join('\n');
+}
+
+function formatNumber(value, digits = 1) {
+  return Number.isFinite(value)
+    ? value.toFixed(digits)
+    : 'n/a';
+}
+
+function formatInteger(value) {
+  return Number.isFinite(value)
+    ? Math.round(value).toLocaleString()
+    : 'n/a';
+}
+
+function formatMemory(value) {
+  return Number.isFinite(value) && value > 0
+    ? `${formatNumber(value, 1)}MB`
+    : 'n/a';
+}
+
+function formatGB(value) {
+  return Number.isFinite(value) && value > 0
+    ? `${formatNumber(value, 1)}GB`
+    : 'n/a';
+}
+
+const hardware = metadata.hardware ?? {};
+
+const environmentRows = [
+  ['Mode', metadata.mode ?? 'headless browser'],
+  ['Frame Pacing', metadata.framePacing ?? 'uncapped'],
+  ['Browser', metadata.browser],
+  [
+    'Viewport',
+    `${metadata.viewport.width}x${metadata.viewport.height}`,
+  ],
+  [
+    'Device Pixel Ratio',
+    formatNumber(hardware.devicePixelRatio, 2),
+  ],
+  ['OS', hardware.os ?? 'n/a'],
+  [
+    'CPU',
+    hardware.cpu
+      ? `${hardware.cpu} (${hardware.logicalCores ?? 'n/a'} logical cores)`
+      : 'n/a',
+  ],
+  [
+    'Memory',
+    `${formatGB(hardware.totalMemoryGB)} system, ${formatGB(hardware.deviceMemoryGB)
+    } browser hint`,
+  ],
+  [
+    'GPU/WebGL',
+    hardware.webglRenderer
+      ? `${hardware.webglRenderer} (${hardware.webglVendor ?? 'unknown'})`
+      : 'n/a',
+  ],
+];
+
+const systemRows = results.map((result) => [
+  result.name,
+  result.minSimulatedParticles === result.maxSimulatedParticles
+    ? formatInteger(result.maxSimulatedParticles)
+    : `${formatInteger(result.minSimulatedParticles)}–${formatInteger(result.maxSimulatedParticles)}`,
+  formatInteger(result.frames),
+  formatNumber(result.avgFps),
+  formatNumber(result.onePercentLowFps),
+  `${formatNumber(result.avgFrameMs, 2)}ms`,
+  `${formatNumber(result.p99FrameMs, 2)}ms`,
+  `${formatNumber(result.maxFrameMs, 2)}ms`,
+  `${formatNumber(result.avgUpdateMs, 2)}ms`,
+  `${formatNumber(result.p95UpdateMs, 2)}ms`,
+  formatMemory(result.maxHeapMB),
+]);
+
+const block = [
+  '## Benchmarks',
+  '',
+  startMarker,
+  '',
+  '_Generated by `npm run benchmark:update-report`._',
+  '',
+  `**${heading}**`,
+  '',
+  `Run length: ${(metadata.durationMs / 1000).toFixed(1)
+  }s measured per case after ${(metadata.warmupMs / 1000).toFixed(1)
+  }s warmup`,
+  `Measured: ${metadata.measuredAt}`,
+  '',
+  'FPS and frame time are measured in an uncapped browser render loop by default. `1% Low FPS` is the reciprocal of the average of the slowest 1% of measured frames. P99 frame time is reported separately. `Update` is the measured `ParticleSystem.update()` slice inside that frame.',
+  '',
+  markdownTable(
+    ['Environment', 'Value'],
+    environmentRows,
+  ),
+  '',
+  markdownTable(
+    [
+      'Case',
+      'Particles',
+      'Rendered Frames',
+      'Avg FPS',
+      '1% Low FPS',
+      'Avg Frame',
+      'P99 Frame',
+      'Max Frame',
+      'Avg Update',
+      'P95 Update',
+      'Max JS Heap',
+    ],
+    systemRows,
+  ),
+  '',
+  endMarker,
+  '',
+].join('\n');
+
+function updateReadme(path) {
+  const original = readFileSync(path, 'utf8');
+
+  const start = original.indexOf(startMarker);
+  const end = original.indexOf(endMarker);
+
+  let withoutExistingBlock = original;
+
+  if (
+    start !== -1
+    && end !== -1
+    && end > start
+  ) {
+    const beforeHeading = original.lastIndexOf(
+      '\n## Benchmarks',
+      start,
+    );
+
+    const replaceStart = beforeHeading === -1
+      ? start
+      : beforeHeading + 1;
+
+    const replaceEnd =
+      end + endMarker.length;
+
+    withoutExistingBlock =
+      `${original.slice(0, replaceStart)}${original
+        .slice(replaceEnd)
+        .replace(/^\n+/, '\n')
+      }`;
+  }
+
+  const developerGuideIndex =
+    withoutExistingBlock.indexOf(
+      '\n## Developer Guide',
+    );
+
+  if (developerGuideIndex !== -1) {
+    const next =
+      `${withoutExistingBlock
+        .slice(0, developerGuideIndex)
+        .trimEnd()}\n\n${block}${withoutExistingBlock.slice(
+          developerGuideIndex,
+        )
+      }`;
+
+    writeFileSync(path, next);
+    return;
+  }
+
+  writeFileSync(
+    path,
+    `${withoutExistingBlock.trimEnd()}\n\n${block}`,
+  );
+}
+
+targets.forEach(path => {
+  updateReadme(path);
+  console.log(`[benchmark:update-report] Updated ${path}`);
+});
+
+console.log(
+  `Updated benchmark report in ${targets.length} READMEs.`,
+);

@@ -61,9 +61,9 @@ Sources that create particles. Omission creates one default emitter; pass [] for
 ```ts
 endBehavior:
   | "none"
+  | EndBehavior
   | "destroy"
-  | "destroyImmediate"
-  | EndBehavior;
+  | "destroyImmediate";
 ```
 
 Controls cleanup after a nonlooping system ends; existing particles may remain.
@@ -237,7 +237,7 @@ null
 ### maxCullingMode
 
 ```ts
-maxCullingMode: "new" | "old" | MaxCulling;
+maxCullingMode: "new" | MaxCulling | "old";
 ```
 
 Chooses whether old or newly spawned particles are culled at capacity.

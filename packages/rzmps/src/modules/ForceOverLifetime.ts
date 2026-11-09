@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { DynamicValue } from '../values/dynamicValue.types';
+import evaluateDynamicVector from '../values/evaluateDynamicVector3';
 
 export interface ForceOverLifetimeOptions extends Partial<ModuleOptions> {
   /** Force sampled by normalized age; velocity change is force times delta seconds divided by mass. */
@@ -33,7 +33,7 @@ class ForceOverLifetime extends Module {
       priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           particle.acceleration.assign(
-            particle.acceleration.add(this.gpuParameters.vector(
+            particle.acceleration.add(this.evaluateDynamicGPU.vector(
               'force',
               () => this.options.force,
               particle.time,

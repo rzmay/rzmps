@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { asin, atan, float, If, vec3, vec4 } from 'three/tsl';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
 
 export interface OrientToDirectionOptions extends Partial<ModuleOptions> {
   /** Model-space forward axis mapped onto velocity; defaults to positive Y. */

@@ -6,8 +6,8 @@ import * as THREE from 'three';
 import { createWebGPURenderer } from '../rendering/createWebGPURenderer';
 import CameraControls from '../components/CameraControls';
 import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
-import particlePresets from '../presets/particles';
-import scenePresets from '../presets/scenes';
+import particlePresets from 'examples/index.js';
+import scenePresets from 'examples/scenes/index.js';
 import BenchmarkPage from './BenchmarkPage';
 import LandingLayout from '../components/LandingLayout';
 
@@ -21,8 +21,8 @@ function getPresetMetadata(presets, name) {
 
   return {
     sourceUrl: entry?.sourceUrl ?? factory?.sourceUrl,
-    author: entry?.author ?? factory?.author,
-    description: entry?.description ?? factory?.description,
+    author: entry?.author ?? factory?.metadata?.author,
+    description: entry?.description ?? factory?.metadata?.description,
   };
 }
 

@@ -1,12 +1,12 @@
-import type { ColorInput } from '../types/ValueInput';
+import type { ColorInput } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { type ModuleExecutionContext, ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleExecutionContext, ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import evaluateByParameterColor from '../helpers/evaluateByParameterColor';
-import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import evaluateByParameterColor from '../values/evaluateByParameterColor';
+import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 
 export interface ColorByDepthOptions extends Partial<ModuleOptions> {
   color: ValueByParameter<ColorInput>;
@@ -58,14 +58,14 @@ class ColorByDepth extends Module {
 
           if (this.options.color !== undefined) {
             particle.color.assign(
-              particle.color.mul(this.gpuParameters.parameterColor(
+              particle.color.mul(this.evaluateDynamicGPU.parameterColor(
                 'color', () => this.options.color, t,
               )),
             );
           }
           if (this.options.alpha !== undefined) {
             particle.alpha.assign(
-              particle.alpha.mul(this.gpuParameters.parameterNumber(
+              particle.alpha.mul(this.evaluateDynamicGPU.parameterNumber(
                 'alpha', () => this.options.alpha, t, 1,
               )),
             );

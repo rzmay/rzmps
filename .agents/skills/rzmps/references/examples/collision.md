@@ -16,7 +16,7 @@ Preset by [rzmay](https://github.com/rzmay).
 A five-second loop emits particles with eight-second lifetimes under full gravity modifier 1. Long life lets several bounces remain visible. Select a collision scene in the demo or pass a collision scene to the preview command; a neutral empty scene cannot show contacts.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/collision.js#L13)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L14)
 
 ```js
   const collision = new ParticleSystem({
@@ -68,7 +68,7 @@ A five-second loop emits particles with eight-second lifetimes under full gravit
 The radius-0.25 sphere emits 30 particles per second with radial speeds 1–5. At lifetime eight, the population can approach 240 before culling. Mass 1 and uniform scale 0.125 make contact behavior easier to compare, while the orange/yellow range distinguishes particles from collision geometry.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/collision.js#L18)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L19)
 
 ```js
     emitters: [
@@ -97,7 +97,7 @@ The radius-0.25 sphere emits 30 particles per second with radial speeds 1–5. A
 Collision uses bounce 0.75 and dampen 0.05, retaining substantial rebound while losing some motion at each contact. radiusScale 1 uses the particle’s normal collision size. applyImpulses true allows compatible external backends to transfer contact impulses to scene bodies; the built-in mesh backend supplies geometric collision queries.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/collision.js#L38)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L39)
 
 ```js
     modules: [
@@ -115,7 +115,7 @@ Collision uses bounce 0.75 and dampen 0.05, retaining substantial rebound while 
 Lit Circle sprites use spherical normals and normal lighting 1 to appear round at low geometric cost. Roughness 0.5 softens highlights and castShadow true helps locate particles above scene geometry. Shadows require the scene lights and renderer to enable shadow support.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/collision.js#L47)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L48)
 
 ```js
     renderers: [

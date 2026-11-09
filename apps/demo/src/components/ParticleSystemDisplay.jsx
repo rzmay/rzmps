@@ -2,9 +2,9 @@ import { useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useFrame, useThree } from '@react-three/fiber';
 import { ParticleSystemGUI } from '../gui/ParticleSystemGUI';
-import particlePresets from '../presets/particles';
-import scenePresets from '../presets/scenes';
-import { getSceneParticleRoot } from '../presets/scenes/particleRoot';
+import particlePresets from 'examples/index.js';
+import scenePresets from 'examples/scenes/index.js';
+import { getSceneParticleRoot } from 'examples/utils/particleRoot.js';
 
 const RZMPS_VERSION = import.meta.env.VITE_RZMPS_VERSION;
 
@@ -58,7 +58,7 @@ function ParticleSystemDisplay({
     let cancelled = false;
 
     async function initialize() {
-      const system = await particlePresets[initialPreset]();
+      const system = await particlePresets[initialPreset].create();
 
       if (cancelled) return;
 

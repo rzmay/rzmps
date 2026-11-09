@@ -4,8 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { GitFork, Package } from 'lucide-react';
 import * as THREE from 'three';
 
-import { createDefaultSceneBackground } from '../presets/scenes/background';
-import { getSceneParticleRoot } from '../presets/scenes/particleRoot';
+import { createDefaultSceneBackground } from 'examples/utils/background.js';
+import { getSceneParticleRoot } from 'examples/utils/particleRoot.js';
 import { Collision, EndBehavior, MaxCulling } from '@rzmps/rzmps';
 
 import { EmitterGUI } from './particle-system-gui/EmitterGUI';
@@ -401,8 +401,8 @@ export class ParticleSystemGUI {
         const factory = this.getPresetFactory(entry);
         return {
             sourceUrl: entry?.sourceUrl ?? factory?.sourceUrl,
-            author: entry?.author ?? factory?.author,
-            description: entry?.description ?? factory?.description,
+            author: entry?.author ?? factory?.metadata?.author,
+            description: entry?.description ?? factory?.metadata?.description,
         };
     }
 

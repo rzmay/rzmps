@@ -1,5 +1,5 @@
-import { surfacePatch } from '../material-copy/Surface';
-import getAttributeVersion from '../helpers/getAttributeVersion';
+import { surfacePatch } from '../rendering/compositing/MaterialCopyRegistry';
+import getAttributeVersion from '../utils/getAttributeVersion';
 import * as THREE from 'three';
 import { Octree } from 'three/examples/jsm/math/Octree.js';
 import { Capsule } from 'three/examples/jsm/math/Capsule.js';
@@ -8,8 +8,8 @@ import type {
   ICollisionBackend,
   CollisionHit,
   CollisionQuery,
-} from '../interfaces/ICollisionBackend';
-import { isIgnoredCollisionObject } from './CollisionSceneUtils';
+} from './collision.types';
+import { isIgnoredCollisionObject } from './isIgnoredCollisionObject';
 
 export interface ThreeCollisionBackendOptions {
   /** Explicit scene subtree to scan; omission uses the owning particle system scene. */

@@ -84,7 +84,7 @@ events: readonly string[];
 
 #### Inherited from
 
-[`MaterialCopy`](MaterialCopy.md).[`events`](MaterialCopy.md#events)
+[`EventReceiver`](EventReceiver.md).[`events`](EventReceiver.md#events)
 
 ***
 
@@ -908,7 +908,7 @@ readonly `string`[]
 
 #### Inherited from
 
-[`MaterialCopy`](MaterialCopy.md).[`selectedEventNames`](MaterialCopy.md#selectedeventnames)
+[`EventReceiver`](EventReceiver.md).[`selectedEventNames`](EventReceiver.md#selectedeventnames)
 
 ***
 

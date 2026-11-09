@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { resolveScene } from './resolveScene.mjs';
 import { validateGPUChildren } from './validateGPUChildren.js';
 import { validateFireflyAttachments } from './validateFireflyAttachments.js';
-import { examples } from '../../examples/index.js';
-import scenePresets from '../../apps/demo/src/presets/scenes/index.js';
-import { getSceneParticleRoot } from '../../apps/demo/src/presets/scenes/particleRoot.js';
+import { examples } from 'examples/index.js';
+import scenePresets from 'examples/scenes/index.js';
+import { getSceneParticleRoot } from 'examples/utils/particleRoot.js';
 import { createWebGPURenderer } from '../../apps/demo/src/rendering/createWebGPURenderer.js';
 
 /** Browser entry point. Only installed for the demo's explicit ?preview route. */
@@ -31,13 +32,12 @@ async function capture(options) {
   scene.background = new THREE.Color('#11151f');
   const light = new THREE.DirectionalLight(0xffffff, 3);
   light.position.set(5,10,5);
-  if (!options.scene) scene.add(new THREE.AmbientLight(0xffffff, 0.8),light);
   try {
     const fixtures = {
-      nativeEvents: () => import('../../tests/visual/fixtures/nativeEvents.js'),
-      eventScopes: () => import('../../tests/visual/fixtures/eventScopes.js'),
-      gpuKill: () => import('../../tests/visual/fixtures/gpuKill.js'),
-      simulationSpaces: () => import('../../tests/visual/fixtures/simulationSpaces.js'),
+      nativeEvents: () => import('../tests/preview/fixtures/nativeEvents.js'),
+      eventScopes: () => import('../tests/preview/fixtures/eventScopes.js'),
+      gpuKill: () => import('../tests/preview/fixtures/gpuKill.js'),
+      simulationSpaces: () => import('../tests/preview/fixtures/simulationSpaces.js'),
     };
     const example = Object.hasOwn(fixtures, options.example)
       ? { create: (await fixtures[options.example]()).default }
@@ -68,10 +68,10 @@ async function capture(options) {
     renderer.setSize(options.width,options.height);
     renderer.shadowMap.enabled = true;
     document.body.replaceChildren(renderer.domElement);
-    if (options.scene) {
-      const factory=scenePresets[options.scene];
-      if (!factory) throw new Error(`Unknown scene ${options.scene}`);
-      sceneHandle=await factory(scene,renderer,camera);
+    const sceneFactory = resolveScene(options.scene, example.previewSettings?.scene, scenePresets);
+    if (!sceneFactory) scene.add(new THREE.AmbientLight(0xffffff, 0.8), light);
+    if (sceneFactory) {
+      sceneHandle=await sceneFactory(scene,renderer,camera);
       if (options.sceneLightStrength !== undefined) {
         if (!sceneHandle?.setLightStrength) throw new Error('Selected scene has no light strength control');
         sceneHandle.setLightStrength(options.sceneLightStrength);
@@ -205,6 +205,7 @@ async function capture(options) {
     const frameValidation = await system.userData.validateSimulationFrames?.(renderer) ?? [];
     const contactSheet=await makeContactSheet(frames,options);
     return {frames,contactSheet,shaderBindings,childValidation,frameValidation,
+      scene: options.scene ?? sceneFactory?.name ?? null,
       camera:{position:camera.position.toArray(),
       target:options.cameraTarget,fov:options.cameraFov},rendererInfo:{calls:renderer.info.render.calls,
       triangles:renderer.info.render.triangles},userAgent:navigator.userAgent,assetErrors};

@@ -158,6 +158,7 @@ export async function capturePreview(options) {
     await png('contact-sheet.png', result.contactSheet);
     Object.assign(metadata, {
       status: 'complete',
+      scene: result.scene ?? options.scene,
       captures: result.frames.map(({ data, ...rest }) => rest),
       camera: result.camera,
       rendererInfo: result.rendererInfo,

@@ -103,7 +103,7 @@ grid resolution appropriate for the effect; see
 [particle spatial acceleration](particle-octree.md) for configuration and limitations.
 
 Runtime scalar, vector, color, range, and curve properties on built-in modules synchronize to GPU
-parameters automatically. A custom class can use its protected `gpuParameters` store for the same
+parameters automatically. A custom class can use its protected `evaluateDynamicGPU` store for the same
 pattern. Set `needsUpdate = true` only when a change alters graph structure or owned resources.
 
 ## Killing a Particle

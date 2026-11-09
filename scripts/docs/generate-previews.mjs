@@ -4,6 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { discoverExamples, root } from './examples.mjs';
+import { previewArguments } from './preview-settings.mjs';
 import {
   checksum, previewDirectory, previewInputs, readPreviewManifest, previewIsCurrent,
 } from './preview-manifest.mjs';
@@ -11,7 +12,6 @@ export async function generatePreviews({ force = false } = {}) {
   const examples = discoverExamples();
   const inputs = previewInputs(examples);
   const manifest = readPreviewManifest();
-  const settings = JSON.parse(await fs.readFile(path.join(root,'scripts/docs/preview-settings.json'),'utf8'));
   await fs.mkdir(previewDirectory,{recursive:true});
   let capture;
   for (const example of examples) {
@@ -29,8 +29,7 @@ export async function generatePreviews({ force = false } = {}) {
     }
     const output = await fs.mkdtemp(path.join(os.tmpdir(),'rzmps-doc-preview-'));
     try {
-      const config = { ...settings.defaults, ...settings.examples[example.id], example:example.id, output };
-      const options = capture.parseOptions(Object.entries(config).flatMap(([key,value]) => ['--'+key,String(value)]));
+      const options = capture.parseOptions(previewArguments(example, output));
       let result;
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {

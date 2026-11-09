@@ -1,9 +1,9 @@
-import type { Vector3Input } from '../types/ValueInput';
+import type { Vector3Input } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { DynamicValue } from '../values/dynamicValue.types';
+import evaluateDynamicVector from '../values/evaluateDynamicVector3';
 
 export interface ScaleOverLifetimeOptions extends Partial<ModuleOptions> {
     scale: DynamicValue<Vector3Input>;
@@ -37,7 +37,7 @@ class ScaleOverLifetime extends Module {
       priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           particle.scale.assign(
-            particle.scale.mul(this.gpuParameters.vector(
+            particle.scale.mul(this.evaluateDynamicGPU.vector(
               'scale',
               () => this.options.scale,
               particle.time,
@@ -46,7 +46,7 @@ class ScaleOverLifetime extends Module {
             )),
           );
           particle.scalarVelocity.assign(
-            particle.scalarVelocity.add(this.gpuParameters.vector(
+            particle.scalarVelocity.add(this.evaluateDynamicGPU.vector(
               'scalarVelocity',
               () => this.options.scalarVelocity,
               particle.time,
@@ -55,7 +55,7 @@ class ScaleOverLifetime extends Module {
             )),
           );
           particle.scalarAcceleration.assign(
-            particle.scalarAcceleration.add(this.gpuParameters.vector(
+            particle.scalarAcceleration.add(this.evaluateDynamicGPU.vector(
               'scalarAcceleration',
               () => this.options.scalarAcceleration,
               particle.time,

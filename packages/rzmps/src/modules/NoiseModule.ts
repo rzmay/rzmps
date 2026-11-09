@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
-import Module, { type ModuleGPUUpdate, type ModuleOptions, type ModuleUpdate } from '../Module';
-import Particle from '../Particle';
-import type { GPUParticleLike } from '../gpu/Particle';
+import Module, { type ModuleGPUUpdate, type ModuleOptions, type ModuleUpdate } from '../core/Module';
+import Particle from '../core/Particle';
+import type { GPUParticleLike } from '../simulation/gpu/Particle';
 import {
   generateGPUParticleNoise,
   generateParticleNoise,
   type GPUParticleNoiseValues,
   type ParticleNoiseValues,
-} from '../helpers/noise';
+} from '../utils/noise.utils';
 
 export interface NoiseOptions extends Partial<ModuleOptions> {
     /** Number of noise layers; additional layers increase sampling work. Defaults to 1. */

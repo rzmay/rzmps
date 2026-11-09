@@ -36,5 +36,5 @@ jobs:
           script: |
             const { pathToFileURL } = require('node:url');
             const path = require('node:path');
-            const { reportBenchmarkProgress } = await import(pathToFileURL(path.resolve('scripts/report-benchmark-progress.mjs')).href);
+            const { reportBenchmarkProgress } = await import(pathToFileURL(path.resolve('scripts/benchmark/report-benchmark-progress.mjs')).href);
             await reportBenchmarkProgress({ github, context, core });

@@ -28,35 +28,79 @@ export function extractRegions(source, file = '<source>') {
   return regions;
 }
 
-function literal(node) {
-  if (ts.isStringLiteral(node)) return node.text;
-  if (ts.isArrayLiteralExpression(node)) return node.elements.map(literal);
+function literal(node, imports = new Map(), propertyPath = []) {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  if (ts.isNumericLiteral(node)) return Number(node.text);
+  if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
+  if (node.kind === ts.SyntaxKind.NullKeyword) return null;
+  if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken
+    && ts.isNumericLiteral(node.operand)) return -Number(node.operand.text);
+  if (ts.isIdentifier(node) && propertyPath.join('.') === 'previewSettings.scene') {
+    const reference = imports.get(node.text);
+    if (!reference) throw new Error('previewSettings.scene must reference an imported scene factory');
+    return reference;
+  }
+  if (ts.isArrayLiteralExpression(node)) return node.elements.map(value => literal(value, imports, propertyPath));
   if (ts.isObjectLiteralExpression(node)) return Object.fromEntries(node.properties.map(p => {
-    if (!ts.isPropertyAssignment(p)) throw new Error('Metadata must contain literal properties');
-    return [p.name.text, literal(p.initializer)];
+    if (!ts.isPropertyAssignment(p) && !ts.isShorthandPropertyAssignment(p)) throw new Error('Metadata must contain literal properties');
+    return [p.name.text, literal(ts.isShorthandPropertyAssignment(p) ? p.name : p.initializer, imports, [...propertyPath, p.name.text])];
   }));
-  if (ts.isSatisfiesExpression(node) || ts.isAsExpression(node)) return literal(node.expression);
-  throw new Error('Example metadata must be a static object of strings and arrays');
+  if (ts.isSatisfiesExpression(node) || ts.isAsExpression(node) || ts.isParenthesizedExpression(node)) {
+    return literal(node.expression, imports, propertyPath);
+  }
+  throw new Error('Example metadata must contain static literal values');
 }
+
+/** Discover metadata without executing browser modules or importing their asset URLs in Node. */
+export function readExampleMetadata(source, file = 'example.js') {
+  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  if (ast.parseDiagnostics.length) throw new Error(`${file}: invalid example source`);
+  const imports = new Map();
+  for (const statement of ast.statements.filter(ts.isImportDeclaration)) {
+    const module = statement.moduleSpecifier.text;
+    if (statement.importClause?.name) imports.set(statement.importClause.name.text, { module, export: 'default' });
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings)) for (const binding of bindings.elements) {
+      imports.set(binding.name.text, { module, export: binding.propertyName?.text ?? binding.name.text });
+    }
+  }
+  const factoryName = ast.statements.find(s => ts.isFunctionDeclaration(s)
+    && s.modifiers?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword))?.name?.text
+    ?? ast.statements.find(ts.isExportAssignment)?.expression.getText(ast);
+  const assignment = ast.statements.filter(ts.isExpressionStatement).map(s => s.expression)
+    .find(e => ts.isBinaryExpression(e) && ts.isPropertyAccessExpression(e.left)
+      && e.left.name.text === 'metadata' && e.left.expression.getText(ast) === factoryName);
+  if (!assignment) throw new Error(`${file}: missing factory.metadata`);
+  const metadata = literal(assignment.right, imports);
+  if (metadata.previewSettings != null && (typeof metadata.previewSettings !== 'object'
+    || Array.isArray(metadata.previewSettings))) throw new Error(`${file}: previewSettings must be an object`);
+  if (metadata.previewSettings?.scene != null && (typeof metadata.previewSettings.scene !== 'object'
+    || !metadata.previewSettings.scene.module)) {
+    throw new Error(`${file}: previewSettings.scene must reference an imported scene factory`);
+  }
+  return metadata;
+}
+
+export function exampleSourcePath(example) {
+  return path.join(root, 'examples', example.file);
+}
+
 export function discoverExamples() {
   const seen = new Set(), titles = new Set();
-  return fs.readdirSync(path.join(root, 'examples')).filter(f => /\.(js|ts)$/.test(f) && !['index.js','types.ts'].includes(f)).sort().map(file => {
+  return fs.readdirSync(path.join(root, 'examples/presets')).filter(f => /\.(js|ts)$/.test(f) && !['index.js','types.ts'].includes(f)).sort().map(filename => {
+    const file = 'presets/' + filename;
     const source = fs.readFileSync(path.join(root, 'examples', file), 'utf8');
     const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
     const hasDefault = ast.statements.some(s => ts.isExportAssignment(s) || (ts.isFunctionDeclaration(s) && s.modifiers?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword)));
     if (!hasDefault) throw new Error(`${file}: missing default example factory`);
-    const declaration = ast.statements.filter(ts.isVariableStatement).filter(s => s.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)).flatMap(s => [...s.declarationList.declarations]).find(d => d.name.getText(ast) === 'metadata');
-    if (!declaration?.initializer) throw new Error(`${file}: missing exported metadata`);
-    const metadata = literal(declaration.initializer);
+    const metadata = readExampleMetadata(source, file);
     for (const field of ['id','title','description','category']) if (typeof metadata[field] !== 'string' || !metadata[field].trim()) throw new Error(`${file}: invalid ${field}`);
     if (!/^[a-zA-Z][\w-]*$/.test(metadata.id) || seen.has(metadata.id) || titles.has(metadata.title)) throw new Error(`${file}: invalid or duplicate id/title`);
     if (!Array.isArray(metadata.tags) || !metadata.tags.length || metadata.tags.some(t => typeof t !== 'string' || !t.trim())) throw new Error(`${file}: invalid tags`);
-    const factoryName = ast.statements.find(s => ts.isFunctionDeclaration(s) && s.modifiers?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword))?.name?.text
-      ?? ast.statements.find(ts.isExportAssignment)?.expression.getText(ast);
-    const authorAssignment = ast.statements.filter(ts.isExpressionStatement).map(s => s.expression).find(e => ts.isBinaryExpression(e) && ts.isPropertyAccessExpression(e.left) && e.left.name.text === 'author' && e.left.expression.getText(ast) === factoryName);
-    const rawAuthor = authorAssignment ? literal(authorAssignment.right) : undefined;
+    const rawAuthor = metadata.author;
     const author = typeof rawAuthor === 'string' ? { name: rawAuthor, url: `https://github.com/${rawAuthor}` } : rawAuthor;
-    if (!author || typeof author.name !== 'string' || !author.name.trim() || (author.url && !/^https?:\/\//.test(author.url))) throw new Error(`${file}: provide literal factory.author metadata (username or {name, url})`);
+    if (!author || typeof author.name !== 'string' || !author.name.trim() || (author.url && !/^https?:\/\//.test(author.url))) throw new Error(`${file}: provide literal factory.metadata.author (username or {name, url})`);
     seen.add(metadata.id); titles.add(metadata.title);
     const regions = extractRegions(source, file);
     for (const [key] of sections) if (![...regions.keys()].some(n => n === key || n.startsWith(key + ':'))) throw new Error(`${file}: missing docs:${key} region`);

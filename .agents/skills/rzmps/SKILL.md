@@ -9,7 +9,7 @@ Inspect the installed package version and public exports before using a feature.
 
 Read [getting started](references/getting-started.md) for scene ownership and updates, [concepts](references/concepts.md) for lifecycle, priority, tags, spatial collections, and subsystem composition, and [GPU processing](references/concepts.md#gpu-processing-and-extension-development) before implementing TSL callbacks, readback, collision, or spatial-grid behavior. Search the [generated API](references/api.md) for signatures.
 
-Reuse a canonical factory from `examples/`; inspect [example explanations](references/examples.md) for its configuration rationale. Preserve the default factory and author metadata contracts. Add balanced documentation source regions and update the authored Markdown explanation, then run `npm run docs:generate` and `npm run docs:check`.
+Reuse a canonical factory from `examples/presets/`; inspect [example explanations](references/examples.md) for its configuration rationale. Preserve the default factory and `factory.metadata` contracts. Add balanced documentation source regions and update the authored Markdown explanation, then run `npm run docs:generate` and `npm run docs:check`.
 
 Check the selected renderer and custom material compatibility using [compatibility](references/compatibility.md). Build packages, run `npm run preview -- --example <id> --backend webgl`, and inspect the contact sheet and metadata. Repeat with webgpu when relevant; report unavailable backends explicitly. Adjust warmup, interval, or scene to capture the actual event. Technical success alone does not establish visual quality.
 

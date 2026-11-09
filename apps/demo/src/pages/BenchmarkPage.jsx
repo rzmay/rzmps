@@ -2,9 +2,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { selectBenchmarkCases, readBenchmarkOptions, updateBenchmarkSystem, benchmarkCaseId }
-  from '../../../../scripts/benchmark-selection.mjs';
-import { isBenchmarkMeasurementComplete } from '../../../../scripts/benchmark-payload.mjs';
-import { recordBenchmarkFrame } from '../../../../scripts/benchmark-measurement.mjs';
+  from '../../../../scripts/benchmark/benchmark-selection.mjs';
+import { isBenchmarkMeasurementComplete } from '../../../../scripts/benchmark/benchmark-payload.mjs';
+import { recordBenchmarkFrame } from '../../../../scripts/benchmark/benchmark-measurement.mjs';
 import * as THREE from 'three';
 import { If, vec3, vec4 } from 'three/tsl';
 import {
@@ -67,10 +67,10 @@ import {
   MaxCulling,
 } from '@rzmps/rzmps';
 import { Curve, NumberKeyframe } from 'curves';
-import createDopplerBullet from '../../../../examples/dopplerBullet.js';
-import createFireworks from '../../../../examples/fireworks.js';
-import createBoids from '../../../../examples/boids.js';
-import createSnow from '../../../../examples/snow.js';
+import dopplerBulletPreset from 'examples/presets/dopplerBullet.js';
+import fireworksPreset from 'examples/presets/fireworks.js';
+import boidsPreset from 'examples/presets/boids.js';
+import snowPreset from 'examples/presets/snow.js';
 
 const benchmarkOptions = readBenchmarkOptions(window.location.search);
 
@@ -437,7 +437,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     || suite === 'runtime-config'
     || suite === 'dynamic-spatial'
   ) {
-    ParticleSystem.GPU_READBACK_RATE = 0;
+    ParticleSystem.Settings.GPU_READBACK_RATE = 0;
   }
 
   if (gl.compute && !gl.__rzmpsBenchmarkComputeWrapped) {
@@ -480,8 +480,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
             spatialEffects: effects,
           }),
           beforeUpdate: (system) => {
-            const registry = system._gpuSpatialRegistry;
-            if (!system.__dynamicSpatialDiagnostics && registry && system._gpuSimulationComputeCache) {
+            const registry = system.gpuSimulation._gpuSpatialRegistry;
+            if (!system.__dynamicSpatialDiagnostics && registry && system.gpuSimulation._gpuSimulationComputeCache) {
               const diagnostics = {
                 baselinePipelineBuilds: system.gpuConfigurationStats.pipelineBuilds,
                 updateTimeMs: 0,
@@ -778,8 +778,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
           beforeUpdate: (system, elapsed) => {
             if (
               !system.__movingSpatialBaseline
-              && system._gpuSpatialRegistry
-              && system._gpuSimulationComputeCache
+              && system.gpuSimulation._gpuSpatialRegistry
+              && system.gpuSimulation._gpuSimulationComputeCache
             ) {
               system.__movingSpatialBaseline = system.gpuConfigurationStats.pipelineBuilds;
               system.spatialEffects[0].position.set(0, 0, 0);
@@ -848,7 +848,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
             });
           },
           beforeUpdate: (system) => {
-            if (!system._gpuBuffers || system.__automaticFeatherReadbackPromise) return;
+            if (!system.gpuSimulation._gpuBuffers || system.__automaticFeatherReadbackPromise) return;
             system.__automaticFeatherReadbackPromise = system.selectiveReadback(2)
               .then((results) => { system.__automaticFeatherReadback = results; });
           },
@@ -875,7 +875,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           requireGPU: true,
           minimumDurationMs: 3200,
           createSystem: async () => {
-            const system = await createBoids();
+            const system = await boidsPreset();
             system.gpuProcessing = true;
             return system;
           },
@@ -1191,7 +1191,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
         },
         validate: (system) => {
           const overflowCount = system.gpuEventStats.overflowCount;
-          const minimumOverflow = particleCount - ParticleSystem.GPU_EVENT_BUFFER_CAPACITY;
+          const minimumOverflow = particleCount - ParticleSystem.Settings.GPU_EVENT_BUFFER_CAPACITY;
           if (expectOverflow && overflowCount < minimumOverflow) {
             throw new Error(
               `Milestone 2 reported ${overflowCount} overflows; expected at least ${minimumOverflow}.`,
@@ -1202,7 +1202,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       return pairBenchmarkCases([
         deathEventCase(4096, 4096),
         {
-          ...deathEventCase(5000, ParticleSystem.GPU_EVENT_BUFFER_CAPACITY, true),
+          ...deathEventCase(5000, ParticleSystem.Settings.GPU_EVENT_BUFFER_CAPACITY, true),
           gpuOnly: true,
         },
       ]);
@@ -1244,8 +1244,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
             }, 0.65, 8, 4));
             system.__rzmpsAddedSpatialInstance = true;
           }
-          if (system._gpuSpatialRegistry && system.__rzmpsSpatialVersion === undefined) {
-            system.__rzmpsSpatialVersion = system._gpuSpatialRegistry.version;
+          if (system.gpuSimulation._gpuSpatialRegistry && system.__rzmpsSpatialVersion === undefined) {
+            system.__rzmpsSpatialVersion = system.gpuSimulation._gpuSpatialRegistry.version;
           }
         },
         validate: (system, mode) => {
@@ -1256,7 +1256,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           if (system.gpuSpatialStats.implementationTypes !== 1) {
             throw new Error('Milestone 3 expanded one force-field implementation into multiple types.');
           }
-          if (system._gpuSpatialRegistry?.version !== system.__rzmpsSpatialVersion) {
+          if (system.gpuSimulation._gpuSpatialRegistry?.version !== system.__rzmpsSpatialVersion) {
             throw new Error('Milestone 3 replaced GPU resources while adding an existing effect type.');
           }
           if (system.__rzmpsSimulationNodeBuilds !== 1) {
@@ -1309,7 +1309,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
             renderers: [new NoopRenderer()],
           });
           // Fix output capacity so the comparison measures executions rather than pool growth.
-          child._getInitialGPUBufferCapacity = () => count * 4;
+          child.gpuSimulation._getInitialGPUBufferCapacity = () => count * 4;
           system.addSubSystem(child, {
             emitContinuous: kind === 'live',
             onEvent: kind === 'events' ? ['pulse'] : undefined,
@@ -1325,17 +1325,17 @@ function BenchmarkScene({ onComplete, onProgress }) {
             || child.particles.length || system.gpuEventStats.readbackCount || child.gpuEventStats.readbackCount)) {
             throw new Error('Emitter instances must stay GPU-native without event readback.');
           }
-          const runtime = kind === 'live' ? child._gpuContinuousEmitterInstances : child._gpuEventEmitterInstances;
+          const runtime = kind === 'live' ? child.gpuSimulation._gpuContinuousEmitterInstances : child.gpuSimulation._gpuEventEmitterInstances;
           system.__emitterInstanceDiagnostics = {
             childCapacity: child.gpuBufferStats.allocated,
             instanceCapacity: runtime?.capacity ?? 0,
             instanceBufferBytes: runtime ? runtime.floatAttribute.array.byteLength
               + runtime.uintAttribute.array.byteLength + runtime.runtimeCounterAttribute.array.byteLength : 0,
-            snapshotBufferBytes: child._gpuEmissionRuns
-              ? child._gpuEmissionRuns.snapshots.attributes.floatData.array.byteLength
-                + child._gpuEmissionRuns.snapshots.attributes.uintData.array.byteLength : 0,
-            particleBufferBytes: child._gpuBuffers ? child._gpuBuffers.attributes.floatData.array.byteLength
-              + child._gpuBuffers.attributes.uintData.array.byteLength : 0,
+            snapshotBufferBytes: child.gpuSimulation._gpuEmissionRuns
+              ? child.gpuSimulation._gpuEmissionRuns.snapshots.attributes.floatData.array.byteLength
+                + child.gpuSimulation._gpuEmissionRuns.snapshots.attributes.uintData.array.byteLength : 0,
+            particleBufferBytes: child.gpuSimulation._gpuBuffers ? child.gpuSimulation._gpuBuffers.attributes.floatData.array.byteLength
+              + child.gpuSimulation._gpuBuffers.attributes.uintData.array.byteLength : 0,
             childConfiguration: child.gpuConfigurationStats,
             childEvents: child.gpuEventStats,
           };
@@ -1436,14 +1436,14 @@ function BenchmarkScene({ onComplete, onProgress }) {
           if (system.particles.length !== 0 || children.some((child) => child.particles.length !== 0)) {
             throw new Error('Milestone 4 created CPU Particle objects for GPU-native emission.');
           }
-          if (!system._gpuBuffers || children.some((child) => !child._gpuBuffers)) {
+          if (!system.gpuSimulation._gpuBuffers || children.some((child) => !child.gpuSimulation._gpuBuffers)) {
             throw new Error('Milestone 4 did not initialize every GPU-native particle pool.');
           }
           if (
-            !children[0]._gpuContinuousEmitterInstances
-            || !children[0]._gpuEventEmitterInstances
-            || !children[1]._gpuEmissionRuns
-            || !children[2]._gpuEmissionRuns
+            !children[0].gpuSimulation._gpuContinuousEmitterInstances
+            || !children[0].gpuSimulation._gpuEventEmitterInstances
+            || !children[1].gpuSimulation._gpuEmissionRuns
+            || !children[2].gpuSimulation._gpuEmissionRuns
           ) {
             throw new Error('Milestone 4 did not initialize mixed contexts and nested persistent event runs.');
           }
@@ -1455,7 +1455,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
         name: 'Milestone 4 actual fireworks',
         particleCount: 0,
         minimumDurationMs: 3500,
-        createSystem: () => createFireworks(),
+        createSystem: () => fireworksPreset(),
         configure: (system) => {
           system.__rzmpsBenchmarkSpawnEvents = 0;
           system.__rzmpsBenchmarkDeathEvents = 0;
@@ -1472,7 +1472,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           const children = [...system.subSystems.keys()];
           const smoke = children.find((child) => child.name === 'Rocket Smoke');
           const sparkles = children.find((child) => child.name === 'Sparkles');
-          if (!smoke?._gpuContinuousEmitterInstances || !sparkles?._gpuEmissionRuns) {
+          if (!smoke?.gpuSimulation._gpuContinuousEmitterInstances || !sparkles?.gpuSimulation._gpuEmissionRuns) {
             throw new Error('Actual fireworks did not use GPU smoke contexts and sparkle runs.');
           }
           if (system.particles.length || smoke.particles.length || sparkles.particles.length) {
@@ -1490,7 +1490,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
         name: 'Doppler Bullet offset emission',
         particleCount: 0,
         minimumDurationMs: 3000,
-        createSystem: () => createDopplerBullet(),
+        createSystem: () => dopplerBulletPreset(),
         configure: (system) => {
           system.__rzmpsBenchmarkSpawnPositions = [];
           system.onSpawn((particle) => {
@@ -1528,10 +1528,10 @@ function BenchmarkScene({ onComplete, onProgress }) {
         }),
         beforeUpdate: (system) => {
           const emitter = system.emitters[0];
-          if (!system.__rzmpsRuntimeBaseline && system._gpuEmissionPrepareComputeCache) {
+          if (!system.__rzmpsRuntimeBaseline && system.gpuSimulation._gpuEmissionPrepareComputeCache) {
             system.__rzmpsRuntimeBaseline = {
               ...system.gpuConfigurationStats,
-              node: system._gpuEmissionPrepareComputeCache.nodes[0],
+              node: system.gpuSimulation._gpuEmissionPrepareComputeCache.nodes[0],
             };
             emitter.rate = 80;
             emitter.rateOverDistance = 3;
@@ -1550,7 +1550,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
             if (current.parameterUploads <= baseline.parameterUploads) {
               throw new Error('Numeric runtime parameters were not uploaded.');
             }
-            if (system._gpuEmissionPrepareComputeCache.nodes[0] !== baseline.node) {
+            if (system.gpuSimulation._gpuEmissionPrepareComputeCache.nodes[0] !== baseline.node) {
               throw new Error('Numeric emitter parameters replaced the emission graph.');
             }
             system.__rzmpsRuntimeNumericVerified = true;
@@ -1561,7 +1561,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
           if (system.__rzmpsRuntimeNumericVerified && !system.__rzmpsRuntimeStructuralVerified) {
             const baseline = system.__rzmpsRuntimeBaseline;
             if (system.gpuConfigurationStats.pipelineBuilds <= baseline.pipelineBuilds) return;
-            if (system._gpuEmissionPrepareComputeCache.nodes[0] === baseline.node) {
+            if (system.gpuSimulation._gpuEmissionPrepareComputeCache.nodes[0] === baseline.node) {
               throw new Error('Structural emitter change retained the stale emission graph.');
             }
             system.__rzmpsRuntimeStructuralVerified = true;
@@ -1579,7 +1579,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
         requireGPU: false,
         minimumDurationMs: 3600,
         createSystem: async () => {
-          const system = await createSnow();
+          const system = await snowPreset();
           configureHierarchyGPU(system, true);
           return system;
         },
@@ -1613,7 +1613,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
                 })
                 .finally(() => { system.__rzmpsSnowReadbackPromise = undefined; });
             }
-            const renderBuffer = system._gpuRenderOutputBuffers;
+            const renderBuffer = system.gpuSimulation._gpuRenderOutputBuffers;
             if (
               renderBuffer
               && !system.__rzmpsSnowRenderReadback
@@ -1637,7 +1637,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
         },
         validate: (system) => {
           const renderer = system.renderers[0];
-          const expectedBuffer = system._gpuRenderOutputBuffers ?? system._gpuBuffers;
+          const expectedBuffer = system.gpuSimulation._gpuRenderOutputBuffers ?? system.gpuSimulation._gpuBuffers;
           if (!system.__rzmpsSnowSwitchedBack || !system.isGPUProcessingActive) {
             throw new Error('Snow did not return to GPU processing after reset.');
           }
@@ -1959,15 +1959,15 @@ function BenchmarkScene({ onComplete, onProgress }) {
     system.__rzmpsSimulationNodeBuilds = 0;
     const sceneObjects = nextCase.configureScene?.(scene) ?? [];
 
-    const originalSimulationPhase = system._computeGPUSimulationPhase.bind(system);
-    system._computeGPUSimulationPhase = (...args) => {
+    const originalSimulationPhase = system.gpuSimulation._computeGPUSimulationPhase.bind(system.gpuSimulation);
+    system.gpuSimulation._computeGPUSimulationPhase = (...args) => {
       system.__rzmpsBenchmarkComputeDispatches += 1;
       system.__rzmpsBenchmarkSimulationDispatches += 1;
       return originalSimulationPhase(...args);
     };
 
-    const originalRenderOutputPhase = system._computeGPURenderOutputPhase.bind(system);
-    system._computeGPURenderOutputPhase = (...args) => {
+    const originalRenderOutputPhase = system.gpuSimulation._computeGPURenderOutputPhase.bind(system.gpuSimulation);
+    system.gpuSimulation._computeGPURenderOutputPhase = (...args) => {
       system.__rzmpsBenchmarkComputeDispatches += 1;
       system.__rzmpsBenchmarkRenderOutputDispatches += 1;
       return originalRenderOutputPhase(...args);
@@ -2022,7 +2022,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     } catch (error) {
       fail(error);
     }
-    const simulationNode = active.current.system._gpuSimulationComputeCache?.node;
+    const simulationNode = active.current.system.gpuSimulation._gpuSimulationComputeCache?.node;
     if (simulationNode && !active.current.simulationNodes.has(simulationNode)) {
       active.current.simulationNodes.add(simulationNode);
       active.current.simulationNodeBuilds += 1;
