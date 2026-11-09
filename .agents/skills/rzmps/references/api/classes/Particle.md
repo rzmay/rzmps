@@ -208,16 +208,6 @@ position: Vector3;
 
 ***
 
-<a id="realtime"></a>
-
-### realtime
-
-```ts
-realtime: number;
-```
-
-***
-
 <a id="rotation"></a>
 
 ### rotation
@@ -417,6 +407,38 @@ set materialCopyV(value): void;
 ###### value
 
 `Vector4`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="realtime"></a>
+
+### realtime
+
+#### Get Signature
+
+```ts
+get realtime(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set realtime(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
 
 ##### Returns
 

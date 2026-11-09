@@ -22,8 +22,9 @@ const matches = base.results.flatMap((baseResult) => {
 
   // Benchmark cases were originally CPU-only and had no mode suffix. Preserve
   // comparisons with those revisions by matching them to the newer CPU case.
-  const cpuName = `${baseResult.name} [CPU]`;
-  const cpu = headByName.get(cpuName);
+  const legacyName = baseResult.name.endsWith(' [CPU]') ? baseResult.name.slice(0, -6) : baseResult.name;
+  const cpuName = `${legacyName} [CPU]`;
+  const cpu = headByName.get(baseResult.name.endsWith(' [CPU]') ? legacyName : cpuName);
   return cpu ? [{ base: baseResult, head: cpu, name: cpuName }] : [];
 });
 const sharedNames = matches.map((match) => match.name);
@@ -45,6 +46,7 @@ base.results = matches.map(({ base: result, name }) => ({ ...result, name }));
 head.results = matches.map(({ head: result, name }) => ({ ...result, name }));
 
 for (const payload of [base, head]) {
+  validateBenchmark(payload);
   payload.metadata.caseIntersection = {
     compared: sharedNames,
     baseOnly,

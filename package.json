@@ -10,6 +10,7 @@
     "dev": "npm run docs:generate -- --skip-previews && npm run build:modules && concurrently -k \"npm run dev --workspace @rzmps/rzmps\" \"npm run dev --workspace @rzmps/ammo\" \"npm run dev --workspace @rzmps/jolt\" \"npm run dev --workspace @rzmps/rapier\" \"node scripts/site/dev.mjs\"",
     "test": "npm test --workspace @rzmps/rzmps",
     "build:modules": "npm run build --workspace @rzmps/rzmps && npm run build --workspace @rzmps/ammo && npm run build --workspace @rzmps/jolt && npm run build --workspace @rzmps/rapier",
+    "test:benchmarks": "node --test scripts/benchmark.test.mjs scripts/benchmark-selection.test.mjs scripts/benchmark-progress.test.mjs",
     "benchmark:run": "npm --workspace demo run benchmark:run --",
     "benchmark:update-report": "node scripts/update-benchmark-report.mjs",
     "benchmark:export": "node scripts/update-benchmark-report.mjs --json-only",

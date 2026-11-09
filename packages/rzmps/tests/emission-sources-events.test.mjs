@@ -396,8 +396,8 @@ test("default parent scope excludes an emitter's own dying particles", () => {
 
 test('shared emitter definitions keep owner clocks, bursts, restart and disposal independent', () => {
   const emitter = new Emitter({ rate: 4, bursts: { time: 0, count: 1 }, initialValues: { lifetime: 20 } });
-  const first = new ParticleSystem({ emitters: [emitter], renderers: [], gravityModifier: 0 });
-  const second = new ParticleSystem({ emitters: [emitter], renderers: [], gravityModifier: 0 });
+  const first = new ParticleSystem({ emitters: [emitter], renderers: [], gravityModifier: 0, substep: false });
+  const second = new ParticleSystem({ emitters: [emitter], renderers: [], gravityModifier: 0, substep: false });
   first.advanceFrames(2, 1 / 4);
   second.advanceFrames(1, 1 / 4);
   assert.equal(first.particles.length, 2);
@@ -414,6 +414,7 @@ test('shared emitter definitions keep owner clocks, bursts, restart and disposal
 
 test('live instances reuse their clock while definition changes affect every selected source', () => {
   const system = root();
+  system.substep = false;
   const first = origin(system, { tags: ['pool'] });
   const second = origin(system, { tags: ['pool'] });
   const emitter = new Emitter({ sources: { tags: ['pool'] }, rate: 4, initialValues: { lifetime: 20 } });

@@ -97,6 +97,53 @@ addRequestCount(value): void;
 
 ***
 
+<a id="birthoffset"></a>
+
+### birthOffset()
+
+```ts
+birthOffset(claim, burstCount): Node<"float">;
+```
+
+#### Parameters
+
+##### claim
+
+`Node`\<`"uint"`\>
+
+##### burstCount
+
+`number`
+
+#### Returns
+
+`Node`\<`"float"`\>
+
+***
+
+<a id="birthschedule"></a>
+
+### birthSchedule()
+
+```ts
+birthSchedule(group): Node<"vec4">;
+```
+
+Per-step request groups live in the existing emitter buffer, never particle storage.
+[exclusive request end, first birth offset, interval, unused].
+
+#### Parameters
+
+##### group
+
+`number`
+
+#### Returns
+
+`Node`\<`"vec4"`\>
+
+***
+
 <a id="claimcount"></a>
 
 ### claimCount()

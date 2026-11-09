@@ -10,6 +10,7 @@ import Particle, { type ParticleInitializationContext, type GPUParticleInitializ
 import type { InitialParticleValues } from './interfaces/InitialParticleValues';
 import evaluateDynamicVector from './helpers/evaluateDynamicVector3';
 import evaluateDynamicNumber from './helpers/evaluateDynamicNumber';
+import maxDynamicNumber from './helpers/maxDynamicNumber';
 import evaluateDynamicColor from './helpers/evaluateDynamicColor';
 import acceptMultiple from './helpers/acceptMultiple';
 import ParticleSystem from './ParticleSystem';
@@ -98,6 +99,8 @@ export interface EmissionContext extends Omit<ParticleInitializationContext, 'sy
   source?: import('./EmissionSource').SubSystemSource;
   /** Stable identity of this emitter execution. */
   key: string;
+  /** @internal Simulation step duration in seconds. */
+  deltaTime?: number;
   transform: THREE.Matrix4;
   position: THREE.Vector3;
   time: number;
@@ -131,6 +134,8 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
   emitterRuntime?: GPUEmitterInstanceRuntime;
   durationNode?: Node<'float'>;
   normalizedTimeNode?: Node<'float'>;
+  loopingClock?: boolean;
+  skippedClockWrapNode?: Node<'float'>;
   countScaleNode?: Node<'float'>;
   emitterPositionNode?: Node<'vec3'>;
   parentParticle?: GPUParticleLike;
@@ -139,6 +144,7 @@ export interface GPUEmitterUpdateContext extends GPUParticleUpdateContext {
   resolveParentParticle?: (claimIndex: Node<'uint'>) => GPUParticleLike;
   resolveDistortionStrength?: (claimIndex: Node<'uint'>) => Node<'float'>;
   resolveEmissionTransform?: (claimIndex: Node<'uint'>) => Node<'mat4'>;
+  resolveBirthOffset?: (claimIndex: Node<'uint'>) => Node<'float'>;
   resolveEmissionTime?: (claimIndex: Node<'uint'>) => Node<'float'>;
   resolveImpulseEffects?: (claimIndex: Node<'uint'>) => {
     scale: Node<'float'>;
@@ -672,6 +678,9 @@ class Emitter extends EventReceiver {
           ...context, source: parent, ...context.resolveInitializationContext?.(claimIndex),
         });
         context.allocationWriter?.markSpawned(particle);
+        // Hooks and spawn snapshots see age zero. Only packed storage carries the offset.
+        particle.birthOffset?.assign((context.resolveBirthOffset?.(claimIndex)
+          ?? runtime.birthOffset(claimIndex, this.bursts.length)).clamp(0, context.deltaTimeNode));
       };
 
       if (context.reclaimOld) {
@@ -702,12 +711,59 @@ class Emitter extends EventReceiver {
     const runtime = context.emitterRuntime;
     if (!runtime) return;
 
-    const elapsedTime = context.elapsedTimeNode;
+    const elapsedTime = context.elapsedTimeNode.toVar('emitterElapsedTime');
     const duration = context.durationNode ?? float(Math.max(context.system.duration, Number.EPSILON));
+    const safeDuration = duration.max(float(Number.EPSILON));
     const normalizedTime = context.normalizedTimeNode
-      ?? elapsedTime.div(duration.max(float(Number.EPSILON)));
+      ?? (context.loopingClock ? elapsedTime.mod(safeDuration) : elapsedTime).div(safeDuration);
     const emissionMultiplier = this._gpuQuality.mul((context.countScaleNode ?? float(1)).max(0));
+    const skipped = context.skippedTimeNode ?? float(0);
+    If(skipped.greaterThan(0), () => {
+      const wrap = context.skippedClockWrapNode ?? float(0);
+      const skipEnd = elapsedTime.sub(context.deltaTimeNode).toVar('skipEnd');
+      const skipTime = (context.loopingClock ? skipEnd.mod(safeDuration) : skipEnd).div(safeDuration);
+      const crossedCycle = (context.loopingClock
+        ? skipEnd.div(safeDuration).floor().notEqual(runtime.timing.w.div(safeDuration).floor())
+        : wrap.greaterThan(0)).toVar('skipCrossedCycle');
+      If(runtime.identity.x.equal(uint(0)), () => {
+        runtime.timing.y.assign(skipEnd.add(wrap).sub(skipped).max(0));
+        runtime.identity.x.assign(uint(1));
+      });
+      const rate = this._gpuParameters.number('rate', () => this.rate, skipTime, 0,
+        uint(context.emitterIndex * 4099)).mul(emissionMultiplier);
+      If(rate.greaterThan(0), () => {
+        const due = skipEnd.add(wrap).sub(runtime.timing.y).mul(rate).add(1e-6).floor().max(0);
+        runtime.timing.y.addAssign(due.div(rate));
+      }).Else(() => { runtime.timing.y.assign(skipEnd.add(wrap)); });
+      runtime.timing.y.subAssign(wrap);
+      runtime.timing.w.assign(skipEnd);
+      runtime.timing.z.assign(0);
+      runtime.distance.xyz.assign(context.emitterPositionNode ?? vec3(0));
+      runtime.distance.w.assign(0);
+      runtime.setPendingRequestCount(0);
+      for (let word = 0; word < Math.ceil(this.bursts.length / 32); word += 1) {
+        If(wrap.greaterThan(0).or(crossedCycle), () => { runtime.firedBurstWord(word).assign(uint(0)); });
+      }
+      this.bursts.forEach((_burst, index) => {
+        const burstTime = this._gpuParameters.number(`burst.${index}.time`,
+          () => this.bursts[index]?.time, skipTime, 0);
+        If(burstTime.lessThanEqual(skipTime), () => {
+          const word = runtime.firedBurstWord(Math.floor(index / 32));
+          word.assign(bitOr(word, shiftLeft(uint(1), uint(index % 32))));
+        });
+      });
+    });
+    if (context.loopingClock) {
+      If(elapsedTime.div(safeDuration).floor().notEqual(runtime.timing.w.div(safeDuration).floor()), () => {
+        for (let word = 0; word < Math.ceil(this.bursts.length / 32); word += 1) {
+          runtime.firedBurstWord(word).assign(uint(0));
+        }
+      });
+    }
     const requestCount = runtime.pendingRequestCount().toVar('emitterRequestCount');
+    runtime.birthSchedule(0).assign(vec4(float(requestCount), 0, 0, 0));
+    const firstBirth = float(0).toVar('firstBirth');
+    const birthInterval = float(0).toVar('birthInterval');
     const resetContext = runtime.identity.x.equal(uint(0))
       .or(elapsedTime.lessThan(runtime.timing.w))
       .toVar('resetEmitterContext');
@@ -718,21 +774,24 @@ class Emitter extends EventReceiver {
         runtime.setPendingRequestCount(0);
         runtime.identity.x.assign(uint(1));
         runtime.timing.x.assign(elapsedTime);
-        runtime.timing.y.assign(elapsedTime);
+        runtime.timing.y.assign(runtime.timing.x);
         runtime.timing.z.assign(float(0));
         runtime.distance.w.assign(float(0));
         runtime.distance.xyz.assign(context.emitterPositionNode ?? vec3(0, 0, 0));
         for (let wordIndex = 0; wordIndex < Math.ceil(this.bursts.length / 32); wordIndex += 1) {
           runtime.firedBurstWord(wordIndex).assign(uint(0));
         }
-      }).Else(() => {
+      });
+      {
         const rate = this._gpuParameters.number(
           'rate', () => this.rate, normalizedTime, 0, uint(context.emitterIndex * 4099),
         )
           .mul(emissionMultiplier);
         If(rate.greaterThan(float(0)), () => {
           const emissionCredit = elapsedTime.sub(runtime.timing.y).mul(rate);
-          const due = emissionCredit.floor();
+          const due = emissionCredit.add(1e-6).floor().max(0);
+          birthInterval.assign(float(1).div(rate));
+          firstBirth.assign(runtime.timing.y.add(birthInterval).sub(elapsedTime.sub(context.deltaTimeNode)));
           requestCount.addAssign(uint(due));
           If(due.greaterThan(float(0)), () => {
             runtime.timing.y.addAssign(due.div(rate));
@@ -740,7 +799,8 @@ class Emitter extends EventReceiver {
         }).Else(() => {
           runtime.timing.y.assign(elapsedTime);
         });
-      });
+      }
+      runtime.birthSchedule(1).assign(vec4(float(requestCount), firstBirth, birthInterval, 0));
 
       const rateOverDistance = this._gpuParameters.number(
         'rateOverDistance',
@@ -765,6 +825,7 @@ class Emitter extends EventReceiver {
         });
       }
 
+      runtime.birthSchedule(2).assign(vec4(float(requestCount), 0, 0, 0));
       this.bursts.forEach((burst, burstIndex) => {
         const burstWord = runtime.firedBurstWord(Math.floor(burstIndex / 32));
         const bit = shiftLeft(uint(1), uint(burstIndex % 32));
@@ -782,6 +843,10 @@ class Emitter extends EventReceiver {
           runtime.distance.w.assign(burstCredit.sub(due));
           burstWord.assign(bitOr(burstWord, bit));
         });
+        runtime.birthSchedule(burstIndex + 3).assign(vec4(float(requestCount),
+          burstTime.mul(duration).add(context.loopingClock
+            ? elapsedTime.div(safeDuration).floor().mul(duration) : float(0))
+            .sub(elapsedTime.sub(context.deltaTimeNode)).max(0), 0, 0));
       });
     }
 
@@ -929,6 +994,48 @@ class Emitter extends EventReceiver {
     particleSystem.add(this.source);
   }
 
+  /** Returns a sampled maximum initial lifetime, or null when no finite sample is readable.
+   * Functional values use GPU_DYNAMIC_VALUE_RESOLUTION samples over normalized time;
+   * their maximum is approximate and can miss peaks between samples. */
+  getMaxLifetime(): number | null {
+    const maximum = maxDynamicNumber(this.initialValues.lifetime ?? 1,
+      ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION, Number.NaN);
+    return Number.isFinite(maximum) ? maximum : null;
+  }
+
+  /** @internal Moves an execution past discarded time without births or deferred credit. */
+  advanceClock(context: Partial<EmissionContext>, system: ParticleSystem,
+    instance: EmitterInstance, discarded: number, clockWrap = 0): void {
+    this.normalizeBurstTimes();
+    const end = (context.elapsedTime ?? instance.elapsed) + clockWrap;
+    const duration = context.duration ?? system.duration;
+    const looping = context.looping ?? system.looping;
+    const time = context.time ?? (duration > 0 ? (looping ? end % duration : end) / duration : 1);
+    if (instance.startTime === undefined) {
+      instance.startTime = Math.max(0, end - discarded) * 1000;
+      instance.lastSpawn = instance.startTime;
+    }
+    const rate = evaluateDynamicNumber(this.rate, time) * system.quality * Math.max(0, context.countScale ?? 1);
+    if (rate > 0) {
+      const interval = 1000 / rate;
+      const count = Math.max(0, Math.floor((end * 1000 - instance.lastSpawn) / interval + 1e-9));
+      instance.lastSpawn += count * interval;
+    } else instance.lastSpawn = end * 1000;
+    instance.lastSpawn -= clockWrap * 1000;
+    instance.startTime -= clockWrap * 1000;
+    const cycle = duration > 0 && looping ? Math.floor(end / duration) : 0;
+    if (clockWrap > 0 || (instance.cycle !== undefined && instance.cycle !== cycle)) {
+      instance.firedBursts.clear();
+    }
+    instance.cycle = clockWrap > 0 ? 0 : cycle;
+    this.bursts.forEach((burst, index) => {
+      if (burst.time <= time) instance.firedBursts.add(index);
+    });
+    instance.distanceCredit = 0;
+    instance.burstCredit = 0;
+    instance.lastDistancePosition = this._getDistancePosition(context)?.clone();
+  }
+
   /** Emits births for the supplied simulation context and returns the newly created particles. */
   update(particles: Particle[], context: Partial<EmissionContext>, particleSystem: ParticleSystem): Particle[];
   /** @internal The coordinator can reuse its resolved instance without another identity lookup. */
@@ -943,6 +1050,7 @@ class Emitter extends EventReceiver {
   ): Particle[] {
     const state = instance ?? this.getInstance(particleSystem, context.key ?? '__default');
     const now = Date.now();
+    const step = context.deltaTime ?? 0;
     this.normalizeBurstTimes();
     const elapsedMilliseconds = context.elapsedTime === undefined
       ? undefined
@@ -979,20 +1087,23 @@ class Emitter extends EventReceiver {
     const emissionMultiplier = particleSystem.quality * Math.max(0, context.countScale ?? 1);
     const rate = evaluateDynamicNumber(this.rate, time) * emissionMultiplier;
     if (emissionMultiplier <= 0) state.lastSpawn = elapsedMilliseconds ?? now;
+    if (rate <= 0) state.lastSpawn = elapsedMilliseconds ?? now;
     if (rate > 0) {
       const secondsPerParticle = 1000 / rate;
       const spawnClock = elapsedMilliseconds ?? now;
-      const particlesDue = Math.floor((spawnClock - state.lastSpawn) / secondsPerParticle);
+      const particlesDue = Math.floor((spawnClock - state.lastSpawn) / secondsPerParticle + 1e-9);
 
       for (let i = 0; i < particlesDue; i += 1) {
         const particle = this.spawnParticle(particles, time, context, particleSystem);
 
-        if (particle) spawned.push(particle);
+        if (particle) {
+          particle.realtime = -Math.max(0, Math.min(step * 1000,
+            state.lastSpawn + (i + 1) * secondsPerParticle - (spawnClock - step * 1000)));
+          spawned.push(particle);
+        }
       }
 
-      if (particlesDue > 0) {
-        state.lastSpawn = emissionMultiplier === 1 ? spawnClock : state.lastSpawn + particlesDue * secondsPerParticle;
-      }
+      if (particlesDue > 0) state.lastSpawn += particlesDue * secondsPerParticle;
     }
 
     const rateOverDistance = evaluateDynamicNumber(this.rateOverDistance, time) * emissionMultiplier;
@@ -1026,7 +1137,12 @@ class Emitter extends EventReceiver {
         state.burstCredit = requested - count;
         for (let i = 0; i < Math.floor(count); i += 1) {
           const particle = this.spawnParticle(particles, time, context, particleSystem);
-          if (particle) spawned.push(particle);
+          if (particle) {
+            const scheduled = burst.time * duration;
+            const cycleStart = explicitLoopClock ? Math.floor(elapsedTime / duration) * duration : 0;
+            particle.realtime = -Math.max(0, Math.min(step, cycleStart + scheduled - (elapsedTime - step))) * 1000;
+            spawned.push(particle);
+          }
         }
         state.firedBursts.add(index);
       }

@@ -1132,6 +1132,24 @@ Returns feature and incompatibility details for GPU-native emission.
 
 ***
 
+<a id="getmaxlifetime"></a>
+
+### getMaxLifetime()
+
+```ts
+getMaxLifetime(): number | null;
+```
+
+Returns a sampled maximum initial lifetime, or null when no finite sample is readable.
+Functional values use GPU_DYNAMIC_VALUE_RESOLUTION samples over normalized time;
+their maximum is approximate and can miss peaks between samples.
+
+#### Returns
+
+`number` \| `null`
+
+***
+
 <a id="reset"></a>
 
 ### reset()

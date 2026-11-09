@@ -2,8 +2,8 @@
   "generatedBy": "npm run docs:previews",
   "examples": {
     "acid": {
-      "inputHash": "f18a91ff6108f30087126046e79a6ac78fb47e5fdd0bdaa693c4dc9c8783e150",
-      "imageHash": "7949ff4bac5c25beab659bc21fb82a5046c75102463cb905be47c7ef725f41e4",
+      "inputHash": "d2f1432e942e05c79f36e84db73570bf908773d4c1feebcc614dfb07c6939213",
+      "imageHash": "edfa2d0dae274ca1c03e4cb51cc0b34fa7cc43c375f482327451e2bdcb25dc84",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -31,7 +31,7 @@
             "name": "Pool Smoke",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 36,
+            "simulated": 39,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -49,7 +49,7 @@
             "name": "Pool Bubbles",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 6,
+            "simulated": 7,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -66,7 +66,7 @@
         ],
         "time": 15,
         "step": 900,
-        "particles": 43,
+        "particles": 47,
         "simulationSpeed": 1,
         "simulatedSeconds": 15
       },
@@ -86,8 +86,8 @@
       "warnings": []
     },
     "additiveSmoke": {
-      "inputHash": "22741e5db729eae51efb3233cc23409af6705bb9ff27f4753279e2e34c0f6045",
-      "imageHash": "6c5344b3e3c8f2960594eacafe8be8839e9b233d0a962c756e27c0661f0e35f7",
+      "inputHash": "61a399e533107110c1e37f270b9fc74d13c5ab3e205e9dc7e9e798b35c67dd24",
+      "imageHash": "c7f00b0d2a5461d1603313ba299e9aa16693db7953860156795b7591f5c801e9",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -97,7 +97,7 @@
             "name": "Smoke",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 89,
+            "simulated": 107,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -114,7 +114,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 89,
+        "particles": 107,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -134,8 +134,8 @@
       "warnings": []
     },
     "boids": {
-      "inputHash": "576b3cc5ac221c48dff337edec75cb65a44934595c4bf97a730c36b3b7ade243",
-      "imageHash": "3a4ef98cc1c7109351229a1a244f7209c4e335490209389547ee5a525e68b715",
+      "inputHash": "74576d520800c311332afd8a4117c2959c28c5a6d6056c6d3dc14213bd3a159b",
+      "imageHash": "608a0876bb475d672e3aad91e2b1d1d019024c6df4ec2703981dca8496a5c402",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -145,7 +145,7 @@
             "name": "Boids",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 94,
+            "simulated": 118,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -162,7 +162,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 94,
+        "particles": 118,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -182,8 +182,8 @@
       "warnings": []
     },
     "bubbles": {
-      "inputHash": "ecc9ee87c3c8c716492809099d5825c2af52f511bd9659f41511cfa7d4142460",
-      "imageHash": "81ddbb89d0ecfaf1eeb4f3727f9bc830e177fc827d03d1502fe9ac49a6007dec",
+      "inputHash": "c2e1d320980e2a44a99e2b96717fefdc78b989d0009810689709320266eb7e55",
+      "imageHash": "0e736147bed9442a7d9b20d83762edfc03e53ca9969ef2b10863ad75d2663fa6",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -230,8 +230,8 @@
       "warnings": []
     },
     "collision": {
-      "inputHash": "0a25510d50b6c6198757079cba4655bd70db84a4b1cd85f4af69c28bf2fcedfa",
-      "imageHash": "4c1268adecdd3bc0e4f7e6a20a802e0c16dc8bc63668614c31b41f02019f5115",
+      "inputHash": "9747a61073f7dd0afcf9de3be30ba20fa0b68ef50cdde94e9cdbcbd5f0a24d10",
+      "imageHash": "6387eafaf0d13c3963e9f69abab159b002c58b50d28dd0b00c48e8e610b677f6",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -241,7 +241,7 @@
             "name": "Collision",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 70,
+            "simulated": 89,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -258,7 +258,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 70,
+        "particles": 89,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -278,8 +278,8 @@
       "warnings": []
     },
     "collisionSubEmitters": {
-      "inputHash": "6391f19e4488268140e05bdb7f1b2438dea87460ff3b981858349ae8c4ee8a5d",
-      "imageHash": "e395b8daef5d2e611941abbe91f123af63cb0a99a0062e90acbcd4f585297617",
+      "inputHash": "b00a51e28816b27f442a9c58f2f08dcccae38ccc4fe3a0c8afbbbb9f4728fee2",
+      "imageHash": "0abf4008a17ca5a5a8cb3ba23b5bdd4a5c10484fbc0c817a48c196a089952d8b",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -307,7 +307,7 @@
             "name": "Metal Ball Sparks",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 18,
+            "simulated": 8,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -324,7 +324,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 32,
+        "particles": 22,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -344,8 +344,8 @@
       "warnings": []
     },
     "cubes": {
-      "inputHash": "04520a838ae97aa60299dfad5af25de002af966c9c23e2bfe5bf8d046b62bdc8",
-      "imageHash": "2d9fa0a1691a7e738b347ceee63b33f0bb4005dba1329e3908ad14c622db4ffa",
+      "inputHash": "701807f856391b892b1dba3246fb7daabe983235e9171dc40e3c21b29d09850e",
+      "imageHash": "97bda36bd717446b026aeae69703d2ee955209cdd12ca57ef55ff2e4e984a1ba",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -355,7 +355,7 @@
             "name": "Spheres",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 31,
+            "simulated": 35,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -372,7 +372,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 31,
+        "particles": 35,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -392,8 +392,8 @@
       "warnings": []
     },
     "destruction": {
-      "inputHash": "00f05320948a629608076dfcb907b1af6b15a0b052e3b8a74644e7de2a920d9f",
-      "imageHash": "d219eb8fca4752ebc85da411a8d560efcbbc4b5b3368d9c2823263cc8ac94207",
+      "inputHash": "66e60b448ba3f95574e377e212453d67cee1910d54c67c1ceaacce9969882602",
+      "imageHash": "5285993b84cbd664078e7c5258dd4f51cc3e88f7263350bde5b336669131a885",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -421,7 +421,7 @@
             "name": "Surface Fragments",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 161,
+            "simulated": 167,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -438,7 +438,7 @@
         ],
         "time": 2.5,
         "step": 150,
-        "particles": 168,
+        "particles": 174,
         "simulationSpeed": 1,
         "simulatedSeconds": 2.5
       },
@@ -458,8 +458,8 @@
       "warnings": []
     },
     "dopplerBullet": {
-      "inputHash": "67b07c60ee05425a379732c486407a8ec0148a41836507683f55381bb43b43be",
-      "imageHash": "137d82327e3d8042286578e4b20195599f02e5652295d4c63f7caf66c168e39e",
+      "inputHash": "91c14cab22a501775507ed8854be3a4f7d7df44349e9b7d434a08869c5a40670",
+      "imageHash": "f421b0195a408d834ab270cb2da96ee1b4a0c40a07d47c1b8c9bddb4dfb2f6b2",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -487,7 +487,7 @@
             "name": "",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 215,
+            "simulated": 219,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -505,7 +505,7 @@
             "name": "",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 2,
+            "simulated": 30,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -576,7 +576,7 @@
         ],
         "time": 4,
         "step": 240,
-        "particles": 224,
+        "particles": 256,
         "simulationSpeed": 1,
         "simulatedSeconds": 4
       },
@@ -596,8 +596,8 @@
       "warnings": []
     },
     "fire": {
-      "inputHash": "db20823b7d2fbc0fcb168ea96270913bdb408e21da50e4dfd269cdeb7175fce6",
-      "imageHash": "20bd6fe4b715fa06cb36b967cf06c6103687a17778439f57fac01ab12710ce2e",
+      "inputHash": "1b3d751af047bd06265695e60633a59a22092a3c9c3c690d6504ba3284688979",
+      "imageHash": "1c4229c10e02de4c9ff6880997a49cd9d298b03dd785ef9af758e3347da2e7f1",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -607,7 +607,7 @@
             "name": "Fire",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 80,
+            "simulated": 121,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -618,14 +618,14 @@
             "lights": {
               "count": 18,
               "active": 18,
-              "peakIntensity": 1.636851003828557
+              "peakIntensity": 1.6207508691757697
             }
           },
           {
             "name": "",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 0,
+            "simulated": 247,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -642,7 +642,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 80,
+        "particles": 368,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -662,8 +662,8 @@
       "warnings": []
     },
     "fireball": {
-      "inputHash": "61709918cf67fd4e793710e438c69930d295f29ee1622ec9eab06de8a295684b",
-      "imageHash": "2f4c4b0c23898774746be7e972bba54f94707efe9faa143a7e57b8ab13ab146c",
+      "inputHash": "a7dee3ef60f11fe38d8b4029010cf374b82250cec67b40ccbb6ec80bd18553da",
+      "imageHash": "b4d0a2d318dbe22294ad69fb39fa89c017b7d6e5bb0a496a029683f80ab2ea5f",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -684,7 +684,7 @@
             "lights": {
               "count": 2,
               "active": 2,
-              "peakIntensity": 1.8073774005486936
+              "peakIntensity": 2.1064814814814583
             }
           },
           {
@@ -728,8 +728,8 @@
       "warnings": []
     },
     "fireflies": {
-      "inputHash": "60f086e14d2e5d226335a8d0d92a2a2812fe630b157a2df55c85a98b7857bb63",
-      "imageHash": "4104fef20f68e2253b09ec4afffc4b8106666670aad455b9edc29123b2b53da7",
+      "inputHash": "a0cd11e9a7848a086652fa261f76f327ef3b1a730bc7a468f83f4e08c90446c2",
+      "imageHash": "e032854f91ca2c0535a6984ada414a1231c2b868f32810fcd65d4b334a497834",
       "backend": "webgpu",
       "width": 640,
       "height": 400,
@@ -757,7 +757,7 @@
             "name": "Firefly Pulses",
             "quality": 1,
             "gpuProcessingActive": true,
-            "simulated": 9,
+            "simulated": 12,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -766,19 +766,19 @@
               "nextDispatchSequence": 1
             },
             "lights": {
-              "count": 5,
+              "count": 3,
               "active": 2,
-              "peakIntensity": 0.36892500410550033
+              "peakIntensity": 0.496574035297839
             }
           }
         ],
         "attachmentValidation": {
-          "pulses": 9,
-          "maxDistance": 0.006370102376871114
+          "pulses": 12,
+          "maxDistance": 0.006501584096997659
         },
         "time": 6,
         "step": 360,
-        "particles": 105,
+        "particles": 108,
         "simulationSpeed": 1,
         "simulatedSeconds": 6
       },
@@ -816,6 +816,7 @@
         "THREE.TSL: Declaration name 'particleDistortionStrength' of 'float' is a reserved keyword or already in use. Renamed to 'particleDistortionStrength_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
         "THREE.TSL: Declaration name 'particleLifetime' of 'float' is a reserved keyword or already in use. Renamed to 'particleLifetime_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
         "THREE.TSL: Declaration name 'particleTime' of 'float' is a reserved keyword or already in use. Renamed to 'particleTime_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
+        "THREE.TSL: Declaration name 'particleBirthOffset' of 'float' is a reserved keyword or already in use. Renamed to 'particleBirthOffset_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
         "THREE.TSL: Declaration name 'particleRealtime' of 'float' is a reserved keyword or already in use. Renamed to 'particleRealtime_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
         "THREE.TSL: Declaration name 'particleAlive' of 'uint' is a reserved keyword or already in use. Renamed to 'particleAlive_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
         "THREE.TSL: Declaration name 'particleTagMask' of 'uint' is a reserved keyword or already in use. Renamed to 'particleTagMask_1'. Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces.",
@@ -826,8 +827,8 @@
       ]
     },
     "fireworks": {
-      "inputHash": "e605e26e280ad16fdcf9730e146bb940c9b16fcb455833196e26b6e45fc50846",
-      "imageHash": "d6054033c71a17e3d4b610204bcb05dee2d7c669a8995a66e0fe01a5f225139f",
+      "inputHash": "517cba051e6feb03952fac145b712da1bb376212f5cd7880ad4befc4b1ac8658",
+      "imageHash": "d35447c7d670a668ae2ecc03b81cf2183b1a11d236d25bf4a73352f44803c0df",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -837,7 +838,7 @@
             "name": "Fireworks",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 5,
+            "simulated": 6,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -855,7 +856,7 @@
             "name": "Rocket Smoke",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 18,
+            "simulated": 378,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -873,7 +874,7 @@
             "name": "Sparkles",
             "quality": 0.46295959450732643,
             "gpuProcessingActive": false,
-            "simulated": 138,
+            "simulated": 85,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -884,13 +885,13 @@
             "lights": {
               "count": 10,
               "active": 10,
-              "peakIntensity": 49.16506814507257
+              "peakIntensity": 33.928194587415504
             }
           }
         ],
         "time": 3,
         "step": 180,
-        "particles": 161,
+        "particles": 469,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -910,8 +911,8 @@
       "warnings": []
     },
     "lodStress": {
-      "inputHash": "6777f866791d0b8bd917154e26ce106266174bd57174292aa6089ec01a74490c",
-      "imageHash": "7810639a533568aa2177e2f507e45e2a3c7e87fa4f8992b51a231a81cd608877",
+      "inputHash": "919cf1a358273872334ac50408ffbceff7388aa3cb9080fc347d9adb2d362b28",
+      "imageHash": "070ed01eae1362052b7b92f88c9b481c083bc1e5f512e73132663e512a8e8ca4",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -921,7 +922,7 @@
             "name": "LOD Stress Test",
             "quality": 0.5728427269032347,
             "gpuProcessingActive": false,
-            "simulated": 3018,
+            "simulated": 3022,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -938,7 +939,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 3018,
+        "particles": 3022,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -958,8 +959,8 @@
       "warnings": []
     },
     "particleTrail": {
-      "inputHash": "9464038ca153aa55ff74879e4b0cbdbb586c54736313d44318e702e5742f19b3",
-      "imageHash": "9bc8bcb4af277c9855dc39cbef08afa888c508bab3500766e4222ef2df291839",
+      "inputHash": "a47245295c291ce778640fc3c4557ae8a45ca598a763596e97f3d75224091c12",
+      "imageHash": "8fc7732178b9716b9e4fdb42f08c0071e06021ca79399e24b26ba2bd3ae299bc",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -969,7 +970,7 @@
             "name": "Particle Trail",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 18,
+            "simulated": 19,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -986,7 +987,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 18,
+        "particles": 19,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -1006,8 +1007,8 @@
       "warnings": []
     },
     "ribbonTrail": {
-      "inputHash": "ec1d3613d841783f0e9c5c3b406141f3c2149dcaa532b2c3a9ea055b994bc1e4",
-      "imageHash": "29b528bee9060de76a306a2085019efd7770af3c2e1cfd9973dfa529a8912236",
+      "inputHash": "12a759157a325da0c9c8e6d0d6aebc6d39cc854dc5c1ba68385ab273a92b0681",
+      "imageHash": "9a75d4d64fa082a8ac925590caeb52a74900a65ea4e42ea1bd11f7b39f9a00e1",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1017,7 +1018,7 @@
             "name": "Ribbon Trail",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 30,
+            "simulated": 50,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -1034,7 +1035,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 30,
+        "particles": 50,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -1054,8 +1055,8 @@
       "warnings": []
     },
     "smoke": {
-      "inputHash": "eb3abf49ed9af5ea45eab5301f2db3004de6d1f70c7622bc73ab77728bf65385",
-      "imageHash": "7641567b6b3b9ca961badad53a1c8ccd9cf30f010be306d3ddd77ad953bb4f7e",
+      "inputHash": "38b24cb3e49ccc55932e8e755aa4c522b7373c00be51b8679cfe5559acbe2767",
+      "imageHash": "e3b6a46d319bfad2310669ad71487462af53f4c834417643aec8bb777c972264",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1065,7 +1066,7 @@
             "name": "Smoke",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 89,
+            "simulated": 107,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -1082,7 +1083,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 89,
+        "particles": 107,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -1102,8 +1103,8 @@
       "warnings": []
     },
     "snow": {
-      "inputHash": "4cce234ee3e7719826451fe7d410927c7b708f5b62a6630b58c543dc1f6092cb",
-      "imageHash": "b2bade454b19e3d648c0d94db54888cba7feca3d3c97d9f964ddf4a72b06804c",
+      "inputHash": "86d12ee9ee7cdcd90e42e2bc54d61015dcf4eecdd93883457bca7d4e7933f727",
+      "imageHash": "163a02dc0e713573ad136d9589ca8d9b4e61d47c77755a3657268cba5d7d95ae",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1113,7 +1114,7 @@
             "name": "Snow",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 179,
+            "simulated": 208,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -1130,7 +1131,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 179,
+        "particles": 208,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -1150,8 +1151,8 @@
       "warnings": []
     },
     "spheres": {
-      "inputHash": "66a330414a246a4d93c2f9be726060826b2426dbad4e14dc513fb92c80a91043",
-      "imageHash": "5a2550beb216a285565bf862af5eb16001b2cdbf9aed0cafb09b8d80cc0de27e",
+      "inputHash": "22f59e1c92c9823dff3a453047545db70e7ac31090b93cb9225b61f457595e51",
+      "imageHash": "086b675e123ab704651c20f6940751b55feec42962a2b80f08cee7cca8fec102",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1161,7 +1162,7 @@
             "name": "Spheres",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 31,
+            "simulated": 35,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -1178,7 +1179,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 31,
+        "particles": 35,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -1198,8 +1199,8 @@
       "warnings": []
     },
     "splatter": {
-      "inputHash": "5d40d596adde6dffe78bfb24fdaee905b4b784dde7fbba994775b9d4f7193b47",
-      "imageHash": "861d18cbce2ca250d03ad192d678a8899aa1d64ec10e8133a8fb7e06c8297246",
+      "inputHash": "52e04a5665b0245441bdef4d5e6656e987000b96fc26d9da018040b5392936a1",
+      "imageHash": "db8eb0b1a04967cd792b04c8ab27707d3b1ca65d5351e6b26d91426908c73177",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1209,7 +1210,7 @@
             "name": "Splatter",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 6,
+            "simulated": 7,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -1226,7 +1227,7 @@
         ],
         "time": 8,
         "step": 480,
-        "particles": 6,
+        "particles": 7,
         "simulationSpeed": 1,
         "simulatedSeconds": 8
       },
@@ -1246,8 +1247,8 @@
       "warnings": []
     },
     "stylizedDepth": {
-      "inputHash": "a56111af3b3400328022856aad52944679f7de735c717b859df7b6cdf3f7a5d5",
-      "imageHash": "70322ecd2a07848e3d4d08b37f51db2fe864e93a7d9ad0b4040db24f3c9e8e9b",
+      "inputHash": "abafd56248cb59cad9ffba95fe71c39cf971e9c7afa4b1095b41559adfb2a545",
+      "imageHash": "16a1ea65a6bea8f47f8897dcc8e7bb1914d2799b92d53c810340477b2e8c224d",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1257,7 +1258,7 @@
             "name": "Stylized Depth",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 537,
+            "simulated": 596,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -1274,7 +1275,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 537,
+        "particles": 596,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -1294,8 +1295,8 @@
       "warnings": []
     },
     "suzanne": {
-      "inputHash": "e8105f0225bcd6a47141452da1f9a69c5c337cc6df7824136ce13b074d13307d",
-      "imageHash": "a208e4d93cab160fe374c8bd838055896c49d23183d49ca085ba6249a7769c69",
+      "inputHash": "adecb65bf0256d40adf393c95da1e5ab93ab74e32f9bd09a83e5808a46fb4571",
+      "imageHash": "e76d160891566fbd3426da4d764e2c799904669067229213ac3a80f67587a7db",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1305,7 +1306,7 @@
             "name": "Suzanne",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 524,
+            "simulated": 563,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -1322,7 +1323,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 524,
+        "particles": 563,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -1342,8 +1343,8 @@
       "warnings": []
     },
     "suzanneInstances": {
-      "inputHash": "ea0aa0ce58d825407325ba903c3988548e5aefdfb8b5b91b29d3c5ecf6456bb8",
-      "imageHash": "743ad337497493404625a6ba87dfc7a55565cb342e2006c6542bb753d92f69ce",
+      "inputHash": "75522c9956fc40010804698de6898e5a1b340c24a635db6f57c3366d7eac8e91",
+      "imageHash": "6980761eb4b1cd2a526f3b5c4a54546f30ed417822317cb9a37f2c542f95ca72",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1353,7 +1354,7 @@
             "name": "Spheres",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 31,
+            "simulated": 35,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -1370,7 +1371,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 31,
+        "particles": 35,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -1390,8 +1391,8 @@
       "warnings": []
     },
     "tags": {
-      "inputHash": "8bc22ecf8db9d6e54cec87d50f4ca26dc97f6f99adb0317f34df0f119d6249f3",
-      "imageHash": "1736bf2768559ff60534e202f0089ca7125f64da7eea9fbbdb2039cc96b653c0",
+      "inputHash": "ff6b1bb4b5f6178030d6425a13ed7cf13451bcd26d2a5cb77491510c7d9d00c1",
+      "imageHash": "3a2fa6c765fa45890989c9b7bb1392970797b03e34cf5473ec780ff6b06f29bf",
       "backend": "webgl",
       "width": 640,
       "height": 400,
@@ -1401,7 +1402,7 @@
             "name": "Spheres",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 31,
+            "simulated": 35,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -1418,7 +1419,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 31,
+        "particles": 35,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },

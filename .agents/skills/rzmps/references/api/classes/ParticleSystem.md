@@ -164,6 +164,24 @@ looping: boolean;
 
 ***
 
+<a id="maxcatchup"></a>
+
+### maxCatchup
+
+```ts
+maxCatchup: number | null;
+```
+
+Maximum simulation seconds recovered per interval; null uses duration and finite emitter lifetimes.
+
+#### Default
+
+```ts
+null
+```
+
+***
+
 <a id="maxcullingmode"></a>
 
 ### maxCullingMode
@@ -327,6 +345,54 @@ optional spatialEffectFilter?: (spatialEffect) => boolean;
 ```ts
 spatialEffects: SpatialEffect[] = [];
 ```
+
+***
+
+<a id="substep"></a>
+
+### substep
+
+```ts
+substep: boolean;
+```
+
+Whether to divide large simulation intervals into smaller steps.
+
+When enabled (default), elapsed time is simulated in increments of at most
+substepDeltaTime. Each increment performs normal emission, particle updates,
+and spatial interactions, improving collisions, forces, emission timing, and
+other time-dependent behavior after irregular or delayed frames.
+
+Substepping is more computationally expensive because multiple simulation
+updates may occur during one rendered frame. Only the most recent maxCatchup
+seconds are simulated; null estimates this limit from emitter lifetimes and
+system duration. An internal step-count safeguard also bounds work.
+
+When disabled, the entire elapsed interval is processed in one simulation
+step. Continuous births still receive distributed spawn times and per-particle
+deltas, but spatial interactions, collisions, and nonlinear motion may be
+inaccurate over large intervals. This is faster and may suit simple effects
+or performance-sensitive applications.
+
+Neither mode guarantees exact reconstruction of missed frames.
+
+#### Default
+
+```ts
+true
+```
+
+***
+
+<a id="substepdeltatime"></a>
+
+### substepDeltaTime
+
+```ts
+substepDeltaTime: number;
+```
+
+Maximum simulation step in seconds. Defaults to 1 / prewarmFPS.
 
 ***
 

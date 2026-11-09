@@ -31,3 +31,30 @@ export async function runBenchmarkWithRetry(run, onRetry) {
     return run(2);
   }
 }
+
+
+/** A Node deadline also expires when the browser's own JavaScript/event loop is stuck. */
+export async function withBenchmarkTimeout(operation, timeoutMs, stage) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${stage} timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+/** Attempt every cleanup step and preserve the primary measurement error. */
+export async function cleanupBenchmark(steps, primaryError, onError = () => {}) {
+  let firstError;
+  for (const { name, run } of steps) {
+    try { await run(); }
+    catch (error) {
+      firstError ??= error;
+      onError(name, error);
+    }
+  }
+  if (!primaryError && firstError) throw firstError;
+}

@@ -153,7 +153,20 @@ class Particle {
 
   time: number;
 
-  realtime: number;
+  private _realtime = 0;
+  // Negative internal age carries a newborn's within-step birth offset. Observers see age zero.
+  get realtime(): number { return Math.max(0, this._realtime); }
+  set realtime(value: number) { this._realtime = value; }
+
+  /** @internal Packed age used when uploading staged CPU births. */
+  get simulationAge(): number { return this._realtime; }
+  /** @internal Seconds available to this particle in the current simulation step. */
+  getSimulationDeltaTime(deltaTime: number, integrated = false): number {
+    return integrated ? Math.min(deltaTime, this.realtime / 1000)
+      : Math.max(0, deltaTime + Math.min(0, this._realtime / 1000));
+  }
+  /** @internal Consumes a pending birth offset while advancing public age. */
+  advanceAge(deltaTime: number): void { this._realtime += deltaTime * 1000; }
 
   id: string;
 

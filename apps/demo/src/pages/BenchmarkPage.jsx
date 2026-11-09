@@ -1,6 +1,10 @@
 /* eslint-disable react/no-unknown-property */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { selectBenchmarkCases, readBenchmarkOptions, updateBenchmarkSystem, benchmarkCaseId }
+  from '../../../../scripts/benchmark-selection.mjs';
+import { isBenchmarkMeasurementComplete } from '../../../../scripts/benchmark-payload.mjs';
+import { recordBenchmarkFrame } from '../../../../scripts/benchmark-measurement.mjs';
 import * as THREE from 'three';
 import { If, vec3, vec4 } from 'three/tsl';
 import {
@@ -68,6 +72,8 @@ import createFireworks from '../../../../examples/fireworks.js';
 import createBoids from '../../../../examples/boids.js';
 import createSnow from '../../../../examples/snow.js';
 
+const benchmarkOptions = readBenchmarkOptions(window.location.search);
+
 class NoopRenderer extends Renderer {
   setup() {}
   _update() {}
@@ -88,6 +94,8 @@ function pairBenchmarkCases(cases) {
       const gpuProcessing = mode === 'gpu';
       return {
         ...benchmarkCase,
+        id: benchmarkCase.id ? `${benchmarkCase.id}:${mode}`
+          : benchmarkCaseId({ name: `${benchmarkCase.name} [${mode.toUpperCase()}]` }),
         name: `${benchmarkCase.name} [${mode.toUpperCase()}]`,
         benchmarkMode: mode,
         requireGPU: gpuProcessing,
@@ -406,7 +414,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
   const fail = (error) => {
     failed.current = true;
-    window.__RZMPS_BENCHMARK_DONE__ = true;
+    setFrameloop('never');
+    window.__RZMPS_BENCHMARK_ERROR__ = { message: error.message ?? String(error), stack: error.stack };
+    window.__RZMPS_BENCHMARK_PROGRESS__ = {
+      ...window.__RZMPS_BENCHMARK_PROGRESS__, phase: 'failed', error: error.message ?? String(error),
+    };
     throw error;
   };
   const durationMs = getNumberParam('durationMs', DEFAULT_DURATION_MS);
@@ -1680,11 +1692,13 @@ function BenchmarkScene({ onComplete, onProgress }) {
     }
 
     return pairBenchmarkCases([{
+      id: 'baseline-10k',
       name: 'Baseline 10k simulation only',
       particleCount: 10_000,
       create: () => ({ modules: [] }),
     },
     {
+      id: 'baseline-50k',
       name: 'Baseline 50k simulation only',
       particleCount: 50_000,
       create: () => ({ modules: [] }),
@@ -1703,6 +1717,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }),
     },
     {
+      id: 'heavy-modules-10k',
       name: 'Heavy modules 10k',
       particleCount: 10_000,
       requireGPU: true,
@@ -1724,6 +1739,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }),
     },
     {
+      id: 'spatial-kill-zones-10k',
       name: 'Spatial kill zones 10k',
       particleCount: 10_000,
       requireGPU: true,
@@ -1770,6 +1786,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }),
     },
     {
+      id: 'spawn-churn',
       name: 'Spawn churn 2k/sec simulation only',
       particleCount: 10_000,
       create: () => ({
@@ -1861,6 +1878,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
     },
     {
+      id: 'sprite-10k',
       name: 'SpriteRenderer 10k rendered',
       particleCount: 10_000,
       create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
@@ -1871,6 +1889,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
     },
     {
+      id: 'mesh-rendered',
       name: ciProfile ? 'MeshRenderer 2k rendered (low-poly)' : 'MeshRenderer 10k rendered',
       particleCount: ciProfile ? 2_000 : 10_000,
       create: () => ({ renderer: new MeshRenderer({
@@ -1879,17 +1898,17 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }) }),
     },
     {
+      id: 'trail-2k',
       name: 'TrailRenderer 2k rendered',
       particleCount: 2_000,
       create: () => ({ renderer: new TrailRenderer({ texture: createParticleTexture() }) }),
     },
     ]);
   }, [suite, ciProfile]);
-  const cases = useMemo(() => (
-    caseFilter
-      ? allCases.filter(({ name }) => name.toLowerCase().includes(caseFilter))
-      : allCases
-  ), [allCases, caseFilter]);
+  const cases = useMemo(() => {
+    const selected = selectBenchmarkCases(allCases, benchmarkOptions.selection);
+    return caseFilter ? selected.filter(({ name }) => name.toLowerCase().includes(caseFilter)) : selected;
+  }, [allCases, caseFilter]);
 
   const startNextCase = async () => {
     if (starting.current) return;
@@ -1911,6 +1930,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
     const nextCase = cases[caseIndex.current];
     if (!nextCase) {
       window.__RZMPS_BENCHMARK_RESULTS__ = results.current;
+      window.__RZMPS_BENCHMARK_PROGRESS__ = {
+        ...window.__RZMPS_BENCHMARK_PROGRESS__, phase: 'complete', completed: results.current.length,
+      };
       window.__RZMPS_BENCHMARK_DONE__ = true;
       onComplete(results.current);
       starting.current = false;
@@ -1996,7 +2018,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     const renderOutputDispatchesBefore = active.current.system.__rzmpsBenchmarkRenderOutputDispatches ?? 0;
     active.current.beforeUpdate?.(active.current.system, frameStart - active.current.phaseStartedAt);
     try {
-      active.current.system.update();
+      updateBenchmarkSystem(active.current.system, benchmarkOptions.simulationClock);
     } catch (error) {
       fail(error);
     }
@@ -2035,20 +2057,15 @@ function BenchmarkScene({ onComplete, onProgress }) {
         lastFrame.current = frameStart;
         return;
       }
-      elapsed = caseDurationMs;
+      elapsed = active.current.measuredDurationMs;
     }
 
-    if (lastFrame.current !== undefined) {
-      active.current.frameSamples.push(frameStart - lastFrame.current);
-    }
-
+    recordBenchmarkFrame(active.current, lastFrame.current, frameStart, updateMs, {
+      compute: computeDispatchesAfter - computeDispatchesBefore,
+      simulation: simulationDispatchesAfter - simulationDispatchesBefore,
+      renderOutput: renderOutputDispatchesAfter - renderOutputDispatchesBefore,
+    });
     lastFrame.current = frameStart;
-    active.current.updateSamples.push(updateMs);
-    active.current.computeDispatchSamples.push(computeDispatchesAfter - computeDispatchesBefore);
-    active.current.simulationDispatchSamples.push(simulationDispatchesAfter - simulationDispatchesBefore);
-    active.current.renderOutputDispatchSamples.push(renderOutputDispatchesAfter - renderOutputDispatchesBefore);
-    active.current.particleSamples.push(active.current.system.liveParticleCount ?? active.current.system.particles.length);
-    active.current.gpuActiveSamples.push(active.current.system.isGPUProcessingActive);
 
     if (active.current.requireGPU && !active.current.system.isGPUProcessingActive) {
       fail(new Error(`${active.current.name} did not activate GPU processing.`));
@@ -2059,7 +2076,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
       active.current.maxHeapMB = Math.max(active.current.maxHeapMB, heapBytes / (1024 * 1024));
     }
 
-    if (elapsed >= caseDurationMs) {
+    // Software rendering or a delayed frame can consume the entire time window.
+    // Keep measuring until the payload validator's minimum frame count is met.
+    if (isBenchmarkMeasurementComplete(elapsed, caseDurationMs, active.current.frameSamples.length)) {
       if (
         active.current.phase === 'measure'
         && awaitingExpectedEvents
@@ -2082,7 +2101,6 @@ function BenchmarkScene({ onComplete, onProgress }) {
       } catch (error) {
         fail(error);
       }
-      active.current.measuredDurationMs = elapsed;
       results.current.push(summarize(active.current));
       window.__RZMPS_BENCHMARK_RESULTS__ = [...results.current];
       gl.info.reset();

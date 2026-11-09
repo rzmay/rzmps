@@ -33,7 +33,7 @@ jobs:
         run: npm test
 
       - name: Validate benchmark reporting
-        run: node --test scripts/benchmark.test.mjs
+        run: npm run test:benchmarks
 
       - name: Build packages
         run: npm run build:modules

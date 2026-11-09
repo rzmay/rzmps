@@ -207,9 +207,9 @@ export default class Module extends EventReceiver {
     particles.filter((p) => (
       p.alive
       && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
-      && this.condition(p, deltaTime, context)
+      && this.condition(p, (context.system.getParticleDeltaTime?.(p, deltaTime) ?? deltaTime), context)
     ))
-      .forEach((p) => this._modify(p, deltaTime, context));
+      .forEach((p) => this._modify(p, (context.system.getParticleDeltaTime?.(p, deltaTime) ?? deltaTime), context));
   }
 
   /** @internal Freezes one event batch for preparation, conditions, and all particle callbacks. */
