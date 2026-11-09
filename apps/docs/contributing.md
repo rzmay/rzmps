@@ -30,7 +30,11 @@ launching Chrome; stale previews require local regeneration.
 Cross-branch PR benchmarks remain exclusively in the existing GitHub runner
 workflow, where both revisions are measured on the same runner. This local command
 does not export PR comparison results, modify that workflow, merge, commit, push,
-or open a PR. Full benchmark/report generation can take several minutes.
+or open a PR. Full benchmark/report generation can take several minutes. The report
+command streams build logs and shows the active browser case, timing settings, and
+an elapsed-time update every ten seconds while measurements run. The final
+whitespace checks run with Git paging disabled, so they exit directly without
+opening an interactive pager.
 
 ## Adding or updating an example
 

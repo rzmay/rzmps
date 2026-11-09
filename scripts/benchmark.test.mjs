@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { validateBenchmark, assertComparable } from './benchmark-payload.mjs';
 import { benchmarkGuide } from './docs/benchmarks.mjs';
 
@@ -147,4 +147,64 @@ test('benchmark retries only transient GPU failures and discards failed sample r
     throw new Error('GPUValidationError: invalid binding');
   }), /GPUValidationError/);
   assert.equal(failures, 1, 'validation failures must not trigger a new sample');
+});
+
+
+test('report updates stream build progress before measurements finish and keep JSON out of logs', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rzmps-report-progress-'));
+  const payload = path.join(directory, 'payload.json');
+  const release = path.join(directory, 'release');
+  const output = path.join(directory, 'export.json');
+  fs.writeFileSync(payload, JSON.stringify(snapshot));
+  const npm = path.join(directory, 'npm');
+  fs.writeFileSync(npm, `#!${process.execPath}
+import fs from 'node:fs';
+console.log('fixture build progress');
+console.error('[benchmark attempt 1] Case 1/1: fixture');
+if (process.env.RZMPS_TEST_FAIL) process.exit(7);
+const timeout = setTimeout(() => { console.error('Build progress was not streamed'); process.exit(3); }, 2000);
+const timer = setInterval(() => {
+  if (!fs.existsSync(process.env.RZMPS_TEST_RELEASE)) return;
+  clearInterval(timer);
+  clearTimeout(timeout);
+  console.log('RZMPS browser benchmark');
+  console.log('RZMPS_BENCHMARK_JSON_START');
+  console.log(fs.readFileSync(process.env.RZMPS_TEST_PAYLOAD, 'utf8'));
+  console.log('RZMPS_BENCHMARK_JSON_END');
+}, 10);
+`);
+  fs.chmodSync(npm, 0o755);
+  const run = fail => new Promise((resolveRun, reject) => {
+    const child = spawn(process.execPath, [path.join(root, 'scripts/update-benchmark-report.mjs'),
+      '--json-only', output], {
+      env: { ...process.env, PATH: `${directory}${path.delimiter}${process.env.PATH}`,
+        RZMPS_TEST_PAYLOAD: payload, RZMPS_TEST_RELEASE: release, RZMPS_TEST_FAIL: fail ? '1' : '' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '', stderr = '';
+    child.stdout.setEncoding('utf8').on('data', chunk => {
+      stdout += chunk;
+      // The fixture cannot complete until its build log reaches this parent.
+      if (stdout.includes('fixture build progress')) fs.writeFileSync(release, 'ready');
+    });
+    child.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk; });
+    child.once('error', reject);
+    child.once('close', code => resolveRun({ code, stdout, stderr }));
+  });
+  try {
+    const result = await run(false);
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /Building the library/);
+    assert.match(result.stdout, /fixture build progress/);
+    assert.match(result.stderr, /Case 1\/1: fixture/);
+    assert.match(result.stdout, /Measurements complete: .* cases in .*s\. Exporting JSON/);
+    assert.doesNotMatch(result.stdout, /RZMPS_BENCHMARK_JSON_START|"metadata"/);
+    assert.deepEqual(JSON.parse(fs.readFileSync(output, 'utf8')), snapshot);
+
+    fs.unlinkSync(output);
+    const failure = await run(true);
+    assert.notEqual(failure.code, 0);
+    assert.match(failure.stderr, /Benchmark command failed \(exit code 7\)/);
+    assert.equal(fs.existsSync(output), false, 'failed measurements must not write a report');
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });

@@ -158,6 +158,15 @@ async function runBenchmark(attempt = 1) {
   const deviceLossChecks = [];
   const gpuValidationErrors = [];
   let page;
+  const startedAt = performance.now();
+  let stage = 'Launching browser';
+  const logProgress = message => console.error(`[benchmark attempt ${attempt}] ${message}`);
+  logProgress(`${stage} (${profile} profile; ${(warmupMs / 1000).toFixed(1)}s warmup + ${
+    (durationMs / 1000).toFixed(1)}s measurement per case; timeout ${timeoutMs / 1000}s)`);
+  const heartbeat = setInterval(() => {
+    logProgress(`${stage}; ${Math.round((performance.now() - startedAt) / 1000)}s elapsed`);
+  }, 10_000);
+  heartbeat.unref();
 
   try {
     browser = await puppeteer.launch({
@@ -170,6 +179,10 @@ async function runBenchmark(attempt = 1) {
 
     page = await browser.newPage();
     page.on('console', (message) => {
+      if (message.text().startsWith('[benchmark] Case ')) {
+        stage = message.text().slice('[benchmark] '.length);
+        logProgress(stage);
+      }
       if (message.type() === 'error') {
         const value = message.text();
         console.error(`[browser ${message.type()}] ${value}`);
@@ -194,6 +207,8 @@ async function runBenchmark(attempt = 1) {
       failMeasurement(error);
       console.error(`[browser pageerror] ${error.stack ?? error.message}`);
     });
+    stage = 'Loading benchmark page';
+    logProgress(stage);
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     const browserHardware = await collectBrowserHardware(page);
     await Promise.race([
@@ -231,6 +246,7 @@ async function runBenchmark(attempt = 1) {
     };
     validateBenchmark({ metadata, results });
     benchmarkValidated = true;
+    logProgress(`Validated ${results.length} cases in ${((performance.now() - startedAt) / 1000).toFixed(1)}s`);
 
     if (values.output) {
       await fs.mkdir(path.dirname(path.resolve(values.output)), { recursive: true });
@@ -329,6 +345,8 @@ async function runBenchmark(attempt = 1) {
     }
     throw pageError ?? error;
   } finally {
+    clearInterval(heartbeat);
+    logProgress('Closing browser and test server');
     closing = true;
     try {
       // Stop rendering, drain submitted work and release the device before closing Chromium.
