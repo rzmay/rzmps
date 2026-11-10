@@ -5,20 +5,21 @@ const props = defineProps({ source: String, poster: String, label: String, width
 const video = ref(null);
 const reduced = ref(true);
 const failed = ref(false);
-let observer, preference, visible = false;
+const visible = ref(false);
+let observer, preference;
 const play = () => video.value?.play().catch(() => {});
 const motionChange = () => {
   reduced.value = preference.matches;
   if (reduced.value) video.value?.pause();
-  else if (visible) play();
+  else if (visible.value) play();
 };
 onMounted(() => {
   preference = matchMedia('(prefers-reduced-motion: reduce)');
   reduced.value = preference.matches;
   preference.addEventListener('change', motionChange);
   observer = new IntersectionObserver(entries => {
-    visible = entries[0].isIntersecting;
-    if (!visible) video.value?.pause();
+    visible.value = entries[0].isIntersecting;
+    if (!visible.value) video.value?.pause();
     else if (!reduced.value) play();
   }, { threshold: 0.1 });
   observer.observe(video.value);
@@ -29,7 +30,7 @@ onBeforeUnmount(() => { observer?.disconnect(); preference?.removeEventListener(
 <template>
   <figure class="example-preview">
     <video ref="video" :src="withBase(props.source)" :poster="withBase(props.poster)"
-      :width="width" :height="height" :aria-label="label" :autoplay="!reduced" muted loop playsinline
+      :width="width" :height="height" :aria-label="label" :autoplay="!reduced && visible" muted loop playsinline
       controls preload="none" @error="failed = true" @loadeddata="failed = false" />
     <figcaption v-if="failed" role="status">Video preview unavailable. Try the live demo above.</figcaption>
   </figure>

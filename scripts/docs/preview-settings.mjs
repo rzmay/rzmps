@@ -4,7 +4,7 @@ export const previewDefaults = Object.freeze({
   warmup: 180,
   format: 'mp4',
   duration: 4,
-  fps: 30,
+  fps: 60,
   crf: 18,
   width: 1920,
   height: 1080,

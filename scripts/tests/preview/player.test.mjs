@@ -24,11 +24,12 @@ test(
       browser;
     const server = createServer(async (req, res) => {
       try {
-        if (req.url === '/')
+        if (req.url === '/' || req.url === '/?offscreen')
           res.end(
             '<script type="importmap">{"imports":{"vue":"/vue.js","vitepress":"/base.js"}}</script' +
               '><div id="app"></div><script type="module">import {createApp} from "vue";import Playe' +
-              'r from "/player.js";createApp(Player,{source:"/preview.mp4",poster:"/poster.png",labe' +
+              'r from "/player.js";if(location.search)document.body.style.paddingTop="2000px";' +
+              'createApp(Player,{source:"/preview.mp4",poster:"/poster.png",labe' +
               'l:"Test preview",width:64,height:48}).mount("#app");</script>',
           );
         else if (req.url === '/player.js') {
@@ -113,6 +114,14 @@ test(
       await page.waitForFunction(() => !document.querySelector('video').paused);
       await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
       await page.waitForFunction(() => document.querySelector('video').paused);
+      await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
+      const previousRequests = requests;
+      await page.goto(`http://127.0.0.1:${server.address().port}/?offscreen`, { waitUntil: 'networkidle0' });
+      assert.equal(requests, previousRequests, 'an initially offscreen video must not fetch media');
+      assert.equal(await page.$eval('video', v => v.paused && !v.hasAttribute('autoplay')), true);
+      await page.$eval('video', v => v.scrollIntoView());
+      await page.waitForFunction(() => !document.querySelector('video').paused);
+      assert.ok(requests > previousRequests);
     } finally {
       await browser?.close();
       await new Promise(resolve => server.close(resolve));

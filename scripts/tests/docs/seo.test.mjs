@@ -149,3 +149,41 @@ test('metadata edits rebuild search once, while simulation edits preserve normal
   await plugin.handleHotUpdate({ file: join(root, 'apps/docs/examples/tags.md'), server });
   assert.equal(restarts, 1, 'repeated notifications and Markdown edits must not restart again');
 });
+
+test('social metadata describes poster dimensions and format overrides accurately', () => {
+  const example = discoverExamples()[0];
+  const tags = exampleSEO({ ...example, previewSettings: { format: 'webm', width: 640, height: 360 } });
+  const property = name => tags.find(([, attrs]) => attrs.property === name)?.[1].content;
+  assert.equal(property('og:image:type'), 'image/png');
+  assert.equal(property('og:image:width'), '640');
+  assert.equal(property('og:image:height'), '360');
+  assert.equal(property('og:video:type'), 'video/webm');
+  assert.equal(property('og:video:width'), '640');
+  assert.equal(property('og:video:height'), '360');
+  assert.ok(property('og:video').endsWith('.webm'));
+});
+
+test('documentation canonicals follow sitemap index routes; demo aliases have static social metadata', async () => {
+  const { documentationSEO, demoPageHTML, sitemapItems } = await import('../../docs/seo.mjs');
+  for (const [relativePath, canonical] of [
+    ['index.md', 'https://rzmps.rzmay.com/docs/'],
+    ['guides/index.md', 'https://rzmps.rzmay.com/docs/guides/'],
+    ['examples/fire.md', 'https://rzmps.rzmay.com/docs/examples/fire.html'],
+  ]) {
+    const tags = documentationSEO({ relativePath, title: 'Guide', description: 'Guide description' });
+    assert.equal(tags.find(([, attrs]) => attrs.rel === 'canonical')[1].href, canonical);
+  }
+  const example = { ...discoverExamples()[0], title: 'Fire & smoke', description: 'An "example" <effect>.' };
+  const source = '<html><head><title>Old</title><meta name="description" content="Old"></head><body>Demo</body></html>';
+  const html = demoPageHTML(source, example);
+  assert.equal((html.match(/<title>/g) ?? []).length, 1);
+  assert.equal((html.match(/name="description"/g) ?? []).length, 1);
+  assert.ok(html.includes('Fire &amp; smoke — RZMPS Demo'));
+  assert.ok(html.includes('An &quot;example&quot; &lt;effect&gt;.'));
+  assert.ok(html.includes('property="og:video"'));
+  assert.ok(html.includes(`href="https://rzmps.rzmay.com/docs/examples/${example.id}.html"`));
+  assert.deepEqual(sitemapItems([{ url: '' }, { url: '404.html' }]), [
+    { url: 'https://rzmps.rzmay.com/' },
+    { url: '' },
+  ]);
+});
