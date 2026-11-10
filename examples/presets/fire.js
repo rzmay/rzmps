@@ -107,17 +107,20 @@ export default async function firePreset() {
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
-        ratio: 0.25,
-        continuousRate: 1.5,
-        direction: (particle) => DecalRenderer.Radial(24)(particle),
-        maxDistance: 3,
+        ratio: 0.5,
+        continuousRate: 3,
+        direction: DecalRenderer.Radial(24),
+        hitSelection: (hits, particle, maxHits) => DecalRenderer.Random(
+          DecalRenderer.Nearest(hits, particle, 5), particle, maxHits,
+        ),
+        maxDistance: 1.5,
         depth: 0.06,
         size: 2.5,
         inheritColor: 0,
         inheritScale: 0,
         inheritAlpha: 0,
         lifetime: 8,
-        opacity: (t) => 0.15 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+        opacity: (t) => 0.05 * THREE.MathUtils.smoothstep(t, 0, 0.025)
           * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
         maxDecals: 100,
       }),

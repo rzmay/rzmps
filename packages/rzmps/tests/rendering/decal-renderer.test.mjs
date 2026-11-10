@@ -65,6 +65,27 @@ test('ratio selects the same particles for events and continuous placement', () 
   }
 });
 
+test('ratio sampling decorrelates GPU burst identities before radial projection', () => {
+  const { renderer, system } = fixture({ direction: DecalRenderer.Radial(24), ratio: 0.5,
+    hitSelection: DecalRenderer.Nearest, maxHits: 5, maxDistance: 2 });
+
+  try {
+    for (const generation of [10, 20, 100]) {
+      const before = renderer.count;
+
+      for (let slot = 0; slot < 5; slot++) {
+        const particle = source();
+        particle.id = `gpu:${slot}:${generation}`;
+        system._notifySpawn(particle);
+      }
+
+      const added = renderer.count - before;
+      assert.ok(added > 0, `GPU generation ${generation} rejected the entire burst before raycasting`);
+      assert.ok(added < 25, 'ratio sampling should also exclude particles within the same burst');
+    }
+  } finally { system.destroy(); }
+});
+
 test('selectors have independent defaults, stable order, counts, and do not mutate inputs', () => {
   const particle = source();
   const hits = [5, 1, 3, 2, 4].map((distance) => ({ distance }));
@@ -80,6 +101,25 @@ test('selectors have independent defaults, stable order, counts, and do not muta
     assert.deepEqual(selector([], particle), []);
   }
   assert.deepEqual(hits.map((h) => h.distance), [5, 1, 3, 2, 4]);
+});
+
+test('Random selects shuffled hits without replacement and preserves selector count conventions', (context) => {
+  const particle = source();
+  const hits = [5, 1, 3, 2, 4].map(distance => ({ distance }));
+  const original = [...hits];
+  context.mock.method(Math, 'random', () => 0);
+
+  assert.deepEqual(DecalRenderer.Random(hits, particle), [hits[1]]);
+  assert.equal(DecalRenderer.Random(hits, particle, 3).length, 3);
+  assert.equal(DecalRenderer.Random(hits, particle, 100).length, hits.length);
+  assert.deepEqual(DecalRenderer.Random(hits, particle, 0), []);
+  assert.deepEqual(DecalRenderer.Random([], particle), []);
+
+  const all = DecalRenderer.Random(hits, particle, -1);
+  assert.equal(new Set(all).size, hits.length);
+  assert.ok(all.every(hit => hits.includes(hit)));
+  assert.notDeepEqual(all, hits);
+  assert.deepEqual(hits, original);
 });
 
 test('Fibonacci sampler returns independent, spherical unit vectors and validates counts', () => {
@@ -569,7 +609,7 @@ test('decal options initialize public properties and clamp invalid numeric confi
 });
 
 test('Intersect sweeps only traveled distance, marks every entry/exit, and leaves motion unchanged', () => {
-  const { renderer, system, scene, floor } = fixture({ direction: (p, context) => DecalRenderer.Intersect()(p, context), onSpawn: false, continuousRate: 60,
+  const { renderer, system, scene, floor } = fixture({ direction: DecalRenderer.Intersect(), onSpawn: false, continuousRate: 60,
     hitSelection: DecalRenderer.All, maxDistance: 0.1, depth: 0.04, size: 0.2, inheritScale: 0 });
   floor.removeFromParent();
   const wallMaterial = new THREE.MeshBasicMaterial();

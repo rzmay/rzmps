@@ -91,16 +91,19 @@ export default async function fireballPreset() {
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
-        continuousRate: 4,
-        direction: (particle) => DecalRenderer.Radial(24)(particle),
-        maxDistance: 3,
+        ratio: 0.5,
+        continuousRate: 5,
+        direction: DecalRenderer.Radial(24),
+        hitSelection: DecalRenderer.Nearest,
+        maxHits: 5,
+        maxDistance: 2,
         depth: 0.06,
         size: 2.5,
         inheritColor: 0,
         inheritScale: 0,
         inheritAlpha: 0,
         lifetime: 8,
-        opacity: (t) => 0.035 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+        opacity: (t) => 0.05 * THREE.MathUtils.smoothstep(t, 0, 0.025)
           * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
         maxDecals: 128,
       }),
