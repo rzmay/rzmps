@@ -1,15 +1,38 @@
 import { copyMaterialEnvironment, type MaterialEnvironment } from './copyMaterialEnvironment';
 import {
-  applyMaterialCopies, compositeGPU, type AppearanceNodes, type MaterialCompositeConfiguration,
+  applyMaterialCopies,
+  compositeGPU,
+  type AppearanceNodes,
+  type MaterialCompositeConfiguration,
 } from './composite.utils';
 import * as THREE from 'three';
 import {
-  attribute, float, texture, uniform, uniformArray, Fn, uv, vec2, vec3, vec4, positionGeometry,
-  materialColor, materialOpacity, materialNormal, materialRoughness, materialMetalness,
+  attribute,
+  float,
+  texture,
+  uniform,
+  uniformArray,
+  Fn,
+  uv,
+  vec2,
+  vec3,
+  vec4,
+  positionGeometry,
+  materialColor,
+  materialOpacity,
+  materialNormal,
+  materialRoughness,
+  materialMetalness,
 } from 'three/tsl';
 import type { Node, WebGPURenderer } from 'three/webgpu';
 import TextureAtlas, { type TextureAtlasOptions } from '../TextureAtlas';
-import { bindSurface, MaterialCopyRegistry, targetMaterial, type MaterialTarget, type SurfaceSample } from './MaterialCopyRegistry';
+import {
+  bindSurface,
+  MaterialCopyRegistry,
+  targetMaterial,
+  type MaterialTarget,
+  type SurfaceSample,
+} from './MaterialCopyRegistry';
 import type Particle from '../../core/Particle';
 
 const maps = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'alphaMap'] as const;
@@ -21,7 +44,11 @@ export default class Appearance {
   private readonly id = Appearance.nextID++;
   readonly atlases: TextureAtlas[];
   readonly palette = new THREE.DataTexture(
-    new Float32Array(columns * 4), columns, 1, THREE.RGBAFormat, THREE.FloatType,
+    new Float32Array(columns * 4),
+    columns,
+    1,
+    THREE.RGBAFormat,
+    THREE.FloatType,
   );
   readonly size = new THREE.Vector2(columns, 1);
   readonly defaultID = uniform(0);
@@ -36,15 +63,23 @@ export default class Appearance {
   private readonly singlePaletteNode = uniformArray(this.singlePaletteValues, 'vec4');
   private readonly trackedMaterials = new Map<THREE.Material, { prefix: string; dispose: () => void }>();
 
-  constructor(readonly registry: MaterialCopyRegistry,
-    readonly configuration: () => MaterialCompositeConfiguration = () => ({}), atlasOptions: TextureAtlasOptions = {},
-    readonly textureCopyQuality = 1) {
-    this.atlases = maps.map((_, i) => new TextureAtlas({
-      ...atlasOptions,
-      tileSize: atlasOptions.tileSize === undefined ? undefined
-        : Math.max(1, Math.ceil(atlasOptions.tileSize * textureCopyQuality)),
-      colorSpace: i === 0 ? THREE.SRGBColorSpace : THREE.NoColorSpace,
-    }));
+  constructor(
+    readonly registry: MaterialCopyRegistry,
+    readonly configuration: () => MaterialCompositeConfiguration = () => ({}),
+    atlasOptions: TextureAtlasOptions = {},
+    readonly textureCopyQuality = 1,
+  ) {
+    this.atlases = maps.map(
+      (_, i) =>
+        new TextureAtlas({
+          ...atlasOptions,
+          tileSize:
+            atlasOptions.tileSize === undefined
+              ? undefined
+              : Math.max(1, Math.ceil(atlasOptions.tileSize * textureCopyQuality)),
+          colorSpace: i === 0 ? THREE.SRGBColorSpace : THREE.NoColorSpace,
+        }),
+    );
 
     this.palette.magFilter = this.palette.minFilter = THREE.NearestFilter;
     this.palette.generateMipmaps = false;
@@ -72,11 +107,15 @@ export default class Appearance {
       if (!source.envMap) continue;
 
       const previous = this.commonEnvironment;
-      const sameRotation = previous?.envMapRotation && source.envMapRotation
-        ? previous.envMapRotation.equals(source.envMapRotation) : previous?.envMapRotation === source.envMapRotation;
+      const sameRotation =
+        previous?.envMapRotation && source.envMapRotation
+          ? previous.envMapRotation.equals(source.envMapRotation)
+          : previous?.envMapRotation === source.envMapRotation;
 
-      if (previous && (previous.envMap !== source.envMap || previous.envMapIntensity !== source.envMapIntensity
-        || !sameRotation)) {
+      if (
+        previous &&
+        (previous.envMap !== source.envMap || previous.envMapIntensity !== source.envMapIntensity || !sameRotation)
+      ) {
         this.commonEnvironment = undefined;
         return;
       }
@@ -145,10 +184,11 @@ export default class Appearance {
     // Add only new snapshots; atlas updates separately detect revised source pixels.
     for (let id = this.registeredCount; id < this.registry.sources.length; id++) {
       const material = this.registry.sources[id] as THREE.MeshStandardMaterial;
-      if (id) maps.forEach((key, channel) => {
-        const source = material[key];
-        if (source) this.atlases[channel].add(source, this.textureCopyQuality);
-      });
+      if (id)
+        maps.forEach((key, channel) => {
+          const source = material[key];
+          if (source) this.atlases[channel].add(source, this.textureCopyQuality);
+        });
     }
 
     this.registeredCount = this.registry.sources.length;
@@ -213,9 +253,11 @@ export default class Appearance {
         geometry.setAttribute(name, new THREE.InterleavedBufferAttribute(data!, 4, row * 4));
       });
     }
-    particles.forEach((particle, index) => names.forEach((name, row) => {
-      particle[name].toArray(data!.array, index * 12 + row * 4);
-    }));
+    particles.forEach((particle, index) =>
+      names.forEach((name, row) => {
+        particle[name].toArray(data!.array, index * 12 + row * 4);
+      }),
+    );
     data.needsUpdate = true;
   }
 
@@ -230,77 +272,95 @@ export default class Appearance {
     const valid = selectedID.greaterThan(0).and(selectedID.lessThan(uniform(this.size).y));
     const id = valid.select(selectedID, float(0));
     // Decide the sampling layout when the shader builds, after sources have been registered.
-    const read = (column: number): Node<'vec4'> => Fn(() => {
-      if (this.registry.sources.length <= 2) {
-        return id.greaterThan(0).select(this.singlePaletteNode.element(column), vec4(column < 2 ? 1 : 0));
-      }
+    const read = (column: number): Node<'vec4'> =>
+      Fn(() => {
+        if (this.registry.sources.length <= 2) {
+          return id.greaterThan(0).select(this.singlePaletteNode.element(column), vec4(column < 2 ? 1 : 0));
+        }
 
-      return texture(this.palette, vec2(
-        float(column + 0.5).div(columns), id.add(0.5).div(uniform(this.size).y),
-      ));
-    })() as Node<'vec4'>;
+        return texture(this.palette, vec2(float(column + 0.5).div(columns), id.add(0.5).div(uniform(this.size).y)));
+      })() as Node<'vec4'>;
 
     // Meshes retain the birth-local frame. Billboards retain chart density and shear.
     const localOffset = offset ?? vec3(uv().sub(0.5), 0);
     const uLength = rowU.xyz.length().max(1e-8);
     const parallel = rowU.xyz.dot(rowV.xyz).div(uLength);
     const perpendicular = rowV.xyz.dot(rowV.xyz).sub(parallel.mul(parallel)).max(0).sqrt();
-    const delta = offset ? vec2(rowU.xyz.dot(localOffset), rowV.xyz.dot(localOffset))
+    const delta = offset
+      ? vec2(rowU.xyz.dot(localOffset), rowV.xyz.dot(localOffset))
       : vec2(localOffset.x.mul(uLength), localOffset.x.mul(parallel).add(localOffset.y.mul(perpendicular)));
     const patchUV = binding.yz.add(delta);
     const hasPatch = rowU.xyz.length().add(rowV.xyz.length()).greaterThan(0);
     const mode = binding.w.notEqual(0).select(binding.w.max(0), this.mode);
     const impactUV = binding.x.greaterThan(0).select(binding.yz, vec2(0.5));
-    const sampleUV = coordinates ?? mode.equal(1).select(impactUV,
-      mode.equal(2).or(binding.x.lessThanEqual(0)).or(hasPatch.not()).select(uv(), patchUV));
+    const sampleUV =
+      coordinates ??
+      mode
+        .equal(1)
+        .select(impactUV, mode.equal(2).or(binding.x.lessThanEqual(0)).or(hasPatch.not()).select(uv(), patchUV));
 
     // Apply the source transform and wrapping within its atlas tile.
-    const wrap = (value: Node<'float'>, mode: Node<'float'>) => mode.equal(THREE.RepeatWrapping).select(
-      value.fract(), mode.equal(THREE.MirroredRepeatWrapping).select(
-        float(1).sub(value.mod(2).sub(1).abs()), value.clamp(0, 1),
-      ),
-    );
+    const wrap = (value: Node<'float'>, mode: Node<'float'>) =>
+      mode
+        .equal(THREE.RepeatWrapping)
+        .select(
+          value.fract(),
+          mode.equal(THREE.MirroredRepeatWrapping).select(float(1).sub(value.mod(2).sub(1).abs()), value.clamp(0, 1)),
+        );
 
-    const sample = (channel: number, fallback: Node<'vec4'>): Node<'vec4'> => Fn(() => {
-      if (!this.atlases[channel].sources.length) return fallback;
+    const sample = (channel: number, fallback: Node<'vec4'>): Node<'vec4'> =>
+      Fn(() => {
+        if (!this.atlases[channel].sources.length) return fallback;
 
-      const rect = read(2 + channel * 3);
-      const u = read(3 + channel * 3);
-      const v = read(4 + channel * 3);
-      const input = vec3(sampleUV, 1);
-      const coord = vec2(wrap(u.xyz.dot(input), u.w), wrap(v.xyz.dot(input), v.w));
-      const value = texture(this.atlases[channel].texture, rect.xy.add(coord.mul(rect.zw)));
-      return rect.z.greaterThan(0).select(value, fallback);
-    })() as Node<'vec4'>;
+        const rect = read(2 + channel * 3);
+        const u = read(3 + channel * 3);
+        const v = read(4 + channel * 3);
+        const input = vec3(sampleUV, 1);
+        const coord = vec2(wrap(u.xyz.dot(input), u.w), wrap(v.xyz.dot(input), v.w));
+        const value = texture(this.atlases[channel].texture, rect.xy.add(coord.mul(rect.zw)));
+        return rect.z.greaterThan(0).select(value, fallback);
+      })() as Node<'vec4'>;
 
     // Normal derivatives use the same chart as the copied normal map.
     const normalU = read(6);
     const normalV = read(7);
     const effectiveMode = binding.w.notEqual(0).select(binding.w.max(0), this.mode);
-    const normalUV = effectiveMode.equal(1).select(uv(), vec2(
-      normalU.xyz.dot(vec3(sampleUV, 1)), normalV.xyz.dot(vec3(sampleUV, 1)),
-    ));
+    const normalUV = effectiveMode
+      .equal(1)
+      .select(uv(), vec2(normalU.xyz.dot(vec3(sampleUV, 1)), normalV.xyz.dot(vec3(sampleUV, 1))));
     const color = read(0);
     const parameters = read(1);
 
     const result: AppearanceNodes = {
-      sourceUV: sampleUV, valid,
+      sourceUV: sampleUV,
+      valid,
       resample: point => this.nodes(binding, rowU, rowV, offset, point),
       compositeGPU: (dest, destUV) => compositeGPU(result, dest, this.configuration().materialCompositeGPU, destUV),
       normalUV,
       color: sample(0, vec4(1)).rgb.mul(color.rgb),
-      alpha: sample(0, vec4(1)).a.mul(sample(4, vec4(1)).g).mul(color.a),
+      alpha: sample(0, vec4(1))
+        .a.mul(sample(4, vec4(1)).g)
+        .mul(color.a),
       roughness: sample(2, vec4(1)).g.mul(parameters.x),
       metalness: sample(3, vec4(1)).b.mul(parameters.y),
-      normal: sample(1, vec4(0.5, 0.5, 1, 1)).xyz.mul(2).sub(1)
-        .mul(vec3(parameters.zw, 1)).normalize(),
+      normal: sample(1, vec4(0.5, 0.5, 1, 1))
+        .xyz.mul(2)
+        .sub(1)
+        .mul(vec3(parameters.zw, 1))
+        .normalize(),
     };
     return result;
   }
 
   /** Shared geometry adapter for persistent, non-instanced material consumers such as decals. */
-  attach(material: THREE.Material, geometry: THREE.BufferGeometry, particle: Particle,
-    sourceFrame: THREE.Matrix4, geometryFrame: THREE.Matrix4, surface?: SurfaceSample): Particle {
+  attach(
+    material: THREE.Material,
+    geometry: THREE.BufferGeometry,
+    particle: Particle,
+    sourceFrame: THREE.Matrix4,
+    geometryFrame: THREE.Matrix4,
+    surface?: SurfaceSample,
+  ): Particle {
     const source = particle.clone();
     if (source.materialCopy.x <= 0 && this.defaultID.value <= 0 && surface?.material) {
       bindSurface(source, this.registry.register(surface.material), sourceFrame, surface, this.mode.value);
@@ -308,7 +368,7 @@ export default class Appearance {
 
     // Persistent geometry owns one material, so it can inherit its exact source environment.
     const environmentID = source.materialCopy.x || this.defaultID.value;
-    const environment = this.registry.sources[environmentID] as THREE.Material & MaterialEnvironment | undefined;
+    const environment = this.registry.sources[environmentID] as (THREE.Material & MaterialEnvironment) | undefined;
     if (environment?.envMap) copyMaterialEnvironment(material, environment);
 
     this.trackMaterial(material);
@@ -337,25 +397,37 @@ export default class Appearance {
     const diffuseMap = (material as THREE.MeshStandardMaterial).map;
     const opacity = diffuseMap ? materialOpacity.mul(texture(diffuseMap).a) : materialOpacity;
     applyMaterialCopies(material, [this.nodes(undefined, undefined, undefined, positionGeometry)], {
-      color: materialColor, opacity, normal: materialNormal,
-      roughness: materialRoughness, metalness: materialMetalness,
+      color: materialColor,
+      opacity,
+      normal: materialNormal,
+      roughness: materialRoughness,
+      metalness: materialMetalness,
     });
     material.needsUpdate = true;
     return source;
   }
 
   /** Installs matching WebGL uniforms and sampling functions. */
-  shader(shader: {
-    vertexShader: string; fragmentShader: string; uniforms: Record<string, unknown>;
-  }, mesh: boolean): void {
+  shader(
+    shader: {
+      vertexShader: string;
+      fragmentShader: string;
+      uniforms: Record<string, unknown>;
+    },
+    mesh: boolean,
+  ): void {
     if ('isMaterial' in shader) this.trackMaterial(shader as unknown as THREE.Material);
 
     Object.assign(shader.uniforms, {
-      copyPalette: { value: this.palette }, copySinglePalette: { value: this.singlePalette },
+      copyPalette: { value: this.palette },
+      copySinglePalette: { value: this.singlePalette },
       copySize: { value: this.size },
-      copyDefault: this.defaultID, copyMode: this.mode,
+      copyDefault: this.defaultID,
+      copyMode: this.mode,
     });
-    this.atlases.forEach((atlas, i) => { shader.uniforms[`copyMap${i}`] = { value: atlas.texture }; });
+    this.atlases.forEach((atlas, i) => {
+      shader.uniforms[`copyMap${i}`] = { value: atlas.texture };
+    });
 
     // Pass the per-particle binding and birth-local frame to the fragment stage.
     shader.vertexShader = `
@@ -369,17 +441,22 @@ export default class Appearance {
       varying vec3 vCopyViewPosition;
       varying vec2 vCopyUV;
       ${shader.vertexShader}`;
-    shader.vertexShader = shader.vertexShader.replace(/void main\s*\(\s*\)\s*\{/, `void main() {
+    shader.vertexShader = shader.vertexShader.replace(
+      /void main\s*\(\s*\)\s*\{/,
+      `void main() {
       vMaterialCopy = materialCopy;
       vMaterialCopyU = materialCopyU;
       vMaterialCopyV = materialCopyV;
       vCopyOffset = position;
       vCopyUV = ${mesh ? 'uv' : 'position.xy + 0.5'};
-    `);
+    `,
+    );
 
     if (mesh) {
-      shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>',
-        '#include <project_vertex>\nvCopyViewPosition = mvPosition.xyz;');
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <project_vertex>',
+        '#include <project_vertex>\nvCopyViewPosition = mvPosition.xyz;',
+      );
     } else {
       const end = shader.vertexShader.lastIndexOf('}');
       const viewPosition = `
@@ -402,26 +479,44 @@ export default class Appearance {
     shader.fragmentShader = this.glsl(mesh) + shader.fragmentShader;
     if (mesh) {
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <color_fragment>', `#include <color_fragment>
-          diffuseColor *= copyColor();`)
-        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-          roughnessFactor *= copyRoughness();`)
-        .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
-          metalnessFactor *= copyMetalness();`)
-        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-          normal = copyBlendNormal(normal, copyNormal(), -vViewPosition, copyNormalUV(copyUV()));`);
+        .replace(
+          '#include <color_fragment>',
+          `#include <color_fragment>
+          diffuseColor *= copyColor();`,
+        )
+        .replace(
+          '#include <roughnessmap_fragment>',
+          `#include <roughnessmap_fragment>
+          roughnessFactor *= copyRoughness();`,
+        )
+        .replace(
+          '#include <metalnessmap_fragment>',
+          `#include <metalnessmap_fragment>
+          metalnessFactor *= copyMetalness();`,
+        )
+        .replace(
+          '#include <normal_fragment_maps>',
+          `#include <normal_fragment_maps>
+          normal = copyBlendNormal(normal, copyNormal(), -vViewPosition, copyNormalUV(copyUV()));`,
+        );
     } else {
       shader.fragmentShader = shader.fragmentShader
-        .replace('vec4 textureColor =', `
+        .replace(
+          'vec4 textureColor =',
+          `
           copyFragmentOffset = vec3(rotatedLocalCoord - 0.5, 0.0);
           copyFragmentUV = rotatedLocalCoord;
-          vec4 textureColor =`)
+          vec4 textureColor =`,
+        )
         .replace('vColor * textureColor;', 'vColor * textureColor * copyColor();')
         .replace('roughnessValue = clamp(', 'roughnessValue *= copyRoughness();\nroughnessValue = clamp(')
         .replace('metalnessValue = clamp(', 'metalnessValue *= copyMetalness();\nmetalnessValue = clamp(')
-        .replace('vec3 viewDirection =', `
+        .replace(
+          'vec3 viewDirection =',
+          `
           normal = copyBlendNormal(normal, copyNormal(), -vViewPosition, copyNormalUV(copyUV()));
-          vec3 viewDirection =`);
+          vec3 viewDirection =`,
+        );
     }
   }
 
@@ -429,7 +524,8 @@ export default class Appearance {
     const source = (channel: import('./composite.utils').MaterialChannel, point: string) => {
       if (channel === 'color') return `(copyRead(0.0).rgb * copySampleAt0(vec4(1.0), ${point}).rgb)`;
 
-      if (channel === 'opacity') return `(copyRead(0.0).a * copySampleAt0(vec4(1.0), ${point}).a
+      if (channel === 'opacity')
+        return `(copyRead(0.0).a * copySampleAt0(vec4(1.0), ${point}).a
         * copySampleAt4(vec4(1.0), ${point}).g)`;
       if (channel === 'roughness') return `(copyRead(1.0).x * copySampleAt2(vec4(1.0), ${point}).g)`;
 
@@ -439,24 +535,40 @@ export default class Appearance {
         normalize((copySampleAt1(vec4(0.5,0.5,1.0,1.0), ${point}).xyz * 2.0 - 1.0)
           * vec3(copyRead(1.0).zw, 1.0)), ${viewPosition}, copyNormalUV(${point}))`;
     };
-    const lit = mesh ? shader.fragmentShader.includes('#include <normal_fragment_maps>')
+    const lit = mesh
+      ? shader.fragmentShader.includes('#include <normal_fragment_maps>')
       : shader.fragmentShader.includes('vec3 viewDirection =');
     const physical = mesh && shader.fragmentShader.includes('#include <lights_physical_fragment>');
     const hasSurfaceParameters = lit && (!mesh || physical);
     const viewPosition = lit ? '-vViewPosition' : mesh ? 'vCopyViewPosition' : 'copyFragmentViewPosition';
-    const baseNormal = lit ? 'normal' : mesh
-      ? 'normalize(cross(dFdx(vCopyViewPosition), dFdy(vCopyViewPosition)))' : 'vec3(0.,0.,1.)';
+    const baseNormal = lit
+      ? 'normal'
+      : mesh
+        ? 'normalize(cross(dFdx(vCopyViewPosition), dFdy(vCopyViewPosition)))'
+        : 'vec3(0.,0.,1.)';
     const color = mesh ? 'diffuseColor' : 'baseColor';
-    const dest = { color: 'compositeDestColor', opacity: 'compositeDestOpacity', normal: 'compositeDestNormal',
-      roughness: 'compositeDestRoughness', metalness: 'compositeDestMetalness' };
+    const dest = {
+      color: 'compositeDestColor',
+      opacity: 'compositeDestOpacity',
+      normal: 'compositeDestNormal',
+      roughness: 'compositeDestRoughness',
+      metalness: 'compositeDestMetalness',
+    };
     const functions = new Map<string, string>();
     const destination = this.destinationSampler(shader, mesh, dest);
-    const copy = Object.fromEntries(Object.keys(dest).map(channel => [channel,
-      `(copyHasSource() ? ${source(channel as import('./composite.utils').MaterialChannel,
-        'copyUV()')} : ${dest[channel as keyof typeof dest]})`])) as typeof dest;
+    const copy = Object.fromEntries(
+      Object.keys(dest).map(channel => [
+        channel,
+        `(copyHasSource() ? ${source(
+          channel as import('./composite.utils').MaterialChannel,
+          'copyUV()',
+        )} : ${dest[channel as keyof typeof dest]})`,
+      ]),
+    ) as typeof dest;
     const output = this.configuration().materialComposite!(copy, dest, {
-      sourceUV: 'copyUV()', destUV: mesh ? 'vCopyUV' : 'spriteCoord',
-      geometricNormal: lit ? mesh ? 'nonPerturbedNormal' : 'normalize(vNormal)' : baseNormal,
+      sourceUV: 'copyUV()',
+      destUV: mesh ? 'vCopyUV' : 'spriteCoord',
+      geometricNormal: lit ? (mesh ? 'nonPerturbedNormal' : 'normalize(vNormal)') : baseNormal,
       destMapAlpha: destination.alpha,
       sampleSource: (channel, coordinates) => `(copyHasSource() ? ${source(channel, coordinates)} : ${dest[channel]})`,
       sampleDest: (channel, coordinates) => destination.sample(channel, coordinates),
@@ -470,13 +582,14 @@ export default class Appearance {
         functions.set(name, code);
       },
     });
-    const opacityFactor = mesh && shader.fragmentShader.includes('varying float vInstanceAlpha;')
-      ? ' * vInstanceAlpha' : '';
+    const opacityFactor =
+      mesh && shader.fragmentShader.includes('varying float vInstanceAlpha;') ? ' * vInstanceAlpha' : '';
     let block = `compositeDestColor = ${color}.rgb; compositeDestOpacity = ${color}.a${opacityFactor};
       compositeDestNormal = ${baseNormal};
-      compositeDestRoughness = ${hasSurfaceParameters ? mesh ? 'roughnessFactor' : 'roughnessValue' : '1.0'};
-      compositeDestMetalness = ${hasSurfaceParameters ? mesh ? 'metalnessFactor' : 'metalnessValue' : '0.0'};`;
-    if (!mesh && !lit) block += `
+      compositeDestRoughness = ${hasSurfaceParameters ? (mesh ? 'roughnessFactor' : 'roughnessValue') : '1.0'};
+      compositeDestMetalness = ${hasSurfaceParameters ? (mesh ? 'metalnessFactor' : 'metalnessValue') : '0.0'};`;
+    if (!mesh && !lit)
+      block += `
       #ifndef USE_POINT_SPRITE
         compositeDestNormal = normalize(cross(dFdx(vCopyViewPosition), dFdy(vCopyViewPosition)));
       #endif
@@ -495,16 +608,22 @@ export default class Appearance {
     }
     shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor.a *= vInstanceAlpha;', '');
     if (mesh) {
-      const marker = lit ? physical ? '#include <lights_physical_fragment>' : '#include <lights_fragment_begin>'
+      const marker = lit
+        ? physical
+          ? '#include <lights_physical_fragment>'
+          : '#include <lights_fragment_begin>'
         : '#include <alphatest_fragment>';
       if (lit) {
-        shader.fragmentShader = shader.fragmentShader.replace('#include <alphatest_fragment>', '')
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <alphatest_fragment>', '')
           .replace('#include <alphahash_fragment>', '');
         block += '\n#include <alphatest_fragment>\n#include <alphahash_fragment>\n';
       }
       shader.fragmentShader = shader.fragmentShader.replace(marker, block + '\n' + marker);
     } else {
-      shader.fragmentShader = shader.fragmentShader.replace('vec4 textureColor =', `
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'vec4 textureColor =',
+        `
         copyFragmentOffset = vec3(rotatedLocalCoord - 0.5, 0.0);
         copyFragmentUV = rotatedLocalCoord;
         #ifdef USE_POINT_SPRITE
@@ -512,17 +631,21 @@ export default class Appearance {
         #else
           copyFragmentViewPosition = vCopyViewPosition;
         #endif
-        vec4 textureColor =`);
+        vec4 textureColor =`,
+      );
       const discard = /if \(baseColor\.a <= 0\.0\)\s*discard;/;
       if (lit) {
         shader.fragmentShader = shader.fragmentShader.replace(discard, '');
-        shader.fragmentShader = shader.fragmentShader.replace('    float shininess =', block
-          + '\nif (baseColor.a <= 0.0) discard;\n    float shininess =');
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '    float shininess =',
+          block + '\nif (baseColor.a <= 0.0) discard;\n    float shininess =',
+        );
       } else {
         shader.fragmentShader = shader.fragmentShader.replace(/float finalAlpha\s*=/, block + '\nfloat finalAlpha =');
       }
     }
-    shader.fragmentShader = `vec3 compositeDestColor; float compositeDestOpacity; vec3 compositeDestNormal;
+    shader.fragmentShader =
+      `vec3 compositeDestColor; float compositeDestOpacity; vec3 compositeDestNormal;
       float compositeDestRoughness; float compositeDestMetalness;
       bool copyHasSource() {
         float id = vMaterialCopy.x > 0.0 ? vMaterialCopy.x : copyDefault;
@@ -538,8 +661,11 @@ export default class Appearance {
     }
   }
 
-  private destinationSampler(shader: { uniforms: Record<string, unknown> }, mesh: boolean,
-    dest: import('./composite.utils').MaterialChannels) {
+  private destinationSampler(
+    shader: { uniforms: Record<string, unknown> },
+    mesh: boolean,
+    dest: import('./composite.utils').MaterialChannels,
+  ) {
     const definitions: string[] = [];
     const declaredTextures = new Set<string>();
     const channels = new Map<import('./composite.utils').MaterialChannel, string>();
@@ -579,8 +705,12 @@ export default class Appearance {
         #endif
         return value;
       }`);
-      channels.set('color', 'compositeDestColorAt'); channels.set('opacity', 'compositeDestOpacityAt');
-      for (const [channel, component] of [['roughness', 'g'], ['metalness', 'b']] as const) {
+      channels.set('color', 'compositeDestColorAt');
+      channels.set('opacity', 'compositeDestOpacityAt');
+      for (const [channel, component] of [
+        ['roughness', 'g'],
+        ['metalness', 'b'],
+      ] as const) {
         if (!shader.uniforms[channel]) continue;
 
         const sample = texture(`${channel}Map`, 'point');
@@ -598,26 +728,38 @@ export default class Appearance {
       const map = texture('pointTexture', 'point');
       definitions.push(`vec3 compositeDestColorAt(vec2 point) { return vColor.rgb * ${map}.rgb; }
         float compositeDestOpacityAt(vec2 point) { return vColor.a * ${map}.a; }`);
-      channels.set('color', 'compositeDestColorAt'); channels.set('opacity', 'compositeDestOpacityAt');
+      channels.set('color', 'compositeDestColorAt');
+      channels.set('opacity', 'compositeDestOpacityAt');
     }
-    const alpha = ['normalMap', 'roughnessMap', 'metalnessMap'].map(name => {
-      const sample = texture(name, 'point');
-      return `#ifdef USE_${name.toUpperCase()}\nvalue *= ${sample}.a;\n#endif`;
-    }).join('\n');
+    const alpha = ['normalMap', 'roughnessMap', 'metalnessMap']
+      .map(name => {
+        const sample = texture(name, 'point');
+        return `#ifdef USE_${name.toUpperCase()}\nvalue *= ${sample}.a;\n#endif`;
+      })
+      .join('\n');
     definitions.push(`float compositeDestMapAlpha(vec2 point) {\nfloat value = 1.0;\n${alpha}\nreturn value;\n}`);
-    return { declarations: definitions.join('\n'), alpha: `compositeDestMapAlpha(${mesh ? 'vCopyUV' : 'spriteCoord'})`,
-      sample: (channel: import('./composite.utils').MaterialChannel, point: string) => channels.has(channel)
-        ? `${channels.get(channel)}(${point})` : dest[channel] };
+    return {
+      declarations: definitions.join('\n'),
+      alpha: `compositeDestMapAlpha(${mesh ? 'vCopyUV' : 'spriteCoord'})`,
+      sample: (channel: import('./composite.utils').MaterialChannel, point: string) =>
+        channels.has(channel) ? `${channels.get(channel)}(${point})` : dest[channel],
+    };
   }
 
   private glsl(mesh: boolean): string {
-    const samplers = this.atlases.map((_, i) => `
+    const samplers = this.atlases
+      .map(
+        (_, i) => `
       #ifdef copyMap${i}Enabled
         uniform sampler2D copyMap${i};
       #endif
-    `).join('\n');
+    `,
+      )
+      .join('\n');
 
-    const samples = this.atlases.map((_, i) => `
+    const samples = this.atlases
+      .map(
+        (_, i) => `
       vec4 copySampleAt${i}(vec4 fallback, vec2 coordinates) {
         #ifndef copyMap${i}Enabled
           return fallback;
@@ -632,7 +774,9 @@ export default class Appearance {
         #endif
       }
       vec4 copySample${i}(vec4 fallback) { return copySampleAt${i}(fallback, copyUV()); }
-    `).join('\n');
+    `,
+      )
+      .join('\n');
 
     return `
       #ifdef copySingleMaterialEnabled
@@ -675,12 +819,15 @@ export default class Appearance {
           return ${mesh ? 'vCopyUV' : 'copyFragmentUV'};
         }
         vec3 offset = ${mesh ? 'vCopyOffset' : 'copyFragmentOffset'};
-        ${mesh ? `return vMaterialCopy.yz + vec2(
+        ${
+          mesh
+            ? `return vMaterialCopy.yz + vec2(
           dot(vMaterialCopyU.xyz, offset), dot(vMaterialCopyV.xyz, offset));`
-    : `float uLength = max(length(vMaterialCopyU.xyz), 1e-8);
+            : `float uLength = max(length(vMaterialCopyU.xyz), 1e-8);
         float parallel = dot(vMaterialCopyU.xyz, vMaterialCopyV.xyz) / uLength;
         float perpendicular = sqrt(max(dot(vMaterialCopyV.xyz, vMaterialCopyV.xyz) - parallel * parallel, 0.0));
-        return vMaterialCopy.yz + vec2(offset.x * uLength, offset.x * parallel + offset.y * perpendicular);`}
+        return vMaterialCopy.yz + vec2(offset.x * uLength, offset.x * parallel + offset.y * perpendicular);`
+        }
       }
       ${samples}
       vec2 copyNormalUV(vec2 point) {

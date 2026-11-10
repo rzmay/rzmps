@@ -3,27 +3,34 @@ import path from 'node:path';
 import { discoverExamples } from '../docs/examples.mjs';
 import { docsUrl } from '../docs/site.mjs';
 import { fileURLToPath } from 'node:url';
-const root = path.resolve(import.meta.dirname,'../..');
-export async function assembleSite({ demoDirectory=path.join(root,'apps/demo/dist'), docsDirectory=path.join(root,'apps/docs/.vitepress/dist'), output=path.join(root,'dist') }={}) {
-  for(const input of [demoDirectory,docsDirectory])await fs.access(path.join(input,'index.html'));
-  for(const input of [root,demoDirectory,docsDirectory])if(path.resolve(output)===path.resolve(input))throw new Error('Combined output must be separate from the repository and input directories');
-  await fs.rm(output,{recursive:true,force:true});
-  await fs.mkdir(output,{recursive:true});
-  await fs.cp(demoDirectory,output,{recursive:true});
-  await fs.cp(docsDirectory,path.join(output,'docs'),{recursive:true});
+const root = path.resolve(import.meta.dirname, '../..');
+export async function assembleSite({
+  demoDirectory = path.join(root, 'apps/demo/dist'),
+  docsDirectory = path.join(root, 'apps/docs/.vitepress/dist'),
+  output = path.join(root, 'dist'),
+} = {}) {
+  for (const input of [demoDirectory, docsDirectory]) await fs.access(path.join(input, 'index.html'));
+  for (const input of [root, demoDirectory, docsDirectory])
+    if (path.resolve(output) === path.resolve(input))
+      throw new Error('Combined output must be separate from the repository and input directories');
+  await fs.rm(output, { recursive: true, force: true });
+  await fs.mkdir(output, { recursive: true });
+  await fs.cp(demoDirectory, output, { recursive: true });
+  await fs.cp(docsDirectory, path.join(output, 'docs'), { recursive: true });
   // Static aliases preserve direct example URLs on hosts without SPA fallback routing.
-  const demoHTML = await fs.readFile(path.join(demoDirectory,'index.html'),'utf8');
+  const demoHTML = await fs.readFile(path.join(demoDirectory, 'index.html'), 'utf8');
   for (const example of discoverExamples()) {
-    const directory = path.join(output,'example',example.id);
-    await fs.mkdir(directory,{recursive:true});
-    const canonical = new URL(`examples/${example.id}.html`,docsUrl).href;
+    const directory = path.join(output, 'example', example.id);
+    await fs.mkdir(directory, { recursive: true });
+    const canonical = new URL(`examples/${example.id}.html`, docsUrl).href;
     const html = demoHTML.replace('<head>', `<head>\n<link rel="canonical" href="${canonical}">`);
-    await fs.writeFile(path.join(directory,'index.html'),html);
-    await fs.writeFile(path.join(output,'example',example.id+'.html'),html);
+    await fs.writeFile(path.join(directory, 'index.html'), html);
+    await fs.writeFile(path.join(output, 'example', example.id + '.html'), html);
   }
   // A physical alias also supports static hosts that resolve /docs to /docs.html.
-  await fs.copyFile(path.join(docsDirectory,'index.html'),path.join(output,'docs.html'));
-  for(const file of ['llms.txt','llms-full.txt'])await fs.copyFile(path.join(docsDirectory,file),path.join(output,file));
+  await fs.copyFile(path.join(docsDirectory, 'index.html'), path.join(output, 'docs.html'));
+  for (const file of ['llms.txt', 'llms-full.txt'])
+    await fs.copyFile(path.join(docsDirectory, file), path.join(output, file));
   console.log(`Combined static site: ${output} (demo at /, documentation at /docs and /docs/)`);
 }
-if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))await assembleSite();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await assembleSite();

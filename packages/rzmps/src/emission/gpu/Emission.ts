@@ -1,8 +1,8 @@
 import { matrixColumnGPU } from '../../simulation/simulationFrame.utils';
 import type EmissionShape from '../EmissionShape';
 import type Emitter from '../Emitter';
-import { EmissionSource } from '../../enums/emissionSource';
-import { TagSelectionMethod } from '../../enums/tagSelectionMethod';
+import { EmissionSource } from '../../enums/EmissionSource';
+import { TagSelectionMethod } from '../../enums/TagSelectionMethod';
 import type { Node } from 'three/webgpu';
 import { uint, mat4 } from 'three/tsl';
 import { FLOAT_SLOT_COUNT } from '../../simulation/gpu/particleLayout.utils';

@@ -1,7 +1,12 @@
 import GlobalSettings from '../core/GlobalSettings';
 import EmitterInstance from './EmitterInstance';
 import getAttributeVersion from '../utils/getAttributeVersion';
-import { transformPointGPU, transformDirectionGPU, rotateEulerYXZGPU, rotateFromYGPU } from '../simulation/gpu/transforms.utils';
+import {
+  transformPointGPU,
+  transformDirectionGPU,
+  rotateEulerYXZGPU,
+  rotateFromYGPU,
+} from '../simulation/gpu/transforms.utils';
 import EventReceiver, { type EventReceiverOptions } from '../events/EventReceiver';
 import type { SubSystemOptions } from '../core/ParticleSystem';
 import * as THREE from 'three';
@@ -18,8 +23,8 @@ import type ParticleSystem from '../core/ParticleSystem';
 import type { DynamicUntimedValue, DynamicValue } from '../values/dynamicValue.types';
 import type { Multiple, StrictMultiple } from '../types/multiple.types';
 import type { Tag } from '../types/tag.types';
-import { TagSelectionMethod } from '../enums/tagSelectionMethod';
-import { EmissionSource } from '../enums/emissionSource';
+import { TagSelectionMethod } from '../enums/TagSelectionMethod';
+import { EmissionSource } from '../enums/EmissionSource';
 import { getGPUEmitterSupport, type GPUEmissionSupportReport } from './gpu/Emission';
 import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 import type { GPUEmitterInstanceRuntime } from './gpu/EmitterInstanceBuffer';
@@ -48,51 +53,48 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
-import {
-  GPUDynamicParameterStore,
-} from '../values/evaluateDynamicGPU';
+import { GPUDynamicParameterStore } from '../values/evaluateDynamicGPU';
 import type { PackedFloatStorage, PackedUintStorage } from '../utils/gpu/storage.utils';
 
 export type SpawnBurst = {
-    /** Normalized emission-cycle time, clamped to the range 0 through 1. */
-    time: number,
-    /** Number of particles emitted when the burst fires. */
-    count: DynamicUntimedValue<number>,
-    /** Internal CPU emission state; reset automatically with the emitter. */
-    fired?: boolean,
+  /** Normalized emission-cycle time, clamped to the range 0 through 1. */
+  time: number;
+  /** Number of particles emitted when the burst fires. */
+  count: DynamicUntimedValue<number>;
+  /** Internal CPU emission state; reset automatically with the emitter. */
+  fired?: boolean;
 };
 
 export type EmitterSources = readonly string[] | { ids?: readonly string[]; tags?: readonly string[] };
 export interface EmitterOptions extends EventReceiverOptions, Partial<Omit<SubSystemOptions, 'tags'>> {
-    /** Registered source IDs, or a union of IDs and sources with any selected tag. Omission uses ordinary emission. */
-    sources?: EmitterSources;
-    /** Tags selecting event origins; tags continues to assign tags at particle birth. */
-    sourceTags?: Tag[];
-    /** Dynamic values sampled at birth; mutable values are isolated per particle. */
-    initialValues: Partial<InitialParticleValues>;
-    /** Geometry and sampling rule used to place particles. Defaults to a sphere. */
-    source: EmissionShape;
-    /** Timed particle batches within an emission cycle.
-     * Supplying bursts changes the default continuous rate to zero. */
-    bursts: Multiple<SpawnBurst>;
-    /** Continuous particles per second. Defaults to 50 without bursts, otherwise 0. */
-    rate: DynamicValue<number>;
-    /** Particles per world-space distance traveled by the emission context.
-     * @defaultValue 0 */
-    rateOverDistance: DynamicValue<number>;
+  /** Registered source IDs, or a union of IDs and sources with any selected tag. Omission uses ordinary emission. */
+  sources?: EmitterSources;
+  /** Tags selecting event origins; tags continues to assign tags at particle birth. */
+  sourceTags?: Tag[];
+  /** Dynamic values sampled at birth; mutable values are isolated per particle. */
+  initialValues: Partial<InitialParticleValues>;
+  /** Geometry and sampling rule used to place particles. Defaults to a sphere. */
+  source: EmissionShape;
+  /** Timed particle batches within an emission cycle.
+   * Supplying bursts changes the default continuous rate to zero. */
+  bursts: Multiple<SpawnBurst>;
+  /** Continuous particles per second. Defaults to 50 without bursts, otherwise 0. */
+  rate: DynamicValue<number>;
+  /** Particles per world-space distance traveled by the emission context.
+   * @defaultValue 0 */
+  rateOverDistance: DynamicValue<number>;
 
-    /** Initial velocity contribution along the sampled source direction.
-     * @defaultValue 1 */
-    radialSpeed: DynamicValue<number>;
-    /** Amount of initial rotation alignment to source direction.
-     * @defaultValue 0 */
-    alignment: DynamicValue<number>;
+  /** Initial velocity contribution along the sampled source direction.
+   * @defaultValue 1 */
+  radialSpeed: DynamicValue<number>;
+  /** Amount of initial rotation alignment to source direction.
+   * @defaultValue 0 */
+  alignment: DynamicValue<number>;
 
-    /** Tags assigned at birth, selected using tagSelection. */
-    tags: StrictMultiple<Tag>;
-    /** Assigns all tags, distributes them, or samples them according to the selected mode. */
-    tagSelection: TagSelectionMethod | `${TagSelectionMethod}`;
-
+  /** Tags assigned at birth, selected using tagSelection. */
+  tags: StrictMultiple<Tag>;
+  /** Assigns all tags, distributes them, or samples them according to the selected mode. */
+  tagSelection: TagSelectionMethod | `${TagSelectionMethod}`;
 }
 
 export interface EmissionContext extends Omit<ParticleInitializationContext, 'system'> {
@@ -212,33 +214,87 @@ class Emitter extends EventReceiver {
   // Owner-specific lookup; each entry is the execution itself, with no parallel context-state map.
   private readonly _instances = new Map<number, Map<string, EmitterInstance>>();
 
-  get emitContinuous(): SubSystemOptions['emitContinuous'] | undefined { return this.emission.emitContinuous; }
-  set emitContinuous(value: SubSystemOptions['emitContinuous'] | undefined) { this.emission.emitContinuous = value; }
-  get emitOnSpawn(): SubSystemOptions['emitOnSpawn'] | undefined { return this.emission.emitOnSpawn; }
-  set emitOnSpawn(value: SubSystemOptions['emitOnSpawn'] | undefined) { this.emission.emitOnSpawn = value; }
-  get emitOnDeath(): SubSystemOptions['emitOnDeath'] | undefined { return this.emission.emitOnDeath; }
-  set emitOnDeath(value: SubSystemOptions['emitOnDeath'] | undefined) { this.emission.emitOnDeath = value; }
-  get emitOnCollision(): SubSystemOptions['emitOnCollision'] | undefined { return this.emission.emitOnCollision; }
-  set emitOnCollision(value: SubSystemOptions['emitOnCollision'] | undefined) { this.emission.emitOnCollision = value; }
-  get onEvent(): SubSystemOptions['onEvent'] | undefined { return this.emission.onEvent; }
-  set onEvent(value: SubSystemOptions['onEvent'] | undefined) { this.emission.onEvent = value; }
-  get shouldEmit(): SubSystemOptions['shouldEmit'] | undefined { return this.emission.shouldEmit; }
-  set shouldEmit(value: SubSystemOptions['shouldEmit'] | undefined) { this.emission.shouldEmit = value; }
-  get ratio(): SubSystemOptions['ratio'] | undefined { return this.emission.ratio; }
-  set ratio(value: SubSystemOptions['ratio'] | undefined) { this.emission.ratio = value; }
-  get inheritScale(): SubSystemOptions['inheritScale'] | undefined { return this.emission.inheritScale; }
-  set inheritScale(value: SubSystemOptions['inheritScale'] | undefined) { this.emission.inheritScale = value; }
-  get inheritColor(): SubSystemOptions['inheritColor'] | undefined { return this.emission.inheritColor; }
-  set inheritColor(value: SubSystemOptions['inheritColor'] | undefined) { this.emission.inheritColor = value; }
-  get inheritAlpha(): SubSystemOptions['inheritAlpha'] | undefined { return this.emission.inheritAlpha; }
-  set inheritAlpha(value: SubSystemOptions['inheritAlpha'] | undefined) { this.emission.inheritAlpha = value; }
-  get inheritMass(): SubSystemOptions['inheritMass'] | undefined { return this.emission.inheritMass; }
-  set inheritMass(value: SubSystemOptions['inheritMass'] | undefined) { this.emission.inheritMass = value; }
-  get inheritVelocity(): SubSystemOptions['inheritVelocity'] | undefined { return this.emission.inheritVelocity; }
-  set inheritVelocity(value: SubSystemOptions['inheritVelocity'] | undefined) { this.emission.inheritVelocity = value; }
-  get inheritLifetime(): SubSystemOptions['inheritLifetime'] | undefined { return this.emission.inheritLifetime; }
-  set inheritLifetime(value: SubSystemOptions['inheritLifetime'] | undefined) { this.emission.inheritLifetime = value; }
-  get impulseThreshold(): SubSystemOptions['impulseThreshold'] | undefined { return this.emission.impulseThreshold; }
+  get emitContinuous(): SubSystemOptions['emitContinuous'] | undefined {
+    return this.emission.emitContinuous;
+  }
+  set emitContinuous(value: SubSystemOptions['emitContinuous'] | undefined) {
+    this.emission.emitContinuous = value;
+  }
+  get emitOnSpawn(): SubSystemOptions['emitOnSpawn'] | undefined {
+    return this.emission.emitOnSpawn;
+  }
+  set emitOnSpawn(value: SubSystemOptions['emitOnSpawn'] | undefined) {
+    this.emission.emitOnSpawn = value;
+  }
+  get emitOnDeath(): SubSystemOptions['emitOnDeath'] | undefined {
+    return this.emission.emitOnDeath;
+  }
+  set emitOnDeath(value: SubSystemOptions['emitOnDeath'] | undefined) {
+    this.emission.emitOnDeath = value;
+  }
+  get emitOnCollision(): SubSystemOptions['emitOnCollision'] | undefined {
+    return this.emission.emitOnCollision;
+  }
+  set emitOnCollision(value: SubSystemOptions['emitOnCollision'] | undefined) {
+    this.emission.emitOnCollision = value;
+  }
+  get onEvent(): SubSystemOptions['onEvent'] | undefined {
+    return this.emission.onEvent;
+  }
+  set onEvent(value: SubSystemOptions['onEvent'] | undefined) {
+    this.emission.onEvent = value;
+  }
+  get shouldEmit(): SubSystemOptions['shouldEmit'] | undefined {
+    return this.emission.shouldEmit;
+  }
+  set shouldEmit(value: SubSystemOptions['shouldEmit'] | undefined) {
+    this.emission.shouldEmit = value;
+  }
+  get ratio(): SubSystemOptions['ratio'] | undefined {
+    return this.emission.ratio;
+  }
+  set ratio(value: SubSystemOptions['ratio'] | undefined) {
+    this.emission.ratio = value;
+  }
+  get inheritScale(): SubSystemOptions['inheritScale'] | undefined {
+    return this.emission.inheritScale;
+  }
+  set inheritScale(value: SubSystemOptions['inheritScale'] | undefined) {
+    this.emission.inheritScale = value;
+  }
+  get inheritColor(): SubSystemOptions['inheritColor'] | undefined {
+    return this.emission.inheritColor;
+  }
+  set inheritColor(value: SubSystemOptions['inheritColor'] | undefined) {
+    this.emission.inheritColor = value;
+  }
+  get inheritAlpha(): SubSystemOptions['inheritAlpha'] | undefined {
+    return this.emission.inheritAlpha;
+  }
+  set inheritAlpha(value: SubSystemOptions['inheritAlpha'] | undefined) {
+    this.emission.inheritAlpha = value;
+  }
+  get inheritMass(): SubSystemOptions['inheritMass'] | undefined {
+    return this.emission.inheritMass;
+  }
+  set inheritMass(value: SubSystemOptions['inheritMass'] | undefined) {
+    this.emission.inheritMass = value;
+  }
+  get inheritVelocity(): SubSystemOptions['inheritVelocity'] | undefined {
+    return this.emission.inheritVelocity;
+  }
+  set inheritVelocity(value: SubSystemOptions['inheritVelocity'] | undefined) {
+    this.emission.inheritVelocity = value;
+  }
+  get inheritLifetime(): SubSystemOptions['inheritLifetime'] | undefined {
+    return this.emission.inheritLifetime;
+  }
+  set inheritLifetime(value: SubSystemOptions['inheritLifetime'] | undefined) {
+    this.emission.inheritLifetime = value;
+  }
+  get impulseThreshold(): SubSystemOptions['impulseThreshold'] | undefined {
+    return this.emission.impulseThreshold;
+  }
   set impulseThreshold(value: SubSystemOptions['impulseThreshold'] | undefined) {
     this.emission.impulseThreshold = value;
   }
@@ -287,12 +343,22 @@ class Emitter extends EventReceiver {
   }
 
   /** Creates emission state; bursts default the continuous rate to zero. */
-  constructor(
-    options: Partial<EmitterOptions> = {},
-  ) {
+  constructor(options: Partial<EmitterOptions> = {}) {
     const {
-      source, sources, sourceTags, initialValues, bursts, rate, rateOverDistance,
-      radialSpeed, alignment, tags, tagSelection, events, eventScope, ...emission
+      source,
+      sources,
+      sourceTags,
+      initialValues,
+      bursts,
+      rate,
+      rateOverDistance,
+      radialSpeed,
+      alignment,
+      tags,
+      tagSelection,
+      events,
+      eventScope,
+      ...emission
     } = options;
 
     super({ events, eventScope });
@@ -315,12 +381,12 @@ class Emitter extends EventReceiver {
   }
 
   /*
-    * CONTROLS
-  */
+   * CONTROLS
+   */
 
   /** Clears timed bursts, movement credit, LOD state, and instance emission clocks. */
   public reset(): void {
-    this.bursts.forEach((burst) => {
+    this.bursts.forEach(burst => {
       burst.fired = false;
     });
 
@@ -363,22 +429,21 @@ class Emitter extends EventReceiver {
       this.getDynamicStructure(this.rateOverDistance),
       this.getDynamicStructure(this.radialSpeed),
       this.getDynamicStructure(this.alignment),
-      ...this.bursts.map((burst) => this.getDynamicStructure(burst.count)),
-      ...Object.keys(this.initialValues).sort().map((key) => (
-        `${key}:${this.getDynamicStructure(this.initialValues[key as keyof InitialParticleValues])}`
-      )),
+      ...this.bursts.map(burst => this.getDynamicStructure(burst.count)),
+      ...Object.keys(this.initialValues)
+        .sort()
+        .map(key => `${key}:${this.getDynamicStructure(this.initialValues[key as keyof InitialParticleValues])}`),
       this.tags?.length ?? 0,
       this.tagSelection,
       this.initialValues.rotation === undefined ? 'aligned-rotation' : 'explicit-rotation',
     ].join('|');
     if (
-      this._gpuStructureSignature
-      && (
-        structureSignature !== this._gpuStructureSignature
-        || this.source !== this._gpuSource
-        || geometry !== this._gpuGeometry
-      )
-    ) this._gpuVersion += 1;
+      this._gpuStructureSignature &&
+      (structureSignature !== this._gpuStructureSignature ||
+        this.source !== this._gpuSource ||
+        geometry !== this._gpuGeometry)
+    )
+      this._gpuVersion += 1;
 
     this._gpuStructureSignature = structureSignature;
     this._gpuSource = this.source;
@@ -387,55 +452,45 @@ class Emitter extends EventReceiver {
 
   /** @internal Builds the standard TSL birth writer used by ParticleSystem. */
   createBuiltInGPUUpdate(): GPUEmitterUpdate {
-    const volumeSampling = this.source.source === EmissionSource.Volume
-      ? this.getGPUVolumeSampling()
-      : undefined;
+    const volumeSampling = this.source.source === EmissionSource.Volume ? this.getGPUVolumeSampling() : undefined;
     const sampledVectors = volumeSampling
-      ? storage(volumeSampling.vectors, 'vec4', volumeSampling.count * 3) as PackedFloatStorage
+      ? (storage(volumeSampling.vectors, 'vec4', volumeSampling.count * 3) as PackedFloatStorage)
       : undefined;
-    const geometrySampling = this.source.source === EmissionSource.Volume
-      ? undefined
-      : this.getGPUGeometrySampling();
+    const geometrySampling = this.source.source === EmissionSource.Volume ? undefined : this.getGPUGeometrySampling();
     const geometryVectors = geometrySampling
-      ? storage(
-        geometrySampling.vectors,
-        'vec4',
-        geometrySampling.vertexCount * 2,
-      ) as PackedFloatStorage
+      ? (storage(geometrySampling.vectors, 'vec4', geometrySampling.vertexCount * 2) as PackedFloatStorage)
       : undefined;
     const geometryTriangles = geometrySampling
-      ? storage(
-        geometrySampling.triangles,
-        'uvec4',
-        Math.max(geometrySampling.triangleCount * 2, 1),
-      ) as PackedUintStorage
+      ? (storage(
+          geometrySampling.triangles,
+          'uvec4',
+          Math.max(geometrySampling.triangleCount * 2, 1),
+        ) as PackedUintStorage)
       : undefined;
-    return (context) => {
+    return context => {
       const particle = context.output.storage.createParticle(undefined, true);
       const runtime = context.emitterRuntime;
       if (!runtime) return;
       const requested = runtime.requestCount();
 
       const initializeParticle = (claimIndex: Node<'uint'>) => {
-        const seed = instanceIndex.add(particle.generation.mul(65537))
-          .add(uint(context.emitterIndex * 4099));
+        const seed = instanceIndex.add(particle.generation.mul(65537)).add(uint(context.emitterIndex * 4099));
         particle.lodPriority.assign(uint(hash(seed.add(9173)).mul(this._gpuQuality).mul(4294967040)));
         let sampledPosition: Node<'vec3'>;
         let sampledNormal: Node<'vec3'>;
         if (this.source.source === EmissionSource.Vertices && geometrySampling) {
           const vertexIndex = int(hash(seed.add(43)).mul(geometrySampling.vertexCount).floor());
           sampledPosition = geometryVectors!.element(vertexIndex).xyz as Node<'vec3'>;
-          sampledNormal = geometryVectors!.element(
-            vertexIndex.add(geometrySampling.vertexCount),
-          ).xyz.normalize() as Node<'vec3'>;
+          sampledNormal = geometryVectors!
+            .element(vertexIndex.add(geometrySampling.vertexCount))
+            .xyz.normalize() as Node<'vec3'>;
         } else if (this.source.source === EmissionSource.Surface && geometrySampling) {
           const selectorIndex = int(hash(seed.add(43)).mul(geometrySampling.triangleCount).floor());
           const selector = geometryTriangles!.element(selectorIndex.mul(2));
           const selectorThreshold = geometryTriangles!.element(selectorIndex.mul(2).add(1)).x;
-          const triangleIndex = uint(hash(seed.add(61)).mul(0xffffffff)).lessThan(selectorThreshold).select(
-            uint(selectorIndex),
-            selector.w,
-          );
+          const triangleIndex = uint(hash(seed.add(61)).mul(0xffffffff))
+            .lessThan(selectorThreshold)
+            .select(uint(selectorIndex), selector.w);
           const triangle = geometryTriangles!.element(triangleIndex.mul(2));
           const point0 = geometryVectors!.element(triangle.x).xyz;
           const point1 = geometryVectors!.element(triangle.y).xyz;
@@ -445,7 +500,9 @@ class Emitter extends EventReceiver {
           const weight1 = root.mul(float(1).sub(hash(seed.add(53))));
           const weight2 = root.sub(weight1);
           sampledPosition = point0.mul(weight0).add(point1.mul(weight1)).add(point2.mul(weight2)) as Node<'vec3'>;
-          sampledNormal = geometryVectors!.element(triangle.x.add(geometrySampling.vertexCount)).xyz.mul(weight0)
+          sampledNormal = geometryVectors!
+            .element(triangle.x.add(geometrySampling.vertexCount))
+            .xyz.mul(weight0)
             .add(geometryVectors!.element(triangle.y.add(geometrySampling.vertexCount)).xyz.mul(weight1))
             .add(geometryVectors!.element(triangle.z.add(geometrySampling.vertexCount)).xyz.mul(weight2))
             .normalize() as Node<'vec3'>;
@@ -462,27 +519,28 @@ class Emitter extends EventReceiver {
           const anchorNormal = sampledVectors!.element(normalOffset).xyz;
           const blendedNormal = vec3(0).toVar('volumeSampleNormal');
           const totalWeight = float(0).toVar('volumeSampleNormalWeight');
-          [sampleIndex, int(neighborRecord.x), int(neighborRecord.y), int(neighborRecord.z)]
-            .forEach((neighborIndex) => {
-              const neighborPosition = sampledVectors!.element(neighborIndex).xyz;
-              const delta = sampledPosition.sub(neighborPosition);
-              const weight = float(1).div(delta.dot(delta).max(float(1e-8)));
-              blendedNormal.addAssign(
-                sampledVectors!.element(
-                  int(volumeSampling!.count).add(neighborIndex.mul(2)),
-                ).xyz.mul(weight),
-              );
-              totalWeight.addAssign(weight);
-            });
-          sampledNormal = blendedNormal.length().greaterThan(float(Number.EPSILON)).select(
-            blendedNormal.div(totalWeight.max(float(Number.EPSILON))).normalize(),
-            anchorNormal,
-          ) as Node<'vec3'>;
+          [sampleIndex, int(neighborRecord.x), int(neighborRecord.y), int(neighborRecord.z)].forEach(neighborIndex => {
+            const neighborPosition = sampledVectors!.element(neighborIndex).xyz;
+            const delta = sampledPosition.sub(neighborPosition);
+            const weight = float(1).div(delta.dot(delta).max(float(1e-8)));
+            blendedNormal.addAssign(
+              sampledVectors!.element(int(volumeSampling!.count).add(neighborIndex.mul(2))).xyz.mul(weight),
+            );
+            totalWeight.addAssign(weight);
+          });
+          sampledNormal = blendedNormal
+            .length()
+            .greaterThan(float(Number.EPSILON))
+            .select(
+              blendedNormal.div(totalWeight.max(float(Number.EPSILON))).normalize(),
+              anchorNormal,
+            ) as Node<'vec3'>;
         }
         const localPosition = transformPointGPU(sampledPosition, this._gpuSourceMatrix);
         const normal = transformDirectionGPU(sampledNormal, this._gpuSourceMatrix).normalize();
-        const time = context.resolveEmissionTime?.(claimIndex)
-          ?? context.elapsedTimeNode.div(float(Math.max(context.system.duration, Number.EPSILON)));
+        const time =
+          context.resolveEmissionTime?.(claimIndex) ??
+          context.elapsedTimeNode.div(float(Math.max(context.system.duration, Number.EPSILON)));
         const initialPosition = this._gpuParameters.vector(
           'initial.position',
           () => this.initialValues.position,
@@ -493,34 +551,47 @@ class Emitter extends EventReceiver {
         const inheritance = context.inheritance;
         const parent = context.resolveParentParticle?.(claimIndex) ?? context.parentParticle;
         const impulseEffects = context.resolveImpulseEffects?.(claimIndex);
-        const emissionTransform = context.resolveEmissionTransform?.(claimIndex)
-          ?? (context.sourceRelative ? mat4(new THREE.Matrix4()) : context.emissionFrame);
-        const inheritedTransformScale = parent && inheritance && inheritance.scale > 0
-          ? mix(vec3(1, 1, 1), parent.scale, inheritance.scale)
-          : vec3(1, 1, 1);
+        const emissionTransform =
+          context.resolveEmissionTransform?.(claimIndex) ??
+          (context.sourceRelative ? mat4(new THREE.Matrix4()) : context.emissionFrame);
+        const inheritedTransformScale =
+          parent && inheritance && inheritance.scale > 0
+            ? mix(vec3(1, 1, 1), parent.scale, inheritance.scale)
+            : vec3(1, 1, 1);
         const parentLocalPosition = localPosition.add(initialPosition).mul(inheritedTransformScale);
-        const rotatedPosition = parent && impulseEffects?.alignmentDirection
-          ? impulseEffects.alignmentDirection.length().greaterThan(float(0)).select(
-            rotateFromYGPU(parentLocalPosition, impulseEffects.alignmentDirection),
-            rotateEulerYXZGPU(parentLocalPosition, parent.rotation),
-          ) as Node<'vec3'>
+        const rotatedPosition =
+          parent && impulseEffects?.alignmentDirection
+            ? (impulseEffects.alignmentDirection
+                .length()
+                .greaterThan(float(0))
+                .select(
+                  rotateFromYGPU(parentLocalPosition, impulseEffects.alignmentDirection),
+                  rotateEulerYXZGPU(parentLocalPosition, parent.rotation),
+                ) as Node<'vec3'>)
+            : parent
+              ? rotateEulerYXZGPU(parentLocalPosition, parent.rotation)
+              : parentLocalPosition;
+        const rotatedNormal =
+          parent && impulseEffects?.alignmentDirection
+            ? (impulseEffects.alignmentDirection
+                .length()
+                .greaterThan(float(0))
+                .select(
+                  rotateFromYGPU(normal, impulseEffects.alignmentDirection),
+                  rotateEulerYXZGPU(normal, parent.rotation),
+                ) as Node<'vec3'>)
+            : parent
+              ? rotateEulerYXZGPU(normal, parent.rotation)
+              : normal;
+        const emissionPosition = emissionTransform
+          ? transformPointGPU(localPosition.add(initialPosition), emissionTransform)
           : parent
-            ? rotateEulerYXZGPU(parentLocalPosition, parent.rotation)
-            : parentLocalPosition;
-        const rotatedNormal = parent && impulseEffects?.alignmentDirection
-          ? impulseEffects.alignmentDirection.length().greaterThan(float(0)).select(
-            rotateFromYGPU(normal, impulseEffects.alignmentDirection),
-            rotateEulerYXZGPU(normal, parent.rotation),
-          ) as Node<'vec3'>
-          : parent
-            ? rotateEulerYXZGPU(normal, parent.rotation)
-            : normal;
-        const emissionPosition = emissionTransform ? transformPointGPU(localPosition.add(initialPosition),
-          emissionTransform) : parent
-          ? rotatedPosition.add(parent.position)
-          : parentLocalPosition.add(context.emitterPositionNode ?? vec3(0, 0, 0));
+            ? rotatedPosition.add(parent.position)
+            : parentLocalPosition.add(context.emitterPositionNode ?? vec3(0, 0, 0));
         const emissionNormal = emissionTransform
-          ? transpose(inverse(mat3(emissionTransform))).mul(normal).normalize() as Node<'vec3'>
+          ? (transpose(inverse(mat3(emissionTransform)))
+              .mul(normal)
+              .normalize() as Node<'vec3'>)
           : rotatedNormal.normalize();
         const initialVelocity = this._gpuParameters.vector(
           'initial.velocity',
@@ -529,24 +600,27 @@ class Emitter extends EventReceiver {
           new THREE.Vector3(),
           seed.add(59),
         );
-        const alignment = this._gpuParameters.number(
-          'alignment', () => this.alignment, time, 0, seed.add(61),
-        ).clamp(0, 1);
+        const alignment = this._gpuParameters
+          .number('alignment', () => this.alignment, time, 0, seed.add(61))
+          .clamp(0, 1);
         const alignedRotation = vec3(
           asin(emissionNormal.y.clamp(-1, 1)).negate(),
-          atan(emissionNormal.x, emissionNormal.x.abs().add(emissionNormal.z.abs()).lessThan(1e-8)
-            .select(float(1), emissionNormal.z)),
+          atan(
+            emissionNormal.x,
+            emissionNormal.x.abs().add(emissionNormal.z.abs()).lessThan(1e-8).select(float(1), emissionNormal.z),
+          ),
           0,
         ).mul(alignment);
-        const initialRotation = this.initialValues.rotation === undefined
-          ? alignedRotation
-          : this._gpuParameters.vector(
-            'initial.rotation',
-            () => this.initialValues.rotation,
-            time,
-            new THREE.Vector3(),
-            seed.add(61),
-          );
+        const initialRotation =
+          this.initialValues.rotation === undefined
+            ? alignedRotation
+            : this._gpuParameters.vector(
+                'initial.rotation',
+                () => this.initialValues.rotation,
+                time,
+                new THREE.Vector3(),
+                seed.add(61),
+              );
         const initialScale = this._gpuParameters.vector(
           'initial.scale',
           () => this.initialValues.scale,
@@ -597,13 +671,25 @@ class Emitter extends EventReceiver {
           seed.add(97),
         );
         const initialSpeed = this._gpuParameters.number(
-          'initial.speed', () => this.initialValues.speed, time, 1, seed.add(101),
+          'initial.speed',
+          () => this.initialValues.speed,
+          time,
+          1,
+          seed.add(101),
         );
         const initialAlpha = this._gpuParameters.number(
-          'initial.alpha', () => this.initialValues.alpha, time, 1, seed.add(103),
+          'initial.alpha',
+          () => this.initialValues.alpha,
+          time,
+          1,
+          seed.add(103),
         );
         const initialMass = this._gpuParameters.number(
-          'initial.mass', () => this.initialValues.mass, time, 0, seed.add(107),
+          'initial.mass',
+          () => this.initialValues.mass,
+          time,
+          0,
+          seed.add(107),
         );
         const initialDistortion = this._gpuParameters.number(
           'initial.distortionStrength',
@@ -613,31 +699,35 @@ class Emitter extends EventReceiver {
           seed.add(109),
         );
         const initialLifetime = this._gpuParameters.number(
-          'initial.lifetime', () => this.initialValues.lifetime, time, 1, seed.add(113),
+          'initial.lifetime',
+          () => this.initialValues.lifetime,
+          time,
+          1,
+          seed.add(113),
         );
-        const radialSpeed = this._gpuParameters.number(
-          'radialSpeed', () => this.radialSpeed, time, 0, seed.add(127),
-        );
+        const radialSpeed = this._gpuParameters.number('radialSpeed', () => this.radialSpeed, time, 0, seed.add(127));
 
-        const inheritedColor = parent && inheritance && inheritance.color > 0
-          ? mix(vec3(1, 1, 1), parent.color, inheritance.color)
-          : vec3(1, 1, 1);
-        const inheritedAlpha = parent && inheritance && inheritance.alpha > 0
-          ? mix(float(1), parent.alpha, inheritance.alpha)
-          : float(1);
-        const inheritedMass = parent && inheritance && inheritance.mass > 0
-          ? mix(float(1), parent.mass, inheritance.mass)
-          : float(1);
-        const inheritedVelocity = context.resolveInheritedVelocity?.(claimIndex)
-          ?? (parent && inheritance && inheritance.velocity > 0
-            ? parent.velocity.mul(inheritance.velocity) : vec3(0, 0, 0));
+        const inheritedColor =
+          parent && inheritance && inheritance.color > 0
+            ? mix(vec3(1, 1, 1), parent.color, inheritance.color)
+            : vec3(1, 1, 1);
+        const inheritedAlpha =
+          parent && inheritance && inheritance.alpha > 0 ? mix(float(1), parent.alpha, inheritance.alpha) : float(1);
+        const inheritedMass =
+          parent && inheritance && inheritance.mass > 0 ? mix(float(1), parent.mass, inheritance.mass) : float(1);
+        const inheritedVelocity =
+          context.resolveInheritedVelocity?.(claimIndex) ??
+          (parent && inheritance && inheritance.velocity > 0
+            ? parent.velocity.mul(inheritance.velocity)
+            : vec3(0, 0, 0));
 
         particle.position.assign(emissionPosition);
         particle.orbitCenter.assign(vec3(0, 0, 0));
         particle.rotation.assign(initialRotation);
         particle.scale.assign(initialScale.mul(impulseEffects?.scale ?? float(1)));
         particle.velocity.assign(
-          initialVelocity.add(emissionNormal.mul(radialSpeed))
+          initialVelocity
+            .add(emissionNormal.mul(radialSpeed))
             .mul(impulseEffects?.speed ?? float(1))
             .add(inheritedVelocity),
         );
@@ -656,44 +746,47 @@ class Emitter extends EventReceiver {
         particle.lifetime.assign(initialLifetime);
         particle.time.assign(float(0));
         particle.realtime.assign(float(0));
-        context.output.storage.createSourceIdentityNode(particle.index).assign(
-          context.resolveSourceIdentity?.(claimIndex) ?? vec4(0),
-        );
+        context.output.storage
+          .createSourceIdentityNode(particle.index)
+          .assign(context.resolveSourceIdentity?.(claimIndex) ?? vec4(0));
         const tagMasks = context.tagMasks ?? [];
         if (
-          (this.tagSelection === TagSelectionMethod.Random
-            || this.tagSelection === TagSelectionMethod.Distribute)
-          && tagMasks.length > 0
+          (this.tagSelection === TagSelectionMethod.Random || this.tagSelection === TagSelectionMethod.Distribute) &&
+          tagMasks.length > 0
         ) {
-          const selectedTag = this.tagSelection === TagSelectionMethod.Random
-            ? int(hash(seed.add(137)).mul(tagMasks.length).floor())
-            : int(particle.index.mod(tagMasks.length));
-          const tagMask = tagMasks.reduce<Node<'uint'>>((result, value, index) => (
-            selectedTag.equal(index).select(uint(value), result) as Node<'uint'>
-          ), uint(0));
+          const selectedTag =
+            this.tagSelection === TagSelectionMethod.Random
+              ? int(hash(seed.add(137)).mul(tagMasks.length).floor())
+              : int(particle.index.mod(tagMasks.length));
+          const tagMask = tagMasks.reduce<Node<'uint'>>(
+            (result, value, index) => selectedTag.equal(index).select(uint(value), result) as Node<'uint'>,
+            uint(0),
+          );
           particle.tagMask.assign(tagMask);
         } else {
           particle.tagMask.assign(uint(tagMasks.reduce((mask, value) => mask | value, 0)));
         }
         context.system.initializeParticleGPU(particle, {
-          ...context, source: parent, ...context.resolveInitializationContext?.(claimIndex),
+          ...context,
+          source: parent,
+          ...context.resolveInitializationContext?.(claimIndex),
         });
         context.allocationWriter?.markSpawned(particle);
         // Hooks and spawn snapshots see age zero. Only packed storage carries the offset.
-        particle.birthOffset?.assign((context.resolveBirthOffset?.(claimIndex)
-          ?? runtime.birthOffset(claimIndex, this.bursts.length)).clamp(0, context.deltaTimeNode));
+        particle.birthOffset?.assign(
+          (context.resolveBirthOffset?.(claimIndex) ?? runtime.birthOffset(claimIndex, this.bursts.length)).clamp(
+            0,
+            context.deltaTimeNode,
+          ),
+        );
       };
 
       if (context.reclaimOld) {
         const deadClaims = runtime.claimCount();
-        const successfulDeadClaims = deadClaims.lessThan(requested)
-          .select(deadClaims, requested) as Node<'uint'>;
-        context.allocationWriter?.claimOldSlotForEmitter(
-          particle,
-          (replacementIndex) => {
-            initializeParticle(successfulDeadClaims.add(replacementIndex));
-          },
-        );
+        const successfulDeadClaims = deadClaims.lessThan(requested).select(deadClaims, requested) as Node<'uint'>;
+        context.allocationWriter?.claimOldSlotForEmitter(particle, replacementIndex => {
+          initializeParticle(successfulDeadClaims.add(replacementIndex));
+        });
       } else {
         context.allocationWriter?.claimDeadSlotForEmitter(
           particle,
@@ -715,27 +808,33 @@ class Emitter extends EventReceiver {
     const elapsedTime = context.elapsedTimeNode.toVar('emitterElapsedTime');
     const duration = context.durationNode ?? float(Math.max(context.system.duration, Number.EPSILON));
     const safeDuration = duration.max(float(Number.EPSILON));
-    const normalizedTime = context.normalizedTimeNode
-      ?? (context.loopingClock ? elapsedTime.mod(safeDuration) : elapsedTime).div(safeDuration);
+    const normalizedTime =
+      context.normalizedTimeNode ??
+      (context.loopingClock ? elapsedTime.mod(safeDuration) : elapsedTime).div(safeDuration);
     const emissionMultiplier = this._gpuQuality.mul((context.countScaleNode ?? float(1)).max(0));
     const skipped = context.skippedTimeNode ?? float(0);
     If(skipped.greaterThan(0), () => {
       const wrap = context.skippedClockWrapNode ?? float(0);
       const skipEnd = elapsedTime.sub(context.deltaTimeNode).toVar('skipEnd');
       const skipTime = (context.loopingClock ? skipEnd.mod(safeDuration) : skipEnd).div(safeDuration);
-      const crossedCycle = (context.loopingClock
-        ? skipEnd.div(safeDuration).floor().notEqual(runtime.timing.w.div(safeDuration).floor())
-        : wrap.greaterThan(0)).toVar('skipCrossedCycle');
+      const crossedCycle = (
+        context.loopingClock
+          ? skipEnd.div(safeDuration).floor().notEqual(runtime.timing.w.div(safeDuration).floor())
+          : wrap.greaterThan(0)
+      ).toVar('skipCrossedCycle');
       If(runtime.identity.x.equal(uint(0)), () => {
         runtime.timing.y.assign(skipEnd.add(wrap).sub(skipped).max(0));
         runtime.identity.x.assign(uint(1));
       });
-      const rate = this._gpuParameters.number('rate', () => this.rate, skipTime, 0,
-        uint(context.emitterIndex * 4099)).mul(emissionMultiplier);
+      const rate = this._gpuParameters
+        .number('rate', () => this.rate, skipTime, 0, uint(context.emitterIndex * 4099))
+        .mul(emissionMultiplier);
       If(rate.greaterThan(0), () => {
         const due = skipEnd.add(wrap).sub(runtime.timing.y).mul(rate).add(1e-6).floor().max(0);
         runtime.timing.y.addAssign(due.div(rate));
-      }).Else(() => { runtime.timing.y.assign(skipEnd.add(wrap)); });
+      }).Else(() => {
+        runtime.timing.y.assign(skipEnd.add(wrap));
+      });
       runtime.timing.y.subAssign(wrap);
       runtime.timing.w.assign(skipEnd);
       runtime.timing.z.assign(0);
@@ -743,11 +842,17 @@ class Emitter extends EventReceiver {
       runtime.distance.w.assign(0);
       runtime.setPendingRequestCount(0);
       for (let word = 0; word < Math.ceil(this.bursts.length / 32); word += 1) {
-        If(wrap.greaterThan(0).or(crossedCycle), () => { runtime.firedBurstWord(word).assign(uint(0)); });
+        If(wrap.greaterThan(0).or(crossedCycle), () => {
+          runtime.firedBurstWord(word).assign(uint(0));
+        });
       }
       this.bursts.forEach((_burst, index) => {
-        const burstTime = this._gpuParameters.number(`burst.${index}.time`,
-          () => this.bursts[index]?.time, skipTime, 0);
+        const burstTime = this._gpuParameters.number(
+          `burst.${index}.time`,
+          () => this.bursts[index]?.time,
+          skipTime,
+          0,
+        );
         If(burstTime.lessThanEqual(skipTime), () => {
           const word = runtime.firedBurstWord(Math.floor(index / 32));
           word.assign(bitOr(word, shiftLeft(uint(1), uint(index % 32))));
@@ -765,7 +870,8 @@ class Emitter extends EventReceiver {
     runtime.birthSchedule(0).assign(vec4(float(requestCount), 0, 0, 0));
     const firstBirth = float(0).toVar('firstBirth');
     const birthInterval = float(0).toVar('birthInterval');
-    const resetContext = runtime.identity.x.equal(uint(0))
+    const resetContext = runtime.identity.x
+      .equal(uint(0))
       .or(elapsedTime.lessThan(runtime.timing.w))
       .toVar('resetEmitterContext');
 
@@ -784,9 +890,8 @@ class Emitter extends EventReceiver {
         }
       });
       {
-        const rate = this._gpuParameters.number(
-          'rate', () => this.rate, normalizedTime, 0, uint(context.emitterIndex * 4099),
-        )
+        const rate = this._gpuParameters
+          .number('rate', () => this.rate, normalizedTime, 0, uint(context.emitterIndex * 4099))
           .mul(emissionMultiplier);
         If(rate.greaterThan(float(0)), () => {
           const emissionCredit = elapsedTime.sub(runtime.timing.y).mul(rate);
@@ -803,13 +908,9 @@ class Emitter extends EventReceiver {
       }
       runtime.birthSchedule(1).assign(vec4(float(requestCount), firstBirth, birthInterval, 0));
 
-      const rateOverDistance = this._gpuParameters.number(
-        'rateOverDistance',
-        () => this.rateOverDistance,
-        normalizedTime,
-        0,
-        uint(context.emitterIndex * 6151),
-      ).mul(emissionMultiplier);
+      const rateOverDistance = this._gpuParameters
+        .number('rateOverDistance', () => this.rateOverDistance, normalizedTime, 0, uint(context.emitterIndex * 6151))
+        .mul(emissionMultiplier);
       if (context.emitterPositionNode) {
         const emitterPosition = context.emitterPositionNode;
         If(resetContext.not().and(rateOverDistance.greaterThan(float(0))), () => {
@@ -832,27 +933,46 @@ class Emitter extends EventReceiver {
         const bit = shiftLeft(uint(1), uint(burstIndex % 32));
         const hasFired = bitAnd(burstWord, bit).notEqual(uint(0));
         const burstTime = this._gpuParameters.number(
-          `burst.${burstIndex}.time`, () => this.bursts[burstIndex]?.time, normalizedTime, 0,
+          `burst.${burstIndex}.time`,
+          () => this.bursts[burstIndex]?.time,
+          normalizedTime,
+          0,
         );
         If(hasFired.not().and(normalizedTime.greaterThanEqual(burstTime)), () => {
-          const burstCredit = this._gpuParameters.number(
-            `burst.${burstIndex}.count`, () => this.bursts[burstIndex]?.count,
-            normalizedTime, 0, uint(context.emitterIndex * 4099 + burstIndex * 131),
-          ).mul(emissionMultiplier).add(runtime.distance.w);
+          const burstCredit = this._gpuParameters
+            .number(
+              `burst.${burstIndex}.count`,
+              () => this.bursts[burstIndex]?.count,
+              normalizedTime,
+              0,
+              uint(context.emitterIndex * 4099 + burstIndex * 131),
+            )
+            .mul(emissionMultiplier)
+            .add(runtime.distance.w);
           const due = burstCredit.floor();
           requestCount.addAssign(uint(due));
           runtime.distance.w.assign(burstCredit.sub(due));
           burstWord.assign(bitOr(burstWord, bit));
         });
-        runtime.birthSchedule(burstIndex + 3).assign(vec4(float(requestCount),
-          burstTime.mul(duration).add(context.loopingClock
-            ? elapsedTime.div(safeDuration).floor().mul(duration) : float(0))
-            .sub(elapsedTime.sub(context.deltaTimeNode)).max(0), 0, 0));
+        runtime.birthSchedule(burstIndex + 3).assign(
+          vec4(
+            float(requestCount),
+            burstTime
+              .mul(duration)
+              .add(context.loopingClock ? elapsedTime.div(safeDuration).floor().mul(duration) : float(0))
+              .sub(elapsedTime.sub(context.deltaTimeNode))
+              .max(0),
+            0,
+            0,
+          ),
+        );
       });
     }
 
     runtime.timing.w.assign(elapsedTime);
-    If(this._gpuQuality.lessThanEqual(float(0)), () => { requestCount.assign(uint(0)); });
+    If(this._gpuQuality.lessThanEqual(float(0)), () => {
+      requestCount.assign(uint(0));
+    });
     runtime.resetRequestCount(requestCount);
   }
 
@@ -879,13 +999,8 @@ class Emitter extends EventReceiver {
     samples.forEach((sample, index) => {
       const positionOffset = index * 4;
       const normalOffset = samples.length * 4 + index * 8;
-      vectors.set(
-        [sample.position.x, sample.position.y, sample.position.z, sample.radius],
-        positionOffset,
-      );
-      const neighbors = Array.from({ length: 3 }, (_, neighborIndex) => (
-        sample.neighbors?.[neighborIndex] ?? index
-      ));
+      vectors.set([sample.position.x, sample.position.y, sample.position.z, sample.radius], positionOffset);
+      const neighbors = Array.from({ length: 3 }, (_, neighborIndex) => sample.neighbors?.[neighborIndex] ?? index);
       vectors.set([sample.normal.x, sample.normal.y, sample.normal.z, 0], normalOffset);
       vectors.set([...neighbors, 0], normalOffset + 4);
     });
@@ -928,9 +1043,7 @@ class Emitter extends EventReceiver {
       vectors[normalOffset + 2] = normal?.getZ(index) ?? 0;
     }
 
-    const triangleCount = geometry.index
-      ? Math.floor(geometry.index.count / 3)
-      : Math.floor(position.count / 3);
+    const triangleCount = geometry.index ? Math.floor(geometry.index.count / 3) : Math.floor(position.count / 3);
     // Two uvec4 records per triangle keep vertex indices and alias metadata in
     // one storage binding: [a,b,c,alias], [probabilityThreshold,0,0,0].
     const triangles = new Uint32Array(Math.max(triangleCount * 2, 1) * 4);
@@ -955,7 +1068,7 @@ class Emitter extends EventReceiver {
     if (triangleCount > 0 && totalArea > 0) {
       const scaledAreas = Array.from(
         triangleAreas.subarray(0, triangleCount),
-        (area) => area * triangleCount / totalArea,
+        area => (area * triangleCount) / totalArea,
       );
       const small: number[] = [];
       const large: number[] = [];
@@ -968,7 +1081,7 @@ class Emitter extends EventReceiver {
         scaledAreas[largeIndex] -= 1 - scaledAreas[smallIndex];
         (scaledAreas[largeIndex] < 1 ? small : large).push(largeIndex);
       }
-      [...small, ...large].forEach((index) => {
+      [...small, ...large].forEach(index => {
         triangles[index * 8 + 3] = index;
         triangles[index * 8 + 4] = 0xffffffff;
       });
@@ -987,8 +1100,8 @@ class Emitter extends EventReceiver {
   }
 
   /*
-    * SIMULATION
-  */
+   * SIMULATION
+   */
 
   /** Attaches the source shape to the particle system. */
   setup(particleSystem: ParticleSystem) {
@@ -999,14 +1112,22 @@ class Emitter extends EventReceiver {
    * Functional values use GPU_DYNAMIC_VALUE_RESOLUTION samples over normalized time;
    * their maximum is approximate and can miss peaks between samples. */
   getMaxLifetime(): number | null {
-    const maximum = maxDynamicNumber(this.initialValues.lifetime ?? 1,
-      GlobalSettings.GPU_DYNAMIC_VALUE_RESOLUTION, Number.NaN);
+    const maximum = maxDynamicNumber(
+      this.initialValues.lifetime ?? 1,
+      GlobalSettings.GPU_DYNAMIC_VALUE_RESOLUTION,
+      Number.NaN,
+    );
     return Number.isFinite(maximum) ? maximum : null;
   }
 
   /** @internal Moves an execution past discarded time without births or deferred credit. */
-  advanceClock(context: Partial<EmissionContext>, system: ParticleSystem,
-    instance: EmitterInstance, discarded: number, clockWrap = 0): void {
+  advanceClock(
+    context: Partial<EmissionContext>,
+    system: ParticleSystem,
+    instance: EmitterInstance,
+    discarded: number,
+    clockWrap = 0,
+  ): void {
     this.normalizeBurstTimes();
     const end = (context.elapsedTime ?? instance.elapsed) + clockWrap;
     const duration = context.duration ?? system.duration;
@@ -1041,7 +1162,10 @@ class Emitter extends EventReceiver {
   update(particles: Particle[], context: Partial<EmissionContext>, particleSystem: ParticleSystem): Particle[];
   /** @internal The coordinator can reuse its resolved instance without another identity lookup. */
   update(
-    particles: Particle[], context: Partial<EmissionContext>, particleSystem: ParticleSystem, instance: EmitterInstance,
+    particles: Particle[],
+    context: Partial<EmissionContext>,
+    particleSystem: ParticleSystem,
+    instance: EmitterInstance,
   ): Particle[];
   update(
     particles: Particle[],
@@ -1053,25 +1177,26 @@ class Emitter extends EventReceiver {
     const now = Date.now();
     const step = context.deltaTime ?? 0;
     this.normalizeBurstTimes();
-    const elapsedMilliseconds = context.elapsedTime === undefined
-      ? undefined
-      : context.elapsedTime * 1000;
+    const elapsedMilliseconds = context.elapsedTime === undefined ? undefined : context.elapsedTime * 1000;
     if (state.startTime === undefined) {
       state.startTime = elapsedMilliseconds ?? now;
       state.lastSpawn = state.startTime;
     }
     const duration = context.duration ?? particleSystem.duration;
-    const elapsedTime = context.elapsedTime ?? ((now - state.startTime) / 1000);
+    const elapsedTime = context.elapsedTime ?? (now - state.startTime) / 1000;
     let time = context.time ?? (duration <= 0 ? 1 : elapsedTime / duration);
     const looping = context.looping ?? particleSystem.looping;
     const spawned: Particle[] = [];
 
-    const explicitLoopClock = context.elapsedTime !== undefined && context.time === undefined && looping &&
-      duration > 0;
+    const explicitLoopClock =
+      context.elapsedTime !== undefined && context.time === undefined && looping && duration > 0;
     if (explicitLoopClock) {
       const cycle = Math.floor(elapsedTime / duration);
       time = (elapsedTime % duration) / duration;
-      if (state.cycle !== cycle) { state.firedBursts.clear(); state.cycle = cycle; }
+      if (state.cycle !== cycle) {
+        state.firedBursts.clear();
+        state.cycle = cycle;
+      }
     }
     if (!explicitLoopClock && context.time === undefined && elapsedTime >= duration) {
       if (!looping) return spawned;
@@ -1098,8 +1223,10 @@ class Emitter extends EventReceiver {
         const particle = this.spawnParticle(particles, time, context, particleSystem);
 
         if (particle) {
-          particle.realtime = -Math.max(0, Math.min(step * 1000,
-            state.lastSpawn + (i + 1) * secondsPerParticle - (spawnClock - step * 1000)));
+          particle.realtime = -Math.max(
+            0,
+            Math.min(step * 1000, state.lastSpawn + (i + 1) * secondsPerParticle - (spawnClock - step * 1000)),
+          );
           spawned.push(particle);
         }
       }
@@ -1153,10 +1280,8 @@ class Emitter extends EventReceiver {
   }
 
   private normalizeBurstTimes(): void {
-    this.bursts.forEach((burst) => {
-      burst.time = Number.isNaN(burst.time)
-        ? 0
-        : THREE.MathUtils.clamp(burst.time, 0, 1);
+    this.bursts.forEach(burst => {
+      burst.time = Number.isNaN(burst.time) ? 0 : THREE.MathUtils.clamp(burst.time, 0, 1);
     });
   }
 
@@ -1215,18 +1340,25 @@ class Emitter extends EventReceiver {
     particleSystem: ParticleSystem,
   ): Particle | undefined {
     const sourceFrame = particleSystem.getSourceEmissionFrame(emissionContext.source);
-    if (emissionContext.source?.alive && particleSystem.isSubSystem
-      && particleSystem.simulationSpace === 'source' && !sourceFrame) return;
+    if (
+      emissionContext.source?.alive &&
+      particleSystem.isSubSystem &&
+      particleSystem.simulationSpace === 'source' &&
+      !sourceFrame
+    )
+      return;
     const toSource = sourceFrame?.clone().invert();
-    const context = toSource ? {
-      ...emissionContext,
-      transform: toSource.clone().multiply(emissionContext.transform ?? new THREE.Matrix4()),
-      velocity: emissionContext.velocity?.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(toSource)),
-    } : emissionContext;
+    const context = toSource
+      ? {
+          ...emissionContext,
+          transform: toSource.clone().multiply(emissionContext.transform ?? new THREE.Matrix4()),
+          velocity: emissionContext.velocity?.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(toSource)),
+        }
+      : emissionContext;
     const point = this.source.getPoint();
-    const position = point.position.clone().add(
-      evaluateDynamicVector(this.initialValues.position ?? new THREE.Vector3(), time),
-    );
+    const position = point.position
+      .clone()
+      .add(evaluateDynamicVector(this.initialValues.position ?? new THREE.Vector3(), time));
     const orbitCenter = new THREE.Vector3();
     const normal = point.normal.clone();
 
@@ -1236,16 +1368,9 @@ class Emitter extends EventReceiver {
       normal.applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(context.transform)).normalize();
     }
 
-    const defaultRotationQuat = (new THREE.Quaternion).setFromUnitVectors(
-      new THREE.Vector3(0, 0, 1),
-      normal
-    );
+    const defaultRotationQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
     const defaultRotationEuler = new THREE.Euler().setFromQuaternion(defaultRotationQuat, 'YXZ');
-    const defaultRotation = new THREE.Vector3(
-      defaultRotationEuler.x,
-      defaultRotationEuler.y,
-      defaultRotationEuler.z
-    );
+    const defaultRotation = new THREE.Vector3(defaultRotationEuler.x, defaultRotationEuler.y, defaultRotationEuler.z);
     const rotation = new THREE.Vector3(0, 0, 0).lerp(
       defaultRotation,
       Math.max(Math.min(evaluateDynamicNumber(this.alignment, time), 1), 0),
@@ -1258,7 +1383,7 @@ class Emitter extends EventReceiver {
 
     let alpha = evaluateDynamicNumber(this.initialValues.alpha ?? 1, time);
     if (context.alpha !== undefined) {
-      alpha *= context.alpha
+      alpha *= context.alpha;
     }
 
     let mass = evaluateDynamicNumber(this.initialValues.mass ?? 0, time);
@@ -1277,10 +1402,9 @@ class Emitter extends EventReceiver {
     }
 
     const speed = evaluateDynamicNumber(this.initialValues.speed ?? 1, time);
-    const velocity = evaluateDynamicVector(this.initialValues.velocity ?? new THREE.Vector3(0, 0, 0), time).clone()
-      .add(normal.multiplyScalar(
-        evaluateDynamicNumber(this.radialSpeed, time),
-      ));
+    const velocity = evaluateDynamicVector(this.initialValues.velocity ?? new THREE.Vector3(0, 0, 0), time)
+      .clone()
+      .add(normal.multiplyScalar(evaluateDynamicNumber(this.radialSpeed, time)));
 
     if (context.velocityScale !== undefined) {
       velocity.multiplyScalar(context.velocityScale);
@@ -1326,20 +1450,24 @@ class Emitter extends EventReceiver {
     particle.lodPriority = particleSystem.quality * Math.random();
     if (!particleSystem.addParticle(particle, particles)) return undefined;
     particleSystem.bindParticleSource(particle, context.source);
-    particleSystem.initializeParticle(particle, { system: particleSystem, source: context.source,
-      event: context.event, sourceToWorld: context.sourceToWorld });
+    particleSystem.initializeParticle(particle, {
+      system: particleSystem,
+      source: context.source,
+      event: context.event,
+      sourceToWorld: context.sourceToWorld,
+    });
     return particle;
   }
 
   private _selectTags(): Tag[] | undefined {
     if (!this.tags) return;
 
-    switch (this.tagSelection){
+    switch (this.tagSelection) {
       case 'random':
-        return [this.tags[Math.floor(Math.random() * this.tags.length)]]
+        return [this.tags[Math.floor(Math.random() * this.tags.length)]];
       case 'distribute':
         this._lastTagIndex = (this._lastTagIndex + 1) % this.tags.length;
-        return [this.tags[this._lastTagIndex]]
+        return [this.tags[this._lastTagIndex]];
       case 'all':
       default:
         return this.tags;
@@ -1351,7 +1479,10 @@ class Emitter extends EventReceiver {
     if (value === undefined) return 'undefined';
     if (typeof value === 'number' || typeof value === 'function') return typeof value;
     if (Array.isArray(value)) return `array:${value.map(value => this.getDynamicStructure(value)).join(',')}`;
-    if (value instanceof Set) return `set:${Array.from(value).map(value => this.getDynamicStructure(value)).join(',')}`;
+    if (value instanceof Set)
+      return `set:${Array.from(value)
+        .map(value => this.getDynamicStructure(value))
+        .join(',')}`;
     if (value instanceof THREE.Vector3) return 'vector3';
     if (value instanceof THREE.Color) return 'color';
     return typeof value === 'object' ? 'node' : typeof value;

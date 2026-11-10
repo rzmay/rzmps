@@ -22,8 +22,13 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
     server = await preview({ ...config, preview: { host: '127.0.0.1', port: 0 } });
     const args = ['--disable-dev-shm-usage', '--enable-unsafe-webgpu', '--autoplay-policy=no-user-gesture-required'];
     if (process.env.CI === 'true') {
-      args.push('--no-sandbox', '--disable-setuid-sandbox', '--use-gl=angle', '--use-angle=swiftshader',
-        '--enable-unsafe-swiftshader');
+      args.push(
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--use-gl=angle',
+        '--use-angle=swiftshader',
+        '--enable-unsafe-swiftshader',
+      );
     } else args.push('--use-angle=default');
     browser = await puppeteer.launch({ headless: true, args });
     const page = await browser.newPage();
@@ -46,11 +51,14 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
       }
     });
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-    const cases = ['Snow', 'LOD Stress Test', 'Fireworks', 'Fire', 'Fireflies', 'Destruction'].map(preset => [preset, 'webgl']);
+    const cases = ['Snow', 'LOD Stress Test', 'Fireworks', 'Fire', 'Fireflies', 'Destruction'].map(preset => [
+      preset,
+      'webgl',
+    ]);
     cases.push(['Fireflies', 'webgpu'], ['Doppler Bullet', 'webgl']);
-    for (const [preset, backend] of cases.filter(([name]) => (
-      !process.env.RZMPS_GUI_PRESET || name === process.env.RZMPS_GUI_PRESET
-    ))) {
+    for (const [preset, backend] of cases.filter(
+      ([name]) => !process.env.RZMPS_GUI_PRESET || name === process.env.RZMPS_GUI_PRESET,
+    )) {
       try {
         const scene = preset === 'Doppler Bullet' ? '&scene=Cornell%20Box' : '';
         await page.goto(`${origin}/?preset=${encodeURIComponent(preset)}&renderer=${backend}${scene}`, {
@@ -60,23 +68,27 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
         await page.waitForSelector('.psgui-renderers', { timeout: 15000 });
       } catch (error) {
         const body = await page.evaluate(() => document.body.innerText.slice(0, 2000));
-        throw new Error(`${preset} (${backend}): ${error.message}; page errors: ${errors.join('; ')}; `
-          + `console: ${consoleErrors.join('; ')}; `
-          + `pending requests: ${[...pending.values()].join(', ')}; body: ${body}`, { cause: error });
+        throw new Error(
+          `${preset} (${backend}): ${error.message}; page errors: ${errors.join('; ')}; ` +
+            `console: ${consoleErrors.join('; ')}; ` +
+            `pending requests: ${[...pending.values()].join(', ')}; body: ${body}`,
+          { cause: error },
+        );
       }
       if (backend === 'webgpu') {
-        await page.waitForFunction(() => /GPU slots/.test(
-          document.querySelector('.particle-count-monitor')?.textContent ?? '',
-        ));
+        await page.waitForFunction(() =>
+          /GPU slots/.test(document.querySelector('.particle-count-monitor')?.textContent ?? ''),
+        );
       }
-      const folders = await page.$$eval('.lil-gui .lil-title', elements => (
-        elements.map(element => element.textContent)
-      ));
+      const folders = await page.$$eval('.lil-gui .lil-title', elements =>
+        elements.map(element => element.textContent),
+      );
       if (preset === 'Destruction') {
         // Scene setup follows GUI construction and code export; both used to throw for BatchedMesh.
         await page.evaluate(() => {
-          const select = [...document.querySelectorAll('.psgui-demo select')]
-            .find(element => [...element.options].some(option => option.text === 'UV debug'));
+          const select = [...document.querySelectorAll('.psgui-demo select')].find(element =>
+            [...element.options].some(option => option.text === 'UV debug'),
+          );
           select.value = [...select.options].find(option => option.text === 'UV debug').value;
           select.dispatchEvent(new Event('change', { bubbles: true }));
         });
@@ -87,8 +99,9 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
         await page.waitForNetworkIdle();
         for (const name of ['Fire', 'Doppler Bullet']) {
           await page.evaluate(name => {
-            const select = [...document.querySelectorAll('.psgui-demo select')]
-              .find(element => [...element.options].some(option => option.text === 'Doppler Bullet'));
+            const select = [...document.querySelectorAll('.psgui-demo select')].find(element =>
+              [...element.options].some(option => option.text === 'Doppler Bullet'),
+            );
             select.value = [...select.options].find(option => option.text === name).value;
             select.dispatchEvent(new Event('change', { bubbles: true }));
           }, name);
@@ -96,9 +109,9 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
           await page.waitForNetworkIdle();
           assert.equal(new URL(page.url()).searchParams.get('scene'), 'Cornell Box');
         }
-        const renderingErrors = consoleErrors.filter(text => (
-          /texture units|too many samplers|THREE\.|WebGL/.test(text)
-        ));
+        const renderingErrors = consoleErrors.filter(text =>
+          /texture units|too many samplers|THREE\.|WebGL/.test(text),
+        );
         assert.deepEqual(renderingErrors, [], 'Cornell/Bullet startup and replacement must not overflow samplers');
       }
       assert.ok(folders.includes('LOD'), `${preset}: population LOD controls`);
@@ -106,9 +119,9 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
       if (preset === 'Fireflies') {
         assert.ok(folders.includes('Scene Settings'), 'Checkerboard exposes scene settings');
         const strength = await page.evaluate(() => {
-          const control = [...document.querySelectorAll('.lil-gui .lil-controller')].find(element => (
-            element.querySelector('.lil-name')?.textContent === 'Light Strength'
-          ));
+          const control = [...document.querySelectorAll('.lil-gui .lil-controller')].find(
+            element => element.querySelector('.lil-name')?.textContent === 'Light Strength',
+          );
           const input = control?.querySelector('input[type="text"], input[type="number"]');
           if (!input) throw new Error('Checkerboard light strength control is missing');
           input.value = '0.08';
@@ -119,22 +132,23 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
         assert.equal(strength, 0.08, 'scene light strength can be lowered without changing the particle system');
       }
       if (preset === 'Snow') {
-        await page.waitForFunction(() => /[\d,]+ simulated \([\d,]+ rendered\)/.test(
-          document.querySelector('.particle-count-monitor')?.textContent ?? '',
-        ));
-        const counts = await page.$eval('.particle-count-monitor', element => (
-          element.textContent.match(/[\d,]+/g).map(value => Number(value.replaceAll(',', '')))
-        ));
-        assert.equal(counts[1], counts[0] * 6,
-          'Snow rendered total includes its five children per particle');
+        await page.waitForFunction(() =>
+          /[\d,]+ simulated \([\d,]+ rendered\)/.test(
+            document.querySelector('.particle-count-monitor')?.textContent ?? '',
+          ),
+        );
+        const counts = await page.$eval('.particle-count-monitor', element =>
+          element.textContent.match(/[\d,]+/g).map(value => Number(value.replaceAll(',', ''))),
+        );
+        assert.equal(counts[1], counts[0] * 6, 'Snow rendered total includes its five children per particle');
       } else if (preset === 'Fire') {
         const text = await page.$eval('.particle-count-monitor', element => element.textContent);
         assert.doesNotMatch(text, /rendered|children/, 'No child line when there are no children');
       }
-      const toggled = await page.evaluate((preset) => {
-        const title = [...document.querySelectorAll('.lil-gui .lil-title')].find(element => (
-          element.textContent === 'LOD'
-        ));
+      const toggled = await page.evaluate(preset => {
+        const title = [...document.querySelectorAll('.lil-gui .lil-title')].find(
+          element => element.textContent === 'LOD',
+        );
         const checkbox = title.closest('.lil-gui').querySelector('input[type="checkbox"]');
         const before = checkbox.checked;
         if (preset === 'Snow' && before) throw new Error('Snow LOD must default to disabled');

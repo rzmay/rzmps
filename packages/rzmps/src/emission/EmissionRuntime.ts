@@ -25,7 +25,10 @@ export interface EmissionExecution {
 
 /** Owns CPU emitter execution bindings, event snapshots and registered emission origins. */
 export default class EmissionRuntime {
-  constructor(readonly system: ParticleSystem, readonly execution: EmissionExecution) { }
+  constructor(
+    readonly system: ParticleSystem,
+    readonly execution: EmissionExecution,
+  ) {}
   readonly _emissionSources = new Map<string, EmissionSource>();
 
   readonly _stagedBirths: Particle[] = [];
@@ -39,17 +42,15 @@ export default class EmissionRuntime {
   _selectedEmitterSources(emitter: Emitter): SubSystemSource[] {
     const selector = emitter.sources;
     if (selector === undefined) return [];
-    const ids = new Set(Array.isArray(selector) ? selector : (selector as { ids?: readonly string[] }).ids ?? []);
-    const tags = Array.isArray(selector) ? [] : (selector as { tags?: readonly string[] }).tags ?? [];
-    return emitter.visibleSystems(this.system).flatMap(owner => [...owner.emissionRuntime._emissionSources.values()])
+    const ids = new Set(Array.isArray(selector) ? selector : ((selector as { ids?: readonly string[] }).ids ?? []));
+    const tags = Array.isArray(selector) ? [] : ((selector as { tags?: readonly string[] }).tags ?? []);
+    return emitter
+      .visibleSystems(this.system)
+      .flatMap(owner => [...owner.emissionRuntime._emissionSources.values()])
       .filter(source => ids.has(source.id) || source.tags?.some(tag => tags.includes(tag)));
   }
 
-  _activateEmitterInstance(
-    emitter: Emitter,
-    key: string,
-    source?: SubSystemSource,
-  ): EmitterInstance {
+  _activateEmitterInstance(emitter: Emitter, key: string, source?: SubSystemSource): EmitterInstance {
     const instance = emitter.getInstance(this.system, key);
     if (source) {
       if (instance.source.kind === 'live') instance.source.source = source;
@@ -66,24 +67,34 @@ export default class EmissionRuntime {
   }
 
   _advanceEmitterInstance(instance: EmitterInstance, options?: SubSystemOptions): void {
-    if (this.execution.discardingTime() && instance.source.kind === 'snapshot' && instance.startTime === undefined) return;
+    if (this.execution.discardingTime() && instance.source.kind === 'snapshot' && instance.startTime === undefined)
+      return;
     const context = instance.prepare(this.system, this.execution.deltaTime(), options);
     if (!context) {
       this._retireEmitterInstance(instance);
       return;
     }
     if (this.execution.discardingTime()) {
-      instance.emitter.advanceClock(context, this.system, instance, this.execution.deltaTime(),
-        instance.source.kind === 'standalone' ? this.execution.clockWrap() : 0);
+      instance.emitter.advanceClock(
+        context,
+        this.system,
+        instance,
+        this.execution.deltaTime(),
+        instance.source.kind === 'standalone' ? this.execution.clockWrap() : 0,
+      );
       return;
     }
     // CPU-bound sources stage a single birth batch when the simulation runs on GPU.
     const parent = this.system.subSystemParent;
     const relationship = parent?.subSystems.get(this.system);
-    const stage = (parent && relationship && this.execution.canUpdateAsGPUChild(parent, relationship))
-      || (!this.system.isSubSystem && this.execution.nativeEmission());
+    const stage =
+      (parent && relationship && this.execution.canUpdateAsGPUChild(parent, relationship)) ||
+      (!this.system.isSubSystem && this.execution.nativeEmission());
     const particles = instance.emitter.update(
-      stage ? this._stagedBirths : this.system.particles, { ...context, deltaTime: this.execution.deltaTime() }, this.system, instance,
+      stage ? this._stagedBirths : this.system.particles,
+      { ...context, deltaTime: this.execution.deltaTime() },
+      this.system,
+      instance,
     );
     if (!stage) particles.forEach(p => this.execution.notifySpawn(p));
   }
@@ -93,8 +104,14 @@ export default class EmissionRuntime {
     // Open every receiver before emitting, so births cannot alter another receiver's current batch.
     const configurations = this.system.emitters.map(emitter => {
       const options = this.system.getEmitterOptions(emitter);
-      if (!this.execution.discardingTime()) emitter.beginExecution(this.system, this.execution.deltaTime(),
-        this.system.isSubSystem ? 'parent' : 'local', this.execution.eventNames(emitter), options.eventScope);
+      if (!this.execution.discardingTime())
+        emitter.beginExecution(
+          this.system,
+          this.execution.deltaTime(),
+          this.system.isSubSystem ? 'parent' : 'local',
+          this.execution.eventNames(emitter),
+          options.eventScope,
+        );
       return options;
     });
     for (const [index, emitter] of this.system.emitters.entries()) {
@@ -106,8 +123,7 @@ export default class EmissionRuntime {
       if (liveSources) {
         for (const source of liveSources) {
           if (!this._canEmitForParticle(source, options)) continue;
-          this._advanceEmitterInstance(this._activateEmitterInstance(emitter, source.id, source),
-            options);
+          this._advanceEmitterInstance(this._activateEmitterInstance(emitter, source.id, source), options);
         }
       } else if (!this.system.isSubSystem && !this.execution.nativeEmission()) {
         this._advanceEmitterInstance(this._activateEmitterInstance(emitter, '__default'));
@@ -118,8 +134,10 @@ export default class EmissionRuntime {
     // Retire undiscovered live bindings; snapshots preserve newest-first event ordering.
     const snapshots: EmitterInstance[] = [];
     for (const instance of this._emitterInstances) {
-      if (!instance.active || (instance.source.kind !== 'snapshot'
-        && instance.lastSeen !== this._emitterInstanceEpoch)) {
+      if (
+        !instance.active ||
+        (instance.source.kind !== 'snapshot' && instance.lastSeen !== this._emitterInstanceEpoch)
+      ) {
         this._retireEmitterInstance(instance);
       } else if (instance.source.kind === 'snapshot') snapshots.push(instance);
     }
@@ -134,9 +152,7 @@ export default class EmissionRuntime {
   _canEmitForParticle(particle: SubSystemSource, options: SubSystemOptions): boolean {
     if (options.tags && !tagsIntersect(particle.tags ?? [], options.tags)) return false;
     if (!particleRatio(particle, options.ratio ?? 1)) return false;
-    return typeof options.shouldEmit === 'function'
-      ? options.shouldEmit(particle)
-      : options.shouldEmit;
+    return typeof options.shouldEmit === 'function' ? options.shouldEmit(particle) : options.shouldEmit;
   }
 
   _activateEventEmitterInstances(
@@ -169,20 +185,27 @@ export default class EmissionRuntime {
       Number.isFinite(particle.lifetime) ? particle.lifetime : this.system.duration,
       options.inheritLifetime,
     );
-    const impulseDuration = collision && options.impulseAffectsLifetime > 0
-      ? this._getImpulseEffect(collision, options.impulseAffectsLifetime)
-      : 0;
+    const impulseDuration =
+      collision && options.impulseAffectsLifetime > 0
+        ? this._getImpulseEffect(collision, options.impulseAffectsLifetime)
+        : 0;
     const duration = baseDuration + impulseDuration;
     const inherited = EmitterInstance.sourceContext(this.system, particle, options);
     const baseContext = {
-      ...inherited, transform, scale: this._getImpulseEffect(collision,
-        options.impulseAffectsScale),
+      ...inherited,
+      transform,
+      scale: this._getImpulseEffect(collision, options.impulseAffectsScale),
       velocityScale: this._getImpulseEffect(collision, options.impulseAffectsSpeed),
-      duration, time: 0, elapsedTime: 0, looping: false, distortionStrength: 1,
+      duration,
+      time: 0,
+      elapsedTime: 0,
+      looping: false,
+      distortionStrength: 1,
       countScale: this._getImpulseEffect(collision, Math.max(0, options.impulseAffectsCount ?? 0)),
       tags: [],
-      mass: (inherited.mass ?? 1) * (options.impulseAffectsMass > 0 ? this._getImpulseEffect(collision,
-        options.impulseAffectsMass) : 1),
+      mass:
+        (inherited.mass ?? 1) *
+        (options.impulseAffectsMass > 0 ? this._getImpulseEffect(collision, options.impulseAffectsMass) : 1),
     } as EmissionContext;
     const overrides = handler?.(data, particle, baseContext);
     if (overrides === false) return;
@@ -216,8 +239,12 @@ export default class EmissionRuntime {
         color: handler || options.inheritColor > 0 ? context.color : undefined,
         alpha: handler || options.inheritAlpha > 0 ? context.alpha : undefined,
         velocity: handler || options.inheritVelocity > 0 ? context.velocity : undefined,
-        mass: handler || options.inheritMass > 0 ? context.mass
-          : options.impulseAffectsMass > 0 ? this._getImpulseEffect(collision, options.impulseAffectsMass) : undefined,
+        mass:
+          handler || options.inheritMass > 0
+            ? context.mass
+            : options.impulseAffectsMass > 0
+              ? this._getImpulseEffect(collision, options.impulseAffectsMass)
+              : undefined,
         scale: context.scale,
         velocityScale: context.velocityScale,
         distortionStrength: context.distortionStrength,
@@ -237,5 +264,4 @@ export default class EmissionRuntime {
       if (binding.kind !== 'standalone' && binding.source?.id === id) binding.source = source;
     });
   }
-
 }

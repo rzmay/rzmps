@@ -1,8 +1,8 @@
 /* eslint-disable react/no-unknown-property */
-import React, { useCallback, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
+import { useCallback, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
-import * as THREE from 'three';
 import { createWebGPURenderer } from '../rendering/createWebGPURenderer';
 import CameraControls from '../components/CameraControls';
 import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
@@ -51,7 +51,6 @@ function setQueryParam(name, value) {
   window.history.replaceState({}, '', url);
 }
 
-
 function DemoScene({
   statsParent,
   searchQuery,
@@ -92,18 +91,11 @@ function PresetAttribution({ metadata }) {
   const sceneAuthor = normalizeAuthor(metadata.scene?.author);
   const particleAvatar = getGithubAvatar(particleAuthor);
   const sceneAvatar = getGithubAvatar(sceneAuthor);
-  const descriptions = [
-    metadata.particle?.description,
-    metadata.scene?.description,
-  ].filter(Boolean);
+  const descriptions = [metadata.particle?.description, metadata.scene?.description].filter(Boolean);
 
   return (
     <div className="preset-attribution" aria-label="Preset attribution">
-      {descriptions.length > 0 && (
-        <div className="preset-attribution-description">
-          {descriptions.join(' ')}
-        </div>
-      )}
+      {descriptions.length > 0 && <div className="preset-attribution-description">{descriptions.join(' ')}</div>}
 
       <div className="preset-attribution-authors">
         {particleAuthor?.url && (
@@ -144,7 +136,9 @@ function DemoPage() {
   const [code, setCode] = useState('');
   const particleCountRef = useRef(null);
   const [showCode, setShowCode] = useState(false);
-  const [initialSelection] = useState(() => resolveDemoSelection(new URL(window.location.href), examples, scenePresets));
+  const [initialSelection] = useState(() =>
+    resolveDemoSelection(new URL(window.location.href), examples, scenePresets),
+  );
   const [rendererMode, setRendererMode] = useState(initialSelection.backend);
   const [particlePreset, setParticlePreset] = useState(initialSelection.preset);
   const [scenePreset, setScenePreset] = useState(initialSelection.scene);
@@ -153,12 +147,12 @@ function DemoPage() {
     scene: getPresetMetadata(scenePresets, scenePreset),
   }));
 
-  const handleRendererChange = useCallback((nextRendererMode) => {
+  const handleRendererChange = useCallback(nextRendererMode => {
     setQueryParam('renderer', nextRendererMode);
     setRendererMode(nextRendererMode);
   }, []);
 
-  const handlePresetChange = useCallback((name) => {
+  const handlePresetChange = useCallback(name => {
     const url = new URL(window.location.href);
     if (url.pathname.startsWith('/example/')) {
       const example = examples.find(entry => entry.title === name);
@@ -169,12 +163,12 @@ function DemoPage() {
     setParticlePreset(name);
   }, []);
 
-  const handleSceneChange = useCallback((name) => {
+  const handleSceneChange = useCallback(name => {
     setQueryParam('scene', name);
     setScenePreset(name);
   }, []);
 
-  const handleParticleCountChange = useCallback((stats) => {
+  const handleParticleCountChange = useCallback(stats => {
     if (particleCountRef.current) {
       const count = typeof stats === 'number' ? stats : stats.particles;
       const allocated = typeof stats === 'number' ? 0 : stats.allocated;
@@ -198,8 +192,12 @@ function DemoPage() {
   }, []);
 
   return (
-    <LandingLayout searchQuery={searchQuery} onSearchChange={setSearchQuery}
-      onExampleSelect={handlePresetChange} selectedExample={particlePreset}>
+    <LandingLayout
+      searchQuery={searchQuery}
+      onSearchChange={setSearchQuery}
+      onExampleSelect={handlePresetChange}
+      selectedExample={particlePreset}
+    >
       <div className="demo-shell" ref={demoRef}>
         <Canvas
           key={rendererMode}
@@ -223,7 +221,9 @@ function DemoPage() {
           />
         </Canvas>
 
-        <div ref={particleCountRef} className="particle-count-monitor">0 particles</div>
+        <div ref={particleCountRef} className="particle-count-monitor">
+          0 particles
+        </div>
 
         <PresetAttribution metadata={metadata} />
 
@@ -246,3 +246,30 @@ function IndexPage() {
 }
 
 export default IndexPage;
+
+DemoScene.propTypes = {
+  searchQuery: PropTypes.string,
+  statsParent: PropTypes.object,
+  onCodeChange: PropTypes.func.isRequired,
+  onMetadataChange: PropTypes.func.isRequired,
+  onParticleCountChange: PropTypes.func.isRequired,
+  onPresetChange: PropTypes.func.isRequired,
+  onRendererChange: PropTypes.func.isRequired,
+  onSceneChange: PropTypes.func.isRequired,
+  onShowCodeChange: PropTypes.func.isRequired,
+  particlePreset: PropTypes.string.isRequired,
+  rendererMode: PropTypes.string.isRequired,
+  scenePreset: PropTypes.string.isRequired,
+};
+const authorType = PropTypes.oneOfType([
+  PropTypes.string,
+  PropTypes.shape({ name: PropTypes.string, url: PropTypes.string }),
+]);
+const attributionType = PropTypes.shape({
+  author: authorType,
+  description: PropTypes.string,
+  sourceUrl: PropTypes.string,
+});
+PresetAttribution.propTypes = {
+  metadata: PropTypes.shape({ particle: attributionType, scene: attributionType }).isRequired,
+};

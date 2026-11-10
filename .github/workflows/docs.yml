@@ -43,7 +43,7 @@ jobs:
           sudo apt-get install -y ffmpeg
           npx puppeteer browsers install chrome --install-deps
       - name: Verify headless WebGPU capture
-        run: node --test scripts/tests/preview/backend.test.mjs scripts/tests/preview/player.test.mjs
+        run: node --test scripts/tests/preview/readback.test.mjs scripts/tests/preview/player.test.mjs
       - name: Restore generated previews
         uses: actions/cache@v4
         with:
@@ -55,6 +55,13 @@ jobs:
       - name: Generate, validate, and assemble deployment
         run: npm run site:deploy
       - run: npm run site:check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preview-diagnostics
+          path: benchmark-results/preview-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: combined-static-site

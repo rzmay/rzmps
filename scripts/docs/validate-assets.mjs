@@ -17,4 +17,5 @@ export async function validateAssets(directory = previewDirectory) {
   }
   console.log(`Validated posters and videos for ${examples.length} examples in ${directory}`);
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await validateAssets(process.argv[2]);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))
+  await validateAssets(process.argv[2]);

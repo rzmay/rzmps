@@ -1,7 +1,13 @@
 import checkerboardScene from 'examples/scenes/checkerboard.js';
 import * as THREE from 'three';
 import {
-  Collision, DecalRenderer, Emitter, EmissionShape, ParticleSystem, SpriteRenderer, Textures,
+  Collision,
+  DecalRenderer,
+  Emitter,
+  EmissionShape,
+  ParticleSystem,
+  SpriteRenderer,
+  Textures,
 } from '@rzmps/rzmps';
 import splatterTexture from 'examples/assets/images/splat2.png?url';
 import splatterNormal from 'examples/assets/images/splat2_norm.jpg?url';
@@ -73,7 +79,7 @@ export default async function splatterPreset() {
         inheritScale: 1,
         inheritAlpha: 1,
         lifetime: 90,
-        opacity: (t) => 1 - THREE.MathUtils.smoothstep(t, 0.85, 1),
+        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.85, 1),
         maxDecals: 512,
       }),
     ],
@@ -95,7 +101,10 @@ splatterPreset.metadata = {
   id: 'splatter',
   title: 'Splatter',
   // eslint-disable-next-line max-len -- Documentation discovery requires a single literal description.
-  description: 'Matte, multicolored paintballs leave long-lived splatters matching their color and size, with randomized surface rotation. Select a scene with collision geometry, such as Checkerboard.',
+  description:
+    'Matte, multicolored paintballs leave long-lived splatters matching their ' +
+    'color and size, with randomized surface rotation. Select a scene with ' +
+    'collision geometry, such as Checkerboard.',
   tags: ['splatter', 'paintballs', 'decals', 'collision'],
   category: 'effects',
   previewSettings: {

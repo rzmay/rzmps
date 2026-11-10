@@ -21,7 +21,7 @@ function collectSystemStats(system, visited = new Set()) {
   visited.add(system);
 
   const stats = {
-    particles: system.liveParticleCount ?? system.particles?.filter((particle) => particle.alive).length ?? 0,
+    particles: system.liveParticleCount ?? system.particles?.filter(particle => particle.alive).length ?? 0,
     children: system.renderers?.reduce((count, renderer) => count + renderer.renderedChildCount, 0) ?? 0,
     allocated: system.isGPUProcessingActive ? (system.gpuBufferStats?.allocated ?? 0) : 0,
     activeSlots: system.isGPUProcessingActive ? (system.gpuBufferStats?.activeSlots ?? 0) : 0,
@@ -57,20 +57,28 @@ function ParticleSystemDisplay({
   const selectionRef = useRef(initialPreset);
   searchRef.current = searchQuery;
   selectionRef.current = initialPreset;
-  useEffect(() => { guiRef.current?.filterPresets(searchQuery); }, [searchQuery]);
+  useEffect(() => {
+    guiRef.current?.filterPresets(searchQuery);
+  }, [searchQuery]);
   useEffect(() => {
     const gui = guiRef.current;
     if (gui && gui.currentPresetName !== initialPreset) void gui.loadPreset(initialPreset);
   }, [initialPreset]);
+  const initialSettings = useRef(null);
+  initialSettings.current = { initialPreset, initialScene, rendererMode };
   const { gl, scene } = useThree();
 
   useEffect(() => {
     let cancelled = false;
+    const { initialPreset, initialScene, rendererMode } = initialSettings.current;
 
     async function initialize() {
       const system = await particlePresets[initialPreset].create();
 
-      if (cancelled) { system.destroy(); return; }
+      if (cancelled) {
+        system.destroy();
+        return;
+      }
 
       particleSystem.current = system;
       getSceneParticleRoot(scene).add(system);
@@ -85,7 +93,7 @@ function ParticleSystemDisplay({
         initialScene,
         title: `🧅 RZMPS Demo v${RZMPS_VERSION}`,
         width: 340,
-        onSystemChange: (nextSystem) => {
+        onSystemChange: nextSystem => {
           particleSystem.current = nextSystem;
         },
         onCodeChange,
@@ -114,16 +122,7 @@ function ParticleSystemDisplay({
         particleSystem.current = null;
       }
     };
-  }, [
-    onCodeChange,
-    onMetadataChange,
-    onPresetChange,
-    onRendererChange,
-    onSceneChange,
-    onShowCodeChange,
-    gl,
-    scene,
-  ]);
+  }, [onCodeChange, onMetadataChange, onPresetChange, onRendererChange, onSceneChange, onShowCodeChange, gl, scene]);
 
   useFrame((_state, delta) => {
     particleSystem.current?.update();

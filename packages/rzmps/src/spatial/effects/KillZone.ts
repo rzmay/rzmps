@@ -4,7 +4,7 @@ import SpatialEffect, {
   type SpatialEffectOptions,
 } from './SpatialEffect';
 import * as THREE from 'three';
-import Priority from '../../enums/priority';
+import Priority from '../../enums/Priority';
 import { float, If } from 'three/tsl';
 import type { GPUSpatialEffectType } from './gpu/SpatialEffectRegistry';
 

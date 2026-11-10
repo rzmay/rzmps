@@ -74,7 +74,7 @@ their generated outputs. The skill's metadata and workflow come from the marked 
 | `apps/docs/api/`, guide/example index pages, navigation JSON | Generated and ignored | Source declarations, guides, and examples |
 | `apps/docs/public/llms.txt` and `llms-full.txt` | Generated and ignored | Canonical docs and skill installation guidance |
 | `examples/index.js` and `examples/scenes/index.js` | Authored automatic discovery | `factory.metadata` on each factory |
-| `packages/rzmps/AGENTS.md` | Generated and ignored, included in npm | `scripts/docs/templates/npm-agents.md` |
+| `packages/rzmps/AGENTS.md` | Generated, committed for GitHub discovery, and included in npm | `scripts/docs/templates/npm-agents.md` |
 
 Commit updated `.agents` files, README guidance, alongside their
 source changes. Other artifacts are rebuilt before documentation/demo builds; package builds

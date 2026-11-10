@@ -1,4 +1,3 @@
-import collisionTestScene from 'examples/scenes/collisionTest.js';
 import * as THREE from 'three';
 import {
   AudioRenderer,
@@ -36,12 +35,7 @@ export default async function bubblesPreset() {
   const simple = new THREE.TextureLoader().load(Textures.Simple);
   const distortionSimple = new THREE.TextureLoader().load(simpleNorm);
 
-
-  const [
-    bubbles,
-    bubblePop1,
-    bubblePop2,
-  ] = await Promise.all([
+  const [bubbles, bubblePop1, bubblePop2] = await Promise.all([
     audioLoader.loadAsync(bubblesUrl),
     audioLoader.loadAsync(bubblePop1Url),
     audioLoader.loadAsync(bubblePop2Url),
@@ -72,18 +66,11 @@ export default async function bubblesPreset() {
         initialValues: {
           lifetime: [7, 12],
 
-          scale: [
-            0.25,
-            1,
-          ],
+          scale: [0.25, 1],
 
           mass: 0.25,
 
-          color: [
-            '#bdefff',
-            '#d8c8ff',
-            '#bfffe4',
-          ],
+          color: ['#bdefff', '#d8c8ff', '#bfffe4'],
         },
       }),
     ],
@@ -104,12 +91,12 @@ export default async function bubblesPreset() {
       }),
 
       new ScaleOverLifetime({
-        scale: (time) => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)),
+        scale: time => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)),
       }),
 
       new DistortionBySize({
         sizeRange: [0, 1],
-        distortionStrength: [0, 1]
+        distortionStrength: [0, 1],
       }),
     ],
     // #endregion docs:modules:1
@@ -133,10 +120,7 @@ export default async function bubblesPreset() {
       new AudioRenderer({
         sound: bubbles,
 
-        onCollisionSound: [
-          bubblePop1,
-          bubblePop2,
-        ],
+        onCollisionSound: [bubblePop1, bubblePop2],
 
         // Only a few particles need looping positional audio.
         // Having every bubble play the same bubbling track would get loud.
@@ -173,15 +157,15 @@ export default async function bubblesPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 bubblesPreset.metadata = {
-  author: "rzmay",
-  "id": "bubbles",
-  "title": "Bubbles",
+  author: 'rzmay',
+  id: 'bubbles',
+  title: 'Bubbles',
   // eslint-disable-next-line max-len -- Documentation discovery requires a single literal description.
-  "description": "Refractive sprite transmission with spherical normals and size-driven distortion. Both continuous sounds and collision-triggered bubble pops.",
-  "tags": [
-    "bubbles"
-  ],
-  "category": "effects",
+  description:
+    'Refractive sprite transmission with spherical normals and size-driven ' +
+    'distortion. Both continuous sounds and collision-triggered bubble pops.',
+  tags: ['bubbles'],
+  category: 'effects',
   previewSettings: {
     scene: cornellBoxScene,
   },

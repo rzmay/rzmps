@@ -2,16 +2,24 @@ import GlobalSettings from '../core/GlobalSettings';
 import * as THREE from 'three';
 import {
   bitcast,
-  Break, Continue,
-  float, Fn, hash, If, instanceIndex,
+  Break,
+  Continue,
+  float,
+  Fn,
+  hash,
+  If,
+  instanceIndex,
   inverse,
   Loop,
   mat3,
   mat4,
-  mix, pow,
-  uint, uniform,
+  mix,
+  pow,
+  uint,
+  uniform,
   uvec4,
-  vec3, vec4
+  vec3,
+  vec4,
 } from 'three/tsl';
 import { WebGPURenderer, type ComputeNode, type Node } from 'three/webgpu';
 import type { CollisionHit } from '../collision/collision.types';
@@ -24,16 +32,13 @@ import Emitter from '../emission/Emitter';
 import { GPUEmissionRunBufferState } from '../emission/gpu/Emission';
 import { GPUEmitterInstanceBufferState } from '../emission/gpu/EmitterInstanceBuffer';
 import overrideEmitterOptions, { subscribes } from '../emission/options.utils';
-import { MaxCulling } from '../enums/maxCulling';
-import { SimulationSpace } from '../enums/simulationSpace';
+import { MaxCulling } from '../enums/MaxCulling';
+import { SimulationSpace } from '../enums/SimulationSpace';
 import EventReceiver from '../events/EventReceiver';
 import { cpuEventHandler, eventNames, type GPUEmissionContext } from '../events/events.utils';
 import { SharedGPUEventBatch } from '../events/gpu/EventBatch';
 import type { GPUEventReadbackBatch } from '../events/gpu/EventBuffer';
-import {
-  GPUEventBufferState,
-  GPUEventType
-} from '../events/gpu/EventBuffer';
+import { GPUEventBufferState, GPUEventType } from '../events/gpu/EventBuffer';
 import type { GPUComputeCache, GPUComputeListCache, GPUUniformNode } from '../utils/gpu/computeCache.types';
 import { isWebGPURenderer } from '../utils/gpu/isWebGPURenderer';
 import { nextPowerOfTwo } from '../utils/gpu/storage.utils';
@@ -46,7 +51,7 @@ import {
   type GPUParticleBufferState,
   type GPUParticleLike,
   type GPUParticleRenderBufferState,
-  type GPUParticleUpdateContext
+  type GPUParticleUpdateContext,
 } from '../simulation/gpu/Particle';
 import {
   GPUSelectiveReadbackState,
@@ -100,7 +105,10 @@ export interface GPUSimulationExecution {
  * The public system supplies configuration; narrow callbacks coordinate time and event delivery.
  */
 export default class GPUSimulation {
-  constructor(readonly system: ParticleSystem, readonly execution: GPUSimulationExecution) { }
+  constructor(
+    readonly system: ParticleSystem,
+    readonly execution: GPUSimulationExecution,
+  ) {}
   _gpuLODCull?: { buffers: GPUParticleBufferState; count: number; version: number; node: ComputeNode };
 
   readonly _gpuLODQuality = uniform(1, 'float');
@@ -173,26 +181,37 @@ export default class GPUSimulation {
 
   _gpuResourceBuildCount = 0;
 
-  readonly _gpuDeltaTimeNode = uniform(0, 'float')
-    .setName('rzmpsDeltaTime') as unknown as GPUUniformNode<number, 'float'>;
+  readonly _gpuDeltaTimeNode = uniform(0, 'float').setName('rzmpsDeltaTime') as unknown as GPUUniformNode<
+    number,
+    'float'
+  >;
 
-  readonly _gpuElapsedTimeNode = uniform(0, 'float')
-    .setName('rzmpsElapsedTime') as unknown as GPUUniformNode<number, 'float'>;
+  readonly _gpuElapsedTimeNode = uniform(0, 'float').setName('rzmpsElapsedTime') as unknown as GPUUniformNode<
+    number,
+    'float'
+  >;
 
-  readonly _gpuDurationNode = uniform(1, 'float')
-    .setName('rzmpsDuration') as unknown as GPUUniformNode<number, 'float'>;
+  readonly _gpuDurationNode = uniform(1, 'float').setName('rzmpsDuration') as unknown as GPUUniformNode<
+    number,
+    'float'
+  >;
 
-  readonly _gpuGravityNode = uniform(new THREE.Vector3(), 'vec3')
-    .setName('rzmpsGravity') as unknown as GPUUniformNode<THREE.Vector3, 'vec3'>;
+  readonly _gpuGravityNode = uniform(new THREE.Vector3(), 'vec3').setName('rzmpsGravity') as unknown as GPUUniformNode<
+    THREE.Vector3,
+    'vec3'
+  >;
 
-  readonly _gpuEmitterPositionNode = uniform(new THREE.Vector3(), 'vec3')
-    .setName('rzmpsEmitterPosition') as unknown as GPUUniformNode<THREE.Vector3, 'vec3'>;
+  readonly _gpuEmitterPositionNode = uniform(new THREE.Vector3(), 'vec3').setName(
+    'rzmpsEmitterPosition',
+  ) as unknown as GPUUniformNode<THREE.Vector3, 'vec3'>;
 
-  readonly _gpuSimulationToWorldNode = uniform(new THREE.Matrix4(), 'mat4')
-    .setName('rzmpsSimulationToWorld') as unknown as GPUUniformNode<THREE.Matrix4, 'mat4'>;
+  readonly _gpuSimulationToWorldNode = uniform(new THREE.Matrix4(), 'mat4').setName(
+    'rzmpsSimulationToWorld',
+  ) as unknown as GPUUniformNode<THREE.Matrix4, 'mat4'>;
 
-  readonly _gpuWorldToSimulationNode = uniform(new THREE.Matrix4(), 'mat4')
-    .setName('rzmpsWorldToSimulation') as unknown as GPUUniformNode<THREE.Matrix4, 'mat4'>;
+  readonly _gpuWorldToSimulationNode = uniform(new THREE.Matrix4(), 'mat4').setName(
+    'rzmpsWorldToSimulation',
+  ) as unknown as GPUUniformNode<THREE.Matrix4, 'mat4'>;
 
   _gpuEmissionComputeCache?: GPUComputeListCache;
 
@@ -253,7 +272,7 @@ export default class GPUSimulation {
     if (!isWebGPURenderer(sceneRenderer)) return;
     this._flushTargetedGPUEvents();
     const lifecycleGeneration = this._gpuLifecycleGeneration;
-    const gpuSpatialEffects = spatialEffects.filter((spatialEffect) => spatialEffect.supportsGPU);
+    const gpuSpatialEffects = spatialEffects.filter(spatialEffect => spatialEffect.supportsGPU);
 
     const debugFrame = this._beginGPUDebugFrame(modules);
     const hasPendingReadback = this._gpuReadbackPending;
@@ -271,7 +290,7 @@ export default class GPUSimulation {
         particleCount: this.system.particles.length,
         sample: this._sampleGPUParticles(this.system.particles),
       });
-      this.system.particles.forEach((particle) => {
+      this.system.particles.forEach(particle => {
         if (particle.alive) particle.restore();
       });
       this._markExpiredGPUParticleSlots();
@@ -297,7 +316,7 @@ export default class GPUSimulation {
       this._gpuBuffers = createGPUParticleBufferState(
         this.system.particles,
         this._getInitialGPUBufferCapacity(),
-        (particle) => this._getParticleGPUTagMask(particle),
+        particle => this._getParticleGPUTagMask(particle),
         (particle, index) => this._getGPUParticleSlotGeneration(particle, index),
       );
     } else if (preserveGPUState) {
@@ -305,16 +324,13 @@ export default class GPUSimulation {
     } else {
       this._gpuBuffers.upload(
         this.system.particles,
-        (particle) => this._getParticleGPUTagMask(particle),
+        particle => this._getParticleGPUTagMask(particle),
         (particle, index) => this._getGPUParticleSlotGeneration(particle, index),
       );
     }
     if (gpuNativeEmission) {
       const estimatedCapacity = this._getInitialGPUBufferCapacity();
-      if (
-        estimatedCapacity > this._gpuBuffers.capacity
-        && this._gpuBuffers.grow(sceneRenderer, estimatedCapacity)
-      ) {
+      if (estimatedCapacity > this._gpuBuffers.capacity && this._gpuBuffers.grow(sceneRenderer, estimatedCapacity)) {
         this._gpuRenderOutputBuffers?.dispose(sceneRenderer);
         this._gpuRenderOutputBuffers = undefined;
         this._gpuAllocationBuffer = undefined;
@@ -332,16 +348,20 @@ export default class GPUSimulation {
 
     const lodBuffers = this._gpuBuffers;
     if (
-      !this._gpuLODCull
-      || this._gpuLODCull.buffers !== lodBuffers
-      || this._gpuLODCull.version !== lodBuffers.version
-      || this._gpuLODCull.count !== lodBuffers.count
+      !this._gpuLODCull ||
+      this._gpuLODCull.buffers !== lodBuffers ||
+      this._gpuLODCull.version !== lodBuffers.version ||
+      this._gpuLODCull.count !== lodBuffers.count
     ) {
       this._gpuLODCull?.node.dispose();
       const node = Fn(() => {
         const state = lodBuffers.storage.createStateNode();
-        If(float(state.w).div(4294967296).greaterThanEqual(this._gpuLODQuality), () => { state.x.assign(uint(0)); });
-      })().compute(lodBuffers.count).setName('rzmps.lod.cull');
+        If(float(state.w).div(4294967296).greaterThanEqual(this._gpuLODQuality), () => {
+          state.x.assign(uint(0));
+        });
+      })()
+        .compute(lodBuffers.count)
+        .setName('rzmps.lod.cull');
       this._gpuLODCull = { buffers: lodBuffers, count: lodBuffers.count, version: lodBuffers.version, node };
     }
     if (this.system.quality < 1) sceneRenderer.compute(this._gpuLODCull.node);
@@ -355,7 +375,9 @@ export default class GPUSimulation {
       this._getGPUCullingModeCode(),
     );
     const eventBuffer = this._hasGPUEventConsumers()
-      ? (this.execution.sharedEvents() ? this.execution.journal(sceneRenderer) : this._acquireGPUEventBuffer(sceneRenderer))
+      ? this.execution.sharedEvents()
+        ? this.execution.journal(sceneRenderer)
+        : this._acquireGPUEventBuffer(sceneRenderer)
       : undefined;
     const eventWriter = eventBuffer?.createWriter(this.system.id);
     const collisionEventWriter = eventWriter
@@ -372,15 +394,11 @@ export default class GPUSimulation {
     this.system.eventRuntime._gpuFrameEventBuffer = eventBuffer;
 
     const tagMaskForEffect = (effect: SpatialEffect) => this._getGPUTagMask(effect.tags) ?? 0;
-    gpuSpatialEffects.forEach((effect) => effect.syncGPUTransform(this.system));
+    gpuSpatialEffects.forEach(effect => effect.syncGPUTransform(this.system));
     if (!this._gpuSpatialRegistry?.update(gpuSpatialEffects, this.system, tagMaskForEffect)) {
       this._gpuSpatialRegistry?.dispose(sceneRenderer);
       this._gpuResourceBuildCount += 1;
-      this._gpuSpatialRegistry = GPUSpatialEffectRegistry.build(
-        gpuSpatialEffects,
-        this.system,
-        tagMaskForEffect,
-      );
+      this._gpuSpatialRegistry = GPUSpatialEffectRegistry.build(gpuSpatialEffects, this.system, tagMaskForEffect);
     }
 
     const context: GPUParticleUpdateContext = {
@@ -410,10 +428,10 @@ export default class GPUSimulation {
         this._computeGPUContinuousSubSystemEmissionPhase(context, this._gpuSubSystemFrameInput);
       }
       if (
-        this._gpuSubSystemFrameInput.options.emitOnDeath
-        || this._gpuSubSystemFrameInput.options.emitOnSpawn
-        || this._gpuSubSystemFrameInput.options.emitOnCollision
-        || eventNames(this._gpuSubSystemFrameInput.options.onEvent).length > 0
+        this._gpuSubSystemFrameInput.options.emitOnDeath ||
+        this._gpuSubSystemFrameInput.options.emitOnSpawn ||
+        this._gpuSubSystemFrameInput.options.emitOnCollision ||
+        eventNames(this._gpuSubSystemFrameInput.options.onEvent).length > 0
       ) {
         this._computeGPUEventSubSystemEmissionPhase(context, this._gpuSubSystemFrameInput);
       }
@@ -421,7 +439,8 @@ export default class GPUSimulation {
       this._computeGPUEmissionPhase(context);
       if (this.system.emitters.some(emitter => this.execution.emitterEventNames(emitter).length)) {
         this._computeGPUEventSubSystemEmissionPhase(context, {
-          parent: this.system, options: overrideEmitterOptions({}, {}, false),
+          parent: this.system,
+          options: overrideEmitterOptions({}, {}, false),
         });
       }
     }
@@ -432,15 +451,15 @@ export default class GPUSimulation {
     for (const module of modules) module.beginGPUExecution(this.system);
 
     const permanentPreMovementModifiers = modifiers
-      .filter((module) => module.priority < 0)
+      .filter(module => module.priority < 0)
       .sort((a, b) => a.priority - b.priority);
 
     const transientPreMovementModifiers = modifiers
-      .filter((module) => module.priority >= 0 && module.priority < 1)
+      .filter(module => module.priority >= 0 && module.priority < 1)
       .sort((a, b) => a.priority - b.priority);
 
     const transientRenderModifiers = modifiers
-      .filter((module) => module.priority >= 1)
+      .filter(module => module.priority >= 1)
       .sort((a, b) => a.priority - b.priority);
 
     this._gpuSpatialRegistry?.configureSegments([
@@ -449,36 +468,24 @@ export default class GPUSimulation {
       transientRenderModifiers,
     ]);
 
-    const fusedPermanentModifiers = this._computeGPUCollisionAndModifierPhases(
-      context,
-      permanentPreMovementModifiers,
-    );
+    const fusedPermanentModifiers = this._computeGPUCollisionAndModifierPhases(context, permanentPreMovementModifiers);
 
     this._logGPUDebug('phase: fused simulation', {
       permanent: this._describeGPUModifiers(fusedPermanentModifiers),
       transientPreMovement: this._describeGPUModifiers(transientPreMovementModifiers),
     });
-    this._computeGPUSimulationPhase(
-      context,
-      fusedPermanentModifiers,
-      transientPreMovementModifiers,
-    );
+    this._computeGPUSimulationPhase(context, fusedPermanentModifiers, transientPreMovementModifiers);
     eventBuffer?.produced();
     this._scheduleGPUAllocationReadback(allocationBuffer, sceneRenderer);
     if (eventBuffer && !this._hasGPUNativeSubSystemConsumers()) {
       this._scheduleGPUEventReadback(eventBuffer, sceneRenderer);
     }
 
-    const shouldRequestReadback = !this.execution.skipRender() && !gpuNativeEmission
-      && !hasPendingReadback
-      && this._shouldRequestGPUReadback();
+    const shouldRequestReadback =
+      !this.execution.skipRender() && !gpuNativeEmission && !hasPendingReadback && this._shouldRequestGPUReadback();
     const readbackSequence = shouldRequestReadback ? this._gpuReadbackSequence + 1 : 0;
-    const readbackParticles = shouldRequestReadback
-      ? this.system.particles.slice(0, this._gpuBuffers.count)
-      : [];
-    const readbackWasAlive = shouldRequestReadback
-      ? readbackParticles.map((particle) => particle.alive)
-      : [];
+    const readbackParticles = shouldRequestReadback ? this.system.particles.slice(0, this._gpuBuffers.count) : [];
+    const readbackWasAlive = shouldRequestReadback ? readbackParticles.map(particle => particle.alive) : [];
     const readbackStart = performance.now();
     let cpuMirrorUpdate: Promise<void> | undefined;
 
@@ -511,8 +518,8 @@ export default class GPUSimulation {
       return;
     }
 
-    const cpuInputRenderers = this.system.renderers.filter((renderer) => !renderer.supportsGPUInput);
-    const gpuInputRenderers = this.system.renderers.filter((renderer) => renderer.supportsGPUInput);
+    const cpuInputRenderers = this.system.renderers.filter(renderer => !renderer.supportsGPUInput);
+    const gpuInputRenderers = this.system.renderers.filter(renderer => renderer.supportsGPUInput);
     const renderModifiers = [...transientPreMovementModifiers, ...transientRenderModifiers];
     const needsRenderModifiers = renderModifiers.length > 0;
     const needsCompactRenderBuffer = needsRenderModifiers && gpuInputRenderers.length > 0;
@@ -531,12 +538,7 @@ export default class GPUSimulation {
         modifiers: this._describeGPUModifiers(renderModifiers),
       });
 
-      this._computeGPURenderOutputPhase(
-        this._gpuBuffers,
-        this._gpuRenderOutputBuffers,
-        renderModifiers,
-        context,
-      );
+      this._computeGPURenderOutputPhase(this._gpuBuffers, this._gpuRenderOutputBuffers, renderModifiers, context);
     } else {
       this._logGPUDebug('phase: render-time transient skipped on GPU', {
         reason: needsRenderModifiers ? 'no GPU-input renderers' : 'no render-time modifiers',
@@ -547,13 +549,13 @@ export default class GPUSimulation {
     const gpuRenderBuffers = needsCompactRenderBuffer ? this._gpuRenderOutputBuffers : this._gpuBuffers;
 
     this._logGPUDebug('renderer handoff', {
-      gpuRenderers: gpuInputRenderers.map((renderer) => renderer.constructor.name),
-      cpuRenderers: cpuInputRenderers.map((renderer) => renderer.constructor.name),
+      gpuRenderers: gpuInputRenderers.map(renderer => renderer.constructor.name),
+      cpuRenderers: cpuInputRenderers.map(renderer => renderer.constructor.name),
       gpuRenderBuffer: needsCompactRenderBuffer ? 'compact render output buffer' : 'main buffer',
       cpuRenderBuffer: 'main buffer',
     });
 
-    gpuInputRenderers.forEach((renderer) => {
+    gpuInputRenderers.forEach(renderer => {
       renderer.updateGPU(gpuRenderBuffers!, this.system, this.execution.deltaTime());
     });
 
@@ -605,7 +607,7 @@ export default class GPUSimulation {
             sample: this._sampleGPUParticles(renderParticles),
           });
 
-          cpuInputRenderers.forEach((renderer) => {
+          cpuInputRenderers.forEach(renderer => {
             renderer.update(renderParticles, this.system, this.execution.deltaTime());
           });
         } else {
@@ -627,7 +629,7 @@ export default class GPUSimulation {
         });
 
         const renderParticles = this.system.particles.filter(particle => particle.alive);
-        cpuInputRenderers.forEach((renderer) => {
+        cpuInputRenderers.forEach(renderer => {
           renderer.update(renderParticles, this.system, this.execution.deltaTime());
         });
 
@@ -644,14 +646,16 @@ export default class GPUSimulation {
 
     const emitterInstances = this._acquireGPUEmitterInstances('standalone', emitters.length, emitters, renderer);
     const prepareNodes = this._getGPUEmissionPrepareComputeNodes(context, emitters, emitterInstances);
-    prepareNodes.forEach((node) => renderer.compute(node));
-    this._getGPUEmissionComputeNodes(context, emitters, emitterInstances, false)
-      .forEach((node) => renderer.compute(node));
+    prepareNodes.forEach(node => renderer.compute(node));
+    this._getGPUEmissionComputeNodes(context, emitters, emitterInstances, false).forEach(node =>
+      renderer.compute(node),
+    );
     if (this.system.maxCullingMode === MaxCulling.Old) {
       this._computeGPUOldEmissionPhase(context, emitters, emitterInstances);
     }
-    this._getGPUEmissionFinalizeComputeNodes(context, emitters, emitterInstances)
-      .forEach((node) => renderer.compute(node));
+    this._getGPUEmissionFinalizeComputeNodes(context, emitters, emitterInstances).forEach(node =>
+      renderer.compute(node),
+    );
   }
 
   _getGPUEmissionComputeNodes(
@@ -666,7 +670,7 @@ export default class GPUSimulation {
       `reclaim:${reclaimOld}`,
       `buffer:${buffers.version}:${buffers.capacity}`,
       `initializers:${this._getParticleInitializationSignature()}`,
-      `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
+      `emitters:${emitters.map(emitter => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
 
     const cached = this._gpuEmissionComputeCache;
@@ -674,25 +678,29 @@ export default class GPUSimulation {
       return cached.nodes;
     }
 
-    cached?.nodes.forEach((node) => node.dispose?.());
+    cached?.nodes.forEach(node => node.dispose?.());
 
     // Keep each emitter in its own pass so geometry sampling bindings do not
     // accumulate with emitter count and exceed WebGPU's default stage limit.
-    const nodes = emitters.map((emitter, emitterIndex) => Fn(() => {
-      if (emitter.sources !== undefined || !this.system.getEmitterOptions(emitter).emitContinuous) return;
-      emitter.createBuiltInGPUUpdate()({
-        ...context,
-        emitter,
-        emitterIndex,
-        output: buffers,
-        emitterRuntime: emitterInstances.createRuntime(emitterIndex),
-        emissionFrame: this.system.simulationSpace === SimulationSpace.World
-          || this.system.simulationSpace === SimulationSpace.Transform
-          ? this._gpuEmissionFrameNode : undefined,
-        tagMasks: this._getGPUEmitterTagMasks(emitter),
-        reclaimOld,
-      });
-    })().compute(buffers.capacity));
+    const nodes = emitters.map((emitter, emitterIndex) =>
+      Fn(() => {
+        if (emitter.sources !== undefined || !this.system.getEmitterOptions(emitter).emitContinuous) return;
+        emitter.createBuiltInGPUUpdate()({
+          ...context,
+          emitter,
+          emitterIndex,
+          output: buffers,
+          emitterRuntime: emitterInstances.createRuntime(emitterIndex),
+          emissionFrame:
+            this.system.simulationSpace === SimulationSpace.World ||
+            this.system.simulationSpace === SimulationSpace.Transform
+              ? this._gpuEmissionFrameNode
+              : undefined,
+          tagMasks: this._getGPUEmitterTagMasks(emitter),
+          reclaimOld,
+        });
+      })().compute(buffers.capacity),
+    );
 
     const entry = {
       key: cacheKey,
@@ -717,26 +725,25 @@ export default class GPUSimulation {
       `buffer:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
       `initializers:${this._getParticleInitializationSignature()}`,
-      `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
+      `emitters:${emitters.map(emitter => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
     if (this._gpuOldSelectionComputeCache?.key !== selectionKey) {
       this._gpuPipelineBuildCount += 1;
-      this._gpuOldSelectionComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuOldSelectionComputeCache?.nodes.forEach(node => node.dispose?.());
       this._gpuOldSelectionComputeCache = {
         key: selectionKey,
-        nodes: emitters.map((_emitter, emitterIndex) => Fn(() => {
-          const particle = context.buffers.storage.createParticle(undefined, true);
-          const runtime = emitterInstances.createRuntime(emitterIndex);
-          const requested = runtime.requestCount();
-          const deadClaims = runtime.claimCount();
-          const deadSuccesses = deadClaims.lessThan(requested)
-            .select(deadClaims, requested) as Node<'uint'>;
-          context.allocationWriter!.selectOldSlotForEmitter(
-            particle,
-            requested.sub(deadSuccesses),
-            () => runtime.claimReplacement(),
-          );
-        })().compute(context.buffers.capacity)),
+        nodes: emitters.map((_emitter, emitterIndex) =>
+          Fn(() => {
+            const particle = context.buffers.storage.createParticle(undefined, true);
+            const runtime = emitterInstances.createRuntime(emitterIndex);
+            const requested = runtime.requestCount();
+            const deadClaims = runtime.claimCount();
+            const deadSuccesses = deadClaims.lessThan(requested).select(deadClaims, requested) as Node<'uint'>;
+            context.allocationWriter!.selectOldSlotForEmitter(particle, requested.sub(deadSuccesses), () =>
+              runtime.claimReplacement(),
+            );
+          })().compute(context.buffers.capacity),
+        ),
       };
     }
 
@@ -745,11 +752,11 @@ export default class GPUSimulation {
       `buffer:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
       `initializers:${this._getParticleInitializationSignature()}`,
-      `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
+      `emitters:${emitters.map(emitter => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
     if (this._gpuOldEmissionComputeCache?.key !== initializationKey) {
       this._gpuPipelineBuildCount += 1;
-      this._gpuOldEmissionComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuOldEmissionComputeCache?.nodes.forEach(node => node.dispose?.());
       this._gpuOldEmissionComputeCache = {
         key: initializationKey,
         nodes: emitters.map((emitter, emitterIndex) => {
@@ -854,29 +861,30 @@ export default class GPUSimulation {
       `culling:${this.system.maxCullingMode}`,
       `defer:${context.buffers.capacity < this.system.maxParticles}`,
       `initializers:${this._getParticleInitializationSignature()}`,
-      `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
+      `emitters:${emitters.map(emitter => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
     if (this._gpuEmissionFinalizeComputeCache?.key === cacheKey) {
       return this._gpuEmissionFinalizeComputeCache.nodes;
     }
 
-    this._gpuEmissionFinalizeComputeCache?.nodes.forEach((node) => node.dispose?.());
-    const nodes = emitters.map((_emitter, emitterIndex) => Fn(() => {
-      const runtime = emitterInstances.createRuntime(emitterIndex);
-      const requested = runtime.requestCount();
-      const deadClaims = runtime.claimCount();
-      const deadSuccesses = deadClaims.lessThan(requested).select(deadClaims, requested) as Node<'uint'>;
-      const afterDead = requested.sub(deadSuccesses);
-      const replacementClaims = runtime.replacementCount();
-      const replacementSuccesses = this.system.maxCullingMode === MaxCulling.Old
-        ? replacementClaims.lessThan(afterDead).select(replacementClaims, afterDead) as Node<'uint'>
-        : uint(0);
-      const failures = afterDead.sub(replacementSuccesses);
-      context.allocationWriter?.recordAllocationFailures(failures);
-      runtime.setPendingRequestCount(
-        context.buffers.capacity < this.system.maxParticles ? failures : uint(0),
-      );
-    })().compute(1));
+    this._gpuEmissionFinalizeComputeCache?.nodes.forEach(node => node.dispose?.());
+    const nodes = emitters.map((_emitter, emitterIndex) =>
+      Fn(() => {
+        const runtime = emitterInstances.createRuntime(emitterIndex);
+        const requested = runtime.requestCount();
+        const deadClaims = runtime.claimCount();
+        const deadSuccesses = deadClaims.lessThan(requested).select(deadClaims, requested) as Node<'uint'>;
+        const afterDead = requested.sub(deadSuccesses);
+        const replacementClaims = runtime.replacementCount();
+        const replacementSuccesses =
+          this.system.maxCullingMode === MaxCulling.Old
+            ? (replacementClaims.lessThan(afterDead).select(replacementClaims, afterDead) as Node<'uint'>)
+            : uint(0);
+        const failures = afterDead.sub(replacementSuccesses);
+        context.allocationWriter?.recordAllocationFailures(failures);
+        runtime.setPendingRequestCount(context.buffers.capacity < this.system.maxParticles ? failures : uint(0));
+      })().compute(1),
+    );
 
     this._gpuEmissionFinalizeComputeCache = { key: cacheKey, nodes };
     this._gpuPipelineBuildCount += nodes.length;
@@ -892,31 +900,33 @@ export default class GPUSimulation {
       'emission-prepare',
       `instances:${emitterInstances.capacity}`,
       `initializers:${this._getParticleInitializationSignature()}`,
-      `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
+      `emitters:${emitters.map(emitter => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
 
     if (this._gpuEmissionPrepareComputeCache?.key === cacheKey) {
       return this._gpuEmissionPrepareComputeCache.nodes;
     }
 
-    this._gpuEmissionPrepareComputeCache?.nodes.forEach((node) => node.dispose?.());
-    this._gpuEmissionFinalizeComputeCache?.nodes.forEach((node) => node.dispose?.());
-    const nodes = emitters.map((emitter, emitterIndex) => Fn(() => {
-      if (emitter.sources !== undefined || !this.system.getEmitterOptions(emitter).emitContinuous) {
-        emitterInstances.createRuntime(emitterIndex).resetRequestCount(uint(0));
-        return;
-      }
-      emitter.prepareBuiltInGPUEmission({
-        ...context,
-        emitter,
-        emitterIndex,
-        output: context.buffers,
-        emitterRuntime: emitterInstances.createRuntime(emitterIndex),
-        durationNode: this._gpuDurationNode,
-        skippedClockWrapNode: this._gpuSkippedClockWrapNode,
-        tagMasks: this._getGPUEmitterTagMasks(emitter),
-      });
-    })().compute(1));
+    this._gpuEmissionPrepareComputeCache?.nodes.forEach(node => node.dispose?.());
+    this._gpuEmissionFinalizeComputeCache?.nodes.forEach(node => node.dispose?.());
+    const nodes = emitters.map((emitter, emitterIndex) =>
+      Fn(() => {
+        if (emitter.sources !== undefined || !this.system.getEmitterOptions(emitter).emitContinuous) {
+          emitterInstances.createRuntime(emitterIndex).resetRequestCount(uint(0));
+          return;
+        }
+        emitter.prepareBuiltInGPUEmission({
+          ...context,
+          emitter,
+          emitterIndex,
+          output: context.buffers,
+          emitterRuntime: emitterInstances.createRuntime(emitterIndex),
+          durationNode: this._gpuDurationNode,
+          skippedClockWrapNode: this._gpuSkippedClockWrapNode,
+          tagMasks: this._getGPUEmitterTagMasks(emitter),
+        });
+      })().compute(1),
+    );
 
     this._gpuEmissionPrepareComputeCache = { key: cacheKey, nodes };
     this._gpuPipelineBuildCount += nodes.length;
@@ -937,34 +947,47 @@ export default class GPUSimulation {
     births.initialize(renderer);
     this._stagedBirthCount.value = count;
     const key =
-      `${births.capacity}:${context.buffers.version}:${context.buffers.capacity}:${context.eventWriter?.version}`;
+      `${births.capacity}` +
+      `:` +
+      `${context.buffers.version}` +
+      `:` +
+      `${context.buffers.capacity}` +
+      `:` +
+      `${context.eventWriter?.version}`;
     if (this._stagedBirthCompute?.key !== key) {
       this._stagedBirthCompute?.nodes.forEach(node => node.dispose());
       const node = Fn(() => {
         const particle = context.buffers.storage.createParticle(undefined, true);
-        context.allocationWriter!.claimDeadSlotForEmitter(particle, this._stagedBirthCount,
-          () => context.allocationWriter!.claimEmissionRun(), claim => {
+        context.allocationWriter!.claimDeadSlotForEmitter(
+          particle,
+          this._stagedBirthCount,
+          () => context.allocationWriter!.claimEmissionRun(),
+          claim => {
             const birth = births.storage.createParticle(claim);
-            context.buffers.storage.storeParticle(Object.assign(birth, {
-              index: particle.index,
-              generation: particle.generation, alive: uint(1)
-            }));
-            context.buffers.storage.createSourceIdentityNode(particle.index)
+            context.buffers.storage.storeParticle(
+              Object.assign(birth, {
+                index: particle.index,
+                generation: particle.generation,
+                alive: uint(1),
+              }),
+            );
+            context.buffers.storage
+              .createSourceIdentityNode(particle.index)
               .assign(births.storage.createSourceIdentityNode(claim));
             context.allocationWriter!.markSpawned(particle);
-          });
+          },
+        );
       })().compute(context.buffers.capacity);
-      const reset = Fn(() => { context.allocationWriter!.resetEmissionRunClaims(); })().compute(1);
+      const reset = Fn(() => {
+        context.allocationWriter!.resetEmissionRunClaims();
+      })().compute(1);
       this._stagedBirthCompute = { key, nodes: [reset, node] };
     }
     this._stagedBirthCompute.nodes.forEach(node => renderer.compute(node));
     this.system.emissionRuntime._stagedBirths.length = 0;
   }
 
-  _computeGPUContinuousSubSystemEmissionPhase(
-    context: GPUParticleUpdateContext,
-    input: GPUSubSystemFrameInput,
-  ): void {
+  _computeGPUContinuousSubSystemEmissionPhase(context: GPUParticleUpdateContext, input: GPUSubSystemFrameInput): void {
     const parentBuffers = input.parent.gpuSimulation._gpuBuffers;
     const renderer = this.system.sceneRenderer;
     if (!parentBuffers || !isWebGPURenderer(renderer)) return;
@@ -984,159 +1007,169 @@ export default class GPUSimulation {
       `parent:${parentBuffers.version}:${parentBuffers.capacity}`,
       `child:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
-      `options:${emitters.map(emitter => this._getSubSystemGPUOptionsSignature(this.system.getEmitterOptions(emitter)))}`,
+      `options:` +
+        `${emitters.map(emitter => this._getSubSystemGPUOptionsSignature(this.system.getEmitterOptions(emitter)))}`,
       `initializers:${this._getParticleInitializationSignature()}`,
-      `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
+      `emitters:${emitters.map(emitter => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
 
     if (this._gpuContinuousSubSystemComputeCache?.key !== cacheKey) {
       this._gpuPipelineBuildCount += 1;
-      this._gpuContinuousSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuContinuousSubSystemComputeCache?.nodes.forEach(node => node.dispose?.());
       const nodes: ComputeNode[] = [];
 
       emitters.forEach((emitter, emitterIndex) => {
         const options = this.system.getEmitterOptions(emitter);
         if (!options.emitContinuous || emitter.sources !== undefined) return;
         const globalRuntime = emitterInstances.createRuntime(contextCount + emitterIndex);
-        nodes.push(Fn(() => {
-          globalRuntime.resetRequestCount(uint(0));
-        })().compute(1));
+        nodes.push(
+          Fn(() => {
+            globalRuntime.resetRequestCount(uint(0));
+          })().compute(1),
+        );
 
-        nodes.push(Fn(() => {
-          const parent = parentBuffers.storage.createParticle(undefined, true);
-          const runtimeIndex = instanceIndex.mul(emitters.length).add(emitterIndex);
-          const runtime = emitterInstances.createRuntime(runtimeIndex);
-          const ratioEligible = options.ratio >= 1
-            ? uint(1).equal(uint(1))
-            : hash(instanceIndex.add(parent.generation.mul(65537))).lessThanEqual(float(options.ratio));
-          const predicateEligible = typeof options.shouldEmit === 'boolean'
-            ? options.shouldEmit
-            : false;
-          const eligible = parent.alive.notEqual(uint(0))
-            .and(ratioEligible)
-            .and(predicateEligible)
-            .and(options.tags
-              ? parent.tagMask.bitAnd(uint(this._getGPUTagMask(options.tags) ?? 0)).notEqual(uint(0))
-              : true);
+        nodes.push(
+          Fn(() => {
+            const parent = parentBuffers.storage.createParticle(undefined, true);
+            const runtimeIndex = instanceIndex.mul(emitters.length).add(emitterIndex);
+            const runtime = emitterInstances.createRuntime(runtimeIndex);
+            const ratioEligible =
+              options.ratio >= 1
+                ? uint(1).equal(uint(1))
+                : hash(instanceIndex.add(parent.generation.mul(65537))).lessThanEqual(float(options.ratio));
+            const predicateEligible = typeof options.shouldEmit === 'boolean' ? options.shouldEmit : false;
+            const eligible = parent.alive
+              .notEqual(uint(0))
+              .and(ratioEligible)
+              .and(predicateEligible)
+              .and(
+                options.tags
+                  ? parent.tagMask.bitAnd(uint(this._getGPUTagMask(options.tags) ?? 0)).notEqual(uint(0))
+                  : true,
+              );
 
-          If(eligible, () => {
-            const identityChanged = runtime.identity.x.equal(uint(0))
-              .or(runtime.identity.y.notEqual(parent.index))
-              .or(runtime.identity.z.notEqual(parent.generation));
-            If(identityChanged, () => {
-              runtime.identity.x.assign(uint(0));
-              runtime.identity.y.assign(parent.index);
-              runtime.identity.z.assign(parent.generation);
-              runtime.identity.w.assign(uint(emitterIndex));
+            If(eligible, () => {
+              const identityChanged = runtime.identity.x
+                .equal(uint(0))
+                .or(runtime.identity.y.notEqual(parent.index))
+                .or(runtime.identity.z.notEqual(parent.generation));
+              If(identityChanged, () => {
+                runtime.identity.x.assign(uint(0));
+                runtime.identity.y.assign(parent.index);
+                runtime.identity.z.assign(parent.generation);
+                runtime.identity.w.assign(uint(emitterIndex));
+              });
+
+              const sourceSkipped = runtime.identity.x
+                .notEqual(uint(0))
+                .select(context.skippedTimeNode ?? float(0), float(0))
+                .toVar('sourceSkippedTime');
+              emitter.prepareBuiltInGPUEmission({
+                ...context,
+                skippedTimeNode: sourceSkipped,
+                loopingClock: options.inheritLifetime <= 0 && this.system.looping,
+                elapsedTimeNode: runtime.timing.w.add(context.deltaTimeNode).add(sourceSkipped),
+                durationNode: mix(this._gpuDurationNode, parent.lifetime, float(options.inheritLifetime)),
+                normalizedTimeNode: options.inheritLifetime > 0 ? parent.time.mul(options.inheritLifetime) : undefined,
+                emitterPositionNode: parent.position,
+                emitter,
+                emitterIndex,
+                output: context.buffers,
+                emitterRuntime: runtime,
+              });
+              runtime.queueBirths(context.allocationWriter!, globalRuntime, parent.index);
+            }).Else(() => {
+              runtime.retire();
             });
+          })().compute(parentBuffers.capacity),
+        );
 
-            const sourceSkipped = runtime.identity.x.notEqual(uint(0)).select(
-              context.skippedTimeNode ?? float(0), float(0)).toVar('sourceSkippedTime');
-            emitter.prepareBuiltInGPUEmission({
+        const emitGPU = emitter.createBuiltInGPUUpdate()!;
+        nodes.push(
+          Fn(() => {
+            const resolveParentSlot = (claimIndex: Node<'uint'>): Node<'uint'> =>
+              context.allocationWriter!.emissionSource(claimIndex);
+
+            emitGPU({
               ...context,
-              skippedTimeNode: sourceSkipped,
-              loopingClock: options.inheritLifetime <= 0 && this.system.looping,
-              elapsedTimeNode: runtime.timing.w.add(context.deltaTimeNode).add(sourceSkipped),
-              durationNode: mix(
-                this._gpuDurationNode,
-                parent.lifetime,
-                float(options.inheritLifetime),
-              ),
-              normalizedTimeNode: options.inheritLifetime > 0
-                ? parent.time.mul(options.inheritLifetime)
-                : undefined,
-              emitterPositionNode: parent.position,
               emitter,
               emitterIndex,
               output: context.buffers,
-              emitterRuntime: runtime,
+              emitterRuntime: globalRuntime,
+              tagMasks: this._getGPUEmitterTagMasks(emitter),
+              inheritance: {
+                color: options.inheritColor,
+                alpha: options.inheritAlpha,
+                mass: options.inheritMass,
+                velocity: options.inheritVelocity,
+                scale: options.inheritScale,
+              },
+              resolveParentParticle: claimIndex =>
+                parentBuffers.storage.createParticle(resolveParentSlot(claimIndex), true),
+              resolveInheritedVelocity: claim => {
+                const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
+                const velocity = this._gpuParentToSimulationNode.mul(vec4(source.velocity, 0));
+                return (
+                  this.system.simulationSpace === SimulationSpace.Source
+                    ? inverse(this._gpuParentToSimulationNode.mul(particleFrameGPU(source, options.inheritScale))).mul(
+                        velocity,
+                      )
+                    : velocity
+                ).xyz.mul(options.inheritVelocity);
+              },
+              resolveInitializationContext: claim => {
+                const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
+                const sourceToWorld = input.parent.gpuSimulation._gpuSimulationToWorldNode;
+                return {
+                  source,
+                  sourceToWorld,
+                  birthToWorld:
+                    this.system.simulationSpace === SimulationSpace.Source
+                      ? sourceToWorld.mul(particleFrameGPU(source, options.inheritScale))
+                      : context.simulationToWorldNode,
+                };
+              },
+              sourceRelative: this.system.simulationSpace === SimulationSpace.Source,
+              resolveSourceIdentity:
+                this.system.simulationSpace === SimulationSpace.Source
+                  ? claim => {
+                      const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
+                      return bitcast(uvec4(source.index, source.generation, 1, 0), 'vec4') as unknown as Node<'vec4'>;
+                    }
+                  : undefined,
+              resolveEmissionTransform: claim => {
+                if (this.system.simulationSpace === SimulationSpace.Source) return mat4(new THREE.Matrix4());
+                const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
+                return this._gpuParentToSimulationNode.mul(particleFrameGPU(source, options.inheritScale));
+              },
+              resolveBirthOffset: claim => {
+                const runtime = emitterInstances.createRuntime(
+                  resolveParentSlot(claim).mul(emitters.length).add(emitterIndex),
+                );
+                return runtime.birthOffset(claim.sub(uint(runtime.birthSchedule(0).w)), emitter.bursts.length);
+              },
+              resolveEmissionTime: claimIndex => {
+                const parentSlot = resolveParentSlot(claimIndex);
+                if (options.inheritLifetime > 0) {
+                  return parentBuffers.storage.createParticle(parentSlot, true).time.mul(options.inheritLifetime);
+                }
+                const runtimeIndex = parentSlot.mul(emitters.length).add(emitterIndex);
+                return emitterInstances.createRuntime(runtimeIndex).timing.w.div(this._gpuDurationNode);
+              },
             });
-            runtime.queueBirths(context.allocationWriter!, globalRuntime, parent.index);
-          }).Else(() => {
-            runtime.retire();
-          });
-        })().compute(parentBuffers.capacity));
-
-        const emitGPU = emitter.createBuiltInGPUUpdate()!;
-        nodes.push(Fn(() => {
-          const resolveParentSlot = (claimIndex: Node<'uint'>): Node<'uint'> => (
-            context.allocationWriter!.emissionSource(claimIndex)
-          );
-
-          emitGPU({
-            ...context,
-            emitter,
-            emitterIndex,
-            output: context.buffers,
-            emitterRuntime: globalRuntime,
-            tagMasks: this._getGPUEmitterTagMasks(emitter),
-            inheritance: {
-              color: options.inheritColor,
-              alpha: options.inheritAlpha,
-              mass: options.inheritMass,
-              velocity: options.inheritVelocity,
-              scale: options.inheritScale,
-            },
-            resolveParentParticle: (claimIndex) => parentBuffers.storage.createParticle(
-              resolveParentSlot(claimIndex),
-              true
-            ),
-            resolveInheritedVelocity: claim => {
-              const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
-              const velocity = this._gpuParentToSimulationNode.mul(vec4(source.velocity, 0));
-              return (this.system.simulationSpace === SimulationSpace.Source
-                ? inverse(this._gpuParentToSimulationNode
-                  .mul(particleFrameGPU(source, options.inheritScale))).mul(velocity) : velocity)
-                .xyz.mul(options.inheritVelocity);
-            },
-            resolveInitializationContext: claim => {
-              const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
-              const sourceToWorld = input.parent.gpuSimulation._gpuSimulationToWorldNode;
-              return {
-                source, sourceToWorld, birthToWorld: this.system.simulationSpace === SimulationSpace.Source
-                  ? sourceToWorld.mul(particleFrameGPU(source, options.inheritScale)) : context.simulationToWorldNode
-              };
-            },
-            sourceRelative: this.system.simulationSpace === SimulationSpace.Source,
-            resolveSourceIdentity: this.system.simulationSpace === SimulationSpace.Source ? claim => {
-              const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
-              return bitcast(uvec4(source.index, source.generation, 1, 0), 'vec4') as unknown as Node<'vec4'>;
-            } : undefined,
-            resolveEmissionTransform: claim => {
-              if (this.system.simulationSpace === SimulationSpace.Source) return mat4(new THREE.Matrix4());
-              const source = parentBuffers.storage.createParticle(resolveParentSlot(claim));
-              return this._gpuParentToSimulationNode.mul(particleFrameGPU(source, options.inheritScale));
-            },
-            resolveBirthOffset: claim => {
-              const runtime = emitterInstances.createRuntime(
-                resolveParentSlot(claim).mul(emitters.length).add(emitterIndex));
-              return runtime.birthOffset(claim.sub(uint(runtime.birthSchedule(0).w)), emitter.bursts.length);
-            },
-            resolveEmissionTime: (claimIndex) => {
-              const parentSlot = resolveParentSlot(claimIndex);
-              if (options.inheritLifetime > 0) {
-                return parentBuffers.storage.createParticle(parentSlot, true).time
-                  .mul(options.inheritLifetime);
-              }
-              const runtimeIndex = parentSlot.mul(emitters.length).add(emitterIndex);
-              return emitterInstances.createRuntime(runtimeIndex).timing.w
-                .div(this._gpuDurationNode);
-            },
-          });
-        })().compute(context.buffers.capacity));
+          })().compute(context.buffers.capacity),
+        );
       });
 
       this._gpuContinuousSubSystemComputeCache = { key: cacheKey, nodes };
     }
 
-    this._gpuContinuousSubSystemComputeCache.nodes.forEach((node) => renderer.compute(node));
+    this._gpuContinuousSubSystemComputeCache.nodes.forEach(node => renderer.compute(node));
   }
 
-  _computeGPUEventSubSystemEmissionPhase(
-    context: GPUParticleUpdateContext,
-    input: GPUSubSystemFrameInput,
-  ): void {
-    const eventBuffer = this.execution.eventRoot().eventRuntime._sharedGPUEvents ?? input.parent.eventRuntime._gpuFrameEventBuffer;
+  _computeGPUEventSubSystemEmissionPhase(context: GPUParticleUpdateContext, input: GPUSubSystemFrameInput): void {
+    const eventBuffer =
+      this.execution.eventRoot().eventRuntime._sharedGPUEvents ?? input.parent.eventRuntime._gpuFrameEventBuffer;
     const renderer = this.system.sceneRenderer;
     if (!eventBuffer || !isWebGPURenderer(renderer)) return;
 
@@ -1165,293 +1198,368 @@ export default class GPUSimulation {
       `child:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
       `options:${configurations.map(options => this._getSubSystemGPUOptionsSignature(options)).join('|')}`,
-      `producers:${origins.map(values => values.map(owner => `${owner.id}:${[...owner.eventRuntime._eventTypes]}`)).join('|')}`,
+      `producers:` +
+        `${origins.map(values => values.map(owner => `${owner.id}:${[...owner.eventRuntime._eventTypes]}`)).join('|')}`,
       `ranges:${readers.map(reader => reader.versionKey).join('|')}`,
       `initializers:${this._getParticleInitializationSignature()}`,
-      `emitters:${emitters.map((emitter) => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
+      `emitters:${emitters.map(emitter => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
     ].join('|');
 
     if (this._gpuEventSubSystemComputeCache?.key !== cacheKey) {
       this._gpuPipelineBuildCount += 1;
-      this._gpuEventSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuEventSubSystemComputeCache?.nodes.forEach(node => node.dispose?.());
       const nodes: ComputeNode[] = [];
-      nodes.push(Fn(() => {
-        const run = runs.load(instanceIndex);
-        If(run.active.notEqual(uint(0)), () => {
-          run.elapsed.addAssign(context.skippedTimeNode ?? float(0));
-        });
-      })().compute(runs.capacity));
+      nodes.push(
+        Fn(() => {
+          const run = runs.load(instanceIndex);
+          If(run.active.notEqual(uint(0)), () => {
+            run.elapsed.addAssign(context.skippedTimeNode ?? float(0));
+          });
+        })().compute(runs.capacity),
+      );
 
       emitters.forEach((_emitter, emitterIndex) => {
         const options = configurations[emitterIndex];
         const reader = readers[emitterIndex];
         nodes.push(Fn(() => context.allocationWriter?.resetEmissionRunClaims())().compute(1));
-        nodes.push(Fn(() => {
-          const runIndex = instanceIndex.add(emitterIndex * runCapacity);
-          const run = runs.load(runIndex);
-          const eventCount = reader.count().toVar('subsystemEventCount');
-          If(run.active.equal(uint(0)), () => {
-            Loop({ start: 0, end: eventCount, type: 'uint' }, () => {
-              const eventIndex = context.allocationWriter!.claimEmissionRun().toVar('eventRunClaim');
-              If(eventIndex.lessThan(eventCount), () => {
-                const event = reader.load(eventIndex);
-                let typeEligible = uint(0).equal(uint(1));
-                for (const producer of origins[emitterIndex]) {
-                  if (!eventBuffer.journal && producer !== input.parent) continue;
-                  for (const [name, type] of producer.eventRuntime._eventTypes) {
-                    if (!subscribes(options, name) || !this._canHandleNativeGPUEvent(producer, options, name)) {
-                      continue;
-                    }
-                    const matches = event.type.equal(uint(type));
-                    typeEligible = typeEligible.or(eventBuffer.journal
-                      ? matches.and(event.origin.equal(uint(producer.id))) : matches);
-                  }
-                }
-                if (options.tags) typeEligible =
-                  typeEligible.and(event.particle.tagMask
-                    .bitAnd(uint(this._getGPUTagMask(options.tags) ?? 0)).notEqual(uint(0)));
-                const ratioEligible = options.ratio >= 1
-                  ? uint(1).equal(uint(1))
-                  : hash(event.slot.add(event.generation.mul(65537))).lessThanEqual(float(options.ratio));
-                const predicateEligible = typeof options.shouldEmit === 'boolean'
-                  ? options.shouldEmit
-                  : false;
-                const impulseEligible = event.type.notEqual(uint(GPUEventType.Collision))
-                  .or(event.collisionImpulse.length().greaterThan(float(options.impulseThreshold)));
-
-                If(typeEligible.and(ratioEligible).and(predicateEligible).and(impulseEligible), () => {
-                  const producerFrame = mat4(new THREE.Matrix4()).toVar('eventProducerFrame');
+        nodes.push(
+          Fn(() => {
+            const runIndex = instanceIndex.add(emitterIndex * runCapacity);
+            const run = runs.load(runIndex);
+            const eventCount = reader.count().toVar('subsystemEventCount');
+            If(run.active.equal(uint(0)), () => {
+              Loop({ start: 0, end: eventCount, type: 'uint' }, () => {
+                const eventIndex = context.allocationWriter!.claimEmissionRun().toVar('eventRunClaim');
+                If(eventIndex.lessThan(eventCount), () => {
+                  const event = reader.load(eventIndex);
+                  let typeEligible = uint(0).equal(uint(1));
                   for (const producer of origins[emitterIndex]) {
-                    const frame = this._gpuWorldToSimulationNode.mul(producer.gpuSimulation._gpuSimulationToWorldNode);
-                    if (eventBuffer.journal) {
-                      If(event.origin.equal(uint(producer.id)), () => { producerFrame.assign(frame); });
-                    } else if (producer === input.parent) producerFrame.assign(frame);
-                  }
-                  const impulseDuration = options.impulseAffectsLifetime > 0
-                    ? event.type.equal(uint(GPUEventType.Collision)).select(
-                      pow(event.collisionImpulse.length().max(float(0)), float(options.impulseAffectsLifetime)),
-                      float(0),
-                    ) as Node<'float'>
-                    : float(0);
-                  const duration = mix(
-                    this._gpuDurationNode,
-                    event.particle.lifetime,
-                    float(options.inheritLifetime),
-                  ).add(impulseDuration);
-
-                  const transformScale = mix(vec3(1), event.particle.scale, float(Math.max(0,
-                    options.inheritScale)));
-                  const rotate = (v: Node<'vec3'>): Node<'vec3'> => {
-                    const base = mat3(particleFrameGPU(event.particle, 0)).mul(v);
-                    return options.impulseAffectsAlignment
-                      ? event.collisionImpulse.length().greaterThan(0).select(rotateFromYGPU(v,
-                        event.collisionImpulse), base) as Node<'vec3'>
-                      : base;
-                  };
-                  const transform = mat4(
-                    vec4(rotate(vec3(transformScale.x, 0, 0)), 0),
-                    vec4(rotate(vec3(0, transformScale.y, 0)), 0),
-                    vec4(rotate(vec3(0, 0, transformScale.z)), 0), vec4(event.particle.position, 1));
-                  const impulseMass = event.type.equal(uint(GPUEventType.Collision)).select(
-                    pow(event.collisionImpulse.length().max(0), Math.max(0, options.impulseAffectsMass)), float(1));
-                  const resolved: GPUEmissionContext = {
-                    transform: producerFrame.mul(transform),
-                    position: producerFrame.mul(vec4(event.particle.position, 1)).xyz,
-                    color: mix(vec3(1), event.particle.color, float(Math.max(0, options.inheritColor))),
-                    alpha: mix(float(1), event.particle.alpha, float(Math.max(0, options.inheritAlpha))),
-                    mass: mix(float(1), event.particle.mass, float(Math.max(0,
-                      options.inheritMass))).mul(impulseMass),
-                    velocity: producerFrame.mul(vec4(event.particle.velocity, 0)).xyz
-                      .mul(Math.max(0, options.inheritVelocity)),
-                    scale: event.type.equal(uint(GPUEventType.Collision)).select(
-                      pow(event.collisionImpulse.length().max(0), options.impulseAffectsScale),
-                      float(1)) as Node<'float'>,
-                    velocityScale: event.type.equal(uint(GPUEventType.Collision)).select(
-                      pow(event.collisionImpulse.length().max(0), options.impulseAffectsSpeed),
-                      float(1)) as Node<'float'>,
-                    distortionStrength: float(1),
-                    duration,
-                  };
-                  const contextValues = Object.fromEntries(Object.entries(resolved).map(([key, node]) => [key,
-                    node.toVar(`eventContext_${key}`)])) as unknown as GPUEmissionContext;
-                  const subscriptions = options.onEvent;
-                  if (subscriptions && !Array.isArray(subscriptions)) {
-                    for (const [name, handler] of Object.entries(subscriptions.gpu ?? {})) {
-                      let matches = uint(0).equal(uint(1));
-                      for (const producer of origins[emitterIndex]) {
-                        const type = producer.eventRuntime._eventTypes.get(name);
-                        if (type === undefined || (!eventBuffer.journal && producer !== input.parent)) continue;
-                        const named = event.type.equal(uint(type));
-                        matches = matches.or(eventBuffer.journal
-                          ? named.and(event.origin.equal(uint(producer.id))) : named);
+                    if (!eventBuffer.journal && producer !== input.parent) continue;
+                    for (const [name, type] of producer.eventRuntime._eventTypes) {
+                      if (!subscribes(options, name) || !this._canHandleNativeGPUEvent(producer, options, name)) {
+                        continue;
                       }
-                      If(matches, () => {
-                        const overrides = handler(event.data, event.particle, contextValues);
-                        if (overrides === false) {
-                          Continue();
-                        } else if (overrides && 'isNode' in overrides) {
-                          If((overrides as Node<'bool'>).not(), () => { Continue(); });
-                        } else if (overrides) {
-                          for (const [key, value] of Object.entries(overrides)) {
-                            (contextValues[key as keyof GPUEmissionContext] as Node).assign(value);
-                          }
-                          if (overrides.position && !overrides.transform) matrixColumnGPU(contextValues.transform,
-                            3).assign(vec4(overrides.position, 1));
-                          if (overrides.transform && !overrides.position) {
-                            contextValues.position.assign(matrixColumnGPU(overrides.transform, 3).xyz);
-                          }
+                      const matches = event.type.equal(uint(type));
+                      typeEligible = typeEligible.or(
+                        eventBuffer.journal ? matches.and(event.origin.equal(uint(producer.id))) : matches,
+                      );
+                    }
+                  }
+                  if (options.tags)
+                    typeEligible = typeEligible.and(
+                      event.particle.tagMask.bitAnd(uint(this._getGPUTagMask(options.tags) ?? 0)).notEqual(uint(0)),
+                    );
+                  const ratioEligible =
+                    options.ratio >= 1
+                      ? uint(1).equal(uint(1))
+                      : hash(event.slot.add(event.generation.mul(65537))).lessThanEqual(float(options.ratio));
+                  const predicateEligible = typeof options.shouldEmit === 'boolean' ? options.shouldEmit : false;
+                  const impulseEligible = event.type
+                    .notEqual(uint(GPUEventType.Collision))
+                    .or(event.collisionImpulse.length().greaterThan(float(options.impulseThreshold)));
+
+                  If(typeEligible.and(ratioEligible).and(predicateEligible).and(impulseEligible), () => {
+                    const producerFrame = mat4(new THREE.Matrix4()).toVar('eventProducerFrame');
+                    for (const producer of origins[emitterIndex]) {
+                      const frame = this._gpuWorldToSimulationNode.mul(
+                        producer.gpuSimulation._gpuSimulationToWorldNode,
+                      );
+                      if (eventBuffer.journal) {
+                        If(event.origin.equal(uint(producer.id)), () => {
+                          producerFrame.assign(frame);
+                        });
+                      } else if (producer === input.parent) producerFrame.assign(frame);
+                    }
+                    const impulseDuration =
+                      options.impulseAffectsLifetime > 0
+                        ? (event.type
+                            .equal(uint(GPUEventType.Collision))
+                            .select(
+                              pow(event.collisionImpulse.length().max(float(0)), float(options.impulseAffectsLifetime)),
+                              float(0),
+                            ) as Node<'float'>)
+                        : float(0);
+                    const duration = mix(
+                      this._gpuDurationNode,
+                      event.particle.lifetime,
+                      float(options.inheritLifetime),
+                    ).add(impulseDuration);
+
+                    const transformScale = mix(vec3(1), event.particle.scale, float(Math.max(0, options.inheritScale)));
+                    const rotate = (v: Node<'vec3'>): Node<'vec3'> => {
+                      const base = mat3(particleFrameGPU(event.particle, 0)).mul(v);
+                      return options.impulseAffectsAlignment
+                        ? (event.collisionImpulse
+                            .length()
+                            .greaterThan(0)
+                            .select(rotateFromYGPU(v, event.collisionImpulse), base) as Node<'vec3'>)
+                        : base;
+                    };
+                    const transform = mat4(
+                      vec4(rotate(vec3(transformScale.x, 0, 0)), 0),
+                      vec4(rotate(vec3(0, transformScale.y, 0)), 0),
+                      vec4(rotate(vec3(0, 0, transformScale.z)), 0),
+                      vec4(event.particle.position, 1),
+                    );
+                    const impulseMass = event.type
+                      .equal(uint(GPUEventType.Collision))
+                      .select(
+                        pow(event.collisionImpulse.length().max(0), Math.max(0, options.impulseAffectsMass)),
+                        float(1),
+                      );
+                    const resolved: GPUEmissionContext = {
+                      transform: producerFrame.mul(transform),
+                      position: producerFrame.mul(vec4(event.particle.position, 1)).xyz,
+                      color: mix(vec3(1), event.particle.color, float(Math.max(0, options.inheritColor))),
+                      alpha: mix(float(1), event.particle.alpha, float(Math.max(0, options.inheritAlpha))),
+                      mass: mix(float(1), event.particle.mass, float(Math.max(0, options.inheritMass))).mul(
+                        impulseMass,
+                      ),
+                      velocity: producerFrame
+                        .mul(vec4(event.particle.velocity, 0))
+                        .xyz.mul(Math.max(0, options.inheritVelocity)),
+                      scale: event.type
+                        .equal(uint(GPUEventType.Collision))
+                        .select(
+                          pow(event.collisionImpulse.length().max(0), options.impulseAffectsScale),
+                          float(1),
+                        ) as Node<'float'>,
+                      velocityScale: event.type
+                        .equal(uint(GPUEventType.Collision))
+                        .select(
+                          pow(event.collisionImpulse.length().max(0), options.impulseAffectsSpeed),
+                          float(1),
+                        ) as Node<'float'>,
+                      distortionStrength: float(1),
+                      duration,
+                    };
+                    const contextValues = Object.fromEntries(
+                      Object.entries(resolved).map(([key, node]) => [key, node.toVar(`eventContext_${key}`)]),
+                    ) as unknown as GPUEmissionContext;
+                    const subscriptions = options.onEvent;
+                    if (subscriptions && !Array.isArray(subscriptions)) {
+                      for (const [name, handler] of Object.entries(subscriptions.gpu ?? {})) {
+                        let matches = uint(0).equal(uint(1));
+                        for (const producer of origins[emitterIndex]) {
+                          const type = producer.eventRuntime._eventTypes.get(name);
+                          if (type === undefined || (!eventBuffer.journal && producer !== input.parent)) continue;
+                          const named = event.type.equal(uint(type));
+                          matches = matches.or(
+                            eventBuffer.journal ? named.and(event.origin.equal(uint(producer.id))) : named,
+                          );
                         }
+                        If(matches, () => {
+                          const overrides = handler(event.data, event.particle, contextValues);
+                          if (overrides === false) {
+                            Continue();
+                          } else if (overrides && 'isNode' in overrides) {
+                            If((overrides as Node<'bool'>).not(), () => {
+                              Continue();
+                            });
+                          } else if (overrides) {
+                            for (const [key, value] of Object.entries(overrides)) {
+                              (contextValues[key as keyof GPUEmissionContext] as Node).assign(value);
+                            }
+                            if (overrides.position && !overrides.transform)
+                              matrixColumnGPU(contextValues.transform, 3).assign(vec4(overrides.position, 1));
+                            if (overrides.transform && !overrides.position) {
+                              contextValues.position.assign(matrixColumnGPU(overrides.transform, 3).xyz);
+                            }
+                          }
+                        });
+                      }
+                    }
+                    if (this.system.simulationSpace === SimulationSpace.Source) {
+                      // Death-triggered births retain the final snapshot
+                      // instead of attaching to an already-dead source.
+                      If(event.type.notEqual(uint(GPUEventType.Death)), () => {
+                        const sourceFrame = producerFrame.mul(particleFrameGPU(event.particle, options.inheritScale));
+                        const toSource = inverse(sourceFrame);
+                        contextValues.transform.assign(toSource.mul(contextValues.transform));
+                        contextValues.position.assign(toSource.mul(vec4(contextValues.position, 1)).xyz);
+                        contextValues.velocity.assign(toSource.mul(vec4(contextValues.velocity, 0)).xyz);
+                        runs.snapshots.storage
+                          .createSourceIdentityNode(runIndex)
+                          .assign(
+                            bitcast(
+                              uvec4(
+                                event.slot,
+                                event.generation,
+                                eventBuffer.journal
+                                  ? event.origin
+                                      .equal(uint(this.system.subSystemParent?.id ?? -1))
+                                      .select(uint(1), event.origin.add(uint(3)))
+                                  : uint(1),
+                                0,
+                              ),
+                              'vec4',
+                            ),
+                          );
+                      }).Else(() => {
+                        runs.snapshots.storage.createSourceIdentityNode(runIndex).assign(vec4(0));
                       });
                     }
-                  }
-                  if (this.system.simulationSpace === SimulationSpace.Source) {
-                    // Death-triggered births retain the final snapshot instead of attaching to an already-dead source.
-                    If(event.type.notEqual(uint(GPUEventType.Death)), () => {
-                      const sourceFrame = producerFrame
-                        .mul(particleFrameGPU(event.particle, options.inheritScale));
-                      const toSource = inverse(sourceFrame);
-                      contextValues.transform.assign(toSource.mul(contextValues.transform));
-                      contextValues.position.assign(toSource.mul(vec4(contextValues.position, 1)).xyz);
-                      contextValues.velocity.assign(toSource.mul(vec4(contextValues.velocity, 0)).xyz);
-                      runs.snapshots.storage.createSourceIdentityNode(runIndex)
-                        .assign(bitcast(uvec4(event.slot, event.generation, eventBuffer.journal
-                          ? event.origin.equal(uint(this.system.subSystemParent?.id ?? -1)).select(uint(1),
-                            event.origin.add(uint(3))) : uint(1), 0), 'vec4'));
-                    }).Else(() => {
-                      runs.snapshots.storage.createSourceIdentityNode(runIndex).assign(vec4(0));
+                    runs.storeEvent(runIndex, event, producerFrame);
+                    runs.storeParticle(runIndex, {
+                      ...event.particle,
+                      alive: uint(1),
+                      realtime: float(0),
+                      lifetime: contextValues.duration,
+                      position: contextValues.position,
+                      rotation: event.collisionNormal,
+                      scale: transformScale,
+                      color: contextValues.color,
+                      alpha: contextValues.alpha,
+                      mass: contextValues.mass,
+                      velocity: contextValues.velocity,
+                      speed: contextValues.scale,
+                      distortionStrength: contextValues.velocityScale,
+                      // Event-specific values are resolved now; the payload need not survive in run storage.
+                      acceleration: matrixColumnGPU(contextValues.transform, 0).xyz,
+                      angularAcceleration: matrixColumnGPU(contextValues.transform, 1).xyz,
+                      scalarAcceleration: matrixColumnGPU(contextValues.transform, 2).xyz,
+                      angularVelocity: matrixColumnGPU(contextValues.transform, 3).xyz,
+                      scalarVelocity: event.collisionImpulse,
+                      orbitCenter: event.collisionPoint,
+                      lodPriority: event.type,
+                      time: contextValues.distortionStrength,
                     });
-                  }
-                  runs.storeEvent(runIndex, event, producerFrame);
-                  runs.storeParticle(runIndex, {
-                    ...event.particle,
-                    alive: uint(1),
-                    realtime: float(0), lifetime: contextValues.duration,
-                    position: contextValues.position, rotation: event.collisionNormal,
-                    scale: transformScale, color: contextValues.color,
-                    alpha: contextValues.alpha, mass: contextValues.mass,
-                    velocity: contextValues.velocity,
-                    speed: contextValues.scale, distortionStrength: contextValues.velocityScale,
-                    // Event-specific values are resolved now; the payload need not survive in run storage.
-                    acceleration: matrixColumnGPU(contextValues.transform, 0).xyz,
-                    angularAcceleration: matrixColumnGPU(contextValues.transform, 1).xyz,
-                    scalarAcceleration: matrixColumnGPU(contextValues.transform, 2).xyz,
-                    angularVelocity: matrixColumnGPU(contextValues.transform, 3).xyz,
-                    scalarVelocity: event.collisionImpulse,
-                    orbitCenter: event.collisionPoint, lodPriority: event.type,
-                    time: contextValues.distortionStrength,
+                    Break();
                   });
+                }).Else(() => {
                   Break();
                 });
-              }).Else(() => { Break(); });
+              });
             });
-          });
-        })().compute(runCapacity));
-
+          })().compute(runCapacity),
+        );
       });
 
-      nodes.push(Fn(() => {
-        const run = runs.load(instanceIndex);
-        If(run.active.notEqual(uint(0)), () => {
-          run.elapsed.addAssign(context.deltaTimeNode);
-        });
-      })().compute(runs.capacity));
+      nodes.push(
+        Fn(() => {
+          const run = runs.load(instanceIndex);
+          If(run.active.notEqual(uint(0)), () => {
+            run.elapsed.addAssign(context.deltaTimeNode);
+          });
+        })().compute(runs.capacity),
+      );
 
       emitters.forEach((emitter, emitterIndex) => {
         const options = this.system.getEmitterOptions(emitter);
         const globalRuntime = emitterInstances.createRuntime(contextCount + emitterIndex);
         nodes.push(Fn(() => globalRuntime.resetRequestCount(uint(0)))().compute(1));
-        nodes.push(Fn(() => {
-          const runIndex = instanceIndex.add(emitterIndex * runCapacity);
-          const run = runs.load(runIndex);
-          const runtime = emitterInstances.createRuntime(runIndex);
+        nodes.push(
+          Fn(() => {
+            const runIndex = instanceIndex.add(emitterIndex * runCapacity);
+            const run = runs.load(runIndex);
+            const runtime = emitterInstances.createRuntime(runIndex);
 
-          If(run.active.notEqual(uint(0)).and(run.elapsed.lessThan(run.duration)), () => {
-            emitter.prepareBuiltInGPUEmission({
+            If(run.active.notEqual(uint(0)).and(run.elapsed.lessThan(run.duration)), () => {
+              emitter.prepareBuiltInGPUEmission({
+                ...context,
+                elapsedTimeNode: run.elapsed,
+                skippedTimeNode: runtime.identity.x
+                  .notEqual(uint(0))
+                  .select(context.skippedTimeNode ?? float(0), float(0)),
+                durationNode: run.duration,
+                emitterPositionNode: run.particle.position,
+                countScaleNode:
+                  (options.impulseAffectsCount ?? 0) > 0
+                    ? run.eventType
+                        .equal(uint(GPUEventType.Collision))
+                        .select(pow(run.collisionImpulse.length().max(0), options.impulseAffectsCount ?? 0), float(1))
+                    : undefined,
+                emitter,
+                emitterIndex,
+                output: context.buffers,
+                emitterRuntime: runtime,
+              });
+              runtime.queueBirths(context.allocationWriter!, globalRuntime, runIndex);
+            }).Else(() => {
+              runtime.retire();
+            });
+          })().compute(runCapacity),
+        );
+
+        const emitGPU = emitter.createBuiltInGPUUpdate()!;
+        nodes.push(
+          Fn(() => {
+            const resolveRunIndex = (claimIndex: Node<'uint'>): Node<'uint'> =>
+              context.allocationWriter!.emissionSource(claimIndex);
+
+            emitGPU({
               ...context,
-              elapsedTimeNode: run.elapsed,
-              skippedTimeNode: runtime.identity.x.notEqual(uint(0)).select(
-                context.skippedTimeNode ?? float(0), float(0)),
-              durationNode: run.duration,
-              emitterPositionNode: run.particle.position,
-              countScaleNode: (options.impulseAffectsCount ?? 0) > 0
-                ? run.eventType.equal(uint(GPUEventType.Collision)).select(
-                  pow(run.collisionImpulse.length().max(0), options.impulseAffectsCount ?? 0), float(1)) : undefined,
               emitter,
               emitterIndex,
               output: context.buffers,
-              emitterRuntime: runtime,
+              emitterRuntime: globalRuntime,
+              tagMasks: this._getGPUEmitterTagMasks(emitter),
+              inheritance: { color: 1, alpha: 1, mass: 1, velocity: 1, scale: 1 },
+              resolveSourceIdentity:
+                this.system.simulationSpace === SimulationSpace.Source
+                  ? claim => runs.snapshots.storage.createSourceIdentityNode(resolveRunIndex(claim))
+                  : undefined,
+              resolveInitializationContext: claim => {
+                const index = resolveRunIndex(claim);
+                const event = runs.event(index);
+                const sourceToWorld = runs.sourceToWorld(index);
+                const birthToWorld =
+                  this.system.simulationSpace === SimulationSpace.Source
+                    ? (event.type
+                        .notEqual(uint(GPUEventType.Death))
+                        .select(
+                          sourceToWorld.mul(particleFrameGPU(event.particle, options.inheritScale)),
+                          context.simulationToWorldNode,
+                        ) as Node<'mat4'>)
+                    : context.simulationToWorldNode;
+                return { event, source: event.particle, sourceToWorld, birthToWorld };
+              },
+              resolveParentParticle: claimIndex => runs.load(resolveRunIndex(claimIndex)).particle,
+              resolveDistortionStrength: claimIndex => runs.load(resolveRunIndex(claimIndex)).particle.time,
+              resolveEmissionTransform: claimIndex => {
+                const p = runs.load(resolveRunIndex(claimIndex)).particle;
+                return mat4(
+                  vec4(p.acceleration, 0),
+                  vec4(p.angularAcceleration, 0),
+                  vec4(p.scalarAcceleration, 0),
+                  vec4(p.angularVelocity, 1),
+                );
+              },
+              resolveBirthOffset: claim => {
+                const runtime = emitterInstances.createRuntime(resolveRunIndex(claim));
+                return runtime.birthOffset(claim.sub(uint(runtime.birthSchedule(0).w)), emitter.bursts.length);
+              },
+              resolveEmissionTime: claimIndex => {
+                const run = runs.load(resolveRunIndex(claimIndex));
+                return run.elapsed.div(run.duration.max(float(Number.EPSILON)));
+              },
+              resolveImpulseEffects: claimIndex => {
+                const run = runs.load(resolveRunIndex(claimIndex));
+                return {
+                  scale: run.particle.speed,
+                  speed: run.particle.distortionStrength,
+                  mass: float(1),
+                  alignmentDirection: undefined,
+                };
+              },
             });
-            runtime.queueBirths(context.allocationWriter!, globalRuntime, runIndex);
-          }).Else(() => {
-            runtime.retire();
-          });
-        })().compute(runCapacity));
-
-        const emitGPU = emitter.createBuiltInGPUUpdate()!;
-        nodes.push(Fn(() => {
-          const resolveRunIndex = (claimIndex: Node<'uint'>): Node<'uint'> => (
-            context.allocationWriter!.emissionSource(claimIndex)
-          );
-
-          emitGPU({
-            ...context,
-            emitter,
-            emitterIndex,
-            output: context.buffers,
-            emitterRuntime: globalRuntime,
-            tagMasks: this._getGPUEmitterTagMasks(emitter),
-            inheritance: { color: 1, alpha: 1, mass: 1, velocity: 1, scale: 1 },
-            resolveSourceIdentity: this.system.simulationSpace === SimulationSpace.Source ? claim =>
-              runs.snapshots.storage.createSourceIdentityNode(resolveRunIndex(claim)) : undefined,
-            resolveInitializationContext: claim => {
-              const index = resolveRunIndex(claim);
-              const event = runs.event(index);
-              const sourceToWorld = runs.sourceToWorld(index);
-              const birthToWorld = this.system.simulationSpace === SimulationSpace.Source
-                ? event.type.notEqual(uint(GPUEventType.Death)).select(
-                  sourceToWorld.mul(particleFrameGPU(event.particle, options.inheritScale)),
-                  context.simulationToWorldNode) as Node<'mat4'> : context.simulationToWorldNode;
-              return { event, source: event.particle, sourceToWorld, birthToWorld };
-            },
-            resolveParentParticle: (claimIndex) => runs.load(resolveRunIndex(claimIndex)).particle,
-            resolveDistortionStrength: claimIndex => runs.load(resolveRunIndex(claimIndex)).particle.time,
-            resolveEmissionTransform: claimIndex => {
-              const p = runs.load(resolveRunIndex(claimIndex)).particle;
-              return mat4(vec4(p.acceleration, 0), vec4(p.angularAcceleration, 0),
-                vec4(p.scalarAcceleration, 0), vec4(p.angularVelocity, 1));
-            },
-            resolveBirthOffset: claim => {
-              const runtime = emitterInstances.createRuntime(resolveRunIndex(claim));
-              return runtime.birthOffset(claim.sub(uint(runtime.birthSchedule(0).w)), emitter.bursts.length);
-            },
-            resolveEmissionTime: (claimIndex) => {
-              const run = runs.load(resolveRunIndex(claimIndex));
-              return run.elapsed.div(run.duration.max(float(Number.EPSILON)));
-            },
-            resolveImpulseEffects: (claimIndex) => {
-              const run = runs.load(resolveRunIndex(claimIndex));
-              return {
-                scale: run.particle.speed,
-                speed: run.particle.distortionStrength,
-                mass: float(1),
-                alignmentDirection: undefined,
-              };
-            },
-          });
-        })().compute(context.buffers.capacity));
+          })().compute(context.buffers.capacity),
+        );
       });
 
-      nodes.push(Fn(() => {
-        const run = runs.load(instanceIndex);
-        If(run.active.notEqual(uint(0)).and(run.elapsed.greaterThanEqual(run.duration)), () => {
-          run.active.assign(uint(0));
-        });
-      })().compute(runs.capacity));
+      nodes.push(
+        Fn(() => {
+          const run = runs.load(instanceIndex);
+          If(run.active.notEqual(uint(0)).and(run.elapsed.greaterThanEqual(run.duration)), () => {
+            run.active.assign(uint(0));
+          });
+        })().compute(runs.capacity),
+      );
 
       this._gpuEventSubSystemComputeCache = { key: cacheKey, nodes };
     }
 
-    this._gpuEventSubSystemComputeCache.nodes.forEach((node) => renderer.compute(node));
+    this._gpuEventSubSystemComputeCache.nodes.forEach(node => renderer.compute(node));
   }
 
   _computeGPUSimulationPhase(
@@ -1463,11 +1571,7 @@ export default class GPUSimulation {
     if (!buffers.count) return;
     if (!isWebGPURenderer(this.system.sceneRenderer)) return;
 
-    const computeNode = this._getGPUSimulationComputeNode(
-      context,
-      permanentModifiers,
-      transientPreMovementModifiers,
-    );
+    const computeNode = this._getGPUSimulationComputeNode(context, permanentModifiers, transientPreMovementModifiers);
 
     this.system.sceneRenderer.compute(computeNode);
   }
@@ -1483,9 +1587,7 @@ export default class GPUSimulation {
     this.system.spatialRuntime._gpuSpatialBuildSequence += 1;
     const builtGrids = new Set<ParticleSpatialGrid>();
     for (const modifier of modifiers) {
-      const grid = modifier instanceof Module
-        ? modifier.getParticleSpatialGrid(this.system)
-        : undefined;
+      const grid = modifier instanceof Module ? modifier.getParticleSpatialGrid(this.system) : undefined;
       if (!(modifier instanceof Collision) && !grid) {
         pending.push(modifier);
         continue;
@@ -1521,10 +1623,7 @@ export default class GPUSimulation {
     return pending;
   }
 
-  _getGPUStoredModifierNode(
-    context: GPUParticleUpdateContext,
-    modifiers: Array<Module | SpatialEffect>,
-  ): ComputeNode {
+  _getGPUStoredModifierNode(context: GPUParticleUpdateContext, modifiers: Array<Module | SpatialEffect>): ComputeNode {
     const buffers = context.buffers;
     const key = [
       'stored-modifiers',
@@ -1549,10 +1648,7 @@ export default class GPUSimulation {
     return node;
   }
 
-  _getGPUCollisionNode(
-    context: GPUParticleUpdateContext,
-    collision: Collision,
-  ): ComputeNode {
+  _getGPUCollisionNode(context: GPUParticleUpdateContext, collision: Collision): ComputeNode {
     const buffers = context.buffers;
     const tagMask = this._getGPUTagMask(collision.tags);
     const key = [
@@ -1569,10 +1665,10 @@ export default class GPUSimulation {
 
     const node = Fn(() => {
       const particle = buffers.storage.createParticle(undefined, true);
-      const matches = tagMask === undefined
-        ? particle.alive.notEqual(uint(0))
-        : particle.alive.notEqual(uint(0))
-          .and(particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)));
+      const matches =
+        tagMask === undefined
+          ? particle.alive.notEqual(uint(0))
+          : particle.alive.notEqual(uint(0)).and(particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)));
       If(matches, () => {
         collision.modifyGPUCollision(particle, this._particleGPUContext(particle, context));
         buffers.storage.storeParticle(particle);
@@ -1582,10 +1678,7 @@ export default class GPUSimulation {
     return node;
   }
 
-  _getGPUCollisionDetectionNode(
-    context: GPUParticleUpdateContext,
-    collision: Collision,
-  ): ComputeNode {
+  _getGPUCollisionDetectionNode(context: GPUParticleUpdateContext, collision: Collision): ComputeNode {
     const buffers = context.buffers;
     const tagMask = this._getGPUTagMask(collision.tags);
     const key = [
@@ -1601,20 +1694,17 @@ export default class GPUSimulation {
 
     const node = Fn(() => {
       const particle = buffers.storage.createParticle(undefined, true);
-      const matches = tagMask === undefined
-        ? particle.alive.notEqual(uint(0))
-        : particle.alive.notEqual(uint(0))
-          .and(particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)));
+      const matches =
+        tagMask === undefined
+          ? particle.alive.notEqual(uint(0))
+          : particle.alive.notEqual(uint(0)).and(particle.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)));
       If(matches, () => collision.detectGPUCollision(particle, this._particleGPUContext(particle, context)));
     })().compute(buffers.count);
     this._gpuModifierComputeCaches.set(key, { key, node });
     return node;
   }
 
-  _getGPUCollisionResolutionNode(
-    context: GPUParticleUpdateContext,
-    collision: Collision,
-  ): ComputeNode {
+  _getGPUCollisionResolutionNode(context: GPUParticleUpdateContext, collision: Collision): ComputeNode {
     const buffers = context.buffers;
     const marker = context.collisionEventWriter!;
     const key = [
@@ -1630,7 +1720,12 @@ export default class GPUSimulation {
       const particle = buffers.storage.createParticle(undefined, true);
       const event = marker.load(particle.index);
       If(particle.alive.notEqual(uint(0)).and(event.active), () => {
-        collision.resolveGPUCollision(particle, this._particleGPUContext(particle, context), event.position, event.normal);
+        collision.resolveGPUCollision(
+          particle,
+          this._particleGPUContext(particle, context),
+          event.position,
+          event.normal,
+        );
         buffers.storage.storeParticle(particle);
       });
     })().compute(buffers.count);
@@ -1638,10 +1733,7 @@ export default class GPUSimulation {
     return node;
   }
 
-  _getGPUCollisionEventNode(
-    context: GPUParticleUpdateContext,
-    collision: Collision,
-  ): ComputeNode {
+  _getGPUCollisionEventNode(context: GPUParticleUpdateContext, collision: Collision): ComputeNode {
     const buffers = context.buffers;
     const marker = context.collisionEventWriter!;
     const key = [
@@ -1662,7 +1754,10 @@ export default class GPUSimulation {
           particle,
           event.point,
           event.normal,
-          event.impulse, event.materialCopy, event.materialCopyU, event.materialCopyV,
+          event.impulse,
+          event.materialCopy,
+          event.materialCopyU,
+          event.materialCopyV,
         );
         marker.clear(particle.index);
       });
@@ -1702,9 +1797,7 @@ export default class GPUSimulation {
 
         this._applyGPUModifiers(permanentModifiers, particle, context);
 
-        const base = transientPreMovementModifiers.length > 0
-          ? this._snapshotGPUParticle(particle)
-          : undefined;
+        const base = transientPreMovementModifiers.length > 0 ? this._snapshotGPUParticle(particle) : undefined;
 
         this._applyGPUModifiers(transientPreMovementModifiers, particle, context);
 
@@ -1806,27 +1899,39 @@ export default class GPUSimulation {
     this._gpuEmissionFrameNode.value.copy(frame).invert().multiply(this.system.matrixWorld);
     this._gpuSimulationToWorldNode.value.copy(frame);
     this._gpuWorldToSimulationNode.value.copy(frame).invert();
-    this._gpuParentToSimulationNode.value.copy(frame).invert().multiply(
-      this.system.subSystemParent?.getSimulationToWorldMatrix() ?? frame);
+    this._gpuParentToSimulationNode.value
+      .copy(frame)
+      .invert()
+      .multiply(this.system.subSystemParent?.getSimulationToWorldMatrix() ?? frame);
 
     if (this.system.simulationSpace === SimulationSpace.World) {
       this._gpuEmitterPositionNode.value.setFromMatrixPosition(this.system.matrixWorld);
     } else {
       this._gpuEmitterPositionNode.value.set(0, 0, 0);
     }
-    this.system.emitters.forEach((emitter) => emitter.updateGPUQuality(this.system.quality));
+    this.system.emitters.forEach(emitter => emitter.updateGPUQuality(this.system.quality));
   }
 
   _getGPUModifierListSignature(modifiers: Array<Module | SpatialEffect>): string {
-    const signatures: string[] = [`events:${Array.from(this.system.eventRuntime._eventTypes).join(',')}`,
-    ...modifiers.filter((modifier): modifier is Module => modifier instanceof Module).map(module =>
-      `${module.events.join(',')}:${module.eventScope}:`
-      + module.visibleSystems(this.system).map(owner => `${owner.id}:${[...owner.eventRuntime._eventTypes]}`).join('|'))];
-    for (let index = 0; index < modifiers.length;) {
+    const signatures: string[] = [
+      `events:${Array.from(this.system.eventRuntime._eventTypes).join(',')}`,
+      ...modifiers
+        .filter((modifier): modifier is Module => modifier instanceof Module)
+        .map(
+          module =>
+            `${module.events.join(',')}:${module.eventScope}:` +
+            module
+              .visibleSystems(this.system)
+              .map(owner => `${owner.id}:${[...owner.eventRuntime._eventTypes]}`)
+              .join('|'),
+        ),
+    ];
+    for (let index = 0; index < modifiers.length; ) {
       const modifier = modifiers[index];
-      const record = modifier instanceof SpatialEffect && isBatchableEffect(modifier)
-        ? this._gpuSpatialRegistry?.getRecord(modifier)
-        : undefined;
+      const record =
+        modifier instanceof SpatialEffect && isBatchableEffect(modifier)
+          ? this._gpuSpatialRegistry?.getRecord(modifier)
+          : undefined;
       if (!record || record.segmentId < 0) {
         signatures.push(this._getGPUModifierSignature(modifier));
         index += 1;
@@ -1837,9 +1942,10 @@ export default class GPUSimulation {
       index += 1;
       while (index < modifiers.length) {
         const next = modifiers[index];
-        const nextRecord = next instanceof SpatialEffect && isBatchableEffect(next)
-          ? this._gpuSpatialRegistry?.getRecord(next)
-          : undefined;
+        const nextRecord =
+          next instanceof SpatialEffect && isBatchableEffect(next)
+            ? this._gpuSpatialRegistry?.getRecord(next)
+            : undefined;
         if (!nextRecord || nextRecord.segmentId !== record.segmentId) break;
         index += 1;
       }
@@ -1850,7 +1956,7 @@ export default class GPUSimulation {
   _getGPUSpatialRegistrySignature(): string {
     const registry = this._gpuSpatialRegistry;
     if (!registry || registry.records.length <= 0) return 'spatial:none';
-    const records = registry.records.map((record) => record.effect.version).join(',');
+    const records = registry.records.map(record => record.effect.version).join(',');
     return `spatial:${registry.version}:${registry.signature}:${records}`;
   }
 
@@ -1862,14 +1968,12 @@ export default class GPUSimulation {
     let instanceState = 'parameterized';
     if (modifier instanceof SpatialEffect) {
       const spatialEffect: SpatialEffect = modifier;
-      const batchable = spatialEffect.supportsGPU
-        && Boolean(spatialEffect.gpuSpatialType?.testGPU && spatialEffect.writeGPUParameters);
+      const batchable =
+        spatialEffect.supportsGPU && Boolean(spatialEffect.gpuSpatialType?.testGPU && spatialEffect.writeGPUParameters);
       if (!batchable) {
-        instanceState = [
-          spatialEffect.visible ? 1 : 0,
-          spatialEffect.feather,
-          spatialEffect.inverted ? 1 : 0,
-        ].join(':');
+        instanceState = [spatialEffect.visible ? 1 : 0, spatialEffect.feather, spatialEffect.inverted ? 1 : 0].join(
+          ':',
+        );
       }
     }
 
@@ -1888,9 +1992,11 @@ export default class GPUSimulation {
     if (value === undefined) return 'undefined';
     if (typeof value === 'number') return 'number';
     if (typeof value === 'function') return 'function';
-    if (Array.isArray(value)) return `array:${value.map((item) => this._getDynamicValueSignature(item)).join(',')}`;
+    if (Array.isArray(value)) return `array:${value.map(item => this._getDynamicValueSignature(item)).join(',')}`;
     if (value instanceof Set) {
-      return `set:${Array.from(value).map((item) => this._getDynamicValueSignature(item)).join(',')}`;
+      return `set:${Array.from(value)
+        .map(item => this._getDynamicValueSignature(item))
+        .join(',')}`;
     }
     if (typeof value === 'object' && value !== null) return `object:${this._getObjectSignature(value)}`;
     return typeof value;
@@ -1911,17 +2017,17 @@ export default class GPUSimulation {
     this.system.frameRuntime.invalidateGPUCompute();
     this._gpuLODCull?.node.dispose();
     this._gpuLODCull = undefined;
-    this._gpuEmissionPrepareComputeCache?.nodes.forEach((node) => node.dispose?.());
-    this._gpuContinuousSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
-    this._gpuEventSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
-    this._gpuEmissionComputeCache?.nodes.forEach((node) => node.dispose?.());
-    this._gpuOldEmissionComputeCache?.nodes.forEach((node) => node.dispose?.());
-    this._gpuOldSelectionComputeCache?.nodes.forEach((node) => node.dispose?.());
+    this._gpuEmissionPrepareComputeCache?.nodes.forEach(node => node.dispose?.());
+    this._gpuContinuousSubSystemComputeCache?.nodes.forEach(node => node.dispose?.());
+    this._gpuEventSubSystemComputeCache?.nodes.forEach(node => node.dispose?.());
+    this._gpuEmissionComputeCache?.nodes.forEach(node => node.dispose?.());
+    this._gpuOldEmissionComputeCache?.nodes.forEach(node => node.dispose?.());
+    this._gpuOldSelectionComputeCache?.nodes.forEach(node => node.dispose?.());
     this._gpuOldDeathEventComputeCache?.node.dispose?.();
     this._gpuAllocationSnapshotComputeCache?.node.dispose?.();
     this._gpuSpawnEventComputeCache?.node.dispose?.();
-    this._gpuSimulationComputeCaches.forEach((cache) => cache.node.dispose?.());
-    this._gpuModifierComputeCaches.forEach((cache) => cache.node.dispose?.());
+    this._gpuSimulationComputeCaches.forEach(cache => cache.node.dispose?.());
+    this._gpuModifierComputeCaches.forEach(cache => cache.node.dispose?.());
     this._gpuRenderOutputComputeCache?.node.dispose?.();
     this._gpuEmissionPrepareComputeCache = undefined;
     this._gpuEmissionFinalizeComputeCache = undefined;
@@ -1939,10 +2045,7 @@ export default class GPUSimulation {
     this._gpuRenderOutputComputeCache = undefined;
   }
 
-  _integrateGPUParticle(
-    particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
-  ): void {
+  _integrateGPUParticle(particle: GPUParticleLike, context: GPUParticleUpdateContext): void {
     const deltaTime = context.deltaTimeNode;
     const gravity = this._gpuGravityNode;
     const gravityModifier = this._gpuParameters.number(
@@ -1976,33 +2079,29 @@ export default class GPUSimulation {
     context.allocationWriter?.recordActive(particle);
   }
 
-  _scheduleGPUAllocationReadback(
-    allocationBuffer: GPUAllocationBufferState,
-    renderer: WebGPURenderer,
-  ): void {
+  _scheduleGPUAllocationReadback(allocationBuffer: GPUAllocationBufferState, renderer: WebGPURenderer): void {
     const now = performance.now();
     if (
-      !renderer.backend
-      || typeof renderer.getArrayBufferAsync !== 'function'
-      || this._gpuAllocationReadbackPending
-      || now - this._lastGPUAllocationReadbackTime < (
-        this.system.spatialEffectBoundsFiltering
-          ? 1000 / Math.max(GlobalSettings.GPU_READBACK_RATE, 1)
-          : 250
-      )
-    ) return;
+      !renderer.backend ||
+      typeof renderer.getArrayBufferAsync !== 'function' ||
+      this._gpuAllocationReadbackPending ||
+      now - this._lastGPUAllocationReadbackTime <
+        (this.system.spatialEffectBoundsFiltering ? 1000 / Math.max(GlobalSettings.GPU_READBACK_RATE, 1) : 250)
+    )
+      return;
 
     this._gpuAllocationReadbackPending = true;
     this._lastGPUAllocationReadbackTime = now;
     const lifecycleGeneration = this._gpuLifecycleGeneration;
-    void allocationBuffer.readback(renderer)
-      .then((diagnostics) => {
+    void allocationBuffer
+      .readback(renderer)
+      .then(diagnostics => {
         if (lifecycleGeneration !== this._gpuLifecycleGeneration) return;
         this._gpuAllocationDiagnostics = diagnostics;
         if (
-          this._gpuBuffers
-          && this._gpuBuffers.capacity < this.system.maxParticles
-          && (diagnostics.allocationFailures > 0 || diagnostics.recycledDeaths > 0)
+          this._gpuBuffers &&
+          this._gpuBuffers.capacity < this.system.maxParticles &&
+          (diagnostics.allocationFailures > 0 || diagnostics.recycledDeaths > 0)
         ) {
           const nextCapacity = Math.min(
             this.system.maxParticles,
@@ -2106,7 +2205,7 @@ export default class GPUSimulation {
   }
 
   _cloneParticlesForGPUReadback(particles: Particle[]): Particle[] {
-    return particles.map((particle) => {
+    return particles.map(particle => {
       const clone = new Particle({
         position: particle.position,
         orbitCenter: particle.orbitCenter,
@@ -2139,8 +2238,11 @@ export default class GPUSimulation {
     });
   }
 
-  _particleGPUContext(particle: GPUParticleLike, context: GPUParticleUpdateContext,
-    integrated = false): GPUParticleUpdateContext {
+  _particleGPUContext(
+    particle: GPUParticleLike,
+    context: GPUParticleUpdateContext,
+    integrated = false,
+  ): GPUParticleUpdateContext {
     const deltaTimeNode = integrated
       ? context.deltaTimeNode.min(particle.realtime.div(1000).max(0))
       : context.deltaTimeNode.sub(particle.birthOffset ?? float(0)).max(0);
@@ -2150,9 +2252,9 @@ export default class GPUSimulation {
   _applyGPUModifier(
     modifier: Module | SpatialEffect,
     particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
+    updateContext: GPUParticleUpdateContext,
   ): void {
-    context = this._particleGPUContext(particle, context);
+    const context = this._particleGPUContext(particle, updateContext);
     const alive = particle.alive.notEqual(uint(0));
 
     if (modifier instanceof Module) {
@@ -2165,10 +2267,7 @@ export default class GPUSimulation {
       };
       const modifyParticle = () => modifier.modifyGPU(particle, context.deltaTimeNode, moduleContext);
       const modifySelectedParticle = modifier.conditionGPU
-        ? () => If(
-          modifier.conditionGPU!(particle, context.deltaTimeNode, moduleContext),
-          modifyParticle,
-        )
+        ? () => If(modifier.conditionGPU!(particle, context.deltaTimeNode, moduleContext), modifyParticle)
         : modifyParticle;
 
       if (tagMask === undefined) {
@@ -2218,11 +2317,11 @@ export default class GPUSimulation {
       particle.tagMask.assign(particle.tagMask.bitOr(uint(registeredTagMask(tag))));
     };
     particle.removeTag = tag => {
-      particle.tagMask.assign(particle.tagMask.bitAnd(uint((~registeredTagMask(tag)) >>> 0)));
+      particle.tagMask.assign(particle.tagMask.bitAnd(uint(~registeredTagMask(tag) >>> 0)));
     };
     particle.emitEvent = (event, payload) => {
-      if (Array.isArray(payload) &&
-        payload.length > 3) throw new Error('GPU custom event payload accepts at most three vec4 values (12 floats).');
+      if (Array.isArray(payload) && payload.length > 3)
+        throw new Error('GPU custom event payload accepts at most three vec4 values (12 floats).');
       const type = this.system.eventRuntime._eventTypes.get(event);
       if (type !== undefined) context.eventWriter?.emitParticleEvent(type, particle, payload);
     };
@@ -2234,11 +2333,12 @@ export default class GPUSimulation {
     context: GPUParticleUpdateContext,
   ): void {
     this._configureParticleGPU(particle, context);
-    for (let index = 0; index < modifiers.length;) {
+    for (let index = 0; index < modifiers.length; ) {
       const modifier = modifiers[index];
-      const firstRecord = modifier instanceof SpatialEffect && isBatchableEffect(modifier)
-        ? this._gpuSpatialRegistry?.getRecord(modifier)
-        : undefined;
+      const firstRecord =
+        modifier instanceof SpatialEffect && isBatchableEffect(modifier)
+          ? this._gpuSpatialRegistry?.getRecord(modifier)
+          : undefined;
       if (!firstRecord || !this._gpuSpatialRegistry) {
         this._applyGPUModifier(modifier, particle, context);
         index += 1;
@@ -2275,9 +2375,8 @@ export default class GPUSimulation {
     if (!type) return;
 
     const alive = particle.alive.notEqual(uint(0));
-    const tagMatch = record.tagMask === 0
-      ? alive
-      : alive.and(particle.tagMask.bitAnd(uint(record.tagMask)).notEqual(uint(0)));
+    const tagMatch =
+      record.tagMask === 0 ? alive : alive.and(particle.tagMask.bitAnd(uint(record.tagMask)).notEqual(uint(0)));
     const applySpatialEffect = () => {
       const strength = record.effect.testGPU(particle, context);
 
@@ -2387,7 +2486,7 @@ export default class GPUSimulation {
     tags?: Tag[];
     supportsGPU: boolean;
   }> {
-    return modules.map((module) => ({
+    return modules.map(module => ({
       name: module.constructor.name,
       priority: module.priority,
       tags: module.tags ? [...module.tags] : undefined,
@@ -2402,7 +2501,7 @@ export default class GPUSimulation {
     supportsGPU: boolean;
     type: 'module' | 'spatialEffect';
   }> {
-    return modifiers.map((modifier) => ({
+    return modifiers.map(modifier => ({
       name: modifier.constructor.name,
       priority: modifier.priority,
       tags: modifier.tags ? [...modifier.tags] : undefined,
@@ -2452,11 +2551,7 @@ export default class GPUSimulation {
   }
 
   _debugVector(vector: THREE.Vector3): number[] {
-    return [
-      this._debugNumber(vector.x),
-      this._debugNumber(vector.y),
-      this._debugNumber(vector.z),
-    ];
+    return [this._debugNumber(vector.x), this._debugNumber(vector.y), this._debugNumber(vector.z)];
   }
 
   _debugNumber(value: number): number {
@@ -2471,24 +2566,23 @@ export default class GPUSimulation {
     const root = this.execution.eventRoot();
 
     const registerSystem = (system: ParticleSystem): void => {
-      const systemModules = system === this.system
-        ? modules
-        : system.modules.flatMap((module) => module.withDependents());
+      const systemModules =
+        system === this.system ? modules : system.modules.flatMap(module => module.withDependents());
       const systemSpatialEffects = system === this.system ? spatialEffects : system.spatialEffects;
 
-      systemModules.forEach((module) => {
-        module.tags?.forEach((tag) => this._registerGPUTag(tag));
+      systemModules.forEach(module => {
+        module.tags?.forEach(tag => this._registerGPUTag(tag));
       });
-      systemSpatialEffects.forEach((spatialEffect) => {
-        spatialEffect.tags?.forEach((tag) => this._registerGPUTag(tag));
+      systemSpatialEffects.forEach(spatialEffect => {
+        spatialEffect.tags?.forEach(tag => this._registerGPUTag(tag));
       });
-      system.emitters.forEach((emitter) => {
-        emitter.tags?.forEach((tag) => this._registerGPUTag(tag));
+      system.emitters.forEach(emitter => {
+        emitter.tags?.forEach(tag => this._registerGPUTag(tag));
         system.getEmitterOptions(emitter).tags?.forEach(tag => this._registerGPUTag(tag));
       });
-      system.renderers.forEach((renderer) => {
-        renderer.tags?.forEach((tag) => this._registerGPUTag(tag));
-        renderer.selectionTags.forEach((tag) => this._registerGPUTag(tag));
+      system.renderers.forEach(renderer => {
+        renderer.tags?.forEach(tag => this._registerGPUTag(tag));
+        renderer.selectionTags.forEach(tag => this._registerGPUTag(tag));
       });
       system.subSystems.forEach((options, child) => {
         options.tags?.forEach(tag => this._registerGPUTag(tag));
@@ -2514,14 +2608,14 @@ export default class GPUSimulation {
   }
 
   _getGPUEmitterTagMasks(emitter: Emitter): number[] {
-    return emitter.tags?.map((tag) => this._getGPUTagMask([tag]) ?? 0) ?? [];
+    return emitter.tags?.map(tag => this._getGPUTagMask([tag]) ?? 0) ?? [];
   }
 
   _getGPUTagMask(tags?: Tag[]): number | undefined {
     if (!tags) return undefined;
 
     let mask = 0;
-    tags.forEach((tag) => {
+    tags.forEach(tag => {
       const index = this._gpuTagRegistry.get(tag);
       if (index === undefined) return;
       mask += 2 ** index;
@@ -2539,8 +2633,7 @@ export default class GPUSimulation {
   }
 
   _usesGPUStableParticleSlots(): boolean {
-    return this._isGPUProcessingActive
-      || (this.system.gpuProcessing && isWebGPURenderer(this.system.sceneRenderer));
+    return this._isGPUProcessingActive || (this.system.gpuProcessing && isWebGPURenderer(this.system.sceneRenderer));
   }
 
   _shouldRequestGPUReadback(): boolean {
@@ -2554,14 +2647,15 @@ export default class GPUSimulation {
   _hasGPUEventConsumers(): boolean {
     if (this.execution.sharedEvents() || this.system.eventRuntime._eventObservers.size) return true;
     if (
-      this.system.eventRuntime._deathListeners.length > 0
-      || this.system.eventRuntime._spawnListeners.length > 0
-      || this.system.eventRuntime._collisionListeners.length > 0
-    ) return true;
+      this.system.eventRuntime._deathListeners.length > 0 ||
+      this.system.eventRuntime._spawnListeners.length > 0 ||
+      this.system.eventRuntime._collisionListeners.length > 0
+    )
+      return true;
 
     for (const options of this.system.subSystems.values()) {
-      if (options.emitOnDeath || options.emitOnSpawn || options.emitOnCollision ||
-        eventNames(options.onEvent).length) return true;
+      if (options.emitOnDeath || options.emitOnSpawn || options.emitOnCollision || eventNames(options.onEvent).length)
+        return true;
     }
 
     return false;
@@ -2575,37 +2669,58 @@ export default class GPUSimulation {
   }
 
   _canUpdateAsGPUSubSystem(parent: ParticleSystem, options: SubSystemOptions): boolean {
-    if (!parent || !options || !parent.gpuSimulation._gpuBuffers || !parent.gpuSimulation._isGPUProcessingActive) return false;
-    if (!this.system.gpuProcessing
-      || !isWebGPURenderer(this.system.sceneRenderer ?? parent.sceneRenderer)) return false;
+    if (!parent || !options || !parent.gpuSimulation._gpuBuffers || !parent.gpuSimulation._isGPUProcessingActive)
+      return false;
+    if (!this.system.gpuProcessing || !isWebGPURenderer(this.system.sceneRenderer ?? parent.sceneRenderer))
+      return false;
     if (typeof options.shouldEmit === 'function') return false;
     if (!this.system.emitters.length) return false;
 
-    return options.emitContinuous
-      || options.emitOnDeath
-      || options.emitOnSpawn
-      || options.emitOnCollision
-      || eventNames(options.onEvent).length > 0;
+    return (
+      options.emitContinuous ||
+      options.emitOnDeath ||
+      options.emitOnSpawn ||
+      options.emitOnCollision ||
+      eventNames(options.onEvent).length > 0
+    );
   }
 
   _canHandleNativeGPUEvent(parent: ParticleSystem, options: SubSystemOptions, event: string): boolean {
     const renderer = this.system.sceneRenderer ?? this.execution.eventRoot().sceneRenderer;
-    if (!this.system.gpuProcessing || !parent.gpuProcessing || !isWebGPURenderer(renderer)
-      || typeof options.shouldEmit !== 'boolean' || !this.system.modules.every(module => module.supportsGPU)) return false;
+    if (
+      !this.system.gpuProcessing ||
+      !parent.gpuProcessing ||
+      !isWebGPURenderer(renderer) ||
+      typeof options.shouldEmit !== 'boolean' ||
+      !this.system.modules.every(module => module.supportsGPU)
+    )
+      return false;
     const gpuHandler = !Array.isArray(options.onEvent) && options.onEvent?.gpu?.[event];
     return !cpuEventHandler(options.onEvent, event) || !!gpuHandler;
   }
 
   _needsCPUEventReadback(): boolean {
-    if ([...this.system.eventRuntime._eventObservers].some(observer => !observer.receiver
-      || observer.receiver instanceof EventReceiver && !observer.receiver.gpuNative)) return true;
-    if (this.system.eventRuntime._deathListeners.length || this.system.eventRuntime._spawnListeners.length || this.system.eventRuntime._collisionListeners.length) return true;
-    const needsReadback = (owner: ParticleSystem): boolean => owner.emitters.some(emitter => {
-      if (!emitter.visibleSystems(owner).includes(this.system)) return false;
-      const options = owner.getEmitterOptions(emitter);
-      return [...this.system.eventRuntime._eventTypes.keys()].some(name => subscribes(options, name)
-        && !owner.gpuSimulation._canHandleNativeGPUEvent(this.system, options, name));
-    }) || [...owner.subSystems.keys()].some(needsReadback);
+    if (
+      [...this.system.eventRuntime._eventObservers].some(
+        observer => !observer.receiver || (observer.receiver instanceof EventReceiver && !observer.receiver.gpuNative),
+      )
+    )
+      return true;
+    if (
+      this.system.eventRuntime._deathListeners.length ||
+      this.system.eventRuntime._spawnListeners.length ||
+      this.system.eventRuntime._collisionListeners.length
+    )
+      return true;
+    const needsReadback = (owner: ParticleSystem): boolean =>
+      owner.emitters.some(emitter => {
+        if (!emitter.visibleSystems(owner).includes(this.system)) return false;
+        const options = owner.getEmitterOptions(emitter);
+        return [...this.system.eventRuntime._eventTypes.keys()].some(
+          name =>
+            subscribes(options, name) && !owner.gpuSimulation._canHandleNativeGPUEvent(this.system, options, name),
+        );
+      }) || [...owner.subSystems.keys()].some(needsReadback);
     return needsReadback(this.execution.eventRoot());
   }
 
@@ -2632,27 +2747,50 @@ export default class GPUSimulation {
       options.impulseThreshold,
       String(options.shouldEmit),
       options.tags?.map(tag => this._gpuTagRegistry.get(tag)).join(','),
-      eventNames(options.onEvent).map(name => {
-        const handler = !Array.isArray(options.onEvent) && options.onEvent?.gpu?.[name];
-        return [
-          name,
-          this.system.subSystemParent?.eventRuntime._eventTypes.get(name),
-          handler ? this._getObjectSignature(handler) : '',
-          !!cpuEventHandler(options.onEvent, name),
-        ].join(':');
-      }).join(','),
+      eventNames(options.onEvent)
+        .map(name => {
+          const handler = !Array.isArray(options.onEvent) && options.onEvent?.gpu?.[name];
+          return [
+            name,
+            this.system.subSystemParent?.eventRuntime._eventTypes.get(name),
+            handler ? this._getObjectSignature(handler) : '',
+            !!cpuEventHandler(options.onEvent, name),
+          ].join(':');
+        })
+        .join(','),
     ].join(':');
   }
 
   _getInitialGPUBufferCapacity(): number {
-    const required = Math.max(GlobalSettings.GPU_INITIAL_BUFFER_SIZE,
-      this.system.particles.length, this.system.emissionRuntime._stagedBirths.length, this.system.estimateParticleCount(), 1);
+    const required = Math.max(
+      GlobalSettings.GPU_INITIAL_BUFFER_SIZE,
+      this.system.particles.length,
+      this.system.emissionRuntime._stagedBirths.length,
+      this.system.estimateParticleCount(),
+      1,
+    );
     return Math.min(nextPowerOfTwo(required), Math.max(this.system.maxParticles, 1));
   }
 
-  _acquireGPUEventBuffer(renderer: WebGPURenderer) { return this.system.eventRuntime.acquireBuffer(renderer, Math.min(GlobalSettings.GPU_EVENT_BUFFER_CAPACITY, Math.max(32, this.system.maxParticles * 3)), () => { this._gpuResourceBuildCount += 1; }); }
+  _acquireGPUEventBuffer(renderer: WebGPURenderer) {
+    return this.system.eventRuntime.acquireBuffer(
+      renderer,
+      Math.min(GlobalSettings.GPU_EVENT_BUFFER_CAPACITY, Math.max(32, this.system.maxParticles * 3)),
+      () => {
+        this._gpuResourceBuildCount += 1;
+      },
+    );
+  }
 
-  _acquireGPUCollisionEventBuffer(renderer: WebGPURenderer) { return this.system.eventRuntime.acquireCollisionBuffer(renderer, Math.max(this._gpuBuffers?.capacity ?? 1, 1), () => { this._gpuResourceBuildCount += 1; }); }
+  _acquireGPUCollisionEventBuffer(renderer: WebGPURenderer) {
+    return this.system.eventRuntime.acquireCollisionBuffer(
+      renderer,
+      Math.max(this._gpuBuffers?.capacity ?? 1, 1),
+      () => {
+        this._gpuResourceBuildCount += 1;
+      },
+    );
+  }
 
   _acquireGPUAllocationBuffer(renderer: WebGPURenderer): GPUAllocationBufferState {
     const capacity = Math.max(this._gpuBuffers?.capacity ?? 1, 1);
@@ -2674,34 +2812,35 @@ export default class GPUSimulation {
     const requiredCapacity = Math.max(1, capacity);
     const maxBurstCount = emitters.reduce((max, emitter) => Math.max(max, emitter.bursts.length), 0);
     const requiredBurstWordCount = Math.max(1, Math.ceil(maxBurstCount / 32));
-    const field = kind === 'standalone'
-      ? '_gpuStandaloneEmitterInstances'
-      : kind === 'continuous'
-        ? '_gpuContinuousEmitterInstances'
-        : '_gpuEventEmitterInstances';
+    const field =
+      kind === 'standalone'
+        ? '_gpuStandaloneEmitterInstances'
+        : kind === 'continuous'
+          ? '_gpuContinuousEmitterInstances'
+          : '_gpuEventEmitterInstances';
     let instances = this[field];
     if (
-      !instances
-      || instances.capacity !== requiredCapacity
-      || instances.burstWordCount !== requiredBurstWordCount
-      || instances.maxBurstCount !== maxBurstCount
+      !instances ||
+      instances.capacity !== requiredCapacity ||
+      instances.burstWordCount !== requiredBurstWordCount ||
+      instances.maxBurstCount !== maxBurstCount
     ) {
       this._gpuResourceBuildCount += 1;
       instances = new GPUEmitterInstanceBufferState(requiredCapacity, maxBurstCount);
       this[field] = instances;
-      this._gpuEmissionPrepareComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuEmissionPrepareComputeCache?.nodes.forEach(node => node.dispose?.());
       this._gpuEmissionPrepareComputeCache = undefined;
-      this._gpuEmissionFinalizeComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuEmissionFinalizeComputeCache?.nodes.forEach(node => node.dispose?.());
       this._gpuEmissionFinalizeComputeCache = undefined;
-      this._gpuEmissionComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuEmissionComputeCache?.nodes.forEach(node => node.dispose?.());
       this._gpuEmissionComputeCache = undefined;
-      this._gpuOldEmissionComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuOldEmissionComputeCache?.nodes.forEach(node => node.dispose?.());
       this._gpuOldEmissionComputeCache = undefined;
-      this._gpuOldSelectionComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuOldSelectionComputeCache?.nodes.forEach(node => node.dispose?.());
       this._gpuOldSelectionComputeCache = undefined;
-      this._gpuContinuousSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuContinuousSubSystemComputeCache?.nodes.forEach(node => node.dispose?.());
       this._gpuContinuousSubSystemComputeCache = undefined;
-      this._gpuEventSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuEventSubSystemComputeCache?.nodes.forEach(node => node.dispose?.());
       this._gpuEventSubSystemComputeCache = undefined;
     }
 
@@ -2709,16 +2848,13 @@ export default class GPUSimulation {
     return instances;
   }
 
-  _acquireGPUEmissionRuns(
-    capacity: number,
-    renderer: WebGPURenderer,
-  ): GPUEmissionRunBufferState {
+  _acquireGPUEmissionRuns(capacity: number, renderer: WebGPURenderer): GPUEmissionRunBufferState {
     const requiredCapacity = Math.max(1, capacity);
     if (!this._gpuEmissionRuns || this._gpuEmissionRuns.capacity !== requiredCapacity) {
       this._gpuResourceBuildCount += 1;
       this._gpuEmissionRuns?.snapshots.dispose(renderer);
       this._gpuEmissionRuns = new GPUEmissionRunBufferState(requiredCapacity);
-      this._gpuEventSubSystemComputeCache?.nodes.forEach((node) => node.dispose?.());
+      this._gpuEventSubSystemComputeCache?.nodes.forEach(node => node.dispose?.());
       this._gpuEventSubSystemComputeCache = undefined;
     }
 
@@ -2734,7 +2870,9 @@ export default class GPUSimulation {
     this.system.eventRuntime.scheduleReadback(buffer, renderer, this._eventReadbackExecution());
   }
 
-  _flushGPUEventBatches(): void { this.system.eventRuntime.flushGPU(this._eventReadbackExecution()); }
+  _flushGPUEventBatches(): void {
+    this.system.eventRuntime.flushGPU(this._eventReadbackExecution());
+  }
 
   _dispatchGPUDeathEvent(slot: number, generation: number, particle: Particle): void {
     const key = this._getGPUParticleSlotKey(slot, generation);
@@ -2777,9 +2915,7 @@ export default class GPUSimulation {
     return this._readbackGPUParticles(this._createReadbackRequests(limit, fields));
   }
 
-  async _readbackGPUParticles(
-    requests: GPUSelectiveReadbackRequest[],
-  ): Promise<GPUSelectiveReadbackResult[]> {
+  async _readbackGPUParticles(requests: GPUSelectiveReadbackRequest[]): Promise<GPUSelectiveReadbackResult[]> {
     if (!this._gpuBuffers || requests.length === 0) return [];
 
     const renderer = this.system.sceneRenderer;
@@ -2787,11 +2923,11 @@ export default class GPUSimulation {
       throw new Error('Selective GPU particle readback requires a WebGPU renderer with async buffer readback.');
     }
 
-    let slot = this._gpuSelectiveReadbacks.find((candidate) => (
-      !candidate.pending && candidate.state.capacity >= requests.length
-    ));
+    let slot = this._gpuSelectiveReadbacks.find(
+      candidate => !candidate.pending && candidate.state.capacity >= requests.length,
+    );
     if (!slot) {
-      const reusable = this._gpuSelectiveReadbacks.find((candidate) => !candidate.pending);
+      const reusable = this._gpuSelectiveReadbacks.find(candidate => !candidate.pending);
       if (reusable) {
         reusable.state = new GPUSelectiveReadbackState(Math.max(1, requests.length));
         slot = reusable;
@@ -2815,7 +2951,7 @@ export default class GPUSimulation {
       slot.state.gather(renderer, this._gpuBuffers);
       const results = await slot.state.readback(renderer);
       if (lifecycleGeneration !== this._gpuLifecycleGeneration) return [];
-      results.forEach((result) => {
+      results.forEach(result => {
         result.particle.setEventOwner(this.system);
         result.particle.tags = this._getGPUTagsFromMask(result.tagMask);
       });
@@ -2827,10 +2963,11 @@ export default class GPUSimulation {
       // flight. Chromium also reports device/context teardown as AbortError.
       // Both cases cancel this optional observation rather than the simulation.
       if (
-        lifecycleGeneration !== this._gpuLifecycleGeneration
-        || this.system.destroyed
-        || (error as { name?: unknown })?.name === 'AbortError'
-      ) return [];
+        lifecycleGeneration !== this._gpuLifecycleGeneration ||
+        this.system.destroyed ||
+        (error as { name?: unknown })?.name === 'AbortError'
+      )
+        return [];
       throw error;
     } finally {
       slot.pending = false;
@@ -2843,10 +2980,7 @@ export default class GPUSimulation {
   ): GPUSelectiveReadbackRequest[] {
     if (!this._gpuBuffers) return [];
 
-    const max = Math.min(
-      this._gpuBuffers.count,
-      Math.max(0, Math.floor(limit)),
-    );
+    const max = Math.min(this._gpuBuffers.count, Math.max(0, Math.floor(limit)));
     const requests: GPUSelectiveReadbackRequest[] = [];
 
     for (let slot = 0; slot < max; slot += 1) {
@@ -2860,7 +2994,7 @@ export default class GPUSimulation {
         fields,
         identity: gpuNativeSlot
           ? undefined
-          : this._getGPUParticleIdentity(slot, generation) ?? this.system.particles[slot],
+          : (this._getGPUParticleIdentity(slot, generation) ?? this.system.particles[slot]),
       });
     }
 
@@ -2891,14 +3025,14 @@ export default class GPUSimulation {
   }
 
   _uploadDirtyGPUParticleSlots(buffer: GPUParticleBufferState): void {
-    this._gpuDirtyParticleSlots.forEach((index) => {
+    this._gpuDirtyParticleSlots.forEach(index => {
       const particle = this.system.particles[index];
       if (!particle) return;
 
       buffer.uploadIndex(
         index,
         particle,
-        (value) => this._getParticleGPUTagMask(value),
+        value => this._getParticleGPUTagMask(value),
         (value, slot) => this._getGPUParticleSlotGeneration(value, slot),
       );
     });
@@ -2931,56 +3065,81 @@ export default class GPUSimulation {
   _flushTargetedGPUEvents(): void {
     if (!this.system.eventRuntime._pendingGPUEvents.length) return;
     const events = this.system.eventRuntime._pendingGPUEvents.splice(0);
-    const requests = Array.from(new Map(events.map(e => [`${e.slot}:${e.generation}`,
-    {
-      slot: e.slot, generation: e.generation, identity: this._getGPUParticleIdentity(e.slot,
-        e.generation)
-    }])).values());
+    const requests = Array.from(
+      new Map(
+        events.map(e => [
+          `${e.slot}:${e.generation}`,
+          {
+            slot: e.slot,
+            generation: e.generation,
+            identity: this._getGPUParticleIdentity(e.slot, e.generation),
+          },
+        ]),
+      ).values(),
+    );
     const lifecycle = this._gpuLifecycleGeneration;
-    void this._readbackGPUParticles(requests).then(results => {
-      if (lifecycle !== this._gpuLifecycleGeneration) return;
-      // A busy bounded readback pool retries the entire batch; events are never coalesced.
-      if (!results.length) { this.system.eventRuntime._pendingGPUEvents.unshift(...events); return; }
-      const snapshots = new Map(results.filter(r => r.valid).map(r => [`${r.slot}:${r.generation}`, r.particle]));
-      for (const event of events) {
-        const particle = snapshots.get(`${event.slot}:${event.generation}`);
-        if (particle) this.execution.dispatchSourceEvent(particle, event.event, event.data);
-      }
-    }).catch(error => { console.warn('RZMPS: GPU event targeting readback failed.', error); });
+    void this._readbackGPUParticles(requests)
+      .then(results => {
+        if (lifecycle !== this._gpuLifecycleGeneration) return;
+        // A busy bounded readback pool retries the entire batch; events are never coalesced.
+        if (!results.length) {
+          this.system.eventRuntime._pendingGPUEvents.unshift(...events);
+          return;
+        }
+        const snapshots = new Map(results.filter(r => r.valid).map(r => [`${r.slot}:${r.generation}`, r.particle]));
+        for (const event of events) {
+          const particle = snapshots.get(`${event.slot}:${event.generation}`);
+          if (particle) this.execution.dispatchSourceEvent(particle, event.event, event.data);
+        }
+      })
+      .catch(error => {
+        console.warn('RZMPS: GPU event targeting readback failed.', error);
+      });
   }
 
   _readGPUContinuousSources(): void {
     const lifecycle = this._gpuLifecycleGeneration;
     this._gpuContinuousSourcesReadbackPending = true;
     const requests = Array.from({ length: this._gpuBuffers!.count }, (_, slot) => ({ slot, generation: 0 }));
-    void this._readbackGPUParticles(requests).then(results => {
-      if (lifecycle !== this._gpuLifecycleGeneration) return;
-      if (!results.length && requests.length) return; // Keep contexts while the bounded pool is busy.
-      const next = results.filter(result => result.valid).map(result => {
-        const identity = this._getGPUParticleIdentity(result.slot, result.generation);
-        if (identity) result.particle.id = identity.id;
-        return result.particle;
-      });
-      const live = new Set(next.map(p => p.id));
-      for (const old of this._gpuContinuousSourceSnapshots) {
-        if (!live.has(old.id)) this.system.subSystems.forEach((options, child) => {
-          if (!child.gpuSimulation._canUpdateAsGPUSubSystem(this.system, options)) child.emitters.forEach(emitter =>
-            emitter.clearContext(old.id, child));
-        });
-      }
-      this._gpuContinuousSourceSnapshots = next;
-    }).catch(error => { console.warn('RZMPS: continuous subsystem source readback failed.', error); })
+    void this._readbackGPUParticles(requests)
+      .then(results => {
+        if (lifecycle !== this._gpuLifecycleGeneration) return;
+        if (!results.length && requests.length) return; // Keep contexts while the bounded pool is busy.
+        const next = results
+          .filter(result => result.valid)
+          .map(result => {
+            const identity = this._getGPUParticleIdentity(result.slot, result.generation);
+            if (identity) result.particle.id = identity.id;
+            return result.particle;
+          });
+        const live = new Set(next.map(p => p.id));
+        for (const old of this._gpuContinuousSourceSnapshots) {
+          if (!live.has(old.id))
+            this.system.subSystems.forEach((options, child) => {
+              if (!child.gpuSimulation._canUpdateAsGPUSubSystem(this.system, options))
+                child.emitters.forEach(emitter => emitter.clearContext(old.id, child));
+            });
+        }
+        this._gpuContinuousSourceSnapshots = next;
+      })
+      .catch(error => {
+        console.warn('RZMPS: continuous subsystem source readback failed.', error);
+      })
       .finally(() => {
-        if (lifecycle === this._gpuLifecycleGeneration) this._gpuContinuousSourcesReadbackPending =
-          false;
+        if (lifecycle === this._gpuLifecycleGeneration) this._gpuContinuousSourcesReadbackPending = false;
       });
   }
 
   _getParticleInitializationSignature(): string {
-    return this.system.modules.flatMap(module => module.withDependents())
+    return this.system.modules
+      .flatMap(module => module.withDependents())
       .filter(module => module.initializeParticleGPU !== undefined)
-      .map(module => `${this._getObjectSignature(module)}:${module.version}:${module.tags?.join(',') ?? ''}:`
-        + this._getObjectSignature(module.initializeParticleGPU!)).join('|');
+      .map(
+        module =>
+          `${this._getObjectSignature(module)}:${module.version}:${module.tags?.join(',') ?? ''}:` +
+          this._getObjectSignature(module.initializeParticleGPU!),
+      )
+      .join('|');
   }
   clear(gpuRenderer?: WebGPURenderer): void {
     this._gpuLifecycleGeneration += 1;
@@ -2993,7 +3152,7 @@ export default class GPUSimulation {
     this._gpuRenderOutputBuffers = undefined;
     this._gpuSpatialRegistry?.dispose(gpuRenderer);
     this._gpuSpatialRegistry = undefined;
-    this._gpuSelectiveReadbacks.forEach((slot) => slot.state.dispose(gpuRenderer));
+    this._gpuSelectiveReadbacks.forEach(slot => slot.state.dispose(gpuRenderer));
     this._gpuSelectiveReadbacks.length = 0;
     this._gpuSelectiveReadbackOverflowCount = 0;
     this._gpuSelectiveReadbackBytes = 0;
@@ -3027,9 +3186,12 @@ export default class GPUSimulation {
   }
   skipTime(renderer: WebGPURenderer, buffers: GPUParticleBufferState): void {
     this._gpuSkippedTimeNode.value = this.execution.skippedTime();
-    if (!this._gpuSkipTimeCompute || this._gpuSkipTimeCompute.buffers !== buffers
-      || this._gpuSkipTimeCompute.version !== buffers.version
-      || this._gpuSkipTimeCompute.count !== buffers.count) {
+    if (
+      !this._gpuSkipTimeCompute ||
+      this._gpuSkipTimeCompute.buffers !== buffers ||
+      this._gpuSkipTimeCompute.version !== buffers.version ||
+      this._gpuSkipTimeCompute.count !== buffers.count
+    ) {
       this._gpuSkipTimeCompute?.node.dispose();
       const node = Fn(() => {
         const particle = buffers.storage.createParticle(undefined, true);
@@ -3045,7 +3207,8 @@ export default class GPUSimulation {
   }
   private _eventReadbackExecution() {
     return {
-      required: () => this._needsCPUEventReadback(), lifecycle: () => this._gpuLifecycleGeneration,
+      required: () => this._needsCPUEventReadback(),
+      lifecycle: () => this._gpuLifecycleGeneration,
       identity: (slot: number, generation: number) => this._getGPUParticleIdentity(slot, generation),
       tags: (mask: number) => this._getGPUTagsFromMask(mask),
       debug: (message: string, data: unknown) => this._logGPUDebug(message, data),
@@ -3060,7 +3223,6 @@ export default class GPUSimulation {
           const name = Array.from(this.system.eventRuntime._eventTypes).find(([, id]) => id === event.type)?.[0];
           if (name) this.execution.dispatchSourceEvent(event.particle, name, event.data, true);
         }
-
       },
     };
   }

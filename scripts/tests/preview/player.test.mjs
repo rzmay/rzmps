@@ -9,42 +9,110 @@ import { parse, compileScript } from '@vue/compiler-sfc';
 import puppeteer from 'puppeteer';
 import { browserArguments } from '../../preview/browser.mjs';
 
-test('documentation player stays on its poster for reduced motion, plays explicitly, and pauses offscreen', {timeout:20000}, async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(),'rzmps-player-test-'));
-  const source = await fs.readFile(new URL('../../../apps/docs/.vitepress/theme/ExampleVideo.vue',import.meta.url),'utf8');
-  const {descriptor} = parse(source);
-  const component = compileScript(descriptor,{id:'preview',inlineTemplate:true}).content;
-  let requests=0, browser;
-  const server = createServer(async (req,res) => {
+test(
+  'documentation player stays on its poster for reduced motion, plays explicitly, and pauses offscreen',
+  { timeout: 20000 },
+  async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'rzmps-player-test-'));
+    const source = await fs.readFile(
+      new URL('../../../apps/docs/.vitepress/theme/ExampleVideo.vue', import.meta.url),
+      'utf8',
+    );
+    const { descriptor } = parse(source);
+    const component = compileScript(descriptor, { id: 'preview', inlineTemplate: true }).content;
+    let requests = 0,
+      browser;
+    const server = createServer(async (req, res) => {
+      try {
+        if (req.url === '/')
+          res.end(
+            '<script type="importmap">{"imports":{"vue":"/vue.js","vitepress":"/base.js"}}</script' +
+              '><div id="app"></div><script type="module">import {createApp} from "vue";import Playe' +
+              'r from "/player.js";createApp(Player,{source:"/preview.mp4",poster:"/poster.png",labe' +
+              'l:"Test preview",width:64,height:48}).mount("#app");</script>',
+          );
+        else if (req.url === '/player.js') {
+          res.setHeader('Content-Type', 'text/javascript');
+          res.end(component);
+        } else if (req.url === '/base.js') {
+          res.setHeader('Content-Type', 'text/javascript');
+          res.end('export const withBase = path => path;');
+        } else if (req.url === '/vue.js') {
+          res.setHeader('Content-Type', 'text/javascript');
+          res.end(await fs.readFile(new URL('../../../node_modules/vue/dist/vue.esm-browser.js', import.meta.url)));
+        } else if (req.url === '/preview.mp4') {
+          requests++;
+          res.setHeader('Content-Type', 'video/mp4');
+          res.end(await fs.readFile(path.join(directory, 'preview.mp4')));
+        } else if (req.url === '/poster.png') {
+          res.setHeader('Content-Type', 'image/png');
+          res.end(await fs.readFile(path.join(directory, 'poster.png')));
+        } else res.writeHead(404).end();
+      } catch (error) {
+        res.writeHead(500).end(error.message);
+      }
+    });
     try {
-      if(req.url==='/') res.end('<script type="importmap">{"imports":{"vue":"/vue.js","vitepress":"/base.js"}}</script><div id="app"></div><script type="module">import {createApp} from "vue";import Player from "/player.js";createApp(Player,{source:"/preview.mp4",poster:"/poster.png",label:"Test preview",width:64,height:48}).mount("#app");</script>');
-      else if(req.url==='/player.js') {res.setHeader('Content-Type','text/javascript');res.end(component);}
-      else if(req.url==='/base.js') {res.setHeader('Content-Type','text/javascript');res.end('export const withBase = path => path;');}
-      else if(req.url==='/vue.js') {res.setHeader('Content-Type','text/javascript');res.end(await fs.readFile(new URL('../../../node_modules/vue/dist/vue.esm-browser.js',import.meta.url)));}
-      else if(req.url==='/preview.mp4') {requests++;res.setHeader('Content-Type','video/mp4');res.end(await fs.readFile(path.join(directory,'preview.mp4')));}
-      else if(req.url==='/poster.png') {res.setHeader('Content-Type','image/png');res.end(await fs.readFile(path.join(directory,'poster.png')));}
-      else res.writeHead(404).end();
-    } catch(error) {res.writeHead(500).end(error.message);}
-  });
-  try {
-    execFileSync('ffmpeg',['-v','error','-f','lavfi','-i','testsrc=size=64x48:rate=6','-t','1','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',path.join(directory,'preview.mp4')],{timeout:10000});
-    execFileSync('ffmpeg',['-v','error','-i',path.join(directory,'preview.mp4'),'-frames:v','1',path.join(directory,'poster.png')],{timeout:10000});
-    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-    browser=await puppeteer.launch({headless:true,args:browserArguments()});
-    const page=await browser.newPage();
-    await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
-    await page.goto(`http://127.0.0.1:${server.address().port}`,{waitUntil:'networkidle0'});
-    assert.equal(requests,0);
-    assert.equal(await page.$eval('video',v=>v.paused && !v.hasAttribute('autoplay')),true);
-    await page.click('button');
-    await page.waitForFunction(()=>!document.querySelector('video').paused && document.querySelector('video').currentTime>0);
-    assert.ok(requests>0);
-    await page.evaluate(()=>{document.body.style.paddingTop='2000px';window.scrollTo(0,0);});
-    await page.waitForFunction(()=>document.querySelector('video').paused);
-    await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'no-preference'}]);
-    await page.$eval('video',v=>v.scrollIntoView());
-    await page.waitForFunction(()=>!document.querySelector('video').paused);
-    await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
-    await page.waitForFunction(()=>document.querySelector('video').paused);
-  } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));await fs.rm(directory,{recursive:true,force:true});}
-});
+      execFileSync(
+        'ffmpeg',
+        [
+          '-v',
+          'error',
+          '-f',
+          'lavfi',
+          '-i',
+          'testsrc=size=64x48:rate=6',
+          '-t',
+          '1',
+          '-c:v',
+          'libx264',
+          '-pix_fmt',
+          'yuv420p',
+          '-movflags',
+          '+faststart',
+          path.join(directory, 'preview.mp4'),
+        ],
+        { timeout: 10000 },
+      );
+      execFileSync(
+        'ffmpeg',
+        [
+          '-v',
+          'error',
+          '-i',
+          path.join(directory, 'preview.mp4'),
+          '-frames:v',
+          '1',
+          path.join(directory, 'poster.png'),
+        ],
+        { timeout: 10000 },
+      );
+      await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+      browser = await puppeteer.launch({ headless: true, args: browserArguments() });
+      const page = await browser.newPage();
+      await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+      await page.goto(`http://127.0.0.1:${server.address().port}`, { waitUntil: 'networkidle0' });
+      assert.equal(requests, 0);
+      assert.equal(await page.$eval('video', v => v.paused && !v.hasAttribute('autoplay')), true);
+      await page.click('button');
+      await page.waitForFunction(
+        () => !document.querySelector('video').paused && document.querySelector('video').currentTime > 0,
+      );
+      assert.ok(requests > 0);
+      await page.evaluate(() => {
+        document.body.style.paddingTop = '2000px';
+        window.scrollTo(0, 0);
+      });
+      await page.waitForFunction(() => document.querySelector('video').paused);
+      await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
+      await page.$eval('video', v => v.scrollIntoView());
+      await page.waitForFunction(() => !document.querySelector('video').paused);
+      await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+      await page.waitForFunction(() => document.querySelector('video').paused);
+    } finally {
+      await browser?.close();
+      await new Promise(resolve => server.close(resolve));
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  },
+);

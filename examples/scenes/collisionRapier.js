@@ -2,10 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { RapierCollisionBackend } from '@rzmps/rapier';
 import createCollisionObjects from '../utils/createCollisionObjects.js';
-import {
-  createSceneParticleRoot,
-  disposeSceneParticleRoot,
-} from '../utils/particleRoot.js';
+import { createSceneParticleRoot, disposeSceneParticleRoot } from '../utils/particleRoot.js';
 
 export default async function collisionRapierScene(scene) {
   await RAPIER.init();
@@ -22,7 +19,7 @@ export default async function collisionRapierScene(scene) {
 
   const bodies = [];
 
-  const createInitialTransform = (mesh) => ({
+  const createInitialTransform = mesh => ({
     position: mesh.position.clone(),
     rotation: mesh.quaternion.clone(),
   });
@@ -46,26 +43,16 @@ export default async function collisionRapierScene(scene) {
         break;
     }
 
-    bodyDesc
-      .setTranslation(
-        mesh.position.x,
-        mesh.position.y,
-        mesh.position.z,
-      )
-      .setRotation({
-        x: mesh.quaternion.x,
-        y: mesh.quaternion.y,
-        z: mesh.quaternion.z,
-        w: mesh.quaternion.w,
-      });
+    bodyDesc.setTranslation(mesh.position.x, mesh.position.y, mesh.position.z).setRotation({
+      x: mesh.quaternion.x,
+      y: mesh.quaternion.y,
+      z: mesh.quaternion.z,
+      w: mesh.quaternion.w,
+    });
 
     const body = world.createRigidBody(bodyDesc);
 
-    const colliderDesc = RAPIER.ColliderDesc.cuboid(
-      params.width / 2,
-      params.height / 2,
-      params.depth / 2,
-    );
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(params.width / 2, params.height / 2, params.depth / 2);
 
     if (type === 'dynamic') {
       colliderDesc.setDensity(1000);
@@ -86,11 +73,9 @@ export default async function collisionRapierScene(scene) {
   addBox(objects.ramp);
   addBox(objects.platform);
 
-  const dynamicBodyA =
-    addBox(objects.dynamicA, 'dynamic');
+  const dynamicBodyA = addBox(objects.dynamicA, 'dynamic');
 
-  const dynamicBodyB =
-    addBox(objects.dynamicB, 'dynamic');
+  const dynamicBodyB = addBox(objects.dynamicB, 'dynamic');
 
   const dynamicBodies = [
     {
@@ -105,32 +90,22 @@ export default async function collisionRapierScene(scene) {
     },
   ];
 
-  const movingBody =
-    addBox(objects.movingBox, 'kinematic');
+  const movingBody = addBox(objects.movingBox, 'kinematic');
 
-  // Normally this would be passed into the constructor, but since we don't have particle system access here we have to use scene data
-  scene.userData.__rzmps_activeCollisionBackend =
-    new RapierCollisionBackend({
-      RAPIER,
-      world,
-    });
+  // The particle system is not available during scene setup,
+  // so expose the collision backend through scene data.
+  scene.userData.__rzmps_activeCollisionBackend = new RapierCollisionBackend({
+    RAPIER,
+    world,
+  });
 
   const syncBody = (mesh, body) => {
     const position = body.translation();
     const rotation = body.rotation();
 
-    mesh.position.set(
-      position.x,
-      position.y,
-      position.z,
-    );
+    mesh.position.set(position.x, position.y, position.z);
 
-    mesh.quaternion.set(
-      rotation.x,
-      rotation.y,
-      rotation.z,
-      rotation.w,
-    );
+    mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
   };
 
   const fixedDelta = 1 / 60;
@@ -140,7 +115,7 @@ export default async function collisionRapierScene(scene) {
 
   world.timestep = fixedDelta;
 
-  const update = (deltaTime) => {
+  const update = deltaTime => {
     const frameDelta = Math.min(deltaTime, 0.1);
     accumulator += frameDelta;
     elapsed += frameDelta;
@@ -157,9 +132,7 @@ export default async function collisionRapierScene(scene) {
     }
 
     const x = Math.sin(elapsed) * 2;
-    const rotation = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(0, elapsed * 0.75, 0),
-    );
+    const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, elapsed * 0.75, 0));
 
     while (accumulator >= fixedDelta) {
       movingBody.setNextKinematicTranslation({ x, y: 1, z: 2 });
@@ -194,7 +167,7 @@ export default async function collisionRapierScene(scene) {
 }
 
 collisionRapierScene.metadata = {
-  "id": "collisionRapier",
-  "title": "Collision (Rapier)",
-  "author": "rzmay"
+  id: 'collisionRapier',
+  title: 'Collision (Rapier)',
+  author: 'rzmay',
 };

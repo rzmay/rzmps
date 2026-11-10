@@ -12,7 +12,7 @@ import SpatialEffect, {
   type SpatialEffectModifier,
   type SpatialEffectOptions,
 } from './SpatialEffect';
-import Priority from '../../enums/priority';
+import Priority from '../../enums/Priority';
 import { cross, float, vec3 } from 'three/tsl';
 import {
   evaluateDynamicNumberGPU,

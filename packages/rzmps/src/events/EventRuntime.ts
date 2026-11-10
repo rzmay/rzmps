@@ -23,10 +23,15 @@ export interface GPUEventReadbackExecution {
 
 /** Owns event identities, subscriptions, reentrant delivery and native transport state. */
 export default class EventRuntime {
-  constructor(readonly origin: ParticleSystem, readonly prepare: () => void,
-    readonly route: (event: SimulationEvent) => void) { }
+  constructor(
+    readonly origin: ParticleSystem,
+    readonly prepare: () => void,
+    readonly route: (event: SimulationEvent) => void,
+  ) {}
   readonly _eventObservers = new Set<{
-    names: readonly string[]; consume: (event: SimulationEvent) => void; receiver: boolean | EventReceiver;
+    names: readonly string[];
+    consume: (event: SimulationEvent) => void;
+    receiver: boolean | EventReceiver;
   }>();
 
   _eventSequence = 0;
@@ -35,7 +40,11 @@ export default class EventRuntime {
 
   readonly _deferredSimulationEvents: SimulationEvent[] = [];
 
-  readonly _eventTypes = new Map<string, number>([['death', 1], ['spawn', 2], ['collision', 3]]);
+  readonly _eventTypes = new Map<string, number>([
+    ['death', 1],
+    ['spawn', 2],
+    ['collision', 3],
+  ]);
 
   readonly _pendingGPUEvents: Array<{ slot: number; generation: number; event: string; data?: unknown }> = [];
 
@@ -61,8 +70,10 @@ export default class EventRuntime {
 
   _gpuEventOverflowCount = 0;
 
-  readonly _gpuEventFrameNode = uniform(0, 'uint')
-    .setName('rzmpsEventFrame') as unknown as GPUUniformNode<number, 'uint'>;
+  readonly _gpuEventFrameNode = uniform(0, 'uint').setName('rzmpsEventFrame') as unknown as GPUUniformNode<
+    number,
+    'uint'
+  >;
 
   _deathListeners: ParticleListener[] = [];
 
@@ -70,12 +81,17 @@ export default class EventRuntime {
 
   _collisionListeners: CollisionListener[] = [];
 
-  onEvent(names: string | readonly string[], consume: (event: SimulationEvent) => void,
-    /** @internal */ receiver: boolean | EventReceiver = false): () => void {
+  onEvent(
+    names: string | readonly string[],
+    consume: (event: SimulationEvent) => void,
+    /** @internal */ receiver: boolean | EventReceiver = false,
+  ): () => void {
     const observer = { names: typeof names === 'string' ? [names] : [...names], consume, receiver };
     observer.names.forEach(name => this._registerEventType(name));
     this._eventObservers.add(observer);
-    return () => { this._eventObservers.delete(observer); };
+    return () => {
+      this._eventObservers.delete(observer);
+    };
   }
 
   _registerEventType(name: string): number {
@@ -86,13 +102,18 @@ export default class EventRuntime {
     return this._eventTypes.get(name)!;
   }
 
-  _publishSimulationEvent(name: string, data?: unknown, source?: SubSystemSource,
-    gpu = false): SimulationEvent {
+  _publishSimulationEvent(name: string, data?: unknown, source?: SubSystemSource, gpu = false): SimulationEvent {
     this.prepare();
     const sequence = ++this._eventSequence;
     const event: SimulationEvent = Object.freeze({
-      name, type: this._eventTypes.get(name) ?? 0, data, source,
-      origin: this.origin, sequence, gpu, id: `${this.origin.uuid}:${sequence}`
+      name,
+      type: this._eventTypes.get(name) ?? 0,
+      data,
+      source,
+      origin: this.origin,
+      sequence,
+      gpu,
+      id: `${this.origin.uuid}:${sequence}`,
     });
     if (this._dispatchingEvent) this._deferredSimulationEvents.push(event);
     else this._deliverSimulationEvent(event);
@@ -106,7 +127,9 @@ export default class EventRuntime {
       for (const observer of [...this._eventObservers]) {
         if (observer.names.includes(event.name)) observer.consume(event);
       }
-    } finally { this._dispatchingEvent = false; }
+    } finally {
+      this._dispatchingEvent = false;
+    }
   }
   flush(): void {
     const deferred = this._deferredSimulationEvents.splice(0);
@@ -153,8 +176,11 @@ export default class EventRuntime {
   scheduleReadback(buffer: GPUEventBufferState, renderer: WebGPURenderer, execution: GPUEventReadbackExecution): void {
     if (!execution.required()) {
       this._gpuCompletedEventBatches.set(buffer.sequence, {
-        sequence: buffer.sequence, events: [],
-        rawEventCount: 0, overflowCount: 0, capacity: buffer.capacity
+        sequence: buffer.sequence,
+        events: [],
+        rawEventCount: 0,
+        overflowCount: 0,
+        capacity: buffer.capacity,
       });
       this.flushGPU(execution);
       return;
@@ -175,7 +201,7 @@ export default class EventRuntime {
       try {
         const batch = await readback;
         if (lifecycleGeneration !== execution.lifecycle()) return;
-        batch.events.forEach((event) => {
+        batch.events.forEach(event => {
           event.particle.tags = execution.tags(event.tagMask ?? 0);
         });
 
@@ -222,7 +248,11 @@ export default class EventRuntime {
       batch.events.forEach(execution.deliver);
     }
   }
-  acquireJournal(renderer: WebGPURenderer, capacity: number, initialize: (journal: GPUEventBufferState) => void): GPUEventBufferState {
+  acquireJournal(
+    renderer: WebGPURenderer,
+    capacity: number,
+    initialize: (journal: GPUEventBufferState) => void,
+  ): GPUEventBufferState {
     if (!this._sharedGPUEvents) {
       this._sharedGPUEvents = new GPUEventBufferState(capacity, true);
       this._sharedGPUEvents.initialize(renderer);

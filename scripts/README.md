@@ -33,3 +33,8 @@ pinned Puppeteer dependency. Source checks and `site:build` do not need these to
 with encoding tests skipped if FFmpeg is absent). The separate
 `node --test scripts/tests/preview/backend.test.mjs` checks real headless WebGPU
 texture readback and runs as a required deployment gate.
+Run `npm run lint` from the repository root to check library sources, the demo,
+examples, and scripts. The shared `.eslintrc.cjs` enforces a 120-character limit;
+`scripts/.eslintrc.cjs` adds Node and browser-harness environments. Use
+`npm run lint:scripts` for scripts alone. CI rejects lint errors and warnings.
+Prettier uses the same 120-character target through `.prettierrc.json`.

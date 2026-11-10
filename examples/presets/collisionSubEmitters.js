@@ -103,10 +103,7 @@ export default async function collisionSubEmittersPreset() {
         initialValues: {
           lifetime: [0.18, 0.42],
           scale: [0.05, 0.15],
-          color: [
-            '#fff4b0',
-            '#ff8a3d',
-          ],
+          color: ['#fff4b0', '#ff8a3d'],
         },
       }),
     ],
@@ -114,7 +111,7 @@ export default async function collisionSubEmittersPreset() {
     // #region docs:modules:2
     modules: [
       new ColorOverLifetime({
-        alpha: (time) => Math.max(0, 1 - time),
+        alpha: time => Math.max(0, 1 - time),
       }),
     ],
     // #endregion docs:modules:2
@@ -160,15 +157,15 @@ export default async function collisionSubEmittersPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 collisionSubEmittersPreset.metadata = {
-  author: "rzmay",
-  "id": "collisionSubEmitters",
-  "title": "Metal Balls",
+  author: 'rzmay',
+  id: 'collisionSubEmitters',
+  title: 'Metal Balls',
   // eslint-disable-next-line max-len -- Documentation discovery requires a single literal description.
-  "description": "Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces.",
-  "tags": [
-    "collisionSubEmitters"
-  ],
-  "category": "effects",
+  description:
+    'Collision-triggered subsystems and sound effects with physics-driven EQ ' +
+    'filtering and live-cubemap rendering for convincing metallic surfaces.',
+  tags: ['collisionSubEmitters'],
+  category: 'effects',
   previewSettings: {
     scene: collisionTestScene,
   },
