@@ -228,6 +228,9 @@ export default abstract class Renderer extends EventReceiver {
   private _gpuConfigurationSignature = '';
   private _gpuParameterVersion = 0;
   private _renderedChildCount = 0;
+  private _visibleInstanceCount = 0;
+  /** Current renderer population, including generated children; GPU counts use available render-output state. */
+  get visibleInstanceCount(): number { return this._visibleInstanceCount; }
   private _usesGPUChildren = false;
   protected readonly evaluateDynamicGPU = new GPUDynamicParameterStore();
   /** @deprecated Use evaluateDynamicGPU; retained for existing component subclasses. */
@@ -259,6 +262,9 @@ export default abstract class Renderer extends EventReceiver {
   /** Configures particle filtering, artistic children, and LOD compensation. */
   constructor(options: Partial<RendererOptions> = {}) {
     super(options);
+    this.benchmarks.register('visibleInstances',
+      { type: 'gauge', unit: 'count', get: () => this.visibleInstanceCount });
+    this.benchmarks.register('childrenCount', { type: 'gauge', unit: 'count', get: () => this.renderedChildCount });
     this._materialComposite = options.materialComposite;
     this._materialCompositeGPU = options.materialCompositeGPU;
     this._groupCount = options.count ?? -1;
@@ -345,6 +351,11 @@ export default abstract class Renderer extends EventReceiver {
 
   /** Expands render-only children and compensation before delegating to the view. */
   public update(particles: Particle[], system: ParticleSystem, deltaTime: number = 0): void {
+    const end = this.benchmarks.begin('update');
+    try { this.updatePopulation(particles, system, deltaTime); } finally { end?.(); }
+  }
+
+  private updatePopulation(particles: Particle[], system: ParticleSystem, deltaTime: number = 0): void {
     this.prepareAppearance(system);
 
     this.beginExecution(system, deltaTime);
@@ -408,6 +419,7 @@ export default abstract class Renderer extends EventReceiver {
       }
     }
 
+    this._visibleInstanceCount = visible.length;
     this._renderedChildCount = visible.length - originalCount;
     this._update(visible, system, deltaTime);
   }
@@ -442,6 +454,15 @@ export default abstract class Renderer extends EventReceiver {
 
   /** Base-class GPU preprocessing; subclasses consume the resulting ordinary render view. */
   public updateGPU(
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+    system: ParticleSystem,
+    deltaTime: number = 0,
+  ): void {
+    const end = this.benchmarks.begin('submissionTime');
+    try { this.updatePopulationGPU(buffers, system, deltaTime); } finally { end?.(); }
+  }
+
+  private updatePopulationGPU(
     buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
     deltaTime: number = 0,
@@ -483,6 +504,7 @@ export default abstract class Renderer extends EventReceiver {
     const visual = this.updateGPUUsesCPUReadback
       ? buffers
       : this._gpuChildren.prepare(grouped, system, this.children, this.compensation, this.version, tagMask);
+    this._visibleInstanceCount = visual.count;
     this._updateGPU(visual, system, deltaTime);
   }
 
@@ -556,6 +578,7 @@ export default abstract class Renderer extends EventReceiver {
   /** Restores transient backend state while retaining reusable rendering resources. */
   public reset(): void {
     this._renderedChildCount = 0;
+    this._visibleInstanceCount = 0;
     this._usesGPUChildren = false;
     this.cancelGPUSelectiveReadback();
     this._gpuChildren.reset();

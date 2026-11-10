@@ -1,3 +1,4 @@
+import Benchmarks from '../core/Benchmarks';
 import type ParticleSystem from '../core/ParticleSystem';
 import type { SubSystemSource } from '../emission/EmissionSource';
 import { emptyGPUEvents, type GPUEventBatch } from './gpu/EventBatch';
@@ -36,6 +37,7 @@ export interface GPUEventExecutionContext {
 
 /** Subscription and execution-batch state, shared by modules, renderers and emitters. */
 export default class EventReceiver {
+  readonly benchmarks = new Benchmarks();
   static readonly CAPACITY = 1024;
 
   // Subscription configuration supplied by modules, renderers, and emitters.
@@ -227,6 +229,7 @@ export default class EventReceiver {
 
   /** Clears batches and unsubscribes when a component is removed or its system is destroyed. */
   dispose(): void {
+    this.benchmarks.detach();
     for (const dispose of this._eventDisposers) dispose();
     this._eventDisposers.clear();
 

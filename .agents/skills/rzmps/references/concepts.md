@@ -1654,6 +1654,45 @@ The callback above is CPU-only. Continue with [First GPU Module](https://rzmps.r
 equivalent TSL operation, then use [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) as the reference for managed
 spatial queries, invalidation, and testing requirements.
 
+## Optional profiling
+
+Modules expose `benchmarks` for custom CPU spans, gauges (`set`), counters (`increment`), provider-backed metrics
+(`register`), and derived metrics (`derive`). Collection is disabled by default; current-value providers remain readable.
+
+```ts
+const module = new Module((particle, deltaTime, { module }) => {
+  module.benchmarks.span('customWork', () => applyCustomForce(particle, deltaTime));
+});
+module.benchmarks.register('residual', { type: 'gauge', get: () => solver.residual });
+
+// After adding the module, collect while running your normal update/render loop:
+system.benchmarks.start({ warmupMs: 500, maxSamples: 4096 });
+// ...run updates...
+const current = system.benchmarks.snapshot();
+const report = system.benchmarks.stop();
+```
+
+Reports use stable component IDs and include sample counts, min/max, mean, population variance, and p50/p95/p99.
+`maxSamples` bounds retained history per metric; distributions describe retained samples, while `totalCount` counts
+all accepted samples. Removed components retain history with a `null` current value. Shared components contribute
+through their first attached owner. Use `spanAsync` for asynchronous CPU work and `assert([{ metric, statistic, max }])`
+for performance or correctness checks. Register explicit `sum`, `max`, or `last` aggregation when needed; overlapping
+spans are separate samples by default. Public system updates sample providers and reset `perFrame` counters once
+per call; standalone collectors use `frame()`.
+
+For render profiling, import `profileRenderer` from `@rzmps/rzmps` and wrap your existing scene render once:
+`profileRenderer(system.benchmarks, renderer, () => renderer.render(scene, camera), frameTimeMs)`.
+Pass the wall-clock frame interval, not the simulation timestep. Its `renderer/*` measurements describe the whole
+scene, including unrelated objects. They use Three.js's statistics without resetting `info` or changing `autoReset`;
+reports identify renderer-wide values through `scope` and `source`.
+
+Actual GPU timing requires `{ gpuTiming: true }`, a common Three.js renderer configured with `trackTimestamp: true`,
+and an explicit `await system.benchmarks.resolveGPU(renderer)` after rendering, once per shared renderer.
+Unsupported timings, including classic `WebGLRenderer` GPU timing, are `null`. CPU submission and timestamp-readback
+waits remain separate from GPU execution. Ordinary collection requests no timestamp readbacks. GPU allocation metrics
+cover main particle buffers; upload bytes count queued CPU uploads. Spawn/death counts cover observed events, with
+latest native allocation diagnostics exposed separately as `gpu/nativeSpawnCount` and `gpu/nativeDeathCount`.
+
 
 ---
 

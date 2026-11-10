@@ -1,3 +1,5 @@
+import { registerRendererBenchmarks } from '../rendering/benchmarkRenderer.utils';
+import Benchmarks from './Benchmarks';
 import GlobalSettings from './GlobalSettings';
 import * as THREE from 'three';
 import { If, uint } from 'three/tsl';
@@ -282,6 +284,7 @@ class ParticleSystem extends THREE.Object3D {
     particleDeath: (particle, fromGPUEvent) => this._dispatchParticleDeath(particle, fromGPUEvent),
     notifyDeath: particle => this._notifyParticleDeath(particle),
   });
+  readonly benchmarks = new Benchmarks({ beforeSnapshot: () => this.syncBenchmarks() });
   particles: Particle[] = [];
   emitters: Emitter[] = [];
   modules: Module[] = [];
@@ -937,6 +940,26 @@ class ParticleSystem extends THREE.Object3D {
 
     this.lastFrame = Date.now();
 
+    const gauge = (name: string, get: () => number | null, unit = 'count') =>
+      this.benchmarks.register(name, { type: 'gauge', unit, get });
+    gauge('system/particleCount', () => this.liveParticleCount);
+    gauge('system/capacity', () => this.isGPUProcessingActive ? this.gpuBufferStats.allocated : this.maxParticles);
+    gauge('system/childrenCount', () =>
+      this.renderers.reduce((count, renderer) => count + renderer.renderedChildCount, 0));
+    gauge('system/emitterCount', () => this.emitters.length);
+    gauge('system/moduleCount', () => this.modules.flatMap(module => module.withDependents()).length);
+    gauge('system/rendererCount', () => this.renderers.length);
+    gauge('system/gpuActive', () => this.isGPUProcessingActive ? 1 : 0);
+    gauge('system/allocatedSlots', () => this.isGPUProcessingActive ? this.gpuBufferStats.allocated : 0);
+    gauge('system/usedSlots', () => this.isGPUProcessingActive ? this.gpuBufferStats.activeSlots : 0);
+    this.benchmarks.derive('system/slotUtilization', ['system/usedSlots', 'system/allocatedSlots'],
+      values => values['system/allocatedSlots'] > 0 ? values['system/usedSlots'] / values['system/allocatedSlots'] : 0);
+    this.benchmarks.register('system/spawnCount', { type: 'counter', unit: 'count', perFrame: true });
+    this.benchmarks.register('system/deathCount', { type: 'counter', unit: 'count', perFrame: true });
+    // The shared renderer describes the whole scene. Never attribute its totals to individual subsystems.
+    registerRendererBenchmarks(this.benchmarks, () => this.isSubSystem ? undefined : this.sceneRenderer);
+    this.benchmarks.attach('gpu', this.gpuSimulation.benchmarks);
+
     this.emitters.forEach(e => e.setup(this));
     this.renderers.forEach(r => r.setup(this));
 
@@ -969,6 +992,13 @@ class ParticleSystem extends THREE.Object3D {
 
   /** Advances from wall-clock time, respecting pause, simulation distance, and population LOD. */
   update(): void {
+    if (!this.benchmarks.enabled) { this.updateInterval(); return; }
+    this.syncBenchmarks();
+    const end = this.benchmarks.begin('system/update');
+    try { this.updateInterval(); } finally { end?.(); this.benchmarks.frame(); }
+  }
+
+  private updateInterval(): void {
     if (this._destroyed) return;
 
     // Subsystems are owned and ticked by parent, avoid double update
@@ -1031,6 +1061,13 @@ class ParticleSystem extends THREE.Object3D {
    * Finite systems can naturally end, including their configured end behavior.
    */
   public advanceFrames(frames: number, deltaTime: number = 1 / 60): void {
+    if (!this.benchmarks.enabled) { this.advanceIntervals(frames, deltaTime); return; }
+    this.syncBenchmarks();
+    const end = this.benchmarks.begin('system/update');
+    try { this.advanceIntervals(frames, deltaTime); } finally { end?.(); this.benchmarks.frame(); }
+  }
+
+  private advanceIntervals(frames: number, deltaTime: number): void {
     if (!Number.isSafeInteger(frames) || frames < 0) {
       throw new RangeError('frames must be a nonnegative safe integer');
     }
@@ -1177,6 +1214,16 @@ class ParticleSystem extends THREE.Object3D {
     return deltaTime * speed;
   }
 
+  /** Reconcile mutable component arrays at collection/snapshot boundaries, not per particle. */
+  private syncBenchmarks(): void {
+    if (this._destroyed) return;
+    this.benchmarks.reconcile('modules', this.modules.flatMap(module => module.withDependents()));
+    this.benchmarks.reconcile('emitters', this.emitters);
+    this.benchmarks.reconcile('renderers', this.renderers);
+    this.benchmarks.reconcile('effects', this._getSpatialEffects());
+    this.benchmarks.reconcile('systems', [...this.subSystems.keys()]);
+  }
+
   private _processParticles() {
     this._particlesIntegrated = false;
     this._renderFrameToken = {};
@@ -1235,7 +1282,10 @@ class ParticleSystem extends THREE.Object3D {
     this.gpuSimulation._isGPUProcessingActive = false;
 
     modules.forEach(module => module.beginExecution(this, this.deltaTime));
-    modules.forEach(module => module.prepare(module.executionContext!));
+    modules.forEach(module => {
+      const end = module.benchmarks.begin('prepare');
+      try { module.prepare(module.executionContext!); } finally { end?.(); }
+    });
 
     const modifiers = [...modules, ...spatialEffects];
 
@@ -1382,6 +1432,7 @@ class ParticleSystem extends THREE.Object3D {
   private readonly _populationEstimates = new Map<string, number>();
 
   private _notifyParticleDeath(particle: Particle): void {
+    if (this.benchmarks.enabled) this.benchmarks.increment('system/deathCount');
     this._dispatchParticleDeath(particle);
   }
 
@@ -1793,6 +1844,7 @@ class ParticleSystem extends THREE.Object3D {
     const gpuRenderer = ParticleSystem.isWebGPURenderer(this.sceneRenderer) ? this.sceneRenderer : undefined;
     this.eventRuntime.disposeJournal(gpuRenderer);
     this._destroyed = true;
+    this.benchmarks.dispose();
     for (const component of [...this.emitters, ...this.modules, ...this.renderers]) component.dispose();
     this.eventRuntime._eventObservers.clear();
     this.stop(true, children);
@@ -2239,6 +2291,7 @@ class ParticleSystem extends THREE.Object3D {
   }
 
   private _notifySpawn(particle: Particle): void {
+    if (this.benchmarks.enabled) this.benchmarks.increment('system/spawnCount');
     particle.setEventOwner(this);
     this.eventRuntime._spawnListeners.forEach(listener => listener(particle));
     this._dispatchSourceEvent(particle, 'spawn');

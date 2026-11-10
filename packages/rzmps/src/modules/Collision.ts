@@ -141,7 +141,10 @@ class Collision extends Module {
       this._backend.materialRegistry = system.materialCopyRegistry;
     }
     this._backend?.setGPUProcessingActive?.(system.isGPUProcessingActive);
-    this._backend?.update?.(deltaTime);
+    this.benchmarks.reconcile('backends', this._backend?.benchmarks
+      ? [{ benchmarks: this._backend.benchmarks, constructor: this._backend.constructor }] : []);
+    const end = this._backend?.benchmarks?.begin('update');
+    try { this._backend?.update?.(deltaTime); } finally { end?.(); }
   }
 
   public hasGPUCollisionBackend(): boolean {
@@ -252,6 +255,7 @@ class Collision extends Module {
   }
 
   public override cleanup(): void {
+    this.benchmarks.reconcile('backends', []);
     if (this._ownsBackend) this._backend?.destroy?.();
     if (!this._explicitBackend) this._backend = undefined;
     this._ownsBackend = false;

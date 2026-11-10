@@ -1,3 +1,4 @@
+import Benchmarks from '../../core/Benchmarks';
 import getAttributeVersion from '../../utils/getAttributeVersion';
 import { transformPointGPU } from '../../simulation/gpu/transforms.utils';
 import * as THREE from 'three';
@@ -114,6 +115,7 @@ type TorusGeometryArgs = ConstructorParameters<typeof THREE.TorusGeometry>;
 
 /** Scene-space modifier volume, discovered by particle systems or collected by specialized modules. */
 class SpatialEffect extends THREE.Object3D {
+  readonly benchmarks = new Benchmarks();
   static readonly GPU_INFLUENCE_FIELDS: GPUSpatialParameterField[] = [
     { name: 'inverseRow0', type: 'vec4' },
     { name: 'inverseRow1', type: 'vec4' },
@@ -785,6 +787,11 @@ class SpatialEffect extends THREE.Object3D {
   }
 
   modify(particles: Particle[], deltaTime: number, particleSystem: ParticleSystem): void {
+    const end = this.benchmarks.begin('update');
+    try { this.modifyPopulation(particles, deltaTime, particleSystem); } finally { end?.(); }
+  }
+
+  private modifyPopulation(particles: Particle[], deltaTime: number, particleSystem: ParticleSystem): void {
     particles
       .filter(particle => particle.alive)
       .filter(particle => this.test(particle, particleSystem))

@@ -1,3 +1,4 @@
+import { Benchmarks } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import Jolt from '@barclah/jolt-physics';
 import type {
@@ -23,6 +24,7 @@ export interface JoltCollisionBackendOptions {
 }
 
 class JoltCollisionBackend implements ICollisionBackend {
+  readonly benchmarks = new Benchmarks();
   broadPhaseLayerFilter: Jolt.BroadPhaseLayerFilter;
 
   objectLayerFilter: Jolt.ObjectLayerFilter;
@@ -261,6 +263,7 @@ class JoltCollisionBackend implements ICollisionBackend {
   }
 
   destroy(): void {
+    this.benchmarks.detach();
     if (this.destroyed) return;
 
     this.destroyed = true;
