@@ -48,6 +48,8 @@ new FLIPSimulation(options?): FLIPSimulation;
 _modify: ModuleUpdate;
 ```
 
+Wraps a per-particle callback; options select filtering, spatial collection, and priority.
+
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`_modify`](FluidSimulation.md#_modify)
@@ -208,6 +210,48 @@ dependents: Module[] = [];
 
 ***
 
+<a id="events"></a>
+
+### events
+
+```ts
+events: readonly string[];
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`events`](FluidSimulation.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`eventScope`](FluidSimulation.md#eventscope)
+
+***
+
+<a id="executioncontext"></a>
+
+### executionContext?
+
+```ts
+optional executionContext?: ModuleExecutionContext;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`executionContext`](FluidSimulation.md#executioncontext)
+
+***
+
 <a id="explicitspatialeffects"></a>
 
 ### explicitSpatialEffects?
@@ -233,6 +277,20 @@ externalForce: Vector3;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`externalForce`](FluidSimulation.md#externalforce)
+
+***
+
+<a id="gpuexecutioncontext"></a>
+
+### gpuExecutionContext
+
+```ts
+gpuExecutionContext: GPUEventExecutionContext;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`gpuExecutionContext`](FluidSimulation.md#gpuexecutioncontext)
 
 ***
 
@@ -294,10 +352,10 @@ optional octree?: ParticleOctree<unknown>;
 
 <a id="octreeaggregator"></a>
 
-### octreeAggregator
+### octreeAggregator?
 
 ```ts
-readonly octreeAggregator: OctreeAggregator<unknown>;
+readonly optional octreeAggregator?: OctreeAggregator<unknown>;
 ```
 
 #### Inherited from
@@ -518,6 +576,20 @@ velocityPaddingLookahead: number;
 
 ***
 
+<a id="capacity"></a>
+
+### CAPACITY
+
+```ts
+readonly static CAPACITY: 1024 = 1024;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`CAPACITY`](FluidSimulation.md#capacity)
+
+***
+
 <a id="cpu_unsupported"></a>
 
 ### CPU\_UNSUPPORTED
@@ -592,6 +664,32 @@ set collisionIterations(value): void;
 
 ***
 
+<a id="gpunative"></a>
+
+### gpuNative
+
+#### Set Signature
+
+```ts
+set gpuNative(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`gpuNative`](FluidSimulation.md#gpunative)
+
+***
+
 <a id="gpuparameteruploadcount"></a>
 
 ### gpuParameterUploadCount
@@ -635,6 +733,28 @@ set needsUpdate(value): void;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`needsUpdate`](FluidSimulation.md#needsupdate)
+
+***
+
+<a id="overflowcount"></a>
+
+### overflowCount
+
+#### Get Signature
+
+```ts
+get overflowCount(): number;
+```
+
+Number of CPU events dropped when the pending batch reached capacity.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`overflowCount`](FluidSimulation.md#overflowcount)
 
 ***
 
@@ -702,6 +822,28 @@ set particleSpacing(value): void;
 
 ***
 
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`selectedEventNames`](FluidSimulation.md#selectedeventnames)
+
+***
+
 <a id="supportsgpu"></a>
 
 ### supportsGPU
@@ -712,7 +854,7 @@ set particleSpacing(value): void;
 get supportsGPU(): boolean;
 ```
 
-Whether both modification and any custom condition have GPU implementations.
+Whether modification, birth hooks and custom conditions support GPU processing.
 
 ##### Returns
 
@@ -743,6 +885,102 @@ get version(): number;
 [`FluidSimulation`](FluidSimulation.md).[`version`](FluidSimulation.md#version)
 
 ## Methods
+
+<a id="begin"></a>
+
+### begin()
+
+```ts
+begin(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Snapshots once per actual execution; events raised during execution remain pending.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`begin`](FluidSimulation.md#begin)
+
+***
+
+<a id="beginexecution"></a>
+
+### beginExecution()
+
+```ts
+beginExecution(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Creates and retains the context shared by every callback in this execution.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`beginExecution`](FluidSimulation.md#beginexecution)
+
+***
 
 <a id="cleanup"></a>
 
@@ -790,7 +1028,7 @@ Optional GPU compute pass, scheduled after the spatial grid is built and before 
 
 ##### grid?
 
-[`ParticleSpatialGrid`](ParticleSpatialGrid.md)
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md)\<[`SpatialAggregateLayout`](../type-aliases/SpatialAggregateLayout.md)\>
 
 #### Returns
 
@@ -799,6 +1037,26 @@ Optional GPU compute pass, scheduled after the spatial grid is built and before 
 #### Overrides
 
 [`FluidSimulation`](FluidSimulation.md).[`computeGPU`](FluidSimulation.md#computegpu)
+
+***
+
+<a id="dispose"></a>
+
+### dispose()
+
+```ts
+dispose(): void;
+```
+
+Clears batches and unsubscribes when a component is removed or its system is destroyed.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`dispose`](FluidSimulation.md#dispose)
 
 ***
 
@@ -854,7 +1112,9 @@ Returns the managed CPU structure after prepare(), when enabled.
 ### getParticleSpatialGrid()
 
 ```ts
-getParticleSpatialGrid(particleSystem): ParticleSpatialGrid | undefined;
+getParticleSpatialGrid(particleSystem):
+  | ParticleSpatialGrid<SpatialAggregateLayout>
+  | undefined;
 ```
 
 Dependency hook used by function-defined and class-based GPU neighbor modules.
@@ -867,11 +1127,70 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 #### Returns
 
-[`ParticleSpatialGrid`](ParticleSpatialGrid.md) \| `undefined`
+  \| [`ParticleSpatialGrid`](ParticleSpatialGrid.md)\<[`SpatialAggregateLayout`](../type-aliases/SpatialAggregateLayout.md)\>
+  \| `undefined`
 
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`getParticleSpatialGrid`](FluidSimulation.md#getparticlespatialgrid)
+
+***
+
+<a id="initializeparticle"></a>
+
+### initializeParticle()?
+
+```ts
+optional initializeParticle(particle, context): void;
+```
+
+Optional birth hooks; ordinary modifier modules do not run initialization work.
+
+#### Parameters
+
+##### particle
+
+[`Particle`](Particle.md)
+
+##### context
+
+[`ParticleInitializationContext`](../interfaces/ParticleInitializationContext.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`initializeParticle`](FluidSimulation.md#initializeparticle)
+
+***
+
+<a id="initializeparticlegpu"></a>
+
+### initializeParticleGPU()?
+
+```ts
+optional initializeParticleGPU(particle, context): void;
+```
+
+#### Parameters
+
+##### particle
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
+
+##### context
+
+[`GPUParticleInitializationContext`](../interfaces/GPUParticleInitializationContext.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`initializeParticleGPU`](FluidSimulation.md#initializeparticlegpu)
 
 ***
 
@@ -883,7 +1202,7 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 modify(
    particles,
    deltaTime,
-   particleSystem?
+   context
 ): void;
 ```
 
@@ -899,9 +1218,9 @@ Applies tag and condition selection before invoking the particle callback.
 
 `number`
 
-##### particleSystem?
+##### context
 
-[`ParticleSystem`](ParticleSystem.md)
+[`ModuleExecutionContext`](../interfaces/ModuleExecutionContext.md)
 
 #### Returns
 
@@ -918,20 +1237,16 @@ Applies tag and condition selection before invoking the particle callback.
 ### prepare()
 
 ```ts
-prepare(particleSystem, dt): void;
+prepare(context): void;
 ```
 
 Prepares shared work once per system update; the base implementation collects matching spatial effects.
 
 #### Parameters
 
-##### particleSystem
+##### context
 
-[`ParticleSystem`](ParticleSystem.md)
-
-##### dt
-
-`number`
+[`ModuleExecutionContext`](../interfaces/ModuleExecutionContext.md)
 
 #### Returns
 
@@ -974,7 +1289,7 @@ Optional render-time GPU pass, after transient particle attributes have been eva
 
 ##### \_grid?
 
-[`ParticleSpatialGrid`](ParticleSpatialGrid.md)
+[`ParticleSpatialGrid`](ParticleSpatialGrid.md)\<[`SpatialAggregateLayout`](../type-aliases/SpatialAggregateLayout.md)\>
 
 #### Returns
 
@@ -1027,6 +1342,36 @@ syncGPUConfiguration(): void;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`syncGPUConfiguration`](FluidSimulation.md#syncgpuconfiguration)
+
+***
+
+<a id="visiblesystems"></a>
+
+### visibleSystems()
+
+```ts
+visibleSystems(system?, scope?): ParticleSystem[];
+```
+
+Selects producers without forwarding or traversing beyond immediate relatives.
+
+#### Parameters
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `...`
+
+#### Returns
+
+[`ParticleSystem`](ParticleSystem.md)[]
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`visibleSystems`](FluidSimulation.md#visiblesystems)
 
 ***
 

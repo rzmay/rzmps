@@ -50,6 +50,22 @@ Accumulated opacity at which step growth begins. Defaults to 0.5.
 
 ***
 
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`atlasOptions`](RendererOptions.md#atlasoptions)
+
+***
+
 <a id="basecolor"></a>
 
 ### baseColor
@@ -108,6 +124,22 @@ Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
+<a id="count"></a>
+
+### count
+
+```ts
+count: number;
+```
+
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`count`](RendererOptions.md#count)
+
+***
+
 <a id="densitycurve"></a>
 
 ### densityCurve
@@ -139,8 +171,8 @@ Render-only density multiplier. Defaults to one.
 ```ts
 densityMapping:
   | "Curve"
-  | "Linear"
   | "None"
+  | "Linear"
   | "Smoothstep"
   | VolumeDensityMapping;
 ```
@@ -168,6 +200,34 @@ Density interval mapped to zero through one in Linear/Curve modes. Defaults to [
 ```ts
 depthTest: boolean;
 ```
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`events`](RendererOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`eventScope`](RendererOptions.md#eventscope)
 
 ***
 
@@ -199,6 +259,22 @@ Enables artistic and LOD child generation. Defaults to true.
 
 ***
 
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`groupingRadius`](RendererOptions.md#groupingradius)
+
+***
+
 <a id="interpolation"></a>
 
 ### interpolation
@@ -222,6 +298,64 @@ Voxel reconstruction, independent of simulation advection. Defaults to Linear.
 ```ts
 jitter: boolean;
 ```
+
+***
+
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialComposite`](RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialCompositeGPU`](RendererOptions.md#materialcompositegpu)
+
+***
+
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialCopySampleMode`](RendererOptions.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`materialTarget`](RendererOptions.md#materialtarget)
 
 ***
 
@@ -307,6 +441,22 @@ range: number;
 
 ***
 
+<a id="ratio"></a>
+
+### ratio
+
+```ts
+ratio: number;
+```
+
+Representative fraction, rounded with Math.round after applying count. Defaults to 1.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`ratio`](RendererOptions.md#ratio)
+
+***
+
 <a id="renderorder"></a>
 
 ### renderOrder
@@ -378,6 +528,22 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](RendererOptions.md).[`tags`](RendererOptions.md#tags)
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`textureCopyQuality`](RendererOptions.md#texturecopyquality)
 
 ***
 

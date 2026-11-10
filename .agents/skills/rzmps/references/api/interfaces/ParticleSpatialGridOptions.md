@@ -8,6 +8,10 @@
 
 # Interface: ParticleSpatialGridOptions
 
+## Extends
+
+- [`SpatialGridOptions`](SpatialGridOptions.md)
+
 ## Properties
 
 <a id="autoexpand"></a>
@@ -103,6 +107,20 @@ expansionHysteresis: number;
 ```
 
 Fractional padding added when automatic expansion occurs. Defaults to 0.125.
+
+***
+
+<a id="levels"></a>
+
+### levels?
+
+```ts
+optional levels?: SpatialLevelsInput;
+```
+
+#### Inherited from
+
+[`SpatialGridOptions`](SpatialGridOptions.md).[`levels`](SpatialGridOptions.md#levels)
 
 ***
 

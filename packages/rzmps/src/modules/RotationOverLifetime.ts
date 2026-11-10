@@ -1,13 +1,15 @@
+import type { Vector3Input } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { DynamicValue } from '../values/dynamicValue.types';
+import evaluateDynamicVector from '../values/evaluateDynamicVector3';
 
 export interface RotationOverLifetimeOptions extends Partial<ModuleOptions> {
-    angle: DynamicValue<THREE.Vector3>;
-    angularVelocity: DynamicValue<THREE.Vector3>;
-    angularAcceleration: DynamicValue<THREE.Vector3>;
+    /** Angular values are radians; scalar inputs expand uniformly across axes. */
+    angle: DynamicValue<Vector3Input>;
+    angularVelocity: DynamicValue<Vector3Input>;
+    angularAcceleration: DynamicValue<Vector3Input>;
 }
 
 /** Adds age-dependent angle, angular velocity, and angular acceleration before movement as transient adjustments. */
@@ -33,7 +35,7 @@ class RotationOverLifetime extends Module {
       priority: Module.Priority.PreMovementTransient,
       modifyGPU: (particle) => {
           particle.rotation.assign(
-            particle.rotation.add(this.gpuParameters.vector(
+            particle.rotation.add(this.evaluateDynamicGPU.vector(
               'angle',
               () => this.options.angle,
               particle.time,
@@ -42,7 +44,7 @@ class RotationOverLifetime extends Module {
             )),
           );
           particle.angularVelocity.assign(
-            particle.angularVelocity.add(this.gpuParameters.vector(
+            particle.angularVelocity.add(this.evaluateDynamicGPU.vector(
               'angularVelocity',
               () => this.options.angularVelocity,
               particle.time,
@@ -51,7 +53,7 @@ class RotationOverLifetime extends Module {
             )),
           );
           particle.angularAcceleration.assign(
-            particle.angularAcceleration.add(this.gpuParameters.vector(
+            particle.angularAcceleration.add(this.evaluateDynamicGPU.vector(
               'angularAcceleration',
               () => this.options.angularAcceleration,
               particle.time,

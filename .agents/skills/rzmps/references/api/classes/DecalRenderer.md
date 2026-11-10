@@ -28,7 +28,7 @@ new DecalRenderer(material, options?): DecalRenderer;
 
 ##### material
 
-`Material`
+[`StrictMultiple`](../Supporting-Types/type-aliases/StrictMultiple.md)\<`Material`\<`MaterialEventMap`\>\>
 
 ##### options?
 
@@ -43,6 +43,20 @@ new DecalRenderer(material, options?): DecalRenderer;
 [`Renderer`](Renderer.md).[`constructor`](Renderer.md#constructor)
 
 ## Properties
+
+<a id="atlasoptions"></a>
+
+### atlasOptions
+
+```ts
+readonly atlasOptions: TextureAtlasOptions;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`atlasOptions`](Renderer.md#atlasoptions)
+
+***
 
 <a id="children"></a>
 
@@ -140,6 +154,58 @@ distanceAffectsSize: number = 0;
 
 ***
 
+<a id="emissiontags"></a>
+
+### emissionTags?
+
+```ts
+optional emissionTags?: string[];
+```
+
+***
+
+<a id="events"></a>
+
+### events
+
+```ts
+events: readonly string[];
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`events`](Renderer.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`eventScope`](Renderer.md#eventscope)
+
+***
+
+<a id="executioncontext"></a>
+
+### executionContext?
+
+```ts
+optional executionContext?: EventExecutionContext;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`executionContext`](Renderer.md#executioncontext)
+
+***
+
 <a id="generatechildren"></a>
 
 ### generateChildren
@@ -154,12 +220,80 @@ generateChildren: boolean;
 
 ***
 
+<a id="gpuexecutioncontext"></a>
+
+### gpuExecutionContext
+
+```ts
+gpuExecutionContext: GPUEventExecutionContext;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`gpuExecutionContext`](Renderer.md#gpuexecutioncontext)
+
+***
+
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`groupingRadius`](Renderer.md#groupingradius)
+
+***
+
 <a id="hitselection"></a>
 
 ### hitSelection
 
 ```ts
 hitSelection: DecalHitSelection = DecalRenderer.Nearest;
+```
+
+***
+
+<a id="impulseaffectslifetime"></a>
+
+### impulseAffectsLifetime
+
+```ts
+impulseAffectsLifetime: number = 0;
+```
+
+***
+
+<a id="impulseaffectsopacity"></a>
+
+### impulseAffectsOpacity
+
+```ts
+impulseAffectsOpacity: number = 0;
+```
+
+***
+
+<a id="impulseaffectssize"></a>
+
+### impulseAffectsSize
+
+```ts
+impulseAffectsSize: number = 0;
+```
+
+***
+
+<a id="impulsethreshold"></a>
+
+### impulseThreshold
+
+```ts
+impulseThreshold: number = 0;
 ```
 
 ***
@@ -209,8 +343,46 @@ lifetime: DynamicValue<number> = 8;
 ### material
 
 ```ts
-material: Material;
+material: StrictMultiple<Material<MaterialEventMap>>;
 ```
+
+***
+
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode
+
+```ts
+materialCopySampleMode: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialCopySampleMode`](Renderer.md#materialcopysamplemode)
+
+***
+
+<a id="materialindex"></a>
+
+### materialIndex?
+
+```ts
+optional materialIndex?: DynamicValue<number>;
+```
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialTarget`](Renderer.md#materialtarget)
 
 ***
 
@@ -259,7 +431,7 @@ offset: number = 0.001;
 ### onCollision
 
 ```ts
-onCollision: boolean = false;
+onCollision: ParameterEventSubscription<DecalParameters, CollisionHit> = false;
 ```
 
 ***
@@ -269,7 +441,7 @@ onCollision: boolean = false;
 ### onDeath
 
 ```ts
-onDeath: boolean = false;
+onDeath: ParameterEventSubscription<DecalParameters> = false;
 ```
 
 ***
@@ -279,7 +451,7 @@ onDeath: boolean = false;
 ### onSpawn
 
 ```ts
-onSpawn: boolean = true;
+onSpawn: ParameterEventSubscription<DecalParameters> = true;
 ```
 
 ***
@@ -299,7 +471,21 @@ opacity: DynamicValue<number> = 1;
 ### ratio
 
 ```ts
-ratio: number = 1;
+ratio: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`ratio`](Renderer.md#ratio)
+
+***
+
+<a id="rotation"></a>
+
+### rotation
+
+```ts
+rotation: DynamicValue<number> = 0;
 ```
 
 ***
@@ -326,6 +512,34 @@ optional tags?: string[];
 
 [`Renderer`](Renderer.md).[`tags`](Renderer.md#tags)
 
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality
+
+```ts
+readonly textureCopyQuality: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`textureCopyQuality`](Renderer.md#texturecopyquality)
+
+***
+
+<a id="capacity"></a>
+
+### CAPACITY
+
+```ts
+readonly static CAPACITY: 1024 = 1024;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`CAPACITY`](Renderer.md#capacity)
+
 ## Accessors
 
 <a id="count"></a>
@@ -343,6 +557,56 @@ Number of persistent decals, including those whose particles have died.
 ##### Returns
 
 `number`
+
+#### Overrides
+
+```ts
+Renderer.count
+```
+
+***
+
+<a id="decals"></a>
+
+### decals
+
+#### Get Signature
+
+```ts
+get decals(): readonly DecalInstance[];
+```
+
+Persistent instances remain accessible after their originating particles die.
+
+##### Returns
+
+readonly [`DecalInstance`](../interfaces/DecalInstance.md)[]
+
+***
+
+<a id="gpunative"></a>
+
+### gpuNative
+
+#### Set Signature
+
+```ts
+set gpuNative(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`VolumeRenderer`](VolumeRenderer.md).[`gpuNative`](VolumeRenderer.md#gpunative)
 
 ***
 
@@ -363,6 +627,90 @@ get gpuParameterUploadCount(): number;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`gpuParameterUploadCount`](Renderer.md#gpuparameteruploadcount)
+
+***
+
+<a id="materialcomposite"></a>
+
+### materialComposite
+
+#### Get Signature
+
+```ts
+get materialComposite():
+  | MaterialCompositeCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialComposite(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.materialComposite
+```
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU
+
+#### Get Signature
+
+```ts
+get materialCompositeGPU():
+  | MaterialCompositeGPUCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialCompositeGPU(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.materialCompositeGPU
+```
 
 ***
 
@@ -388,9 +736,45 @@ set needsUpdate(value): void;
 
 #### Inherited from
 
+[`Renderer`](Renderer.md).[`needsUpdate`](Renderer.md#needsupdate)
+
+***
+
+<a id="overflowcount"></a>
+
+### overflowCount
+
+#### Get Signature
+
 ```ts
-Renderer.needsUpdate
+get overflowCount(): number;
 ```
+
+Number of CPU events dropped when the pending batch reached capacity.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`overflowCount`](Renderer.md#overflowcount)
+
+***
+
+<a id="parameterevents"></a>
+
+### parameterEvents
+
+#### Get Signature
+
+```ts
+get parameterEvents(): ParameterEventSubscriptions<DecalParameters>;
+```
+
+##### Returns
+
+[`ParameterEventSubscriptions`](../type-aliases/ParameterEventSubscriptions.md)\<[`DecalParameters`](../interfaces/DecalParameters.md)\>
 
 ***
 
@@ -416,6 +800,28 @@ Additional visual particles; GPU diagnostics refresh asynchronously when request
 
 ***
 
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
+#### Overrides
+
+[`Renderer`](Renderer.md).[`selectedEventNames`](Renderer.md#selectedeventnames)
+
+***
+
 <a id="supportsgpuinput"></a>
 
 ### supportsGPUInput
@@ -435,6 +841,28 @@ Whether this renderer can consume GPU particle buffers without a selective CPU r
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`supportsGPUInput`](Renderer.md#supportsgpuinput)
+
+***
+
+<a id="supportsmaterialcopy"></a>
+
+### supportsMaterialCopy
+
+#### Get Signature
+
+```ts
+get supportsMaterialCopy(): boolean;
+```
+
+Custom renderer subclasses opt in by implementing onMaterialCopyChange.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`supportsMaterialCopy`](Renderer.md#supportsmaterialcopy)
 
 ***
 
@@ -458,6 +886,102 @@ get version(): number;
 
 ## Methods
 
+<a id="begin"></a>
+
+### begin()
+
+```ts
+begin(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Snapshots once per actual execution; events raised during execution remain pending.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`begin`](Renderer.md#begin)
+
+***
+
+<a id="beginexecution"></a>
+
+### beginExecution()
+
+```ts
+beginExecution(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Creates and retains the context shared by every callback in this execution.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`beginExecution`](Renderer.md#beginexecution)
+
+***
+
 <a id="clear"></a>
 
 ### clear()
@@ -478,6 +1002,32 @@ Removes displayed particles while retaining resources for reuse.
 
 ***
 
+<a id="copymaterial"></a>
+
+### copyMaterial()
+
+```ts
+copyMaterial(source): this;
+```
+
+Renderer-specific translation retains the destination shader and rendering settings.
+
+#### Parameters
+
+##### source
+
+[`MaterialTarget`](../type-aliases/MaterialTarget.md) \| `undefined`
+
+#### Returns
+
+`this`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`copyMaterial`](Renderer.md#copymaterial)
+
+***
+
 <a id="destroy"></a>
 
 ### destroy()
@@ -495,6 +1045,76 @@ Permanently releases owned rendering resources.
 #### Overrides
 
 [`Renderer`](Renderer.md).[`destroy`](Renderer.md#destroy)
+
+***
+
+<a id="dispose"></a>
+
+### dispose()
+
+```ts
+dispose(): void;
+```
+
+Clears batches and unsubscribes when a component is removed or its system is destroyed.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`dispose`](Renderer.md#dispose)
+
+***
+
+<a id="onevent"></a>
+
+### onEvent()
+
+#### Call Signature
+
+```ts
+onEvent(name, handler): this;
+```
+
+Subscribes through the existing event receiver and transforms each selected decal's evaluated parameters.
+
+##### Parameters
+
+###### name
+
+`"collision"`
+
+###### handler
+
+[`ParameterEventSubscription`](../type-aliases/ParameterEventSubscription.md)\<[`DecalParameters`](../interfaces/DecalParameters.md), [`CollisionHit`](../interfaces/CollisionHit.md)\>
+
+##### Returns
+
+`this`
+
+#### Call Signature
+
+```ts
+onEvent(name, handler?): this;
+```
+
+Subscribes through the existing event receiver and transforms each selected decal's evaluated parameters.
+
+##### Parameters
+
+###### name
+
+`string`
+
+###### handler?
+
+[`ParameterEventSubscription`](../type-aliases/ParameterEventSubscription.md)\<[`DecalParameters`](../interfaces/DecalParameters.md)\>
+
+##### Returns
+
+`this`
 
 ***
 
@@ -641,6 +1261,36 @@ Base-class GPU preprocessing; subclasses consume the resulting ordinary render v
 
 ***
 
+<a id="visiblesystems"></a>
+
+### visibleSystems()
+
+```ts
+visibleSystems(system?, scope?): ParticleSystem[];
+```
+
+Selects producers without forwarding or traversing beyond immediate relatives.
+
+#### Parameters
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `...`
+
+#### Returns
+
+[`ParticleSystem`](ParticleSystem.md)[]
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`visibleSystems`](Renderer.md#visiblesystems)
+
+***
+
 <a id="all"></a>
 
 ### All()
@@ -720,6 +1370,22 @@ Local +Y forward transformed by particle rotation, with an optional local XYZ of
 ##### rotation?
 
 `Vector3` = `...`
+
+#### Returns
+
+[`DecalDirectionSampler`](../type-aliases/DecalDirectionSampler.md)
+
+***
+
+<a id="intersect"></a>
+
+### Intersect()
+
+```ts
+static Intersect(): DecalDirectionSampler;
+```
+
+Samples the movement segment covered by the ordinary continuous projection interval.
 
 #### Returns
 

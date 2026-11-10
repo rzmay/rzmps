@@ -1,24 +1,25 @@
+import { transformPointGPU, transformDirectionGPU } from '../simulation/gpu/transforms.utils';
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import ParticleSystem from '../ParticleSystem';
-import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
-import acceptMultiple from '../helpers/acceptMultiple';
-import tagsIntersect from '../helpers/tagsIntersect';
+import Module, { type ModuleExecutionContext, type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import ParticleSystem from '../core/ParticleSystem';
+import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
+import acceptMultiple from '../utils/acceptMultiple';
+import tagsIntersect from '../core/tags/tagsIntersect';
 import ParticleOctree, {
   type OctreeAggregator,
   type OctreeConfig,
-} from '../helpers/ParticleOctree';
-import type { DynamicValue } from '../types/DynamicValue';
-import type { Multiple } from '../types/Multiple';
-import type { Tag } from '../types/Tag';
-import BoidAffector from '../spatial/BoidAffector';
-import BoidAffectorHelper from '../spatial/BoidAffectorHelper';
-import type { BoidAffectorOptions } from '../spatial/BoidAffector';
-import type { ParticleSpatialGridOptions } from '../gpu/ParticleSpatialGrid';
-import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
+} from '../spatial/structures/ParticleOctree';
+import type { DynamicValue } from '../values/dynamicValue.types';
+import type { Multiple } from '../types/multiple.types';
+import type { Tag } from '../types/tag.types';
+import BoidAffector from '../spatial/effects/BoidAffector';
+import BoidAffectorHelper from '../spatial/effects/BoidAffectorHelper';
+import type { BoidAffectorOptions } from '../spatial/effects/BoidAffector';
+import type { ParticleSpatialGridOptions } from '../spatial/structures/ParticleSpatialGrid';
+import type { GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 import type { Node } from 'three/webgpu';
-import { acos, cos, float, If, max, mix, sin, uint, vec3, vec4 } from 'three/tsl';
+import { acos, cos, float, If, max, mix, sin, uint, vec3 } from 'three/tsl';
 
 const GPU_FALLOFF_MIN_DISTANCE = 1e-3;
 
@@ -117,13 +118,10 @@ class Boids extends Module {
       brickSubdivisions: 2,
       cellSubdivisions: 2,
     };
-    const {
-      octreeOptions: _octreeOptions,
-      spatialGridOptions: _spatialGridOptions,
-      useOctree: _useOctree,
-      useSpatialGrid: _useSpatialGrid,
-      ...moduleOptions
-    } = options;
+    const moduleOptions = { ...options };
+    for (const key of ['octreeOptions', 'spatialGridOptions', 'useOctree', 'useSpatialGrid'] as const) {
+      delete moduleOptions[key];
+    }
 
     super((particle, deltaTime) => {
       if (!this.octree) return;
@@ -222,7 +220,8 @@ class Boids extends Module {
     this.neighborRadius = options.neighborRadius ?? 1;
   }
 
-  public prepare(particleSystem: ParticleSystem): void {
+  public prepare(context: ModuleExecutionContext): void {
+    const { system: particleSystem } = context;
     // The managed tree includes both flock members and tagged particle-affector sources.
     this.octreeOptions.tags = this.tags?.length
       ? Array.from(new Set([
@@ -230,7 +229,7 @@ class Boids extends Module {
         ...this.particleAffectors.flatMap((affector) => acceptMultiple(affector.sourceTags) ?? []),
       ]))
       : undefined;
-    super.prepare(particleSystem, 0);
+    super.prepare(context);
     this.particleSystem = particleSystem;
 
     // BoidAffectors are sampled per particle, so keep their matrices fresh once per frame.
@@ -254,7 +253,7 @@ class Boids extends Module {
     context: GPUParticleUpdateContext,
   ): void {
     const grid = this.getParticleSpatialGrid(context.system)!;
-    const radius = this.gpuParameters.number(
+    const radius = this.evaluateDynamicGPU.number(
       'neighborRadius', () => this.neighborRadius, particle.time, 1, particle.index,
     ).max(Number.EPSILON);
     const alignment = vec3(0).toVar('boidAlignment');
@@ -287,7 +286,7 @@ class Boids extends Module {
           const distance = delta.length().max(Number.EPSILON);
           const sourceSize = max(source.scale.x.abs(), max(source.scale.y.abs(), source.scale.z.abs()));
           const preferredDistance = sourceSize.mul(rule.distance ?? 1).add(
-            this.gpuParameters.number(
+            this.evaluateDynamicGPU.number(
               `affectorDistance:${ruleIndex}`,
               () => this.affectorDistance,
               particle.time,
@@ -325,20 +324,20 @@ class Boids extends Module {
       separation.assign(separation.div(count).normalize());
     });
 
-    const alignmentWeight = this.gpuParameters.number(
+    const alignmentWeight = this.evaluateDynamicGPU.number(
       'alignmentWeight', () => this.alignmentWeight, particle.time, 1, particle.index,
     );
-    const cohesionWeight = this.gpuParameters.number(
+    const cohesionWeight = this.evaluateDynamicGPU.number(
       'cohesionWeight', () => this.cohesionWeight, particle.time, 1, particle.index,
     );
-    const separationWeight = this.gpuParameters.number(
+    const separationWeight = this.evaluateDynamicGPU.number(
       'separationWeight', () => this.separationWeight, particle.time, 1.5, particle.index,
     );
     const desired = vec3(
       alignment.mul(alignmentWeight)
         .add(cohesion.mul(cohesionWeight))
         .add(separation.mul(separationWeight))
-        .add(affector.mul(this.gpuParameters.number(
+        .add(affector.mul(this.evaluateDynamicGPU.number(
           'affectorWeight', () => this.affectorWeight, particle.time, 1, particle.index,
         ))),
     ).toVar('boidDesiredVelocity');
@@ -349,11 +348,11 @@ class Boids extends Module {
       // own magnitude here instead of multiplying the simulation speed twice.
       const targetSpeed = this.speed === undefined
         ? currentSpeed.greaterThan(float(Number.EPSILON)).select(currentSpeed, float(1))
-        : this.gpuParameters.number(
+        : this.evaluateDynamicGPU.number(
           'speed', () => this.speed, particle.time, 1, particle.index,
         ).max(0);
       desired.assign(desired.normalize().mul(targetSpeed));
-      const steering = this.gpuParameters.number(
+      const steering = this.evaluateDynamicGPU.number(
         'steering', () => this.steering, particle.time, 0.5, particle.index,
       ).max(0);
       const alpha = deltaTime.mul(steering).clamp(0, 1);
@@ -577,7 +576,7 @@ class Boids extends Module {
 
   private createAggregator(): OctreeAggregator<BoidAggregate> {
     return {
-      "new": (particle?: Particle) => {
+      'new': (particle?: Particle) => {
         const aggregate: BoidAggregate = {
           count: 0,
           positionSum: new THREE.Vector3(),
@@ -665,13 +664,13 @@ class Boids extends Module {
     target.set(0, 0, 0);
 
     const particleSystem = this.particleSystem;
-    const useLocalSimulationSpace = particleSystem?.simulationSpace === 'local';
+    const useLocalSimulationSpace = particleSystem?.simulationSpace !== 'world';
 
     if (useLocalSimulationSpace && particleSystem) {
       particleSystem.updateWorldMatrix(true, false);
       this.affectorSamplePosition.copy(particle.position);
-      particleSystem.localToWorld(this.affectorSamplePosition);
-      particleSystem.getWorldQuaternion(this.worldQuaternion);
+      particleSystem.simulationToWorld(this.affectorSamplePosition);
+      particleSystem.getSimulationWorldQuaternion(this.worldQuaternion);
       this.inverseWorldQuaternion.copy(this.worldQuaternion).invert();
     } else {
       this.affectorSamplePosition.copy(particle.position);
@@ -700,14 +699,6 @@ class Boids extends Module {
       return sum.addScaledVector(this.affectorDirection, -affector.weight * falloff);
     }, target);
   }
-}
-
-function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
-  return matrix.mul(vec4(point, 1)).xyz as Node<'vec3'>;
-}
-
-function transformDirectionGPU(vector: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
-  return matrix.mul(vec4(vector, 0)).xyz as Node<'vec3'>;
 }
 
 export default Boids;

@@ -3,15 +3,15 @@ import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgp
 import {
   Fn, If, clamp, float, floor, instanceIndex, int, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4,
 } from 'three/tsl';
-import Module, { type ModuleOptions } from '../Module';
-import { SpatialEffectUpdatePolicy } from '../SpatialEffect';
-import type ParticleSystem from '../ParticleSystem';
-import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
+import Module, { type ModuleExecutionContext, type ModuleOptions } from '../core/Module';
+import { SpatialEffectUpdatePolicy } from '../spatial/effects/SpatialEffect';
+import type ParticleSystem from '../core/ParticleSystem';
+import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 import ParticleSpatialGrid, {
   type ParticleSpatialGridOptions,
   type ParticleSpatialGridRenderer,
-} from '../gpu/ParticleSpatialGrid';
-import FluidCollider from '../spatial/FluidCollider';
+} from '../spatial/structures/ParticleSpatialGrid';
+import FluidCollider from '../spatial/effects/FluidCollider';
 import ThreeGPUCollisionBackend from '../collision/ThreeGPUCollisionBackend';
 import { FluidBoundsPolicy } from '../enums/FluidBoundsPolicy';
 
@@ -168,11 +168,12 @@ abstract class FluidSimulation extends Module {
     this.allocateGridFields();
   }
 
-  public override prepare(particleSystem: ParticleSystem, dt: number): void {
+  public override prepare(context: ModuleExecutionContext): void {
+    const { system: particleSystem, deltaTime: dt } = context;
     if (!particleSystem.isGPUProcessingActive) {
       throw new Error('Fluid simulations require GPU particle processing with a WebGPU renderer.');
     }
-    super.prepare(particleSystem, dt);
+    super.prepare(context);
     const grid = this.getParticleSpatialGrid(particleSystem);
     if (grid) this.synchronizeGridBounds(grid);
     this.syncBoundsPolicy();
@@ -249,7 +250,8 @@ abstract class FluidSimulation extends Module {
             If(particle.alive.equal(uint(0)), () => { context.eventWriter?.emitDeath(particle); });
             context.buffers.storage.storeParticle(particle);
           };
-          if (this.conditionGPU) If(this.conditionGPU(particle, context.deltaTimeNode, context, grid), reconcile);
+          if (this.conditionGPU) If(this.conditionGPU(particle, context.deltaTimeNode,
+            { ...context, events: this.gpuExecutionContext.events, spatialGrid: grid }), reconcile);
           else reconcile();
         });
       })().compute(context.buffers.count);

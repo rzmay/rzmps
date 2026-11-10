@@ -3,13 +3,13 @@ title: "Metal Balls"
 example: collisionSubEmitters
 ---
 
-# Metal Balls
+[View live example](https://rzmps.rzmay.com/example/collisionSubEmitters)
+
+# Metal Balls <ExampleAttribution />
+
+<ExampleTags />
 
 Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces.
-
-[View live example](https://rzmps.rzmay.com/?preset=Metal%20Balls)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

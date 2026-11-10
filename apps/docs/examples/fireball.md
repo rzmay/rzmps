@@ -3,13 +3,13 @@ title: "Fireball"
 example: fireball
 ---
 
-# Fireball
+[View live example](https://rzmps.rzmay.com/example/fireball)
+
+# Fireball <ExampleAttribution />
+
+<ExampleTags />
 
 Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks.
-
-[View live example](https://rzmps.rzmay.com/?preset=Fireball)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

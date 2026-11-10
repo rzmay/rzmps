@@ -1,805 +1,911 @@
 import * as THREE from 'three';
 import {
-    AudioRenderer,
-    DecalRenderer,
-    Boids,
-    Collision,
-    EmissionSource,
-    EndBehavior,
-    FLIPSimulation,
-    GasSimulation,
-    LightRenderer,
-    MeshRenderer,
-    NoiseModule,
-    OrientToDirection,
-    SpriteRenderer,
-    Textures,
-    TrailRenderer,
-    VolumeRenderer,
-    SurfaceRenderer,
+  AudioRenderer,
+  GasSimulation,
+  FLIPSimulation,
+  VolumeRenderer,
+  SurfaceRenderer,
+  DecalRenderer,
+  Boids,
+  Collision,
+  EmissionSource,
+  EndBehavior,
+  LightRenderer,
+  MeshRenderer,
+  Module,
+  NoiseModule,
+  SpriteRenderer,
+  Textures,
+  TrailRenderer,
 } from '@rzmps/rzmps';
 import { AUDIO_BUFFER_SOURCE_KEY, RAW_CODE } from './constants';
 
 export class ParticleSystemSerializer {
-    constructor(host) {
-        this.host = host;
+  constructor(host) {
+    this.host = host;
+  }
+
+  get system() {
+    return this.host.system;
+  }
+
+  serializeParticleSystem() {
+    const imports = new Set(['EndBehavior', 'ParticleSystem', 'Emitter', 'EmissionShape', 'EmissionSource']);
+    this.collectImports(this.system, imports);
+    this.usesEasing = false;
+
+    const counter = { value: 0 };
+    const rootName = 'particleSystem';
+    const systemLines = this.serializeParticleSystemTree(this.system, rootName, counter);
+
+    const lines = [
+      "import * as THREE from 'three';",
+      `import { ${Array.from(imports).sort().join(', ')} } from '@rzmps/rzmps';`,
+    ];
+
+    if (this.usesEasing) {
+      lines.push("import { Easing } from 'eaz';");
     }
 
-    get system() {
-        return this.host.system;
+    lines.push(...systemLines, '', `export default ${rootName};`, '');
+    this.usesEasing = false;
+    return lines.join('\n');
+  }
+
+  collectImports(system, imports) {
+    system.modules.forEach(module => imports.add(module.constructor.name));
+    system.renderers.forEach(renderer => {
+      imports.add(renderer.constructor.name);
+      if (this.rendererUsesBuiltInTexture(renderer)) {
+        imports.add('Textures');
+      }
+    });
+    system.subSystems?.forEach((_options, subSystem) => this.collectImports(subSystem, imports));
+  }
+
+  serializeParticleSystemTree(system, variableName, counter) {
+    const lines = this.serializeParticleSystemDeclaration(system, variableName);
+
+    system.subSystems?.forEach((options, subSystem) => {
+      counter.value += 1;
+      const subName = `${variableName}SubSystem${counter.value}`;
+      lines.push('');
+      lines.push(...this.serializeParticleSystemTree(subSystem, subName, counter));
+      lines.push(`${variableName}.addSubSystem(${subName}, ${this.serializeSubSystemOptions(options)});`);
+    });
+
+    return lines;
+  }
+
+  serializeParticleSystemDeclaration(system, variableName) {
+    const emitters = system.emitters.map(emitter => this.serializeEmitter(emitter)).join(',\n');
+    const modules = system.modules.map(module => this.serializeModule(module)).join(',\n');
+    const renderers = system.renderers.map(renderer => this.serializeRenderer(renderer)).join(',\n');
+    const lines = [
+      `const ${variableName} = new ParticleSystem({`,
+      `  gravity: ${this.serializeValue(system.gravity)},`,
+      `  gravityModifier: ${this.serializeValue(system.gravityModifier)},`,
+      `  inheritVelocity: ${this.serializeValue(system.inheritVelocity)},`,
+      `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
+      `  simulationSpaceTransform: ${this.serializeValue(
+        system.simulationSpaceTransform instanceof THREE.Object3D
+          ? system.simulationSpaceTransform.matrixWorld
+          : system.simulationSpaceTransform,
+      )},`,
+      `  sourceLoss: ${JSON.stringify(system.sourceLoss)},`,
+      `  useSpatialEffects: ${this.serializeValue(system.useSpatialEffects)},`,
+      `  spatialEffectBoundsFiltering: ${this.serializeValue(system.spatialEffectBoundsFiltering)},`,
+      `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
+      `  duration: ${this.serializeValue(system.duration)},`,
+      `  prewarm: ${this.serializeValue(system.prewarm)},`,
+      `  prewarmFPS: ${this.serializeValue(system.prewarmFPS)},`,
+      `  looping: ${this.serializeValue(system.looping)},`,
+      `  endBehavior: ${this.serializeEndBehavior(system.endBehavior)},`,
+      `  maxParticles: ${this.serializeValue(system.maxParticles)},`,
+      `  maxCullingMode: ${this.serializeValue(system.maxCullingMode)},`,
+      `  simulationDistance: ${this.serializeValue(system.simulationDistance)},`,
+      `  lod: ${this.serializeValue(system.lod)},`,
+      `  useLiveCubemap: ${this.serializeValue(system.useLiveCubemap)},`,
+      `  liveCubemapFPS: ${this.serializeValue(system.liveCubemap.fps)},`,
+      `  liveCubemapResolutionScale: ${this.serializeValue(system.liveCubemap.resolutionScale)},`,
+      `  liveCubemapIntensity: ${this.serializeValue(system.liveCubemap.intensity)},`,
+      '  emitters: [',
+      this.indent(emitters, 4),
+      '  ],',
+      '  modules: [',
+      this.indent(modules, 4),
+      '  ],',
+      '  renderers: [',
+      this.indent(renderers, 4),
+      '  ],',
+      '});',
+    ];
+
+    if (system.name) lines.push(`${variableName}.name = ${JSON.stringify(system.name)};`);
+    if (!system.position.equals(new THREE.Vector3())) {
+      lines.push(`${variableName}.position.set(${system.position.x}, ${system.position.y}, ${system.position.z});`);
     }
 
-    serializeParticleSystem() {
-        const imports = new Set(['EndBehavior', 'ParticleSystem', 'Emitter', 'EmissionShape', 'EmissionSource']);
-        this.collectImports(this.system, imports);
-        this.usesEasing = false;
+    return lines;
+  }
 
-        const counter = { value: 0 };
-        const rootName = 'particleSystem';
-        const systemLines = this.serializeParticleSystemTree(this.system, rootName, counter);
+  serializeEndBehavior(value) {
+    return `EndBehavior.${EndBehavior[value] ?? 'None'}`;
+  }
 
-        const lines = [
-            `import * as THREE from 'three';`,
-            `import { ${Array.from(imports).sort().join(', ')} } from '@rzmps/rzmps';`,
-        ];
+  serializeSubSystemOptions(options) {
+    return this.serializeValue({
+      eventScope: options.eventScope,
+      shouldEmit: options.shouldEmit,
+      shouldEmitGPU: options.shouldEmitGPU,
+      ratio: options.ratio,
+      emitContinuous: options.emitContinuous,
+      emitOnCollision: options.emitOnCollision,
+      emitOnSpawn: options.emitOnSpawn,
+      emitOnDeath: options.emitOnDeath,
+      inheritScale: options.inheritScale,
+      inheritLifetime: options.inheritLifetime,
+      inheritColor: options.inheritColor,
+      inheritAlpha: options.inheritAlpha,
+      inheritMass: options.inheritMass,
+      inheritVelocity: options.inheritVelocity,
+      impulseAffectsCount: options.impulseAffectsCount,
+      impulseAffectsScale: options.impulseAffectsScale,
+      impulseAffectsSpeed: options.impulseAffectsSpeed,
+      impulseAffectsLifetime: options.impulseAffectsLifetime,
+      impulseAffectsMass: options.impulseAffectsMass,
+      impulseAffectsAlignment: options.impulseAffectsAlignment,
+      impulseThreshold: options.impulseThreshold,
+    });
+  }
 
-        if (this.usesEasing) {
-            lines.push(`import { Easing } from 'eaz';`);
-        }
+  serializeEmitter(emitter) {
+    const initialValues = this.serializeValue(emitter.initialValues);
+    const bursts = this.serializeValue(emitter.bursts.map(({ time, count }) => ({ time, count })));
+    const lodOptions = this.serializeLODOptions(emitter, true);
+    return [
+      'new Emitter({',
+      `  source: ${this.serializeEmissionShape(emitter.source)},`,
+      `  rate: ${this.serializeValue(emitter.rate)},`,
+      `  rateOverDistance: ${this.serializeValue(emitter.rateOverDistance)},`,
+      `  radialSpeed: ${this.serializeValue(emitter.radialSpeed)},`,
+      `  alignment: ${this.serializeValue(emitter.alignment)},`,
+      ...lodOptions,
+      `  tags: ${this.serializeValue(emitter.tags)},`,
+      `  tagSelection: ${this.serializeValue(emitter.tagSelection)},`,
+      `  bursts: ${bursts},`,
+      `  initialValues: ${initialValues},`,
+      '})',
+    ].join('\n');
+  }
 
-        lines.push(...systemLines, '', `export default ${rootName};`, '');
-        this.usesEasing = false;
-        return lines.join('\n');
+  serializeEmissionShape(shape) {
+    const geometry = shape.geometry;
+    const params = geometry.parameters ?? {};
+    const volumeSamples = shape.volumeSamples === 'auto' ? "'auto'" : shape.volumeSamples;
+    let expression;
+    if (geometry.type.includes('Box')) {
+      expression = `EmissionShape.Box(${params.width ?? 1}, ${params.height ?? 1}, ${params.depth ?? 1})`;
+    } else if (geometry.type.includes('Cone')) {
+      expression = `EmissionShape.Cone(${params.radius ?? 1}, ${params.height ?? 1}, ${params.radialSegments ?? 16})`;
+    } else if (geometry.type.includes('Torus')) {
+      expression =
+        'EmissionShape.Torus(' +
+        `${params.radius ?? 1}` +
+        ', ' +
+        `${params.tube ?? 0.4}` +
+        ', ' +
+        `${params.radialSegments ?? 16}` +
+        ', ' +
+        `${params.tubularSegments ?? 32}` +
+        ', ' +
+        `${params.arc ?? Math.PI * 2}` +
+        ')';
+    } else if (geometry.type.includes('Sphere')) {
+      expression =
+        'EmissionShape.Sphere(' +
+        `${params.radius ?? 1}` +
+        ', ' +
+        `${params.widthSegments ?? params.radialSegments ?? 16}` +
+        ', ' +
+        `${params.heightSegments ?? 8}` +
+        ')';
+    } else {
+      return (
+        'new EmissionShape({ geometry: new THREE.BufferGeometry() /* replace with ' +
+        `${geometry.type}` +
+        ' */, source: EmissionSource.' +
+        `${this.emissionSourceName(shape.source)}` +
+        ', volumeSamples: ' +
+        `${volumeSamples}` +
+        ' })'
+      );
+    }
+    const overrides = [];
+    if (shape.source !== EmissionSource.Volume)
+      overrides.push(`source: EmissionSource.${this.emissionSourceName(shape.source)}`);
+    if (shape.volumeSamples !== 'auto') overrides.push(`volumeSamples: ${volumeSamples}`);
+    return overrides.length > 0 ? `Object.assign(${expression}, { ${overrides.join(', ')} })` : expression;
+  }
+
+  serializeModule(module) {
+    if (module instanceof GasSimulation) {
+      return `new GasSimulation(${this.serializeValue({
+        maxActiveBricks: module.maxActiveBricks,
+        advectionMethod: module.advectionMethod,
+        boundsPolicy: module.boundsPolicy,
+        bounds: module.autoBounds ? undefined : module.bounds,
+        boundsPadding: module.boundsPadding,
+        maxBounds: Number.isFinite(module.maxBounds) ? module.maxBounds : undefined,
+        automaticPadding: module.automaticPadding,
+        showGridHelper: module.showGridHelper,
+        spatialGridOptions: module.spatialGridOptions,
+        pressureIterations: module.pressureIterations,
+        externalForce: module.externalForce,
+        maxVelocity: module.maxVelocity,
+        colorDissipation: module.colorDissipation,
+        densityDissipation: module.densityDissipation,
+        densityCutoff: module.densityCutoff,
+        temperatureDissipation: module.temperatureDissipation,
+        velocityDissipation: module.velocityDissipation,
+        buoyancy: module.buoyancy,
+        weight: module.weight,
+        sourceStrength: module.sourceStrength,
+        velocitySourceStrength: module.velocitySourceStrength,
+        sourceTemperature: module.sourceTemperature,
+        temperatureOverLifetime: module.temperatureOverLifetime,
+        scalarDiffusion: module.scalarDiffusion,
+        temperatureColor: module.temperatureColor,
+        temperatureRange: module.temperatureRange,
+        vorticityStrength: module.vorticityStrength,
+        turbulenceStrength: module.turbulenceStrength,
+        noiseFrequency: module.noiseFrequency,
+        noiseSpeed: module.noiseSpeed,
+        noiseOctaves: module.noiseOctaves,
+        ...this.getLODOptions(module),
+        tags: module.tags,
+      })})`;
+    }
+    if (module instanceof FLIPSimulation) {
+      return `new FLIPSimulation(${this.serializeValue({
+        bounds: module.autoBounds ? undefined : module.bounds,
+        boundsPadding: module.boundsPadding,
+        maxBounds: Number.isFinite(module.maxBounds) ? module.maxBounds : undefined,
+        boundsPolicy: module.boundsPolicy,
+        automaticPadding: module.automaticPadding,
+        showGridHelper: module.showGridHelper,
+        spatialGridOptions: module.spatialGridOptions,
+        pressureIterations: module.pressureIterations,
+        externalForce: module.externalForce,
+        maxVelocity: module.maxVelocity,
+        picRatio: module.picRatio,
+        advectParticles: module.advectParticlesEnabled,
+        velocityPaddingLookahead: module.velocityPaddingLookahead,
+        collisionIterations: module.collisionIterations,
+        particleSeparation: module.particleSeparation,
+        particleSpacing: module.particleSpacing,
+        ...this.getLODOptions(module),
+        tags: module.tags,
+      })})`;
     }
 
-    collectImports(system, imports) {
-        system.modules.forEach((module) => imports.add(module.constructor.name));
-        system.renderers.forEach((renderer) => {
-            imports.add(renderer.constructor.name);
-            if (this.rendererUsesBuiltInTexture(renderer)) {
-                imports.add('Textures');
-            }
-        });
-        system.subSystems?.forEach((_options, subSystem) => this.collectImports(subSystem, imports));
+    if (module instanceof Collision) {
+      return `new Collision(${this.serializeValue({
+        dampen: module.dampen,
+        bounce: module.bounce,
+        lifetimeLoss: module.lifetimeLoss,
+        applyImpulses: module.applyImpulses,
+        radiusScale: module.radiusScale,
+        radiusOffset: module.radiusOffset,
+        minKillSpeed: module.minKillSpeed,
+        maxKillSpeed: module.maxKillSpeed,
+        ...this.getLODOptions(module),
+        tags: module.tags,
+      })})`;
     }
 
-    serializeParticleSystemTree(system, variableName, counter) {
-        const lines = this.serializeParticleSystemDeclaration(system, variableName);
-
-        system.subSystems?.forEach((options, subSystem) => {
-            counter.value += 1;
-            const subName = `${variableName}SubSystem${counter.value}`;
-            lines.push('');
-            lines.push(...this.serializeParticleSystemTree(subSystem, subName, counter));
-            lines.push(`${variableName}.addSubSystem(${subName}, ${this.serializeSubSystemOptions(options)});`);
-        });
-
-        return lines;
+    if (module instanceof NoiseModule) {
+      const runtime = module;
+      return `new NoiseModule(${JSON.stringify(runtime.key)}, ${this.serializeValue({
+        octaves: runtime.octaves,
+        frequency: runtime.frequency,
+        lacunarity: runtime.lacunarity,
+        persistence: runtime.persistence,
+        time: runtime.time,
+        offset: runtime.offset,
+        ...this.getLODOptions(runtime),
+        tags: runtime.tags,
+      })})`;
     }
 
-    serializeParticleSystemDeclaration(system, variableName) {
-        const emitters = system.emitters.map((emitter) => this.serializeEmitter(emitter)).join(',\n');
-        const modules = system.modules.map((module) => this.serializeModule(module)).join(',\n');
-        const renderers = system.renderers.map((renderer) => this.serializeRenderer(renderer)).join(',\n');
-        const lines = [
-            `const ${variableName} = new ParticleSystem({`,
-            `  gravity: ${this.serializeValue(system.gravity)},`,
-            `  gravityModifier: ${this.serializeValue(system.gravityModifier)},`,
-            `  inheritVelocity: ${this.serializeValue(system.inheritVelocity)},`,
-            `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
-            `  useSpatialEffects: ${this.serializeValue(system.useSpatialEffects)},`,
-            `  spatialEffectBoundsFiltering: ${this.serializeValue(system.spatialEffectBoundsFiltering)},`,
-            `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
-            `  duration: ${this.serializeValue(system.duration)},`,
-            `  prewarm: ${this.serializeValue(system.prewarm)},`,
-            `  prewarmFPS: ${this.serializeValue(system.prewarmFPS)},`,
-            `  looping: ${this.serializeValue(system.looping)},`,
-            `  endBehavior: ${this.serializeEndBehavior(system.endBehavior)},`,
-            `  maxParticles: ${this.serializeValue(system.maxParticles)},`,
-            `  maxCullingMode: ${this.serializeValue(system.maxCullingMode)},`,
-            `  simulationDistance: ${this.serializeValue(system.simulationDistance)},`,
-            `  lod: ${this.serializeValue(system.lod)},`,
-            `  useLiveCubemap: ${this.serializeValue(system.useLiveCubemap)},`,
-            `  liveCubemapFPS: ${this.serializeValue(system.liveCubemap.fps)},`,
-            `  liveCubemapResolutionScale: ${this.serializeValue(system.liveCubemap.resolutionScale)},`,
-            `  liveCubemapIntensity: ${this.serializeValue(system.liveCubemap.intensity)},`,
-            '  emitters: [',
-            this.indent(emitters, 4),
-            '  ],',
-            '  modules: [',
-            this.indent(modules, 4),
-            '  ],',
-            '  renderers: [',
-            this.indent(renderers, 4),
-            '  ],',
-            '});',
-        ];
-
-        if (system.name) lines.push(`${variableName}.name = ${JSON.stringify(system.name)};`);
-        if (!system.position.equals(new THREE.Vector3())) {
-            lines.push(`${variableName}.position.set(${system.position.x}, ${system.position.y}, ${system.position.z});`);
-        }
-
-        return lines;
+    if (module instanceof Boids) {
+      return `new Boids(${this.serializeValue({
+        octreeOptions: module.octreeOptions,
+        spatialGridOptions: module.spatialGridOptions,
+        speed: module.speed,
+        alignmentWeight: module.alignmentWeight,
+        cohesionWeight: module.cohesionWeight,
+        separationWeight: module.separationWeight,
+        affectorWeight: module.affectorWeight,
+        affectorDistance: module.affectorDistance,
+        steering: module.steering,
+        particleAffectors: module.particleAffectors,
+        ...this.getLODOptions(module),
+        tags: module.tags,
+      })})`;
     }
 
-    serializeEndBehavior(value) {
-        return `EndBehavior.${EndBehavior[value] ?? 'None'}`;
+    if (module.constructor === Module) {
+      // Export constructor inputs, never the live octree/grid and their cyclic particle references.
+      const options = this.serializeValue({
+        priority: module.priority,
+        tags: module.tags,
+        events: module.events,
+        eventScope: module.eventScope,
+        prepare: module._prepare,
+        initializeParticle:
+          module.initializeParticle === Module.prototype.initializeParticle ? undefined : module.initializeParticle,
+        initializeParticleGPU:
+          module.initializeParticleGPU === Module.prototype.initializeParticleGPU
+            ? undefined
+            : module.initializeParticleGPU,
+        condition: module.condition,
+        conditionGPU: module.conditionGPU,
+        modifyGPU: module.modifyGPU,
+        useOctree: module.useOctree,
+        octreeOptions: module.octreeOptions,
+        useSpatialGrid: module.useSpatialGrid,
+        spatialGridOptions: module.spatialGridOptions,
+      });
+      return `new Module(${this.serializeFunction(module._modify)}, ${options})`;
     }
 
-    serializeSubSystemOptions(options) {
-        return this.serializeValue({
-            shouldEmit: options.shouldEmit,
-            ratio: options.ratio,
-            emitContinuous: options.emitContinuous,
-            emitOnCollision: options.emitOnCollision,
-            emitOnSpawn: options.emitOnSpawn,
-            emitOnDeath: options.emitOnDeath,
-            inheritScale: options.inheritScale,
-            inheritLifetime: options.inheritLifetime,
-            inheritColor: options.inheritColor,
-            inheritAlpha: options.inheritAlpha,
-            inheritMass: options.inheritMass,
-            inheritVelocity: options.inheritVelocity,
-            impulseAffectsScale: options.impulseAffectsScale,
-            impulseAffectsSpeed: options.impulseAffectsSpeed,
-            impulseAffectsLifetime: options.impulseAffectsLifetime,
-            impulseAffectsMass: options.impulseAffectsMass,
-            impulseAffectsAlignment: options.impulseAffectsAlignment,
-            impulseThreshold: options.impulseThreshold,
-        });
+    const runtime = module;
+    const args =
+      runtime.options !== undefined
+        ? this.serializeValue({
+            ...runtime.options,
+            ...this.getLODOptions(runtime),
+            tags: runtime.tags,
+          })
+        : this.serializeValue(this.getSerializableRuntimeOptions(runtime));
+    return `new ${module.constructor.name}(${args})`;
+  }
+
+  serializeRenderer(renderer) {
+    if (renderer instanceof SurfaceRenderer) {
+      const materialOptions = this.serializeMaterialOptions(renderer.material, true);
+      const material = `new THREE.${renderer.material.type}(${materialOptions})`;
+      return `new SurfaceRenderer(${this.serializeValue({
+        material: this.rawCode(material),
+        bounds: renderer.bounds,
+        voxelSize: renderer.voxelSize,
+        particleRadiusScale: renderer.particleRadiusScale,
+        isoLevel: renderer.isoLevel,
+        maxActiveBricks: renderer.maxActiveBricks,
+        maxTriangles: renderer.maxTriangles,
+        smoothingIterations: renderer.smoothingIterations,
+        smoothingStrength: renderer.smoothingStrength,
+        spatialGridOptions: renderer.spatialGridOptions,
+        particleColors: renderer.particleColors,
+        castShadow: renderer.castShadow,
+        receiveShadow: renderer.receiveShadow,
+        ...this.getLODOptions(renderer, true, true),
+        tags: renderer.tags,
+      })})`;
+    }
+    if (renderer instanceof VolumeRenderer) {
+      return `new VolumeRenderer(${this.serializeValue({
+        baseColor: renderer.baseColor,
+        opacity: renderer.opacity,
+        threshold: renderer.threshold,
+        range: renderer.range,
+        steps: renderer.steps,
+        renderOrder: renderer.renderOrder,
+        depthTest: renderer.depthTest,
+        jitter: renderer.jitter,
+        interpolation: renderer.interpolation,
+        stepSizeMultiplier: renderer.stepSizeMultiplier,
+        adaptiveStepping: renderer.adaptiveStepping,
+        adaptiveStepThreshold: renderer.adaptiveStepThreshold,
+        adaptiveStepFactor: renderer.adaptiveStepFactor,
+        transmittanceThreshold: renderer.transmittanceThreshold,
+        sceneDepthClipping: renderer.sceneDepthClipping,
+        sceneDepthBias: renderer.sceneDepthBias,
+        densityGain: renderer.densityGain,
+        densityMapping: renderer.densityMapping,
+        densityRange: renderer.densityRange,
+        densityCurve: renderer.densityCurve,
+        noiseStrength: renderer.noiseStrength,
+        noiseContrast: renderer.noiseContrast,
+        noiseFrequency: renderer.noiseFrequency,
+        noiseSpeed: renderer.noiseSpeed,
+        noiseOctaves: renderer.noiseOctaves,
+        ...this.getLODOptions(renderer, true, true),
+        tags: renderer.tags,
+      })})`;
     }
 
-    serializeEmitter(emitter) {
-        const initialValues = this.serializeValue(emitter.initialValues);
-        const bursts = this.serializeValue(emitter.bursts.map(({ time, count }) => ({ time, count })));
-        const lodOptions = this.serializeLODOptions(emitter, true);
-        return [
-            'new Emitter({',
-            `  source: ${this.serializeEmissionShape(emitter.source)},`,
-            `  rate: ${this.serializeValue(emitter.rate)},`,
-            `  rateOverDistance: ${this.serializeValue(emitter.rateOverDistance)},`,
-            `  radialSpeed: ${this.serializeValue(emitter.radialSpeed)},`,
-            `  alignment: ${this.serializeValue(emitter.alignment)},`,
-            ...lodOptions,
-            `  tags: ${this.serializeValue(emitter.tags)},`,
-            `  tagSelection: ${this.serializeValue(emitter.tagSelection)},`,
-            `  bursts: ${bursts},`,
-            `  initialValues: ${initialValues},`,
-            '})',
-        ].join('\n');
+    if (renderer instanceof DecalRenderer) {
+      // Serialize each complete template so correlated maps survive a preset round trip.
+      const materials = [renderer.material]
+        .flat()
+        .map(material => `new THREE.${material.type}(${this.serializeMaterialOptions(material, true)})`);
+      const material = Array.isArray(renderer.material) ? `[${materials.join(', ')}]` : materials[0];
+      const options = {
+        materialIndex: renderer.materialIndex,
+        direction: renderer.direction,
+        hitSelection: renderer.hitSelection,
+        maxHits: renderer.maxHits,
+        maxDistance: renderer.maxDistance,
+        depth: renderer.depth,
+        offset: renderer.offset,
+        size: renderer.size,
+        rotation: renderer.rotation,
+        color: renderer.color,
+        lifetime: renderer.lifetime,
+        opacity: renderer.opacity,
+        inheritColor: renderer.inheritColor,
+        inheritScale: renderer.inheritScale,
+        inheritAlpha: renderer.inheritAlpha,
+        distanceAffectsOpacity: renderer.distanceAffectsOpacity,
+        distanceAffectsSize: renderer.distanceAffectsSize,
+        maxDecals: renderer.maxDecals,
+        onSpawn: renderer.onSpawn,
+        onCollision: renderer.onCollision,
+        impulseThreshold: renderer.impulseThreshold,
+        impulseAffectsSize: renderer.impulseAffectsSize,
+        impulseAffectsOpacity: renderer.impulseAffectsOpacity,
+        impulseAffectsLifetime: renderer.impulseAffectsLifetime,
+        emissionTags: renderer.emissionTags,
+        onEvent: renderer.parameterEvents,
+        events: renderer.events,
+        eventScope: renderer.eventScope,
+        onDeath: renderer.onDeath,
+        continuousRate: renderer.continuousRate,
+        ratio: renderer.ratio,
+        ...this.getLODOptions(renderer, true, true),
+        tags: renderer.tags,
+      };
+      // Built-in selectors need their public name, not their method source text.
+      for (const name of ['Nearest', 'Farthest', 'All']) {
+        if (options.hitSelection === DecalRenderer[name]) {
+          options.hitSelection = this.rawCode(`DecalRenderer.${name}`);
+        }
+      }
+      return `new DecalRenderer(${material}, ${this.serializeValue(options)})`;
+    }
+    if (renderer instanceof AudioRenderer) {
+      const options = {
+        loop: renderer.loop,
+        onSpawn: renderer.onSpawn,
+        onDeath: renderer.onDeath,
+        onCollision: renderer.onCollision,
+        onEvent: renderer.parameterEvents,
+        events: renderer.events,
+        eventScope: renderer.eventScope,
+        maxClips: renderer.maxClips,
+        ratio: renderer.ratio,
+        collisionRatio: renderer.collisionRatio,
+        pitch: renderer.pitch,
+        volume: renderer.volume,
+        highPass: renderer.highPass,
+        lowPass: renderer.lowPass,
+        sizeAffectsPitch: renderer.sizeAffectsPitch,
+        sizeAffectsVolume: renderer.sizeAffectsVolume,
+        sizeAffectsHighPass: renderer.sizeAffectsHighPass,
+        sizeAffectsLowPass: renderer.sizeAffectsLowPass,
+        alphaAffectsPitch: renderer.alphaAffectsPitch,
+        alphaAffectsVolume: renderer.alphaAffectsVolume,
+        alphaAffectsHighPass: renderer.alphaAffectsHighPass,
+        alphaAffectsLowPass: renderer.alphaAffectsLowPass,
+        speedAffectsPitch: renderer.speedAffectsPitch,
+        speedAffectsVolume: renderer.speedAffectsVolume,
+        speedAffectsHighPass: renderer.speedAffectsHighPass,
+        speedAffectsLowPass: renderer.speedAffectsLowPass,
+        depthAffectsPitch: renderer.depthAffectsPitch,
+        depthAffectsVolume: renderer.depthAffectsVolume,
+        depthAffectsHighPass: renderer.depthAffectsHighPass,
+        depthAffectsLowPass: renderer.depthAffectsLowPass,
+        dopplerEffect: renderer.dopplerEffect,
+        impulseAffectsPitch: renderer.impulseAffectsPitch,
+        impulseAffectsVolume: renderer.impulseAffectsVolume,
+        impulseAffectsHighPass: renderer.impulseAffectsHighPass,
+        impulseAffectsLowPass: renderer.impulseAffectsLowPass,
+        impulseThreshold: renderer.impulseThreshold,
+        ...this.getLODOptions(renderer, true, true),
+        tags: renderer.tags,
+      };
+
+      if (renderer.sound?.length) {
+        options.sound = this.rawCode(this.serializeAudioBuffers(renderer.sound));
+      }
+
+      if (renderer.onCollisionSound?.length) {
+        options.onCollisionSound = this.rawCode(this.serializeAudioBuffers(renderer.onCollisionSound));
+      }
+
+      if (renderer.onSpawnSound?.length) {
+        options.onSpawnSound = this.rawCode(this.serializeAudioBuffers(renderer.onSpawnSound));
+      }
+
+      if (renderer.onDeathSound?.length) {
+        options.onDeathSound = this.rawCode(this.serializeAudioBuffers(renderer.onDeathSound));
+      }
+
+      return `new AudioRenderer(${this.serializeValue(options)})`;
+    }
+    if (renderer instanceof SpriteRenderer) {
+      const texture = this.serializeResourceTree(
+        renderer.textureSource,
+        value => typeof value === 'string' || value?.isTexture,
+        value =>
+          typeof value === 'string'
+            ? (this.textureReference(value) ?? JSON.stringify(value))
+            : this.serializeTexture(value),
+      );
+      const options = this.serializeValue({
+        fps: renderer.fps,
+        textureIndex: renderer.textureIndex,
+        materialCopySampleMode: renderer.materialCopySampleMode,
+        billboard: renderer.billboard,
+        sizeAttenuation: renderer.sizeAttenuation,
+        tileSize: renderer.tileSize,
+        tileMargin: renderer.tileMargin,
+        gridSize: renderer.gridSize,
+        frames: renderer.frames,
+        castShadow: renderer.castShadow,
+        softParticleDistance: renderer.softParticleDistance,
+        ...this.getLODOptions(renderer, true, true),
+        tags: renderer.tags,
+        alphaMap: renderer.alphaMap ? this.rawCode(this.serializeTexture(renderer.alphaMap)) : undefined,
+        material: renderer.materialType,
+        materialOptions: renderer.materialOptions,
+      });
+      return `new SpriteRenderer(${texture}, ${options})`;
+    }
+    if (renderer instanceof LightRenderer) {
+      return `new LightRenderer(${this.serializeValue({
+        brightness: renderer.brightness,
+        rangeMultiplier: renderer.rangeMultiplier,
+        groupingRadius: renderer.groupingRadius,
+        allocation: renderer.allocation,
+        decay: renderer.decay,
+        count: renderer.count,
+        ratio: renderer.ratio,
+        inheritParticleColor: renderer.inheritParticleColor,
+        sizeAffectsRange: renderer.sizeAffectsRange,
+        alphaAffectsIntensity: renderer.alphaAffectsIntensity,
+        ...this.getLODOptions(renderer, true, true),
+        tags: renderer.tags,
+        lightOptions: renderer.lightOptions,
+      })})`;
+    }
+    if (renderer instanceof MeshRenderer) {
+      return `new MeshRenderer(${this.serializeValue({
+        mesh: this.rawCode(
+          this.serializeResourceTree(
+            renderer.meshSource,
+            value => value?.isMesh || value?.isBufferGeometry,
+            value => this.serializeMesh(value.isMesh ? value : new THREE.Mesh(value, renderer.mesh.material)),
+          ),
+        ),
+        meshIndex: renderer.meshIndex,
+        maxParticles: renderer.maxParticles,
+        materialCopySampleMode: renderer.materialCopySampleMode,
+        castShadow: renderer.castShadow,
+        receiveShadow: renderer.receiveShadow,
+        ...this.getLODOptions(renderer, true, true),
+        tags: renderer.tags,
+      })})`;
+    }
+    if (renderer instanceof TrailRenderer) {
+      const lodOptions = this.serializeLODOptions(renderer, true, true);
+      return [
+        'new TrailRenderer({',
+        `  mode: ${this.serializeValue(renderer.mode)},`,
+        `  ratio: ${this.serializeValue(renderer.ratio)},`,
+        `  lifetime: ${this.serializeValue(renderer.lifetime)},`,
+        `  minimumVertexDistance: ${this.serializeValue(renderer.minimumVertexDistance)},`,
+        `  dieWithParticles: ${this.serializeValue(renderer.dieWithParticles)},`,
+        `  ribbonCount: ${this.serializeValue(renderer.ribbonCount)},`,
+        `  textureMode: ${this.serializeValue(renderer.textureMode)},`,
+        `  width: ${this.serializeValue(renderer.width)},`,
+        `  widthOverTrail: ${this.serializeValue(renderer.widthOverTrail)},`,
+        `  sizeAffectsWidth: ${this.serializeValue(renderer.sizeAffectsWidth)},`,
+        `  sizeAffectsLifetime: ${this.serializeValue(renderer.sizeAffectsLifetime)},`,
+        `  inheritParticleColor: ${this.serializeValue(renderer.inheritParticleColor)},`,
+        `  castShadow: ${this.serializeValue(renderer.castShadow)},`,
+        `  receiveShadow: ${this.serializeValue(renderer.receiveShadow)},`,
+        ...lodOptions,
+        `  tags: ${this.serializeValue(renderer.tags)},`,
+        `  colorOverLifetime: ${this.serializeValue(renderer.colorOverLifetime)},`,
+        `  colorOverTrail: ${this.serializeValue(renderer.colorOverTrail)},`,
+        `  materialOptions: ${this.serializeMaterialOptions(renderer.material)},`,
+        '})',
+      ].join('\n');
+    }
+    return `new ${renderer.constructor.name}(${this.serializeValue(this.getSerializableRuntimeOptions(renderer))})`;
+  }
+
+  getLODOptions(target) {
+    const options = {};
+    if ('materialComposite' in target) {
+      options.materialComposite = target.materialComposite;
+      options.materialCompositeGPU = target.materialCompositeGPU;
+      if (target.textureCopyQuality !== 1) options.textureCopyQuality = target.textureCopyQuality;
+      if (target.atlasOptions && Object.keys(target.atlasOptions).length) {
+        options.atlasOptions = target.atlasOptions;
+      }
+    }
+    if (target.lod) options.lod = target.lod;
+    if (target.children) options.children = target.children;
+    if (target.generateChildren === false) options.generateChildren = false;
+    if (target.compensation && target.compensation !== 'none') options.compensation = target.compensation;
+    return options;
+  }
+
+  serializeLODOptions(target, includeCount = false, includeSize = false) {
+    return Object.entries(this.getLODOptions(target, includeCount, includeSize)).map(
+      ([key, value]) => `  ${key}: ${this.serializeValue(value)},`,
+    );
+  }
+
+  getSerializableRuntimeOptions(target) {
+    const hidden = new Set(['executionContext', 'gpuExecutionContext']);
+    return Object.fromEntries(Object.entries(target).filter(([key]) => !key.startsWith('_') && !hidden.has(key)));
+  }
+
+  serializeResourceTree(value, isLeaf, serializeLeaf) {
+    if (isLeaf(value)) return serializeLeaf(value);
+    if (Array.isArray(value)) {
+      return `[${value.map(child => this.serializeResourceTree(child, isLeaf, serializeLeaf)).join(', ')}]`;
+    }
+    return `{ ${Object.entries(value)
+      .map(([tag, child]) => `${this.serializeKey(tag)}: ${this.serializeResourceTree(child, isLeaf, serializeLeaf)}`)
+      .join(', ')} }`;
+  }
+
+  serializeMesh(mesh) {
+    const geometry = mesh.geometry;
+    const geometryCtor = geometry.type;
+    const params = geometry.parameters;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const geometryExpression = params
+      ? `new THREE.${geometryCtor}(${Object.values(params)
+          .map(value => this.serializeValue(value))
+          .join(', ')})`
+      : `new THREE.BufferGeometryLoader().parse(${JSON.stringify(geometry.toJSON())})`;
+    const expressions = materials.map(material =>
+      material
+        ? `new THREE.${material.type}(${this.serializeMaterialOptions(material, true)})`
+        : 'new THREE.MeshStandardMaterial()',
+    );
+    const materialExpression = Array.isArray(mesh.material) ? `[${expressions.join(', ')}]` : expressions[0];
+    return `new THREE.Mesh(${geometryExpression}, ${materialExpression})`;
+  }
+
+  serializeMaterialOptions(material, loadTextures = false) {
+    if (!material) {
+      return '{}';
     }
 
-    serializeEmissionShape(shape) {
-        const geometry = shape.geometry;
-        const params = geometry.parameters ?? {};
-        const volumeSamples = shape.volumeSamples === 'auto' ? "'auto'" : shape.volumeSamples;
-        let expression;
-        if (geometry.type.includes('Box')) {
-            expression = `EmissionShape.Box(${params.width ?? 1}, ${params.height ?? 1}, ${params.depth ?? 1})`;
-        }
-        else if (geometry.type.includes('Cone')) {
-            expression = `EmissionShape.Cone(${params.radius ?? 1}, ${params.height ?? 1}, ${params.radialSegments ?? 16})`;
-        }
-        else if (geometry.type.includes('Torus')) {
-            expression = `EmissionShape.Torus(${params.radius ?? 1}, ${params.tube ?? 0.4}, ${params.radialSegments ?? 16}, ${params.tubularSegments ?? 32}, ${params.arc ?? Math.PI * 2})`;
-        }
-        else if (geometry.type.includes('Sphere')) {
-            expression = `EmissionShape.Sphere(${params.radius ?? 1}, ${params.widthSegments ?? params.radialSegments ?? 16}, ${params.heightSegments ?? 8})`;
-        }
-        else {
-            return `new EmissionShape({ geometry: new THREE.BufferGeometry() /* replace with ${geometry.type} */, source: EmissionSource.${this.emissionSourceName(shape.source)}, volumeSamples: ${volumeSamples} })`;
-        }
-        const overrides = [];
-        if (shape.source !== EmissionSource.Volume)
-            overrides.push(`source: EmissionSource.${this.emissionSourceName(shape.source)}`);
-        if (shape.volumeSamples !== 'auto')
-            overrides.push(`volumeSamples: ${volumeSamples}`);
-        return overrides.length > 0 ? `Object.assign(${expression}, { ${overrides.join(', ')} })` : expression;
+    const options = {};
+
+    if (loadTextures) {
+      for (const key of ['map', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap']) {
+        const texture = material[key];
+        if (!texture) continue;
+        options[key] = this.rawCode(
+          `Object.assign(new THREE.TextureLoader().load(${this.serializeTexture(texture)}), ` +
+            `{ colorSpace: ${this.serializeValue(texture.colorSpace)}, channel: ${texture.channel} })`,
+        );
+      }
+      if (material.normalMap) options.normalScale = material.normalScale;
+    } else if (material.map) {
+      options.map = this.rawCode(this.serializeTexture(material.map));
     }
 
-    serializeModule(module) {
-        if (module instanceof Collision) {
-            return `new Collision(${this.serializeValue({
-                dampen: module.dampen,
-                bounce: module.bounce,
-                lifetimeLoss: module.lifetimeLoss,
-                applyImpulses: module.applyImpulses,
-                radiusScale: module.radiusScale,
-                radiusOffset: module.radiusOffset,
-                minKillSpeed: module.minKillSpeed,
-                maxKillSpeed: module.maxKillSpeed,
-                ...this.getLODOptions(module),
-                tags: module.tags,
-            })})`;
-        }
-
-        if (module instanceof NoiseModule) {
-            const runtime = module;
-            return `new NoiseModule(${JSON.stringify(runtime.key)}, ${this.serializeValue({
-                octaves: runtime.octaves,
-                frequency: runtime.frequency,
-                lacunarity: runtime.lacunarity,
-                persistence: runtime.persistence,
-                time: runtime.time,
-                offset: runtime.offset,
-                ...this.getLODOptions(runtime),
-                tags: runtime.tags,
-            })})`;
-        }
-
-        if (module instanceof Boids) {
-            return `new Boids(${this.serializeValue({
-                octreeOptions: module.octreeOptions,
-                spatialGridOptions: module.spatialGridOptions,
-                speed: module.speed,
-                alignmentWeight: module.alignmentWeight,
-                cohesionWeight: module.cohesionWeight,
-                separationWeight: module.separationWeight,
-                affectorWeight: module.affectorWeight,
-                affectorDistance: module.affectorDistance,
-                steering: module.steering,
-                particleAffectors: module.particleAffectors,
-                ...this.getLODOptions(module),
-                tags: module.tags,
-            })})`;
-        }
-
-        if (module instanceof GasSimulation) {
-            return `new GasSimulation(${this.serializeValue({
-                maxActiveBricks: module.maxActiveBricks,
-                advectionMethod: module.advectionMethod,
-                boundsPolicy: module.boundsPolicy,
-                bounds: module.autoBounds ? undefined : module.bounds,
-                boundsPadding: module.boundsPadding,
-                maxBounds: Number.isFinite(module.maxBounds) ? module.maxBounds : undefined,
-                automaticPadding: module.automaticPadding,
-                showGridHelper: module.showGridHelper,
-                spatialGridOptions: module.spatialGridOptions,
-                pressureIterations: module.pressureIterations,
-                externalForce: module.externalForce,
-                maxVelocity: module.maxVelocity,
-                colorDissipation: module.colorDissipation,
-                densityDissipation: module.densityDissipation,
-                densityCutoff: module.densityCutoff,
-                temperatureDissipation: module.temperatureDissipation,
-                velocityDissipation: module.velocityDissipation,
-                buoyancy: module.buoyancy,
-                weight: module.weight,
-                sourceStrength: module.sourceStrength,
-                velocitySourceStrength: module.velocitySourceStrength,
-                sourceTemperature: module.sourceTemperature,
-                temperatureOverLifetime: module.temperatureOverLifetime,
-                scalarDiffusion: module.scalarDiffusion,
-                temperatureColor: module.temperatureColor,
-                temperatureRange: module.temperatureRange,
-                vorticityStrength: module.vorticityStrength,
-                turbulenceStrength: module.turbulenceStrength,
-                noiseFrequency: module.noiseFrequency,
-                noiseSpeed: module.noiseSpeed,
-                noiseOctaves: module.noiseOctaves,
-                ...this.getLODOptions(module),
-                tags: module.tags,
-            })})`;
-        }
-
-        if (module instanceof FLIPSimulation) {
-            return `new FLIPSimulation(${this.serializeValue({
-                bounds: module.autoBounds ? undefined : module.bounds,
-                boundsPadding: module.boundsPadding,
-                maxBounds: Number.isFinite(module.maxBounds) ? module.maxBounds : undefined,
-                boundsPolicy: module.boundsPolicy,
-                automaticPadding: module.automaticPadding,
-                showGridHelper: module.showGridHelper,
-                spatialGridOptions: module.spatialGridOptions,
-                pressureIterations: module.pressureIterations,
-                externalForce: module.externalForce,
-                maxVelocity: module.maxVelocity,
-                picRatio: module.picRatio,
-                advectParticles: module.advectParticlesEnabled,
-                velocityPaddingLookahead: module.velocityPaddingLookahead,
-                collisionIterations: module.collisionIterations,
-                particleSeparation: module.particleSeparation,
-                particleSpacing: module.particleSpacing,
-                ...this.getLODOptions(module),
-                tags: module.tags,
-            })})`;
-        }
-
-        const runtime = module;
-        const args = runtime.options !== undefined
-            ? this.serializeValue({
-                ...runtime.options,
-                ...this.getLODOptions(runtime),
-                tags: runtime.tags,
-            })
-            : this.serializeValue(this.getSerializableRuntimeOptions(runtime));
-        return `new ${module.constructor.name}(${args})`;
+    if (material.color) {
+      options.color = material.color;
     }
 
-    serializeRenderer(renderer) {
-        if (renderer instanceof SurfaceRenderer) {
-            const materialOptions = this.serializeMaterialOptions(renderer.material, true);
-            const material = `new THREE.${renderer.material.type}(${materialOptions})`;
-            return `new SurfaceRenderer(${this.serializeValue({
-                material: this.rawCode(material), bounds: renderer.bounds, voxelSize: renderer.voxelSize,
-                particleRadiusScale: renderer.particleRadiusScale, isoLevel: renderer.isoLevel,
-                maxActiveBricks: renderer.maxActiveBricks, maxTriangles: renderer.maxTriangles,
-                smoothingIterations: renderer.smoothingIterations, smoothingStrength: renderer.smoothingStrength,
-                spatialGridOptions: renderer.spatialGridOptions, particleColors: renderer.particleColors,
-                castShadow: renderer.castShadow, receiveShadow: renderer.receiveShadow,
-                ...this.getLODOptions(renderer, true, true), tags: renderer.tags,
-            })})`;
-        }
-        if (renderer instanceof DecalRenderer) {
-            const material = `new THREE.${renderer.material.type}(${this.serializeMaterialOptions(renderer.material, true)})`;
-            const options = {
-                direction: renderer.direction,
-                hitSelection: renderer.hitSelection,
-                maxHits: renderer.maxHits,
-                maxDistance: renderer.maxDistance,
-                depth: renderer.depth,
-                offset: renderer.offset,
-                size: renderer.size,
-                color: renderer.color,
-                lifetime: renderer.lifetime,
-                opacity: renderer.opacity,
-                inheritColor: renderer.inheritColor,
-                inheritScale: renderer.inheritScale,
-                inheritAlpha: renderer.inheritAlpha,
-                distanceAffectsOpacity: renderer.distanceAffectsOpacity,
-                distanceAffectsSize: renderer.distanceAffectsSize,
-                maxDecals: renderer.maxDecals,
-                onSpawn: renderer.onSpawn,
-                onCollision: renderer.onCollision,
-                onDeath: renderer.onDeath,
-                continuousRate: renderer.continuousRate,
-                ratio: renderer.ratio,
-                ...this.getLODOptions(renderer, true, true),
-                tags: renderer.tags,
-            };
-            // Built-in selectors need their public name, not their method source text.
-            for (const name of ['Nearest', 'Farthest', 'All']) {
-                if (options.hitSelection === DecalRenderer[name]) {
-                    options.hitSelection = this.rawCode(`DecalRenderer.${name}`);
-                }
-            }
-            return `new DecalRenderer(${material}, ${this.serializeValue(options)})`;
-        }
-        if (renderer instanceof AudioRenderer) {
-            const options = {
-                loop: renderer.loop,
-                maxClips: renderer.maxClips,
-                ratio: renderer.ratio,
-                collisionRatio: renderer.collisionRatio,
-                pitch: renderer.pitch,
-                volume: renderer.volume,
-                highPass: renderer.highPass,
-                lowPass: renderer.lowPass,
-                sizeAffectsPitch: renderer.sizeAffectsPitch,
-                sizeAffectsVolume: renderer.sizeAffectsVolume,
-                sizeAffectsHighPass: renderer.sizeAffectsHighPass,
-                sizeAffectsLowPass: renderer.sizeAffectsLowPass,
-                alphaAffectsPitch: renderer.alphaAffectsPitch,
-                alphaAffectsVolume: renderer.alphaAffectsVolume,
-                alphaAffectsHighPass: renderer.alphaAffectsHighPass,
-                alphaAffectsLowPass: renderer.alphaAffectsLowPass,
-                speedAffectsPitch: renderer.speedAffectsPitch,
-                speedAffectsVolume: renderer.speedAffectsVolume,
-                speedAffectsHighPass: renderer.speedAffectsHighPass,
-                speedAffectsLowPass: renderer.speedAffectsLowPass,
-                depthAffectsPitch: renderer.depthAffectsPitch,
-                depthAffectsVolume: renderer.depthAffectsVolume,
-                depthAffectsHighPass: renderer.depthAffectsHighPass,
-                depthAffectsLowPass: renderer.depthAffectsLowPass,
-                dopplerEffect: renderer.dopplerEffect,
-                impulseAffectsPitch: renderer.impulseAffectsPitch,
-                impulseAffectsVolume: renderer.impulseAffectsVolume,
-                impulseAffectsHighPass: renderer.impulseAffectsHighPass,
-                impulseAffectsLowPass: renderer.impulseAffectsLowPass,
-                impulseThreshold: renderer.impulseThreshold,
-                ...this.getLODOptions(renderer, true, true),
-                tags: renderer.tags,
-            };
-
-            if (renderer.sound?.length) {
-                options.sound = this.rawCode(this.serializeAudioBuffers(renderer.sound));
-            }
-
-            if (renderer.onCollisionSound?.length) {
-                options.onCollisionSound = this.rawCode(this.serializeAudioBuffers(renderer.onCollisionSound));
-            }
-
-            if (renderer.onSpawnSound?.length) {
-                options.onSpawnSound = this.rawCode(this.serializeAudioBuffers(renderer.onSpawnSound));
-            }
-
-            if (renderer.onDeathSound?.length) {
-                options.onDeathSound = this.rawCode(this.serializeAudioBuffers(renderer.onDeathSound));
-            }
-
-            return `new AudioRenderer(${this.serializeValue(options)})`;
-        }
-        if (renderer instanceof SpriteRenderer) {
-            const texture = this.serializeTexture(renderer.texture);
-            const options = this.serializeValue({
-                fps: renderer.fps,
-                billboard: renderer.billboard,
-                sizeAttenuation: renderer.sizeAttenuation,
-                tileSize: renderer.tileSize,
-                tileMargin: renderer.tileMargin,
-                gridSize: renderer.gridSize,
-                frames: renderer.frames,
-                castShadow: renderer.castShadow,
-                softParticleDistance: renderer.softParticleDistance,
-                ...this.getLODOptions(renderer, true, true),
-                tags: renderer.tags,
-                alphaMap: renderer.alphaMap ? this.rawCode(this.serializeTexture(renderer.alphaMap)) : undefined,
-                material: renderer.materialType,
-                materialOptions: renderer.materialOptions,
-            });
-            return `new SpriteRenderer(${texture}, ${options})`;
-        }
-        if (renderer instanceof LightRenderer) {
-            return `new LightRenderer(${this.serializeValue({
-                brightness: renderer.brightness,
-                rangeMultiplier: renderer.rangeMultiplier,
-                groupingRadiusRatio: renderer.groupingRadiusRatio,
-                decay: renderer.decay,
-                count: renderer.count,
-                ratio: renderer.ratio,
-                randomDistribution: renderer.randomDistribution,
-                inheritParticleColor: renderer.inheritParticleColor,
-                sizeAffectsRange: renderer.sizeAffectsRange,
-                alphaAffectsIntensity: renderer.alphaAffectsIntensity,
-                ...this.getLODOptions(renderer, true, true),
-                tags: renderer.tags,
-                lightOptions: renderer.lightOptions,
-            })})`;
-        }
-        if (renderer instanceof MeshRenderer) {
-            return `new MeshRenderer(${this.serializeValue({
-                mesh: this.rawCode(this.serializeMesh(renderer.mesh)),
-                maxParticles: renderer.instances.instanceMatrix.count,
-                castShadow: renderer.castShadow,
-                receiveShadow: renderer.receiveShadow,
-                ...this.getLODOptions(renderer, true, true),
-                tags: renderer.tags,
-            })})`;
-        }
-        if (renderer instanceof TrailRenderer) {
-            const lodOptions = this.serializeLODOptions(renderer, true, true);
-            return [
-                'new TrailRenderer({',
-                `  mode: ${this.serializeValue(renderer.mode)},`,
-                `  ratio: ${this.serializeValue(renderer.ratio)},`,
-                `  lifetime: ${this.serializeValue(renderer.lifetime)},`,
-                `  minimumVertexDistance: ${this.serializeValue(renderer.minimumVertexDistance)},`,
-                `  dieWithParticles: ${this.serializeValue(renderer.dieWithParticles)},`,
-                `  ribbonCount: ${this.serializeValue(renderer.ribbonCount)},`,
-                `  textureMode: ${this.serializeValue(renderer.textureMode)},`,
-                `  width: ${this.serializeValue(renderer.width)},`,
-                `  widthOverTrail: ${this.serializeValue(renderer.widthOverTrail)},`,
-                `  sizeAffectsWidth: ${this.serializeValue(renderer.sizeAffectsWidth)},`,
-                `  sizeAffectsLifetime: ${this.serializeValue(renderer.sizeAffectsLifetime)},`,
-                `  inheritParticleColor: ${this.serializeValue(renderer.inheritParticleColor)},`,
-                `  castShadow: ${this.serializeValue(renderer.castShadow)},`,
-                `  receiveShadow: ${this.serializeValue(renderer.receiveShadow)},`,
-                ...lodOptions,
-                `  tags: ${this.serializeValue(renderer.tags)},`,
-                `  colorOverLifetime: ${this.serializeValue(renderer.colorOverLifetime)},`,
-                `  colorOverTrail: ${this.serializeValue(renderer.colorOverTrail)},`,
-                `  materialOptions: ${this.serializeMaterialOptions(renderer.material)},`,
-                '})',
-            ].join('\n');
-        }
-        if (renderer instanceof VolumeRenderer) {
-            return `new VolumeRenderer(${this.serializeValue({
-                baseColor: renderer.baseColor,
-                opacity: renderer.opacity,
-                threshold: renderer.threshold,
-                range: renderer.range,
-                steps: renderer.steps,
-                renderOrder: renderer.renderOrder,
-                depthTest: renderer.depthTest,
-                jitter: renderer.jitter,
-                interpolation: renderer.interpolation,
-                stepSizeMultiplier: renderer.stepSizeMultiplier,
-                adaptiveStepping: renderer.adaptiveStepping,
-                adaptiveStepThreshold: renderer.adaptiveStepThreshold,
-                adaptiveStepFactor: renderer.adaptiveStepFactor,
-                transmittanceThreshold: renderer.transmittanceThreshold,
-                sceneDepthClipping: renderer.sceneDepthClipping,
-                sceneDepthBias: renderer.sceneDepthBias,
-                densityGain: renderer.densityGain,
-                densityMapping: renderer.densityMapping,
-                densityRange: renderer.densityRange,
-                densityCurve: renderer.densityCurve,
-                noiseStrength: renderer.noiseStrength,
-                noiseContrast: renderer.noiseContrast,
-                noiseFrequency: renderer.noiseFrequency,
-                noiseSpeed: renderer.noiseSpeed,
-                noiseOctaves: renderer.noiseOctaves,
-                ...this.getLODOptions(renderer, true, true),
-                tags: renderer.tags,
-            })})`;
-        }
-        return `new ${renderer.constructor.name}(${this.serializeValue(this.getSerializableRuntimeOptions(renderer))})`;
+    if (material.opacity !== undefined && material.opacity !== 1) {
+      options.opacity = material.opacity;
     }
 
-    getLODOptions(target, includeCount = false, includeSize = false) {
-        const options = {};
-        if (target.lod) options.lod = target.lod;
-        if (target.children) options.children = target.children;
-        if (typeof target.generateChildren === 'boolean') options.generateChildren = target.generateChildren;
-        if (target.compensation && target.compensation !== 'none') options.compensation = target.compensation;
-        return options;
+    if (material.transparent) {
+      options.transparent = true;
     }
 
-    serializeLODOptions(target, includeCount = false, includeSize = false) {
-        return Object.entries(this.getLODOptions(target, includeCount, includeSize))
-            .map(([key, value]) => `  ${key}: ${this.serializeValue(value)},`);
+    if (material.wireframe) {
+      options.wireframe = true;
     }
 
-    getSerializableRuntimeOptions(target) {
-        const hidden = new Set([
-        ]);
-        return Object.fromEntries(
-            Object.entries(target).filter(([key]) => !key.startsWith('_') && !hidden.has(key)),
+    if (material.roughness !== undefined) {
+      options.roughness = material.roughness;
+    }
+
+    if (material.metalness !== undefined) {
+      options.metalness = material.metalness;
+    }
+
+    if (material.emissive) {
+      options.emissive = material.emissive;
+    }
+
+    if (material.emissiveIntensity !== undefined && material.emissiveIntensity !== 1) {
+      options.emissiveIntensity = material.emissiveIntensity;
+    }
+
+    if (material.side !== undefined && material.side !== THREE.FrontSide) {
+      options.side = material.side;
+    }
+
+    if (!material.depthWrite) {
+      options.depthWrite = false;
+    }
+
+    return this.serializeValue(options);
+  }
+
+  serializeTexture(texture) {
+    const source = this.textureSource(texture);
+    const reference = this.textureReference(source);
+    return (
+      reference ??
+      (source !== undefined
+        ? JSON.stringify(source)
+        : `undefined /* texture ${JSON.stringify(texture?.name || texture?.uuid)} must be supplied manually */`)
+    );
+  }
+
+  serializeAudioBuffers(buffers) {
+    const values = buffers.map(buffer => {
+      const source = this.audioBufferSource(buffer);
+
+      return source
+        ? `await new THREE.AudioLoader().loadAsync(${JSON.stringify(source)})`
+        : `undefined /* audio clip ${JSON.stringify(this.audioBufferLabel(buffer))} must be supplied manually */`;
+    });
+
+    return values.length === 1 ? values[0] : `[\n${values.map(value => `  ${value},`).join('\n')}\n]`;
+  }
+
+  audioBufferSource(buffer) {
+    return buffer?.[AUDIO_BUFFER_SOURCE_KEY]?.url;
+  }
+
+  audioBufferLabel(buffer) {
+    const source = buffer?.[AUDIO_BUFFER_SOURCE_KEY];
+    return source?.name || source?.url || `${buffer?.duration?.toFixed?.(2) ?? '?'}s clip`;
+  }
+
+  setAudioBufferSource(buffer, url, name = url) {
+    if (!buffer) return buffer;
+
+    Object.defineProperty(buffer, AUDIO_BUFFER_SOURCE_KEY, {
+      value: { url, name },
+      configurable: true,
+    });
+
+    return buffer;
+  }
+
+  textureReference(source) {
+    if (source === undefined) return undefined;
+
+    const references = {
+      'Textures.Default': Textures.Default,
+      'Textures.Circle': Textures.Circle,
+      'Textures.Simple': Textures.Simple,
+    };
+
+    return Object.entries(references).find(([, value]) => value === source)?.[0];
+  }
+
+  resourceTreeUsesBuiltInTexture(value) {
+    if (typeof value === 'string') return Boolean(this.textureReference(value));
+    if (value?.isTexture) return Boolean(this.textureReference(this.textureSource(value)));
+    return Object.values(value ?? {}).some(child => this.resourceTreeUsesBuiltInTexture(child));
+  }
+
+  rendererUsesBuiltInTexture(renderer) {
+    if (renderer instanceof SpriteRenderer) {
+      return Boolean(
+        this.resourceTreeUsesBuiltInTexture(renderer.textureSource) ||
+          this.textureReference(this.textureSource(renderer.alphaMap)),
+      );
+    }
+
+    if (renderer instanceof TrailRenderer || renderer instanceof DecalRenderer) {
+      return [renderer.material]
+        .flat()
+        .some(material =>
+          ['map', 'alphaMap', 'normalMap', 'aoMap'].some(key =>
+            Boolean(this.textureReference(this.textureSource(material?.[key]))),
+          ),
         );
     }
 
-    serializeMesh(mesh) {
-        const geometry = mesh.geometry;
-        const geometryCtor = geometry.type;
-        const params = geometry.parameters;
-        const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-        const geometryExpression = params
-            ? `new THREE.${geometryCtor}(${Object.values(params).map((value) => this.serializeValue(value)).join(', ')})`
-            : `new THREE.BufferGeometry() /* replace with ${geometry.type} */`;
-        const materialExpression = material
-            ? `new THREE.${material.type}(${this.serializeMaterialOptions(material)})`
-            : 'new THREE.MeshStandardMaterial()';
-        return `new THREE.Mesh(${geometryExpression}, ${materialExpression})`;
+    return false;
+  }
+
+  rawCode(code) {
+    return { [RAW_CODE]: code };
+  }
+
+  textureSource(texture) {
+    const image = texture?.image;
+    return image?.currentSrc || image?.src || undefined;
+  }
+
+  serializeValue(value, seen = new WeakSet()) {
+    if (value?.[RAW_CODE]) return value[RAW_CODE];
+    if (value === undefined) return 'undefined';
+    if (value === null) return 'null';
+    if (typeof value === 'string') return JSON.stringify(value);
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (typeof value === 'function') return this.serializeFunction(value);
+    if (value instanceof THREE.Matrix4) return `new THREE.Matrix4().fromArray(${JSON.stringify(value.elements)})`;
+    if (value instanceof THREE.Vector3) return `new THREE.Vector3(${value.x}, ${value.y}, ${value.z})`;
+    if (value instanceof THREE.Box3)
+      return `new THREE.Box3(${this.serializeValue(value.min, seen)}, ${this.serializeValue(value.max, seen)})`;
+    if (value instanceof THREE.Vector2) return `new THREE.Vector2(${value.x}, ${value.y})`;
+    if (value instanceof THREE.Color) return `new THREE.Color(${JSON.stringify(`#${value.getHexString()}`)})`;
+    if (value instanceof THREE.Euler)
+      return `new THREE.Euler(${value.x}, ${value.y}, ${value.z}, ${JSON.stringify(value.order)})`;
+    if (Array.isArray(value)) {
+      return `[${value.map(item => this.serializeValue(item, seen)).join(', ')}]`;
     }
-
-    serializeMaterialOptions(material, loadTextures = false) {
-        if (!material) {
-            return '{}';
-        }
-
-        const options = {};
-
-        if (loadTextures) {
-            for (const key of ['map', 'alphaMap', 'normalMap']) {
-                const texture = material[key];
-                if (!texture) continue;
-                options[key] = this.rawCode(
-                    `Object.assign(new THREE.TextureLoader().load(${this.serializeTexture(texture)}), { colorSpace: ${this.serializeValue(texture.colorSpace)} })`,
-                );
-            }
-            if (material.normalMap) options.normalScale = material.normalScale;
-        } else if (material.map) {
-            options.map = this.rawCode(this.serializeTexture(material.map));
-        }
-
-        if (material.color) {
-            options.color = material.color;
-        }
-
-        if (
-            material.opacity !== undefined
-            && material.opacity !== 1
-        ) {
-            options.opacity = material.opacity;
-        }
-
-        if (material.transparent) {
-            options.transparent = true;
-        }
-
-        if (material.wireframe) {
-            options.wireframe = true;
-        }
-
-        if (material.roughness !== undefined) {
-            options.roughness = material.roughness;
-        }
-
-        if (material.metalness !== undefined) {
-            options.metalness = material.metalness;
-        }
-        for (const key of ['clearcoat', 'clearcoatRoughness', 'transmission', 'thickness', 'ior']) {
-            if (material[key] !== undefined) options[key] = material[key];
-        }
-        if (material.attenuationColor) options.attenuationColor = material.attenuationColor;
-        if (Number.isFinite(material.attenuationDistance)) options.attenuationDistance = material.attenuationDistance;
-
-        if (material.emissive) {
-            options.emissive = material.emissive;
-        }
-
-        if (
-            material.emissiveIntensity !== undefined
-            && material.emissiveIntensity !== 1
-        ) {
-            options.emissiveIntensity =
-                material.emissiveIntensity;
-        }
-
-        if (
-            material.side !== undefined
-            && material.side !== THREE.FrontSide
-        ) {
-            options.side = material.side;
-        }
-
-        if (!material.depthWrite) {
-            options.depthWrite = false;
-        }
-
-        return this.serializeValue(options);
+    if (value instanceof Set) {
+      return `new Set([${Array.from(value)
+        .map(item => this.serializeValue(item, seen))
+        .join(', ')}])`;
     }
-
-    serializeTexture(texture) {
-        const source = this.textureSource(texture);
-        const reference = this.textureReference(source);
-        return reference
-            ?? (source !== undefined
-                ? JSON.stringify(source)
-                : `undefined /* texture ${JSON.stringify(texture?.name || texture?.uuid)} must be supplied manually */`);
+    if (typeof value === 'object') {
+      if (seen.has(value)) return 'undefined /* circular reference */';
+      seen.add(value);
+      const entries = Object.entries(value)
+        .filter(([key]) => !key.startsWith('_'))
+        .map(([key, item]) => `${this.serializeKey(key)}: ${this.serializeValue(item, seen)}`);
+      seen.delete(value);
+      return `{ ${entries.join(', ')} }`;
     }
+    return 'undefined';
+  }
 
-    serializeAudioBuffers(buffers) {
-        const values = buffers.map((buffer) => {
-            const source = this.audioBufferSource(buffer);
-
-            return source
-                ? `await new THREE.AudioLoader().loadAsync(${JSON.stringify(source)})`
-                : `undefined /* audio clip ${JSON.stringify(this.audioBufferLabel(buffer))} must be supplied manually */`;
-        });
-
-        return values.length === 1
-            ? values[0]
-            : `[\n${values.map((value) => `  ${value},`).join('\n')}\n]`;
+  serializeFunction(value) {
+    let source = value.toString();
+    // Object-method shorthand needs a function expression when emitted as a property value.
+    if (/^(?:async\s+)?[\w$]+\s*\([^)]*\)\s*\{/.test(source) && !/^(?:async\s+)?function\b/.test(source)) {
+      source = source.replace(/^(async\s+)?/, '$1function ');
     }
-
-    audioBufferSource(buffer) {
-        return buffer?.[AUDIO_BUFFER_SOURCE_KEY]?.url;
+    if (/\bEasing\./.test(source)) {
+      this.usesEasing = true;
     }
+    return source;
+  }
 
-    audioBufferLabel(buffer) {
-        const source = buffer?.[AUDIO_BUFFER_SOURCE_KEY];
-        return source?.name || source?.url || `${buffer?.duration?.toFixed?.(2) ?? '?'}s clip`;
-    }
+  serializeKey(key) {
+    return /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
+  }
 
-    setAudioBufferSource(buffer, url, name = url) {
-        if (!buffer) return buffer;
+  emissionSourceName(source) {
+    if (source === EmissionSource.Surface) return 'Surface';
+    if (source === EmissionSource.Vertices) return 'Vertices';
+    return 'Volume';
+  }
 
-        Object.defineProperty(buffer, AUDIO_BUFFER_SOURCE_KEY, {
-            value: { url, name },
-            configurable: true,
-        });
-
-        return buffer;
-    }
-
-    textureReference(source) {
-        if (source === undefined)
-            return undefined;
-
-        const references = {
-            'Textures.Default': Textures.Default,
-            'Textures.Circle': Textures.Circle,
-            'Textures.Simple': Textures.Simple,
-        };
-
-        return Object.entries(references)
-            .find(([, value]) => value === source)?.[0];
-    }
-
-    rendererUsesBuiltInTexture(renderer) {
-        if (renderer instanceof SpriteRenderer) {
-            return Boolean(
-                this.textureReference(this.textureSource(renderer.texture))
-                || this.textureReference(this.textureSource(renderer.alphaMap)),
-            );
-        }
-
-        if (renderer instanceof TrailRenderer || renderer instanceof DecalRenderer) {
-            return ['map', 'alphaMap', 'normalMap'].some(key =>
-                Boolean(this.textureReference(this.textureSource(renderer.material?.[key]))));
-        }
-
-        return false;
-    }
-
-    rawCode(code) {
-        return { [RAW_CODE]: code };
-    }
-
-    textureSource(texture) {
-        const image = texture?.image;
-        return image?.currentSrc || image?.src || undefined;
-    }
-
-    serializeValue(value, seen = new WeakSet()) {
-        if (value?.[RAW_CODE])
-            return value[RAW_CODE];
-        if (value === undefined)
-            return 'undefined';
-        if (value === null)
-            return 'null';
-        if (typeof value === 'string')
-            return JSON.stringify(value);
-        if (typeof value === 'number' || typeof value === 'boolean')
-            return String(value);
-        if (typeof value === 'function')
-            return this.serializeFunction(value);
-        if (ArrayBuffer.isView(value))
-            return 'undefined /* runtime buffer */';
-        if (value instanceof THREE.Texture)
-            return 'undefined /* runtime texture */';
-        if (value instanceof THREE.Material)
-            return 'undefined /* runtime material */';
-        if (value instanceof THREE.BufferGeometry)
-            return 'undefined /* runtime geometry */';
-        if (value instanceof THREE.Vector3)
-            return `new THREE.Vector3(${value.x}, ${value.y}, ${value.z})`;
-        if (value instanceof THREE.Box3)
-            return `new THREE.Box3(${this.serializeValue(value.min, seen)}, ${this.serializeValue(value.max, seen)})`;
-        if (value instanceof THREE.Vector2)
-            return `new THREE.Vector2(${value.x}, ${value.y})`;
-        if (value instanceof THREE.Color)
-            return `new THREE.Color(${JSON.stringify(`#${value.getHexString()}`)})`;
-        if (value instanceof THREE.Euler)
-            return `new THREE.Euler(${value.x}, ${value.y}, ${value.z}, ${JSON.stringify(value.order)})`;
-        if (Array.isArray(value)) {
-            return `[${value.map((item) => this.serializeValue(item, seen)).join(', ')}]`;
-        }
-        if (value instanceof Set) {
-            return `new Set([${Array.from(value).map((item) => this.serializeValue(item, seen)).join(', ')}])`;
-        }
-        if (typeof value === 'object') {
-            if (seen.has(value))
-                return 'undefined /* circular reference */';
-            seen.add(value);
-            const entries = Object.entries(value)
-                .filter(([key]) => !key.startsWith('_'))
-                .map(([key, item]) => `${this.serializeKey(key)}: ${this.serializeValue(item, seen)}`);
-            seen.delete(value);
-            return `{ ${entries.join(', ')} }`;
-        }
-        return 'undefined';
-    }
-
-    serializeFunction(value) {
-        const source = value.toString();
-        if (/\bEasing\./.test(source)) {
-            this.usesEasing = true;
-        }
-        return source;
-    }
-
-    serializeKey(key) {
-        return /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
-    }
-
-    emissionSourceName(source) {
-        if (source === EmissionSource.Surface)
-            return 'Surface';
-        if (source === EmissionSource.Vertices)
-            return 'Vertices';
-        return 'Volume';
-    }
-
-    indent(value, spaces) {
-        if (!value)
-            return '';
-        const prefix = ' '.repeat(spaces);
-        return value.split('\n').map((line) => `${prefix}${line}`).join('\n');
-    }
-    // -------------------------------------------------------------------------
-    // Display helpers / styles
-    // -------------------------------------------------------------------------
+  indent(value, spaces) {
+    if (!value) return '';
+    const prefix = ' '.repeat(spaces);
+    return value
+      .split('\n')
+      .map(line => `${prefix}${line}`)
+      .join('\n');
+  }
+  // -------------------------------------------------------------------------
+  // Display helpers / styles
+  // -------------------------------------------------------------------------
 }

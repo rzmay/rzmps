@@ -123,9 +123,8 @@ export default async function createGasVolume(simulationOptions = {}) {
   return system;
 }
 
-createGasVolume.author = "rzmay";
+createGasVolume.author = 'rzmay';
 
-/** @type {import("../types").ExampleMetadata} */
 export const metadata = {
   id: 'gasVolume',
   title: 'Gas Volume',
@@ -135,3 +134,5 @@ export const metadata = {
 };
 
 createGasVolume.description = metadata.description;
+
+createGasVolume.metadata = { ...metadata, author: 'rzmay' };

@@ -3,13 +3,13 @@ title: "LOD Stress Test"
 example: lodStress
 ---
 
-# LOD Stress Test
+[View live example](https://rzmps.rzmay.com/example/lodStress)
+
+# LOD Stress Test <ExampleAttribution />
+
+<ExampleTags />
 
 Unified population LOD with density compensation.
-
-[View live example](https://rzmps.rzmay.com/?preset=LOD%20Stress%20Test)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

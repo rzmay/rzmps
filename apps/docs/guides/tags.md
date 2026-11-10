@@ -9,3 +9,92 @@ That example uses a single emitter at 12 particles per second. Cube particles ro
 A `condition` callback further restricts a module or spatial effect after tag matching. Use it for a value-dependent rule, such as age or speed, instead of creating a tag for every transient state. Keep conditions cheap because they run over the candidate population each update.
 
 Tags are application-defined values. Use consistent names across emitters, module filters, renderer filters, and particle-affector `sourceTags`. A misspelled tag can produce a technically valid but invisible effect; inspect both the population and the rendered preview when diagnosing it.
+
+
+## Choosing textures and meshes by tag
+
+SpriteRenderer textures and MeshRenderer `mesh` / `geometry` options accept a resource, an array,
+or a nested tag map. All resources are discovered during construction and use the same atlas or
+batch as an ordinary list:
+
+```js
+new SpriteRenderer({
+  wood: woodTexture,
+  stone: [stoneTextureA, stoneTextureB],
+  '*': defaultTexture,
+});
+
+new MeshRenderer({
+  mesh: {
+    debris: {
+      stone: [rockA, rockB],
+      wood: splinter,
+    },
+  },
+});
+```
+
+Object branches are checked in JavaScript key order. The first matching branch that can resolve
+wins. Nested keys require all tags along that path: the rock meshes above require both `debris`
+and `stone`. Assign them with `tags: ['debris', 'stone'], tagSelection: 'all'` on an emitter.
+If a matching outer branch cannot resolve a nested key, selection tries the next outer branch.
+
+An array makes a stable random choice among its resolvable children. Nested arrays retain their
+own random choice, rather than becoming one flattened distribution. Repeated resources can weight
+the choice, while repeated texture objects still alias the same atlas tile. `textureIndex` and
+`meshIndex` replace random choice within each selected array, wrapping integer indices (including
+negative indices). They do not bypass tag constraints. Sprite `fps` advances within that branch;
+`randomStartFrame: false` starts at its first eligible choice.
+
+No matching resource hides the particle for that renderer, while simulation continues. A `'*'`
+branch supplies a fallback and is tried after named keys, wherever it appears in the object.
+Existing renderer `tags` filters still apply independently. Empty trees and cyclic input are rejected.
+
+Inputs are static resource trees: recreate the renderer when replacing their structure. The exported
+`TaggedValue<T>` type and selection helpers also support custom renderers. Prepare the tree once with
+`prepareTaggedSelection(resources, isLeaf)` to obtain its flattened `values`, resource `tags` and branch graph.
+Call `selectByTags(selection, tags, seed?, index?, offset?)` to obtain an index into `selection.values`,
+or -1 for no match. `selectByTagsGPU(selection, tagMask, maskForTag, seed, index?, offset?)` builds the
+matching TSL expression. Selection uses plain functions and prepared data; it does not rebuild the tree
+per particle.
+Plain resource arrays use direct index arithmetic; tag checks add no storage buffers. Resource keys
+participate in the existing GPU tag registry and its 32-tag limit.
+
+The [Destruction example](../examples/destruction.md) supplies five meshes as a plain random-choice array.
+Wrap that array in a map such as `{ rock: { fracture: meshes } }` to require both tags instead.
+
+## Changing Tags During Updates
+
+CPU modules can modify `particle.tags` directly. GPU update callbacks can use `particle.addTag(name)` and
+`particle.removeTag(name)` to modify the particle's bitmask without assigning bit positions themselves:
+
+```ts
+const pulseTags = new Module(() => {}, {
+  modifyGPU(particle) {
+    If(particle.alpha.greaterThan(0.5), () => {
+      particle.addTag('glowing');
+    }).Else(() => {
+      particle.removeTag('glowing');
+    });
+  },
+});
+const lights = new LightRenderer({ tags: 'glowing', count: 16 });
+```
+
+Here `If` comes from `three/tsl`; `Module` and `LightRenderer` come from `@rzmps/rzmps`. The tag must already be
+registered by an emitter, module, renderer, spatial effect, or subsystem tag selector in the composition. The light
+renderer registers `glowing` in this example. Unknown names throw during shader construction, so typos cannot silently
+change unrelated bits. Repeated additions and removals are idempotent and preserve other tags, including bit 31.
+
+Use a permanent module priority when the change should persist into later simulation steps. A transient module's
+changes follow the existing transient-state rules. GPU event records are snapshots; their source views cannot use
+these helpers to mutate a live particle. GPU tag capacity remains 32 names per composition.
+
+The [Fireflies example](../examples/fireflies.md) gives its glow pulses their own particle system, allowing a light
+renderer to select that population directly without changing tags.
+
+
+Sub-particles do not automatically inherit tags from their source particle or registered source. Set the child
+emitter's `tags` explicitly. `sourceTags` filters event origins independently of the tags assigned to new particles;
+this makes it possible to select rocket deaths while producing sparkles that do not match the rocket filter.
+Tag inheritance is not required for Source simulation space or source tracking.

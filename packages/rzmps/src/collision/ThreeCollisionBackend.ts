@@ -1,3 +1,5 @@
+import { surfacePatch } from '../rendering/compositing/MaterialCopyRegistry';
+import getAttributeVersion from '../utils/getAttributeVersion';
 import * as THREE from 'three';
 import { Octree } from 'three/examples/jsm/math/Octree.js';
 import { Capsule } from 'three/examples/jsm/math/Capsule.js';
@@ -6,8 +8,8 @@ import type {
   ICollisionBackend,
   CollisionHit,
   CollisionQuery,
-} from '../interfaces/ICollisionBackend';
-import { isIgnoredCollisionObject } from './CollisionSceneUtils';
+} from './collision.types';
+import { isIgnoredCollisionObject } from './isIgnoredCollisionObject';
 
 export interface ThreeCollisionBackendOptions {
   /** Explicit scene subtree to scan; omission uses the owning particle system scene. */
@@ -66,6 +68,11 @@ type MembershipChanges = {
 class ThreeCollisionBackend implements ICollisionBackend {
   readonly supportsCPU = true;
   readonly supportsGPU = false;
+  private readonly triangleSources = new WeakMap<THREE.Triangle, {
+    object: THREE.Mesh; materialIndex: number; faceIndex: number;
+    a: THREE.Vector3; b: THREE.Vector3; c: THREE.Vector3;
+    uv?: THREE.Vector2[];
+  }>();
   staticOctree = new Octree();
   dynamicOctree = new Octree();
 
@@ -154,16 +161,16 @@ class ThreeCollisionBackend implements ICollisionBackend {
       const position = tracked.object.geometry.getAttribute('position');
       const index = tracked.object.geometry.index;
       const geometryChanged = tracked.geometry !== tracked.object.geometry
-        || tracked.positionVersion !== attributeVersion(position)
+        || tracked.positionVersion !== getAttributeVersion(position)
         || tracked.positionCount !== (position?.count ?? 0)
-        || tracked.indexVersion !== attributeVersion(index)
+        || tracked.indexVersion !== getAttributeVersion(index)
         || tracked.indexCount !== (index?.count ?? position?.count ?? 0)
         || this.invalidatedGeometry.has(tracked.object.uuid);
       if (geometryChanged) {
         tracked.geometry = tracked.object.geometry;
-        tracked.positionVersion = attributeVersion(position);
+        tracked.positionVersion = getAttributeVersion(position);
         tracked.positionCount = position?.count ?? 0;
-        tracked.indexVersion = attributeVersion(index);
+        tracked.indexVersion = getAttributeVersion(index);
         tracked.indexCount = index?.count ?? position?.count ?? 0;
         if (tracked.dynamic) dynamicMembershipChanged = true;
         else staticMembershipChanged = true;
@@ -230,8 +237,8 @@ class ThreeCollisionBackend implements ICollisionBackend {
       Math.max(query.radius, Number.EPSILON),
     );
 
-    const staticHit = this.staticOctree.capsuleIntersect(capsule);
-    const dynamicHit = this.dynamicOctree.capsuleIntersect(capsule);
+    const staticHit = this.capsuleContact(this.staticOctree, capsule);
+    const dynamicHit = this.capsuleContact(this.dynamicOctree, capsule);
 
     if (!staticHit && !dynamicHit) return null;
 
@@ -268,12 +275,35 @@ class ThreeCollisionBackend implements ICollisionBackend {
       .multiplyScalar(query.particle.mass)
       .multiplyScalar(Math.max(0, -query.velocity.dot(normal)));
 
+    const contact = staticHit && dynamicHit ? (staticHit.weight >= dynamicHit.weight ? staticHit
+      : dynamicHit) : staticHit || dynamicHit;
+    const source = contact ? this.triangleSources.get(contact.triangle) : undefined;
+    const material = source ? (Array.isArray(source.object.material) ? source.object.material[source
+      .materialIndex] : source.object.material) : undefined;
+    const contactPoint = contact ? contact.triangle.closestPointToPoint(contact.point, new THREE.Vector3()) : point;
     return {
-      point,
-      normal,
-      position,
-      impulse,
+      point: contactPoint, normal, position, impulse,
+      object: source?.object, material, materialIndex: source?.materialIndex, faceIndex: source?.faceIndex,
+      surface: source?.uv ? surfacePatch(contactPoint, source.a, source.b, source.c, source.uv[0],
+        source.uv[1], source.uv[2]) : undefined,
     };
+  }
+
+  /** Preserves Octree's sequential push-out while retaining the strongest contributing triangle. */
+  private capsuleContact(tree: Octree, capsule: Capsule) {
+    const working = capsule.clone(); const triangles: THREE.Triangle[] = [];
+    tree.getCapsuleTriangles(working, triangles);
+    let contact: { triangle: THREE.Triangle; point: THREE.Vector3; weight: number } | undefined;
+    for (const triangle of triangles) {
+      const hit = tree.triangleCapsuleIntersect(working, triangle);
+      if (!hit) continue;
+      if (!contact || hit.depth > contact.weight) contact = { triangle, point: hit.point.clone(), weight: hit.depth };
+      working.translate(hit.normal.clone().multiplyScalar(hit.depth));
+    }
+    if (!contact) return false;
+    const delta = working.getCenter(new THREE.Vector3()).sub(capsule.getCenter(new THREE.Vector3()));
+    const depth = delta.length();
+    return { ...contact, normal: delta.normalize(), depth };
   }
 
   private initialize(): void {
@@ -501,11 +531,11 @@ class ThreeCollisionBackend implements ICollisionBackend {
       lastMovedAt: this.elapsedTime,
       geometry: previousTracked?.geometry ?? object.geometry,
       positionVersion: previousTracked?.positionVersion
-        ?? attributeVersion(object.geometry.getAttribute('position')),
+        ?? getAttributeVersion(object.geometry.getAttribute('position')),
       positionCount: previousTracked?.positionCount
         ?? object.geometry.getAttribute('position')?.count
         ?? 0,
-      indexVersion: previousTracked?.indexVersion ?? attributeVersion(object.geometry.index),
+      indexVersion: previousTracked?.indexVersion ?? getAttributeVersion(object.geometry.index),
       indexCount: previousTracked?.indexCount
         ?? object.geometry.index?.count
         ?? object.geometry.getAttribute('position')?.count
@@ -635,15 +665,22 @@ class ThreeCollisionBackend implements ICollisionBackend {
       ? this.getMaterialSide(object, geometry, vertexStart)
       : THREE.FrontSide;
 
+    const uv = geometry.getAttribute('uv');
+    const metadata = { object, materialIndex: this.getMaterialIndexForVertex(geometry, vertexStart),
+      faceIndex: vertexStart / 3,
+      a, b, c, uv: uv ? [0, 1, 2].map(i => new THREE.Vector2(uv.getX(vertexStart + i),
+        uv.getY(vertexStart + i))) : undefined };
+    const add = (triangle: THREE.Triangle) => { this.triangleSources.set(triangle,
+      metadata); octree.addTriangle(triangle); };
     if (side === THREE.BackSide) {
-      octree.addTriangle(new THREE.Triangle(c, b, a));
+      add(new THREE.Triangle(c, b, a));
       return 1;
     }
 
-    octree.addTriangle(new THREE.Triangle(a, b, c));
+    add(new THREE.Triangle(a, b, c));
 
     if (side === THREE.DoubleSide) {
-      octree.addTriangle(new THREE.Triangle(c, b, a));
+      add(new THREE.Triangle(c, b, a));
       return 2;
     }
 
@@ -699,10 +736,3 @@ class ThreeCollisionBackend implements ICollisionBackend {
 }
 
 export default ThreeCollisionBackend;
-
-function attributeVersion(
-  attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined
-): number {
-  if (!attribute) return -1;
-  return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
-}

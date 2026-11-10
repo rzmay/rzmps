@@ -3,13 +3,13 @@ title: "Cubes and Spheres"
 example: tags
 ---
 
-# Cubes and Spheres
+[View live example](https://rzmps.rzmay.com/example/tags)
+
+# Cubes and Spheres <ExampleAttribution />
+
+<ExampleTags />
 
 Tag-based module and renderer filtering by mixing cubes and spheres in one particle system.
-
-[View live example](https://rzmps.rzmay.com/?preset=Cubes%20and%20Spheres)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

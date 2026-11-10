@@ -1,5 +1,5 @@
 {
-  "root": true,
+  "root": false,
   "env": {
     "browser": true,
     "es6": true,
@@ -7,24 +7,37 @@
   },
   "parser": "@babel/eslint-parser",
   "extends": [
-    "react-app",
-    "airbnb",
-    "airbnb/hooks"
+    "../../.eslintrc.cjs",
+    "plugin:react/recommended",
+    "plugin:react-hooks/recommended",
+    "plugin:react/jsx-runtime"
   ],
   "parserOptions": {
     "ecmaFeatures": {
       "jsx": true
     },
     "ecmaVersion": 2022,
-    "sourceType": "module"
+    "sourceType": "module",
+    "requireConfigFile": false,
+    "babelOptions": {
+      "presets": [
+        "@babel/preset-react"
+      ]
+    }
   },
   "rules": {
-    "no-unused-vars": "warn",
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_",
+        "ignoreRestSiblings": true
+      }
+    ],
     "import/no-extraneous-dependencies": "off",
     "jsx-a11y/anchor-is-valid": "off",
     "nonblock-statement-body-position": "off",
     "curly": "off",
-    "max-len": "off",
     "no-nested-ternary": "off",
     "arrow-body-style": "off",
     "react/no-array-index-key": "off",
@@ -49,5 +62,21 @@
     "react/forbid-prop-types": "off",
     "func-names": "off",
     "react/display-name": "off"
-  }
+  },
+  "settings": {
+    "react": {
+      "version": "detect"
+    }
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/*.test.js",
+        "**/setupTests.js"
+      ],
+      "env": {
+        "jest": true
+      }
+    }
+  ]
 }

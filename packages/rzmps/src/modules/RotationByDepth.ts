@@ -1,16 +1,17 @@
+import type { Vector3Input } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type ParticleSystem from '../ParticleSystem';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleExecutionContext, ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
+import evaluateByParameterVector from '../values/evaluateByParameterVector3';
 
 export interface RotationByDepthOptions extends Partial<ModuleOptions> {
-  angle: ValueByParameter<THREE.Vector3>;
-  angularVelocity: ValueByParameter<THREE.Vector3>;
-  angularAcceleration: ValueByParameter<THREE.Vector3>;
+  /** Angular values are radians; scalar inputs expand uniformly across axes. */
+  angle: ValueByParameter<Vector3Input>;
+  angularVelocity: ValueByParameter<Vector3Input>;
+  angularAcceleration: ValueByParameter<Vector3Input>;
   /** Camera-distance interval mapped to zero through one; omitted endpoints use camera near/far when available. */
   depthRange?: [number, number];
 }
@@ -68,19 +69,19 @@ class RotationByDepth extends Module {
           const time = this.getDepthTimeGPU(particle.position);
 
           particle.rotation.assign(
-            particle.rotation.add(this.gpuParameters.parameterVector(
+            particle.rotation.add(this.evaluateDynamicGPU.parameterVector(
               'angle', () => this.options.angle,
               time,
             )),
           );
           particle.angularVelocity.assign(
-            particle.angularVelocity.add(this.gpuParameters.parameterVector(
+            particle.angularVelocity.add(this.evaluateDynamicGPU.parameterVector(
               'angularVelocity', () => this.options.angularVelocity,
               time,
             )),
           );
           particle.angularAcceleration.assign(
-            particle.angularAcceleration.add(this.gpuParameters.parameterVector(
+            particle.angularAcceleration.add(this.evaluateDynamicGPU.parameterVector(
               'angularAcceleration', () => this.options.angularAcceleration,
               time,
             )),
@@ -91,14 +92,16 @@ class RotationByDepth extends Module {
     this.depthRange = options.depthRange;
   }
 
-  public prepare(particleSystem: ParticleSystem): void {
+  public prepare(context: ModuleExecutionContext): void {
+    const { system: particleSystem } = context;
+    super.prepare(context);
     const camera = particleSystem.sceneCamera;
 
     if (camera) {
       camera.getWorldPosition(this.cameraPosition);
 
       if (particleSystem.simulationSpace !== 'world') {
-        particleSystem.worldToLocal(this.cameraPosition);
+        particleSystem.worldToSimulation(this.cameraPosition);
       }
 
       if (camera instanceof THREE.PerspectiveCamera || camera instanceof THREE.OrthographicCamera) {

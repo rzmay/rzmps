@@ -52,6 +52,16 @@ count: number = 0;
 
 ***
 
+<a id="floatstride"></a>
+
+### floatStride
+
+```ts
+readonly floatStride: number;
+```
+
+***
+
 <a id="instancecountnode"></a>
 
 ### instanceCountNode?
@@ -71,6 +81,28 @@ Actual GPU-produced visual range, including original simulation slots.
 ```ts
 particle: GPUParticleRenderContext;
 ```
+
+***
+
+<a id="spacingindex"></a>
+
+### spacingIndex?
+
+```ts
+optional spacingIndex?: (index) => Node<"uint">;
+```
+
+Source simulation slot for system-owned LOD spacing.
+
+#### Parameters
+
+##### index
+
+`Node`\<`"uint"`\>
+
+#### Returns
+
+`Node`\<`"uint"`\>
 
 ***
 

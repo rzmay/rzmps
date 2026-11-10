@@ -396,7 +396,9 @@ set needsUpdate(value): void;
 
 #### Inherited from
 
-[`ParticleForceField`](ParticleForceField.md).[`needsUpdate`](ParticleForceField.md#needsupdate)
+```ts
+SpatialEffect.needsUpdate
+```
 
 ***
 

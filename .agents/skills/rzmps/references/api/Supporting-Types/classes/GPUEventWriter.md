@@ -15,7 +15,7 @@
 ### Constructor
 
 ```ts
-new GPUEventWriter(state): GPUEventWriter;
+new GPUEventWriter(state, origin?): GPUEventWriter;
 ```
 
 #### Parameters
@@ -23,6 +23,10 @@ new GPUEventWriter(state): GPUEventWriter;
 ##### state
 
 [`GPUEventBufferState`](../../classes/GPUEventBufferState.md)
+
+##### origin?
+
+`number` = `0`
 
 #### Returns
 
@@ -59,7 +63,10 @@ emitCollision(
    particle,
    point,
    normal,
-   impulse
+   impulse,
+   materialCopy?,
+   materialCopyU?,
+   materialCopyV?
 ): void;
 ```
 
@@ -81,6 +88,18 @@ emitCollision(
 
 `Node`\<`"vec3"`\>
 
+##### materialCopy?
+
+`Node`\<`"vec4"`\> = `...`
+
+##### materialCopyU?
+
+`Node`\<`"vec4"`\> = `...`
+
+##### materialCopyV?
+
+`Node`\<`"vec4"`\> = `...`
+
 #### Returns
 
 `void`
@@ -100,6 +119,43 @@ emitDeath(particle): void;
 ##### particle
 
 [`GPUParticleLike`](../../interfaces/GPUParticleLike.md)
+
+#### Returns
+
+`void`
+
+***
+
+<a id="emitparticleevent"></a>
+
+### emitParticleEvent()
+
+```ts
+emitParticleEvent(
+   type,
+   particle,
+   payload?,
+   surface?
+): void;
+```
+
+#### Parameters
+
+##### type
+
+`number`
+
+##### particle
+
+[`GPUParticleLike`](../../interfaces/GPUParticleLike.md)
+
+##### payload?
+
+[`GPUEventPayload`](../../type-aliases/GPUEventPayload.md)
+
+##### surface?
+
+readonly `Node`\<`"vec4"`\>[]
 
 #### Returns
 

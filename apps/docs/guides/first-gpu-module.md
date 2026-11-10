@@ -63,7 +63,7 @@ module uses the grid's exact-radius query and performs the count entirely in the
 
 ```ts
 const crowdDrag = new Module(
-  (particle, deltaTime, _system, octree) => {
+  (particle, deltaTime, { octree }) => {
     const nearbyCount = octree
       .particlesInRadius(particle.position, 2)
       .filter((neighbor) => neighbor !== particle)
@@ -77,7 +77,7 @@ const crowdDrag = new Module(
     octreeOptions: { maxDepth: 6, particlesPerLeaf: 8 },
     useSpatialGrid: true,
     spatialGridOptions: { brickSubdivisions: 3, cellSubdivisions: 4 },
-    modifyGPU: (particle, deltaTime, _context, grid) => {
+    modifyGPU: (particle, deltaTime, { spatialGrid: grid }) => {
       if (!grid) return;
 
       const nearbyCount = float(0).toVar("nearbyCount");
@@ -96,15 +96,42 @@ const crowdDrag = new Module(
 );
 ```
 
-RZMPS rebuilds both structures and passes the appropriate one as the final callback argument. A
+RZMPS rebuilds both structures and exposes them as `context.octree` on CPU and `context.spatialGrid` on GPU. A
 grid query emits shader-side work and never returns JavaScript particles. Its callback can inspect
 each neighbor and the squared distance when a count alone is not enough. Keep query bounds and
 grid resolution appropriate for the effect; see
 [particle spatial acceleration](particle-octree.md) for configuration and limitations.
 
 Runtime scalar, vector, color, range, and curve properties on built-in modules synchronize to GPU
-parameters automatically. A custom class can use its protected `gpuParameters` store for the same
+parameters automatically. A custom class can use its protected `evaluateDynamicGPU` store for the same
 pattern. Set `needsUpdate = true` only when a change alters graph structure or owned resources.
+
+## Killing a Particle
+
+Call `particle.kill()` on either backend. For a permanent boundary rule, pair a CPU condition with a TSL condition:
+
+```ts
+const boundary = new Module(
+  particle => {
+    if (particle.position.y < -10) particle.kill();
+  },
+  {
+    modifyGPU(particle) {
+      If(particle.position.y.lessThan(-10), () => {
+        particle.kill();
+      });
+    },
+  },
+);
+```
+
+`If` comes from `three/tsl`. The default module priority is permanent. The GPU helper marks the slot dead immediately
+and advances its age past its lifetime using finite values. Normal death-event subscribers still receive one event,
+including when the module runs in a separate stored update before integration. Event source snapshots are historical
+views and cannot kill a live particle.
+
+The [Fireflies example](../examples/fireflies.md) kills insects outside its volume instead of steering them toward
+boundaries, and replenishes them through ordinary emission to maintain a roaming population with a bounded spatial grid.
 
 Continue with [GPU processing](gpu-processing.md) for execution phases, fallback rules, readback,
 and validation.

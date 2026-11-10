@@ -3,13 +3,13 @@ title: "Cube Instances"
 example: cubes
 ---
 
-# Cube Instances
+[View live example](https://rzmps.rzmay.com/example/cubes)
+
+# Cube Instances <ExampleAttribution />
+
+<ExampleTags />
 
 Instanced mesh rendering with randomized cube particles and simple lifetime rotation and fade-out.
-
-[View live example](https://rzmps.rzmay.com/?preset=Cube%20Instances)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

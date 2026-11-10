@@ -8,6 +8,10 @@
 
 # Interface: ModuleOptions
 
+## Extends
+
+- [`EventReceiverOptions`](EventReceiverOptions.md)
+
 ## Properties
 
 <a id="condition"></a>
@@ -31,6 +35,54 @@ conditionGPU: ModuleGPUCondition | null;
 ```
 
 Optional TSL condition callback for GPU processing.
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`events`](EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
+
+***
+
+<a id="initializeparticle"></a>
+
+### initializeParticle?
+
+```ts
+optional initializeParticle?: ParticleInitializer;
+```
+
+***
+
+<a id="initializeparticlegpu"></a>
+
+### initializeParticleGPU?
+
+```ts
+optional initializeParticleGPU?: GPUParticleInitializer;
+```
 
 ***
 
@@ -67,6 +119,28 @@ octreeOptions: Partial<OctreeConfig>;
 ```
 
 Configures and implicitly enables the managed CPU ParticleOctree.
+
+***
+
+<a id="prepare"></a>
+
+### prepare
+
+```ts
+prepare: (context) => void;
+```
+
+Shared preparation work, called once before processing particles.
+
+#### Parameters
+
+##### context
+
+[`ModuleExecutionContext`](ModuleExecutionContext.md)
+
+#### Returns
+
+`void`
 
 ***
 

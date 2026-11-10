@@ -100,6 +100,34 @@ Optional TSL condition callback for GPU processing.
 
 ***
 
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`events`](EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
+
+***
+
 <a id="externalforce"></a>
 
 ### externalForce
@@ -107,6 +135,34 @@ Optional TSL condition callback for GPU processing.
 ```ts
 externalForce: Vector3;
 ```
+
+***
+
+<a id="initializeparticle"></a>
+
+### initializeParticle?
+
+```ts
+optional initializeParticle?: ParticleInitializer;
+```
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`initializeParticle`](ModuleOptions.md#initializeparticle)
+
+***
+
+<a id="initializeparticlegpu"></a>
+
+### initializeParticleGPU?
+
+```ts
+optional initializeParticleGPU?: GPUParticleInitializer;
+```
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`initializeParticleGPU`](ModuleOptions.md#initializeparticlegpu)
 
 ***
 
@@ -178,6 +234,32 @@ Configures and implicitly enables the managed CPU ParticleOctree.
 #### Inherited from
 
 [`ModuleOptions`](ModuleOptions.md).[`octreeOptions`](ModuleOptions.md#octreeoptions)
+
+***
+
+<a id="prepare"></a>
+
+### prepare?
+
+```ts
+optional prepare?: (context) => void;
+```
+
+Shared preparation work, called once before processing particles.
+
+#### Parameters
+
+##### context
+
+[`ModuleExecutionContext`](ModuleExecutionContext.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`ModuleOptions`](ModuleOptions.md).[`prepare`](ModuleOptions.md#prepare)
 
 ***
 

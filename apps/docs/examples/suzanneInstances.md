@@ -3,13 +3,13 @@ title: "Suzanne Instances"
 example: suzanneInstances
 ---
 
-# Suzanne Instances
+[View live example](https://rzmps.rzmay.com/example/suzanneInstances)
+
+# Suzanne Instances <ExampleAttribution />
+
+<ExampleTags />
 
 Mesh instancing with Suzanne particles and randomized transforms.
-
-[View live example](https://rzmps.rzmay.com/?preset=Suzanne%20Instances)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

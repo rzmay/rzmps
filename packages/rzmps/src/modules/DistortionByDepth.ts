@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import Module, { ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type ParticleSystem from '../ParticleSystem';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleExecutionContext, ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 
 export interface DistortionByDepthOptions extends Partial<ModuleOptions> {
   distortionStrength: ValueByParameter<number>;
@@ -50,7 +49,7 @@ class DistortionByDepth extends Module {
       priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           particle.distortionStrength.assign(
-            particle.distortionStrength.mul(this.gpuParameters.parameterNumber(
+            particle.distortionStrength.mul(this.evaluateDynamicGPU.parameterNumber(
               'distortionStrength',
               () => this.options.distortionStrength,
               this.getDepthTimeGPU(particle.position),
@@ -63,14 +62,16 @@ class DistortionByDepth extends Module {
     this.depthRange = options.depthRange;
   }
 
-  public prepare(particleSystem: ParticleSystem): void {
+  public prepare(context: ModuleExecutionContext): void {
+    const { system: particleSystem } = context;
+    super.prepare(context);
     const camera = particleSystem.sceneCamera;
 
     if (camera) {
       camera.getWorldPosition(this.cameraPosition);
 
       if (particleSystem.simulationSpace !== 'world') {
-        particleSystem.worldToLocal(this.cameraPosition);
+        particleSystem.worldToSimulation(this.cameraPosition);
       }
 
       if (camera instanceof THREE.PerspectiveCamera || camera instanceof THREE.OrthographicCamera) {

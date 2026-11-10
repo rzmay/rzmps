@@ -54,6 +54,22 @@ alphaAffectsVolume: number;
 
 ***
 
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`atlasOptions`](../../interfaces/RendererOptions.md#atlasoptions)
+
+***
+
 <a id="children"></a>
 
 ### children?
@@ -99,6 +115,22 @@ Visual approximation for population removed by system LOD. Defaults to none.
 #### Inherited from
 
 [`RendererOptions`](../../interfaces/RendererOptions.md).[`compensation`](../../interfaces/RendererOptions.md#compensation)
+
+***
+
+<a id="count"></a>
+
+### count?
+
+```ts
+optional count?: number;
+```
+
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`count`](../../interfaces/RendererOptions.md#count)
 
 ***
 
@@ -154,6 +186,34 @@ Strength of relative-velocity pitch shifting; zero disables the Doppler response
 
 ***
 
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](../../interfaces/EventReceiverOptions.md).[`events`](../../interfaces/EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](../../interfaces/EventReceiverOptions.md).[`eventScope`](../../interfaces/EventReceiverOptions.md#eventscope)
+
+***
+
 <a id="generatechildren"></a>
 
 ### generateChildren?
@@ -177,6 +237,22 @@ Enables artistic and LOD child generation. Defaults to true.
 ```ts
 gpuInterpolationRate: number;
 ```
+
+***
+
+<a id="groupingradius"></a>
+
+### groupingRadius?
+
+```ts
+optional groupingRadius?: number;
+```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`groupingRadius`](../../interfaces/RendererOptions.md#groupingradius)
 
 ***
 
@@ -280,6 +356,64 @@ Low-pass cutoff in Hz, evaluated with normalized particle age.
 
 ***
 
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialComposite`](../../interfaces/RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCompositeGPU`](../../interfaces/RendererOptions.md#materialcompositegpu)
+
+***
+
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCopySampleMode`](../../interfaces/RendererOptions.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialTarget`](../../interfaces/RendererOptions.md#materialtarget)
+
+***
+
 <a id="maxclips"></a>
 
 ### maxClips
@@ -289,6 +423,16 @@ maxClips: number;
 ```
 
 Maximum simultaneously managed positional clips; limits audio resource costs.
+
+***
+
+<a id="oncollision"></a>
+
+### onCollision
+
+```ts
+onCollision: ParameterEventSubscription<AudioParameters, CollisionHit>;
+```
 
 ***
 
@@ -304,6 +448,16 @@ Decoded buffers played on eligible collision events.
 
 ***
 
+<a id="ondeath"></a>
+
+### onDeath
+
+```ts
+onDeath: ParameterEventSubscription<AudioParameters>;
+```
+
+***
+
 <a id="ondeathsound"></a>
 
 ### onDeathSound
@@ -313,6 +467,26 @@ onDeathSound: StrictMultiple<AudioBuffer>;
 ```
 
 Decoded buffers played on eligible particle deaths.
+
+***
+
+<a id="onevent"></a>
+
+### onEvent?
+
+```ts
+optional onEvent?: ParameterEventSubscriptions<AudioParameters>;
+```
+
+***
+
+<a id="onspawn"></a>
+
+### onSpawn
+
+```ts
+onSpawn: ParameterEventSubscription<AudioParameters>;
+```
 
 ***
 
@@ -349,6 +523,10 @@ ratio: number;
 ```
 
 Fraction of eligible particles selected for continuous audio.
+
+#### Overrides
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`ratio`](../../interfaces/RendererOptions.md#ratio)
 
 ***
 
@@ -479,6 +657,22 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](../../interfaces/RendererOptions.md).[`tags`](../../interfaces/RendererOptions.md#tags)
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`textureCopyQuality`](../../interfaces/RendererOptions.md#texturecopyquality)
 
 ***
 

@@ -2,17 +2,21 @@
 
 # Examples
 
+- [Acid](examples/./acid.md) — Green acid pools emit rotating smoke and floating refractive bubbles. Select Checkerboard for a floor. Preset by [rzmay](https://github.com/rzmay).
 - [Additive Smoke](examples/./additiveSmoke.md) — Additive blending with soft particles and layered lifetime color ramps for luminous smoke. Preset by [rzmay](https://github.com/rzmay).
 - [Boids](examples/./boids.md) — Flocking particles using ParticleOctree aggregation, with red hazard particles acting as tagged particle affectors. Preset by [rzmay](https://github.com/rzmay).
 - [Bubbles](examples/./bubbles.md) — Refractive sprite transmission with spherical normals and size-driven distortion. Both continuous sounds and collision-triggered bubble pops. Preset by [rzmay](https://github.com/rzmay).
 - [Collision](examples/./collision.md) — Particle collision with automatic mesh detection and sorting between static and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, Rapier, and Ammo can be used as external physics backends, allowing particles to affect other physics objects in the scene. Preset by [rzmay](https://github.com/rzmay).
-- [Metal Balls](examples/./collisionSubEmitters.md) — Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces. Preset by [rzmay](https://github.com/rzmay).
 - [Cube Instances](examples/./cubes.md) — Instanced mesh rendering with randomized cube particles and simple lifetime rotation and fade-out. Preset by [rzmay](https://github.com/rzmay).
-- [Doppler Bullet](examples/./dopplerBullet.md) — Doppler effect on a fast bullet particle, with smoke, faint trails, spawn blast effects, and distortion wake subsystems. Preset by [rzmay](https://github.com/rzmay).
+- [Cubes and Spheres](examples/./tags.md) — Tag-based module and renderer filtering by mixing cubes and spheres in one particle system. Preset by [rzmay](https://github.com/rzmay).
+- [Destruction](examples/./destruction.md) — Metal ball impacts leave concrete cracks and fragments carrying the contacted surface UV footprint. Preset by [rzmay](https://github.com/rzmay).
+- [Doppler Bullet](examples/./dopplerBullet.md) — A fast, piercing bullet leaves surface-blended bullet holes, with Doppler audio, smoke, trails, and distortion. Preset by [rzmay](https://github.com/rzmay).
 - [Fire](examples/./fire.md) — Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces. Preset by [rzmay](https://github.com/rzmay).
 - [Fireball](examples/./fireball.md) — Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks. Preset by [rzmay](https://github.com/rzmay).
+- [Fireflies](examples/./fireflies.md) — Fireflies use spatial queries and native events to emit attached glow pulses and small lights. Preset by [rzmay](https://github.com/rzmay).
 - [Fireworks](examples/./fireworks.md) — Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks. Preset by [rzmay](https://github.com/rzmay).
 - [LOD Stress Test](examples/./lodStress.md) — Unified LOD with density compensation under a dense simulation load. Preset by [rzmay](https://github.com/rzmay).
+- [Metal Balls](examples/./collisionSubEmitters.md) — Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces. Preset by [rzmay](https://github.com/rzmay).
 - [Particle Trail](examples/./particleTrail.md) — Per-particle trail rendering with inherited color and alpha over moving particles. Preset by [rzmay](https://github.com/rzmay).
 - [Ribbon Trail](examples/./ribbonTrail.md) — Ribbon trail rendering for continuous streaks with lifetime fading. Preset by [rzmay](https://github.com/rzmay).
 - [Smoke](examples/./smoke.md) — Lit smoke sprites with soft particles and lifetime scale/color shaping. Preset by [rzmay](https://github.com/rzmay).
@@ -22,4 +26,3 @@
 - [Stylized Depth](examples/./stylizedDepth.md) — Depth-based color, scale, speed, rotation, and velocity modules for stylized perspective effects. Preset by [rzmay](https://github.com/rzmay).
 - [Suzanne](examples/./suzanne.md) — Mesh-surface emission from a model with lit sprite rendering. Preset by [rzmay](https://github.com/rzmay).
 - [Suzanne Instances](examples/./suzanneInstances.md) — Mesh instancing with Suzanne particles and randomized transforms. Preset by [rzmay](https://github.com/rzmay).
-- [Cubes and Spheres](examples/./tags.md) — Tag-based module and renderer filtering by mixing cubes and spheres in one particle system. Preset by [rzmay](https://github.com/rzmay).

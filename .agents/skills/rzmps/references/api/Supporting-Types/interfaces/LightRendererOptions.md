@@ -14,6 +14,18 @@
 
 ## Properties
 
+<a id="allocation"></a>
+
+### allocation
+
+```ts
+allocation: LightRendererAllocationOptions;
+```
+
+Predictive scene-light reservation and shrink hysteresis.
+
+***
+
 <a id="alphaaffectsintensity"></a>
 
 ### alphaAffectsIntensity
@@ -21,6 +33,22 @@
 ```ts
 alphaAffectsIntensity: boolean;
 ```
+
+***
+
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`atlasOptions`](../../interfaces/RendererOptions.md#atlasoptions)
 
 ***
 
@@ -78,6 +106,12 @@ Visual approximation for population removed by system LOD. Defaults to none.
 count: number;
 ```
 
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+#### Overrides
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`count`](../../interfaces/RendererOptions.md#count)
+
 ***
 
 <a id="decay"></a>
@@ -87,6 +121,34 @@ count: number;
 ```ts
 decay: number;
 ```
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`events`](../../interfaces/RendererOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`eventScope`](../../interfaces/RendererOptions.md#eventscope)
 
 ***
 
@@ -106,13 +168,19 @@ Enables artistic and LOD child generation. Defaults to true.
 
 ***
 
-<a id="groupingradiusratio"></a>
+<a id="groupingradius"></a>
 
-### groupingRadiusRatio
+### groupingRadius
 
 ```ts
-groupingRadiusRatio: number;
+groupingRadius: number;
 ```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`groupingRadius`](../../interfaces/RendererOptions.md#groupingradius)
 
 ***
 
@@ -136,13 +204,61 @@ lightOptions: PointLightOptions;
 
 ***
 
-<a id="randomdistribution"></a>
+<a id="materialcomposite"></a>
 
-### randomDistribution
+### materialComposite?
 
 ```ts
-randomDistribution: boolean;
+optional materialComposite?: MaterialCompositeCallback;
 ```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialComposite`](../../interfaces/RendererOptions.md#materialcomposite)
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCompositeGPU`](../../interfaces/RendererOptions.md#materialcompositegpu)
+
+***
+
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialCopySampleMode`](../../interfaces/RendererOptions.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`materialTarget`](../../interfaces/RendererOptions.md#materialtarget)
 
 ***
 
@@ -163,6 +279,12 @@ rangeMultiplier: DynamicValue<number>;
 ```ts
 ratio: number;
 ```
+
+Representative fraction, rounded with Math.round after applying count. Defaults to 1.
+
+#### Overrides
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`ratio`](../../interfaces/RendererOptions.md#ratio)
 
 ***
 
@@ -189,3 +311,19 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](../../interfaces/RendererOptions.md).[`tags`](../../interfaces/RendererOptions.md#tags)
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`textureCopyQuality`](../../interfaces/RendererOptions.md#texturecopyquality)

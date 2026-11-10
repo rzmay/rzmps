@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import Module, { ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type ParticleSystem from '../ParticleSystem';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleExecutionContext, ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
+import evaluateByParameterVector from '../values/evaluateByParameterVector3';
 
 export interface VelocityByDepthOptions extends Partial<ModuleOptions> {
   position: ValueByParameter<THREE.Vector3>;
@@ -68,19 +67,19 @@ class VelocityByDepth extends Module {
           const time = this.getDepthTimeGPU(particle.position);
 
           particle.position.assign(
-            particle.position.add(this.gpuParameters.parameterVector(
+            particle.position.add(this.evaluateDynamicGPU.parameterVector(
               'position', () => this.options.position,
               time,
             )),
           );
           particle.velocity.assign(
-            particle.velocity.add(this.gpuParameters.parameterVector(
+            particle.velocity.add(this.evaluateDynamicGPU.parameterVector(
               'velocity', () => this.options.velocity,
               time,
             )),
           );
           particle.acceleration.assign(
-            particle.acceleration.add(this.gpuParameters.parameterVector(
+            particle.acceleration.add(this.evaluateDynamicGPU.parameterVector(
               'acceleration', () => this.options.acceleration,
               time,
             )),
@@ -91,14 +90,16 @@ class VelocityByDepth extends Module {
     this.depthRange = options.depthRange;
   }
 
-  public prepare(particleSystem: ParticleSystem): void {
+  public prepare(context: ModuleExecutionContext): void {
+    const { system: particleSystem } = context;
+    super.prepare(context);
     const camera = particleSystem.sceneCamera;
 
     if (camera) {
       camera.getWorldPosition(this.cameraPosition);
 
       if (particleSystem.simulationSpace !== 'world') {
-        particleSystem.worldToLocal(this.cameraPosition);
+        particleSystem.worldToSimulation(this.cameraPosition);
       }
 
       if (camera instanceof THREE.PerspectiveCamera || camera instanceof THREE.OrthographicCamera) {

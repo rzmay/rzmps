@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
-import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { DynamicValue } from '../values/dynamicValue.types';
+import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
+import evaluateDynamicVector from '../values/evaluateDynamicVector3';
 import { vec3 } from 'three/tsl';
 
 export interface VelocityOverLifetimeOptions extends Partial<ModuleOptions> {
@@ -65,7 +65,7 @@ class VelocityOverLifetime extends Module {
       modifyGPU: (particle) => {
           if (this.options.position !== undefined) {
             particle.position.assign(
-              particle.position.add(this.gpuParameters.vector(
+              particle.position.add(this.evaluateDynamicGPU.vector(
                 'position',
                 () => this.options.position,
                 particle.time,
@@ -77,7 +77,7 @@ class VelocityOverLifetime extends Module {
 
           if (this.options.linear !== undefined) {
             particle.velocity.assign(
-              particle.velocity.add(this.gpuParameters.vector(
+              particle.velocity.add(this.evaluateDynamicGPU.vector(
                 'linear',
                 () => this.options.linear,
                 particle.time,
@@ -89,7 +89,7 @@ class VelocityOverLifetime extends Module {
 
           if (this.options.acceleration !== undefined) {
             particle.acceleration.assign(
-              particle.acceleration.add(this.gpuParameters.vector(
+              particle.acceleration.add(this.evaluateDynamicGPU.vector(
                 'acceleration',
                 () => this.options.acceleration,
                 particle.time,
@@ -99,7 +99,7 @@ class VelocityOverLifetime extends Module {
             );
           }
 
-          const offset = this.gpuParameters.vector(
+          const offset = this.evaluateDynamicGPU.vector(
             'orbitOffset',
             () => this.options.orbitOffset,
             particle.time,
@@ -112,7 +112,7 @@ class VelocityOverLifetime extends Module {
           const fromCenterDirection = fromCenter.div(fromCenterLength.max(Number.EPSILON));
 
           if (this.options.orbital !== undefined) {
-            const angularVelocity = this.gpuParameters.vector(
+            const angularVelocity = this.evaluateDynamicGPU.vector(
               'orbital',
               () => this.options.orbital,
               particle.time,
@@ -135,7 +135,7 @@ class VelocityOverLifetime extends Module {
               particle.velocity.add(
                 fromCenterLength.greaterThan(Number.EPSILON).select(
                   fromCenterDirection.mul(
-                    this.gpuParameters.number(
+                    this.evaluateDynamicGPU.number(
                       'radial', () => this.options.radial, particle.time, 0, particle.index,
                     ),
                   ),
@@ -148,7 +148,7 @@ class VelocityOverLifetime extends Module {
           if (this.options.speedModifier !== undefined) {
             particle.speed.assign(
               particle.speed.mul(
-                this.gpuParameters.number(
+                this.evaluateDynamicGPU.number(
                   'speedModifier', () => this.options.speedModifier, particle.time, 1, particle.index,
                 )
               ),

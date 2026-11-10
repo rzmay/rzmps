@@ -3,13 +3,13 @@ title: "Spheres"
 example: spheres
 ---
 
-# Spheres
+[View live example](https://rzmps.rzmay.com/example/spheres)
+
+# Spheres <ExampleAttribution />
+
+<ExampleTags />
 
 Lit sprite particles with spherical normals for a 3D effect.
-
-[View live example](https://rzmps.rzmay.com/?preset=Spheres)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

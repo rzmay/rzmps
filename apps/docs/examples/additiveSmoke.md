@@ -3,13 +3,13 @@ title: "Additive Smoke"
 example: additiveSmoke
 ---
 
-# Additive Smoke
+[View live example](https://rzmps.rzmay.com/example/additiveSmoke)
+
+# Additive Smoke <ExampleAttribution />
+
+<ExampleTags />
 
 Additive blending with soft particles and layered lifetime color ramps for luminous smoke.
-
-[View live example](https://rzmps.rzmay.com/?preset=Additive%20Smoke)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

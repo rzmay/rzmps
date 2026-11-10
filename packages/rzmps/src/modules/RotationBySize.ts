@@ -1,15 +1,17 @@
+import type { Vector3Input } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
-import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
+import evaluateByParameterVector from '../values/evaluateByParameterVector3';
 import { SizeRange } from './ColorBySize';
 
 export interface RotationBySizeOptions extends Partial<ModuleOptions> {
-    angle: ValueByParameter<THREE.Vector3>;
-    angularVelocity: ValueByParameter<THREE.Vector3>;
-    angularAcceleration: ValueByParameter<THREE.Vector3>;
+    /** Angular values are radians; scalar inputs expand uniformly across axes. */
+    angle: ValueByParameter<Vector3Input>;
+    angularVelocity: ValueByParameter<Vector3Input>;
+    angularAcceleration: ValueByParameter<Vector3Input>;
     /** Particle-size interval mapped to zero through one; values outside it are clamped. */
     sizeRange: SizeRange;
 }
@@ -48,19 +50,19 @@ class RotationBySize extends Module {
           const time = this.getSizeTimeGPU(particle.scale.length());
 
           particle.rotation.assign(
-            particle.rotation.add(this.gpuParameters.parameterVector(
+            particle.rotation.add(this.evaluateDynamicGPU.parameterVector(
               'angle', () => this.options.angle,
               time,
             )),
           );
           particle.angularVelocity.assign(
-            particle.angularVelocity.add(this.gpuParameters.parameterVector(
+            particle.angularVelocity.add(this.evaluateDynamicGPU.parameterVector(
               'angularVelocity', () => this.options.angularVelocity,
               time,
             )),
           );
           particle.angularAcceleration.assign(
-            particle.angularAcceleration.add(this.gpuParameters.parameterVector(
+            particle.angularAcceleration.add(this.evaluateDynamicGPU.parameterVector(
               'angularAcceleration', () => this.options.angularAcceleration,
               time,
             )),
@@ -78,10 +80,10 @@ class RotationBySize extends Module {
   }
 
   private getSizeTimeGPU(size: Node<'float'>) {
-    const min = this.gpuParameters.number('sizeRange.min', () => (
+    const min = this.evaluateDynamicGPU.number('sizeRange.min', () => (
       Array.isArray(this.options.sizeRange) ? this.options.sizeRange[0] : this.options.sizeRange?.min
     ), size, 0);
-    const max = this.gpuParameters.number('sizeRange.max', () => (
+    const max = this.evaluateDynamicGPU.number('sizeRange.max', () => (
       Array.isArray(this.options.sizeRange) ? this.options.sizeRange[1] : this.options.sizeRange?.max
     ), size, 1);
     return size.sub(min).div(max.sub(min).max(Number.EPSILON)).clamp(0, 1);

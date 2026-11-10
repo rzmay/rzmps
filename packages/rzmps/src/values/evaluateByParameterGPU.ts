@@ -1,0 +1,196 @@
+import GlobalSettings from '../core/GlobalSettings';
+import type { ColorInput, Vector3Input } from './valueInput.types';
+import acceptColor from './acceptColor';
+import acceptVector3 from './acceptVector3';
+import * as THREE from 'three';
+import type { Node } from 'three/webgpu';
+import { float, int, mix, uniformArray, vec3 } from 'three/tsl';
+import type { ValueByParameter } from './valueByParameter.types';
+import evaluateByParameterNumber from './evaluateByParameterNumber';
+import evaluateByParameterVector from './evaluateByParameterVector3';
+import evaluateByParameterColor from './evaluateByParameterColor';
+import isTSLNode from '../utils/isTSLNode';
+
+export function evaluateByParameterNumberGPU(
+  value: ValueByParameter<number> | undefined,
+  parameter: Node<'float'>,
+  fallback = 0,
+): Node<'float'> {
+  if (value === undefined) return float(fallback);
+  if (isTSLNode(value)) return value as Node<'float'>;
+  if (typeof value === 'function') return sampleParameterNumberGPU(value, parameter);
+  if (typeof value === 'number') return float(value).mul(parameter);
+  if (Array.isArray(value)) {
+    return mix(
+      resolveParameterNumberEndpointGPU(value[0], parameter, fallback),
+      resolveParameterNumberEndpointGPU(value[1], parameter, fallback),
+      parameter.clamp(0, 1),
+    );
+  }
+  throw new Error('GPU parameter values must be constants or [constant, constant] ranges.');
+}
+
+export function evaluateByParameterVectorGPU(
+  value: ValueByParameter<Vector3Input> | undefined,
+  parameter: Node<'float'>,
+  fallback = new THREE.Vector3(),
+): Node<'vec3'> {
+  if (value === undefined) return vec3(fallback).mul(parameter);
+  if (isTSLNode(value)) return value as Node<'vec3'>;
+  if (typeof value === 'function') return sampleParameterVectorGPU(value, parameter);
+  if (value instanceof THREE.Vector3 || typeof value === 'number') return vec3(acceptVector3(value)).mul(parameter);
+  if (Array.isArray(value)) {
+    return mix(
+      resolveParameterVectorEndpointGPU(value[0], parameter, fallback),
+      resolveParameterVectorEndpointGPU(value[1], parameter, fallback),
+      parameter.clamp(0, 1),
+    );
+  }
+  throw new Error('GPU parameter vectors must be constants or [constant, constant] ranges.');
+}
+
+export function evaluateByParameterColorGPU(
+  value: ValueByParameter<ColorInput> | undefined,
+  parameter: Node<'float'>,
+  fallback = new THREE.Color(),
+): Node<'vec3'> {
+  if (value === undefined) return vec3(fallback.r, fallback.g, fallback.b).mul(parameter);
+  if (isTSLNode(value)) return value as Node<'vec3'>;
+  if (typeof value === 'function') return sampleParameterColorGPU(value, parameter);
+  if (value instanceof THREE.Color || typeof value === 'string' || typeof value === 'number') {
+    const color = acceptColor(value);
+    return vec3(color.r, color.g, color.b).mul(parameter);
+  }
+  if (Array.isArray(value)) {
+    return mix(
+      resolveParameterColorEndpointGPU(value[0], parameter, fallback),
+      resolveParameterColorEndpointGPU(value[1], parameter, fallback),
+      parameter.clamp(0, 1),
+    );
+  }
+  throw new Error('GPU parameter colors must be constants or [constant, constant] ranges.');
+}
+
+function resolveParameterNumberEndpointGPU(
+  value: ValueByParameter<number> | undefined,
+  parameter: Node<'float'>,
+  fallback = 0,
+): Node<'float'> {
+  if (value === undefined) return float(fallback);
+  if (isTSLNode(value)) return value as Node<'float'>;
+  if (typeof value === 'function') return sampleParameterNumberGPU(value, parameter);
+  if (typeof value === 'number') return float(value);
+  if (Array.isArray(value)) return evaluateByParameterNumberGPU(value, parameter, fallback);
+  throw new Error('GPU parameter values must be constants or [constant, constant] ranges.');
+}
+
+function resolveParameterVectorEndpointGPU(
+  value: ValueByParameter<Vector3Input> | undefined,
+  parameter: Node<'float'>,
+  fallback = new THREE.Vector3(),
+): Node<'vec3'> {
+  if (value === undefined) return vec3(fallback);
+  if (isTSLNode(value)) return value as Node<'vec3'>;
+  if (typeof value === 'function') return sampleParameterVectorGPU(value, parameter);
+  if (value instanceof THREE.Vector3 || typeof value === 'number') return vec3(acceptVector3(value));
+  if (Array.isArray(value)) return evaluateByParameterVectorGPU(value, parameter, fallback);
+  throw new Error('GPU parameter vectors must be constants or [constant, constant] ranges.');
+}
+
+function resolveParameterColorEndpointGPU(
+  value: ValueByParameter<ColorInput> | undefined,
+  parameter: Node<'float'>,
+  fallback = new THREE.Color(),
+): Node<'vec3'> {
+  if (value === undefined) return vec3(fallback.r, fallback.g, fallback.b);
+  if (isTSLNode(value)) return value as Node<'vec3'>;
+  if (typeof value === 'function') return sampleParameterColorGPU(value, parameter);
+  if (value instanceof THREE.Color || typeof value === 'string' || typeof value === 'number') {
+    const color = acceptColor(value);
+    return vec3(color.r, color.g, color.b);
+  }
+  if (Array.isArray(value)) return evaluateByParameterColorGPU(value, parameter, fallback);
+  throw new Error('GPU parameter colors must be constants or [constant, constant] ranges.');
+}
+
+function sampleParameterNumberGPU(
+  value: ValueByParameter<number>,
+  parameter: Node<'float'>,
+): Node<'float'> {
+  return sampleNumberArrayGPU(
+    sampleParameterValue(value, evaluateByParameterNumber),
+    parameter,
+  );
+}
+
+function sampleParameterVectorGPU(
+  value: ValueByParameter<Vector3Input>,
+  parameter: Node<'float'>,
+): Node<'vec3'> {
+  return sampleVectorArrayGPU(
+    sampleParameterValue(value, evaluateByParameterVector),
+    parameter,
+  );
+}
+
+function sampleParameterColorGPU(
+  value: ValueByParameter<ColorInput>,
+  parameter: Node<'float'>,
+): Node<'vec3'> {
+  const samples = sampleParameterValue(value, evaluateByParameterColor)
+    .map((sample) => new THREE.Vector3(sample.r, sample.g, sample.b));
+  return sampleVectorArrayGPU(samples, parameter);
+}
+
+function sampleParameterValue<T, Input = T>(
+  value: ValueByParameter<Input>,
+  evaluate: (value: ValueByParameter<Input>, parameter: number) => T,
+): T[] {
+  const resolution = Math.max(2, Math.floor(GlobalSettings.GPU_DYNAMIC_VALUE_RESOLUTION));
+  return Array.from({ length: resolution }, (_unused, index) => {
+    const parameter = index / (resolution - 1);
+    return evaluate(value, parameter);
+  });
+}
+
+function sampleNumberArrayGPU(
+  samples: number[],
+  parameter: Node<'float'>,
+): Node<'float'> {
+  const resolution = samples.length;
+  const samplePosition = parameter.clamp(0, 1).mul(resolution - 1);
+  const lowerPosition = samplePosition.floor();
+  const lowerIndex = int(lowerPosition);
+  const upperIndex = int(lowerPosition.add(1).min(resolution - 1));
+  const interpolation = samplePosition.sub(lowerPosition);
+  const samplesNode = uniformArray(samples, 'float');
+  const lower = samplesNode.element(lowerIndex) as unknown as Node<'float'>;
+  const upper = samplesNode.element(upperIndex) as unknown as Node<'float'>;
+
+  return mix(
+    lower,
+    upper,
+    interpolation,
+  );
+}
+
+function sampleVectorArrayGPU(
+  samples: THREE.Vector3[],
+  parameter: Node<'float'>,
+): Node<'vec3'> {
+  const resolution = samples.length;
+  const samplePosition = parameter.clamp(0, 1).mul(resolution - 1);
+  const lowerPosition = samplePosition.floor();
+  const lowerIndex = int(lowerPosition);
+  const upperIndex = int(lowerPosition.add(1).min(resolution - 1));
+  const interpolation = samplePosition.sub(lowerPosition);
+  const samplesNode = uniformArray(samples, 'vec3');
+  const lower = samplesNode.element(lowerIndex) as unknown as Node<'vec3'>;
+  const upper = samplesNode.element(upperIndex) as unknown as Node<'vec3'>;
+
+  return mix(
+    lower,
+    upper,
+    interpolation,
+  );
+}

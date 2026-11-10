@@ -10,7 +10,7 @@ import {
   SurfaceRenderer,
   Textures,
 } from '@rzmps/rzmps';
-import sprayAlpha from '../../apps/demo/src/assets/images/spray_alpha.png?url';
+import sprayAlpha from '../assets/images/spray_alpha.png?url';
 
 export default async function createFlipFluid() {
   // #region docs:modules:1
@@ -147,9 +147,8 @@ export default async function createFlipFluid() {
   return system;
 }
 
-createFlipFluid.author = "rzmay";
+createFlipFluid.author = 'rzmay';
 
-/** @type {import("../types").ExampleMetadata} */
 export const metadata = {
   id: 'flipFluid',
   title: 'FLIP Fluid',
@@ -159,3 +158,5 @@ export const metadata = {
 };
 
 createFlipFluid.description = metadata.description;
+
+createFlipFluid.metadata = { ...metadata, author: 'rzmay' };

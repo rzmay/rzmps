@@ -3,13 +3,13 @@ title: "Smoke"
 example: smoke
 ---
 
-# Smoke
+[View live example](https://rzmps.rzmay.com/example/smoke)
+
+# Smoke <ExampleAttribution />
+
+<ExampleTags />
 
 Lit smoke sprites with soft particles and lifetime scale/color shaping.
-
-[View live example](https://rzmps.rzmay.com/?preset=Smoke)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

@@ -8,6 +8,10 @@
 
 # Interface: EmissionContext
 
+## Extends
+
+- `Omit`\<[`ParticleInitializationContext`](ParticleInitializationContext.md), `"system"`\>
+
 ## Properties
 
 <a id="alpha"></a>
@@ -20,6 +24,22 @@ alpha: number;
 
 ***
 
+<a id="birthtoworld"></a>
+
+### birthToWorld?
+
+```ts
+readonly optional birthToWorld?: Matrix4;
+```
+
+Frame interpreting the newborn particle attributes at this initialization boundary.
+
+#### Inherited from
+
+[`ParticleInitializationContext`](ParticleInitializationContext.md).[`birthToWorld`](ParticleInitializationContext.md#birthtoworld)
+
+***
+
 <a id="color"></a>
 
 ### color
@@ -27,6 +47,18 @@ alpha: number;
 ```ts
 color: Color;
 ```
+
+***
+
+<a id="countscale"></a>
+
+### countScale?
+
+```ts
+optional countScale?: number;
+```
+
+Multiplies burst counts and time/distance emission rates; defaults to one.
 
 ***
 
@@ -60,6 +92,20 @@ elapsedTime: number;
 
 ***
 
+<a id="event"></a>
+
+### event?
+
+```ts
+readonly optional event?: SimulationEvent<unknown>;
+```
+
+#### Inherited from
+
+[`ParticleInitializationContext`](ParticleInitializationContext.md).[`event`](ParticleInitializationContext.md#event)
+
+***
+
 <a id="key"></a>
 
 ### key
@@ -68,7 +114,7 @@ elapsedTime: number;
 key: string;
 ```
 
-Stable root or subsystem run identity.
+Stable identity of this emitter execution.
 
 ***
 
@@ -109,6 +155,22 @@ position: Vector3;
 ```ts
 scale: number;
 ```
+
+***
+
+<a id="sourcetoworld"></a>
+
+### sourceToWorld?
+
+```ts
+readonly optional sourceToWorld?: Matrix4;
+```
+
+Snapshot of the event producer's simulation-to-world frame.
+
+#### Inherited from
+
+[`ParticleInitializationContext`](ParticleInitializationContext.md).[`sourceToWorld`](ParticleInitializationContext.md#sourcetoworld)
 
 ***
 

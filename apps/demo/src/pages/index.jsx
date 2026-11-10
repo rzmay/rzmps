@@ -1,30 +1,31 @@
 /* eslint-disable react/no-unknown-property */
-import React, { useCallback, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
+import { useCallback, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
-import * as THREE from 'three';
 import { createWebGPURenderer } from '../rendering/createWebGPURenderer';
 import CameraControls from '../components/CameraControls';
 import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
-import particlePresets from '../presets/particles';
-import { experimentalExamples } from '../../../../examples/experimental';
-import scenePresets from '../presets/scenes';
+import standardPresets, { examples as standardExamples } from 'examples/index.js';
+import experimentalPresets, { experimentalExamples } from 'examples/experimental/index.js';
+import { resolveDemoSelection } from 'examples/utils/resolveDemoSelection.js';
+import scenePresets from 'examples/scenes/index.js';
 import BenchmarkPage from './BenchmarkPage';
 import LandingLayout from '../components/LandingLayout';
 
-const RENDERER_MODES = ['webgl', 'webgpu'];
-const GPU_FLUID_PRESETS = new Set(experimentalExamples.map(({ title }) => title));
-const PARTICLE_PRESET_NAMES = Object.keys(particlePresets);
-const SCENE_PRESET_NAMES = Object.keys(scenePresets);
+const particlePresets = { ...standardPresets, ...experimentalPresets };
+const examples = [...standardExamples, ...experimentalExamples];
+const GPU_FLUID_PRESETS = new Set(experimentalExamples.map(entry => entry.title));
 
 function getPresetMetadata(presets, name) {
   const entry = presets[name];
   const factory = typeof entry === 'function' ? entry : entry?.create;
 
   return {
+    id: entry?.id ?? factory?.metadata?.id,
     sourceUrl: entry?.sourceUrl ?? factory?.sourceUrl,
-    author: entry?.author ?? factory?.author,
-    description: entry?.description ?? factory?.description,
+    author: entry?.author ?? factory?.metadata?.author,
+    description: entry?.description ?? factory?.metadata?.description,
   };
 }
 
@@ -49,20 +50,12 @@ function normalizeAuthor(author) {
   return author;
 }
 
-function getQueryParam(name, allowedValues, fallback) {
-  const params = new URLSearchParams(window.location.search);
-  const value = params.get(name);
-
-  return allowedValues.includes(value) ? value : fallback;
-}
-
 function setQueryParam(name, value) {
   const url = new URL(window.location.href);
 
   url.searchParams.set(name, value);
   window.history.replaceState({}, '', url);
 }
-
 
 function DemoScene({
   statsParent,
@@ -102,18 +95,11 @@ function PresetAttribution({ metadata }) {
   const sceneAuthor = normalizeAuthor(metadata.scene?.author);
   const particleAvatar = getGithubAvatar(particleAuthor);
   const sceneAvatar = getGithubAvatar(sceneAuthor);
-  const descriptions = [
-    metadata.particle?.description,
-    metadata.scene?.description,
-  ].filter(Boolean);
+  const descriptions = [metadata.particle?.description, metadata.scene?.description].filter(Boolean);
 
   return (
     <div className="preset-attribution" aria-label="Preset attribution">
-      {descriptions.length > 0 && (
-        <div className="preset-attribution-description">
-          {descriptions.join(' ')}
-        </div>
-      )}
+      {descriptions.length > 0 && <div className="preset-attribution-description">{descriptions.join(' ')}</div>}
 
       <div className="preset-attribution-authors">
         {particleAuthor?.url && (
@@ -132,7 +118,9 @@ function PresetAttribution({ metadata }) {
       </div>
 
       <div className="preset-attribution-sources">
-        <a href="/docs/">Documentation</a>
+        <a href={metadata.particle?.id ? `/docs/examples/${metadata.particle.id}.html` : '/docs/examples/'}>
+          Documentation
+        </a>
         {metadata.particle?.sourceUrl && (
           <a href={metadata.particle.sourceUrl} target="_blank" rel="noreferrer">
             Particle source
@@ -153,29 +141,30 @@ function DemoPage() {
   const [code, setCode] = useState('');
   const particleCountRef = useRef(null);
   const [showCode, setShowCode] = useState(false);
-  const [rendererMode, setRendererMode] = useState(() => (
-    GPU_FLUID_PRESETS.has(getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire'))
-      ? 'webgpu'
-      : getQueryParam('renderer', RENDERER_MODES, 'webgl')
-  ));
-  const [particlePreset, setParticlePreset] = useState(() => (
-    getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire')
-  ));
-  const [scenePreset, setScenePreset] = useState(() => (
-    getQueryParam('scene', SCENE_PRESET_NAMES, 'Checkerboard')
-  ));
+  const [initialSelection] = useState(() =>
+    resolveDemoSelection(new URL(window.location.href), examples, scenePresets),
+  );
+  const [rendererMode, setRendererMode] = useState(GPU_FLUID_PRESETS.has(initialSelection.preset) ? 'webgpu' : initialSelection.backend);
+  const [particlePreset, setParticlePreset] = useState(initialSelection.preset);
+  const [scenePreset, setScenePreset] = useState(initialSelection.scene);
   const [metadata, setMetadata] = useState(() => ({
     particle: getPresetMetadata(particlePresets, particlePreset),
     scene: getPresetMetadata(scenePresets, scenePreset),
   }));
 
-  const handleRendererChange = useCallback((nextRendererMode) => {
+  const handleRendererChange = useCallback(nextRendererMode => {
     setQueryParam('renderer', nextRendererMode);
     setRendererMode(nextRendererMode);
   }, []);
 
-  const handlePresetChange = useCallback((name) => {
-    setQueryParam('preset', name);
+  const handlePresetChange = useCallback(name => {
+    const url = new URL(window.location.href);
+    if (url.pathname.startsWith('/example/')) {
+      const example = examples.find(entry => entry.title === name);
+      url.pathname = `/example/${example.id}`;
+      url.searchParams.delete('preset');
+      window.history.replaceState({}, '', url);
+    } else setQueryParam('preset', name);
     if (GPU_FLUID_PRESETS.has(name)) {
       setQueryParam('renderer', 'webgpu');
       setRendererMode('webgpu');
@@ -183,12 +172,29 @@ function DemoPage() {
     setParticlePreset(name);
   }, []);
 
-  const handleSceneChange = useCallback((name) => {
+  const handleSceneChange = useCallback(name => {
     setQueryParam('scene', name);
     setScenePreset(name);
   }, []);
 
-  const handleParticleCountChange = useCallback((stats) => {
+  const handleExampleSelect = useCallback(
+    name => {
+      const example = examples.find(entry => entry.title === name);
+      if (!example) return;
+      // Resolve a fresh example route so the previous scene query cannot override
+      // the preset's preferred scene. Preserve the user's current renderer.
+      const selection = resolveDemoSelection(
+        new URL(`/example/${example.id}`, window.location.origin),
+        examples,
+        scenePresets,
+      );
+      handlePresetChange(selection.preset);
+      handleSceneChange(selection.scene);
+    },
+    [handlePresetChange, handleSceneChange],
+  );
+
+  const handleParticleCountChange = useCallback(stats => {
     if (particleCountRef.current) {
       const count = typeof stats === 'number' ? stats : stats.particles;
       const allocated = typeof stats === 'number' ? 0 : stats.allocated;
@@ -220,7 +226,7 @@ function DemoPage() {
   }, []);
 
   return (
-    <LandingLayout>
+    <LandingLayout onExampleSelect={handleExampleSelect} selectedExample={particlePreset}>
       <div className="demo-shell" ref={demoRef}>
         <Canvas
           key={rendererMode}
@@ -243,7 +249,9 @@ function DemoPage() {
           />
         </Canvas>
 
-        <div ref={particleCountRef} className="particle-count-monitor">0 particles</div>
+        <div ref={particleCountRef} className="particle-count-monitor">
+          0 particles
+        </div>
 
         <PresetAttribution metadata={metadata} />
 
@@ -266,3 +274,30 @@ function IndexPage() {
 }
 
 export default IndexPage;
+
+DemoScene.propTypes = {
+  statsParent: PropTypes.object,
+  onCodeChange: PropTypes.func.isRequired,
+  onMetadataChange: PropTypes.func.isRequired,
+  onParticleCountChange: PropTypes.func.isRequired,
+  onPresetChange: PropTypes.func.isRequired,
+  onRendererChange: PropTypes.func.isRequired,
+  onSceneChange: PropTypes.func.isRequired,
+  onShowCodeChange: PropTypes.func.isRequired,
+  particlePreset: PropTypes.string.isRequired,
+  rendererMode: PropTypes.string.isRequired,
+  scenePreset: PropTypes.string.isRequired,
+};
+const authorType = PropTypes.oneOfType([
+  PropTypes.string,
+  PropTypes.shape({ name: PropTypes.string, url: PropTypes.string }),
+]);
+const attributionType = PropTypes.shape({
+  id: PropTypes.string,
+  author: authorType,
+  description: PropTypes.string,
+  sourceUrl: PropTypes.string,
+});
+PresetAttribution.propTypes = {
+  metadata: PropTypes.shape({ particle: attributionType, scene: attributionType }).isRequired,
+};

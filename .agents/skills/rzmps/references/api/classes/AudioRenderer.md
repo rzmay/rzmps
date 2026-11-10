@@ -80,6 +80,20 @@ alphaAffectsVolume: number;
 
 ***
 
+<a id="atlasoptions"></a>
+
+### atlasOptions
+
+```ts
+readonly atlasOptions: TextureAtlasOptions;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`atlasOptions`](Renderer.md#atlasoptions)
+
+***
+
 <a id="children"></a>
 
 ### children
@@ -172,6 +186,48 @@ dopplerEffect: number;
 
 ***
 
+<a id="events"></a>
+
+### events
+
+```ts
+events: readonly string[];
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`events`](Renderer.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`eventScope`](Renderer.md#eventscope)
+
+***
+
+<a id="executioncontext"></a>
+
+### executionContext?
+
+```ts
+optional executionContext?: EventExecutionContext;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`executionContext`](Renderer.md#executioncontext)
+
+***
+
 <a id="generatechildren"></a>
 
 ### generateChildren
@@ -186,6 +242,20 @@ generateChildren: boolean;
 
 ***
 
+<a id="gpuexecutioncontext"></a>
+
+### gpuExecutionContext
+
+```ts
+gpuExecutionContext: GPUEventExecutionContext;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`gpuExecutionContext`](Renderer.md#gpuexecutioncontext)
+
+***
+
 <a id="gpuinterpolationrate"></a>
 
 ### gpuInterpolationRate
@@ -193,6 +263,20 @@ generateChildren: boolean;
 ```ts
 gpuInterpolationRate: number;
 ```
+
+***
+
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`groupingRadius`](Renderer.md#groupingradius)
 
 ***
 
@@ -286,12 +370,50 @@ lowPass: DynamicValue<number>;
 
 ***
 
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode
+
+```ts
+materialCopySampleMode: MaterialCopySampleMode;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialCopySampleMode`](Renderer.md#materialcopysamplemode)
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`materialTarget`](Renderer.md#materialtarget)
+
+***
+
 <a id="maxclips"></a>
 
 ### maxClips
 
 ```ts
 maxClips: number;
+```
+
+***
+
+<a id="oncollision"></a>
+
+### onCollision
+
+```ts
+onCollision: ParameterEventSubscription<AudioParameters, CollisionHit> = true;
 ```
 
 ***
@@ -306,12 +428,32 @@ optional onCollisionSound?: AudioBuffer[];
 
 ***
 
+<a id="ondeath"></a>
+
+### onDeath
+
+```ts
+onDeath: ParameterEventSubscription<AudioParameters> = true;
+```
+
+***
+
 <a id="ondeathsound"></a>
 
 ### onDeathSound?
 
 ```ts
 optional onDeathSound?: AudioBuffer[];
+```
+
+***
+
+<a id="onspawn"></a>
+
+### onSpawn
+
+```ts
+onSpawn: ParameterEventSubscription<AudioParameters> = true;
 ```
 
 ***
@@ -343,6 +485,10 @@ pitch: DynamicValue<number>;
 ```ts
 ratio: number;
 ```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`ratio`](Renderer.md#ratio)
 
 ***
 
@@ -470,6 +616,20 @@ optional tags?: string[];
 
 ***
 
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality
+
+```ts
+readonly textureCopyQuality: number;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`textureCopyQuality`](Renderer.md#texturecopyquality)
+
+***
+
 <a id="volume"></a>
 
 ### volume
@@ -478,7 +638,85 @@ optional tags?: string[];
 volume: DynamicValue<number>;
 ```
 
+***
+
+<a id="capacity"></a>
+
+### CAPACITY
+
+```ts
+readonly static CAPACITY: 1024 = 1024;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`CAPACITY`](Renderer.md#capacity)
+
 ## Accessors
+
+<a id="count"></a>
+
+### count
+
+#### Get Signature
+
+```ts
+get count(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set count(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.count
+```
+
+***
+
+<a id="gpunative"></a>
+
+### gpuNative
+
+#### Set Signature
+
+```ts
+set gpuNative(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`gpuNative`](Renderer.md#gpunative)
+
+***
 
 <a id="gpuparameteruploadcount"></a>
 
@@ -497,6 +735,90 @@ get gpuParameterUploadCount(): number;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`gpuParameterUploadCount`](Renderer.md#gpuparameteruploadcount)
+
+***
+
+<a id="materialcomposite"></a>
+
+### materialComposite
+
+#### Get Signature
+
+```ts
+get materialComposite():
+  | MaterialCompositeCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialComposite(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeCallback`](../type-aliases/MaterialCompositeCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.materialComposite
+```
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU
+
+#### Get Signature
+
+```ts
+get materialCompositeGPU():
+  | MaterialCompositeGPUCallback
+  | undefined;
+```
+
+##### Returns
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+#### Set Signature
+
+```ts
+set materialCompositeGPU(value): void;
+```
+
+##### Parameters
+
+###### value
+
+  \| [`MaterialCompositeGPUCallback`](../type-aliases/MaterialCompositeGPUCallback.md)
+  \| `undefined`
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Renderer.materialCompositeGPU
+```
 
 ***
 
@@ -522,9 +844,45 @@ set needsUpdate(value): void;
 
 #### Inherited from
 
+[`Renderer`](Renderer.md).[`needsUpdate`](Renderer.md#needsupdate)
+
+***
+
+<a id="overflowcount"></a>
+
+### overflowCount
+
+#### Get Signature
+
 ```ts
-Renderer.needsUpdate
+get overflowCount(): number;
 ```
+
+Number of CPU events dropped when the pending batch reached capacity.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`overflowCount`](Renderer.md#overflowcount)
+
+***
+
+<a id="parameterevents"></a>
+
+### parameterEvents
+
+#### Get Signature
+
+```ts
+get parameterEvents(): ParameterEventSubscriptions<AudioParameters>;
+```
+
+##### Returns
+
+[`ParameterEventSubscriptions`](../type-aliases/ParameterEventSubscriptions.md)\<[`AudioParameters`](../interfaces/AudioParameters.md)\>
 
 ***
 
@@ -550,6 +908,28 @@ Additional visual particles; GPU diagnostics refresh asynchronously when request
 
 ***
 
+<a id="selectedeventnames"></a>
+
+### selectedEventNames
+
+#### Get Signature
+
+```ts
+get selectedEventNames(): readonly string[];
+```
+
+Names selected by this component, including callback subscriptions supplied by subclasses.
+
+##### Returns
+
+readonly `string`[]
+
+#### Overrides
+
+[`Renderer`](Renderer.md).[`selectedEventNames`](Renderer.md#selectedeventnames)
+
+***
+
 <a id="supportsgpuinput"></a>
 
 ### supportsGPUInput
@@ -569,6 +949,28 @@ Whether this renderer can consume GPU particle buffers without a selective CPU r
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`supportsGPUInput`](Renderer.md#supportsgpuinput)
+
+***
+
+<a id="supportsmaterialcopy"></a>
+
+### supportsMaterialCopy
+
+#### Get Signature
+
+```ts
+get supportsMaterialCopy(): boolean;
+```
+
+Custom renderer subclasses opt in by implementing onMaterialCopyChange.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`supportsMaterialCopy`](Renderer.md#supportsmaterialcopy)
 
 ***
 
@@ -592,6 +994,102 @@ get version(): number;
 
 ## Methods
 
+<a id="begin"></a>
+
+### begin()
+
+```ts
+begin(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Snapshots once per actual execution; events raised during execution remain pending.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`begin`](Renderer.md#begin)
+
+***
+
+<a id="beginexecution"></a>
+
+### beginExecution()
+
+```ts
+beginExecution(
+   system,
+   deltaTime,
+   defaultScope?,
+   names?,
+   scope?
+): EventExecutionContext;
+```
+
+Creates and retains the context shared by every callback in this execution.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### deltaTime
+
+`number`
+
+##### defaultScope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `'local'`
+
+##### names?
+
+readonly `string`[] = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md)
+
+#### Returns
+
+[`EventExecutionContext`](../interfaces/EventExecutionContext.md)
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`beginExecution`](Renderer.md#beginexecution)
+
+***
+
 <a id="clear"></a>
 
 ### clear()
@@ -612,6 +1110,32 @@ Removes displayed particles while retaining resources for reuse.
 
 ***
 
+<a id="copymaterial"></a>
+
+### copyMaterial()
+
+```ts
+copyMaterial(source): this;
+```
+
+Renderer-specific translation retains the destination shader and rendering settings.
+
+#### Parameters
+
+##### source
+
+[`MaterialTarget`](../type-aliases/MaterialTarget.md) \| `undefined`
+
+#### Returns
+
+`this`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`copyMaterial`](Renderer.md#copymaterial)
+
+***
+
 <a id="destroy"></a>
 
 ### destroy()
@@ -629,6 +1153,72 @@ Permanently releases owned rendering resources.
 #### Overrides
 
 [`Renderer`](Renderer.md).[`destroy`](Renderer.md#destroy)
+
+***
+
+<a id="dispose"></a>
+
+### dispose()
+
+```ts
+dispose(): void;
+```
+
+Clears batches and unsubscribes when a component is removed or its system is destroyed.
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`dispose`](Renderer.md#dispose)
+
+***
+
+<a id="onevent"></a>
+
+### onEvent()
+
+#### Call Signature
+
+```ts
+onEvent(name, handler): this;
+```
+
+##### Parameters
+
+###### name
+
+`"collision"`
+
+###### handler
+
+[`ParameterEventSubscription`](../type-aliases/ParameterEventSubscription.md)\<[`AudioParameters`](../interfaces/AudioParameters.md), [`CollisionHit`](../interfaces/CollisionHit.md)\>
+
+##### Returns
+
+`this`
+
+#### Call Signature
+
+```ts
+onEvent(name, handler?): this;
+```
+
+##### Parameters
+
+###### name
+
+`string`
+
+###### handler?
+
+[`ParameterEventSubscription`](../type-aliases/ParameterEventSubscription.md)\<[`AudioParameters`](../interfaces/AudioParameters.md)\>
+
+##### Returns
+
+`this`
 
 ***
 
@@ -772,3 +1362,33 @@ Base-class GPU preprocessing; subclasses consume the resulting ordinary render v
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`updateGPU`](Renderer.md#updategpu)
+
+***
+
+<a id="visiblesystems"></a>
+
+### visibleSystems()
+
+```ts
+visibleSystems(system?, scope?): ParticleSystem[];
+```
+
+Selects producers without forwarding or traversing beyond immediate relatives.
+
+#### Parameters
+
+##### system?
+
+[`ParticleSystem`](ParticleSystem.md) = `...`
+
+##### scope?
+
+[`EventScope`](../type-aliases/EventScope.md) = `...`
+
+#### Returns
+
+[`ParticleSystem`](ParticleSystem.md)[]
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`visibleSystems`](Renderer.md#visiblesystems)

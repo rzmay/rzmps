@@ -10,17 +10,39 @@ on:
       - synchronize
       - reopened
       - ready_for_review
+      - labeled
+      - unlabeled
+
+  workflow_dispatch:
+    inputs:
+      selection:
+        description: Benchmark coverage
+        type: choice
+        options: [full, pr]
+        default: full
+      simulation_clock:
+        description: Wall clock includes catch-up; fixed compares equal simulation intervals
+        type: choice
+        options: [wall, fixed]
+        default: wall
+      base_ref:
+        description: Base branch or commit
+        type: string
+        default: develop
 
 permissions:
   contents: read
 
 concurrency:
-  group: benchmark-pr-${{ github.event.pull_request.number }}
+  group: benchmark-pr-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   benchmark:
-    if: github.event.pull_request.draft == false
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.draft == false &&
+       ((github.event.action != 'labeled' && github.event.action != 'unlabeled') || github.event.label.name == 'benchmark:full'))
 
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -31,21 +53,23 @@ jobs:
       RZMPS_BENCHMARK_WIDTH: 640
       RZMPS_BENCHMARK_HEIGHT: 360
       RZMPS_BENCHMARK_TIMEOUT_MS: 180000
+      BENCHMARK_SELECTION: ${{ github.event_name == 'workflow_dispatch' && inputs.selection || (contains(github.event.pull_request.labels.*.name, 'benchmark:full') && 'full' || 'pr') }}
+      BENCHMARK_CLOCK: ${{ github.event_name == 'workflow_dispatch' && inputs.simulation_clock || 'fixed' }}
 
     steps:
       - name: Checkout base
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.base.repo.full_name }}
-          ref: ${{ github.event.pull_request.base.sha }}
+          repository: ${{ github.event.pull_request.base.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.base.sha || inputs.base_ref || 'develop' }}
           path: base
           persist-credentials: false
 
       - name: Checkout PR
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: head
           persist-credentials: false
 
@@ -82,68 +106,70 @@ jobs:
           node apps/demo/scripts/build-benchmark.mjs --library-root "$GITHUB_WORKSPACE/base" --out-dir "$GITHUB_WORKSPACE/benchmark-results/base-site"
           node apps/demo/scripts/build-benchmark.mjs --library-root "$GITHUB_WORKSPACE/head" --out-dir "$GITHUB_WORKSPACE/benchmark-results/head-site"
 
-      - name: Measure interleaved samples (ABBAAB)
+      - name: Write comparison identity
         working-directory: head
-        run: |
-          set -euo pipefail
-          for sample in base-a head-a head-b base-b base-c head-c; do
-            revision="${sample%-*}"
-            node apps/demo/scripts/benchmark-rzmps.mjs --vsync \
-              --dist "$GITHUB_WORKSPACE/benchmark-results/$revision-site" \
-              --output "$GITHUB_WORKSPACE/benchmark-results/$sample.json"
-          done
-
-      - name: Aggregate benchmark samples
-        working-directory: head
-        run: |
-          node scripts/aggregate-benchmarks.mjs \
-            "$GITHUB_WORKSPACE/benchmark-results/base.json" \
-            "$GITHUB_WORKSPACE/benchmark-results/base-a.json" \
-            "$GITHUB_WORKSPACE/benchmark-results/base-b.json" \
-            "$GITHUB_WORKSPACE/benchmark-results/base-c.json"
-
-          node scripts/aggregate-benchmarks.mjs \
-            "$GITHUB_WORKSPACE/benchmark-results/head.json" \
-            "$GITHUB_WORKSPACE/benchmark-results/head-a.json" \
-            "$GITHUB_WORKSPACE/benchmark-results/head-b.json" \
-            "$GITHUB_WORKSPACE/benchmark-results/head-c.json"
-
-      - name: Keep cases available in both revisions
-        working-directory: head
-        run: |
-          node scripts/intersect-benchmarks.mjs \
-            "$GITHUB_WORKSPACE/benchmark-results/base.json" \
-            "$GITHUB_WORKSPACE/benchmark-results/head.json"
-
-      - name: Write PR metadata
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref || inputs.base_ref || 'develop' }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
         run: |
-          jq -n \
-            --argjson pr "$PR_NUMBER" \
-            --arg baseSha "$BASE_SHA" \
-            --arg headSha "$HEAD_SHA" \
-            --arg baseRef "$BASE_REF" \
-            --arg headRef "$HEAD_REF" \
-            '{
-              pr: $pr,
-              baseSha: $baseSha,
-              headSha: $headSha,
-              baseRef: $baseRef,
-              headRef: $headRef
-            }' \
-            > benchmark-results/metadata.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { execFileSync } from 'node:child_process';
+          const checkout = process.env.GITHUB_WORKSPACE;
+          const sha = revision => execFileSync('git', ['-C', path.join(checkout, revision), 'rev-parse', 'HEAD'], {encoding:'utf8'}).trim();
+          fs.writeFileSync(path.join(checkout, 'benchmark-results/metadata.json'), JSON.stringify({
+            pr: process.env.PR_NUMBER ? Number(process.env.PR_NUMBER) : null,
+            runId: Number(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+            baseSha: sha('base'), headSha: sha('head'), baseRef: process.env.BASE_REF, headRef: process.env.HEAD_REF,
+          }, null, 2));
+          NODE
+
+      - name: Measure AB and compare 1 sample(s) per revision
+        working-directory: head
+        run: node scripts/benchmark/run-pr-benchmarks.mjs --stage 1 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
+
+      - name: Publish preliminary checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-stage-${{ github.run_attempt }}-1
+          path: benchmark-results/stage-1/
+          compression-level: 1
+          retention-days: 30
+
+      - name: Measure BA and compare 2 sample(s) per revision
+        working-directory: head
+        run: node scripts/benchmark/run-pr-benchmarks.mjs --stage 2 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
+
+      - name: Publish intermediate checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-stage-${{ github.run_attempt }}-2
+          path: benchmark-results/stage-2/
+          compression-level: 1
+          retention-days: 30
+
+      - name: Measure AB and compare 3 sample(s) per revision
+        working-directory: head
+        run: node scripts/benchmark/run-pr-benchmarks.mjs --stage 3 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
+
+      - name: Publish final checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-stage-${{ github.run_attempt }}-3
+          path: benchmark-results/stage-3/
+          compression-level: 1
+          retention-days: 30
 
       - name: Upload benchmark results and failure diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
+          overwrite: true
           path: |
+            benchmark-results/*.md
             benchmark-results/*.json
             benchmark-results/*.png
           if-no-files-found: warn

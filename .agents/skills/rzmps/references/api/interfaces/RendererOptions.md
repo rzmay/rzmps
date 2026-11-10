@@ -8,6 +8,10 @@
 
 # Interface: RendererOptions
 
+## Extends
+
+- [`EventReceiverOptions`](EventReceiverOptions.md)
+
 ## Extended by
 
 - [`SurfaceRendererOptions`](SurfaceRendererOptions.md)
@@ -18,6 +22,18 @@
 - [`TrailRendererOptions`](../Supporting-Types/interfaces/TrailRendererOptions.md)
 
 ## Properties
+
+<a id="atlasoptions"></a>
+
+### atlasOptions?
+
+```ts
+optional atlasOptions?: TextureAtlasOptions;
+```
+
+Creation options shared by texture-choice, batched-mesh, and copied-material atlases.
+
+***
 
 <a id="children"></a>
 
@@ -47,6 +63,46 @@ Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
+<a id="count"></a>
+
+### count
+
+```ts
+count: number;
+```
+
+Desired representative cap. Negative or Infinity means unlimited. Defaults to -1.
+
+***
+
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`events`](EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
+
+***
+
 <a id="generatechildren"></a>
 
 ### generateChildren
@@ -59,6 +115,72 @@ Enables artistic and LOD child generation. Defaults to true.
 
 ***
 
+<a id="groupingradius"></a>
+
+### groupingRadius
+
+```ts
+groupingRadius: number;
+```
+
+Maximum world-space assignment distance. Negative means unbounded (default -1).
+
+***
+
+<a id="materialcomposite"></a>
+
+### materialComposite?
+
+```ts
+optional materialComposite?: MaterialCompositeCallback;
+```
+
+***
+
+<a id="materialcompositegpu"></a>
+
+### materialCompositeGPU?
+
+```ts
+optional materialCompositeGPU?: MaterialCompositeGPUCallback;
+```
+
+***
+
+<a id="materialcopysamplemode"></a>
+
+### materialCopySampleMode?
+
+```ts
+optional materialCopySampleMode?: MaterialCopySampleMode;
+```
+
+***
+
+<a id="materialtarget"></a>
+
+### materialTarget?
+
+```ts
+optional materialTarget?: MaterialTarget;
+```
+
+Optional surface whose appearance multiplies this renderer's configured appearance.
+
+***
+
+<a id="ratio"></a>
+
+### ratio
+
+```ts
+ratio: number;
+```
+
+Representative fraction, rounded with Math.round after applying count. Defaults to 1.
+
+***
+
 <a id="tags"></a>
 
 ### tags
@@ -68,3 +190,15 @@ tags: StrictMultiple<string>;
 ```
 
 Filters the simulated population by tag before rendering.
+
+***
+
+<a id="texturecopyquality"></a>
+
+### textureCopyQuality?
+
+```ts
+optional textureCopyQuality?: number;
+```
+
+Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.

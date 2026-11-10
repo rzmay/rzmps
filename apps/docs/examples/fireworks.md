@@ -3,13 +3,13 @@ title: "Fireworks"
 example: fireworks
 ---
 
-# Fireworks
+[View live example](https://rzmps.rzmay.com/example/fireworks)
+
+# Fireworks <ExampleAttribution />
+
+<ExampleTags />
 
 Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks.
-
-[View live example](https://rzmps.rzmay.com/?preset=Fireworks)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

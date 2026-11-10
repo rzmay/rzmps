@@ -4,16 +4,18 @@ import {
   Fn, If, atomicMax, atomicStore, clamp, float, floatBitsToUint, instanceIndex, int, ivec3,
   max, min, mix, pow, storage, textureStore, uint, uniform, vec3, vec4,
 } from 'three/tsl';
-import type { GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateContext } from '../gpu/Particle';
-import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
-import { generateGPUParticleNoise4D } from '../helpers/noise';
-import type { VolumeField } from '../interfaces/VolumeField';
-import type { VolumeFieldProvider } from '../interfaces/VolumeFieldProvider';
-import type { ValueByParameter } from '../types/ValueByParameter';
-import type { DynamicValue } from '../types/DynamicValue';
+import type {
+  GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateContext,
+} from '../simulation/gpu/Particle';
+import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../spatial/structures/ParticleSpatialGrid';
+import { generateGPUParticleNoise4D } from '../utils/noise.utils';
+import type { VolumeField } from '../rendering/volumeField.types';
+import type { VolumeFieldProvider } from '../rendering/volumeField.types';
+import type { ValueByParameter } from '../values/valueByParameter.types';
+import type { DynamicValue } from '../values/dynamicValue.types';
 import FluidSimulation, { type FluidSimulationOptions } from './FluidSimulation';
-import SparseVolumeGrid from '../gpu/SparseVolumeGrid';
-import FluidPressureProjection from '../gpu/FluidPressureProjection';
+import SparseVolumeGrid from '../spatial/structures/gpu/SparseVolumeGrid';
+import FluidPressureProjection from '../simulation/gpu/FluidPressureProjection';
 import { AdvectionMethod } from '../enums/AdvectionMethod';
 
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
@@ -897,7 +899,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   }
 
   private particleTemperature(time: Node<'float'>, seed: Node): Node<'float'> {
-    return float(this.sourceTemperature).mul(this.gpuParameters.number(
+    return float(this.sourceTemperature).mul(this.evaluateDynamicGPU.number(
       'temperatureOverLifetime',
       () => this.temperatureOverLifetime,
       time,
@@ -972,7 +974,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     const parameter = temperature.sub(this.temperatureRange[0])
       .div(Math.max(this.temperatureRange[1] - this.temperatureRange[0], Number.EPSILON))
       .clamp(0, 1);
-    return this.gpuParameters.parameterColor(
+    return this.evaluateDynamicGPU.parameterColor(
       'temperatureColor',
       () => this.temperatureColor,
       parameter,

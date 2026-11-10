@@ -1,24 +1,18 @@
+import { transformPointGPU, transformDirectionGPU } from '../simulation/gpu/transforms.utils';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
-import {
-  abs,
-  float,
-  If,
-  max,
-  sqrt,
-  vec3,
-} from 'three/tsl';
+import { abs, float, If, max, sqrt, vec4, uniform } from 'three/tsl';
 
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
-import type { ICollisionBackend, CollisionHit } from '../interfaces/ICollisionBackend';
+import Module, { type ModuleExecutionContext, type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { DynamicValue } from '../values/dynamicValue.types';
+import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
+import type { ICollisionBackend, CollisionHit } from '../collision/collision.types';
 import ThreeCollisionBackend from '../collision/ThreeCollisionBackend';
 import ThreeGPUCollisionBackend from '../collision/ThreeGPUCollisionBackend';
-import ParticleSystem from '../ParticleSystem';
+import ParticleSystem from '../core/ParticleSystem';
 import { SimulationSpace } from '../enums/SimulationSpace';
-import type { GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
+import type { GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 
 export type CollisionListener = (particle: Particle, collision: CollisionHit) => void;
 
@@ -112,8 +106,7 @@ class Collision extends Module {
   }
 
   override get supportsGPU(): boolean {
-    return !this.applyImpulses
-      && (!this._explicitBackend || this._backend?.supportsGPU === true);
+    return !this.applyImpulses && (!this._explicitBackend || this._backend?.supportsGPU === true);
   }
 
   /** Select an explicit backend, or pass undefined to restore automatic selection. */
@@ -135,15 +128,23 @@ class Collision extends Module {
   }
 
   public notifyGPUCollision(particle: Particle, collision: CollisionHit): void {
-    this.collisionListeners.forEach((listener) => listener(particle, collision));
+    if (collision.materialSourceId && !collision.material) {
+      collision.material = this._system?.materialCopyRegistry.sources[collision.materialSourceId];
+    }
+    this.collisionListeners.forEach(listener => listener(particle, collision));
   }
 
-  public prepare(system: ParticleSystem, deltaTime: number) {
+  private readonly _simulationToWorld = uniform(new THREE.Matrix4(), 'mat4');
+  private readonly _worldToSimulation = uniform(new THREE.Matrix4(), 'mat4');
+
+  public prepare(context: ModuleExecutionContext): void {
+    const { system, deltaTime } = context;
+    super.prepare(context);
+    this._simulationToWorld.value.copy(system.getSimulationToWorldMatrix());
+    this._worldToSimulation.value.copy(this._simulationToWorld.value).invert();
     this._system = system;
     if (!this._explicitBackend && system.scene) {
-      const Backend = system.isGPUProcessingActive
-        ? ThreeGPUCollisionBackend
-        : ThreeCollisionBackend;
+      const Backend = system.isGPUProcessingActive ? ThreeGPUCollisionBackend : ThreeCollisionBackend;
       if (!(this._backend instanceof Backend)) {
         if (this._ownsBackend) this._backend?.destroy?.();
         this._backend = new Backend({ world: system.scene });
@@ -151,6 +152,9 @@ class Collision extends Module {
       }
     }
 
+    if (this._backend instanceof ThreeGPUCollisionBackend) {
+      this._backend.materialRegistry = system.materialCopyRegistry;
+    }
     this._backend?.setGPUProcessingActive?.(system.isGPUProcessingActive);
     if (this._backend instanceof ThreeGPUCollisionBackend) this._backend.update(deltaTime, system.renderFrameToken);
     else this._backend?.update?.(deltaTime);
@@ -160,10 +164,7 @@ class Collision extends Module {
     return this.backend instanceof ThreeGPUCollisionBackend && this.backend.hasGeometry;
   }
 
-  public modifyGPUCollision(
-    particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
-  ): void {
+  public modifyGPUCollision(particle: GPUParticleLike, context: GPUParticleUpdateContext): void {
     if (!(this.backend instanceof ThreeGPUCollisionBackend)) return;
     const radius = max(
       abs(particle.scale.x),
@@ -181,23 +182,15 @@ class Collision extends Module {
     const worldCapsulePoint = hit.get('capsulePoint') as Node<'vec3'>;
     const worldNormal = (hit.get('normal') as Node<'vec3'>).normalize();
     const distance = sqrt(hit.get('distanceSq') as Node<'float'>);
-    const correctedWorldPosition = worldCapsulePoint.add(
-      worldNormal.mul(radius.sub(distance).max(0)),
-    );
+    const correctedWorldPosition = worldCapsulePoint.add(worldNormal.mul(radius.sub(distance).max(0)));
     If(found, () => {
-      this.resolveGPUCollision(
-        particle,
-        context,
+      this.resolveGPUCollision(particle, context,
         this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
-        this.gpuDirectionToSimulationSpace(worldNormal, context.system),
-      );
+        this.gpuDirectionToSimulationSpace(worldNormal, context.system));
     });
   }
 
-  public detectGPUCollision(
-    particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
-  ): void {
+  public detectGPUCollision(particle: GPUParticleLike, context: GPUParticleUpdateContext): void {
     if (!(this.backend instanceof ThreeGPUCollisionBackend) || !context.collisionEventWriter) return;
     const radius = max(
       abs(particle.scale.x),
@@ -207,24 +200,16 @@ class Collision extends Module {
     const localStart = particle.position;
     const localVelocity = particle.velocity.add(this.gpuGravityStep(particle, context));
     const start = this.gpuPointToWorld(localStart, context.system);
-    const end = this.gpuPointToWorld(
-      localStart.add(localVelocity.mul(step)),
-      context.system,
-    );
+    const end = this.gpuPointToWorld(localStart.add(localVelocity.mul(step)), context.system);
     const velocity = this.gpuDirectionToWorld(localVelocity, context.system);
-    const mass = particle.mass.greaterThan(float(0)).select(
-      particle.mass,
-      float(1),
-    ) as Node<'float'>;
+    const mass = particle.mass.greaterThan(float(0)).select(particle.mass, float(1)) as Node<'float'>;
     const hit = this.backend.queryCapsule(start, end, radius);
     const found = hit.get('found') as Node<'bool'>;
     const worldPoint = hit.get('point') as Node<'vec3'>;
     const worldCapsulePoint = hit.get('capsulePoint') as Node<'vec3'>;
     const worldNormal = (hit.get('normal') as Node<'vec3'>).normalize();
     const distance = sqrt(hit.get('distanceSq') as Node<'float'>);
-    const correctedWorldPosition = worldCapsulePoint.add(
-      worldNormal.mul(radius.sub(distance).max(0)),
-    );
+    const correctedWorldPosition = worldCapsulePoint.add(worldNormal.mul(radius.sub(distance).max(0)));
     const normalVelocity = float(velocity.dot(worldNormal));
     const impulse = worldNormal.mul(normalVelocity.min(0).abs().mul(mass));
 
@@ -235,6 +220,9 @@ class Collision extends Module {
         this.gpuPointToSimulationSpace(correctedWorldPosition, context.system),
         this.gpuDirectionToSimulationSpace(worldNormal, context.system).normalize(),
         this.gpuDirectionToSimulationSpace(impulse, context.system),
+        vec4(float(hit.get('sourceId') as Node<'uint'>), hit.get('hitUV') as Node<'vec2'>, 0),
+        vec4(hit.get('gradientU') as Node<'vec3'>, 0),
+        vec4(hit.get('gradientV') as Node<'vec3'>, 0),
       );
     });
   }
@@ -249,10 +237,10 @@ class Collision extends Module {
 
     particle.position.assign(hitPosition);
 
-    const bounce = this.gpuParameters.number(
+    const bounce = this.evaluateDynamicGPU.number(
       'bounce', () => this.bounce, particle.time, 1, particle.index,
     ).clamp(0, 1);
-    const dampen = this.gpuParameters.number(
+    const dampen = this.evaluateDynamicGPU.number(
       'dampen', () => this.dampen, particle.time, 0, particle.index,
     ).clamp(0, 1);
     const gravityStep = this.gpuGravityStep(particle, context);
@@ -271,16 +259,10 @@ class Collision extends Module {
       ),
     );
 
-    const lifetimeLoss = this.gpuParameters.number(
-      'lifetimeLoss',
-      () => this.lifetimeLoss,
-      particle.time,
-      0,
-      particle.index,
-    ).clamp(0, 1);
-    particle.realtime.assign(
-      particle.realtime.add(particle.lifetime.mul(lifetimeLoss).mul(1000)),
-    );
+    const lifetimeLoss = this.evaluateDynamicGPU
+      .number('lifetimeLoss', () => this.lifetimeLoss, particle.time, 0, particle.index)
+      .clamp(0, 1);
+    particle.realtime.assign(particle.realtime.add(particle.lifetime.mul(lifetimeLoss).mul(1000)));
 
     const speed = particle.velocity.length();
     if (this.minKillSpeed > 0) {
@@ -306,7 +288,7 @@ class Collision extends Module {
     particle: GPUParticleLike,
     context: GPUParticleUpdateContext,
   ): Node<'vec3'> {
-    const gravityModifier = this.gpuParameters.number(
+    const gravityModifier = this.evaluateDynamicGPU.number(
       'gravityModifier.collision',
       () => context.system.gravityModifier,
       particle.time,
@@ -316,66 +298,56 @@ class Collision extends Module {
     return context.gravityNode.mul(context.deltaTimeNode.mul(gravityModifier)) as Node<'vec3'>;
   }
 
-  private gpuPointToWorld(
-    point: Node<'vec3'>,
-    system: ParticleSystem,
-  ): Node<'vec3'> {
+  private gpuPointToWorld(point: Node<'vec3'>, system: ParticleSystem): Node<'vec3'> {
     if (system.simulationSpace === SimulationSpace.World) return point;
 
     system.updateWorldMatrix(true, false);
-    return transformPointGPU(point, system.matrixWorld);
+    return transformPointGPU(point, this._simulationToWorld);
   }
 
-  private gpuPointToSimulationSpace(
-    point: Node<'vec3'>,
-    system: ParticleSystem,
-  ): Node<'vec3'> {
+  private gpuPointToSimulationSpace(point: Node<'vec3'>, system: ParticleSystem): Node<'vec3'> {
     if (system.simulationSpace === SimulationSpace.World) return point;
 
     system.updateWorldMatrix(true, false);
-    return transformPointGPU(point, system.matrixWorld.clone().invert());
+    return transformPointGPU(point, this._worldToSimulation);
   }
 
-  private gpuDirectionToWorld(
-    vector: Node<'vec3'>,
-    system: ParticleSystem,
-  ): Node<'vec3'> {
+  private gpuDirectionToWorld(vector: Node<'vec3'>, system: ParticleSystem): Node<'vec3'> {
     if (system.simulationSpace === SimulationSpace.World) return vector;
 
     system.updateWorldMatrix(true, false);
-    return transformDirectionGPU(vector, system.matrixWorld);
+    return transformDirectionGPU(vector, this._simulationToWorld);
   }
 
-  private gpuDirectionToSimulationSpace(
-    vector: Node<'vec3'>,
-    system: ParticleSystem,
-  ): Node<'vec3'> {
+  private gpuDirectionToSimulationSpace(vector: Node<'vec3'>, system: ParticleSystem): Node<'vec3'> {
     if (system.simulationSpace === SimulationSpace.World) return vector;
 
     system.updateWorldMatrix(true, false);
-    return transformDirectionGPU(vector, system.matrixWorld.clone().invert());
+    return transformDirectionGPU(vector, this._worldToSimulation);
   }
 
   private collide(particle: Particle, deltaTime: number): void {
     if (!this.backend || !this._system) return;
 
     const startPosition = particle.position.clone();
-    const endPosition = particle.position.clone()
-      .addScaledVector(particle.velocity, deltaTime * particle.speed);
+    const endPosition = particle.position.clone().addScaledVector(particle.velocity, deltaTime * particle.speed);
 
     if (startPosition.equals(endPosition)) return;
 
     this._system.updateWorldMatrix(true, false);
 
-    const start = this._system.simulationSpace === 'world'
-      ? startPosition.clone()
-      : this._system.localToWorld(startPosition.clone());
-    const end = this._system.simulationSpace === 'world'
-      ? endPosition.clone()
-      : this._system.localToWorld(endPosition.clone());
-    const velocity = this._system.simulationSpace === 'world'
-      ? particle.velocity.clone()
-      : this.localDirectionToWorld(particle.velocity);
+    const start =
+      this._system.simulationSpace === 'world'
+        ? startPosition.clone()
+        : this._system.simulationToWorld(startPosition.clone());
+    const end =
+      this._system.simulationSpace === 'world'
+        ? endPosition.clone()
+        : this._system.simulationToWorld(endPosition.clone());
+    const velocity =
+      this._system.simulationSpace === 'world'
+        ? particle.velocity.clone()
+        : this.localDirectionToWorld(particle.velocity);
 
     const radius = this.getParticleRadius(particle);
 
@@ -391,31 +363,25 @@ class Collision extends Module {
 
     const worldHit = this.cloneHit(hit);
 
-    if (this._system.simulationSpace === 'local') {
-      const inverseWorld = this._system.matrixWorld.clone().invert();
+    if (this._system.simulationSpace !== 'world') {
+      const inverseWorld = this._system.getSimulationToWorldMatrix().clone().invert();
       const impulseLength = hit.impulse.length();
 
-      hit.point = this._system.worldToLocal(hit.point.clone());
+      hit.point = this._system.worldToSimulation(hit.point.clone());
 
       if (hit.position) {
-        hit.position = this._system.worldToLocal(hit.position.clone());
+        hit.position = this._system.worldToSimulation(hit.position.clone());
       }
 
-      hit.normal = hit.normal
-        .clone()
-        .transformDirection(inverseWorld)
-        .normalize();
+      hit.normal = hit.normal.clone().transformDirection(inverseWorld).normalize();
 
       if (impulseLength > 0) {
-        hit.impulse = hit.impulse
-          .clone()
-          .transformDirection(inverseWorld)
-          .multiplyScalar(impulseLength);
+        hit.impulse = hit.impulse.clone().transformDirection(inverseWorld).multiplyScalar(impulseLength);
       }
     }
 
     // Collision callbacks
-    this.collisionListeners.forEach((listener) => listener(particle, hit));
+    this.collisionListeners.forEach(listener => listener(particle, hit));
     this._system.notifyCollision(particle, hit);
 
     this.resolvePosition(particle, hit, radius);
@@ -426,73 +392,36 @@ class Collision extends Module {
 
     this.resolveLifetime(particle);
 
-    if (
-      particle.mass > 0
-      && this.applyImpulses
-      && this.backend.applyImpulse
-    ) {
-      const impulse = particle.velocity
-        .clone()
-        .sub(incomingVelocity)
-        .multiplyScalar(-particle.mass);
+    if (particle.mass > 0 && this.applyImpulses && this.backend.applyImpulse) {
+      const impulse = particle.velocity.clone().sub(incomingVelocity).multiplyScalar(-particle.mass);
 
-      const backendImpulse = this._system.simulationSpace === 'world'
-        ? impulse
-        : this.localDirectionToWorld(impulse);
+      const backendImpulse = this._system.simulationSpace === 'world' ? impulse : this.localDirectionToWorld(impulse);
 
       this.backend.applyImpulse(worldHit, backendImpulse);
     }
 
     const speed = particle.velocity.length();
 
-    if (
-      speed < this.minKillSpeed
-      || speed > this.maxKillSpeed
-    ) {
+    if (speed < this.minKillSpeed || speed > this.maxKillSpeed) {
       this.killParticle(particle);
     }
   }
 
-  private resolvePosition(
-    particle: Particle,
-    hit: CollisionHit,
-    radius: number,
-  ): void {
+  private resolvePosition(particle: Particle, hit: CollisionHit, radius: number): void {
     if (hit.position) {
       particle.position.copy(hit.position);
       return;
     }
 
-    particle.position
-      .copy(hit.point)
-      .addScaledVector(hit.normal, radius);
+    particle.position.copy(hit.point).addScaledVector(hit.normal, radius);
   }
 
-  private resolveVelocity(
-    particle: Particle,
-    hit: CollisionHit,
-  ): void {
+  private resolveVelocity(particle: Particle, hit: CollisionHit): void {
     const normal = hit.normal.clone().normalize();
 
-    const bounce = THREE.MathUtils.clamp(
-      evaluateDynamicNumber(
-        this.bounce ?? 1,
-        particle.time,
-        particle.id,
-      ),
-      0,
-      1,
-    );
+    const bounce = THREE.MathUtils.clamp(evaluateDynamicNumber(this.bounce ?? 1, particle.time, particle.id), 0, 1);
 
-    const dampen = THREE.MathUtils.clamp(
-      evaluateDynamicNumber(
-        this.dampen ?? 0,
-        particle.time,
-        particle.id,
-      ),
-      0,
-      1,
-    );
+    const dampen = THREE.MathUtils.clamp(evaluateDynamicNumber(this.dampen ?? 0, particle.time, particle.id), 0, 1);
 
     const normalSpeed = particle.velocity.dot(normal);
 
@@ -502,13 +431,9 @@ class Collision extends Module {
      */
     if (normalSpeed >= 0) return;
 
-    const normalVelocity = normal
-      .clone()
-      .multiplyScalar(normalSpeed);
+    const normalVelocity = normal.clone().multiplyScalar(normalSpeed);
 
-    const tangentVelocity = particle.velocity
-      .clone()
-      .sub(normalVelocity);
+    const tangentVelocity = particle.velocity.clone().sub(normalVelocity);
 
     particle.velocity
       .copy(tangentVelocity)
@@ -516,18 +441,8 @@ class Collision extends Module {
       .multiplyScalar(1 - dampen);
   }
 
-  private resolveLifetime(
-    particle: Particle,
-  ): void {
-    const loss = THREE.MathUtils.clamp(
-      evaluateDynamicNumber(
-        this.lifetimeLoss ?? 0,
-        particle.time,
-        particle.id,
-      ),
-      0,
-      1,
-    );
+  private resolveLifetime(particle: Particle): void {
+    const loss = THREE.MathUtils.clamp(evaluateDynamicNumber(this.lifetimeLoss ?? 0, particle.time, particle.id), 0, 1);
 
     if (loss === 0) return;
 
@@ -539,11 +454,7 @@ class Collision extends Module {
   }
 
   private getParticleRadius(particle: Particle): number {
-    const size = Math.max(
-      Math.abs(particle.scale.x),
-      Math.abs(particle.scale.y),
-      Math.abs(particle.scale.z),
-    );
+    const size = Math.max(Math.abs(particle.scale.x), Math.abs(particle.scale.y), Math.abs(particle.scale.z));
 
     return size * 0.5 * (this.radiusScale ?? 1);
   }
@@ -567,32 +478,8 @@ class Collision extends Module {
 
     if (length === 0 || !this._system) return vector.clone();
 
-    return vector
-      .clone()
-      .transformDirection(this._system.matrixWorld)
-      .multiplyScalar(length);
+    return vector.clone().transformDirection(this._system.getSimulationToWorldMatrix()).multiplyScalar(length);
   }
-
-}
-
-function transformPointGPU(point: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const e = matrix.elements;
-
-  return vec3(
-    point.x.mul(e[0]).add(point.y.mul(e[4])).add(point.z.mul(e[8])).add(e[12]),
-    point.x.mul(e[1]).add(point.y.mul(e[5])).add(point.z.mul(e[9])).add(e[13]),
-    point.x.mul(e[2]).add(point.y.mul(e[6])).add(point.z.mul(e[10])).add(e[14]),
-  ) as Node<'vec3'>;
-}
-
-function transformDirectionGPU(vector: Node<'vec3'>, matrix: THREE.Matrix4): Node<'vec3'> {
-  const e = matrix.elements;
-
-  return vec3(
-    vector.x.mul(e[0]).add(vector.y.mul(e[4])).add(vector.z.mul(e[8])),
-    vector.x.mul(e[1]).add(vector.y.mul(e[5])).add(vector.z.mul(e[9])),
-    vector.x.mul(e[2]).add(vector.y.mul(e[6])).add(vector.z.mul(e[10])),
-  ) as Node<'vec3'>;
 }
 
 export default Collision;

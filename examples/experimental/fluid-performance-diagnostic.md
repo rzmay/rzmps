@@ -32,7 +32,7 @@ Users can explicitly lower `maxActiveBricks` to save memory. Larger cell depths
 multiply per-brick memory eightfold; device storage-buffer limits still apply.
 Changing the budget continues to rebuild and clear simulation fields.
 
-Run `node tests/visual/gas-dispatch-review.mjs /tmp/rzmps-gas-dispatch` for the
+Run `node scripts/tests/preview/fluids/gas-dispatch-review.mjs /tmp/rzmps-gas-dispatch` for the
 matched-input reference comparison. It uses one controlled moving, buoyant source,
 fixed side-16 bounds, 16 pressure iterations and eight active bricks. Pool-wide
 reference kernels use the same allocator/operators, with the old thirteen clears.
@@ -346,7 +346,7 @@ grid changes, a 60-second continuous plume, and WebGL/WebGPU volume regressions.
 
 ## Reproducible Measurements
 
-Run `node tests/visual/fluid-performance-review.mjs /tmp/rzmps-fluid-performance-final`.
+Run `node scripts/tests/preview/fluids/fluid-performance-review.mjs /tmp/rzmps-fluid-performance-final`.
 The harness uses the actual WebGPU presets, deterministic random numbers,
 60 warmup updates and five batches of six timed updates at 1/60 second.
 It separately measures repeated renders and standalone particle-grid rebuilds.

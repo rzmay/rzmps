@@ -60,6 +60,28 @@ Starts child emission when a parent particle is born.
 
 ***
 
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+Exclusive event origins; an explicit attachment value overrides the emitter scope.
+
+***
+
 <a id="impulseaffectsalignment"></a>
 
 ### impulseAffectsAlignment
@@ -69,6 +91,18 @@ impulseAffectsAlignment: boolean;
 ```
 
 Aligns child emission with collision impulse direction.
+
+***
+
+<a id="impulseaffectscount"></a>
+
+### impulseAffectsCount?
+
+```ts
+optional impulseAffectsCount?: number;
+```
+
+Exponent scaling burst counts and emission rates by contact impulse; zero disables scaling.
 
 ***
 
@@ -202,6 +236,18 @@ inheritVelocity: number;
 
 ***
 
+<a id="onevent"></a>
+
+### onEvent?
+
+```ts
+optional onEvent?: EventSubscriptions;
+```
+
+Named events, optionally with CPU and TSL context handlers.
+
+***
+
 <a id="ratio"></a>
 
 ### ratio
@@ -219,7 +265,7 @@ Fraction of eligible parent particles selected for subsystem emission.
 ### shouldEmit
 
 ```ts
-shouldEmit: boolean | ((particle) => boolean);
+shouldEmit: boolean | ((source) => boolean);
 ```
 
 Predicate or switch selecting whether a parent particle may trigger child emission.
@@ -236,6 +282,16 @@ shouldEmitGPU:
   | null;
 ```
 
-GPU counterpart of shouldEmit. Replaces a CPU callback on GPU; false still disables emission.
-Event predicates receive the captured source state, not a potentially recycled live slot.
-CPU simulation continues to use shouldEmit. Defaults to null.
+GPU counterpart of shouldEmit; false still disables emission on both backends.
+
+***
+
+<a id="tags"></a>
+
+### tags?
+
+```ts
+optional tags?: string[];
+```
+
+Select parent source tags, using the same intersection rule as modules/renderers.

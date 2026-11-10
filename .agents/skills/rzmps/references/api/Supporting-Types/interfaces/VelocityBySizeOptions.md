@@ -56,6 +56,62 @@ Optional TSL condition callback for GPU processing.
 
 ***
 
+<a id="events"></a>
+
+### events?
+
+```ts
+optional events?: readonly string[];
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](../../interfaces/EventReceiverOptions.md).[`events`](../../interfaces/EventReceiverOptions.md#events)
+
+***
+
+<a id="eventscope"></a>
+
+### eventScope?
+
+```ts
+optional eventScope?: EventScope;
+```
+
+#### Inherited from
+
+[`EventReceiverOptions`](../../interfaces/EventReceiverOptions.md).[`eventScope`](../../interfaces/EventReceiverOptions.md#eventscope)
+
+***
+
+<a id="initializeparticle"></a>
+
+### initializeParticle?
+
+```ts
+optional initializeParticle?: ParticleInitializer;
+```
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`initializeParticle`](../../interfaces/ModuleOptions.md#initializeparticle)
+
+***
+
+<a id="initializeparticlegpu"></a>
+
+### initializeParticleGPU?
+
+```ts
+optional initializeParticleGPU?: GPUParticleInitializer;
+```
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`initializeParticleGPU`](../../interfaces/ModuleOptions.md#initializeparticlegpu)
+
+***
+
 <a id="modifygpu"></a>
 
 ### modifyGPU?
@@ -111,6 +167,32 @@ Configures and implicitly enables the managed CPU ParticleOctree.
 ```ts
 position: ValueByParameter<Vector3>;
 ```
+
+***
+
+<a id="prepare"></a>
+
+### prepare?
+
+```ts
+optional prepare?: (context) => void;
+```
+
+Shared preparation work, called once before processing particles.
+
+#### Parameters
+
+##### context
+
+[`ModuleExecutionContext`](../../interfaces/ModuleExecutionContext.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`prepare`](../../interfaces/ModuleOptions.md#prepare)
 
 ***
 

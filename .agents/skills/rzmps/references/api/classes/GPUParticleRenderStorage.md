@@ -80,6 +80,30 @@ originalCount: Node<"uint">;
 
 ## Methods
 
+<a id="appearance"></a>
+
+### appearance()
+
+```ts
+appearance(index, row): Node<"vec4">;
+```
+
+#### Parameters
+
+##### index
+
+`Node`\<`"uint"`\>
+
+##### row
+
+`number`
+
+#### Returns
+
+`Node`\<`"vec4"`\>
+
+***
+
 <a id="createparticle"></a>
 
 ### createParticle()
@@ -105,7 +129,7 @@ createParticle(index?): GPUParticleRenderContext;
 ### createScalarNodes()
 
 ```ts
-createScalarNodes(index?): Pick<GPUParticleScalarNodes, "alpha" | "distortionStrength" | "realtime" | "time">;
+createScalarNodes(index?): Pick<GPUParticleScalarNodes, "time" | "alpha" | "realtime" | "distortionStrength"> & object;
 ```
 
 #### Parameters
@@ -116,7 +140,7 @@ createScalarNodes(index?): Pick<GPUParticleScalarNodes, "alpha" | "distortionStr
 
 #### Returns
 
-`Pick`\<[`GPUParticleScalarNodes`](../Supporting-Types/type-aliases/GPUParticleScalarNodes.md), `"alpha"` \| `"distortionStrength"` \| `"realtime"` \| `"time"`\>
+`Pick`\<[`GPUParticleScalarNodes`](../Supporting-Types/type-aliases/GPUParticleScalarNodes.md), `"time"` \| `"alpha"` \| `"realtime"` \| `"distortionStrength"`\> & `object`
 
 ***
 
@@ -145,7 +169,7 @@ createStateNode(index?): Node<"uvec4">;
 ### createVectorNodes()
 
 ```ts
-createVectorNodes(index?): Pick<GPUParticleVectorNodes, "position" | "rotation" | "scale" | "color">;
+createVectorNodes(index?): Pick<GPUParticleVectorNodes, "position" | "rotation" | "scale" | "color" | "velocity">;
 ```
 
 #### Parameters
@@ -156,7 +180,7 @@ createVectorNodes(index?): Pick<GPUParticleVectorNodes, "position" | "rotation" 
 
 #### Returns
 
-`Pick`\<[`GPUParticleVectorNodes`](../Supporting-Types/type-aliases/GPUParticleVectorNodes.md), `"position"` \| `"rotation"` \| `"scale"` \| `"color"`\>
+`Pick`\<[`GPUParticleVectorNodes`](../Supporting-Types/type-aliases/GPUParticleVectorNodes.md), `"position"` \| `"rotation"` \| `"scale"` \| `"color"` \| `"velocity"`\>
 
 ***
 

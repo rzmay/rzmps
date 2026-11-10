@@ -61,9 +61,9 @@ Sources that create particles. Omission creates one default emitter; pass [] for
 ```ts
 endBehavior:
   | "none"
+  | EndBehavior
   | "destroy"
-  | "destroyImmediate"
-  | EndBehavior;
+  | "destroyImmediate";
 ```
 
 Controls cleanup after a nonlooping system ends; existing particles may remain.
@@ -214,12 +214,30 @@ true
 
 ***
 
+<a id="maxcatchup"></a>
+
+### maxCatchup
+
+```ts
+maxCatchup: number | null;
+```
+
+Maximum simulation seconds recovered per interval; null uses duration and finite emitter lifetimes.
+
+#### Default
+
+```ts
+null
+```
+
+***
+
 <a id="maxcullingmode"></a>
 
 ### maxCullingMode
 
 ```ts
-maxCullingMode: "new" | "old" | MaxCulling;
+maxCullingMode: "new" | MaxCulling | "old";
 ```
 
 Chooses whether old or newly spawned particles are culled at capacity.
@@ -328,12 +346,26 @@ Camera-distance limit for normal updates; zero disables distance culling.
 
 ```ts
 simulationSpace:
+  | "source"
+  | "transform"
   | "local"
   | SimulationSpace
   | "world";
 ```
 
-Local or world coordinates for simulated particles; changing it converts existing particles.
+World, Local, Transform or per-particle Source coordinates; changing modes preserves existing world poses.
+
+***
+
+<a id="simulationspacetransform"></a>
+
+### simulationSpaceTransform
+
+```ts
+simulationSpaceTransform: Matrix4 | Object3D<Object3DEventMap> | null;
+```
+
+Live world-space frame for Transform mode; a Matrix4 is caller-managed. Omission uses identity.
 
 ***
 
@@ -352,6 +384,18 @@ Nonnegative multiplier applied to simulation delta seconds.
 ```ts
 1
 ```
+
+***
+
+<a id="sourceloss"></a>
+
+### sourceLoss
+
+```ts
+sourceLoss: "kill" | "detach";
+```
+
+Source mode behavior when an emitting source disappears. Defaults to detach at its last valid frame.
 
 ***
 
@@ -398,6 +442,54 @@ spatialEffects: Multiple<SpatialEffect>;
 ```
 
 Explicit generic spatial effects, combined with matching scene effects.
+
+***
+
+<a id="substep"></a>
+
+### substep
+
+```ts
+substep: boolean;
+```
+
+Whether to divide large simulation intervals into smaller steps.
+
+When enabled (default), elapsed time is simulated in increments of at most
+substepDeltaTime. Each increment performs normal emission, particle updates,
+and spatial interactions, improving collisions, forces, emission timing, and
+other time-dependent behavior after irregular or delayed frames.
+
+Substepping is more computationally expensive because multiple simulation
+updates may occur during one rendered frame. Only the most recent maxCatchup
+seconds are simulated; null estimates this limit from emitter lifetimes and
+system duration. An internal step-count safeguard also bounds work.
+
+When disabled, the entire elapsed interval is processed in one simulation
+step. Continuous births still receive distributed spawn times and per-particle
+deltas, but spatial interactions, collisions, and nonlinear motion may be
+inaccurate over large intervals. This is faster and may suit simple effects
+or performance-sensitive applications.
+
+Neither mode guarantees exact reconstruction of missed frames.
+
+#### Default
+
+```ts
+true
+```
+
+***
+
+<a id="substepdeltatime"></a>
+
+### substepDeltaTime
+
+```ts
+substepDeltaTime: number;
+```
+
+Maximum simulation step in seconds. Defaults to 1 / prewarmFPS.
 
 ***
 

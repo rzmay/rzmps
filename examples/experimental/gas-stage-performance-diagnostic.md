@@ -86,7 +86,7 @@ unchanged; timings in the raw matrix still depend on the evolving plume snapshot
 
 ### Corrective Verification
 
-`tests/visual/gas-source-gathers.test.mjs` compares the optimized masks against
+`scripts/tests/preview/fluids/gas-source-gathers.test.mjs` compares the optimized masks against
 exhaustive gathering on the same controlled inputs, using both advection methods.
 Density/heat, color, velocity and transient output buffers match exactly in the
 recorded test. Inputs include overlapping splats, nonuniform radii, grid-edge
@@ -107,7 +107,7 @@ baseline for comparison.
 
 ## Method
 
-Run `node tests/visual/gas-stage-profile.mjs /tmp/rzmps-gas-stages`.
+Run `node scripts/tests/preview/fluids/gas-stage-profile.mjs /tmp/rzmps-gas-stages`.
 The recorded run is `/tmp/rzmps-gas-stages-verified/metrics.json`, with screenshots
 alongside it. The script uses the actual Gas Volume preset and Gas Flow scene,
 including colliders, automatic bounds, 16 pressure iterations and SemiLagrangian

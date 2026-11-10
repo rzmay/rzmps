@@ -39,7 +39,7 @@ Undefined for continuous emission; captured GPUEventType for event emission.
 ### spatialGrid?
 
 ```ts
-optional spatialGrid?: ParticleSpatialGrid;
+optional spatialGrid?: ParticleSpatialGrid<SpatialAggregateLayout>;
 ```
 
 Current parent-particle neighborhood, when requested by the predicate.

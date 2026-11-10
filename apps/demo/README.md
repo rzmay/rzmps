@@ -250,18 +250,18 @@ Useful places to start:
 - `src/gui/ParticleSystemGUI.js`: editor controls, preset switching, and code
   serialization.
 - `../../examples`: canonical particle system examples.
-- `src/presets/scenes`: scene setup examples, including physics backends.
+- `../../examples/scenes`: scene setup examples, including physics backends.
 
 ## Adding Presets
 
-Add a particle factory in the root `examples/` directory with exported metadata and
+Add a particle factory in the `examples/presets/` directory with exported metadata and
 documentation source regions. Run `npm run docs:generate` from the repository root
 to discover it and create its Markdown guide. Complete the configuration explanations
-and run `npm run docs:check`. The registry is generated; do not edit it manually.
-Attach author metadata with `createMyPreset.author = 'github-user'`.
+and run `npm run docs:check`. The registry discovers preset files automatically.
+Attach author metadata with `createMyPreset.metadata = { id: 'myPreset', title: 'My Preset', author: 'github-user', description: '...', tags: ['example'], category: 'effects' }`.
 
-Add a scene preset by creating a loader in `src/presets/scenes`, then
-registering it in `src/presets/scenes/index.js`.
+Add a scene preset by creating a loader in `../../examples/scenes`, then
+attaching its id, title and author in `factory.metadata`; the index discovers it automatically.
 
 Scene loaders can return a cleanup function:
 
@@ -274,7 +274,7 @@ export default function createScene(scene) {
   };
 }
 
-createScene.author = 'github-user';
+createScene.metadata = { id: 'myScene', title: 'My Scene', author: 'github-user' };
 ```
 
 ## License
@@ -283,9 +283,10 @@ MIT
 
 ## Shared examples and visual validation
 
-Particle factories live in the root `examples/` directory. The demo consumes its generated
-registry through the existing preset import path, preserving GUI metadata and code generation.
-Scene presets and assets remain under `src/presets/scenes` and `src/assets`.
+Particle factories live in the `examples/presets/` directory. The demo consumes its automatically discovered
+registry directly as `examples/index.js`, preserving GUI metadata and code generation.
+Scene presets live in `examples/scenes` and are imported as `examples/scenes/index.js`.
+Assets live in `examples/assets/`, alongside shared helpers in `examples/utils/`.
 
 See [contributing](../../apps/docs/contributing.md) for adding metadata and source regions,
 authoring explanations, and generating documentation. From the repository root, build packages

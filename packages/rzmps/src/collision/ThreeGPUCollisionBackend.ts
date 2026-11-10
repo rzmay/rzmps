@@ -1,3 +1,5 @@
+import { MaterialCopyRegistry } from '../rendering/compositing/MaterialCopyRegistry';
+import getAttributeVersion from '../utils/getAttributeVersion';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { StorageBufferAttribute, type Node } from 'three/webgpu';
@@ -5,8 +7,8 @@ import { If, storage, uniform } from 'three/tsl';
 // Use the focused entry point so unrelated WebGPU helper exports cannot collide.
 // @ts-expect-error three-mesh-bvh does not publish declarations for deep imports.
 import { BVHComputeData } from 'three-mesh-bvh/src/webgpu/BVHComputeData.js';
-import type { CollisionQuery, ICollisionBackend } from '../interfaces/ICollisionBackend';
-import { isIgnoredCollisionObject } from './CollisionSceneUtils';
+import type { CollisionQuery, ICollisionBackend } from './collision.types';
+import { isIgnoredCollisionObject } from './isIgnoredCollisionObject';
 import capsuleBVHCollisionNode, {
   CapsuleQuery,
 } from './capsuleBVHCollisionNode';
@@ -72,6 +74,31 @@ type TrackedMesh = {
   drawRangeCount: number;
 };
 
+class SurfaceBVHComputeData extends BVHComputeData {
+  declare structs: { transform: { getLength(): number } };
+  constructor(meshes: THREE.Mesh[], options: unknown, public registry: MaterialCopyRegistry) {
+    super(meshes, options);
+  }
+  writeTransformData(info: { object: THREE.Mesh; root: number }, matrix: THREE.Matrix4, offset: number,
+    buffer: ArrayBuffer): void {
+    super.writeTransformData(info, matrix, offset, buffer);
+    const object = info.object;
+    // BVH roots are split at geometry-group boundaries; read the root's triangle offset.
+    const roots = (object.geometry as THREE.BufferGeometry & { boundsTree?: { _roots: ArrayBuffer[] } })
+      .boundsTree?._roots;
+    const root = roots?.[info.root];
+    const u32 = root ? new Uint32Array(root) : undefined;
+    const u16 = root ? new Uint16Array(root) : undefined;
+    let node = 0;
+    if (u16) while (u16[node * 2 + 15] !== 0xffff) node += 8;
+    const start = u32 ? u32[node + 6] * 3 : 0;
+    const group = object.geometry.groups.find(g => start >= g.start && start < g.start + g.count);
+    const material = Array.isArray(object.material) ? object.material[group?.materialIndex ?? 0] : object.material;
+    const stride = this.structs.transform.getLength();
+    new Uint32Array(buffer)[offset * stride + 33] = this.registry.register(material);
+  }
+}
+
 type BVHComputeDataRuntime = BVHComputeData & {
   objects: THREE.Object3D[];
   storage: Record<string, { proxyNode?: { value?: { array?: ArrayBufferView } } }>;
@@ -82,6 +109,8 @@ type BVHComputeDataRuntime = BVHComputeData & {
 
 /** GPU-only collision geometry owner backed by three-mesh-bvh's packed TLAS and BLAS. */
 export default class ThreeGPUCollisionBackend implements ICollisionBackend {
+  materialRegistry = new MaterialCopyRegistry();
+  private materialSignature = '';
   readonly supportsCPU = false;
   readonly supportsGPU = true;
 
@@ -214,6 +243,13 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
       ) transformChanged = true;
     });
 
+    const materialSignature = Array.from(next.values(), ({ mesh }) => (
+      (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+        .map(material => this.materialRegistry.register(material)).join(',')
+    )).join('|');
+    if (materialSignature !== this.materialSignature) transformChanged = true;
+    this.materialSignature = materialSignature;
+    if (this.data) (this.data as unknown as SurfaceBVHComputeData).registry = this.materialRegistry;
     this.releaseUnusedGeometryBVHs(next);
     this.tracked = next;
     this.invalidatedGeometry.clear();
@@ -362,7 +398,8 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     if (this.data) {
       this.data.objects = meshes;
     } else {
-      this.data = new BVHComputeData(meshes) as BVHComputeDataRuntime;
+      this.data = new SurfaceBVHComputeData(meshes, { attributes: { position: 'vec4f', uv: 'vec2f' } },
+        this.materialRegistry) as BVHComputeDataRuntime;
     }
     this.data.update();
     if (!this.capsuleQuery) {
@@ -428,10 +465,10 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
         matrixWorld: mesh.matrixWorld.clone(),
         geometry,
         positionAttribute: position,
-        positionVersion: ThreeGPUCollisionBackend.attributeVersion(position),
+        positionVersion: getAttributeVersion(position),
         positionCount: position.count,
         indexAttribute: index,
-        indexVersion: ThreeGPUCollisionBackend.attributeVersion(index),
+        indexVersion: getAttributeVersion(index),
         indexCount: index?.count ?? position.count,
         drawRangeStart: geometry.drawRange.start,
         drawRangeCount: geometry.drawRange.count,
@@ -482,10 +519,4 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     return Array.from(arrays).reduce((bytes, array) => bytes + array.byteLength, 0);
   }
 
-  private static attributeVersion(
-    attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined,
-  ): number {
-    if (!attribute) return -1;
-    return 'version' in attribute ? Number(attribute.version) : Number(attribute.data.version ?? 0);
-  }
 }

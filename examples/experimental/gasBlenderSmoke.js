@@ -45,3 +45,5 @@ export const metadata = {
 };
 
 createGasBlenderSmoke.description = metadata.description;
+
+createGasBlenderSmoke.metadata = { ...metadata, author: 'rzmay' };

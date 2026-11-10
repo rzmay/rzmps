@@ -8,6 +8,9 @@
 
 # Class: GPUEmitterInstanceRuntime
 
+Indexed execution state: standalone entry, live source slot, or event snapshot slot.
+Bindings differ, but timing, request submission and retirement use the same runtime.
+
 ## Constructors
 
 <a id="constructor"></a>
@@ -91,6 +94,53 @@ addRequestCount(value): void;
 #### Returns
 
 `void`
+
+***
+
+<a id="birthoffset"></a>
+
+### birthOffset()
+
+```ts
+birthOffset(claim, burstCount): Node<"float">;
+```
+
+#### Parameters
+
+##### claim
+
+`Node`\<`"uint"`\>
+
+##### burstCount
+
+`number`
+
+#### Returns
+
+`Node`\<`"float"`\>
+
+***
+
+<a id="birthschedule"></a>
+
+### birthSchedule()
+
+```ts
+birthSchedule(group): Node<"vec4">;
+```
+
+Per-step request groups live in the existing emitter buffer, never particle storage.
+[exclusive request end, first birth offset, interval, unused].
+
+#### Parameters
+
+##### group
+
+`number`
+
+#### Returns
+
+`Node`\<`"vec4"`\>
 
 ***
 

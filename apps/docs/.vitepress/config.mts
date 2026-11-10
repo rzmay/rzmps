@@ -1,28 +1,37 @@
 import { defineConfig } from 'vitepress';
+import { renderSearchPage, exampleSearchPlugin } from '../../../scripts/docs/search.mjs';
+import { exampleSEO, documentationSEO, sitemapItems } from '../../../scripts/docs/seo.mjs';
 import { docsUrl } from '../../../scripts/docs/site.mjs';
 import path from 'node:path';
-import { discoverExamples, resolveExample } from '../../../scripts/docs/examples.mjs';
+import { discoverExamples, resolveExample, exampleSourcePath } from '../../../scripts/docs/examples.mjs';
 import { guideNavigation } from '../../../scripts/docs/navigation.mjs';
 import examples from './examples.generated.json';
 import apiSections from './api.generated.json';
-const hostname = docsUrl.replace(/\/$/, '');
 const guideSidebar = guideNavigation(path.resolve(import.meta.dirname,'../guides')).map(({text,items})=>({text,items}));
 const apiSidebar = apiSections.map(({text,items},index)=>({
   text,collapsed:index>0,
   items:items.map(item=>item.items?{...item,collapsed:true}:item),
 }));
 export default defineConfig({
+  lang: 'en-US',
   title: 'RZMPS',
   description: 'Modular particle effects for Three.js',
   srcExclude: ['public/**'],
   base: new URL(docsUrl).pathname,
-  sitemap: { hostname: docsUrl },
+  sitemap: { hostname: docsUrl, transformItems: sitemapItems },
   head: [['meta', {name:'theme-color',content:'#3451b2'}], ['link', {rel:'icon',type:'image/png',href: `${new URL(docsUrl).pathname}favicon.png`}]],
-  transformHead: ({ pageData }) => [['link', { rel:'canonical', href:`${hostname}/${pageData.relativePath.replace(/\.md$/,'.html')}` }]],
-  transformPageData(pageData) { pageData.frontmatter.lastUpdated = false; },
+  transformHead: ({ pageData }) => {
+    const example = discoverExamples().find(entry => entry.id === pageData.frontmatter.example);
+    return example ? exampleSEO(example) : documentationSEO(pageData);
+  },
+  transformPageData(pageData) {
+    pageData.frontmatter.lastUpdated = false;
+    const example = discoverExamples().find(entry => entry.id === pageData.frontmatter.example);
+    if (example) { pageData.title = example.title; pageData.description = example.description; }
+  },
   vite: {
     server: { port: 5174, strictPort: true },
-    plugins: [{
+    plugins: [exampleSearchPlugin(), {
       name: 'rzmps-source-regions',
       enforce: 'pre',
       configureServer(server) {
@@ -38,14 +47,14 @@ export default defineConfig({
         const exampleId = code.match(/^example: ([\w-]+)$/m)?.[1];
         const example = discoverExamples().find(e=>e.id===exampleId);
         if (!example) throw new Error(`Unknown example: ${id}`);
-        this.addWatchFile(path.resolve(import.meta.dirname, '../../../examples', example.file));
+        this.addWatchFile(exampleSourcePath(example));
         return resolveExample(code, example);
       },
     }],
   },
   themeConfig: {
     siteTitle: 'RZMPS',
-    search: { provider: 'local' },
+    search: { provider: 'local', options: { _render: renderSearchPage } },
     nav: [
       { text:'Getting Started', link:'/guides/first-particle-system' },
       { text:'Guides', link:'/guides/' },

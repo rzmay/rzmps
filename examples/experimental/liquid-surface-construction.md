@@ -106,7 +106,7 @@ For clear water retain alpha one and use transmission, not generic alpha blendin
 
 ### Verification And Remaining Scope
 
-`node tests/visual/surface.test.mjs` exercises merged/separate colored drops,
+`node scripts/tests/preview/fluids/surface.test.mjs` exercises merged/separate colored drops,
 brick-edge continuity, triangle winding, finite unit normals, tags, source
 removal/reuse, alpha/scale/transient inputs, children, clipping, triangle budgets,
 material ownership, GUI/serialization and resource teardown. Smoothing checks
@@ -116,7 +116,7 @@ has 1804 triangles, one connected component, no open edges and a red/blue blende
 join on an eight-storage-buffer device. Desktop/mobile captures are written to
 `/tmp/rzmps-surface-desktop.png` and `/tmp/rzmps-surface-mobile.png`.
 
-`node tests/visual/liquid-surface-review.mjs /tmp/rzmps-liquid-surface` captures
+`node scripts/tests/preview/fluids/liquid-surface-review.mjs /tmp/rzmps-liquid-surface` captures
 the actual teapot fill after emission stops and records surface/update GPU timing
 and budget occupancy. These checks do not establish a physically improved spout
 or fix the pre-surface simulation findings below.
@@ -219,7 +219,7 @@ spacing, but do not refine either grid. Higher solver resolution alone does not
 refine the collider bake. Particle scale also changes represented liquid volume,
 so shrinking particles without increasing emission can stop the pot filling.
 
-Use `node tests/visual/teapot-spout-review.mjs /tmp/rzmps-teapot-spout` to compare
+Use `node scripts/tests/preview/fluids/teapot-spout-review.mjs /tmp/rzmps-teapot-spout` to compare
 centerline clearance, swept GPU contacts at two radii, and solid masks at
 64/128 solver resolution and 48/96 collider-bake resolution. This diagnostic
 does not change preset settings. Review pressure connectivity and actual water

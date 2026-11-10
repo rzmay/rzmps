@@ -29,7 +29,8 @@ new GPUParticleContext(
    tagMask,
    generation,
    materializeLocals?,
-   lodPriority?
+   lodPriority?,
+   appearance?
 ): GPUParticleContext;
 ```
 
@@ -66,6 +67,10 @@ new GPUParticleContext(
 ##### lodPriority?
 
 `Node`\<`"uint"`\> = `...`
+
+##### appearance?
+
+`Node`\<`"vec4"`\>[] = `...`
 
 #### Returns
 
@@ -157,6 +162,16 @@ readonly color: Node<"vec3">;
 
 ***
 
+<a id="contribution"></a>
+
+### contribution
+
+```ts
+readonly contribution: VarNode<"float", ConstNode<"float", number>>;
+```
+
+***
+
 <a id="distortionstrength"></a>
 
 ### distortionStrength
@@ -238,6 +253,48 @@ readonly mass: Node<"float">;
 #### Implementation of
 
 [`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`mass`](../interfaces/GPUParticleLike.md#mass)
+
+***
+
+<a id="materialcopy"></a>
+
+### materialCopy
+
+```ts
+readonly materialCopy: Node<"vec4">;
+```
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`materialCopy`](../interfaces/GPUParticleLike.md#materialcopy)
+
+***
+
+<a id="materialcopyu"></a>
+
+### materialCopyU
+
+```ts
+readonly materialCopyU: Node<"vec4">;
+```
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`materialCopyU`](../interfaces/GPUParticleLike.md#materialcopyu)
+
+***
+
+<a id="materialcopyv"></a>
+
+### materialCopyV
+
+```ts
+readonly materialCopyV: Node<"vec4">;
+```
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`materialCopyV`](../interfaces/GPUParticleLike.md#materialcopyv)
 
 ***
 
@@ -488,3 +545,105 @@ get root(): GPUParticleContext;
 #### Implementation of
 
 [`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`root`](../interfaces/GPUParticleLike.md#root)
+
+## Methods
+
+<a id="addtag"></a>
+
+### addTag()
+
+```ts
+addTag(tag): void;
+```
+
+Builds a tag mutation inside a system's GPU update callback.
+
+#### Parameters
+
+##### tag
+
+`string`
+
+#### Returns
+
+`void`
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`addTag`](../interfaces/GPUParticleLike.md#addtag)
+
+***
+
+<a id="emitevent"></a>
+
+### emitEvent()
+
+```ts
+emitEvent(event, payload?): void;
+```
+
+Builds an event-buffer write at this point in the TSL graph.
+
+#### Parameters
+
+##### event
+
+`string`
+
+##### payload?
+
+[`GPUEventPayload`](../type-aliases/GPUEventPayload.md)
+
+#### Returns
+
+`void`
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`emitEvent`](../interfaces/GPUParticleLike.md#emitevent)
+
+***
+
+<a id="kill"></a>
+
+### kill()
+
+```ts
+kill(): void;
+```
+
+Marks the particle dead and advances its age past its lifetime using finite GPU values.
+
+#### Returns
+
+`void`
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`kill`](../interfaces/GPUParticleLike.md#kill)
+
+***
+
+<a id="removetag"></a>
+
+### removeTag()
+
+```ts
+removeTag(tag): void;
+```
+
+Builds a tag mutation inside a system's GPU update callback.
+
+#### Parameters
+
+##### tag
+
+`string`
+
+#### Returns
+
+`void`
+
+#### Implementation of
+
+[`GPUParticleLike`](../interfaces/GPUParticleLike.md).[`removeTag`](../interfaces/GPUParticleLike.md#removetag)

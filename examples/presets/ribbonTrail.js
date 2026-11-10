@@ -1,0 +1,75 @@
+import * as THREE from 'three';
+import {
+  Emitter,
+  EmissionShape,
+  ParticleSystem,
+  TrailRenderer,
+  TrailMode,
+} from '@rzmps/rzmps';
+
+export default async function ribbonTrailPreset() {
+  // #region docs:system:1
+  // #region docs:modules:none
+  const ribbonTrail = new ParticleSystem({
+    maxParticles: 128,
+    duration: 4,
+    looping: true,
+    // #region docs:emitters:1
+    emitters: [
+      new Emitter({
+        source: EmissionShape.Torus(),
+        rate: 50,
+        radialSpeed: 5,
+        initialValues: {
+          lifetime: 1,
+          scale: 0.12,
+        },
+      }),
+    ],
+    // #endregion docs:emitters:1
+    // #region docs:renderers:1
+    renderers: [
+      new TrailRenderer({
+        mode: TrailMode.Ribbon,
+        ratio: 1,
+        ribbonCount: 3,
+        width: 0.15,
+        widthOverTrail: (time) => {
+          if (time < 0.2) return time / 0.2;
+          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
+          return 0.85 * (1 - ((time - 0.75) / 0.25));
+        },
+        colorOverTrail: (time) => new THREE.Color().lerpColors(
+          new THREE.Color('#fff'),
+          new THREE.Color('#66e0ff'),
+          time,
+        ),
+        inheritParticleColor: true,
+        materialOptions: {
+          roughness: 0,
+          metalness: 0,
+        },
+      }),
+    ],
+    // #endregion docs:renderers:1
+  });
+  // #endregion docs:modules:none
+  // #endregion docs:system:1
+
+  ribbonTrail.name = 'Ribbon Trail';
+  ribbonTrail.position.set(0, 0, 0);
+
+  return ribbonTrail;
+}
+
+/** @type {import("../types").ExampleMetadata} */
+ribbonTrailPreset.metadata = {
+  author: 'rzmay',
+  'id': 'ribbonTrail',
+  'title': 'Ribbon Trail',
+  'description': 'Ribbon trail rendering for continuous streaks with lifetime fading.',
+  tags: ['ribbonTrail', 'trails', 'ribbon', 'effects'],
+  previewSettings: {
+    duration: 4,
+  },
+};

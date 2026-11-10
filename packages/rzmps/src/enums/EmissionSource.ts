@@ -1,7 +1,7 @@
 enum EmissionSource {
-    Volume = "volume",
-    Surface = "surface",
-    Vertices = "vertices",
+    Volume = 'volume',
+    Surface = 'surface',
+    Vertices = 'vertices',
 }
 
 export type EmissionSourceValue = EmissionSource | `${EmissionSource}`;

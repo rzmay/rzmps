@@ -92,6 +92,18 @@ color: Color;
 
 ***
 
+<a id="contribution"></a>
+
+### contribution
+
+```ts
+contribution: number = 1;
+```
+
+Extensive visual energy; simulation particles contribute one by default.
+
+***
+
 <a id="data"></a>
 
 ### data
@@ -192,16 +204,6 @@ Immediate visual parent; null for simulated particles.
 
 ```ts
 position: Vector3;
-```
-
-***
-
-<a id="realtime"></a>
-
-### realtime
-
-```ts
-realtime: number;
 ```
 
 ***
@@ -312,6 +314,138 @@ get isChild(): boolean;
 
 ***
 
+<a id="materialcopy"></a>
+
+### materialCopy
+
+#### Get Signature
+
+```ts
+get materialCopy(): Vector4;
+```
+
+Material source ID, impact UV, and sampling mode. Allocated on first access.
+
+##### Returns
+
+`Vector4`
+
+#### Set Signature
+
+```ts
+set materialCopy(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`Vector4`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="materialcopyu"></a>
+
+### materialCopyU
+
+#### Get Signature
+
+```ts
+get materialCopyU(): Vector4;
+```
+
+UV gradient rows, transformed into particle-local coordinates at birth. Allocated on first access.
+
+##### Returns
+
+`Vector4`
+
+#### Set Signature
+
+```ts
+set materialCopyU(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`Vector4`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="materialcopyv"></a>
+
+### materialCopyV
+
+#### Get Signature
+
+```ts
+get materialCopyV(): Vector4;
+```
+
+##### Returns
+
+`Vector4`
+
+#### Set Signature
+
+```ts
+set materialCopyV(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`Vector4`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="realtime"></a>
+
+### realtime
+
+#### Get Signature
+
+```ts
+get realtime(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set realtime(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
+
+***
+
 <a id="root"></a>
 
 ### root
@@ -394,6 +528,32 @@ Copies current state with independent vectors, color, tags, and birth snapshot.
 
 ***
 
+<a id="emitevent"></a>
+
+### emitEvent()
+
+```ts
+emitEvent(event, data?): this;
+```
+
+Dispatches a named event through this simulated particle's owner.
+
+#### Parameters
+
+##### event
+
+`string`
+
+##### data?
+
+`unknown`
+
+#### Returns
+
+`this`
+
+***
+
 <a id="kill"></a>
 
 ### kill()
@@ -420,8 +580,8 @@ lerp(target, alpha): this;
 
 ##### target
 
-  \| [`ParticleCachedValues`](../Supporting-Types/type-aliases/ParticleCachedValues.md)
   \| `Particle`
+  \| [`ParticleCachedValues`](../Supporting-Types/type-aliases/ParticleCachedValues.md)
 
 ##### alpha
 

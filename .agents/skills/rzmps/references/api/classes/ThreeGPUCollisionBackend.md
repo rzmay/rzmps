@@ -98,6 +98,16 @@ optional geometryDynamicObjects?: Object3D<Object3DEventMap>[];
 
 ***
 
+<a id="materialregistry"></a>
+
+### materialRegistry
+
+```ts
+materialRegistry: MaterialCopyRegistry;
+```
+
+***
+
 <a id="objectfilter"></a>
 
 ### objectFilter?

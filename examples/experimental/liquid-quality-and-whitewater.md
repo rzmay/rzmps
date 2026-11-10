@@ -24,7 +24,7 @@ APIC, anisotropic meshing, reseeding, or whitewater are implemented.
 
 ## Original Dense Costs
 
-Run `node tests/visual/liquid-performance-review.mjs`. Results are written to
+Run `node scripts/tests/preview/fluids/liquid-performance-review.mjs`. Results are written to
 `/tmp/rzmps-liquid-performance.json`. Chromium native WebGPU on Apple Metal;
 800x600 viewport; 900 warmup steps at 60 Hz; medians of the next 30 steps;
 6,975 live particles in a controlled 16,000-slot allocation; identical source,

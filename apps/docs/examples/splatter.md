@@ -3,13 +3,13 @@ title: "Splatter"
 example: splatter
 ---
 
-# Splatter
+[View live example](https://rzmps.rzmay.com/example/splatter)
+
+# Splatter <ExampleAttribution />
+
+<ExampleTags />
 
 Matte, multicolored paintballs leave long-lived splatters matching their color and size, with randomized surface rotation. Select a scene with collision geometry, such as Checkerboard.
-
-[View live example](https://rzmps.rzmay.com/?preset=Splatter)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

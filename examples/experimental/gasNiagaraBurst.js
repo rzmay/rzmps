@@ -40,3 +40,5 @@ export const metadata = {
 };
 
 createGasNiagaraBurst.description = metadata.description;
+
+createGasNiagaraBurst.metadata = { ...metadata, author: 'rzmay' };

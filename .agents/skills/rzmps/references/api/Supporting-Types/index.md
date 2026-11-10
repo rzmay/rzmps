@@ -15,11 +15,13 @@
 
 ## Classes
 
+- [GlobalSettings](classes/GlobalSettings.md)
 - [GPUCollisionEventBufferState](classes/GPUCollisionEventBufferState.md)
 - [GPUCollisionEventWriter](classes/GPUCollisionEventWriter.md)
 - [GPUEmitterInstanceRuntime](classes/GPUEmitterInstanceRuntime.md)
 - [GPUEventReader](classes/GPUEventReader.md)
 - [GPUEventWriter](classes/GPUEventWriter.md)
+- [MaterialCopyRegistry](classes/MaterialCopyRegistry.md)
 
 ## Interfaces
 
@@ -74,8 +76,11 @@
 
 ## Type Aliases
 
+- [AtlasRenderer](type-aliases/AtlasRenderer.md)
 - [BoidAggregate](type-aliases/BoidAggregate.md)
 - [BoidParticleAffectorAggregate](type-aliases/BoidParticleAffectorAggregate.md)
+- [DecalMaterial](type-aliases/DecalMaterial.md)
+- [EmitterSources](type-aliases/EmitterSources.md)
 - [GPUParticleScalarNodes](type-aliases/GPUParticleScalarNodes.md)
 - [GPUParticleVectorNodes](type-aliases/GPUParticleVectorNodes.md)
 - [GPUSpatialParameterType](type-aliases/GPUSpatialParameterType.md)

@@ -3,6 +3,6 @@ enum TrailTextureMode {
   Tile = 'tile',
   RepeatPerSegment = 'repeat',
   DistributePerSegment = 'distribute',
-};
+}
 
-export { TrailTextureMode }
+export { TrailTextureMode };

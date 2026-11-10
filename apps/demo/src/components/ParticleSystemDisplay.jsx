@@ -3,9 +3,12 @@ import PropTypes from 'prop-types';
 import { useFrame, useThree } from '@react-three/fiber';
 import { FluidSimulation } from '@rzmps/rzmps';
 import { ParticleSystemGUI } from '../gui/ParticleSystemGUI';
-import particlePresets from '../presets/particles';
-import scenePresets from '../presets/scenes';
-import { getSceneParticleRoot } from '../presets/scenes/particleRoot';
+import standardPresets from 'examples/index.js';
+import experimentalPresets from 'examples/experimental/index.js';
+import scenePresets from 'examples/scenes/index.js';
+import { getSceneParticleRoot } from 'examples/utils/particleRoot.js';
+
+const particlePresets = { ...standardPresets, ...experimentalPresets };
 
 const RZMPS_VERSION = import.meta.env.VITE_RZMPS_VERSION;
 
@@ -30,7 +33,7 @@ function collectSystemStats(system, visited = new Set()) {
   visited.add(system);
 
   const stats = {
-    particles: system.liveParticleCount ?? system.particles?.filter((particle) => particle.alive).length ?? 0,
+    particles: system.liveParticleCount ?? system.particles?.filter(particle => particle.alive).length ?? 0,
     children: system.renderers?.reduce((count, renderer) => count + renderer.renderedChildCount, 0) ?? 0,
     allocated: system.isGPUProcessingActive ? (system.gpuBufferStats?.allocated ?? 0) : 0,
     activeSlots: system.isGPUProcessingActive ? (system.gpuBufferStats?.activeSlots ?? 0) : 0,
@@ -72,15 +75,29 @@ function ParticleSystemDisplay({
 }) {
   const particleSystem = useRef(null);
   const guiRef = useRef(null);
+  const selectionRef = useRef(null);
+  selectionRef.current = { preset: initialPreset, scene: initialScene };
+  useEffect(() => {
+    const gui = guiRef.current;
+    if (!gui) return;
+    if (gui.currentPresetName !== initialPreset) void gui.loadPreset(initialPreset);
+    if (gui.currentSceneName !== initialScene) void gui.setScene(initialScene);
+  }, [initialPreset, initialScene]);
+  const initialSettings = useRef(null);
+  initialSettings.current = { initialPreset, initialScene, rendererMode };
   const { gl, scene } = useThree();
 
   useEffect(() => {
     let cancelled = false;
+    const { initialPreset, initialScene, rendererMode } = initialSettings.current;
 
     async function initialize() {
-      const system = await particlePresets[initialPreset]();
+      const system = await particlePresets[initialPreset].create();
 
-      if (cancelled) return;
+      if (cancelled) {
+        system.destroy();
+        return;
+      }
 
       particleSystem.current = system;
       getSceneParticleRoot(scene).add(system);
@@ -95,7 +112,7 @@ function ParticleSystemDisplay({
         initialScene,
         title: `🧅 RZMPS Demo v${RZMPS_VERSION}`,
         width: 340,
-        onSystemChange: (nextSystem) => {
+        onSystemChange: nextSystem => {
           particleSystem.current = nextSystem;
         },
         onCodeChange,
@@ -108,6 +125,9 @@ function ParticleSystemDisplay({
       });
 
       guiRef.current = gui;
+      const selection = selectionRef.current;
+      if (selection.preset !== initialPreset) void gui.loadPreset(selection.preset);
+      if (selection.scene !== initialScene) void gui.setScene(selection.scene);
     }
 
     initialize();
@@ -122,16 +142,7 @@ function ParticleSystemDisplay({
         particleSystem.current = null;
       }
     };
-  }, [
-    onCodeChange,
-    onMetadataChange,
-    onPresetChange,
-    onRendererChange,
-    onSceneChange,
-    onShowCodeChange,
-    gl,
-    scene,
-  ]);
+  }, [onCodeChange, onMetadataChange, onPresetChange, onRendererChange, onSceneChange, onShowCodeChange, gl, scene]);
 
   useFrame((_state, delta) => {
     const system = particleSystem.current;

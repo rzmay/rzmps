@@ -3,13 +3,13 @@ import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgp
 import {
   Fn, If, clamp, float, floor, instanceIndex, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4,
 } from 'three/tsl';
-import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../gpu/Particle';
-import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../gpu/ParticleSpatialGrid';
+import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
+import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../spatial/structures/ParticleSpatialGrid';
 import Collision from './Collision';
-import FluidPressureProjection from '../gpu/FluidPressureProjection';
-import SparseVolumeGrid from '../gpu/SparseVolumeGrid';
+import FluidPressureProjection from '../simulation/gpu/FluidPressureProjection';
+import SparseVolumeGrid from '../spatial/structures/gpu/SparseVolumeGrid';
 import FluidSimulation, { type FluidSimulationOptions } from './FluidSimulation';
-import type { SubSystemGPUCondition } from '../ParticleSystem';
+import type { SubSystemGPUCondition } from '../core/ParticleSystem';
 
 /** Lightweight spray-source gates; child emission rate, ratio and lifetime stay on the subsystem. */
 export interface FLIPSprayConditionOptions {
@@ -247,7 +247,7 @@ class FLIPSimulation extends FluidSimulation {
         fluidCell.assign(max(fluidCell, containsMarker.select(1, 0)));
         const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(radius)));
         const mass = max(particle.mass, float(0)).mul(weight);
-        const gravityModifier = this.gpuParameters.number(
+        const gravityModifier = this.evaluateDynamicGPU.number(
           'gravityModifier.flip', () => context.system.gravityModifier,
           particle.time, 0, particle.index,
         );
@@ -534,7 +534,7 @@ class FLIPSimulation extends FluidSimulation {
     const before = this.pressureProjection!.sample(coordinate, true);
     const flipVelocity = vec3(particle.velocity).add(picVelocity.sub(before));
     const velocity = this.clampVelocity(mix(flipVelocity, picVelocity, this.picRatioNode));
-    const gravityModifier = this.gpuParameters.number(
+    const gravityModifier = this.evaluateDynamicGPU.number(
       'gravityModifier.flip', () => context.system.gravityModifier,
       particle.time, 0, particle.index,
     );

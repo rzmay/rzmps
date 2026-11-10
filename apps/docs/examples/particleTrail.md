@@ -3,13 +3,13 @@ title: "Particle Trail"
 example: particleTrail
 ---
 
-# Particle Trail
+[View live example](https://rzmps.rzmay.com/example/particleTrail)
+
+# Particle Trail <ExampleAttribution />
+
+<ExampleTags />
 
 Per-particle trail rendering with inherited color and alpha over moving particles.
-
-[View live example](https://rzmps.rzmay.com/?preset=Particle%20Trail)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

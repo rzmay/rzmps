@@ -28,7 +28,7 @@ reflections. Thickness remains a material constant, not measured fluid depth.
 The teapot demo starts with centered eight-unit solver bounds so it does not
 change from a coarse to a finer grid partway through filling. Liquid and gas
 share matched face-based pressure projection; liquid transfers before/after
-face velocities to markers. See the [settling investigation](../../tests/visual/fluid-study.md#liquid-lifecycle-and-settling-correction-october-28-2026)
+face velocities to markers. See the [settling investigation](../../scripts/tests/preview/fluids/fluid-study.md#liquid-lifecycle-and-settling-correction-october-28-2026)
 for restart fixes, packing measurements and remaining sub-grid boundary limits.
 
 The interactive preset now uses 3+4 subdivisions, a 32,000-particle budget and
