@@ -44,6 +44,16 @@ THREE.Object3D.constructor
 
 ## Properties
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+***
+
 <a id="boundingbox"></a>
 
 ### boundingBox

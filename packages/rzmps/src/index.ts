@@ -1,3 +1,8 @@
+export { profileRenderer } from './rendering/benchmarkRenderer.utils';
+export type { BenchmarkRenderer } from './rendering/benchmarkRenderer.utils';
+export { default as Benchmarks } from './core/Benchmarks';
+export type { BenchmarkMetric, BenchmarkDomain, BenchmarkAggregation, BenchmarkCollectionOptions,
+  BenchmarkDistribution, BenchmarkReport, BenchmarkAssertion } from './core/Benchmarks';
 // ParticleSystem
 export { default as ParticleSystem } from './core/ParticleSystem';
 export type {

@@ -59,6 +59,20 @@ Wraps a per-particle callback; options select filtering, spatial collection, and
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`NoiseModule`](NoiseModule.md).[`benchmarks`](NoiseModule.md#benchmarks)
+
+***
+
 <a id="condition"></a>
 
 ### condition

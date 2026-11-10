@@ -1,3 +1,4 @@
+import Benchmarks from '../core/Benchmarks';
 import { surfacePatch } from '../rendering/compositing/MaterialCopyRegistry';
 import getAttributeVersion from '../utils/getAttributeVersion';
 import * as THREE from 'three';
@@ -66,6 +67,7 @@ type MembershipChanges = {
 
 /** Triangle collision backend with separate static and dynamic octrees and optional automatic scene membership. */
 class ThreeCollisionBackend implements ICollisionBackend {
+  readonly benchmarks = new Benchmarks();
   readonly supportsCPU = true;
   readonly supportsGPU = false;
   private readonly triangleSources = new WeakMap<THREE.Triangle, {

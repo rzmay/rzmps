@@ -97,6 +97,7 @@ test('TypeDoc preserves GlobalSettings name when reached through ParticleSystem.
   assert.ok(project, 'TypeDoc conversion succeeds');
   const classes = project.getReflectionsByKind(ReflectionKind.Class);
   assert.ok(classes.some(item => item.name === 'GlobalSettings'));
+  assert.ok(classes.some(item => item.name === 'Benchmarks'));
   assert.ok(!classes.some(item => item.name === 'default'), 'supporting classes retain their declared names');
   const pages = new Map(classes.map(item => [`classes/${item.name}.md`, `# Class: ${item.name}\n`]));
   const sections = apiNavigation(pages, fs.readFileSync(path.join(root, 'packages/rzmps/src/index.ts'), 'utf8'));

@@ -69,6 +69,20 @@ applyImpulses: boolean = false;
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`benchmarks`](Module.md#benchmarks)
+
+***
+
 <a id="bounce"></a>
 
 ### bounce

@@ -52,6 +52,20 @@ alignment: DynamicValue<number>;
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`benchmarks`](EventReceiver.md#benchmarks)
+
+***
+
 <a id="bursts"></a>
 
 ### bursts

@@ -32,6 +32,16 @@ attributes: GPUParticleAttributes;
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+***
+
 <a id="capacity"></a>
 
 ### capacity
@@ -89,6 +99,18 @@ storage: GPUParticleStorage;
 ```ts
 tagMask: Node<"uint">;
 ```
+
+***
+
+<a id="uploadbytes"></a>
+
+### uploadBytes
+
+```ts
+uploadBytes: number = 0;
+```
+
+Cumulative bytes queued through CPU particle uploads, excluding GPU-to-GPU copies.
 
 ***
 

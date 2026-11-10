@@ -61,6 +61,20 @@ readonly atlasOptions: TextureAtlasOptions;
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`benchmarks`](EventReceiver.md#benchmarks)
+
+***
+
 <a id="children"></a>
 
 ### children
@@ -490,6 +504,24 @@ Custom renderer subclasses opt in by implementing onMaterialCopyChange.
 ```ts
 get version(): number;
 ```
+
+##### Returns
+
+`number`
+
+***
+
+<a id="visibleinstancecount"></a>
+
+### visibleInstanceCount
+
+#### Get Signature
+
+```ts
+get visibleInstanceCount(): number;
+```
+
+Current renderer population, including generated children; GPU counts use available render-output state.
 
 ##### Returns
 

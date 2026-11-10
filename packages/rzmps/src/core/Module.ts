@@ -211,6 +211,11 @@ export default class Module extends EventReceiver {
 
   /** Applies tag and condition selection before invoking the particle callback. */
   public modify(particles: Particle[], deltaTime: number, context: ModuleExecutionContext): void {
+    const end = this.benchmarks.begin('update');
+    try { this.modifyPopulation(particles, deltaTime, context); } finally { end?.(); }
+  }
+
+  private modifyPopulation(particles: Particle[], deltaTime: number, context: ModuleExecutionContext): void {
     particles.filter((p) => (
       p.alive
       && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))

@@ -68,6 +68,20 @@ bakedFieldResolution: number;
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`benchmarks`](SpatialEffect.md#benchmarks)
+
+***
+
 <a id="bvhoptions"></a>
 
 ### bvhOptions?

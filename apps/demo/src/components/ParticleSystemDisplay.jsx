@@ -1,3 +1,4 @@
+import { profileRenderer } from '@rzmps/rzmps';
 import { useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -8,33 +9,14 @@ import { getSceneParticleRoot } from 'examples/utils/particleRoot.js';
 
 const RZMPS_VERSION = import.meta.env.VITE_RZMPS_VERSION;
 
-function collectSystemStats(system, visited = new Set()) {
-  if (!system || visited.has(system)) {
-    return {
-      particles: 0,
-      children: 0,
-      allocated: 0,
-      activeSlots: 0,
-    };
+function collectSystemStats(system) {
+  const stats = { particles: 0, children: 0, allocated: 0, activeSlots: 0 };
+  const fields = { particleCount: 'particles', childrenCount: 'children',
+    allocatedSlots: 'allocated', usedSlots: 'activeSlots' };
+  for (const [path, value] of Object.entries(system?.benchmarks.snapshot() ?? {})) {
+    const match = path.match(/^(?:systems\/[^/]+\/)*system\/([^/]+)$/);
+    if (match && fields[match[1]]) stats[fields[match[1]]] += value ?? 0;
   }
-
-  visited.add(system);
-
-  const stats = {
-    particles: system.liveParticleCount ?? system.particles?.filter(particle => particle.alive).length ?? 0,
-    children: system.renderers?.reduce((count, renderer) => count + renderer.renderedChildCount, 0) ?? 0,
-    allocated: system.isGPUProcessingActive ? (system.gpuBufferStats?.allocated ?? 0) : 0,
-    activeSlots: system.isGPUProcessingActive ? (system.gpuBufferStats?.activeSlots ?? 0) : 0,
-  };
-
-  system.subSystems?.forEach((_options, subSystem) => {
-    const childStats = collectSystemStats(subSystem, visited);
-    stats.particles += childStats.particles;
-    stats.children += childStats.children;
-    stats.allocated += childStats.allocated;
-    stats.activeSlots += childStats.activeSlots;
-  });
-
   return stats;
 }
 
@@ -126,6 +108,11 @@ function ParticleSystemDisplay({
     onParticleCountChange(collectSystemStats(particleSystem.current));
     guiRef.current?.update(delta);
   });
+
+  // Keep the normal update-before-render order; this callback owns the one default scene render.
+  useFrame(({ gl, scene, camera }, delta) => {
+    profileRenderer(particleSystem.current?.benchmarks, gl, () => gl.render(scene, camera), delta * 1000);
+  }, 1);
 
   return null;
 }
