@@ -92,17 +92,20 @@ The 10-second loop schedules a continuous flame; individual flame particles last
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
-        ratio: 0.25,
-        continuousRate: 1.5,
-        direction: (particle) => DecalRenderer.Radial(24)(particle),
-        maxDistance: 3,
+        ratio: 0.5,
+        continuousRate: 3,
+        direction: DecalRenderer.Radial(24),
+        hitSelection: (hits, particle, maxHits) => DecalRenderer.Random(
+          DecalRenderer.Nearest(hits, particle, 5), particle, maxHits,
+        ),
+        maxDistance: 1.5,
         depth: 0.06,
         size: 2.5,
         inheritColor: 0,
         inheritScale: 0,
         inheritAlpha: 0,
         lifetime: 8,
-        opacity: (t) => 0.15 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+        opacity: (t) => 0.05 * THREE.MathUtils.smoothstep(t, 0, 0.025)
           * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
         maxDecals: 100,
       }),
@@ -111,7 +114,7 @@ The 10-second loop schedules a continuous flame; individual flame particles last
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L156)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L159)
 
 ```js
   return new ParticleSystem({
@@ -200,7 +203,7 @@ Uniform scale values and color strings use the standard input shortcuts.
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L160)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L163)
 
 ```js
     emitters: [
@@ -259,7 +262,7 @@ Noise strength 2.1 and frequency 1.35 break up the regular rise. The additional 
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L176)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L179)
 
 ```js
     modules: [
@@ -319,17 +322,20 @@ The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one anim
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
-        ratio: 0.25,
-        continuousRate: 1.5,
-        direction: (particle) => DecalRenderer.Radial(24)(particle),
-        maxDistance: 3,
+        ratio: 0.5,
+        continuousRate: 3,
+        direction: DecalRenderer.Radial(24),
+        hitSelection: (hits, particle, maxHits) => DecalRenderer.Random(
+          DecalRenderer.Nearest(hits, particle, 5), particle, maxHits,
+        ),
+        maxDistance: 1.5,
         depth: 0.06,
         size: 2.5,
         inheritColor: 0,
         inheritScale: 0,
         inheritAlpha: 0,
         lifetime: 8,
-        opacity: (t) => 0.15 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+        opacity: (t) => 0.05 * THREE.MathUtils.smoothstep(t, 0, 0.025)
           * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
         maxDecals: 100,
       }),
@@ -337,7 +343,7 @@ The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one anim
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L200)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L203)
 
 ```js
     renderers: [

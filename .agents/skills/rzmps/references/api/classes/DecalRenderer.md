@@ -1430,3 +1430,37 @@ Deterministic Fibonacci sphere, with exactly subdivisions unit directions.
 #### Returns
 
 [`DecalDirectionSampler`](../type-aliases/DecalDirectionSampler.md)
+
+***
+
+<a id="random"></a>
+
+### Random()
+
+```ts
+static Random(
+   hits,
+   particle,
+   n?
+): Intersection<Object3D<Object3DEventMap>>[];
+```
+
+Shuffles candidates without replacement; defaults to one random hit. Negative n returns every hit shuffled.
+
+#### Parameters
+
+##### hits
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+##### particle
+
+[`Particle`](Particle.md)
+
+##### n?
+
+`number` = `1`
+
+#### Returns
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
