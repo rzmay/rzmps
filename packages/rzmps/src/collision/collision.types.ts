@@ -1,3 +1,4 @@
+import type Benchmarks from '../core/Benchmarks';
 import type { SurfacePatch } from '../rendering/compositing/MaterialCopyRegistry';
 import * as THREE from 'three';
 import Particle from '../core/Particle';
@@ -32,6 +33,7 @@ export interface CollisionHit {
 }
 
 export interface ICollisionBackend {
+  readonly benchmarks?: Benchmarks;
   readonly supportsCPU?: boolean;
   readonly supportsGPU?: boolean;
   setGPUProcessingActive?(active: boolean): void;

@@ -74,6 +74,20 @@ readonly atlasOptions: TextureAtlasOptions;
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`benchmarks`](Renderer.md#benchmarks)
+
+***
+
 <a id="brightness"></a>
 
 ### brightness
@@ -651,6 +665,28 @@ get version(): number;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`version`](Renderer.md#version)
+
+***
+
+<a id="visibleinstancecount"></a>
+
+### visibleInstanceCount
+
+#### Get Signature
+
+```ts
+get visibleInstanceCount(): number;
+```
+
+Current renderer population, including generated children; GPU counts use available render-output state.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`visibleInstanceCount`](Renderer.md#visibleinstancecount)
 
 ## Methods
 

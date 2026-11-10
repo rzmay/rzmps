@@ -90,6 +90,20 @@ Wraps a per-particle callback; options select filtering, spatial collection, and
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`EventReceiver`](EventReceiver.md).[`benchmarks`](EventReceiver.md#benchmarks)
+
+***
+
 <a id="condition"></a>
 
 ### condition

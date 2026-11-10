@@ -1,3 +1,4 @@
+import Benchmarks from '../core/Benchmarks';
 import { MaterialCopyRegistry } from '../rendering/compositing/MaterialCopyRegistry';
 import getAttributeVersion from '../utils/getAttributeVersion';
 import * as THREE from 'three';
@@ -105,6 +106,7 @@ type BVHComputeDataRuntime = BVHComputeData & {
 
 /** GPU-only collision geometry owner backed by three-mesh-bvh's packed TLAS and BLAS. */
 export default class ThreeGPUCollisionBackend implements ICollisionBackend {
+  readonly benchmarks = new Benchmarks();
   materialRegistry = new MaterialCopyRegistry();
   private materialSignature = '';
   readonly supportsCPU = false;
@@ -143,6 +145,9 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
 
   /** Creates an uninitialized GPU backend; call update before constructing query nodes. */
   constructor(options: ThreeGPUCollisionBackendOptions = {}) {
+    for (const name of Object.keys(this.stats) as (keyof ThreeGPUCollisionBackendStats)[])
+      this.benchmarks.register(name, { type: 'gauge', unit: name === 'uploadBytes' ? 'bytes' : 'count',
+        get: () => this.stats[name] });
     this.world = options.world;
     this.staticObjects = options.staticObjects;
     this.dynamicObjects = options.dynamicObjects;
@@ -278,6 +283,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
 
   /** Releases packed GPU data and BVHs created by this backend. */
   destroy(): void {
+    this.benchmarks.detach();
     this.disposeData();
     this.tracked.clear();
     this.invalidatedGeometry.clear();

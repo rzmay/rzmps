@@ -38,6 +38,16 @@ new EventReceiver(options?): EventReceiver;
 
 ## Properties
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+***
+
 <a id="events"></a>
 
 ### events

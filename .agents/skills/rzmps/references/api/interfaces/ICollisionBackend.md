@@ -10,6 +10,16 @@
 
 ## Properties
 
+<a id="benchmarks"></a>
+
+### benchmarks?
+
+```ts
+readonly optional benchmarks?: Benchmarks;
+```
+
+***
+
 <a id="supportscpu"></a>
 
 ### supportsCPU?
