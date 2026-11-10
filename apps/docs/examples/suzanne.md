@@ -3,13 +3,13 @@ title: "Suzanne"
 example: suzanne
 ---
 
-# Suzanne
+[View live example](https://rzmps.rzmay.com/example/suzanne)
+
+# Suzanne <ExampleAttribution />
+
+<ExampleTags />
 
 Mesh-surface emission from a model with lit sprite rendering.
-
-[View live example](https://rzmps.rzmay.com/?preset=Suzanne)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

@@ -84,12 +84,12 @@ export default async function particleTrailPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 particleTrailPreset.metadata = {
-  author: "rzmay",
-  "id": "particleTrail",
-  "title": "Particle Trail",
-  "description": "Per-particle trail rendering with inherited color and alpha over moving particles.",
-  "tags": [
-    "particleTrail"
-  ],
-  "category": "effects"
+  author: 'rzmay',
+  'id': 'particleTrail',
+  'title': 'Particle Trail',
+  'description': 'Per-particle trail rendering with inherited color and alpha over moving particles.',
+  tags: ['particleTrail', 'trails', 'noise', 'effects'],
+  previewSettings: {
+    duration: 2,
+  },
 };

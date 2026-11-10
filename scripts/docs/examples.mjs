@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { demoUrl } from './site.mjs';
+import { previewDefaults } from './preview-settings.mjs';
 import path from 'node:path';
 import ts from 'typescript';
 export const root = path.resolve(import.meta.dirname, '../..');
@@ -145,7 +146,7 @@ export function discoverExamples() {
       );
       if (!hasDefault) throw new Error(`${file}: missing default example factory`);
       const metadata = readExampleMetadata(source, file);
-      for (const field of ['id', 'title', 'description', 'category'])
+      for (const field of ['id', 'title', 'description'])
         if (typeof metadata[field] !== 'string' || !metadata[field].trim())
           throw new Error(`${file}: invalid ${field}`);
       if (!/^[a-zA-Z][\w-]*$/.test(metadata.id) || seen.has(metadata.id) || titles.has(metadata.title))
@@ -183,15 +184,15 @@ export function resolveCode(markdown, example) {
       .flatMap(([name, entries]) =>
         entries.map(
           ({ code, line }) =>
-            `\n[Source: ` +
+            '\n[Source: ' +
             `${name}` +
-            `](https://github.com/rzmay/rzmps/blob/develop/examples/` +
+            '](https://github.com/rzmay/rzmps/blob/develop/examples/' +
             `${example.file}` +
-            `#L` +
+            '#L' +
             `${line}` +
-            `)\n\n\`\`\`js\n` +
+            ')\n\n```js\n' +
             `${code}` +
-            `\n\`\`\`\n`,
+            '\n```\n',
         ),
       )
       .join('\n');
@@ -199,36 +200,30 @@ export function resolveCode(markdown, example) {
 }
 export function guideTemplate(example) {
   return (
-    `---\ntitle: ` +
+    '---\ntitle: ' +
     `${JSON.stringify(example.title)}` +
-    `\nexample: ` +
+    '\nexample: ' +
     `${example.id}` +
-    `\n---\n\n# ` +
-    `${example.title}` +
-    `\n\n` +
-    `${example.description}` +
-    `\n\n[View live example](` +
-    `${demoUrl}` +
-    `?preset=` +
-    `${encodeURIComponent(example.title)}` +
-    `)\n\n<ExampleAttribution />\n\n<ExamplePreview />\n\n` +
+    `\n---\n\n[View live example](${demoUrl}example/${example.id})\n\n` +
+    `# ${example.title} <ExampleAttribution />\n\n<ExampleTags />\n\n` +
+    `${example.description}\n\n<ExamplePreview />\n\n` +
     sections
       .map(
         ([key, title]) =>
-          `## ` +
+          '## ' +
           `${title}` +
-          `\n\n<!-- TODO: Explain the ` +
+          '\n\n<!-- TODO: Explain the ' +
           `${key}` +
-          `, its purpose, and why the important configuration values suit this effect. ` +
-          `-->\n\n<ExampleCode region="` +
+          ', its purpose, and why the important configuration values suit this effect. ' +
+          '-->\n\n<ExampleCode region="' +
           `${key}` +
-          `" />\n`,
+          '" />\n',
       )
       .join('\n')
   );
 }
 export function validateGuide(markdown, example, strict = true) {
-  for (const component of ['ExampleAttribution', 'ExamplePreview']) {
+  for (const component of ['ExampleAttribution', 'ExampleTags', 'ExamplePreview']) {
     if (!markdown.includes(`<${component} />`)) throw new Error(`${example.id}: missing ${component}`);
   }
   const liveLink = markdown.match(/\[View live example\]\(([^)]+)\)/)?.[1];
@@ -239,8 +234,8 @@ export function validateGuide(markdown, example, strict = true) {
   } catch {
     throw new Error(`${example.id}: invalid live example URL`);
   }
-  if (liveUrl.searchParams.get('preset') !== example.title)
-    throw new Error(`${example.id}: stale live example preset; expected ${example.title}`);
+  if (liveUrl.pathname !== `/example/${example.id}` || liveUrl.search || liveUrl.hash)
+    throw new Error(`${example.id}: stale live example route; expected /example/${example.id}`);
   let last = -1;
   for (const [key, title] of sections) {
     const index = markdown.indexOf(`## ${title}\n`);
@@ -267,10 +262,36 @@ export function validateGuide(markdown, example, strict = true) {
 /** Resolve source-linked assets and authors without copying their data into authored guides. */
 export function resolveExample(markdown, example) {
   const author = example.author;
-  const credit = author?.url
-    ? `Preset by [${author.name}](${author.url}).`
-    : `Preset by ${author?.name ?? 'unknown author'}.`;
-  return resolveCode(markdown, example)
-    .replace(/<ExampleAttribution\s*\/>/g, credit)
-    .replace(/<ExamplePreview\s*\/>/g, `![Generated preview of ${example.title}](/previews/${example.id}.png)`);
+  const escape = value =>
+    String(value).replace(
+      /[&<>"']/g,
+      character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character],
+    );
+  const name = escape(author?.name ?? 'unknown author');
+  const credit = author?.url ? `<a href="${escape(author.url)}" rel="author">${name}</a>` : name;
+  const tags = (example.tags ?? []).map(tag => `<span class="example-tag">${escape(tag)}</span>`).join(' ');
+  const attribution = `<span class="example-author">Preset by ${credit}</span>`;
+  const tagList = `<div class="example-tags" aria-label="Example tags">${tags}</div>`;
+  const settings = { ...previewDefaults, ...example.previewSettings };
+  return (
+    resolveCode(markdown, example)
+      // The combined site shares an origin in development and production. Raw HTML
+      // keeps VitePress from prefixing the demo route with the /docs/ base.
+      .replace(
+        /\[View live example\]\([^)]+\)/g,
+        () =>
+          `<a class="example-live-demo" href="/example/${example.id}" target="_self">Open live demo ` +
+          '<span aria-hidden="true">↗</span></a>',
+      )
+      .replace(/<ExampleAttribution\s*\/>/g, () => attribution)
+      .replace(/<ExampleTags\s*\/>/g, () => tagList)
+      .replace(
+        /<ExamplePreview\s*\/>/g,
+        () =>
+          `<ExampleVideo source="/previews/${example.id}.${settings.format}" ` +
+          `poster="/previews/${example.id}.png" ` +
+          `label="${escape(example.title)} preview" ` +
+          `:width="${settings.width}" :height="${settings.height}" />`,
+      )
+  );
 }

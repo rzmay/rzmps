@@ -1,0 +1,22 @@
+.vp-doc .example-live-demo {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .2rem .55rem;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 5px;
+  color: var(--vp-c-text-2);
+  font-size: .75rem;
+  line-height: 1.6;
+  text-decoration: none;
+}
+.vp-doc .example-live-demo:hover { color: var(--vp-c-brand-1); border-color: var(--vp-c-brand-1); }
+.vp-doc h1:has(.example-author) { display: flex; align-items: baseline; flex-wrap: wrap; gap: .5rem 1rem; }
+.example-author { font-size: .875rem; font-weight: 400; letter-spacing: normal; color: var(--vp-c-text-2); }
+.vp-doc .example-author a { color: var(--vp-c-text-1); font-weight: 500; text-decoration: none; }
+.vp-doc .example-author a:hover { color: var(--vp-c-brand-1); text-decoration: underline; }
+.example-tags { display: flex; flex-wrap: wrap; gap: .35rem; margin: .75rem 0 1.25rem; }
+.example-tag {
+  display: inline-block; padding: .15rem .6rem; border-radius: 99px; font-size: .75rem; line-height: 1.6;
+  background: var(--vp-c-default-soft); color: var(--vp-c-text-2);
+}

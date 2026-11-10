@@ -91,12 +91,12 @@ export default async function suzanneInstancesPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 suzanneInstancesPreset.metadata = {
-  author: "rzmay",
-  "id": "suzanneInstances",
-  "title": "Suzanne Instances",
-  "description": "Mesh instancing with Suzanne particles and randomized transforms.",
-  "tags": [
-    "suzanneInstances"
-  ],
-  "category": "effects"
+  author: 'rzmay',
+  'id': 'suzanneInstances',
+  'title': 'Suzanne Instances',
+  'description': 'Mesh instancing with Suzanne particles and randomized transforms.',
+  tags: ['suzanneInstances', 'meshes', 'instancing', 'effects'],
+  previewSettings: {
+    duration: 10,
+  },
 };

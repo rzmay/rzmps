@@ -3,13 +3,13 @@ title: "Collision"
 example: collision
 ---
 
-# Collision
+[View live example](https://rzmps.rzmay.com/example/collision)
+
+# Collision <ExampleAttribution />
+
+<ExampleTags />
 
 Particle collision with automatic mesh detection and sorting between static and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, Rapier, and Ammo can be used as external physics backends, allowing particles to affect other physics objects in the scene.
-
-[View live example](https://rzmps.rzmay.com/?preset=Collision)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

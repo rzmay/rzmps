@@ -230,14 +230,15 @@ firefliesPreset.metadata = {
   id: 'fireflies',
   title: 'Fireflies',
   description: 'Fireflies use spatial queries and native events to emit attached glow pulses and small lights.',
-  tags: ['fireflies', 'gpu', 'events', 'spatial-grid', 'lights'],
-  category: 'effects',
+  tags: ['fireflies', 'gpu', 'events', 'spatial-grid', 'spatial', 'lights', 'effects'],
   previewSettings: {
+    // A representative sample of the 120-second ambient cycle.
+    duration: 10,
     scene: checkerboardScene,
-    backend: "webgpu",
+    backend: 'webgpu',
     sceneLightStrength: 0.08,
     warmup: 360,
-    cameraPosition: [15,10,23],
-    cameraTarget: [0,3,0],
+    cameraPosition: [15, 10, 23],
+    cameraTarget: [0, 3, 0],
   },
 };

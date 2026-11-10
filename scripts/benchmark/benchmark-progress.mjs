@@ -22,13 +22,13 @@ export function formatProgressReport(markdown, metadata, { runUrl, interrupted =
     `<!-- rzmps-benchmark-run:${metadata.runId}:${metadata.runAttempt}:${stage} -->`,
     `**Base:** \`${escape(metadata.baseRef)}@${metadata.baseSha.slice(0, 7)}\``,
     `**PR:** \`${escape(metadata.headRef)}@${metadata.headSha.slice(0, 7)}\``,
-    `**Suite:** ` +
+    '**Suite:** ' +
       `${metadata.selection === 'full' ? 'Full' : 'PR (16 cases)'}` +
-      ` · **Status:** ` +
+      ' · **Status:** ' +
       `${state}` +
-      ` · **Measurements:** ` +
+      ' · **Measurements:** ' +
       `${passes.length}` +
-      `/6 per case`,
+      '/6 per case',
     `**Completed order:** ${passes.map(pass => (pass.startsWith('base') ? 'A' : 'B')).join('')}`,
     metadata.simulationClock === 'fixed'
       ? '**Simulation:** one fixed 1/60-second interval per rendered frame; ' +

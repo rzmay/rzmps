@@ -5,7 +5,7 @@ services:
     name: rzmps
     branch: develop
     # Omit rootDir: Render must use the repository root for npm workspace linking.
-    buildCommand: npm ci && npx puppeteer browsers install chrome && npm run site:build
+    buildCommand: npm ci && npx puppeteer browsers install chrome && npm run site:deploy
     staticPublishPath: dist
     envVars:
       - key: NODE_VERSION

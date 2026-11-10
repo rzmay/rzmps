@@ -181,14 +181,14 @@ try {
   );
   for (const example of discoverExamples()) {
     await page.goto(`${origin}/docs/examples/${example.id}.html`, { waitUntil: 'networkidle0' });
-    const poster = await page.$('.vp-doc img[src*="/previews/"]');
-    assert.ok(poster, `${example.id}: preview image`);
-    await poster.evaluate(element => element.scrollIntoView());
-    await page.waitForFunction(() => {
-      const image = document.querySelector('.vp-doc img[src*="/previews/"]');
-      return image.complete && image.naturalWidth > 0;
-    });
-    assert.equal(await poster.evaluate(element => new URL(element.src).pathname), `/docs/previews/${example.id}.png`);
+    const video = await page.$('.vp-doc video');
+    assert.ok(video, `${example.id}: animated preview`);
+    await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+    await video.evaluate(element => element.scrollIntoView());
+    assert.equal(await video.evaluate(element => new URL(element.poster).pathname), `/docs/previews/${example.id}.png`);
+    await page.waitForFunction(() => document.querySelector('.vp-doc video').paused);
+    assert.ok(await page.$('link[rel="canonical"]'));
+    await page.emulateMediaFeatures([]);
     const text = await page.$eval('.vp-doc', element => element.textContent);
     assert.ok(text.includes(`Preset by ${example.author.name}`), `${example.id}: credit`);
   }

@@ -14,7 +14,7 @@ import { WebGPURenderer } from 'three/webgpu';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
 import type { GPUParticleReadbackField } from '../../simulation/gpu/SelectiveReadback';
 
-export const TRAIL_RENDERER_USER_DATA_KEY = "__rzmps_trailRenderer";
+export const TRAIL_RENDERER_USER_DATA_KEY = '__rzmps_trailRenderer';
 
 export interface TrailRendererOptions extends RendererOptions {
   /** Particle mode keeps one history per particle; Ribbon mode connects particles into shared strands. */

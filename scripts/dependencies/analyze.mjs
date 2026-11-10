@@ -56,13 +56,13 @@ try {
   const diff = compareWarnings(report.base, report.head);
   for (const warning of report.head) console.log(`warn ${warning.rule}: ${warning.from} → ${warning.to}`);
   console.log(
-    `[dependencies] ` +
+    '[dependencies] ' +
       `${diff.added.length}` +
-      ` new, ` +
+      ' new, ' +
       `${diff.resolved.length}` +
-      ` resolved, ` +
+      ' resolved, ' +
       `${diff.existing.length}` +
-      ` existing warnings`,
+      ' existing warnings',
   );
   for (const [file, data] of [
     ['base.json', base],

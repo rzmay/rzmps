@@ -23,7 +23,7 @@ const withAudioSource = (buffer, url) => {
   return buffer;
 };
 
-export default async function collisionSubEmittersPreset() {
+export default async function metalBallsPreset() {
   const ballHit = await new THREE.AudioLoader().loadAsync(ballHitUrl);
   withAudioSource(ballHit, ballHitUrl);
 
@@ -156,7 +156,7 @@ export default async function collisionSubEmittersPreset() {
 }
 
 /** @type {import("../types").ExampleMetadata} */
-collisionSubEmittersPreset.metadata = {
+metalBallsPreset.metadata = {
   author: 'rzmay',
   id: 'collisionSubEmitters',
   title: 'Metal Balls',
@@ -164,9 +164,9 @@ collisionSubEmittersPreset.metadata = {
   description:
     'Collision-triggered subsystems and sound effects with physics-driven EQ ' +
     'filtering and live-cubemap rendering for convincing metallic surfaces.',
-  tags: ['collisionSubEmitters'],
-  category: 'effects',
+  tags: ['collisionSubEmitters', 'metal', 'balls', 'audio', 'collision', 'events', 'subsystems', 'trails', 'effects'],
   previewSettings: {
+    duration: 5,
     scene: collisionTestScene,
   },
 };

@@ -6,20 +6,18 @@ import { Stats } from '@react-three/drei';
 import { createWebGPURenderer } from '../rendering/createWebGPURenderer';
 import CameraControls from '../components/CameraControls';
 import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
-import particlePresets from 'examples/index.js';
+import particlePresets, { examples } from 'examples/index.js';
+import { resolveDemoSelection } from 'examples/utils/resolveDemoSelection.js';
 import scenePresets from 'examples/scenes/index.js';
 import BenchmarkPage from './BenchmarkPage';
 import LandingLayout from '../components/LandingLayout';
-
-const RENDERER_MODES = ['webgl', 'webgpu'];
-const PARTICLE_PRESET_NAMES = Object.keys(particlePresets);
-const SCENE_PRESET_NAMES = Object.keys(scenePresets);
 
 function getPresetMetadata(presets, name) {
   const entry = presets[name];
   const factory = typeof entry === 'function' ? entry : entry?.create;
 
   return {
+    id: entry?.id ?? factory?.metadata?.id,
     sourceUrl: entry?.sourceUrl ?? factory?.sourceUrl,
     author: entry?.author ?? factory?.metadata?.author,
     description: entry?.description ?? factory?.metadata?.description,
@@ -45,13 +43,6 @@ function normalizeAuthor(author) {
   }
 
   return author;
-}
-
-function getQueryParam(name, allowedValues, fallback) {
-  const params = new URLSearchParams(window.location.search);
-  const value = params.get(name);
-
-  return allowedValues.includes(value) ? value : fallback;
 }
 
 function setQueryParam(name, value) {
@@ -122,7 +113,9 @@ function PresetAttribution({ metadata }) {
       </div>
 
       <div className="preset-attribution-sources">
-        <a href="/docs/">Documentation</a>
+        <a href={metadata.particle?.id ? `/docs/examples/${metadata.particle.id}.html` : '/docs/examples/'}>
+          Documentation
+        </a>
         {metadata.particle?.sourceUrl && (
           <a href={metadata.particle.sourceUrl} target="_blank" rel="noreferrer">
             Particle source
@@ -143,9 +136,12 @@ function DemoPage() {
   const [code, setCode] = useState('');
   const particleCountRef = useRef(null);
   const [showCode, setShowCode] = useState(false);
-  const [rendererMode, setRendererMode] = useState(() => getQueryParam('renderer', RENDERER_MODES, 'webgl'));
-  const [particlePreset, setParticlePreset] = useState(() => getQueryParam('preset', PARTICLE_PRESET_NAMES, 'Fire'));
-  const [scenePreset, setScenePreset] = useState(() => getQueryParam('scene', SCENE_PRESET_NAMES, 'Checkerboard'));
+  const [initialSelection] = useState(() =>
+    resolveDemoSelection(new URL(window.location.href), examples, scenePresets),
+  );
+  const [rendererMode, setRendererMode] = useState(initialSelection.backend);
+  const [particlePreset, setParticlePreset] = useState(initialSelection.preset);
+  const [scenePreset, setScenePreset] = useState(initialSelection.scene);
   const [metadata, setMetadata] = useState(() => ({
     particle: getPresetMetadata(particlePresets, particlePreset),
     scene: getPresetMetadata(scenePresets, scenePreset),
@@ -157,7 +153,13 @@ function DemoPage() {
   }, []);
 
   const handlePresetChange = useCallback(name => {
-    setQueryParam('preset', name);
+    const url = new URL(window.location.href);
+    if (url.pathname.startsWith('/example/')) {
+      const example = examples.find(entry => entry.title === name);
+      url.pathname = `/example/${example.id}`;
+      url.searchParams.delete('preset');
+      window.history.replaceState({}, '', url);
+    } else setQueryParam('preset', name);
     setParticlePreset(name);
   }, []);
 
@@ -165,6 +167,23 @@ function DemoPage() {
     setQueryParam('scene', name);
     setScenePreset(name);
   }, []);
+
+  const handleExampleSelect = useCallback(
+    name => {
+      const example = examples.find(entry => entry.title === name);
+      if (!example) return;
+      // Resolve a fresh example route so the previous scene query cannot override
+      // the preset's preferred scene. Preserve the user's current renderer.
+      const selection = resolveDemoSelection(
+        new URL(`/example/${example.id}`, window.location.origin),
+        examples,
+        scenePresets,
+      );
+      handlePresetChange(selection.preset);
+      handleSceneChange(selection.scene);
+    },
+    [handlePresetChange, handleSceneChange],
+  );
 
   const handleParticleCountChange = useCallback(stats => {
     if (particleCountRef.current) {
@@ -190,7 +209,7 @@ function DemoPage() {
   }, []);
 
   return (
-    <LandingLayout>
+    <LandingLayout onExampleSelect={handleExampleSelect} selectedExample={particlePreset}>
       <div className="demo-shell" ref={demoRef}>
         <Canvas
           key={rendererMode}
@@ -257,6 +276,7 @@ const authorType = PropTypes.oneOfType([
   PropTypes.shape({ name: PropTypes.string, url: PropTypes.string }),
 ]);
 const attributionType = PropTypes.shape({
+  id: PropTypes.string,
   author: authorType,
   description: PropTypes.string,
   sourceUrl: PropTypes.string,

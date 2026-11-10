@@ -34,12 +34,12 @@ export class ParticleSystemSerializer {
     const systemLines = this.serializeParticleSystemTree(this.system, rootName, counter);
 
     const lines = [
-      `import * as THREE from 'three';`,
+      'import * as THREE from \'three\';',
       `import { ${Array.from(imports).sort().join(', ')} } from '@rzmps/rzmps';`,
     ];
 
     if (this.usesEasing) {
-      lines.push(`import { Easing } from 'eaz';`);
+      lines.push('import { Easing } from \'eaz\';');
     }
 
     lines.push(...systemLines, '', `export default ${rootName};`, '');
@@ -178,35 +178,35 @@ export class ParticleSystemSerializer {
       expression = `EmissionShape.Cone(${params.radius ?? 1}, ${params.height ?? 1}, ${params.radialSegments ?? 16})`;
     } else if (geometry.type.includes('Torus')) {
       expression =
-        `EmissionShape.Torus(` +
+        'EmissionShape.Torus(' +
         `${params.radius ?? 1}` +
-        `, ` +
+        ', ' +
         `${params.tube ?? 0.4}` +
-        `, ` +
+        ', ' +
         `${params.radialSegments ?? 16}` +
-        `, ` +
+        ', ' +
         `${params.tubularSegments ?? 32}` +
-        `, ` +
+        ', ' +
         `${params.arc ?? Math.PI * 2}` +
-        `)`;
+        ')';
     } else if (geometry.type.includes('Sphere')) {
       expression =
-        `EmissionShape.Sphere(` +
+        'EmissionShape.Sphere(' +
         `${params.radius ?? 1}` +
-        `, ` +
+        ', ' +
         `${params.widthSegments ?? params.radialSegments ?? 16}` +
-        `, ` +
+        ', ' +
         `${params.heightSegments ?? 8}` +
-        `)`;
+        ')';
     } else {
       return (
-        `new EmissionShape({ geometry: new THREE.BufferGeometry() /* replace with ` +
+        'new EmissionShape({ geometry: new THREE.BufferGeometry() /* replace with ' +
         `${geometry.type}` +
-        ` */, source: EmissionSource.` +
+        ' */, source: EmissionSource.' +
         `${this.emissionSourceName(shape.source)}` +
-        `, volumeSamples: ` +
+        ', volumeSamples: ' +
         `${volumeSamples}` +
-        ` })`
+        ' })'
       );
     }
     const overrides = [];

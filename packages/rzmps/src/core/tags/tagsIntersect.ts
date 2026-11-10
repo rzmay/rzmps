@@ -1,4 +1,4 @@
-import type { Tag } from "../../types/tag.types";
+import type { Tag } from '../../types/tag.types';
 
 export default function tagsIntersect(a: Tag[], b: Tag[]) {
   for (let i = 0; i < a.length; i += 1) {

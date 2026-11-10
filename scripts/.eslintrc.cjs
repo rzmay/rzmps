@@ -5,7 +5,12 @@ module.exports = {
   rules: { 'no-inner-declarations': 'off' },
   overrides: [
     {
-      files: ['preview/**/*.{js,mjs}', 'tests/preview/**/*.{js,mjs}', 'tests/site/browser-check.mjs'],
+      files: [
+        'preview/**/*.{js,mjs}',
+        'tests/preview/**/*.{js,mjs}',
+        'tests/site/browser-check.mjs',
+        'tests/site/search.test.mjs',
+      ],
       env: { browser: true },
       globals: { GPUBufferUsage: 'readonly', GPUMapMode: 'readonly', GPUShaderStage: 'readonly' },
     },

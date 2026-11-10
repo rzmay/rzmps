@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { discoverExamples } from '../docs/examples.mjs';
+import { demoPageHTML } from '../docs/seo.mjs';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(import.meta.dirname, '../..');
 export async function assembleSite({
@@ -15,6 +17,16 @@ export async function assembleSite({
   await fs.mkdir(output, { recursive: true });
   await fs.cp(demoDirectory, output, { recursive: true });
   await fs.cp(docsDirectory, path.join(output, 'docs'), { recursive: true });
+  const demoHTML = await fs.readFile(path.join(demoDirectory, 'index.html'), 'utf8');
+  await fs.writeFile(path.join(output, 'index.html'), demoPageHTML(demoHTML));
+  // Static aliases preserve direct example URLs on hosts without SPA fallback routing.
+  for (const example of discoverExamples()) {
+    const directory = path.join(output, 'example', example.id);
+    await fs.mkdir(directory, { recursive: true });
+    const html = demoPageHTML(demoHTML, example);
+    await fs.writeFile(path.join(directory, 'index.html'), html);
+    await fs.writeFile(path.join(output, 'example', example.id + '.html'), html);
+  }
   // A physical alias also supports static hosts that resolve /docs to /docs.html.
   await fs.copyFile(path.join(docsDirectory, 'index.html'), path.join(output, 'docs.html'));
   for (const file of ['llms.txt', 'llms-full.txt'])

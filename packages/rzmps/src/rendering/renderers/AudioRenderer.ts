@@ -17,7 +17,7 @@ import type { SimulationEvent } from '../../events/EventReceiver';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
 import type { GPUParticleReadbackField } from '../../simulation/gpu/SelectiveReadback';
 
-const AUDIO_LISTENER_KEY = "__rzmps_audioListener";
+const AUDIO_LISTENER_KEY = '__rzmps_audioListener';
 
 /** Evaluated inputs for one event cue. Position is in the renderer system's simulation space. */
 export interface AudioParameters {

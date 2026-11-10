@@ -3,13 +3,13 @@ title: "Doppler Bullet"
 example: dopplerBullet
 ---
 
-# Doppler Bullet
+[View live example](https://rzmps.rzmay.com/example/dopplerBullet)
+
+# Doppler Bullet <ExampleAttribution />
+
+<ExampleTags />
 
 A piercing bullet leaves surface-blended bullet holes, with Doppler audio, smoke, faint trails and a distortion wake.
-
-[View live example](https://rzmps.rzmay.com/?preset=Doppler%20Bullet)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

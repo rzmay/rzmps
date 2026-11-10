@@ -12,7 +12,7 @@ import {
 } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-export default async function tagsPreset() {
+export default async function cubesAndSpheresPreset() {
   const colors = new Set([
     '#ff3333',
     '#33ff66',
@@ -102,13 +102,13 @@ export default async function tagsPreset() {
 }
 
 /** @type {import("../types").ExampleMetadata} */
-tagsPreset.metadata = {
-  author: "rzmay",
-  "id": "tags",
-  "title": "Cubes and Spheres",
-  "description": "Tag-based module and renderer filtering by mixing cubes and spheres in one particle system.",
-  "tags": [
-    "tags"
-  ],
-  "category": "effects"
+cubesAndSpheresPreset.metadata = {
+  author: 'rzmay',
+  'id': 'tags',
+  'title': 'Cubes and Spheres',
+  'description': 'Tag-based module and renderer filtering by mixing cubes and spheres in one particle system.',
+  tags: ['tags', 'collision', 'meshes', 'sprites', 'tag-filtering', 'effects'],
+  previewSettings: {
+    duration: 10,
+  },
 };

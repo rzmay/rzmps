@@ -3,13 +3,13 @@ title: "Ribbon Trail"
 example: ribbonTrail
 ---
 
-# Ribbon Trail
+[View live example](https://rzmps.rzmay.com/example/ribbonTrail)
+
+# Ribbon Trail <ExampleAttribution />
+
+<ExampleTags />
 
 Ribbon trail rendering for continuous streaks with lifetime fading.
-
-[View live example](https://rzmps.rzmay.com/?preset=Ribbon%20Trail)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

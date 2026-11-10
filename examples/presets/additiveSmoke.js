@@ -58,9 +58,9 @@ export default async function additiveSmokePreset() {
       new ColorOverLifetime({
         color: '#ffffff',
         alpha: (time) =>
-          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+          ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+          : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
         angularVelocity: [-1, 1],
@@ -93,12 +93,12 @@ export default async function additiveSmokePreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 additiveSmokePreset.metadata = {
-  author: "rzmay",
-  "id": "additiveSmoke",
-  "title": "Additive Smoke",
-  "description": "Additive blending with soft particles and layered lifetime color ramps for luminous smoke.",
-  "tags": [
-    "additiveSmoke"
-  ],
-  "category": "effects"
+  author: 'rzmay',
+  'id': 'additiveSmoke',
+  'title': 'Additive Smoke',
+  'description': 'Additive blending with soft particles and layered lifetime color ramps for luminous smoke.',
+  tags: ['additiveSmoke', 'additive-blending', 'additive', 'blending', 'smoke', 'sprites', 'noise'],
+  previewSettings: {
+    duration: 10,
+  },
 };

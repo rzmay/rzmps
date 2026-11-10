@@ -18,7 +18,8 @@ test('examples workspace resolves particle and scene entry points from demo and 
 
 test('Vite resolves workspace imports and all relocated scene modules and assets', async () => {
   const server = await createServer({
-    root: path.join(root, 'apps/demo'), configFile: path.join(root, 'apps/demo/vite.config.mjs'),
+    root: path.join(root, 'apps/demo'),
+    configFile: path.join(root, 'apps/demo/vite.config.mjs'),
     server: { middlewareMode: true, hmr: false, ws: false },
     optimizeDeps: { noDiscovery: true, include: [] },
   });
@@ -27,8 +28,16 @@ test('Vite resolves workspace imports and all relocated scene modules and assets
       const resolved = await server.pluginContainer.resolveId(entry, path.join(root, 'apps/demo/src/pages/index.jsx'));
       assert.equal(resolved.id, path.join(root, entry));
     }
-    for (const file of ['examples/index.js', 'examples/scenes/index.js']) {
+    for (const file of ['examples/index.js', 'examples/scenes/index.js', 'scripts/preview/harness.js']) {
       assert.ok((await server.transformRequest('/@fs/' + path.join(root, file)))?.code);
+    }
+    for (const file of [
+      'pages/index.jsx',
+      'components/LandingLayout.jsx',
+      'components/ParticleSystemDisplay.jsx',
+      'gui/ParticleSystemGUI.js',
+    ]) {
+      assert.ok((await server.transformRequest('/src/' + file))?.code, `demo ${file} transforms`);
     }
     for (const directory of ['presets', 'scenes', 'utils']) {
       for (const file of fs.readdirSync(path.join(root, 'examples', directory)).filter(file => file.endsWith('.js'))) {
@@ -36,5 +45,7 @@ test('Vite resolves workspace imports and all relocated scene modules and assets
         assert.ok(result?.code, `${directory}/${file} and its imports resolve after relocation`);
       }
     }
-  } finally { await server.close(); }
+  } finally {
+    await server.close();
+  }
 });

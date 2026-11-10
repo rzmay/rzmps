@@ -3,13 +3,13 @@ title: "Fire"
 example: fire
 ---
 
-# Fire
+[View live example](https://rzmps.rzmay.com/example/fire)
+
+# Fire <ExampleAttribution />
+
+<ExampleTags />
 
 Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces.
-
-[View live example](https://rzmps.rzmay.com/?preset=Fire)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

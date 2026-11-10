@@ -44,9 +44,9 @@ if (github || source) {
     const preload = path.join(temporary, 'isolated-user.cjs');
     await fsp.writeFile(
       preload,
-      `const os=require('node:os'); os.homedir=()=>` +
+      'const os=require(\'node:os\'); os.homedir=()=>' +
         `${JSON.stringify(testHome)}` +
-        `; require('node:module').syncBuiltinESMExports();\n`,
+        '; require(\'node:module\').syncBuiltinESMExports();\n',
     );
     const isolatedRun = (args, cwd) =>
       execFileSync(process.execPath, ['--require', preload, cli, ...args], {
@@ -88,9 +88,9 @@ if (github || source) {
   for (const hook of ['preinstall', 'install', 'postinstall'])
     if (pkg.scripts?.[hook]) throw new Error(`Consumer installation hook ${hook} is not permitted`);
   console.log(
-    `npm pack --dry-run passed: ` +
+    'npm pack --dry-run passed: ' +
       `${files.length}` +
-      ` files, short AGENTS.md included, full skill excluded, no consumer install ` +
-      `hooks.`,
+      ' files, short AGENTS.md included, full skill excluded, no consumer install ' +
+      'hooks.',
   );
 }

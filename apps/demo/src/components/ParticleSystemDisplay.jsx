@@ -52,6 +52,14 @@ function ParticleSystemDisplay({
 }) {
   const particleSystem = useRef(null);
   const guiRef = useRef(null);
+  const selectionRef = useRef(null);
+  selectionRef.current = { preset: initialPreset, scene: initialScene };
+  useEffect(() => {
+    const gui = guiRef.current;
+    if (!gui) return;
+    if (gui.currentPresetName !== initialPreset) void gui.loadPreset(initialPreset);
+    if (gui.currentSceneName !== initialScene) void gui.setScene(initialScene);
+  }, [initialPreset, initialScene]);
   const initialSettings = useRef(null);
   initialSettings.current = { initialPreset, initialScene, rendererMode };
   const { gl, scene } = useThree();
@@ -63,7 +71,10 @@ function ParticleSystemDisplay({
     async function initialize() {
       const system = await particlePresets[initialPreset].create();
 
-      if (cancelled) return;
+      if (cancelled) {
+        system.destroy();
+        return;
+      }
 
       particleSystem.current = system;
       getSceneParticleRoot(scene).add(system);
@@ -91,6 +102,9 @@ function ParticleSystemDisplay({
       });
 
       guiRef.current = gui;
+      const selection = selectionRef.current;
+      if (selection.preset !== initialPreset) void gui.loadPreset(selection.preset);
+      if (selection.scene !== initialScene) void gui.setScene(selection.scene);
     }
 
     initialize();

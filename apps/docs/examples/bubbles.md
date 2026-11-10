@@ -3,13 +3,13 @@ title: "Bubbles"
 example: bubbles
 ---
 
-# Bubbles
+[View live example](https://rzmps.rzmay.com/example/bubbles)
+
+# Bubbles <ExampleAttribution />
+
+<ExampleTags />
 
 Refractive sprite transmission with spherical normals and size-driven distortion. Both continuous sounds and collision-triggered bubble pops.
-
-[View live example](https://rzmps.rzmay.com/?preset=Bubbles)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

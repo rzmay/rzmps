@@ -92,12 +92,12 @@ export default async function stylizedDepthPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 stylizedDepthPreset.metadata = {
-  author: "rzmay",
-  "id": "stylizedDepth",
-  "title": "Stylized Depth",
-  "description": "Depth-based color, scale, speed, rotation, and velocity modules for stylized perspective effects.",
-  "tags": [
-    "stylizedDepth"
-  ],
-  "category": "effects"
+  author: 'rzmay',
+  'id': 'stylizedDepth',
+  'title': 'Stylized Depth',
+  'description': 'Depth-based color, scale, speed, rotation, and velocity modules for stylized perspective effects.',
+  tags: ['stylizedDepth', 'attenuation', 'depth', 'sprites', 'color', 'scale', 'effects'],
+  previewSettings: {
+    duration: 14,
+  },
 };

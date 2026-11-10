@@ -105,9 +105,9 @@ splatterPreset.metadata = {
     'Matte, multicolored paintballs leave long-lived splatters matching their ' +
     'color and size, with randomized surface rotation. Select a scene with ' +
     'collision geometry, such as Checkerboard.',
-  tags: ['splatter', 'paintballs', 'decals', 'collision'],
-  category: 'effects',
+  tags: ['splatter', 'paintballs', 'decals', 'collision', 'effects'],
   previewSettings: {
+    duration: 8,
     scene: checkerboardScene,
     warmup: 480,
   },

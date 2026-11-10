@@ -48,19 +48,20 @@ async function runInLinux() {
       if (['warn', 'error'].includes(message.type())) console.warn(`[browser ${message.type()}] ${message.text()}`);
     });
     page.on('pageerror', error => diagnostics.report({ phase: 'page-error', message: error.stack }));
+    // Video capture streams PNGs instead of returning their data in result.frames.
+    await page.exposeFunction('rzmpsWriteFrame', async (index, _observation, data) => {
+      await fs.writeFile(`/output/frame-${index}.png`, Buffer.from(data.split(',')[1], 'base64'));
+    });
     diagnostics.report({ phase: 'page-navigation' });
     await page.goto(`http://127.0.0.1:${server.address().port}/?preview=1`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.rzmpsPreview);
     const result = await Promise.race([
-      page.evaluate(options => window.rzmpsPreview.capture(options), options),
+      page.evaluate(options => window.rzmpsPreview.capture({ ...options, streamFrames: true }), options),
       new Promise((_, reject) => {
         timeout = setTimeout(() => reject(new Error('Capture exceeded 180 seconds')), 180000);
       }),
     ]);
     if (result.backend !== options.backend) throw new Error('Requested rendering backend was not used');
-    for (const [index, frame] of result.frames.entries()) {
-      await fs.writeFile(`/output/frame-${index}.png`, Buffer.from(frame.data.split(',')[1], 'base64'));
-    }
     const { frames, contactSheet, ...metadata } = result;
     await fs.writeFile(
       '/output/result.json',

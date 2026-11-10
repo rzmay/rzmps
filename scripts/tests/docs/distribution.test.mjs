@@ -98,7 +98,7 @@ test('website discovers the canonical GitHub skill without a hosted duplicate', 
 test('example credit is resolved from the canonical factory author', () => {
   const example = discoverExamples().find(e => e.id === 'fire');
   const rendered = resolveExample('<ExampleAttribution />\n<ExamplePreview />', example);
-  assert.match(rendered, /Preset by \[rzmay\]\(https:\/\/github.com\/rzmay\)/);
+  assert.match(rendered, /Preset by <a href="https:\/\/github.com\/rzmay" rel="author">rzmay<\/a>/);
   assert.match(rendered, /\/previews\/fire.png/);
 });
 test('example guides require generated preview and attribution components', () => {
@@ -131,14 +131,17 @@ test('skill format validates YAML and rejects broken references', () => {
   }
 });
 
-test('preview validation requires matching inputs, manifest and image bytes', () => {
-  const image = Buffer.from('preview image');
-  const entry = { inputHash: 'current-source', imageHash: checksum(image) };
-  assert.equal(previewIsCurrent(entry, 'current-source', image), true);
-  assert.equal(previewIsCurrent(entry, 'edited-source', image), false);
-  assert.equal(previewIsCurrent(entry, 'current-source', Buffer.from('edited image')), false);
-  assert.equal(previewIsCurrent(entry, 'current-source', null), false);
-  assert.equal(previewIsCurrent(undefined, 'current-source', image), false);
+test('preview cache validation requires current inputs, actual backend, poster and video checksums', () => {
+  const image = Buffer.from('preview image'), video = Buffer.from('video');
+  const entry = { inputHash: 'current-source', backend:'webgpu', actualBackend:'webgpu', format:'mp4',
+    files: {'example.png':checksum(image),'example.mp4':checksum(video)} };
+  const files = {'example.png':image,'example.mp4':video};
+  assert.equal(previewIsCurrent(entry, 'current-source', files), true);
+  assert.equal(previewIsCurrent(entry, 'edited-source', files), false);
+  assert.equal(previewIsCurrent(entry, 'current-source', {...files,'example.png':Buffer.from('edited')}), false);
+  assert.equal(previewIsCurrent(entry, 'current-source', {'example.png':image}), false);
+  assert.equal(previewIsCurrent({...entry,actualBackend:'webgl'}, 'current-source',files), false);
+  assert.equal(previewIsCurrent(undefined, 'current-source', files), false);
 });
 
 test('skill entry points use direct files; secondary references validate heading fragments', async () => {

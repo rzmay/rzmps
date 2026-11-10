@@ -12,10 +12,10 @@ export function adaptBenchmarkPage(source) {
     throw new Error('Benchmark page cannot accept shared selection/clock controls; update its compatibility adapter');
   }
   const imports =
-    `import { selectBenchmarkCases, readBenchmarkOptions, updateBenchmarkSystem ` +
-    `} from ` +
+    'import { selectBenchmarkCases, readBenchmarkOptions, updateBenchmarkSystem ' +
+    '} from ' +
     `${JSON.stringify(benchmarkControlModule)}` +
-    `;\n` +
+    ';\n' +
     'const benchmarkOptions = readBenchmarkOptions(window.location.search);\n';
   return (
     imports +

@@ -1,11 +1,12 @@
 import fs from 'node:fs/promises';
+import { previewBrowserArguments } from './browserSettings.mjs';
+import { attachBrowserDiagnostics } from './browserDiagnostics.mjs';
+import { encodeVideo, containers } from './media.mjs';
 import { rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { build, preview } from 'vite';
-import puppeteer from 'puppeteer';
-import { previewBrowserArguments } from './browserSettings.mjs';
-import { attachBrowserDiagnostics } from './browserDiagnostics.mjs';
+import puppeteer, { PUPPETEER_REVISIONS } from 'puppeteer';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
@@ -27,6 +28,10 @@ export function parseOptions(args) {
     'camera-target',
     'camera-fov',
     'example-options',
+    'format',
+    'duration',
+    'fps',
+    'crf',
   ];
   const { values } = parseArgs({
     args,
@@ -49,6 +54,9 @@ export function parseOptions(args) {
   const options = {
     ...(exampleOptions === undefined ? {} : { exampleOptions }),
     example: values.example ?? 'fire',
+    format: values.format ?? 'png',
+    fps: Number(values.fps ?? 30),
+    crf: Number(values.crf ?? 28),
     backend: values.backend ?? 'webgl',
     frames: Number(values.frames ?? 6),
     interval: Number(values.interval ?? 20),
@@ -63,8 +71,25 @@ export function parseOptions(args) {
     cameraPosition: vector('camera-position', [8, 6, 12]),
     cameraTarget: vector('camera-target', [0, 2, 0]),
     cameraFov: Number(values['camera-fov'] ?? 50),
-    output: path.resolve(values.output ?? `previews/${values.example ?? 'fire'}`),
+    output: path.resolve(values.output ?? `benchmark-results/previews/${values.example ?? 'fire'}`),
   };
+  if (options.format !== 'png' && !containers[options.format]) throw new Error('--format must be png, mp4 or webm');
+  const video = options.format !== 'png';
+  if (!Number.isFinite(options.fps) || options.fps <= 0 || options.fps > 120)
+    throw new Error('--fps must be between 0 and 120');
+  if (!Number.isFinite(options.crf) || options.crf < 0 || options.crf > 51)
+    throw new Error('--crf must be between 0 and 51');
+  if (video) {
+    const duration = Number(values.duration ?? 4);
+    if (!Number.isFinite(duration) || duration <= 0 || duration > 30)
+      throw new Error('--duration must be between 0 and 30 seconds');
+    options.frames = Number(values.frames ?? Math.round(duration * options.fps));
+    options.deltaTime = Number(values['delta-time'] ?? 1 / 60);
+    options.interval = 1;
+    options.duration = options.frames / options.fps;
+    if (options.duration > 30) throw new Error('Video frame count exceeds 30 seconds at the requested fps');
+    if (options.width % 2 || options.height % 2) throw new Error('Video dimensions must be even');
+  }
   if (!['webgl', 'webgpu'].includes(options.backend)) throw new Error('--backend must be webgl or webgpu');
   if (
     options.sceneLightStrength !== undefined &&
@@ -86,17 +111,15 @@ export function parseOptions(args) {
     throw new Error('--camera-fov must be between 0 and 180 degrees');
   if (options.cameraPosition.every((v, i) => v === options.cameraTarget[i]))
     throw new Error('Camera position and target must differ');
-  if (
-    options.frames > 60 ||
-    options.width > 4096 ||
-    options.height > 4096 ||
-    options.warmup + options.interval * (options.frames - 1) > 100000
-  ) {
-    throw new Error('Preview exceeds limits: 60 captures, 4096px dimensions, 100000 total steps');
+  const totalSteps =
+    options.warmup + (options.frames - 1) * (video ? Math.ceil(1 / options.fps / options.deltaTime) : options.interval);
+  if (options.frames > (video ? 3600 : 60) || options.width > 4096 || options.height > 4096 || totalSteps > 100000) {
+    throw new Error('Preview exceeds limits: capture count, 4096px dimensions, 100000 total steps');
   }
   const columns = Math.min(3, options.frames);
   const sheetPixels = columns * options.width * Math.ceil(options.frames / columns) * (options.height + 30);
-  if (sheetPixels > 64000000) throw new Error('Contact sheet exceeds 64 megapixels; reduce frame count or dimensions');
+  if (!video && sheetPixels > 64000000)
+    throw new Error('Contact sheet exceeds 64 megapixels; reduce frame count or dimensions');
   return options;
 }
 
@@ -107,7 +130,8 @@ export async function capturePreview(options) {
   await fs.mkdir(options.output, { recursive: true });
   // Replace artifacts owned by this tool, preserving unrelated user files.
   for (const file of await fs.readdir(options.output)) {
-    if (/^frame-\d+\.png$|^contact-sheet\.png$/.test(file)) await fs.unlink(path.join(options.output, file));
+    if (/^frame-\d+\.png$|^(contact-sheet|poster)\.png$|^preview\.(mp4|webm)$|^audio\.wav$/.test(file))
+      await fs.unlink(path.join(options.output, file));
   }
   let server, browser, browserDiagnostics;
   const metadata = {
@@ -152,8 +176,16 @@ export async function capturePreview(options) {
       args,
       defaultViewport: { width: options.width, height: options.height, deviceScaleFactor: 1 },
     });
+    metadata.browserVersion = await browser.version();
+    if (process.env.CI === 'true' && !metadata.browserVersion.endsWith('/' + PUPPETEER_REVISIONS.chrome)) {
+      throw new Error(`Expected pinned Chrome ${PUPPETEER_REVISIONS.chrome}; found ${metadata.browserVersion}`);
+    }
     const page = await browser.newPage();
     page.setDefaultTimeout(180000);
+    console.log(
+      `Capturing ${options.example}: requested ${options.backend}, ${options.format}, ` +
+        `${options.frames} frames at ${options.width}x${options.height}`,
+    );
     browserDiagnostics = await attachBrowserDiagnostics(browser, page, options, args);
     await browserDiagnostics.snapshot();
     page.on('console', message => {
@@ -167,13 +199,23 @@ export async function capturePreview(options) {
     page.on('response', response => {
       if (response.status() >= 400) diagnostics.errors.push(`${response.status()} ${response.url()}`);
     });
+    const streamedFrames = [];
+    await page.exposeFunction('rzmpsWriteFrame', async (index, observation, data) => {
+      const bytes = Buffer.from(data.split(',')[1], 'base64');
+      if (bytes.length < 100 || bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a')
+        throw new Error('Invalid captured PNG');
+      await fs.writeFile(path.join(options.output, `frame-${String(index).padStart(3, '0')}.png`), bytes);
+      streamedFrames.push(observation);
+      if (index === 0 || (index + 1) % 30 === 0 || index + 1 === options.frames)
+        console.log(`  ${options.example} [${options.backend}]: frame ${index + 1}/${options.frames}`);
+    });
     browserDiagnostics.report({ phase: 'page-navigation' });
     await page.goto(`http://127.0.0.1:${address.port}/?preview=1`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.rzmpsPreview);
     let captureTimeout, result;
     try {
       result = await Promise.race([
-        page.evaluate(options => window.rzmpsPreview.capture(options), options),
+        page.evaluate(options => window.rzmpsPreview.capture({ ...options, streamFrames: true }), options),
         new Promise((_, reject) => {
           captureTimeout = setTimeout(() => reject(new Error('Timed out capturing preview after 180 seconds')), 180000);
         }),
@@ -188,14 +230,17 @@ export async function capturePreview(options) {
       await fs.writeFile(path.join(options.output, file), buffer);
     }
     for (const [index, frame] of result.frames.entries()) {
-      await png(`frame-${String(index).padStart(3, '0')}.png`, frame.data);
+      if (frame.data) await png(`frame-${String(index).padStart(3, '0')}.png`, frame.data);
     }
-    await png('contact-sheet.png', result.contactSheet);
+    if (result.contactSheet) await png('contact-sheet.png', result.contactSheet);
+    if (result.audio) await fs.writeFile(path.join(options.output, 'audio.wav'), Buffer.from(result.audio, 'base64'));
+    if (options.format !== 'png') metadata.video = await encodeVideo({ ...options, audio: !!result.audio });
     Object.assign(metadata, {
       status: 'complete',
-      actualBackend: result.backend,
       scene: result.scene ?? options.scene,
-      captures: result.frames.map(({ data, ...rest }) => rest),
+      actualBackend: result.backend,
+      audio: !!result.audio,
+      captures: (streamedFrames.length ? streamedFrames : result.frames).map(({ data, ...rest }) => rest),
       camera: result.camera,
       rendererInfo: result.rendererInfo,
       childValidation: result.childValidation,
@@ -212,6 +257,10 @@ export async function capturePreview(options) {
       userAgent: result.userAgent,
     });
     if (diagnostics.errors.length) throw new Error(`Browser errors: ${diagnostics.errors.join('\n')}`);
+    if (options.format !== 'png')
+      for (const file of await fs.readdir(options.output)) {
+        if (/^frame-\d+\.png$/.test(file)) await fs.unlink(path.join(options.output, file));
+      }
     console.log(`Captured ${options.frames} ${options.backend} frames in ${options.output}`);
     return metadata;
   } catch (error) {

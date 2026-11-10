@@ -568,9 +568,9 @@ class SpatialEffect extends THREE.Object3D {
     const positionAttribute = geometry.getAttribute('position');
     const topologyKey =
       `${positionAttribute?.count ?? 0}` +
-      `:` +
+      ':' +
       `${geometry.index?.count ?? 0}` +
-      `:` +
+      ':' +
       `${getAttributeVersion(geometry.index)}`;
     const positionVersion = getAttributeVersion(positionAttribute);
     if (!this._bvh || this._bvhGeometry !== geometry || this._bvhTopologyKey !== topologyKey) {

@@ -1,11 +1,12 @@
 import PropTypes from 'prop-types';
 import { useEffect, useRef, useState } from 'react';
+import ExampleSearch from './ExampleSearch';
 import { ChevronLeft, Menu } from 'lucide-react';
 
 // Top contributors from GitHub. Keep this curated list free of runtime API requests.
 const CONTRIBUTORS = ['rzmay'];
 
-export default function LandingLayout({ children }) {
+export default function LandingLayout({ children, onExampleSelect }) {
   const [open, setOpen] = useState(true);
   const toggleRef = useRef(null);
 
@@ -70,6 +71,8 @@ export default function LandingLayout({ children }) {
           </p>
         </header>
 
+        <ExampleSearch onSelect={onExampleSelect} />
+
         <nav aria-label="Project resources">
           <h2>Learn</h2>
           <a className="landing-start" href="/docs/guides/first-particle-system.html">
@@ -122,4 +125,7 @@ export default function LandingLayout({ children }) {
   );
 }
 
-LandingLayout.propTypes = { children: PropTypes.node };
+LandingLayout.propTypes = {
+  children: PropTypes.node,
+  onExampleSelect: PropTypes.func,
+};

@@ -1,7 +1,14 @@
-/** Shared documentation capture defaults; examples only supply their overrides. */
+/** Shared poster/video resolution and encoding quality; presets own their clip durations. */
 export const previewDefaults = Object.freeze({
-  backend: 'webgl', frames: 1, warmup: 180, interval: 20,
-  width: 1920, height: 1080, seed: 1,
+  backend: 'webgl',
+  warmup: 180,
+  format: 'mp4',
+  duration: 4,
+  fps: 60,
+  crf: 18,
+  width: 1920,
+  height: 1080,
+  seed: 1,
 });
 
 /** Scene factories stay in browser-side metadata; only scalar options cross the CLI boundary. */

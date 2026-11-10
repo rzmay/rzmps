@@ -1,3 +1,4 @@
+import { createAudioCapture } from './audioCapture.mjs';
 import * as THREE from 'three';
 import { readTargetPNG } from './readback.utils.mjs';
 import { resolveScene } from './resolveScene.mjs';
@@ -22,6 +23,7 @@ async function capture(options) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
   let renderer, system, sceneHandle, captureTarget;
+  let audioCapture, originalAudioContext;
   let step = 0;
   let deviceLost;
   const report = (phase, details = {}) => window.rzmpsPreviewReport?.({ phase, step, ...details });
@@ -52,6 +54,11 @@ async function capture(options) {
       : examples.find(e => e.id === options.example);
     if (!example)
       throw new Error(`Unknown example ${options.example}. Available: ${examples.map(e => e.id).join(', ')}`);
+    if (options.format && options.format !== 'png' && example.tags?.includes('audio')) {
+      originalAudioContext = THREE.AudioContext.getContext();
+      audioCapture = createAudioCapture(options);
+      THREE.AudioContext.setContext(audioCapture.context);
+    }
     await report('renderer-init');
     if (options.backend === 'webgpu') {
       if (!navigator.gpu || !(await navigator.gpu.requestAdapter()))
@@ -154,16 +161,16 @@ async function capture(options) {
     };
     await report('initial-render');
     await render(); // Establish RZMPS camera/renderer context before the first step.
-
-    async function advance(count) {
+    async function advance(count, deltaTime = options.deltaTime) {
       for (let i = 0; i < count; i++) {
-        sceneHandle?.update?.(options.deltaTime);
+        sceneHandle?.update?.(deltaTime);
         scene.updateMatrixWorld(true);
         const roots = [];
         scene.traverse(object => {
           if (typeof object.advanceFrames === 'function' && !object.isSubSystem) roots.push(object);
         });
-        for (const root of roots) root.advanceFrames(1, options.deltaTime);
+        for (const root of roots) root.advanceFrames(1, deltaTime);
+        await audioCapture?.advance(deltaTime);
         step++;
         // Let asynchronous GPU lifecycle consumers (including persistent decals)
         // observe frames during warmup, as they do in a real animation loop.
@@ -180,7 +187,17 @@ async function capture(options) {
     await report('warmup-complete');
     const frames = [];
     for (let index = 0; index < options.frames; index++) {
-      if (index > 0) await advance(options.interval);
+      if (index > 0) {
+        if (options.format && options.format !== 'png') {
+          // Step to exact presentation time, including a fractional last simulation step.
+          let remaining = 1 / options.fps;
+          while (remaining > 1e-10) {
+            const dt = Math.min(options.deltaTime, remaining);
+            await advance(1, dt);
+            remaining -= dt;
+          }
+        } else await advance(options.interval);
+      }
       // Live reflections are renderer work, deferred by advanceFrames, so refresh only for captures.
       system.traverse(object => {
         if (object.useLiveCubemap) {
@@ -209,10 +226,12 @@ async function capture(options) {
         }
       }
       await report('frame-export', { frame: index });
-      const data = captureTarget
-        ? await readTargetPNG(renderer, captureTarget, options.width, options.height)
-        : renderer.domElement.toDataURL('image/png');
-      if (!data.startsWith('data:image/png;base64,')) throw new Error('Canvas PNG export failed');
+      const video = options.format && options.format !== 'png';
+      let data;
+      if (captureTarget) {
+        data = await readTargetPNG(renderer, captureTarget, options.width, options.height);
+      } else data = renderer.domElement.toDataURL('image/png');
+      if (!data.startsWith('data:image/png;base64,')) throw new Error('PNG export failed');
       // Preview metadata is an explicit observation, so inspect GPU state rather
       // than reporting the runtime diagnostic's intentionally delayed count.
       const gpuCounts = new Map();
@@ -266,23 +285,29 @@ async function capture(options) {
       });
       const attachmentValidation =
         options.example === 'fireflies' ? await validateFireflyAttachments(system) : undefined;
-      frames.push({
-        data,
+      const time = video ? options.warmup * options.deltaTime + index / options.fps : step * options.deltaTime;
+      const observation = {
         systems,
         attachmentValidation,
-        time: step * options.deltaTime,
+        time,
         step,
         particles,
         simulationSpeed: system.simulationSpeed,
-        simulatedSeconds: step * options.deltaTime * Math.max(0, system.simulationSpeed),
-      });
+        simulatedSeconds: time * Math.max(0, system.simulationSpeed),
+      };
+      if (options.streamFrames) await window.rzmpsWriteFrame(index, observation, data);
+      frames.push({ ...observation, ...(!video ? { data } : {}) });
     }
     await report('validation');
     const childValidation = options.backend === 'webgpu' ? await validateGPUChildren(system, renderer) : [];
     const frameValidation = (await system.userData.validateSimulationFrames?.(renderer)) ?? [];
-    const contactSheet = await makeContactSheet(frames, options);
+    const contactSheet = options.format && options.format !== 'png' ? null : await makeContactSheet(frames, options);
+    if (options.streamFrames) for (const frame of frames) delete frame.data;
+    await report('audio-render');
+    const audio = await audioCapture?.finish();
     await report('complete');
     return {
+      audio,
       backend: renderer.backend?.isWebGPUBackend ? 'webgpu' : 'webgl',
       frames,
       contactSheet,
@@ -305,6 +330,7 @@ async function capture(options) {
     } finally {
       THREE.DefaultLoadingManager.onError = oldOnError;
       Math.random = originalRandom;
+      if (originalAudioContext) THREE.AudioContext.setContext(originalAudioContext);
     }
   }
 }

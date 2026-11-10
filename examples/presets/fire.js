@@ -216,16 +216,26 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
 
 /** @type {import("../types").ExampleMetadata} */
 firePreset.metadata = {
-  author: "rzmay",
-  "id": "fire",
-  "title": "Fire",
-  "description":
-    "Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces.",
-  "tags": [
-    "fire", "flames", "sprites", "sprite-sheet", "lights", "distortion", "decals", "scorch"
+  author: 'rzmay',
+  'id': 'fire',
+  'title': 'Fire',
+  'description':
+    'Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces.',
+  tags: [
+    'fire',
+    'flames',
+    'sprites',
+    'sprite-sheet',
+    'lights',
+    'distortion',
+    'decals',
+    'scorch',
+    'soot',
+    'ash',
+    'effects'
   ],
-  "category": "effects",
   previewSettings: {
+    duration: 10,
     scene: checkerboardScene,
   },
 };

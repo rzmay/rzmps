@@ -127,7 +127,7 @@ export default function repulsorScene(scene) {
 }
 
 repulsorScene.metadata = {
-  "id": "repulsor",
-  "title": "Repulsor / Attractor",
-  "author": "rzmay"
+  'id': 'repulsor',
+  'title': 'Repulsor / Attractor',
+  'author': 'rzmay'
 };

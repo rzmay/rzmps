@@ -571,7 +571,7 @@ class Boids extends Module {
 
   private createAggregator(): OctreeAggregator<BoidAggregate> {
     return {
-      "new": (particle?: Particle) => {
+      'new': (particle?: Particle) => {
         const aggregate: BoidAggregate = {
           count: 0,
           positionSum: new THREE.Vector3(),

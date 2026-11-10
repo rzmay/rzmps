@@ -38,12 +38,6 @@
     "jsx-a11y/anchor-is-valid": "off",
     "nonblock-statement-body-position": "off",
     "curly": "off",
-    "max-len": [
-      "error",
-      {
-        "code": 120
-      }
-    ],
     "no-nested-ternary": "off",
     "arrow-body-style": "off",
     "react/no-array-index-key": "off",

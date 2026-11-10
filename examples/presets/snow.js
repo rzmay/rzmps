@@ -91,12 +91,12 @@ export default async function snowPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 snowPreset.metadata = {
-  author: "rzmay",
-  "id": "snow",
-  "title": "Snow",
-  "description": "Depth-based fading, noise-driven motion, warmup, and broad low-cost emission.",
-  "tags": [
-    "snow"
-  ],
-  "category": "effects"
+  author: 'rzmay',
+  'id': 'snow',
+  'title': 'Snow',
+  'description': 'Depth-based fading, noise-driven motion, warmup, and broad low-cost emission.',
+  tags: ['snow', 'children', 'renderer-children', 'weather', 'sprites', 'noise', 'depth', 'effects'],
+  previewSettings: {
+    duration: 10,
+  },
 };

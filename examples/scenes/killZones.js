@@ -155,8 +155,8 @@ export default function killZonesScene(scene) {
 }
 
 killZonesScene.metadata = {
-  "id": "killZones",
-  "title": "Kill Zones",
-  "author": "rzmay"
+  'id': 'killZones',
+  'title': 'Kill Zones',
+  'author': 'rzmay'
 };
-killZonesScene.description = "Scene-level KillZone spatial effects using geometry and an infinite plane test.";
+killZonesScene.description = 'Scene-level KillZone spatial effects using geometry and an infinite plane test.';

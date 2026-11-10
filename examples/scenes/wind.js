@@ -105,7 +105,7 @@ export default function windScene(scene) {
 }
 
 windScene.metadata = {
-  "id": "wind",
-  "title": "Wind",
-  "author": "rzmay"
+  'id': 'wind',
+  'title': 'Wind',
+  'author': 'rzmay'
 };
