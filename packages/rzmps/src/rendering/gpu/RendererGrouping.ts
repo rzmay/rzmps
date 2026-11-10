@@ -1,14 +1,51 @@
 import { Matrix4 } from 'three';
-import { IndirectStorageBufferAttribute, StorageBufferAttribute, type ComputeNode,
-  type Node, type WebGPURenderer } from 'three/webgpu';
-import { Fn, If, Loop, Break, float, uint, vec3, vec4, uvec4, instanceIndex, storage, uniform,
-  floatBitsToUint, uintBitsToFloat, atomicLoad, atomicStore, atomicAdd, atomicMin, atomicMax,
-  atomicFunc, localId, workgroupId, workgroupArray, workgroupBarrier } from 'three/tsl';
+import {
+  IndirectStorageBufferAttribute,
+  StorageBufferAttribute,
+  type ComputeNode,
+  type Node,
+  type WebGPURenderer,
+} from 'three/webgpu';
+import {
+  Fn,
+  If,
+  Loop,
+  Break,
+  float,
+  uint,
+  vec3,
+  vec4,
+  uvec4,
+  instanceIndex,
+  storage,
+  uniform,
+  floatBitsToUint,
+  uintBitsToFloat,
+  atomicLoad,
+  atomicStore,
+  atomicAdd,
+  atomicMin,
+  atomicMax,
+  atomicFunc,
+  localId,
+  workgroupId,
+  workgroupArray,
+  workgroupBarrier,
+} from 'three/tsl';
 import Particle from '../../core/Particle';
 import type ParticleSystem from '../../core/ParticleSystem';
-import { GPUParticleRenderBufferState, destroyGPUStorageAttribute, type GPUParticleBufferState } from '../../simulation/gpu/Particle';
+import {
+  GPUParticleRenderBufferState,
+  destroyGPUStorageAttribute,
+  type GPUParticleBufferState,
+} from '../../simulation/gpu/Particle';
 import ParticleSpatialGrid from '../../spatial/structures/ParticleSpatialGrid';
-import { nextPowerOfTwo, orderedFloatNode, unorderedFloatNode, type AtomicUintStorage } from '../../utils/gpu/storage.utils';
+import {
+  nextPowerOfTwo,
+  orderedFloatNode,
+  unorderedFloatNode,
+  type AtomicUintStorage,
+} from '../../utils/gpu/storage.utils';
 import { rendererGroupCount } from '../groupRendererParticles';
 import { computeRange, writeComputeDispatch, type GPUComputeRange } from '../../utils/gpu/computeDispatch.utils';
 import { SpatialLevels } from '../../enums/resolveSpatialLevels';
@@ -43,10 +80,22 @@ export default class GPURendererGrouping {
   private capacity = 0;
   private maximum = 0;
   private regionCapacity = 0;
-  private readonly source = new ParticleSpatialGrid<Summary>({ brickSubdivisions: 2, cellSubdivisions: 2,
-    powerOfTwoBounds: false, autoExpand: false, levels: SpatialLevels.All }, summary);
-  private readonly centers = new ParticleSpatialGrid({ brickSubdivisions: 2, cellSubdivisions: 0,
-    powerOfTwoBounds: false, autoExpand: false });
+  private readonly source = new ParticleSpatialGrid<Summary>(
+    {
+      brickSubdivisions: 2,
+      cellSubdivisions: 2,
+      powerOfTwoBounds: false,
+      autoExpand: false,
+      levels: SpatialLevels.All,
+    },
+    summary,
+  );
+  private readonly centers = new ParticleSpatialGrid({
+    brickSubdivisions: 2,
+    cellSubdivisions: 0,
+    powerOfTwoBounds: false,
+    autoExpand: false,
+  });
   private readonly toWorld = uniform(new Matrix4(), 'mat4');
   private readonly quality = uniform(1);
   private readonly inputCount = uniform(0, 'uint');
@@ -89,9 +138,12 @@ export default class GPURendererGrouping {
       this.anchorDispatch = new IndirectStorageBufferAttribute(new Uint32Array([0, 1, 1]), 1);
 
       const words = 3 * capacity + 6 * this.maximum + 2 * this.regionCapacity + 12;
-      const limit = (renderer.backend as unknown as {
-        device?: { limits: { maxStorageBufferBindingSize: number } } }).device?.limits.maxStorageBufferBindingSize
-        ?? 134217728;
+      const limit =
+        (
+          renderer.backend as unknown as {
+            device?: { limits: { maxStorageBufferBindingSize: number } };
+          }
+        ).device?.limits.maxStorageBufferBindingSize ?? 134217728;
       if (words * 4 > limit || capacity * 80 > limit) {
         this.reset();
         throw new RangeError('Renderer grouping exceeds the device storage-buffer capacity.');
@@ -129,8 +181,11 @@ export default class GPURendererGrouping {
   }
 
   private layout() {
-    const data = this.scratchNode ??= storage(this.scratch!, 'uint', this.scratch!.count)
-      .toAtomic() as AtomicUintStorage;
+    const data = (this.scratchNode ??= storage(
+      this.scratch!,
+      'uint',
+      this.scratch!.count,
+    ).toAtomic() as AtomicUintStorage);
     const records = 0;
     const owners = this.capacity;
     const links = 2 * this.capacity;
@@ -150,8 +205,23 @@ export default class GPURendererGrouping {
       atomicStore(at(offset, index), typeof value === 'number' ? uint(value) : value);
     };
 
-    return { records, owners, links, heads, seeds, support, taskCells, taskLevels, ordinals,
-      budgets, starts, meta, at, read, write };
+    return {
+      records,
+      owners,
+      links,
+      heads,
+      seeds,
+      support,
+      taskCells,
+      taskLevels,
+      ordinals,
+      budgets,
+      starts,
+      meta,
+      at,
+      read,
+      write,
+    };
   }
 
   private buildSnapshot(input: Input, count: number, ratio: number, tagMask?: number): ComputeNode[] {
@@ -166,10 +236,15 @@ export default class GPURendererGrouping {
         write(budgets, instanceIndex, 0);
       });
       If(instanceIndex.lessThan(8), () => {
-        write(meta, instanceIndex, instanceIndex.greaterThanEqual(2).and(instanceIndex.lessThan(5))
-          .select(uint(EMPTY), uint(0)));
+        write(
+          meta,
+          instanceIndex,
+          instanceIndex.greaterThanEqual(2).and(instanceIndex.lessThan(5)).select(uint(EMPTY), uint(0)),
+        );
       });
-    })().compute(Math.max(this.maximum, this.regionCapacity, 8)).setName('rzmps.grouping.reset');
+    })()
+      .compute(Math.max(this.maximum, this.regionCapacity, 8))
+      .setName('rzmps.grouping.reset');
 
     // Compact eligible slots while reducing their world-space bounds.
     const project = Fn(() => {
@@ -190,7 +265,9 @@ export default class GPURendererGrouping {
         atomicMax(at(meta, 6), orderedFloatNode(position.y));
         atomicMax(at(meta, 7), orderedFloatNode(position.z));
       });
-    })().compute(this.capacity).setName('rzmps.grouping.snapshot');
+    })()
+      .compute(this.capacity)
+      .setName('rzmps.grouping.snapshot');
 
     // Convert the resulting population and anchor budget into indirect dispatch sizes.
     const schedule = Fn(() => {
@@ -208,72 +285,97 @@ export default class GPURendererGrouping {
       args.element(2).assign(1);
 
       If(n.greaterThan(0), () => {
-        const minimum = vec3(unorderedFloatNode(read(meta, 2)), unorderedFloatNode(read(meta, 3)),
-          unorderedFloatNode(read(meta, 4)));
-        const maximum = vec3(unorderedFloatNode(read(meta, 5)), unorderedFloatNode(read(meta, 6)),
-          unorderedFloatNode(read(meta, 7)));
+        const minimum = vec3(
+          unorderedFloatNode(read(meta, 2)),
+          unorderedFloatNode(read(meta, 3)),
+          unorderedFloatNode(read(meta, 4)),
+        );
+        const maximum = vec3(
+          unorderedFloatNode(read(meta, 5)),
+          unorderedFloatNode(read(meta, 6)),
+          unorderedFloatNode(read(meta, 7)),
+        );
         this.source.setBoundsNode(minimum, maximum);
         this.centers.setBoundsNode(minimum, maximum);
       });
-    })().compute(1).setName('rzmps.grouping.schedule');
+    })()
+      .compute(1)
+      .setName('rzmps.grouping.schedule');
 
     return [reset, project, schedule];
   }
 
   private buildSelection(input: Input): ComputeNode[] {
-    const { records, owners, seeds, support, taskCells, taskLevels, ordinals, budgets, starts,
-      meta, read, write } = this.layout();
+    const { records, owners, seeds, support, taskCells, taskLevels, ordinals, budgets, starts, meta, read, write } =
+      this.layout();
     const nodes: ComputeNode[] = [];
 
     // Refine a population-proportional budget through the maintained source levels.
-    nodes.push(Fn(() => {
-      If(read(meta, 1).greaterThan(0), () => {
-        const root = this.source.getRegions(0).region(uint(0));
-        write(budgets, root.index, read(meta, 1));
-        write(starts, root.index, 0);
-      });
-    })().compute(1).setName('rzmps.grouping.root'));
+    nodes.push(
+      Fn(() => {
+        If(read(meta, 1).greaterThan(0), () => {
+          const root = this.source.getRegions(0).region(uint(0));
+          write(budgets, root.index, read(meta, 1));
+          write(starts, root.index, 0);
+        });
+      })()
+        .compute(1)
+        .setName('rzmps.grouping.root'),
+    );
 
     let base = 0;
     for (const depth of this.source.levels) {
       const offset = base;
       const regions = this.source.getRegions(depth);
       const nextOffset = base + regions.capacity;
-      nodes.push(this.source.computeRegions(depth, region => {
-        const budget = read(budgets, region.index.add(offset)).toVar();
-        const start = read(starts, region.index.add(offset)).toVar();
-        If(budget.greaterThan(0), () => {
-          const children = this.source.getChildren(region);
-          If(budget.equal(1).or(children.count.equal(0)), () => {
-            const bounds = this.source.getBounds(region);
-            const scale = this.radius > 0 ? float(this.radius * this.radius)
-              : bounds.max.sub(bounds.min).lengthSq().max(1e-12);
-            Loop({ start: uint(0), end: budget, type: 'uint', condition: '<' }, ({ i }) => {
-              const group = start.add(i);
-              write(taskCells, group, region.index);
-              write(taskLevels, group, depth);
-              write(support, group, floatBitsToUint(scale) as unknown as Node<'uint'>);
-              const ordinal = uint(float(i).div(float(budget)).mul(float(this.source.getAggregate(region).count)));
-              write(ordinals, group, budget.equal(1).select(uint(EMPTY), ordinal));
+      nodes.push(
+        this.source
+          .computeRegions(depth, region => {
+            const budget = read(budgets, region.index.add(offset)).toVar();
+            const start = read(starts, region.index.add(offset)).toVar();
+            If(budget.greaterThan(0), () => {
+              const children = this.source.getChildren(region);
+              If(budget.equal(1).or(children.count.equal(0)), () => {
+                const bounds = this.source.getBounds(region);
+                const scale =
+                  this.radius > 0 ? float(this.radius * this.radius) : bounds.max.sub(bounds.min).lengthSq().max(1e-12);
+                Loop({ start: uint(0), end: budget, type: 'uint', condition: '<' }, ({ i }) => {
+                  const group = start.add(i);
+                  write(taskCells, group, region.index);
+                  write(taskLevels, group, depth);
+                  write(support, group, floatBitsToUint(scale) as unknown as Node<'uint'>);
+                  const ordinal = uint(
+                    float(i)
+                      .div(float(budget))
+                      .mul(float(this.source.getAggregate(region).count)),
+                  );
+                  write(ordinals, group, budget.equal(1).select(uint(EMPTY), ordinal));
+                });
+              }).Else(() => {
+                const total = float(this.source.getAggregate(region).count).toVar();
+                const cumulative = float(0).toVar();
+                const assigned = uint(0).toVar();
+                Loop({ start: uint(0), end: children.count, type: 'uint', condition: '<' }, ({ i }) => {
+                  const child = children.region(uint(i));
+                  const size = float(this.source.getAggregate(child).count).toVar();
+                  cumulative.addAssign(size);
+                  const end = uint(
+                    float(budget)
+                      .mul(cumulative.div(total))
+                      .floor()
+                      .max(float(budget).sub(total.sub(cumulative)).max(0))
+                      .min(float(assigned).add(size))
+                      .min(float(budget)),
+                  ).toVar();
+                  write(budgets, child.index.add(nextOffset), end.sub(assigned));
+                  write(starts, child.index.add(nextOffset), start.add(assigned));
+                  assigned.assign(end);
+                });
+              });
             });
-          }).Else(() => {
-            const total = float(this.source.getAggregate(region).count).toVar();
-            const cumulative = float(0).toVar();
-            const assigned = uint(0).toVar();
-            Loop({ start: uint(0), end: children.count, type: 'uint', condition: '<' }, ({ i }) => {
-              const child = children.region(uint(i));
-              const size = float(this.source.getAggregate(child).count).toVar();
-              cumulative.addAssign(size);
-              const end = uint(float(budget).mul(cumulative.div(total)).floor()
-                .max(float(budget).sub(total.sub(cumulative)).max(0))
-                .min(float(assigned).add(size)).min(float(budget))).toVar();
-              write(budgets, child.index.add(nextOffset), end.sub(assigned));
-              write(starts, child.index.add(nextOffset), start.add(assigned));
-              assigned.assign(end);
-            });
-          });
-        });
-      }).setName('rzmps.grouping.refine'));
+          })
+          .setName('rzmps.grouping.refine'),
+      );
       base = nextOffset;
     }
 
@@ -315,8 +417,11 @@ export default class GPURendererGrouping {
           });
         }
 
-        const particles = this.source.getParticleIndices({ depth: this.source.maxDepth,
-          index: cell, valid: uint(1).equal(1) });
+        const particles = this.source.getParticleIndices({
+          depth: this.source.maxDepth,
+          index: cell,
+          valid: uint(1).equal(1),
+        });
         const ordinal = read(ordinals, group).toVar();
         If(ordinal.notEqual(EMPTY), () => {
           If(localId.x.equal(0), () => {
@@ -347,11 +452,17 @@ export default class GPURendererGrouping {
         If(localId.x.lessThan(stride), () => {
           const other = sharedDistance.element(localId.x.add(stride));
           const otherIndex = sharedIndex.element(localId.x.add(stride));
-          If(other.lessThan(sharedDistance.element(localId.x)).or(other.equal(sharedDistance.element(localId.x))
-            .and(otherIndex.lessThan(sharedIndex.element(localId.x)))), () => {
-            sharedDistance.element(localId.x).assign(other);
-            sharedIndex.element(localId.x).assign(otherIndex);
-          });
+          If(
+            other
+              .lessThan(sharedDistance.element(localId.x))
+              .or(
+                other.equal(sharedDistance.element(localId.x)).and(otherIndex.lessThan(sharedIndex.element(localId.x))),
+              ),
+            () => {
+              sharedDistance.element(localId.x).assign(other);
+              sharedIndex.element(localId.x).assign(otherIndex);
+            },
+          );
         });
         workgroupBarrier();
       }
@@ -361,11 +472,14 @@ export default class GPURendererGrouping {
         const original = read(records, selected).toVar();
         write(seeds, group, original);
         write(owners, original, group);
-        this.output!.storage.createParticle(group).position
-          .assign(this.snapshot!.storage.createParticle(selected).position);
+        this.output!.storage.createParticle(group).position.assign(
+          this.snapshot!.storage.createParticle(selected).position,
+        );
         this.output!.storage.createStateNode(group).assign(input.storage.createStateNode(original));
       });
-    })().computeKernel([64]).setName('rzmps.grouping.anchors');
+    })()
+      .computeKernel([64])
+      .setName('rzmps.grouping.anchors');
     anchors.dispatchSize = this.anchorDispatch! as unknown as number[];
     nodes.push(anchors);
 

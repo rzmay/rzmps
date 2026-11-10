@@ -1,13 +1,6 @@
 import collisionTestScene from 'examples/scenes/collisionTest.js';
 import * as THREE from 'three';
-import {
-  Collision,
-  Emitter,
-  EmissionShape,
-  ParticleSystem,
-  SpriteRenderer,
-  Textures,
-} from '@rzmps/rzmps';
+import { Collision, Emitter, EmissionShape, ParticleSystem, SpriteRenderer, Textures } from '@rzmps/rzmps';
 
 export default async function collisionPreset() {
   // #region docs:system:1
@@ -27,10 +20,7 @@ export default async function collisionPreset() {
           lifetime: 8,
           scale: 0.125,
           mass: 1,
-          color: [
-            '#ff6633',
-            '#ffd166',
-          ],
+          color: ['#ff6633', '#ffd166'],
         },
       }),
     ],
@@ -68,15 +58,17 @@ export default async function collisionPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 collisionPreset.metadata = {
-  author: "rzmay",
-  "id": "collision",
-  "title": "Collision",
+  author: 'rzmay',
+  id: 'collision',
+  title: 'Collision',
   // eslint-disable-next-line max-len -- Documentation discovery requires a single literal description.
-  "description": "Particle collision with automatic mesh detection and sorting between static and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, Rapier, and Ammo can be used as external physics backends, allowing particles to affect other physics objects in the scene.",
-  "tags": [
-    "collision"
-  ],
-  "category": "effects",
+  description:
+    'Particle collision with automatic mesh detection and sorting between static ' +
+    'and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, ' +
+    'Rapier, and Ammo can be used as external physics backends, allowing ' +
+    'particles to affect other physics objects in the scene.',
+  tags: ['collision'],
+  category: 'effects',
   previewSettings: {
     scene: collisionTestScene,
   },

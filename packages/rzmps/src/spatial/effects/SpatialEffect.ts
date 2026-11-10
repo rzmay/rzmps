@@ -3,21 +3,7 @@ import { transformPointGPU } from '../../simulation/gpu/transforms.utils';
 import * as THREE from 'three';
 import { MeshBVH, type HitPointInfo } from 'three-mesh-bvh';
 import type { Node } from 'three/webgpu';
-import {
-  abs,
-  array,
-  float,
-  int,
-  length,
-  max,
-  min,
-  mix,
-  texture3D,
-  uniform,
-  vec2,
-  vec3,
-  vec4,
-} from 'three/tsl';
+import { abs, array, float, int, length, max, min, mix, texture3D, uniform, vec2, vec3, vec4 } from 'three/tsl';
 import Particle from '../../core/Particle';
 import type ParticleSystem from '../../core/ParticleSystem';
 import acceptMultiple from '../../utils/acceptMultiple';
@@ -42,11 +28,7 @@ enum SpatialInfluenceShape {
   Torus,
 }
 
-export type SpatialEffectUpdate = (
-  particle: Particle,
-  deltaTime: number,
-  particleSystem: ParticleSystem,
-) => void;
+export type SpatialEffectUpdate = (particle: Particle, deltaTime: number, particleSystem: ParticleSystem) => void;
 
 export type SpatialEffectFeatherUpdate = (
   particle: Particle,
@@ -88,11 +70,7 @@ export enum SpatialEffectUpdatePolicy {
   Auto = 'auto',
 }
 
-export type SpatialEffectTest = (
-  particle: Particle,
-  particleSystem: ParticleSystem,
-  effect: SpatialEffect,
-) => boolean;
+export type SpatialEffectTest = (particle: Particle, particleSystem: ParticleSystem, effect: SpatialEffect) => boolean;
 
 export interface SpatialEffectOptions {
   /** Local position of the effect volume. */
@@ -148,10 +126,7 @@ class SpatialEffect extends THREE.Object3D {
 
   static readonly GPU_INFLUENCE_ALIGNED_SIZE = 24;
 
-  static testGPUInfluence(
-    particle: GPUParticleLike,
-    params: GPUSpatialParameterAccessor,
-  ): Node<'float'> {
+  static testGPUInfluence(particle: GPUParticleLike, params: GPUSpatialParameterAccessor): Node<'float'> {
     const position = vec4(particle.position, 1);
     const local = vec3(
       params.vec4('inverseRow0').dot(position),
@@ -168,33 +143,30 @@ class SpatialEffect extends THREE.Object3D {
     const sphereDistance = local.length().sub(size.x);
     const coneHalfHeight = size.y.mul(0.5).max(float(Number.EPSILON));
     const coneRadius = size.x.mul(float(0.5).sub(local.y.div(size.y.max(float(Number.EPSILON)))));
-    const coneDistance = max(
-      local.y.abs().sub(coneHalfHeight),
-      length(local.xz).sub(coneRadius),
-    );
+    const coneDistance = max(local.y.abs().sub(coneHalfHeight), length(local.xz).sub(coneRadius));
     const torusDistance = length(vec2(length(local.xz).sub(size.x), local.y)).sub(size.y);
 
-    const distance = shape.equal(float(SpatialInfluenceShape.Box)).select(
-      boxDistance,
-      shape.equal(float(SpatialInfluenceShape.Sphere)).select(
-        sphereDistance,
-        shape.equal(float(SpatialInfluenceShape.Cone)).select(coneDistance, torusDistance),
-      ),
-    ) as Node<'float'>;
+    const distance = shape
+      .equal(float(SpatialInfluenceShape.Box))
+      .select(
+        boxDistance,
+        shape
+          .equal(float(SpatialInfluenceShape.Sphere))
+          .select(sphereDistance, shape.equal(float(SpatialInfluenceShape.Cone)).select(coneDistance, torusDistance)),
+      ) as Node<'float'>;
     const inside = distance.lessThanEqual(float(0));
     const feather = params.float('feather');
     const featheredStrength = inside.select(
       float(1),
-      float(1).sub(distance.div(feather.max(float(Number.EPSILON)))).clamp(0, 1),
+      float(1)
+        .sub(distance.div(feather.max(float(Number.EPSILON))))
+        .clamp(0, 1),
     );
-    const strength = feather.greaterThan(float(0)).select(
-      featheredStrength,
-      inside.select(float(1), float(0)),
-    );
-    return params.float('inverted').greaterThan(float(0.5)).select(
-      inside.select(float(0), float(1)),
-      strength,
-    ) as Node<'float'>;
+    const strength = feather.greaterThan(float(0)).select(featheredStrength, inside.select(float(1), float(0)));
+    return params
+      .float('inverted')
+      .greaterThan(float(0.5))
+      .select(inside.select(float(0), float(1)), strength) as Node<'float'>;
   }
 
   static Box(
@@ -202,13 +174,10 @@ class SpatialEffect extends THREE.Object3D {
     options: Partial<SpatialEffectOptions> | null,
     ...args: BoxGeometryArgs
   ): SpatialEffect {
-    return new SpatialEffect(
-      modify,
-      {
-        ...(options ?? {}),
-        geometry: new THREE.BoxGeometry(...args),
-      },
-    );
+    return new SpatialEffect(modify, {
+      ...(options ?? {}),
+      geometry: new THREE.BoxGeometry(...args),
+    });
   }
 
   static Sphere(
@@ -216,13 +185,10 @@ class SpatialEffect extends THREE.Object3D {
     options: Partial<SpatialEffectOptions> | null,
     ...args: SphereGeometryArgs
   ): SpatialEffect {
-    return new SpatialEffect(
-      modify,
-      {
-        ...(options ?? {}),
-        geometry: new THREE.SphereGeometry(...args),
-      },
-    );
+    return new SpatialEffect(modify, {
+      ...(options ?? {}),
+      geometry: new THREE.SphereGeometry(...args),
+    });
   }
 
   static Cone(
@@ -230,13 +196,10 @@ class SpatialEffect extends THREE.Object3D {
     options: Partial<SpatialEffectOptions> | null,
     ...args: ConeGeometryArgs
   ): SpatialEffect {
-    return new SpatialEffect(
-      modify,
-      {
-        ...(options ?? {}),
-        geometry: new THREE.ConeGeometry(...args),
-      },
-    );
+    return new SpatialEffect(modify, {
+      ...(options ?? {}),
+      geometry: new THREE.ConeGeometry(...args),
+    });
   }
 
   static Torus(
@@ -244,13 +207,10 @@ class SpatialEffect extends THREE.Object3D {
     options: Partial<SpatialEffectOptions> | null,
     ...args: TorusGeometryArgs
   ): SpatialEffect {
-    return new SpatialEffect(
-      modify,
-      {
-        ...(options ?? {}),
-        geometry: new THREE.TorusGeometry(...args),
-      },
-    );
+    return new SpatialEffect(modify, {
+      ...(options ?? {}),
+      geometry: new THREE.TorusGeometry(...args),
+    });
   }
 
   static Plane(
@@ -363,10 +323,7 @@ class SpatialEffect extends THREE.Object3D {
     return this._geometry;
   }
 
-  constructor(
-    modify: SpatialEffectModifier | null,
-    options: Partial<SpatialEffectOptions> | null = {},
-  ) {
+  constructor(modify: SpatialEffectModifier | null, options: Partial<SpatialEffectOptions> | null = {}) {
     super();
     const resolvedOptions = options ?? {};
 
@@ -388,13 +345,10 @@ class SpatialEffect extends THREE.Object3D {
     this.conditionGPU = resolvedOptions.conditionGPU ?? undefined;
     this.priority = resolvedOptions.priority ?? this.priority;
     this.feather = Math.max(resolvedOptions.feather ?? 0, 0);
-    this.featherEasing = resolvedOptions.featherEasing ?? ((feather) => feather);
+    this.featherEasing = resolvedOptions.featherEasing ?? (feather => feather);
     this.automaticFeather = resolvedOptions.automaticFeather !== false;
     this.modifyGPU = resolvedOptions.modifyGPU ?? SpatialEffect.GPU_UNSUPPORTED;
-    this.bakedFieldResolution = Math.max(
-      2,
-      Math.floor(resolvedOptions.bakedFieldResolution ?? 16),
-    );
+    this.bakedFieldResolution = Math.max(2, Math.floor(resolvedOptions.bakedFieldResolution ?? 16));
     this.updatePolicy = resolvedOptions.updatePolicy ?? SpatialEffectUpdatePolicy.Auto;
     this._test = resolvedOptions.test;
     this.geometry = resolvedOptions.geometry;
@@ -441,16 +395,20 @@ class SpatialEffect extends THREE.Object3D {
   // If this directly modifies particles and should be picked up by particle systems
   // This will be true for most spatial effects, but not special ones like boid affectors
   get modifiesParticles(): boolean {
-    return this._modify !== null
-      || this._modifyFeather !== undefined
-      || this._modifyParticle !== SpatialEffect.prototype._modifyParticle;
+    return (
+      this._modify !== null ||
+      this._modifyFeather !== undefined ||
+      this._modifyParticle !== SpatialEffect.prototype._modifyParticle
+    );
   }
 
   /** Whether the effect has all callbacks and geometry needed by GPU simulation. */
   get supportsGPU(): boolean {
-    return this.modifyGPU !== SpatialEffect.GPU_UNSUPPORTED
-      && (!this._hasCustomCondition || this.conditionGPU !== undefined)
-      && (this._testGPU !== undefined || this.geometry !== undefined);
+    return (
+      this.modifyGPU !== SpatialEffect.GPU_UNSUPPORTED &&
+      (!this._hasCustomCondition || this.conditionGPU !== undefined) &&
+      (this._testGPU !== undefined || this.geometry !== undefined)
+    );
   }
 
   get supportsParameterizedGPUInfluence(): boolean {
@@ -476,11 +434,7 @@ class SpatialEffect extends THREE.Object3D {
     }
   }
 
-  protected writeGPUInfluenceParameters(
-    target: Float32Array,
-    offset: number,
-    system: ParticleSystem,
-  ): void {
+  protected writeGPUInfluenceParameters(target: Float32Array, offset: number, system: ParticleSystem): void {
     this.updateWorldMatrix(true, false);
     const simulationToWorld = new THREE.Matrix4();
     if (system.simulationSpace !== SimulationSpace.World) {
@@ -494,9 +448,12 @@ class SpatialEffect extends THREE.Object3D {
     target.set([elements[2], elements[6], elements[10], elements[14]], offset + 8);
 
     const geometry = this.geometry!;
-    const parameters = (geometry as THREE.BufferGeometry & {
-      parameters?: Record<string, number>;
-    }).parameters ?? {};
+    const parameters =
+      (
+        geometry as THREE.BufferGeometry & {
+          parameters?: Record<string, number>;
+        }
+      ).parameters ?? {};
     let shape = 0;
     let sizeX = 0;
     let sizeY = 0;
@@ -538,11 +495,7 @@ class SpatialEffect extends THREE.Object3D {
     if (this.tags && !tagsIntersect(this.tags, particle.tags ?? [])) return false;
     if (this._test) return this._test(particle, particleSystem, this);
 
-    getParticleWorldPosition(
-      particle,
-      particleSystem,
-      this.localParticlePosition,
-    );
+    getParticleWorldPosition(particle, particleSystem, this.localParticlePosition);
 
     return this.getFeather(this.localParticlePosition) > 0;
   }
@@ -594,12 +547,7 @@ class SpatialEffect extends THREE.Object3D {
     if (this.inverted) return 1;
     if (this.feather <= 0) return 0;
 
-    const hit = this.getCurrentBVH().closestPointToPoint(
-      position,
-      this.closestPointInfo,
-      0,
-      this.feather,
-    );
+    const hit = this.getCurrentBVH().closestPointToPoint(position, this.closestPointInfo, 0, this.feather);
 
     if (!hit) return 0;
 
@@ -619,7 +567,11 @@ class SpatialEffect extends THREE.Object3D {
     if (!geometry) throw new Error('A spatial effect without geometry has no BVH.');
     const positionAttribute = geometry.getAttribute('position');
     const topologyKey =
-      `${positionAttribute?.count ?? 0}:${geometry.index?.count ?? 0}:${getAttributeVersion(geometry.index)}`;
+      `${positionAttribute?.count ?? 0}` +
+      `:` +
+      `${geometry.index?.count ?? 0}` +
+      `:` +
+      `${getAttributeVersion(geometry.index)}`;
     const positionVersion = getAttributeVersion(positionAttribute);
     if (!this._bvh || this._bvhGeometry !== geometry || this._bvhTopologyKey !== topologyKey) {
       this._bvh = new MeshBVH(geometry);
@@ -627,9 +579,9 @@ class SpatialEffect extends THREE.Object3D {
       this._bvhTopologyKey = topologyKey;
       this._bvhPositionVersion = positionVersion;
     } else if (
-      this.updatePolicy !== SpatialEffectUpdatePolicy.Static
-      && this.updatePolicy !== SpatialEffectUpdatePolicy.TransformDynamic
-      && this._bvhPositionVersion !== positionVersion
+      this.updatePolicy !== SpatialEffectUpdatePolicy.Static &&
+      this.updatePolicy !== SpatialEffectUpdatePolicy.TransformDynamic &&
+      this._bvhPositionVersion !== positionVersion
     ) {
       this._bvh.refit();
       this._bvhPositionVersion = positionVersion;
@@ -637,37 +589,22 @@ class SpatialEffect extends THREE.Object3D {
     return this._bvh;
   }
 
-  testGPU(
-    particle: GPUParticleLike,
-    context: GPUParticleUpdateContext,
-  ): Node<'float'> {
-    const rawStrength = this._testGPU
-      ? this._testGPU(particle, context, this)
-      : this.bakedFieldGPU(particle);
-    const strength = this._hasCustomFeatherEasing
-      ? this.easeFeatherGPU(rawStrength)
-      : rawStrength;
+  testGPU(particle: GPUParticleLike, context: GPUParticleUpdateContext): Node<'float'> {
+    const rawStrength = this._testGPU ? this._testGPU(particle, context, this) : this.bakedFieldGPU(particle);
+    const strength = this._hasCustomFeatherEasing ? this.easeFeatherGPU(rawStrength) : rawStrength;
 
     if (!this.conditionGPU) return strength;
 
-    return this.conditionGPU(particle, context, this).select(
-      strength,
-      float(0),
-    ) as Node<'float'>;
+    return this.conditionGPU(particle, context, this).select(strength, float(0)) as Node<'float'>;
   }
 
-  bakedFieldGPU(
-    particle: GPUParticleLike,
-  ): Node<'float'> {
+  bakedFieldGPU(particle: GPUParticleLike): Node<'float'> {
     this.ensureBakedField();
 
     if (!this._bakedFieldTexture) return float(0);
 
     const localPosition = this.getGPUParticleLocalPosition(particle);
-    const uv = localPosition
-      .sub(this._gpuBakedFieldMinNode)
-      .div(this._gpuBakedFieldSizeNode)
-      .clamp(0, 1);
+    const uv = localPosition.sub(this._gpuBakedFieldMinNode).div(this._gpuBakedFieldSizeNode).clamp(0, 1);
 
     return texture3D(this._bakedFieldTexture, uv).x as Node<'float'>;
   }
@@ -677,19 +614,17 @@ class SpatialEffect extends THREE.Object3D {
 
     const { type } = this.geometry;
     if (type === 'SphereGeometry' || type === 'IcosahedronGeometry') {
-      return (particle) => this.sphereTestGPU(particle);
+      return particle => this.sphereTestGPU(particle);
     }
 
     if (type === 'BoxGeometry') {
-      return (particle) => this.boxTestGPU(particle);
+      return particle => this.boxTestGPU(particle);
     }
 
     return undefined;
   }
 
-  private sphereTestGPU(
-    particle: GPUParticleLike,
-  ): Node<'float'> {
+  private sphereTestGPU(particle: GPUParticleLike): Node<'float'> {
     const bounds = this.getLocalBounds();
     const center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
@@ -706,25 +641,16 @@ class SpatialEffect extends THREE.Object3D {
       return inside.select(float(1), float(0));
     }
 
-    return inside.select(
-      float(1),
-      float(1).sub(distance.sub(radius).div(this.feather)).clamp(0, 1),
-    ) as Node<'float'>;
+    return inside.select(float(1), float(1).sub(distance.sub(radius).div(this.feather)).clamp(0, 1)) as Node<'float'>;
   }
 
-  private boxTestGPU(
-    particle: GPUParticleLike,
-  ): Node<'float'> {
+  private boxTestGPU(particle: GPUParticleLike): Node<'float'> {
     const bounds = this.getLocalBounds();
     const center = bounds.getCenter(new THREE.Vector3());
     const halfSize = bounds.getSize(new THREE.Vector3()).multiplyScalar(0.5);
     const localPosition = this.getGPUParticleLocalPosition(particle);
     const q = abs(localPosition.sub(vec3(center))).sub(vec3(halfSize));
-    const outside = vec3(
-      max(q.x, float(0)),
-      max(q.y, float(0)),
-      max(q.z, float(0)),
-    );
+    const outside = vec3(max(q.x, float(0)), max(q.y, float(0)), max(q.z, float(0)));
     const outsideDistance = outside.length();
     const maxAxis = max(q.x, max(q.y, q.z));
     const inside = maxAxis.lessThanEqual(float(0));
@@ -737,10 +663,7 @@ class SpatialEffect extends THREE.Object3D {
       return inside.select(float(1), float(0));
     }
 
-    return inside.select(
-      float(1),
-      float(1).sub(outsideDistance.div(this.feather)).clamp(0, 1),
-    ) as Node<'float'>;
+    return inside.select(float(1), float(1).sub(outsideDistance.div(this.feather)).clamp(0, 1)) as Node<'float'>;
   }
 
   protected getLocalBounds(): THREE.Box3 {
@@ -752,8 +675,9 @@ class SpatialEffect extends THREE.Object3D {
     }
 
     if (!this.geometry.boundingBox) this.geometry.computeBoundingBox();
-    return this.geometry.boundingBox
-      ?? new THREE.Box3(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5));
+    return (
+      this.geometry.boundingBox ?? new THREE.Box3(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5))
+    );
   }
 
   /** World-space influence bounds, including the feather region. */
@@ -764,19 +688,12 @@ class SpatialEffect extends THREE.Object3D {
     return target;
   }
 
-  protected getGPUParticleWorldPosition(
-    particle: GPUParticleLike,
-  ): Node<'vec3'> {
+  protected getGPUParticleWorldPosition(particle: GPUParticleLike): Node<'vec3'> {
     return transformPointGPU(particle.position, this._gpuSimulationToWorldNode);
   }
 
-  protected getGPUParticleLocalPosition(
-    particle: GPUParticleLike,
-  ): Node<'vec3'> {
-    return transformPointGPU(
-      this.getGPUParticleWorldPosition(particle),
-      this._gpuWorldToLocalNode,
-    );
+  protected getGPUParticleLocalPosition(particle: GPUParticleLike): Node<'vec3'> {
+    return transformPointGPU(this.getGPUParticleWorldPosition(particle), this._gpuWorldToLocalNode);
   }
 
   private ensureBakedField(): void {
@@ -788,12 +705,13 @@ class SpatialEffect extends THREE.Object3D {
     const geometryKey = this.getGeometryRevisionKey();
 
     if (
-      this._bakedFieldTexture
-      && this._bakedFieldGeometry === this.geometry
-      && this._bakedFieldFeather === this.feather
-      && this._bakedFieldResolution === this.bakedFieldResolution
-      && this._bakedFieldGeometryKey === geometryKey
-    ) return;
+      this._bakedFieldTexture &&
+      this._bakedFieldGeometry === this.geometry &&
+      this._bakedFieldFeather === this.feather &&
+      this._bakedFieldResolution === this.bakedFieldResolution &&
+      this._bakedFieldGeometryKey === geometryKey
+    )
+      return;
 
     const bounds = this.getBakedFieldLocalBounds();
     const resolution = this.bakedFieldResolution;
@@ -815,11 +733,7 @@ class SpatialEffect extends THREE.Object3D {
     for (let z = 0; z < resolution; z += 1) {
       for (let y = 0; y < resolution; y += 1) {
         for (let x = 0; x < resolution; x += 1) {
-          point.set(
-            bounds.min.x + step.x * x,
-            bounds.min.y + step.y * y,
-            bounds.min.z + step.z * z,
-          );
+          point.set(bounds.min.x + step.x * x, bounds.min.y + step.y * y, bounds.min.z + step.z * z);
           data[index] = Math.round(THREE.MathUtils.clamp(this.getLocalFeather(point), 0, 1) * 255);
           index += 1;
         }
@@ -852,10 +766,7 @@ class SpatialEffect extends THREE.Object3D {
   private getBakedFieldLocalBounds(): THREE.Box3 {
     if (!this.geometry) {
       const radius = Math.max(this.feather, Number.EPSILON);
-      return new THREE.Box3(
-        new THREE.Vector3(-radius, -radius, -radius),
-        new THREE.Vector3(radius, radius, radius),
-      );
+      return new THREE.Box3(new THREE.Vector3(-radius, -radius, -radius), new THREE.Vector3(radius, radius, radius));
     }
 
     return this.getLocalBounds().clone().expandByScalar(Math.max(this.feather, Number.EPSILON));
@@ -875,22 +786,20 @@ class SpatialEffect extends THREE.Object3D {
 
   modify(particles: Particle[], deltaTime: number, particleSystem: ParticleSystem): void {
     particles
-      .filter((particle) => particle.alive)
-      .filter((particle) => this.test(particle, particleSystem))
-      .filter((particle) => this.condition(particle))
-      .forEach((particle) => this._modifyParticle(particle, (particleSystem.getParticleDeltaTime?.(particle, deltaTime) ?? deltaTime), particleSystem));
+      .filter(particle => particle.alive)
+      .filter(particle => this.test(particle, particleSystem))
+      .filter(particle => this.condition(particle))
+      .forEach(particle =>
+        this._modifyParticle(
+          particle,
+          particleSystem.getParticleDeltaTime?.(particle, deltaTime) ?? deltaTime,
+          particleSystem,
+        ),
+      );
   }
 
-  protected _modifyParticle(
-    particle: Particle,
-    deltaTime: number,
-    particleSystem: ParticleSystem,
-  ): void {
-    getParticleWorldPosition(
-      particle,
-      particleSystem,
-      this.localParticlePosition,
-    );
+  protected _modifyParticle(particle: Particle, deltaTime: number, particleSystem: ParticleSystem): void {
+    getParticleWorldPosition(particle, particleSystem, this.localParticlePosition);
 
     const feather = this._test ? 1 : this.getFeather(this.localParticlePosition);
     if (feather <= 0) return;
@@ -910,24 +819,18 @@ class SpatialEffect extends THREE.Object3D {
     const before = particle.clone();
     this._modify(particle, deltaTime, particleSystem);
     const after = particle.clone();
-    particle
-      .lerp(before, 1)
-      .lerp(after, feather);
+    particle.lerp(before, 1).lerp(after, feather);
   }
 
   private easeFeather(feather: number): number {
     const clamped = Math.min(Math.max(feather, 0), 1);
     const eased = this.featherEasing(clamped);
-    return Number.isFinite(eased)
-      ? Math.min(Math.max(eased, 0), 1)
-      : clamped;
+    return Number.isFinite(eased) ? Math.min(Math.max(eased, 0), 1) : clamped;
   }
 
   private easeFeatherGPU(feather: Node<'float'>): Node<'float'> {
     const resolution = 17;
-    const values = Array.from({ length: resolution }, (_, index) => (
-      float(this.easeFeather(index / (resolution - 1)))
-    ));
+    const values = Array.from({ length: resolution }, (_, index) => float(this.easeFeather(index / (resolution - 1))));
     const samples = array(values);
     const position = feather.clamp(0, 1).mul(resolution - 1);
     const lowerPosition = position.floor();

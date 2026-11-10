@@ -1,12 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
-import {
-  Boids,
-} from '@rzmps/rzmps';
-import {
-  createSceneParticleRoot,
-  disposeSceneParticleRoot,
-} from '../utils/particleRoot.js';
+import { Boids } from '@rzmps/rzmps';
+import { createSceneParticleRoot, disposeSceneParticleRoot } from '../utils/particleRoot.js';
 import suzanneModel from 'examples/assets/models/suzanne.glb?url';
 
 function createAffectorMesh(affector, color, opacity = 0.22) {
@@ -40,7 +35,7 @@ function syncMesh(mesh, affector) {
 function findFirstGeometry(object) {
   let geometry = null;
 
-  object.traverse((child) => {
+  object.traverse(child => {
     if (!geometry && child.isMesh) geometry = child.geometry.clone();
   });
 
@@ -185,7 +180,7 @@ export default async function boidAffectorsScene(scene) {
   let elapsed = 0;
 
   return {
-    update: (deltaTime) => {
+    update: deltaTime => {
       elapsed += deltaTime;
       target.position.set(
         Math.cos(elapsed * 0.21) * 15,
@@ -197,26 +192,18 @@ export default async function boidAffectorsScene(scene) {
         3.5 + Math.sin(elapsed * 0.31) * 1.1,
         Math.sin(elapsed * 0.2 + 1.2) * 12,
       );
-      gate.position.set(
-        Math.cos(elapsed * 0.13 + 4.2) * 8,
-        4.2,
-        Math.sin(elapsed * 0.17 + 3) * 15,
-      );
+      gate.position.set(Math.cos(elapsed * 0.13 + 4.2) * 8, 4.2, Math.sin(elapsed * 0.17 + 3) * 15);
       gate.rotation.y = Math.PI * 0.18 + Math.sin(elapsed * 0.22) * 0.65;
       suzanne.position.set(
         Math.cos(elapsed * 0.19 + 5.5) * 16,
         4.5 + Math.sin(elapsed * 0.27 + 1.5) * 1.6,
         Math.sin(elapsed * 0.14 + 4.5) * 13,
       );
-      suzanne.rotation.set(
-        Math.sin(elapsed * 0.37) * 0.25,
-        elapsed * 0.42,
-        Math.cos(elapsed * 0.29) * 0.18,
-      );
+      suzanne.rotation.set(Math.sin(elapsed * 0.37) * 0.25, elapsed * 0.42, Math.cos(elapsed * 0.29) * 0.18);
       updateMeshes();
     },
 
-    gui: (folder) => {
+    gui: folder => {
       const targetFolder = folder.addFolder('Target');
       targetFolder.add(target.position, 'x', -26, 26, 0.1).name('X').onChange(updateMeshes);
       targetFolder.add(target.position, 'y', -2, 18, 0.1).name('Y').onChange(updateMeshes);
@@ -284,8 +271,9 @@ export default async function boidAffectorsScene(scene) {
 }
 
 boidAffectorsScene.metadata = {
-  "id": "boidAffectors",
-  "title": "Boid Affectors",
-  "author": "rzmay"
+  id: 'boidAffectors',
+  title: 'Boid Affectors',
+  author: 'rzmay',
 };
-boidAffectorsScene.description = "Scene-level BoidAffector targets and obstacles, discovered automatically by the Boids module.";
+boidAffectorsScene.description =
+  'Scene-level BoidAffector targets and obstacles, discovered automatically by the Boids module.';

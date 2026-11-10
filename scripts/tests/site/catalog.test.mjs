@@ -12,8 +12,11 @@ test('automatic catalogs preserve factory metadata and derive source links witho
   factory.metadata = { id: 'scene', title: 'Scene', author: 'rzmay' };
   const metadata = { ...factory.metadata };
   const [entry] = createRegistry({ './scene.js': factory }, 'scenes');
-  assert.deepEqual(entry, { create: factory, ...metadata,
-    sourceUrl: 'https://github.com/rzmay/rzmps/blob/develop/examples/scenes/scene.js' });
+  assert.deepEqual(entry, {
+    create: factory,
+    ...metadata,
+    sourceUrl: 'https://github.com/rzmay/rzmps/blob/develop/examples/scenes/scene.js',
+  });
   assert.deepEqual(factory.metadata, metadata);
   assert.equal(factory.sourceUrl, undefined);
   assert.throws(() => createRegistry({ './a.js': factory, './b.js': factory }, 'scenes'), /duplicate/);
@@ -21,8 +24,12 @@ test('automatic catalogs preserve factory metadata and derive source links witho
 });
 
 test('every scene supplies its own metadata and HDRI environments are independent scenes', () => {
-  const files = fs.readdirSync(path.join(root, 'examples/scenes')).filter(file => file.endsWith('.js') && file !== 'index.js');
-  const scenes = files.map(file => readExampleMetadata(fs.readFileSync(path.join(root, 'examples/scenes', file), 'utf8'), file));
+  const files = fs
+    .readdirSync(path.join(root, 'examples/scenes'))
+    .filter(file => file.endsWith('.js') && file !== 'index.js');
+  const scenes = files.map(file =>
+    readExampleMetadata(fs.readFileSync(path.join(root, 'examples/scenes', file), 'utf8'), file),
+  );
   assert.ok(scenes.length >= 2);
   for (const scene of scenes) for (const field of ['id', 'title', 'author']) assert.ok(scene[field]);
   assert.equal(new Set(scenes.map(scene => scene.title)).size, scenes.length);

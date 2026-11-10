@@ -1,8 +1,13 @@
 /* eslint-disable react/no-unknown-property */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import PropTypes from 'prop-types';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { selectBenchmarkCases, readBenchmarkOptions, updateBenchmarkSystem, benchmarkCaseId }
-  from '../../../../scripts/benchmark/benchmark-selection.mjs';
+import {
+  selectBenchmarkCases,
+  readBenchmarkOptions,
+  updateBenchmarkSystem,
+  benchmarkCaseId,
+} from '../../../../scripts/benchmark/benchmark-selection.mjs';
 import { isBenchmarkMeasurementComplete } from '../../../../scripts/benchmark/benchmark-payload.mjs';
 import { recordBenchmarkFrame } from '../../../../scripts/benchmark/benchmark-measurement.mjs';
 import * as THREE from 'three';
@@ -83,38 +88,29 @@ class NoopRenderer extends Renderer {
 }
 
 function pairBenchmarkCases(cases) {
-  return cases.flatMap((benchmarkCase) => {
-    const modes = benchmarkCase.gpuOnly
-      ? ['gpu']
-      : benchmarkCase.cpuOnly
-        ? ['cpu']
-        : ['cpu', 'gpu'];
+  return cases.flatMap(benchmarkCase => {
+    const modes = benchmarkCase.gpuOnly ? ['gpu'] : benchmarkCase.cpuOnly ? ['cpu'] : ['cpu', 'gpu'];
 
-    return modes.map((mode) => {
+    return modes.map(mode => {
       const gpuProcessing = mode === 'gpu';
       return {
         ...benchmarkCase,
-        id: benchmarkCase.id ? `${benchmarkCase.id}:${mode}`
+        id: benchmarkCase.id
+          ? `${benchmarkCase.id}:${mode}`
           : benchmarkCaseId({ name: `${benchmarkCase.name} [${mode.toUpperCase()}]` }),
         name: `${benchmarkCase.name} [${mode.toUpperCase()}]`,
         benchmarkMode: mode,
         requireGPU: gpuProcessing,
-        create: benchmarkCase.create
-          ? () => ({ ...benchmarkCase.create(mode), gpuProcessing })
-          : undefined,
+        create: benchmarkCase.create ? () => ({ ...benchmarkCase.create(mode), gpuProcessing }) : undefined,
         createSystem: benchmarkCase.createSystem
           ? async () => {
-            const system = await benchmarkCase.createSystem(mode);
-            configureHierarchyGPU(system, gpuProcessing);
-            return system;
-          }
+              const system = await benchmarkCase.createSystem(mode);
+              configureHierarchyGPU(system, gpuProcessing);
+              return system;
+            }
           : undefined,
-        configure: benchmarkCase.configure
-          ? (system) => benchmarkCase.configure(system, mode)
-          : undefined,
-        validate: benchmarkCase.validate
-          ? (system) => benchmarkCase.validate(system, mode)
-          : undefined,
+        configure: benchmarkCase.configure ? system => benchmarkCase.configure(system, mode) : undefined,
+        validate: benchmarkCase.validate ? system => benchmarkCase.validate(system, mode) : undefined,
       };
     });
   });
@@ -142,11 +138,7 @@ async function createBenchmarkRenderer(defaultProps) {
 }
 
 function makeCurve() {
-  return new Curve([
-    new NumberKeyframe(0, 0),
-    new NumberKeyframe(0.35, 1),
-    new NumberKeyframe(1, 0.25),
-  ]);
+  return new Curve([new NumberKeyframe(0, 0), new NumberKeyframe(0.35, 1), new NumberKeyframe(1, 0.25)]);
 }
 
 const growCurve = makeCurve();
@@ -161,14 +153,7 @@ function createParticleTexture() {
   canvas.height = size;
 
   const context = canvas.getContext('2d');
-  const gradient = context.createRadialGradient(
-    size / 2,
-    size / 2,
-    0,
-    size / 2,
-    size / 2,
-    size / 2,
-  );
+  const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
 
   gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
   gradient.addColorStop(0.35, 'rgba(255, 210, 120, 0.85)');
@@ -193,11 +178,7 @@ function getStringParam(name, fallback = '') {
 function createParticle(index) {
   const particle = new Particle({
     lifetime: 10000,
-    position: new THREE.Vector3(
-      (index % 200) * 0.035 - 3.5,
-      (Math.floor(index / 200) % 200) * 0.035 - 3.5,
-      0,
-    ),
+    position: new THREE.Vector3((index % 200) * 0.035 - 3.5, (Math.floor(index / 200) % 200) * 0.035 - 3.5, 0),
     rotation: new THREE.Vector3(),
     scale: new THREE.Vector3(0.08, 0.08, 0.08),
     velocity: new THREE.Vector3(0.01, 0.02, 0),
@@ -244,15 +225,13 @@ function createSystem({
 }
 
 function createMilestoneGPUModules(count) {
-  return Array.from({ length: count }, (_unused, index) => (
-    new VelocityOverLifetime({
-      acceleration: new THREE.Vector3(
-        0.0005 * (index + 1),
-        -0.00025 * (index + 1),
-        0.000125 * (index + 1),
-      ),
-    })
-  ));
+  return Array.from(
+    { length: count },
+    (_unused, index) =>
+      new VelocityOverLifetime({
+        acceleration: new THREE.Vector3(0.0005 * (index + 1), -0.00025 * (index + 1), 0.000125 * (index + 1)),
+      }),
+  );
 }
 
 function createNativeBuiltInModules() {
@@ -361,18 +340,12 @@ function summarize({
     gpuActiveFrames: gpuActiveSamples.filter(Boolean).length,
     gpuMeasuredFrames: gpuActiveSamples.length,
     gpuProcessingActive: gpuActiveSamples.length > 0 && gpuActiveSamples.every(Boolean),
-    avgComputeDispatches: computeDispatchSamples.length > 0
-      ? computeTotal / computeDispatchSamples.length
-      : 0,
-    maxComputeDispatches: computeDispatchSamples.length > 0
-      ? Math.max(...computeDispatchSamples)
-      : 0,
-    avgSimulationDispatches: simulationDispatchSamples.length > 0
-      ? simulationDispatchTotal / simulationDispatchSamples.length
-      : 0,
-    avgRenderOutputDispatches: renderOutputDispatchSamples.length > 0
-      ? renderOutputDispatchTotal / renderOutputDispatchSamples.length
-      : 0,
+    avgComputeDispatches: computeDispatchSamples.length > 0 ? computeTotal / computeDispatchSamples.length : 0,
+    maxComputeDispatches: computeDispatchSamples.length > 0 ? Math.max(...computeDispatchSamples) : 0,
+    avgSimulationDispatches:
+      simulationDispatchSamples.length > 0 ? simulationDispatchTotal / simulationDispatchSamples.length : 0,
+    avgRenderOutputDispatches:
+      renderOutputDispatchSamples.length > 0 ? renderOutputDispatchTotal / renderOutputDispatchSamples.length : 0,
     estimatedPersistentGPUBufferMB,
     rendererType,
     deathEvents: system.__rzmpsBenchmarkDeathEvents,
@@ -409,15 +382,19 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }
     };
     window.__RZMPS_BENCHMARK_SHUTDOWN__ = shutdown;
-    return () => { delete window.__RZMPS_BENCHMARK_SHUTDOWN__; };
+    return () => {
+      delete window.__RZMPS_BENCHMARK_SHUTDOWN__;
+    };
   }, [gl, setFrameloop]);
 
-  const fail = (error) => {
+  const fail = error => {
     failed.current = true;
     setFrameloop('never');
     window.__RZMPS_BENCHMARK_ERROR__ = { message: error.message ?? String(error), stack: error.stack };
     window.__RZMPS_BENCHMARK_PROGRESS__ = {
-      ...window.__RZMPS_BENCHMARK_PROGRESS__, phase: 'failed', error: error.message ?? String(error),
+      ...window.__RZMPS_BENCHMARK_PROGRESS__,
+      phase: 'failed',
+      error: error.message ?? String(error),
     };
     throw error;
   };
@@ -428,14 +405,14 @@ function BenchmarkScene({ onComplete, onProgress }) {
   const ciProfile = new URLSearchParams(window.location.search).get('profile') === 'ci';
 
   if (
-    suite === 'milestone1'
-    || suite === 'milestone2'
-    || suite === 'milestone3'
-    || suite === 'milestone4'
-    || suite === 'emitter-instances'
-    || suite === 'doppler'
-    || suite === 'runtime-config'
-    || suite === 'dynamic-spatial'
+    suite === 'milestone1' ||
+    suite === 'milestone2' ||
+    suite === 'milestone3' ||
+    suite === 'milestone4' ||
+    suite === 'emitter-instances' ||
+    suite === 'doppler' ||
+    suite === 'runtime-config' ||
+    suite === 'dynamic-spatial'
   ) {
     ParticleSystem.Settings.GPU_READBACK_RATE = 0;
   }
@@ -452,7 +429,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
   const allCases = useMemo(() => {
     if (suite === 'dynamic-spatial') {
-      const movingEffectsCase = (effectCount) => {
+      const movingEffectsCase = effectCount => {
         const geometry = new THREE.SphereGeometry(0.35, 6, 4);
         const effects = Array.from({ length: effectCount }, (_unused, index) => {
           const effect = new ParticleForceField({
@@ -479,7 +456,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
             renderer: new NoopRenderer(),
             spatialEffects: effects,
           }),
-          beforeUpdate: (system) => {
+          beforeUpdate: system => {
             const registry = system.gpuSimulation._gpuSpatialRegistry;
             if (!system.__dynamicSpatialDiagnostics && registry && system.gpuSimulation._gpuSimulationComputeCache) {
               const diagnostics = {
@@ -503,11 +480,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
             if (!diagnostics) return;
             diagnostics.frame += 1;
             effects.forEach((effect, index) => {
-              effect.position.x = effect.userData.benchmarkBaseX
-                + Math.sin(diagnostics.frame * 0.08 + index * 0.17) * 0.35;
+              effect.position.x =
+                effect.userData.benchmarkBaseX + Math.sin(diagnostics.frame * 0.08 + index * 0.17) * 0.35;
             });
           },
-          validate: (system) => {
+          validate: system => {
             const diagnostics = system.__dynamicSpatialDiagnostics;
             const stats = system.gpuSpatialStats;
             if (!diagnostics || diagnostics.updates === 0) {
@@ -548,7 +525,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
             renderer: new NoopRenderer(),
             modules: [new Collision({ backend })],
           }),
-          beforeUpdate: (system) => {
+          beforeUpdate: system => {
             if (!system.__dynamicSpatialDiagnostics && backend.stats.fullBuilds > 0) {
               const diagnostics = {
                 baselinePipelineBuilds: system.gpuConfigurationStats.pipelineBuilds,
@@ -586,7 +563,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
               geometry.setDrawRange(0, diagnostics.frame % 2 === 0 ? 30 : 36);
             }
           },
-          validate: (system) => {
+          validate: system => {
             const diagnostics = system.__dynamicSpatialDiagnostics;
             if (!diagnostics || diagnostics.updates === 0) {
               throw new Error('Collision backend updates were not measured.');
@@ -602,7 +579,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
             }
             diagnostics.averageBackendUpdateMs = diagnostics.updateTimeMs / diagnostics.updates;
             diagnostics.collisionStats = { ...backend.stats };
-            new Set(meshes.map((mesh) => mesh.geometry)).forEach((geometry) => geometry.dispose());
+            new Set(meshes.map(mesh => mesh.geometry)).forEach(geometry => geometry.dispose());
           },
         };
       };
@@ -627,27 +604,26 @@ function BenchmarkScene({ onComplete, onProgress }) {
           minimumDurationMs: 750,
           create: () => ({
             gpuProcessing: true,
-            modules: [new Boids({
-              tags: 'flock',
-              neighborRadius: 4,
-              alignmentWeight: 0,
-              cohesionWeight: 3,
-              separationWeight: 0,
-              steering: 12,
-              spatialGridOptions: {
-                bounds: new THREE.Box3(
-                  new THREE.Vector3(-4, -4, -4),
-                  new THREE.Vector3(4, 4, 4),
-                ),
-                brickSubdivisions: 2,
-                cellSubdivisions: 2,
-                autoExpand: false,
-              },
-            })],
+            modules: [
+              new Boids({
+                tags: 'flock',
+                neighborRadius: 4,
+                alignmentWeight: 0,
+                cohesionWeight: 3,
+                separationWeight: 0,
+                steering: 12,
+                spatialGridOptions: {
+                  bounds: new THREE.Box3(new THREE.Vector3(-4, -4, -4), new THREE.Vector3(4, 4, 4)),
+                  brickSubdivisions: 2,
+                  cellSubdivisions: 2,
+                  autoExpand: false,
+                },
+              }),
+            ],
           }),
-          configure: (system) => {
+          configure: system => {
             system.particles.forEach((particle, index) => {
-              const angle = index / system.particles.length * Math.PI * 2;
+              const angle = (index / system.particles.length) * Math.PI * 2;
               const direction = new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0);
               particle.position.copy(direction).multiplyScalar(2);
               particle.orbitCenter.copy(particle.position);
@@ -663,32 +639,41 @@ function BenchmarkScene({ onComplete, onProgress }) {
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 250 || system.__gridDiagnosticsPromise) return;
             const grid = system.modules[0].getParticleSpatialGrid(system);
-            system.__gridDiagnosticsPromise = grid.readDiagnostics(system.sceneRenderer)
-              .then((diagnostics) => { system.__gridDiagnostics = diagnostics; })
-              .catch(() => { system.__gridDiagnosticsPromise = undefined; });
+            system.__gridDiagnosticsPromise = grid
+              .readDiagnostics(system.sceneRenderer)
+              .then(diagnostics => {
+                system.__gridDiagnostics = diagnostics;
+              })
+              .catch(() => {
+                system.__gridDiagnosticsPromise = undefined;
+              });
           },
-          validate: (system) => {
-            const unchanged = system.particles.filter((particle) => (
-              particle.velocity.clone().normalize().dot(particle.data.initialDirection) > 0.9
-            ));
+          validate: system => {
+            const unchanged = system.particles.filter(
+              particle => particle.velocity.clone().normalize().dot(particle.data.initialDirection) > 0.9,
+            );
             if (unchanged.length > system.particles.length * 0.75) {
               throw new Error(
-                `GPU Boids left ${unchanged.length}/${system.particles.length} particles moving outward; `
-                + `samples ${JSON.stringify(system.particles.slice(0, 3).map((particle) => ({
-                  position: particle.position.toArray(),
-                  velocity: particle.velocity.toArray(),
-                  initial: particle.data.initialDirection.toArray(),
-                  alive: particle.alive,
-                })))}; `
-                + `grid diagnostics ${JSON.stringify(system.__gridDiagnostics)}.`,
+                `GPU Boids left ${unchanged.length}/${system.particles.length} particles moving outward; ` +
+                  `samples ${JSON.stringify(
+                    system.particles.slice(0, 3).map(particle => ({
+                      position: particle.position.toArray(),
+                      velocity: particle.velocity.toArray(),
+                      initial: particle.data.initialDirection.toArray(),
+                      alive: particle.alive,
+                    })),
+                  )}; ` +
+                  `grid diagnostics ${JSON.stringify(system.__gridDiagnostics)}.`,
               );
             }
-            const accelerated = system.particles.filter((particle) => (
-              Math.abs(particle.velocity.length() - 1) > 0.05
-            ));
+            const accelerated = system.particles.filter(particle => Math.abs(particle.velocity.length() - 1) > 0.05);
             if (accelerated.length > 0) {
               throw new Error(
-                `GPU Boids changed base velocity magnitude for ${accelerated.length}/${system.particles.length} particles.`,
+                `GPU Boids changed base velocity magnitude for ` +
+                  `${accelerated.length}` +
+                  `/` +
+                  `${system.particles.length}` +
+                  ` particles.`,
               );
             }
           },
@@ -699,29 +684,36 @@ function BenchmarkScene({ onComplete, onProgress }) {
           requireGPU: true,
           minimumDurationMs: 1000,
           create: () => {
-            const target = Boids.BoidAffector.Sphere({
-              weight: Boids.BoidAffector.Weight.Target * 2,
-              distance: 0.25,
-              range: 6,
-              tags: 'flock',
-            }, 0.5, 12, 8);
+            const target = Boids.BoidAffector.Sphere(
+              {
+                weight: Boids.BoidAffector.Weight.Target * 2,
+                distance: 0.25,
+                range: 6,
+                tags: 'flock',
+              },
+              0.5,
+              12,
+              8,
+            );
             return {
               gpuProcessing: true,
-              modules: [new Boids({
-                tags: 'flock',
-                alignmentWeight: 0,
-                cohesionWeight: 0,
-                separationWeight: 0,
-                affectorWeight: 1,
-                steering: 8,
-                neighborRadius: 4,
-                affectors: [target],
-              })],
+              modules: [
+                new Boids({
+                  tags: 'flock',
+                  alignmentWeight: 0,
+                  cohesionWeight: 0,
+                  separationWeight: 0,
+                  affectorWeight: 1,
+                  steering: 8,
+                  neighborRadius: 4,
+                  affectors: [target],
+                }),
+              ],
             };
           },
-          configure: (system) => {
+          configure: system => {
             system.particles.forEach((particle, index) => {
-              const angle = index / system.particles.length * Math.PI * 2;
+              const angle = (index / system.particles.length) * Math.PI * 2;
               const direction = new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0);
               particle.position.copy(direction).multiplyScalar(2);
               particle.orbitCenter.copy(particle.position);
@@ -734,21 +726,22 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 100 || system.__boidAffectorReadbackPromise) return;
-            system.__boidAffectorReadbackPromise = system.selectiveReadback()
-              .then((results) => { system.__boidAffectorReadback = results; });
+            system.__boidAffectorReadbackPromise = system.selectiveReadback().then(results => {
+              system.__boidAffectorReadback = results;
+            });
           },
-          validate: (system) => {
+          validate: system => {
             const samples = system.__boidAffectorReadback;
             if (!samples) throw new Error('GPU BoidAffector verification readback did not complete.');
-            const unchanged = samples.filter((result) => (
-              result.particle.velocity.clone().normalize().dot(
-                system.particles[result.slot].data.initialDirection,
-              ) > 0.999
-            ));
+            const unchanged = samples.filter(
+              result =>
+                result.particle.velocity.clone().normalize().dot(system.particles[result.slot].data.initialDirection) >
+                0.999,
+            );
             if (unchanged.length > samples.length * 0.25) {
               throw new Error(
-                `GPU BoidAffector left ${unchanged.length}/${samples.length} particles moving outward; `
-                + `samples ${JSON.stringify(samples.slice(0, 3).map((result) => result.particle.velocity.toArray()))}.`,
+                `GPU BoidAffector left ${unchanged.length}/${samples.length} particles moving outward; ` +
+                  `samples ${JSON.stringify(samples.slice(0, 3).map(result => result.particle.velocity.toArray()))}.`,
               );
             }
           },
@@ -761,13 +754,20 @@ function BenchmarkScene({ onComplete, onProgress }) {
           create: () => ({
             gpuProcessing: true,
             modules: [],
-            spatialEffects: [ParticleForceField.Sphere({
-              position: new THREE.Vector3(6, 0, 0),
-              direction: new THREE.Vector3(4, 0, 0),
-            }, 2, 12, 8)],
+            spatialEffects: [
+              ParticleForceField.Sphere(
+                {
+                  position: new THREE.Vector3(6, 0, 0),
+                  direction: new THREE.Vector3(4, 0, 0),
+                },
+                2,
+                12,
+                8,
+              ),
+            ],
           }),
-          configure: (system) => {
-            system.particles.forEach((particle) => {
+          configure: system => {
+            system.particles.forEach(particle => {
               particle.position.set(0, 0, 0);
               particle.orbitCenter.copy(particle.position);
               particle.velocity.set(0, 0, 0);
@@ -777,24 +777,25 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system, elapsed) => {
             if (
-              !system.__movingSpatialBaseline
-              && system.gpuSimulation._gpuSpatialRegistry
-              && system.gpuSimulation._gpuSimulationComputeCache
+              !system.__movingSpatialBaseline &&
+              system.gpuSimulation._gpuSpatialRegistry &&
+              system.gpuSimulation._gpuSimulationComputeCache
             ) {
               system.__movingSpatialBaseline = system.gpuConfigurationStats.pipelineBuilds;
               system.spatialEffects[0].position.set(0, 0, 0);
               system.__movingSpatialMovedAt = elapsed;
             }
             if (
-              elapsed >= (system.__movingSpatialMovedAt ?? Number.POSITIVE_INFINITY) + 250
-              && system.__movingSpatialBaseline
-              && !system.__movingSpatialReadbackPromise
+              elapsed >= (system.__movingSpatialMovedAt ?? Number.POSITIVE_INFINITY) + 250 &&
+              system.__movingSpatialBaseline &&
+              !system.__movingSpatialReadbackPromise
             ) {
-              system.__movingSpatialReadbackPromise = system.selectiveReadback()
-                .then((results) => { system.__movingSpatialReadback = results; });
+              system.__movingSpatialReadbackPromise = system.selectiveReadback().then(results => {
+                system.__movingSpatialReadback = results;
+              });
             }
           },
-          validate: (system) => {
+          validate: system => {
             if (system.__movingSpatialBaseline === undefined) {
               throw new Error('Moving spatial effect did not establish a compiled baseline.');
             }
@@ -806,14 +807,16 @@ function BenchmarkScene({ onComplete, onProgress }) {
             }
             const samples = system.__movingSpatialReadback;
             if (!samples) throw new Error('Moving force-field verification readback did not complete.');
-            const influenced = samples.filter((result) => result.particle.velocity.x > 0.1);
+            const influenced = samples.filter(result => result.particle.velocity.x > 0.1);
             if (influenced.length < samples.length * 0.75) {
               throw new Error(
-                `Moved GPU force field influenced ${influenced.length}/${samples.length} particles; `
-                + `samples ${JSON.stringify(samples.slice(0, 3).map((result) => ({
-                  position: result.particle.position.toArray(),
-                  velocity: result.particle.velocity.toArray(),
-                })))}; stats ${JSON.stringify(system.gpuSpatialStats)}.`,
+                `Moved GPU force field influenced ${influenced.length}/${samples.length} particles; ` +
+                  `samples ${JSON.stringify(
+                    samples.slice(0, 3).map(result => ({
+                      position: result.particle.position.toArray(),
+                      velocity: result.particle.velocity.toArray(),
+                    })),
+                  )}; stats ${JSON.stringify(system.gpuSpatialStats)}.`,
               );
             }
           },
@@ -826,33 +829,42 @@ function BenchmarkScene({ onComplete, onProgress }) {
           create: () => ({
             gpuProcessing: true,
             modules: [],
-            spatialEffects: [SpatialEffect.Sphere((particle) => {
-              particle.color.set(0xff0000);
-            }, {
-              feather: 2,
-              featherEasing: (strength) => strength * strength,
-              priority: Module.Priority.Permanent,
-              modifyGPU: (particle) => {
-                particle.color.assign(vec3(1, 0, 0));
-              },
-            }, 1, 12, 8)],
+            spatialEffects: [
+              SpatialEffect.Sphere(
+                particle => {
+                  particle.color.set(0xff0000);
+                },
+                {
+                  feather: 2,
+                  featherEasing: strength => strength * strength,
+                  priority: Module.Priority.Permanent,
+                  modifyGPU: particle => {
+                    particle.color.assign(vec3(1, 0, 0));
+                  },
+                },
+                1,
+                12,
+                8,
+              ),
+            ],
           }),
-          configure: (system) => {
+          configure: system => {
             system.particles[0].position.set(0, 0, 0);
             system.particles[1].position.set(2, 0, 0);
-            system.particles.forEach((particle) => {
+            system.particles.forEach(particle => {
               particle.orbitCenter.copy(particle.position);
               particle.velocity.set(0, 0, 0);
               particle.color.set(0xffffff);
               particle.cache();
             });
           },
-          beforeUpdate: (system) => {
+          beforeUpdate: system => {
             if (!system.gpuSimulation._gpuBuffers || system.__automaticFeatherReadbackPromise) return;
-            system.__automaticFeatherReadbackPromise = system.selectiveReadback(2)
-              .then((results) => { system.__automaticFeatherReadback = results; });
+            system.__automaticFeatherReadbackPromise = system.selectiveReadback(2).then(results => {
+              system.__automaticFeatherReadback = results;
+            });
           },
-          validate: (system) => {
+          validate: system => {
             const samples = system.__automaticFeatherReadback;
             if (!samples || samples.length !== 2) {
               throw new Error('Automatic color feather verification readback did not complete.');
@@ -879,53 +891,62 @@ function BenchmarkScene({ onComplete, onProgress }) {
             system.gpuProcessing = true;
             return system;
           },
-          configureScene: (benchmarkScene) => {
-            const target = Boids.BoidAffector.Sphere({
-              position: new THREE.Vector3(10, 2, -8),
-              weight: Boids.BoidAffector.Weight.Target * 2.5,
-              distance: 1.75,
-              tags: 'boid',
-            }, 1.25, 16, 8);
-            const container = Boids.BoidAffector.Box({
-              position: new THREE.Vector3(0, 2, 0),
-              weight: Boids.BoidAffector.Weight.Obstacle * 3.25,
-              inverted: true,
-              distance: 3.4,
-              tags: 'boid',
-            }, 52, 26, 46);
+          configureScene: benchmarkScene => {
+            const target = Boids.BoidAffector.Sphere(
+              {
+                position: new THREE.Vector3(10, 2, -8),
+                weight: Boids.BoidAffector.Weight.Target * 2.5,
+                distance: 1.75,
+                tags: 'boid',
+              },
+              1.25,
+              16,
+              8,
+            );
+            const container = Boids.BoidAffector.Box(
+              {
+                position: new THREE.Vector3(0, 2, 0),
+                weight: Boids.BoidAffector.Weight.Obstacle * 3.25,
+                inverted: true,
+                distance: 3.4,
+                tags: 'boid',
+              },
+              52,
+              26,
+              46,
+            );
             benchmarkScene.add(target, container);
             return [target, container];
           },
           beforeUpdate: (system, elapsed) => {
-            if (
-              elapsed < 2200
-              || !system.isGPUProcessingActive
-              || system.__emittingBoidsReadbackPromise
-            ) return;
-            system.__emittingBoidsReadbackPromise = system.selectiveReadback()
-              .then((results) => { system.__emittingBoidsReadback = results; });
-            const grid = system.modules.find((module) => module instanceof Boids)
-              ?.getParticleSpatialGrid(system);
-            system.__emittingBoidsGridPromise = grid?.readDiagnostics(system.sceneRenderer)
-              .then((diagnostics) => { system.__emittingBoidsGrid = diagnostics; });
+            if (elapsed < 2200 || !system.isGPUProcessingActive || system.__emittingBoidsReadbackPromise) return;
+            system.__emittingBoidsReadbackPromise = system.selectiveReadback().then(results => {
+              system.__emittingBoidsReadback = results;
+            });
+            const grid = system.modules.find(module => module instanceof Boids)?.getParticleSpatialGrid(system);
+            system.__emittingBoidsGridPromise = grid?.readDiagnostics(system.sceneRenderer).then(diagnostics => {
+              system.__emittingBoidsGrid = diagnostics;
+            });
           },
-          validate: (system) => {
-            const samples = system.__emittingBoidsReadback?.filter((sample) => sample.valid) ?? [];
-            const hazards = samples.filter((sample) => sample.particle.tags?.includes('hazard'));
+          validate: system => {
+            const samples = system.__emittingBoidsReadback?.filter(sample => sample.valid) ?? [];
+            const hazards = samples.filter(sample => sample.particle.tags?.includes('hazard'));
             const diagnostics = system.__emittingBoidsGrid;
             if (samples.length < 50 || hazards.length < 2) {
               throw new Error(
-                `Emitting boid readback covered ${samples.length} particles and ${hazards.length} predators; `
-                + `allocation ${JSON.stringify(system.gpuAllocationStats)}; `
-                + `raw ${JSON.stringify((system.__emittingBoidsReadback ?? []).slice(0, 8).map((sample) => ({
-                  valid: sample.valid,
-                  slot: sample.slot,
-                  tags: sample.particle.tags,
-                  position: sample.particle.position.toArray(),
-                  velocity: sample.particle.velocity.toArray(),
-                  lifetime: sample.particle.lifetime,
-                  realtime: sample.particle.realtime,
-                })))}.`,
+                `Emitting boid readback covered ${samples.length} particles and ${hazards.length} predators; ` +
+                  `allocation ${JSON.stringify(system.gpuAllocationStats)}; ` +
+                  `raw ${JSON.stringify(
+                    (system.__emittingBoidsReadback ?? []).slice(0, 8).map(sample => ({
+                      valid: sample.valid,
+                      slot: sample.slot,
+                      tags: sample.particle.tags,
+                      position: sample.particle.position.toArray(),
+                      velocity: sample.particle.velocity.toArray(),
+                      lifetime: sample.particle.lifetime,
+                      realtime: sample.particle.realtime,
+                    })),
+                  )}.`,
               );
             }
             if (!diagnostics || diagnostics.referencedSlots < samples.length) {
@@ -933,21 +954,20 @@ function BenchmarkScene({ onComplete, onProgress }) {
                 `Boid grid omitted live slots: ${JSON.stringify(diagnostics)} for ${samples.length} samples.`,
               );
             }
-            const escaped = samples.filter(({ particle }) => (
-              !particle.tags?.includes('hazard')
-              && (
-              Math.abs(particle.position.x) > 28
-              || particle.position.y < -15
-              || particle.position.y > 15
-              || Math.abs(particle.position.z) > 25
-              )
-            ));
+            const escaped = samples.filter(
+              ({ particle }) =>
+                !particle.tags?.includes('hazard') &&
+                (Math.abs(particle.position.x) > 28 ||
+                  particle.position.y < -15 ||
+                  particle.position.y > 15 ||
+                  Math.abs(particle.position.z) > 25),
+            );
             if (escaped.length > 0) {
               throw new Error(`Boid container lost ${escaped.length}/${samples.length} sampled particles.`);
             }
             const hazardDirections = hazards.map(({ particle }) => particle.velocity.clone().normalize());
             const firstDirection = hazardDirections[0];
-            const unsteered = hazardDirections.filter((direction) => direction.dot(firstDirection) > 0.999);
+            const unsteered = hazardDirections.filter(direction => direction.dot(firstDirection) > 0.999);
             if (unsteered.length === hazardDirections.length) {
               throw new Error('All sampled predators retained the same unsteered direction.');
             }
@@ -960,27 +980,26 @@ function BenchmarkScene({ onComplete, onProgress }) {
           minimumDurationMs: 700,
           create: () => ({
             gpuProcessing: true,
-            modules: [new Boids({
-              tags: 'probe',
-              alignmentWeight: 0,
-              cohesionWeight: 0,
-              separationWeight: 0,
-              affectorWeight: 1,
-              steering: 20,
-              maintainSpeed: false,
-              neighborRadius: 1,
-              spatialGridOptions: {
-                bounds: new THREE.Box3(
-                  new THREE.Vector3(-16, -16, -16),
-                  new THREE.Vector3(16, 16, 16),
-                ),
-                brickSubdivisions: 1,
-                cellSubdivisions: 2,
-                autoExpand: false,
-              },
-            })],
+            modules: [
+              new Boids({
+                tags: 'probe',
+                alignmentWeight: 0,
+                cohesionWeight: 0,
+                separationWeight: 0,
+                affectorWeight: 1,
+                steering: 20,
+                maintainSpeed: false,
+                neighborRadius: 1,
+                spatialGridOptions: {
+                  bounds: new THREE.Box3(new THREE.Vector3(-16, -16, -16), new THREE.Vector3(16, 16, 16)),
+                  brickSubdivisions: 1,
+                  cellSubdivisions: 2,
+                  autoExpand: false,
+                },
+              }),
+            ],
           }),
-          configure: (system) => {
+          configure: system => {
             system.position.set(0, 7, 0);
             const particle = system.particles[0];
             particle.position.set(0, 0, 0);
@@ -989,28 +1008,32 @@ function BenchmarkScene({ onComplete, onProgress }) {
             particle.tags = ['probe'];
             particle.cache();
           },
-          configureScene: (benchmarkScene) => {
-            const target = Boids.BoidAffector.Sphere({
-              position: new THREE.Vector3(8, 7, 0),
-              weight: Boids.BoidAffector.Weight.Target,
-              range: 100,
-              tags: 'probe',
-            }, 1, 12, 8);
+          configureScene: benchmarkScene => {
+            const target = Boids.BoidAffector.Sphere(
+              {
+                position: new THREE.Vector3(8, 7, 0),
+                weight: Boids.BoidAffector.Weight.Target,
+                range: 100,
+                tags: 'probe',
+              },
+              1,
+              12,
+              8,
+            );
             benchmarkScene.add(target);
             return [target];
           },
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 250 || system.__boidCoordinateReadbackPromise) return;
-            system.__boidCoordinateReadbackPromise = system.selectiveReadback(1)
-              .then((results) => { system.__boidCoordinateReadback = results; });
+            system.__boidCoordinateReadbackPromise = system.selectiveReadback(1).then(results => {
+              system.__boidCoordinateReadback = results;
+            });
           },
-          validate: (system) => {
+          validate: system => {
             const velocity = system.__boidCoordinateReadback?.[0]?.particle.velocity;
             if (!velocity) throw new Error('BoidAffector coordinate readback did not complete.');
             if (velocity.x <= 0 || Math.abs(velocity.y) > Math.abs(velocity.x) * 0.02) {
-              throw new Error(
-                `Translated GPU boid targeted outside the affector transform: ${velocity.toArray()}.`,
-              );
+              throw new Error(`Translated GPU boid targeted outside the affector transform: ${velocity.toArray()}.`);
             }
           },
         },
@@ -1023,19 +1046,21 @@ function BenchmarkScene({ onComplete, onProgress }) {
             return {
               gpuProcessing: true,
               renderer: new SpriteRenderer(),
-              modules: [new Collision({
-                bounce: 1,
-                dampen: 0,
-              })],
+              modules: [
+                new Collision({
+                  bounce: 1,
+                  dampen: 0,
+                }),
+              ],
             };
           },
-          configureScene: (benchmarkScene) => {
+          configureScene: benchmarkScene => {
             const floor = new THREE.Mesh(new THREE.BoxGeometry(8, 1, 8));
             floor.position.y = -0.5;
             benchmarkScene.add(floor);
             return [floor];
           },
-          configure: (system) => {
+          configure: system => {
             system.__rzmpsBenchmarkCollisionEvents = 0;
             system.onCollision((particle, collision) => {
               system.__rzmpsBenchmarkCollisionEvents += 1;
@@ -1061,10 +1086,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
           },
           beforeUpdate: (system, elapsed) => {
             if (elapsed < 650 || system.__rzmpsCollisionReadbackPromise) return;
-            system.__rzmpsCollisionReadbackPromise = system.selectiveReadback()
-              .then((results) => { system.__rzmpsCollisionReadback = results; });
+            system.__rzmpsCollisionReadbackPromise = system.selectiveReadback().then(results => {
+              system.__rzmpsCollisionReadback = results;
+            });
           },
-          validate: (system) => {
+          validate: system => {
             if (!(system.modules[0].backend instanceof ThreeGPUCollisionBackend)) {
               throw new Error('Collision did not select ThreeGPUCollisionBackend automatically.');
             }
@@ -1072,16 +1098,18 @@ function BenchmarkScene({ onComplete, onProgress }) {
             if (!readback) {
               throw new Error('GPU Collision selective verification readback did not complete.');
             }
-            const valid = readback.filter((result) => result.valid);
-            const bounced = valid.filter((result) => result.particle.velocity.y > 0.1);
+            const valid = readback.filter(result => result.valid);
+            const bounced = valid.filter(result => result.particle.velocity.y > 0.1);
             if (bounced.length < valid.length * 0.75) {
               throw new Error(
-                `GPU Collision bounced ${bounced.length}/${valid.length} particles in direct GPU readback; `
-                + `events ${system.__rzmpsBenchmarkCollisionEvents}; samples ${JSON.stringify(valid.slice(0, 3).map((result) => ({
-                  position: result.particle.position.toArray(),
-                  velocity: result.particle.velocity.toArray(),
-                  alive: result.particle.alive,
-                })))}; last event ${JSON.stringify(system.__rzmpsBenchmarkLastCollision)}.`,
+                `GPU Collision bounced ${bounced.length}/${valid.length} particles in direct GPU readback; ` +
+                  `events ${system.__rzmpsBenchmarkCollisionEvents}; samples ${JSON.stringify(
+                    valid.slice(0, 3).map(result => ({
+                      position: result.particle.position.toArray(),
+                      velocity: result.particle.velocity.toArray(),
+                      alive: result.particle.alive,
+                    })),
+                  )}; last event ${JSON.stringify(system.__rzmpsBenchmarkLastCollision)}.`,
               );
             }
             if (system.__rzmpsBenchmarkCollisionEvents <= 0) {
@@ -1094,36 +1122,36 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
     if (suite === 'spatial-grid') {
       return pairBenchmarkCases([
-        ...[1_000, 10_000, 100_000].map((particleCount) => ({
+        ...[1_000, 10_000, 100_000].map(particleCount => ({
           name: `Spatial grid Boids ${particleCount.toLocaleString()}`,
           particleCount,
           create: () => ({
             maxParticles: particleCount,
             renderer: new NoopRenderer(),
-            modules: [new Boids({
-              neighborRadius: 0.3,
-              spatialGridOptions: {
-                bounds: new THREE.Box3(
-                  new THREE.Vector3(-16, -16, -16),
-                  new THREE.Vector3(16, 16, 16),
-                ),
-                brickSubdivisions: 3,
-                cellSubdivisions: 4,
-                autoExpand: true,
-              },
-            })],
+            modules: [
+              new Boids({
+                neighborRadius: 0.3,
+                spatialGridOptions: {
+                  bounds: new THREE.Box3(new THREE.Vector3(-16, -16, -16), new THREE.Vector3(16, 16, 16)),
+                  brickSubdivisions: 3,
+                  cellSubdivisions: 4,
+                  autoExpand: true,
+                },
+              }),
+            ],
           }),
         })),
         {
           name: 'Collision static mesh 10k',
           particleCount: 10_000,
-          create: (mode) => {
+          create: mode => {
             const collisionScene = new THREE.Scene();
             const collisionMesh = new THREE.Mesh(new THREE.TorusKnotGeometry(2, 0.5, 256, 32));
             collisionScene.add(collisionMesh);
-            const backend = mode === 'gpu'
-              ? new ThreeGPUCollisionBackend({ world: collisionScene })
-              : new ThreeCollisionBackend({ world: collisionScene });
+            const backend =
+              mode === 'gpu'
+                ? new ThreeGPUCollisionBackend({ world: collisionScene })
+                : new ThreeCollisionBackend({ world: collisionScene });
             return {
               maxParticles: 10_000,
               renderer: new NoopRenderer(),
@@ -1138,29 +1166,32 @@ function BenchmarkScene({ onComplete, onProgress }) {
       const particleCounts = [1_000, 10_000, 100_000];
       const moduleCounts = [1, 5, 10, 20];
 
-      return pairBenchmarkCases([...particleCounts.flatMap((particleCount) => (
-        moduleCounts.map((moduleCount) => ({
-          name: `Milestone 1 ${particleCount.toLocaleString()} particles ${moduleCount} modules`,
-          particleCount,
+      return pairBenchmarkCases([
+        ...particleCounts.flatMap(particleCount =>
+          moduleCounts.map(moduleCount => ({
+            name: `Milestone 1 ${particleCount.toLocaleString()} particles ${moduleCount} modules`,
+            particleCount,
+            requireGPU: true,
+            create: () => ({
+              gpuProcessing: true,
+              maxParticles: particleCount,
+              renderer: new NoopRenderer(),
+              modules: createMilestoneGPUModules(moduleCount),
+            }),
+          })),
+        ),
+        {
+          name: 'Milestone 1 all built-in modules',
+          particleCount: 1_000,
           requireGPU: true,
           create: () => ({
             gpuProcessing: true,
-            maxParticles: particleCount,
+            maxParticles: 1_000,
             renderer: new NoopRenderer(),
-            modules: createMilestoneGPUModules(moduleCount),
+            modules: createNativeBuiltInModules(),
           }),
-        }))
-      )), {
-        name: 'Milestone 1 all built-in modules',
-        particleCount: 1_000,
-        requireGPU: true,
-        create: () => ({
-          gpuProcessing: true,
-          maxParticles: 1_000,
-          renderer: new NoopRenderer(),
-          modules: createNativeBuiltInModules(),
-        }),
-      }]);
+        },
+      ]);
     }
 
     if (suite === 'milestone2') {
@@ -1175,13 +1206,10 @@ function BenchmarkScene({ onComplete, onProgress }) {
           gpuProcessing: true,
           maxParticles: particleCount,
           renderer: new NoopRenderer(),
-          modules: [
-            ...createMilestoneGPUModules(1),
-            new OrientToDirection(),
-          ],
+          modules: [...createMilestoneGPUModules(1), new OrientToDirection()],
         }),
-        configure: (system) => {
-          system.particles.forEach((particle) => {
+        configure: system => {
+          system.particles.forEach(particle => {
             particle.lifetime = 0.01;
           });
           system.__rzmpsBenchmarkDeathEvents = 0;
@@ -1189,13 +1217,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
             system.__rzmpsBenchmarkDeathEvents += 1;
           });
         },
-        validate: (system) => {
+        validate: system => {
           const overflowCount = system.gpuEventStats.overflowCount;
           const minimumOverflow = particleCount - ParticleSystem.Settings.GPU_EVENT_BUFFER_CAPACITY;
           if (expectOverflow && overflowCount < minimumOverflow) {
-            throw new Error(
-              `Milestone 2 reported ${overflowCount} overflows; expected at least ${minimumOverflow}.`,
-            );
+            throw new Error(`Milestone 2 reported ${overflowCount} overflows; expected at least ${minimumOverflow}.`);
           }
         },
       });
@@ -1209,700 +1235,794 @@ function BenchmarkScene({ onComplete, onProgress }) {
     }
 
     if (suite === 'milestone3') {
-      const forceFields = Array.from({ length: 128 }, (_unused, index) => (
-        ParticleForceField.Sphere({
-          position: new THREE.Vector3(
-            (index % 16) * 0.45 - 3.4,
-            Math.floor(index / 16) * 0.45 - 1.6,
-            0,
-          ),
-          direction: new THREE.Vector3((index % 3) * 0.01, 0.02, 0),
-          gravity: index % 5 === 0 ? 0.03 : 0,
-          multiplier: 0.5 + (index % 7) * 0.1,
-        }, 0.65, 8, 4)
-      ));
-      return pairBenchmarkCases([{
-        name: 'Milestone 3 128 force fields',
+      const forceFields = Array.from({ length: 128 }, (_unused, index) =>
+        ParticleForceField.Sphere(
+          {
+            position: new THREE.Vector3((index % 16) * 0.45 - 3.4, Math.floor(index / 16) * 0.45 - 1.6, 0),
+            direction: new THREE.Vector3((index % 3) * 0.01, 0.02, 0),
+            gravity: index % 5 === 0 ? 0.03 : 0,
+            multiplier: 0.5 + (index % 7) * 0.1,
+          },
+          0.65,
+          8,
+          4,
+        ),
+      );
+      return pairBenchmarkCases([
+        {
+          name: 'Milestone 3 128 force fields',
+          particleCount: 10_000,
+          requireGPU: true,
+          create: () => ({
+            gpuProcessing: true,
+            renderer: new NoopRenderer(),
+            modules: createMilestoneGPUModules(1),
+            spatialEffects: forceFields,
+          }),
+          beforeUpdate: (system, elapsed) => {
+            const effect = system.spatialEffects[0];
+            effect.position.x = Math.sin(elapsed / 500) * 2;
+            effect.scale.setScalar(0.75 + Math.sin(elapsed / 700) * 0.2);
+            effect.visible = Math.floor(elapsed / 250) % 2 === 0;
+            if (elapsed >= 500 && !system.__rzmpsAddedSpatialInstance) {
+              system.addSpatialEffect(
+                ParticleForceField.Sphere(
+                  {
+                    position: new THREE.Vector3(0, 0, 0),
+                    direction: new THREE.Vector3(0, 0.02, 0),
+                    multiplier: 0.75,
+                  },
+                  0.65,
+                  8,
+                  4,
+                ),
+              );
+              system.__rzmpsAddedSpatialInstance = true;
+            }
+            if (system.gpuSimulation._gpuSpatialRegistry && system.__rzmpsSpatialVersion === undefined) {
+              system.__rzmpsSpatialVersion = system.gpuSimulation._gpuSpatialRegistry.version;
+            }
+          },
+          validate: (system, mode) => {
+            if (mode === 'cpu') return;
+            if (system.gpuSpatialStats.batchableEffects !== 129) {
+              throw new Error('Milestone 3 did not register all batchable force fields.');
+            }
+            if (system.gpuSpatialStats.implementationTypes !== 1) {
+              throw new Error('Milestone 3 expanded one force-field implementation into multiple types.');
+            }
+            if (system.gpuSimulation._gpuSpatialRegistry?.version !== system.__rzmpsSpatialVersion) {
+              throw new Error('Milestone 3 replaced GPU resources while adding an existing effect type.');
+            }
+            if (system.__rzmpsSimulationNodeBuilds !== 1) {
+              throw new Error(`Milestone 3 rebuilt its simulation shader ${system.__rzmpsSimulationNodeBuilds} times.`);
+            }
+          },
+        },
+      ]);
+    }
+
+    if (suite === 'emitter-instances') {
+      return pairBenchmarkCases(
+        [8, 256, 2048].flatMap(count =>
+          ['live', 'events'].map(kind => ({
+            name: `Emitter instances ${kind} ${count}`,
+            particleCount: 0,
+            create: () => ({
+              initialParticleCount: 0,
+              duration: 60,
+              maxParticles: count,
+              renderer: new NoopRenderer(),
+              emitters: [
+                new Emitter({
+                  source: EmissionShape.Sphere(1),
+                  bursts: { time: 0, count },
+                  radialSpeed: 0,
+                  initialValues: { lifetime: 60 },
+                }),
+              ],
+              modules:
+                kind === 'events'
+                  ? [
+                      new Module(
+                        (particle, dt) => {
+                          if (
+                            Math.floor(particle.realtime / 750) >
+                            Math.floor(Math.max(0, particle.realtime - dt * 1000) / 750)
+                          ) {
+                            particle.emitEvent('pulse', 1);
+                          }
+                        },
+                        {
+                          modifyGPU(particle, dt) {
+                            If(
+                              particle.realtime
+                                .div(750)
+                                .floor()
+                                .greaterThan(particle.realtime.sub(dt.mul(1000)).max(0).div(750).floor()),
+                              () => {
+                                particle.emitEvent('pulse', [vec4(1, 0, 0, 0)]);
+                              },
+                            );
+                          },
+                        },
+                      ),
+                    ]
+                  : [],
+            }),
+            configure: (system, mode) => {
+              system.duration = 60;
+              const child = new ParticleSystem({
+                gpuProcessing: mode === 'gpu',
+                gravityModifier: 0,
+                duration: 0.4,
+                maxParticles: count * 4,
+                emitters: [
+                  new Emitter({
+                    source: EmissionShape.Sphere(0.01),
+                    rate: kind === 'live' ? 12 : 0,
+                    bursts:
+                      kind === 'events'
+                        ? [
+                            { time: 0, count: 1 },
+                            { time: 0.5, count: 1 },
+                          ]
+                        : [],
+                    radialSpeed: 0,
+                    initialValues: { lifetime: 0.2 },
+                  }),
+                ],
+                renderers: [new NoopRenderer()],
+              });
+              // Fix output capacity so the comparison measures executions rather than pool growth.
+              child.gpuSimulation._getInitialGPUBufferCapacity = () => count * 4;
+              system.addSubSystem(child, {
+                emitContinuous: kind === 'live',
+                onEvent: kind === 'events' ? ['pulse'] : undefined,
+                inheritLifetime: 0,
+              });
+            },
+            validate: system => {
+              const child = [...system.subSystems.keys()][0];
+              if (!system.isGPUProcessingActive && !child.liveParticleCount && kind === 'live') {
+                throw new Error('Live instances did not emit.');
+              }
+              if (
+                system.isGPUProcessingActive &&
+                (!child.isGPUProcessingActive ||
+                  system.particles.length ||
+                  child.particles.length ||
+                  system.gpuEventStats.readbackCount ||
+                  child.gpuEventStats.readbackCount)
+              ) {
+                throw new Error('Emitter instances must stay GPU-native without event readback.');
+              }
+              const runtime =
+                kind === 'live'
+                  ? child.gpuSimulation._gpuContinuousEmitterInstances
+                  : child.gpuSimulation._gpuEventEmitterInstances;
+              system.__emitterInstanceDiagnostics = {
+                childCapacity: child.gpuBufferStats.allocated,
+                instanceCapacity: runtime?.capacity ?? 0,
+                instanceBufferBytes: runtime
+                  ? runtime.floatAttribute.array.byteLength +
+                    runtime.uintAttribute.array.byteLength +
+                    runtime.runtimeCounterAttribute.array.byteLength
+                  : 0,
+                snapshotBufferBytes: child.gpuSimulation._gpuEmissionRuns
+                  ? child.gpuSimulation._gpuEmissionRuns.snapshots.attributes.floatData.array.byteLength +
+                    child.gpuSimulation._gpuEmissionRuns.snapshots.attributes.uintData.array.byteLength
+                  : 0,
+                particleBufferBytes: child.gpuSimulation._gpuBuffers
+                  ? child.gpuSimulation._gpuBuffers.attributes.floatData.array.byteLength +
+                    child.gpuSimulation._gpuBuffers.attributes.uintData.array.byteLength
+                  : 0,
+                childConfiguration: child.gpuConfigurationStats,
+                childEvents: child.gpuEventStats,
+              };
+            },
+          })),
+        ),
+      );
+    }
+
+    if (suite === 'milestone4') {
+      return pairBenchmarkCases([
+        {
+          name: 'Milestone 4 GPU-native lifecycle and subsystems',
+          gpuOnly: true,
+          particleCount: 0,
+          requireGPU: true,
+          create: () => ({
+            gpuProcessing: true,
+            initialParticleCount: 0,
+            maxParticles: 8,
+            maxCullingMode: MaxCulling.Old,
+            renderer: new NoopRenderer(),
+            emitters: [
+              new Emitter({
+                source: EmissionShape.Sphere(0.05),
+                rate: 100,
+                tags: ['gpu-parent'],
+                initialValues: {
+                  lifetime: 0.35,
+                  position: new THREE.Vector3(0.05, 0.1, -0.05),
+                  velocity: new THREE.Vector3(0, 1, 0),
+                },
+              }),
+            ],
+            modules: createMilestoneGPUModules(1),
+          }),
+          configure: system => {
+            system.__rzmpsBenchmarkSpawnEvents = 0;
+            system.__rzmpsBenchmarkDeathEvents = 0;
+            system.onSpawn(() => {
+              system.__rzmpsBenchmarkSpawnEvents += 1;
+            });
+            system.onDeath(() => {
+              system.__rzmpsBenchmarkDeathEvents += 1;
+            });
+            const smoke = new ParticleSystem({
+              gpuProcessing: true,
+              maxParticles: 256,
+              emitters: [
+                new Emitter({
+                  source: EmissionShape.Sphere(0.02),
+                  rate: 18,
+                  rateOverDistance: 2,
+                  initialValues: { lifetime: 0.5 },
+                }),
+              ],
+              modules: createMilestoneGPUModules(1),
+              renderers: [new NoopRenderer()],
+            });
+            const bursts = new ParticleSystem({
+              gpuProcessing: true,
+              looping: false,
+              duration: 0.5,
+              maxParticles: 256,
+              emitters: [
+                new Emitter({
+                  source: EmissionShape.Cone(0.05, 0.1),
+                  rate: 4,
+                  bursts: [
+                    { time: 0, count: 4 },
+                    { time: 0.5, count: 2 },
+                  ],
+                  initialValues: { lifetime: 0.3 },
+                }),
+              ],
+              modules: createMilestoneGPUModules(1),
+              renderers: [new NoopRenderer()],
+            });
+            const nestedSparks = new ParticleSystem({
+              gpuProcessing: true,
+              looping: false,
+              duration: 0.25,
+              maxParticles: 128,
+              emitters: [
+                new Emitter({
+                  source: EmissionShape.Sphere(0.01),
+                  rate: 0,
+                  bursts: [{ time: 0, count: 2 }],
+                  initialValues: { lifetime: 0.15 },
+                }),
+              ],
+              modules: createMilestoneGPUModules(1),
+              renderers: [new NoopRenderer()],
+            });
+
+            system.addSubSystem(smoke, {
+              emitContinuous: true,
+              emitOnDeath: true,
+              inheritLifetime: 0,
+              inheritColor: 0,
+              inheritScale: 0,
+            });
+            system.addSubSystem(bursts, {
+              emitOnDeath: true,
+              inheritLifetime: 0,
+              inheritScale: 0,
+            });
+            bursts.addSubSystem(nestedSparks, { emitOnSpawn: true, inheritLifetime: 0 });
+            system.__rzmpsBenchmarkChildren = [smoke, bursts, nestedSparks];
+          },
+          validate: system => {
+            const children = system.__rzmpsBenchmarkChildren ?? [];
+            if (system.particles.length !== 0 || children.some(child => child.particles.length !== 0)) {
+              throw new Error('Milestone 4 created CPU Particle objects for GPU-native emission.');
+            }
+            if (!system.gpuSimulation._gpuBuffers || children.some(child => !child.gpuSimulation._gpuBuffers)) {
+              throw new Error('Milestone 4 did not initialize every GPU-native particle pool.');
+            }
+            if (
+              !children[0].gpuSimulation._gpuContinuousEmitterInstances ||
+              !children[0].gpuSimulation._gpuEventEmitterInstances ||
+              !children[1].gpuSimulation._gpuEmissionRuns ||
+              !children[2].gpuSimulation._gpuEmissionRuns
+            ) {
+              throw new Error('Milestone 4 did not initialize mixed contexts and nested persistent event runs.');
+            }
+            if (system.__rzmpsBenchmarkSpawnEvents <= 0 || system.__rzmpsBenchmarkDeathEvents <= 0) {
+              throw new Error('Milestone 4 did not deliver asynchronous GPU spawn/death callbacks.');
+            }
+          },
+        },
+        {
+          name: 'Milestone 4 actual fireworks',
+          particleCount: 0,
+          minimumDurationMs: 3500,
+          createSystem: () => fireworksPreset(),
+          configure: system => {
+            system.__rzmpsBenchmarkSpawnEvents = 0;
+            system.__rzmpsBenchmarkDeathEvents = 0;
+            system.onSpawn(() => {
+              system.__rzmpsBenchmarkSpawnEvents += 1;
+            });
+            system.onDeath(() => {
+              system.__rzmpsBenchmarkDeathEvents += 1;
+            });
+          },
+          validate: (system, mode) => {
+            if (mode === 'cpu') {
+              if (system.isGPUProcessingActive || system.particles.length <= 0) {
+                throw new Error('Actual fireworks CPU mode did not remain on CPU or emit rockets.');
+              }
+              return;
+            }
+            const children = [...system.subSystems.keys()];
+            const smoke = children.find(child => child.name === 'Rocket Smoke');
+            const sparkles = children.find(child => child.name === 'Sparkles');
+            if (!smoke?.gpuSimulation._gpuContinuousEmitterInstances || !sparkles?.gpuSimulation._gpuEmissionRuns) {
+              throw new Error('Actual fireworks did not use GPU smoke contexts and sparkle runs.');
+            }
+            if (system.particles.length || smoke.particles.length || sparkles.particles.length) {
+              throw new Error('Actual fireworks created CPU particles in GPU mode.');
+            }
+            if (system.__rzmpsBenchmarkSpawnEvents <= 0 || system.__rzmpsBenchmarkDeathEvents <= 0) {
+              throw new Error('Actual fireworks did not deliver launch and explosion event callbacks.');
+            }
+          },
+        },
+      ]);
+    }
+
+    if (suite === 'doppler') {
+      return pairBenchmarkCases([
+        {
+          name: 'Doppler Bullet offset emission',
+          particleCount: 0,
+          minimumDurationMs: 3000,
+          createSystem: () => dopplerBulletPreset(),
+          configure: system => {
+            system.__rzmpsBenchmarkSpawnPositions = [];
+            system.onSpawn(particle => {
+              system.__rzmpsBenchmarkSpawnPositions.push(particle.position.clone());
+            });
+          },
+          validate: (system, mode) => {
+            const spawn = system.__rzmpsBenchmarkSpawnPositions[0];
+            if (!spawn || spawn.z < 25) {
+              throw new Error(
+                `Doppler Bullet [` +
+                  `${mode.toUpperCase()}` +
+                  `] spawned at ` +
+                  `${spawn?.toArray().join(', ') ?? 'no position'}` +
+                  `; expected the offset cone near z=34.`,
+              );
+            }
+          },
+        },
+      ]);
+    }
+
+    if (suite === 'runtime-config') {
+      return [
+        {
+          name: 'Runtime GPU parameter synchronization',
+          benchmarkMode: 'gpu',
+          particleCount: 0,
+          requireGPU: true,
+          create: () => ({
+            gpuProcessing: true,
+            initialParticleCount: 0,
+            maxParticles: 512,
+            renderer: new NoopRenderer(),
+            emitters: [
+              new Emitter({
+                rate: 40,
+                rateOverDistance: 1,
+                bursts: [{ time: 0.1, count: 2 }],
+                initialValues: { lifetime: 2 },
+              }),
+            ],
+          }),
+          beforeUpdate: system => {
+            const emitter = system.emitters[0];
+            if (!system.__rzmpsRuntimeBaseline && system.gpuSimulation._gpuEmissionPrepareComputeCache) {
+              system.__rzmpsRuntimeBaseline = {
+                ...system.gpuConfigurationStats,
+                node: system.gpuSimulation._gpuEmissionPrepareComputeCache.nodes[0],
+              };
+              emitter.rate = 80;
+              emitter.rateOverDistance = 3;
+              emitter.bursts[0].time = 0.2;
+              system.duration = 20;
+              system.gravity.set(1, 2, 3);
+              return;
+            }
+
+            if (system.__rzmpsRuntimeBaseline && !system.__rzmpsRuntimeNumericVerified) {
+              const baseline = system.__rzmpsRuntimeBaseline;
+              const current = system.gpuConfigurationStats;
+              if (current.pipelineBuilds !== baseline.pipelineBuilds) {
+                throw new Error('Numeric runtime parameters rebuilt a GPU pipeline.');
+              }
+              if (current.parameterUploads <= baseline.parameterUploads) {
+                throw new Error('Numeric runtime parameters were not uploaded.');
+              }
+              if (system.gpuSimulation._gpuEmissionPrepareComputeCache.nodes[0] !== baseline.node) {
+                throw new Error('Numeric emitter parameters replaced the emission graph.');
+              }
+              system.__rzmpsRuntimeNumericVerified = true;
+              emitter.rate = time => 20 + time * 20;
+              return;
+            }
+
+            if (system.__rzmpsRuntimeNumericVerified && !system.__rzmpsRuntimeStructuralVerified) {
+              const baseline = system.__rzmpsRuntimeBaseline;
+              if (system.gpuConfigurationStats.pipelineBuilds <= baseline.pipelineBuilds) return;
+              if (system.gpuSimulation._gpuEmissionPrepareComputeCache.nodes[0] === baseline.node) {
+                throw new Error('Structural emitter change retained the stale emission graph.');
+              }
+              system.__rzmpsRuntimeStructuralVerified = true;
+            }
+          },
+          validate: system => {
+            if (!system.__rzmpsRuntimeNumericVerified || !system.__rzmpsRuntimeStructuralVerified) {
+              throw new Error('Runtime configuration synchronization did not complete.');
+            }
+          },
+        },
+        {
+          name: 'Snow CPU/GPU reset isolation',
+          benchmarkMode: 'mixed',
+          particleCount: 0,
+          requireGPU: false,
+          minimumDurationMs: 3600,
+          createSystem: async () => {
+            const system = await snowPreset();
+            configureHierarchyGPU(system, true);
+            return system;
+          },
+          beforeUpdate: (system, elapsed) => {
+            if (system.isGPUProcessingActive && !system.__rzmpsSnowSwitchedToCPU && elapsed > 350) {
+              system.gpuProcessing = false;
+              system.__rzmpsSnowSwitchedToCPU = true;
+              return;
+            }
+            if (
+              system.__rzmpsSnowSwitchedToCPU &&
+              !system.isGPUProcessingActive &&
+              !system.__rzmpsSnowSwitchedBack &&
+              elapsed > 1500
+            ) {
+              system.gpuProcessing = true;
+              system.__rzmpsSnowSwitchedBack = true;
+              return;
+            }
+            if (system.__rzmpsSnowSwitchedBack && system.isGPUProcessingActive && elapsed > 2200) {
+              // Chromium may cancel a map while the reset's retired GPU resources are released.
+              // Leave an empty observation unset so the benchmark retries it on the next frame.
+              if (!system.__rzmpsSnowReadback && !system.__rzmpsSnowReadbackPromise) {
+                system.__rzmpsSnowReadbackPromise = system
+                  .selectiveReadback(32)
+                  .then(results => {
+                    if (results.length > 0) system.__rzmpsSnowReadback = results;
+                  })
+                  .finally(() => {
+                    system.__rzmpsSnowReadbackPromise = undefined;
+                  });
+              }
+              const renderBuffer = system.gpuSimulation._gpuRenderOutputBuffers;
+              if (
+                renderBuffer &&
+                !system.__rzmpsSnowRenderReadback &&
+                !system.__rzmpsSnowRenderReadbackPromise &&
+                typeof system.sceneRenderer.getArrayBufferAsync === 'function'
+              ) {
+                system.__rzmpsSnowRenderReadbackPromise = Promise.all([
+                  system.sceneRenderer.getArrayBufferAsync(renderBuffer.attributes.floatData),
+                  system.sceneRenderer.getArrayBufferAsync(renderBuffer.attributes.uintData),
+                ])
+                  .then(([floatBuffer, uintBuffer]) => {
+                    system.__rzmpsSnowRenderReadback = {
+                      floats: new Float32Array(floatBuffer),
+                      uints: new Uint32Array(uintBuffer),
+                      count: renderBuffer.count,
+                    };
+                  })
+                  .catch(error => {
+                    if (error?.name !== 'AbortError') throw error;
+                  })
+                  .finally(() => {
+                    system.__rzmpsSnowRenderReadbackPromise = undefined;
+                  });
+              }
+            }
+          },
+          validate: system => {
+            const renderer = system.renderers[0];
+            const expectedBuffer = system.gpuSimulation._gpuRenderOutputBuffers ?? system.gpuSimulation._gpuBuffers;
+            if (!system.__rzmpsSnowSwitchedBack || !system.isGPUProcessingActive) {
+              throw new Error('Snow did not return to GPU processing after reset.');
+            }
+            if (!expectedBuffer || renderer.webgpuGPUMaterialBuffer !== expectedBuffer) {
+              throw new Error('Snow renderer retained a stale pre-reset GPU buffer.');
+            }
+            const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+            const matrices = renderer.webgpuMesh.instanceMatrix.array;
+            const matrixCount = Math.min(renderer.webgpuMesh.count, 256);
+            for (let instance = 0; instance < matrixCount; instance += 1) {
+              const offset = instance * 16;
+              if (identity.some((value, index) => Math.abs(matrices[offset + index] - value) > 0.0001)) {
+                throw new Error(
+                  `Snow GPU rendering retained a CPU transform at instance ${instance}: ` +
+                    `${JSON.stringify([...matrices.slice(offset, offset + 16)])}.`,
+                );
+              }
+            }
+            const samples = system.__rzmpsSnowReadback;
+            if (!samples?.length) throw new Error('Snow post-switch GPU readback did not complete.');
+            const malformed = samples.filter(
+              ({ particle }) =>
+                Math.abs(particle.scale.x - 0.25) > 0.001 ||
+                Math.abs(particle.scale.y - 0.25) > 0.001 ||
+                Math.abs(particle.scale.z - 0.25) > 0.001,
+            );
+            if (malformed.length > 0) {
+              throw new Error(
+                `Snow post-switch GPU scale was corrupted for ${malformed.length}/${samples.length} samples.`,
+              );
+            }
+            const rendered = system.__rzmpsSnowRenderReadback;
+            if (!rendered) throw new Error('Snow render-output buffer readback did not complete.');
+            let renderedSamples = 0;
+            let malformedRenderedSamples = 0;
+            for (let slot = 0; slot < rendered.count && renderedSamples < 32; slot += 1) {
+              if (rendered.uints[slot * 4] === 0) continue;
+              renderedSamples += 1;
+              const scaleOffset = slot * 16 + 8;
+              if (
+                Math.abs(rendered.floats[scaleOffset] - 0.25) > 0.001 ||
+                Math.abs(rendered.floats[scaleOffset + 1] - 0.25) > 0.001 ||
+                Math.abs(rendered.floats[scaleOffset + 2] - 0.25) > 0.001
+              )
+                malformedRenderedSamples += 1;
+            }
+            if (renderedSamples === 0 || malformedRenderedSamples > 0) {
+              throw new Error(
+                `Snow render output contained ${malformedRenderedSamples}/${renderedSamples} malformed scales.`,
+              );
+            }
+          },
+        },
+      ];
+    }
+
+    return pairBenchmarkCases([
+      {
+        id: 'baseline-10k',
+        name: 'Baseline 10k simulation only',
+        particleCount: 10_000,
+        create: () => ({ modules: [] }),
+      },
+      {
+        id: 'baseline-50k',
+        name: 'Baseline 50k simulation only',
+        particleCount: 50_000,
+        create: () => ({ modules: [] }),
+      },
+      {
+        name: 'Fused modules 10k simulation only',
         particleCount: 10_000,
         requireGPU: true,
         create: () => ({
           gpuProcessing: true,
           renderer: new NoopRenderer(),
-          modules: createMilestoneGPUModules(1),
-          spatialEffects: forceFields,
+          modules: [
+            new ForceOverLifetime({ force: new THREE.Vector3(0.1, -0.15, 0.05) }),
+            new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) }),
+          ],
         }),
-        beforeUpdate: (system, elapsed) => {
-          const effect = system.spatialEffects[0];
-          effect.position.x = Math.sin(elapsed / 500) * 2;
-          effect.scale.setScalar(0.75 + Math.sin(elapsed / 700) * 0.2);
-          effect.visible = Math.floor(elapsed / 250) % 2 === 0;
-          if (elapsed >= 500 && !system.__rzmpsAddedSpatialInstance) {
-            system.addSpatialEffect(ParticleForceField.Sphere({
-              position: new THREE.Vector3(0, 0, 0),
-              direction: new THREE.Vector3(0, 0.02, 0),
-              multiplier: 0.75,
-            }, 0.65, 8, 4));
-            system.__rzmpsAddedSpatialInstance = true;
-          }
-          if (system.gpuSimulation._gpuSpatialRegistry && system.__rzmpsSpatialVersion === undefined) {
-            system.__rzmpsSpatialVersion = system.gpuSimulation._gpuSpatialRegistry.version;
-          }
-        },
-        validate: (system, mode) => {
-          if (mode === 'cpu') return;
-          if (system.gpuSpatialStats.batchableEffects !== 129) {
-            throw new Error('Milestone 3 did not register all batchable force fields.');
-          }
-          if (system.gpuSpatialStats.implementationTypes !== 1) {
-            throw new Error('Milestone 3 expanded one force-field implementation into multiple types.');
-          }
-          if (system.gpuSimulation._gpuSpatialRegistry?.version !== system.__rzmpsSpatialVersion) {
-            throw new Error('Milestone 3 replaced GPU resources while adding an existing effect type.');
-          }
-          if (system.__rzmpsSimulationNodeBuilds !== 1) {
-            throw new Error(`Milestone 3 rebuilt its simulation shader ${system.__rzmpsSimulationNodeBuilds} times.`);
-          }
-        },
-      }]);
-    }
-
-    if (suite === 'emitter-instances') {
-      return pairBenchmarkCases([8, 256, 2048].flatMap(count => ['live', 'events'].map(kind => ({
-        name: `Emitter instances ${kind} ${count}`,
-        particleCount: 0,
-        create: () => ({
-          initialParticleCount: 0,
-          duration: 60,
-          maxParticles: count,
-          renderer: new NoopRenderer(),
-          emitters: [new Emitter({
-            source: EmissionShape.Sphere(1),
-            bursts: { time: 0, count },
-            radialSpeed: 0,
-            initialValues: { lifetime: 60 },
-          })],
-          modules: kind === 'events' ? [new Module((particle, dt) => {
-            if (Math.floor(particle.realtime / 750) > Math.floor(Math.max(0, particle.realtime - dt * 1000) / 750)) {
-              particle.emitEvent('pulse', 1);
-            }
-          }, { modifyGPU(particle, dt) {
-            If(particle.realtime.div(750).floor()
-              .greaterThan(particle.realtime.sub(dt.mul(1000)).max(0).div(750).floor()), () => {
-              particle.emitEvent('pulse', [vec4(1, 0, 0, 0)]);
-            });
-          } })] : [],
-        }),
-        configure: (system, mode) => {
-          system.duration = 60;
-          const child = new ParticleSystem({
-            gpuProcessing: mode === 'gpu',
-            gravityModifier: 0,
-            duration: 0.4,
-            maxParticles: count * 4,
-            emitters: [new Emitter({
-              source: EmissionShape.Sphere(0.01),
-              rate: kind === 'live' ? 12 : 0,
-              bursts: kind === 'events' ? [{ time: 0, count: 1 }, { time: 0.5, count: 1 }] : [],
-              radialSpeed: 0,
-              initialValues: { lifetime: 0.2 },
-            })],
-            renderers: [new NoopRenderer()],
-          });
-          // Fix output capacity so the comparison measures executions rather than pool growth.
-          child.gpuSimulation._getInitialGPUBufferCapacity = () => count * 4;
-          system.addSubSystem(child, {
-            emitContinuous: kind === 'live',
-            onEvent: kind === 'events' ? ['pulse'] : undefined,
-            inheritLifetime: 0,
-          });
-        },
-        validate: system => {
-          const child = [...system.subSystems.keys()][0];
-          if (!system.isGPUProcessingActive && !child.liveParticleCount && kind === 'live') {
-            throw new Error('Live instances did not emit.');
-          }
-          if (system.isGPUProcessingActive && (!child.isGPUProcessingActive || system.particles.length
-            || child.particles.length || system.gpuEventStats.readbackCount || child.gpuEventStats.readbackCount)) {
-            throw new Error('Emitter instances must stay GPU-native without event readback.');
-          }
-          const runtime = kind === 'live' ? child.gpuSimulation._gpuContinuousEmitterInstances : child.gpuSimulation._gpuEventEmitterInstances;
-          system.__emitterInstanceDiagnostics = {
-            childCapacity: child.gpuBufferStats.allocated,
-            instanceCapacity: runtime?.capacity ?? 0,
-            instanceBufferBytes: runtime ? runtime.floatAttribute.array.byteLength
-              + runtime.uintAttribute.array.byteLength + runtime.runtimeCounterAttribute.array.byteLength : 0,
-            snapshotBufferBytes: child.gpuSimulation._gpuEmissionRuns
-              ? child.gpuSimulation._gpuEmissionRuns.snapshots.attributes.floatData.array.byteLength
-                + child.gpuSimulation._gpuEmissionRuns.snapshots.attributes.uintData.array.byteLength : 0,
-            particleBufferBytes: child.gpuSimulation._gpuBuffers ? child.gpuSimulation._gpuBuffers.attributes.floatData.array.byteLength
-              + child.gpuSimulation._gpuBuffers.attributes.uintData.array.byteLength : 0,
-            childConfiguration: child.gpuConfigurationStats,
-            childEvents: child.gpuEventStats,
-          };
-        },
-      }))));
-    }
-
-    if (suite === 'milestone4') {
-      return pairBenchmarkCases([{
-        name: 'Milestone 4 GPU-native lifecycle and subsystems',
-        gpuOnly: true,
-        particleCount: 0,
-        requireGPU: true,
-        create: () => ({
-          gpuProcessing: true,
-          initialParticleCount: 0,
-          maxParticles: 8,
-          maxCullingMode: MaxCulling.Old,
-          renderer: new NoopRenderer(),
-          emitters: [new Emitter({
-            source: EmissionShape.Sphere(0.05),
-            rate: 100,
-            tags: ['gpu-parent'],
-            initialValues: {
-              lifetime: 0.35,
-              position: new THREE.Vector3(0.05, 0.1, -0.05),
-              velocity: new THREE.Vector3(0, 1, 0),
-            },
-          })],
-          modules: createMilestoneGPUModules(1),
-        }),
-        configure: (system) => {
-          system.__rzmpsBenchmarkSpawnEvents = 0;
-          system.__rzmpsBenchmarkDeathEvents = 0;
-          system.onSpawn(() => { system.__rzmpsBenchmarkSpawnEvents += 1; });
-          system.onDeath(() => { system.__rzmpsBenchmarkDeathEvents += 1; });
-          const smoke = new ParticleSystem({
-            gpuProcessing: true,
-            maxParticles: 256,
-            emitters: [new Emitter({
-              source: EmissionShape.Sphere(0.02),
-              rate: 18,
-              rateOverDistance: 2,
-              initialValues: { lifetime: 0.5 },
-            })],
-            modules: createMilestoneGPUModules(1),
-            renderers: [new NoopRenderer()],
-          });
-          const bursts = new ParticleSystem({
-            gpuProcessing: true,
-            looping: false,
-            duration: 0.5,
-            maxParticles: 256,
-            emitters: [new Emitter({
-              source: EmissionShape.Cone(0.05, 0.1),
-              rate: 4,
-              bursts: [
-                { time: 0, count: 4 },
-                { time: 0.5, count: 2 },
-              ],
-              initialValues: { lifetime: 0.3 },
-            })],
-            modules: createMilestoneGPUModules(1),
-            renderers: [new NoopRenderer()],
-          });
-          const nestedSparks = new ParticleSystem({
-            gpuProcessing: true,
-            looping: false,
-            duration: 0.25,
-            maxParticles: 128,
-            emitters: [new Emitter({
-              source: EmissionShape.Sphere(0.01),
-              rate: 0,
-              bursts: [{ time: 0, count: 2 }],
-              initialValues: { lifetime: 0.15 },
-            })],
-            modules: createMilestoneGPUModules(1),
-            renderers: [new NoopRenderer()],
-          });
-
-          system.addSubSystem(smoke, {
-            emitContinuous: true,
-            emitOnDeath: true,
-            inheritLifetime: 0,
-            inheritColor: 0,
-            inheritScale: 0,
-          });
-          system.addSubSystem(bursts, {
-            emitOnDeath: true,
-            inheritLifetime: 0,
-            inheritScale: 0,
-          });
-          bursts.addSubSystem(nestedSparks, { emitOnSpawn: true, inheritLifetime: 0 });
-          system.__rzmpsBenchmarkChildren = [smoke, bursts, nestedSparks];
-        },
-        validate: (system) => {
-          const children = system.__rzmpsBenchmarkChildren ?? [];
-          if (system.particles.length !== 0 || children.some((child) => child.particles.length !== 0)) {
-            throw new Error('Milestone 4 created CPU Particle objects for GPU-native emission.');
-          }
-          if (!system.gpuSimulation._gpuBuffers || children.some((child) => !child.gpuSimulation._gpuBuffers)) {
-            throw new Error('Milestone 4 did not initialize every GPU-native particle pool.');
-          }
-          if (
-            !children[0].gpuSimulation._gpuContinuousEmitterInstances
-            || !children[0].gpuSimulation._gpuEventEmitterInstances
-            || !children[1].gpuSimulation._gpuEmissionRuns
-            || !children[2].gpuSimulation._gpuEmissionRuns
-          ) {
-            throw new Error('Milestone 4 did not initialize mixed contexts and nested persistent event runs.');
-          }
-          if (system.__rzmpsBenchmarkSpawnEvents <= 0 || system.__rzmpsBenchmarkDeathEvents <= 0) {
-            throw new Error('Milestone 4 did not deliver asynchronous GPU spawn/death callbacks.');
-          }
-        },
-      }, {
-        name: 'Milestone 4 actual fireworks',
-        particleCount: 0,
-        minimumDurationMs: 3500,
-        createSystem: () => fireworksPreset(),
-        configure: (system) => {
-          system.__rzmpsBenchmarkSpawnEvents = 0;
-          system.__rzmpsBenchmarkDeathEvents = 0;
-          system.onSpawn(() => { system.__rzmpsBenchmarkSpawnEvents += 1; });
-          system.onDeath(() => { system.__rzmpsBenchmarkDeathEvents += 1; });
-        },
-        validate: (system, mode) => {
-          if (mode === 'cpu') {
-            if (system.isGPUProcessingActive || system.particles.length <= 0) {
-              throw new Error('Actual fireworks CPU mode did not remain on CPU or emit rockets.');
-            }
-            return;
-          }
-          const children = [...system.subSystems.keys()];
-          const smoke = children.find((child) => child.name === 'Rocket Smoke');
-          const sparkles = children.find((child) => child.name === 'Sparkles');
-          if (!smoke?.gpuSimulation._gpuContinuousEmitterInstances || !sparkles?.gpuSimulation._gpuEmissionRuns) {
-            throw new Error('Actual fireworks did not use GPU smoke contexts and sparkle runs.');
-          }
-          if (system.particles.length || smoke.particles.length || sparkles.particles.length) {
-            throw new Error('Actual fireworks created CPU particles in GPU mode.');
-          }
-          if (system.__rzmpsBenchmarkSpawnEvents <= 0 || system.__rzmpsBenchmarkDeathEvents <= 0) {
-            throw new Error('Actual fireworks did not deliver launch and explosion event callbacks.');
-          }
-        },
-      }]);
-    }
-
-    if (suite === 'doppler') {
-      return pairBenchmarkCases([{
-        name: 'Doppler Bullet offset emission',
-        particleCount: 0,
-        minimumDurationMs: 3000,
-        createSystem: () => dopplerBulletPreset(),
-        configure: (system) => {
-          system.__rzmpsBenchmarkSpawnPositions = [];
-          system.onSpawn((particle) => {
-            system.__rzmpsBenchmarkSpawnPositions.push(particle.position.clone());
-          });
-        },
-        validate: (system, mode) => {
-          const spawn = system.__rzmpsBenchmarkSpawnPositions[0];
-          if (!spawn || spawn.z < 25) {
-            throw new Error(
-              `Doppler Bullet [${mode.toUpperCase()}] spawned at ${spawn?.toArray().join(', ') ?? 'no position'}; expected the offset cone near z=34.`,
-            );
-          }
-        },
-      }]);
-    }
-
-    if (suite === 'runtime-config') {
-      return [{
-        name: 'Runtime GPU parameter synchronization',
-        benchmarkMode: 'gpu',
-        particleCount: 0,
-        requireGPU: true,
-        create: () => ({
-          gpuProcessing: true,
-          initialParticleCount: 0,
-          maxParticles: 512,
-          renderer: new NoopRenderer(),
-          emitters: [new Emitter({
-            rate: 40,
-            rateOverDistance: 1,
-            bursts: [{ time: 0.1, count: 2 }],
-            initialValues: { lifetime: 2 },
-          })],
-        }),
-        beforeUpdate: (system) => {
-          const emitter = system.emitters[0];
-          if (!system.__rzmpsRuntimeBaseline && system.gpuSimulation._gpuEmissionPrepareComputeCache) {
-            system.__rzmpsRuntimeBaseline = {
-              ...system.gpuConfigurationStats,
-              node: system.gpuSimulation._gpuEmissionPrepareComputeCache.nodes[0],
-            };
-            emitter.rate = 80;
-            emitter.rateOverDistance = 3;
-            emitter.bursts[0].time = 0.2;
-            system.duration = 20;
-            system.gravity.set(1, 2, 3);
-            return;
-          }
-
-          if (system.__rzmpsRuntimeBaseline && !system.__rzmpsRuntimeNumericVerified) {
-            const baseline = system.__rzmpsRuntimeBaseline;
-            const current = system.gpuConfigurationStats;
-            if (current.pipelineBuilds !== baseline.pipelineBuilds) {
-              throw new Error('Numeric runtime parameters rebuilt a GPU pipeline.');
-            }
-            if (current.parameterUploads <= baseline.parameterUploads) {
-              throw new Error('Numeric runtime parameters were not uploaded.');
-            }
-            if (system.gpuSimulation._gpuEmissionPrepareComputeCache.nodes[0] !== baseline.node) {
-              throw new Error('Numeric emitter parameters replaced the emission graph.');
-            }
-            system.__rzmpsRuntimeNumericVerified = true;
-            emitter.rate = (time) => 20 + time * 20;
-            return;
-          }
-
-          if (system.__rzmpsRuntimeNumericVerified && !system.__rzmpsRuntimeStructuralVerified) {
-            const baseline = system.__rzmpsRuntimeBaseline;
-            if (system.gpuConfigurationStats.pipelineBuilds <= baseline.pipelineBuilds) return;
-            if (system.gpuSimulation._gpuEmissionPrepareComputeCache.nodes[0] === baseline.node) {
-              throw new Error('Structural emitter change retained the stale emission graph.');
-            }
-            system.__rzmpsRuntimeStructuralVerified = true;
-          }
-        },
-        validate: (system) => {
-          if (!system.__rzmpsRuntimeNumericVerified || !system.__rzmpsRuntimeStructuralVerified) {
-            throw new Error('Runtime configuration synchronization did not complete.');
-          }
-        },
-      }, {
-        name: 'Snow CPU/GPU reset isolation',
-        benchmarkMode: 'mixed',
-        particleCount: 0,
-        requireGPU: false,
-        minimumDurationMs: 3600,
-        createSystem: async () => {
-          const system = await snowPreset();
-          configureHierarchyGPU(system, true);
-          return system;
-        },
-        beforeUpdate: (system, elapsed) => {
-          if (system.isGPUProcessingActive && !system.__rzmpsSnowSwitchedToCPU && elapsed > 350) {
-            system.gpuProcessing = false;
-            system.__rzmpsSnowSwitchedToCPU = true;
-            return;
-          }
-          if (
-            system.__rzmpsSnowSwitchedToCPU
-            && !system.isGPUProcessingActive
-            && !system.__rzmpsSnowSwitchedBack
-            && elapsed > 1500
-          ) {
-            system.gpuProcessing = true;
-            system.__rzmpsSnowSwitchedBack = true;
-            return;
-          }
-          if (
-            system.__rzmpsSnowSwitchedBack
-            && system.isGPUProcessingActive
-            && elapsed > 2200
-          ) {
-            // Chromium may cancel a map while the reset's retired GPU resources are released.
-            // Leave an empty observation unset so the benchmark retries it on the next frame.
-            if (!system.__rzmpsSnowReadback && !system.__rzmpsSnowReadbackPromise) {
-              system.__rzmpsSnowReadbackPromise = system.selectiveReadback(32)
-                .then((results) => {
-                  if (results.length > 0) system.__rzmpsSnowReadback = results;
-                })
-                .finally(() => { system.__rzmpsSnowReadbackPromise = undefined; });
-            }
-            const renderBuffer = system.gpuSimulation._gpuRenderOutputBuffers;
-            if (
-              renderBuffer
-              && !system.__rzmpsSnowRenderReadback
-              && !system.__rzmpsSnowRenderReadbackPromise
-              && typeof system.sceneRenderer.getArrayBufferAsync === 'function'
-            ) {
-              system.__rzmpsSnowRenderReadbackPromise = Promise.all([
-                system.sceneRenderer.getArrayBufferAsync(renderBuffer.attributes.floatData),
-                system.sceneRenderer.getArrayBufferAsync(renderBuffer.attributes.uintData),
-              ]).then(([floatBuffer, uintBuffer]) => {
-                system.__rzmpsSnowRenderReadback = {
-                  floats: new Float32Array(floatBuffer),
-                  uints: new Uint32Array(uintBuffer),
-                  count: renderBuffer.count,
-                };
-              }).catch((error) => {
-                if (error?.name !== 'AbortError') throw error;
-              }).finally(() => { system.__rzmpsSnowRenderReadbackPromise = undefined; });
-            }
-          }
-        },
-        validate: (system) => {
-          const renderer = system.renderers[0];
-          const expectedBuffer = system.gpuSimulation._gpuRenderOutputBuffers ?? system.gpuSimulation._gpuBuffers;
-          if (!system.__rzmpsSnowSwitchedBack || !system.isGPUProcessingActive) {
-            throw new Error('Snow did not return to GPU processing after reset.');
-          }
-          if (!expectedBuffer || renderer.webgpuGPUMaterialBuffer !== expectedBuffer) {
-            throw new Error('Snow renderer retained a stale pre-reset GPU buffer.');
-          }
-          const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-          const matrices = renderer.webgpuMesh.instanceMatrix.array;
-          const matrixCount = Math.min(renderer.webgpuMesh.count, 256);
-          for (let instance = 0; instance < matrixCount; instance += 1) {
-            const offset = instance * 16;
-            if (identity.some((value, index) => Math.abs(matrices[offset + index] - value) > 0.0001)) {
-              throw new Error(
-                `Snow GPU rendering retained a CPU transform at instance ${instance}: `
-                + `${JSON.stringify([...matrices.slice(offset, offset + 16)])}.`,
-              );
-            }
-          }
-          const samples = system.__rzmpsSnowReadback;
-          if (!samples?.length) throw new Error('Snow post-switch GPU readback did not complete.');
-          const malformed = samples.filter(({ particle }) => (
-            Math.abs(particle.scale.x - 0.25) > 0.001
-            || Math.abs(particle.scale.y - 0.25) > 0.001
-            || Math.abs(particle.scale.z - 0.25) > 0.001
-          ));
-          if (malformed.length > 0) {
-            throw new Error(
-              `Snow post-switch GPU scale was corrupted for ${malformed.length}/${samples.length} samples.`,
-            );
-          }
-          const rendered = system.__rzmpsSnowRenderReadback;
-          if (!rendered) throw new Error('Snow render-output buffer readback did not complete.');
-          let renderedSamples = 0;
-          let malformedRenderedSamples = 0;
-          for (let slot = 0; slot < rendered.count && renderedSamples < 32; slot += 1) {
-            if (rendered.uints[slot * 4] === 0) continue;
-            renderedSamples += 1;
-            const scaleOffset = slot * 16 + 8;
-            if (
-              Math.abs(rendered.floats[scaleOffset] - 0.25) > 0.001
-              || Math.abs(rendered.floats[scaleOffset + 1] - 0.25) > 0.001
-              || Math.abs(rendered.floats[scaleOffset + 2] - 0.25) > 0.001
-            ) malformedRenderedSamples += 1;
-          }
-          if (renderedSamples === 0 || malformedRenderedSamples > 0) {
-            throw new Error(
-              `Snow render output contained ${malformedRenderedSamples}/${renderedSamples} malformed scales.`,
-            );
-          }
-        },
-      }];
-    }
-
-    return pairBenchmarkCases([{
-      id: 'baseline-10k',
-      name: 'Baseline 10k simulation only',
-      particleCount: 10_000,
-      create: () => ({ modules: [] }),
-    },
-    {
-      id: 'baseline-50k',
-      name: 'Baseline 50k simulation only',
-      particleCount: 50_000,
-      create: () => ({ modules: [] }),
-    },
-    {
-      name: 'Fused modules 10k simulation only',
-      particleCount: 10_000,
-      requireGPU: true,
-      create: () => ({
-        gpuProcessing: true,
-        renderer: new NoopRenderer(),
-        modules: [
-          new ForceOverLifetime({ force: new THREE.Vector3(0.1, -0.15, 0.05) }),
-          new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) }),
-        ],
-      }),
-    },
-    {
-      id: 'heavy-modules-10k',
-      name: 'Heavy modules 10k',
-      particleCount: 10_000,
-      requireGPU: true,
-      create: () => ({
-        gpuProcessing: true,
-        renderer: new NoopRenderer(),
-        modules: [
-          new ForceOverLifetime({ force: new THREE.Vector3(0.1, -0.15, 0.05) }),
-          new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) }),
-          new ColorOverLifetime({
-            color: (time) => new THREE.Color(1, 0.6 + 0.4 * fadeCurve.evaluate(time), 0.25),
-            alpha: (time) => fadeCurve.evaluate(time),
-          }),
-          new ScaleOverLifetime({
-            scale: (time) => new THREE.Vector3(1, 1, 1).multiplyScalar(0.5 + growCurve.evaluate(time)),
-          }),
-          new RotationOverLifetime({ angularVelocity: new THREE.Vector3(0, 0, 1) }),
-        ],
-      }),
-    },
-    {
-      id: 'spatial-kill-zones-10k',
-      name: 'Spatial kill zones 10k',
-      particleCount: 10_000,
-      requireGPU: true,
-      create: () => ({
-        gpuProcessing: true,
-        renderer: new NoopRenderer(),
-        modules: [
-          new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) }),
-        ],
-        spatialEffects: [
-          KillZone.Sphere({ position: new THREE.Vector3(0, 0, 0), feather: 0.4 }, 1.5, 16, 8),
-          KillZone.Torus({ position: new THREE.Vector3(1.5, 0, 0), feather: 0.25 }, 1, 0.25, 16, 8),
-        ],
-      }),
-    },
-    {
-      name: 'Typical VFX 5k sprite',
-      particleCount: 5_000,
-      create: () => ({
-        renderer: new SpriteRenderer(createParticleTexture()),
-        modules: [
-          new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) }),
-          new ForceOverLifetime({ force: new THREE.Vector3(0, -0.01, 0) }),
-          new ColorOverLifetime({
-            color: (time) => new THREE.Color(1, 0.6 + 0.4 * fadeCurve.evaluate(time), 0.25),
-            alpha: (time) => fadeCurve.evaluate(time),
-          }),
-          new ScaleOverLifetime({
-            scale: (time) => new THREE.Vector3(1, 1, 1).multiplyScalar(0.5 + growCurve.evaluate(time)),
-          }),
-          new RotationOverLifetime({ angularVelocity: new THREE.Vector3(0, 0, 1) }),
-        ],
-      }),
-    },
-    {
-      name: 'Heavy modules 10k noise+forces',
-      cpuOnly: true,
-      particleCount: 10_000,
-      create: () => ({
-        modules: [
-          new ForceOverLifetime({ force: new THREE.Vector3(0.1, -0.15, 0.05) }),
-          new NoiseModule('bench-noise'),
-        ],
-      }),
-    },
-    {
-      id: 'spawn-churn',
-      name: 'Spawn churn 2k/sec simulation only',
-      particleCount: 10_000,
-      create: () => ({
-        initialParticleCount: 0,
-        maxParticles: 10_000,
-        emitters: new Emitter({
-          rate: 2_000,
-          radialSpeed: 1.5,
-          alignment: 1,
-          initialValues: {
-            lifetime: 5,
-            scale: new THREE.Vector3(0.05, 0.05, 0.05),
-            velocity: new THREE.Vector3(0.02, 0.04, 0),
-            color: new THREE.Color(1, 0.65, 0.25),
-          },
-        }),
-      }),
-    },
-    {
-      name: 'Custom volume spawn churn 2k/sec',
-      particleCount: 10_000,
-      create: () => ({
-        initialParticleCount: 0,
-        maxParticles: 10_000,
-        emitters: new Emitter({
-          source: new EmissionShape({
-            geometry: new THREE.TorusGeometry(1, 0.3, 16, 32),
-            source: EmissionSource.Volume,
-            volumeSamples: 'auto',
-          }),
-          rate: 2_000,
-          radialSpeed: 1.5,
-          alignment: 1,
-          initialValues: {
-            lifetime: 5,
-            scale: new THREE.Vector3(0.05, 0.05, 0.05),
-            velocity: new THREE.Vector3(0.02, 0.04, 0),
-            color: new THREE.Color(1, 0.65, 0.25),
-          },
-        }),
-      }),
-      validate: (system) => {
-        const shape = system.emitters[0].source;
-        if (shape.resolvedVolumeSamples <= EmissionShape.MIN_AUTO_VOLUME_SAMPLES) {
-          throw new Error('Automatic custom-volume sampling did not scale above its minimum.');
-        }
       },
-    },
-    {
-      name: 'Surface spawn churn 2k/sec',
-      particleCount: 10_000,
-      create: () => ({
-        initialParticleCount: 0,
-        maxParticles: 10_000,
-        emitters: new Emitter({
-          source: EmissionShape.Torus({ source: EmissionSource.Surface }, 1, 0.3, 16, 32),
-          rate: 2_000,
-          radialSpeed: 1.5,
-          initialValues: {
-            lifetime: 5,
-            scale: new THREE.Vector3(0.05, 0.05, 0.05),
-          },
+      {
+        id: 'heavy-modules-10k',
+        name: 'Heavy modules 10k',
+        particleCount: 10_000,
+        requireGPU: true,
+        create: () => ({
+          gpuProcessing: true,
+          renderer: new NoopRenderer(),
+          modules: [
+            new ForceOverLifetime({ force: new THREE.Vector3(0.1, -0.15, 0.05) }),
+            new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) }),
+            new ColorOverLifetime({
+              color: time => new THREE.Color(1, 0.6 + 0.4 * fadeCurve.evaluate(time), 0.25),
+              alpha: time => fadeCurve.evaluate(time),
+            }),
+            new ScaleOverLifetime({
+              scale: time => new THREE.Vector3(1, 1, 1).multiplyScalar(0.5 + growCurve.evaluate(time)),
+            }),
+            new RotationOverLifetime({ angularVelocity: new THREE.Vector3(0, 0, 1) }),
+          ],
         }),
-      }),
-    },
-    {
-      name: 'Renderer tag filtering 10k x4 noop',
-      particleCount: 10_000,
-      create: () => ({
-        renderer: [
-          new NoopRenderer({ tags: 'even' }),
-          new NoopRenderer({ tags: 'odd' }),
-          new NoopRenderer({ tags: 'even' }),
-          new NoopRenderer({ tags: 'odd' }),
-        ],
-      }),
-    },
-    {
-      name: 'Population LOD size compensation 10k noop',
-      particleCount: 10_000,
-      create: () => ({
-        lod: { distance: 1, quality: 0.5, maxLevel: 1 },
-        renderer: new NoopRenderer({ compensation: 'size' }),
-      }),
-    },
-    {
-      name: 'SpriteRenderer 5k rendered',
-      particleCount: 5_000,
-      create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
-    },
-    {
-      id: 'sprite-10k',
-      name: 'SpriteRenderer 10k rendered',
-      particleCount: 10_000,
-      create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
-    },
-    {
-      name: 'SpriteRenderer 50k rendered',
-      particleCount: 50_000,
-      create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
-    },
-    {
-      id: 'mesh-rendered',
-      name: ciProfile ? 'MeshRenderer 2k rendered (low-poly)' : 'MeshRenderer 10k rendered',
-      particleCount: ciProfile ? 2_000 : 10_000,
-      create: () => ({ renderer: new MeshRenderer({
-        maxParticles: ciProfile ? 2_000 : 10_000,
-        ...(ciProfile ? { geometry: new THREE.BoxGeometry(1, 1, 1) } : {}),
-      }) }),
-    },
-    {
-      id: 'trail-2k',
-      name: 'TrailRenderer 2k rendered',
-      particleCount: 2_000,
-      create: () => ({ renderer: new TrailRenderer({ texture: createParticleTexture() }) }),
-    },
+      },
+      {
+        id: 'spatial-kill-zones-10k',
+        name: 'Spatial kill zones 10k',
+        particleCount: 10_000,
+        requireGPU: true,
+        create: () => ({
+          gpuProcessing: true,
+          renderer: new NoopRenderer(),
+          modules: [new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) })],
+          spatialEffects: [
+            KillZone.Sphere({ position: new THREE.Vector3(0, 0, 0), feather: 0.4 }, 1.5, 16, 8),
+            KillZone.Torus({ position: new THREE.Vector3(1.5, 0, 0), feather: 0.25 }, 1, 0.25, 16, 8),
+          ],
+        }),
+      },
+      {
+        name: 'Typical VFX 5k sprite',
+        particleCount: 5_000,
+        create: () => ({
+          renderer: new SpriteRenderer(createParticleTexture()),
+          modules: [
+            new VelocityOverLifetime({ linear: new THREE.Vector3(0.01, 0.02, 0) }),
+            new ForceOverLifetime({ force: new THREE.Vector3(0, -0.01, 0) }),
+            new ColorOverLifetime({
+              color: time => new THREE.Color(1, 0.6 + 0.4 * fadeCurve.evaluate(time), 0.25),
+              alpha: time => fadeCurve.evaluate(time),
+            }),
+            new ScaleOverLifetime({
+              scale: time => new THREE.Vector3(1, 1, 1).multiplyScalar(0.5 + growCurve.evaluate(time)),
+            }),
+            new RotationOverLifetime({ angularVelocity: new THREE.Vector3(0, 0, 1) }),
+          ],
+        }),
+      },
+      {
+        name: 'Heavy modules 10k noise+forces',
+        cpuOnly: true,
+        particleCount: 10_000,
+        create: () => ({
+          modules: [
+            new ForceOverLifetime({ force: new THREE.Vector3(0.1, -0.15, 0.05) }),
+            new NoiseModule('bench-noise'),
+          ],
+        }),
+      },
+      {
+        id: 'spawn-churn',
+        name: 'Spawn churn 2k/sec simulation only',
+        particleCount: 10_000,
+        create: () => ({
+          initialParticleCount: 0,
+          maxParticles: 10_000,
+          emitters: new Emitter({
+            rate: 2_000,
+            radialSpeed: 1.5,
+            alignment: 1,
+            initialValues: {
+              lifetime: 5,
+              scale: new THREE.Vector3(0.05, 0.05, 0.05),
+              velocity: new THREE.Vector3(0.02, 0.04, 0),
+              color: new THREE.Color(1, 0.65, 0.25),
+            },
+          }),
+        }),
+      },
+      {
+        name: 'Custom volume spawn churn 2k/sec',
+        particleCount: 10_000,
+        create: () => ({
+          initialParticleCount: 0,
+          maxParticles: 10_000,
+          emitters: new Emitter({
+            source: new EmissionShape({
+              geometry: new THREE.TorusGeometry(1, 0.3, 16, 32),
+              source: EmissionSource.Volume,
+              volumeSamples: 'auto',
+            }),
+            rate: 2_000,
+            radialSpeed: 1.5,
+            alignment: 1,
+            initialValues: {
+              lifetime: 5,
+              scale: new THREE.Vector3(0.05, 0.05, 0.05),
+              velocity: new THREE.Vector3(0.02, 0.04, 0),
+              color: new THREE.Color(1, 0.65, 0.25),
+            },
+          }),
+        }),
+        validate: system => {
+          const shape = system.emitters[0].source;
+          if (shape.resolvedVolumeSamples <= EmissionShape.MIN_AUTO_VOLUME_SAMPLES) {
+            throw new Error('Automatic custom-volume sampling did not scale above its minimum.');
+          }
+        },
+      },
+      {
+        name: 'Surface spawn churn 2k/sec',
+        particleCount: 10_000,
+        create: () => ({
+          initialParticleCount: 0,
+          maxParticles: 10_000,
+          emitters: new Emitter({
+            source: EmissionShape.Torus({ source: EmissionSource.Surface }, 1, 0.3, 16, 32),
+            rate: 2_000,
+            radialSpeed: 1.5,
+            initialValues: {
+              lifetime: 5,
+              scale: new THREE.Vector3(0.05, 0.05, 0.05),
+            },
+          }),
+        }),
+      },
+      {
+        name: 'Renderer tag filtering 10k x4 noop',
+        particleCount: 10_000,
+        create: () => ({
+          renderer: [
+            new NoopRenderer({ tags: 'even' }),
+            new NoopRenderer({ tags: 'odd' }),
+            new NoopRenderer({ tags: 'even' }),
+            new NoopRenderer({ tags: 'odd' }),
+          ],
+        }),
+      },
+      {
+        name: 'Population LOD size compensation 10k noop',
+        particleCount: 10_000,
+        create: () => ({
+          lod: { distance: 1, quality: 0.5, maxLevel: 1 },
+          renderer: new NoopRenderer({ compensation: 'size' }),
+        }),
+      },
+      {
+        name: 'SpriteRenderer 5k rendered',
+        particleCount: 5_000,
+        create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
+      },
+      {
+        id: 'sprite-10k',
+        name: 'SpriteRenderer 10k rendered',
+        particleCount: 10_000,
+        create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
+      },
+      {
+        name: 'SpriteRenderer 50k rendered',
+        particleCount: 50_000,
+        create: () => ({ renderer: new SpriteRenderer(createParticleTexture()) }),
+      },
+      {
+        id: 'mesh-rendered',
+        name: ciProfile ? 'MeshRenderer 2k rendered (low-poly)' : 'MeshRenderer 10k rendered',
+        particleCount: ciProfile ? 2_000 : 10_000,
+        create: () => ({
+          renderer: new MeshRenderer({
+            maxParticles: ciProfile ? 2_000 : 10_000,
+            ...(ciProfile ? { geometry: new THREE.BoxGeometry(1, 1, 1) } : {}),
+          }),
+        }),
+      },
+      {
+        id: 'trail-2k',
+        name: 'TrailRenderer 2k rendered',
+        particleCount: 2_000,
+        create: () => ({ renderer: new TrailRenderer({ texture: createParticleTexture() }) }),
+      },
     ]);
   }, [suite, ciProfile]);
   const cases = useMemo(() => {
@@ -1921,7 +2041,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       // Case transitions are outside measurement; reclaim storage only after queued work completes.
       await gl.backend.device.queue.onSubmittedWorkDone();
       active.current.system.destroy();
-      active.current.sceneObjects?.forEach((object) => object.removeFromParent());
+      active.current.sceneObjects?.forEach(object => object.removeFromParent());
       active.current = null;
     }
 
@@ -1931,7 +2051,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
     if (!nextCase) {
       window.__RZMPS_BENCHMARK_RESULTS__ = results.current;
       window.__RZMPS_BENCHMARK_PROGRESS__ = {
-        ...window.__RZMPS_BENCHMARK_PROGRESS__, phase: 'complete', completed: results.current.length,
+        ...window.__RZMPS_BENCHMARK_PROGRESS__,
+        phase: 'complete',
+        completed: results.current.length,
       };
       window.__RZMPS_BENCHMARK_DONE__ = true;
       onComplete(results.current);
@@ -1941,14 +2063,17 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
     // Report case transitions outside measurement so CLI users can see progress
     // without polling the measured browser render loop.
-    console.info(`[benchmark] Case ${caseIndex.current + 1}/${cases.length}: ${nextCase.name} (${warmupMs / 1000}s warmup, ${
-      Math.max(durationMs, nextCase.minimumDurationMs ?? 0) / 1000}s measurement)`);
+    console.info(
+      `[benchmark] Case ${caseIndex.current + 1}/${cases.length}: ${nextCase.name} (${warmupMs / 1000}s warmup, ${
+        Math.max(durationMs, nextCase.minimumDurationMs ?? 0) / 1000
+      }s measurement)`,
+    );
     const system = nextCase.createSystem
       ? await nextCase.createSystem()
       : createSystem({
-        particleCount: nextCase.particleCount,
-        ...nextCase.create(),
-      });
+          particleCount: nextCase.particleCount,
+          ...nextCase.create(),
+        });
     nextCase.configure?.(system);
     system._renderer = gl;
     system._scene = scene;
@@ -1996,14 +2121,18 @@ function BenchmarkScene({ onComplete, onProgress }) {
     onProgress(nextCase.name);
     starting.current = false;
     setFrameloop('always');
-    window.__RZMPS_BENCHMARK_PROGRESS__ = { activeCase: nextCase.name, phase: 'warmup', completed: results.current.length };
+    window.__RZMPS_BENCHMARK_PROGRESS__ = {
+      activeCase: nextCase.name,
+      phase: 'warmup',
+      completed: results.current.length,
+    };
   };
 
   useFrame(() => {
     if (failed.current || starting.current) return;
 
     if (!active.current) {
-      void startNextCase().catch((error) => {
+      void startNextCase().catch(error => {
         setTimeout(() => fail(error));
       });
       return;
@@ -2011,9 +2140,10 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
     const frameStart = performance.now();
     const updateStart = performance.now();
-    const computeDispatchesBefore = suite === 'emitter-instances'
-      ? gl.__rzmpsBenchmarkComputeDispatches
-      : active.current.system.__rzmpsBenchmarkComputeDispatches ?? gl.__rzmpsBenchmarkComputeDispatches ?? 0;
+    const computeDispatchesBefore =
+      suite === 'emitter-instances'
+        ? gl.__rzmpsBenchmarkComputeDispatches
+        : (active.current.system.__rzmpsBenchmarkComputeDispatches ?? gl.__rzmpsBenchmarkComputeDispatches ?? 0);
     const simulationDispatchesBefore = active.current.system.__rzmpsBenchmarkSimulationDispatches ?? 0;
     const renderOutputDispatchesBefore = active.current.system.__rzmpsBenchmarkRenderOutputDispatches ?? 0;
     active.current.beforeUpdate?.(active.current.system, frameStart - active.current.phaseStartedAt);
@@ -2028,14 +2158,16 @@ function BenchmarkScene({ onComplete, onProgress }) {
       active.current.simulationNodeBuilds += 1;
       active.current.system.__rzmpsSimulationNodeBuilds = active.current.simulationNodeBuilds;
     }
-    const computeDispatchesAfter = suite === 'emitter-instances'
-      ? gl.__rzmpsBenchmarkComputeDispatches
-      : active.current.system.__rzmpsBenchmarkComputeDispatches
-        ?? gl.__rzmpsBenchmarkComputeDispatches ?? computeDispatchesBefore;
-    const simulationDispatchesAfter = active.current.system.__rzmpsBenchmarkSimulationDispatches
-      ?? simulationDispatchesBefore;
-    const renderOutputDispatchesAfter = active.current.system.__rzmpsBenchmarkRenderOutputDispatches
-      ?? renderOutputDispatchesBefore;
+    const computeDispatchesAfter =
+      suite === 'emitter-instances'
+        ? gl.__rzmpsBenchmarkComputeDispatches
+        : (active.current.system.__rzmpsBenchmarkComputeDispatches ??
+          gl.__rzmpsBenchmarkComputeDispatches ??
+          computeDispatchesBefore);
+    const simulationDispatchesAfter =
+      active.current.system.__rzmpsBenchmarkSimulationDispatches ?? simulationDispatchesBefore;
+    const renderOutputDispatchesAfter =
+      active.current.system.__rzmpsBenchmarkRenderOutputDispatches ?? renderOutputDispatchesBefore;
     const updateMs = performance.now() - updateStart;
     let elapsed = frameStart - active.current.phaseStartedAt;
 
@@ -2050,8 +2182,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
     }
 
     const caseDurationMs = Math.max(durationMs, active.current.minimumDurationMs ?? 0);
-    const awaitingExpectedEvents = active.current.expectedDeathEvents
-      && (active.current.system.__rzmpsBenchmarkDeathEvents ?? 0) < active.current.expectedDeathEvents;
+    const awaitingExpectedEvents =
+      active.current.expectedDeathEvents &&
+      (active.current.system.__rzmpsBenchmarkDeathEvents ?? 0) < active.current.expectedDeathEvents;
     if (active.current.phase === 'drain') {
       if (awaitingExpectedEvents && elapsed < 5000) {
         lastFrame.current = frameStart;
@@ -2079,22 +2212,21 @@ function BenchmarkScene({ onComplete, onProgress }) {
     // Software rendering or a delayed frame can consume the entire time window.
     // Keep measuring until the payload validator's minimum frame count is met.
     if (isBenchmarkMeasurementComplete(elapsed, caseDurationMs, active.current.frameSamples.length)) {
-      if (
-        active.current.phase === 'measure'
-        && awaitingExpectedEvents
-      ) {
+      if (active.current.phase === 'measure' && awaitingExpectedEvents) {
         active.current.phase = 'drain';
         active.current.phaseStartedAt = frameStart;
         return;
       }
       if (
-        active.current.expectedDeathEvents
-        && (active.current.system.__rzmpsBenchmarkDeathEvents ?? 0) < active.current.expectedDeathEvents
+        active.current.expectedDeathEvents &&
+        (active.current.system.__rzmpsBenchmarkDeathEvents ?? 0) < active.current.expectedDeathEvents
       ) {
-        fail(new Error(
-          `${active.current.name} dispatched ${active.current.system.__rzmpsBenchmarkDeathEvents ?? 0}`
-          + ` GPU death events; expected ${active.current.expectedDeathEvents}.`,
-        ));
+        fail(
+          new Error(
+            `${active.current.name} dispatched ${active.current.system.__rzmpsBenchmarkDeathEvents ?? 0}` +
+              ` GPU death events; expected ${active.current.expectedDeathEvents}.`,
+          ),
+        );
       }
       try {
         active.current.validate?.(active.current.system);
@@ -2104,7 +2236,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       results.current.push(summarize(active.current));
       window.__RZMPS_BENCHMARK_RESULTS__ = [...results.current];
       gl.info.reset();
-      void startNextCase().catch((error) => {
+      void startNextCase().catch(error => {
         setTimeout(() => fail(error));
       });
     }
@@ -2116,9 +2248,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
 function BenchmarkPage() {
   const [results, setResults] = useState([]);
   const [activeCase, setActiveCase] = useState('Starting');
-  const status = results.length > 0
-    ? `${results.length} cases completed`
-    : 'warming up';
+  const status = results.length > 0 ? `${results.length} cases completed` : 'warming up';
 
   return (
     <div className="demo-shell">
@@ -2138,12 +2268,12 @@ function BenchmarkPage() {
       </div>
 
       <pre className="code-panel">
-        <code>
-          {JSON.stringify({ activeCase, results }, null, 2)}
-        </code>
+        <code>{JSON.stringify({ activeCase, results }, null, 2)}</code>
       </pre>
     </div>
   );
 }
 
 export default BenchmarkPage;
+
+BenchmarkScene.propTypes = { onComplete: PropTypes.func.isRequired, onProgress: PropTypes.func };

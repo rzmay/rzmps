@@ -1,4 +1,3 @@
-import uvDebugScene from 'examples/scenes/uvDebug.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
@@ -49,8 +48,9 @@ import cornellBoxScene from '../scenes/cornellBox';
 
 async function loadFragments() {
   const loader = new GLTFLoader();
-  const assets = await Promise.all([destruction1, destruction2, destruction3, destruction4, destruction5]
-    .map(url => loader.loadAsync(url)));
+  const assets = await Promise.all(
+    [destruction1, destruction2, destruction3, destruction4, destruction5].map(url => loader.loadAsync(url)),
+  );
   const material = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 1 });
   const fragments = [];
   const sourceMaterials = new Set();
@@ -79,59 +79,80 @@ export default async function destructionPreset() {
   // Load each matching map bundle together, then choose one whole material per impact.
   const impactURLs = [
     {
-      normalMap: impact1Normal, alphaMap: impact1Opacity,
-      aoMap: impact1AO, roughnessMap: impact1Roughness
+      normalMap: impact1Normal,
+      alphaMap: impact1Opacity,
+      aoMap: impact1AO,
+      roughnessMap: impact1Roughness,
     },
     {
-      normalMap: impact2Normal, alphaMap: impact2Opacity,
-      aoMap: impact2AO, roughnessMap: impact2Roughness
+      normalMap: impact2Normal,
+      alphaMap: impact2Opacity,
+      aoMap: impact2AO,
+      roughnessMap: impact2Roughness,
     },
     {
-      normalMap: impact3Normal, alphaMap: impact3Opacity,
-      aoMap: impact3AO, roughnessMap: impact3Roughness
+      normalMap: impact3Normal,
+      alphaMap: impact3Opacity,
+      aoMap: impact3AO,
+      roughnessMap: impact3Roughness,
     },
     {
-      normalMap: impact4Normal, alphaMap: impact4Opacity,
-      aoMap: impact4AO, roughnessMap: impact4Roughness
+      normalMap: impact4Normal,
+      alphaMap: impact4Opacity,
+      aoMap: impact4AO,
+      roughnessMap: impact4Roughness,
     },
     {
-      normalMap: impact5Normal, alphaMap: impact5Opacity,
-      aoMap: impact5AO, roughnessMap: impact5Roughness
+      normalMap: impact5Normal,
+      alphaMap: impact5Opacity,
+      aoMap: impact5AO,
+      roughnessMap: impact5Roughness,
     },
     {
-      normalMap: impact6Normal, alphaMap: impact6Opacity,
-      aoMap: impact6AO, roughnessMap: impact6Roughness
+      normalMap: impact6Normal,
+      alphaMap: impact6Opacity,
+      aoMap: impact6AO,
+      roughnessMap: impact6Roughness,
     },
   ];
   const [fragments, impactTextures] = await Promise.all([
     loadFragments(),
-    Promise.all(impactURLs.map(async urls => {
-      const entries = await Promise.all(Object.entries(urls).map(async ([key, url]) => {
-        const texture = await textureLoader.loadAsync(url);
-        texture.colorSpace = THREE.NoColorSpace;
-        texture.channel = 0;
-        return [key, texture];
-      }));
-      return Object.fromEntries(entries);
-    })),
+    Promise.all(
+      impactURLs.map(async urls => {
+        const entries = await Promise.all(
+          Object.entries(urls).map(async ([key, url]) => {
+            const texture = await textureLoader.loadAsync(url);
+            texture.colorSpace = THREE.NoColorSpace;
+            texture.channel = 0;
+            return [key, texture];
+          }),
+        );
+        return Object.fromEntries(entries);
+      }),
+    ),
   ]);
-  const impactMaterials = impactTextures.map(maps => new THREE.MeshStandardMaterial({
-    ...maps,
-    normalScale: new THREE.Vector2(2, 2),
-    roughness: 1,
-    metalness: 0,
-    transparent: true,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-  }));
+  const impactMaterials = impactTextures.map(
+    maps =>
+      new THREE.MeshStandardMaterial({
+        ...maps,
+        normalScale: new THREE.Vector2(2, 2),
+        roughness: 1,
+        metalness: 0,
+        transparent: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+      }),
+  );
   // #endregion docs:renderers:3
 
-  const thicknesses = fragments.map(fragment => {
-    fragment.geometry.computeBoundingBox();
-    const size = fragment.geometry.boundingBox.getSize(new THREE.Vector3());
-    return Math.min(size.x, size.y, size.z);
-  }).sort((a, b) => a - b);
+  const thicknesses = fragments
+    .map(fragment => {
+      fragment.geometry.computeBoundingBox();
+      const size = fragment.geometry.boundingBox.getSize(new THREE.Vector3());
+      return Math.min(size.x, size.y, size.z);
+    })
+    .sort((a, b) => a - b);
   // Collision uses a sphere; use representative rock thickness rather than the old unit-sized geometry.
   const collisionDiameter = thicknesses[Math.floor(thicknesses.length / 2)] ?? 0.7;
 
@@ -232,8 +253,8 @@ export default async function destructionPreset() {
         angularVelocity: [new THREE.Vector3(), new THREE.Vector3(20, 40, 10)],
       }),
       new ColorOverLifetime({
-        alpha: (t) => t < 0.8 ? 1 : Easing.cubic.out(1 - ((t - 0.8) * 5))
-      })
+        alpha: t => (t < 0.8 ? 1 : Easing.cubic.out(1 - (t - 0.8) * 5)),
+      }),
     ],
     // #endregion docs:modules:2
     // #region docs:renderers:2
@@ -280,8 +301,19 @@ destructionPreset.metadata = {
   id: 'destruction',
   title: 'Destruction',
   category: 'effects',
-  tags: ['destruction', 'collision', 'debris', 'meshes', 'batching', 'materials', 'material-copy',
-    'uv-patch', 'decals', 'compositing', 'impulse'],
+  tags: [
+    'destruction',
+    'collision',
+    'debris',
+    'meshes',
+    'batching',
+    'materials',
+    'material-copy',
+    'uv-patch',
+    'decals',
+    'compositing',
+    'impulse',
+  ],
   description: 'Metal ball impacts leave concrete cracks and fragments carrying the contacted surface UV footprint.',
   previewSettings: {
     scene: cornellBoxScene,

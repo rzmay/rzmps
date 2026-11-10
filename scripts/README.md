@@ -25,3 +25,9 @@ Run fast benchmark and dependency reporting tests with `npm run test:benchmarks`
 and `npm run test:dependencies`. Documentation tests live in `tests/docs/` and run
 through `npm run docs:check`. `npm run preview:smoke` runs the optional browser suite;
 `npm run site:browser-check` checks the assembled site.
+
+Run `npm run lint` from the repository root to check library sources, the demo,
+examples, and scripts. The shared `.eslintrc.cjs` enforces a 120-character limit;
+`scripts/.eslintrc.cjs` adds Node and browser-harness environments. Use
+`npm run lint:scripts` for scripts alone. CI rejects lint errors and warnings.
+Prettier uses the same 120-character target through `.prettierrc.json`.

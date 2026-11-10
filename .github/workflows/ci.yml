@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint maintained source
+        run: npm run lint
+
       - name: Check source import casing
         run: npm run test:source
 

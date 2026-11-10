@@ -3,10 +3,7 @@ import AmmoModule from 'ammo.js/builds/ammo.wasm.js';
 import ammoWasmUrl from 'ammo.js/builds/ammo.wasm.wasm?url';
 import { AmmoCollisionBackend } from '@rzmps/ammo';
 import createCollisionObjects from '../utils/createCollisionObjects.js';
-import {
-  createSceneParticleRoot,
-  disposeSceneParticleRoot,
-} from '../utils/particleRoot.js';
+import { createSceneParticleRoot, disposeSceneParticleRoot } from '../utils/particleRoot.js';
 
 export default async function collisionAmmoScene(scene) {
   const scope = {};
@@ -18,21 +15,11 @@ export default async function collisionAmmoScene(scene) {
 
   const Ammo = scope.Ammo;
 
-  const collisionConfiguration =
-    new Ammo.btDefaultCollisionConfiguration();
-  const dispatcher =
-    new Ammo.btCollisionDispatcher(collisionConfiguration);
-  const broadphase =
-    new Ammo.btDbvtBroadphase();
-  const solver =
-    new Ammo.btSequentialImpulseConstraintSolver();
-  const world =
-    new Ammo.btDiscreteDynamicsWorld(
-      dispatcher,
-      broadphase,
-      solver,
-      collisionConfiguration,
-    );
+  const collisionConfiguration = new Ammo.btDefaultCollisionConfiguration();
+  const dispatcher = new Ammo.btCollisionDispatcher(collisionConfiguration);
+  const broadphase = new Ammo.btDbvtBroadphase();
+  const solver = new Ammo.btSequentialImpulseConstraintSolver();
+  const world = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration);
 
   const gravity = new Ammo.btVector3(0, -9.81, 0);
   world.setGravity(gravity);
@@ -43,7 +30,7 @@ export default async function collisionAmmoScene(scene) {
   const bodies = [];
   const scratchTransform = new Ammo.btTransform();
 
-  const createInitialTransform = (mesh) => ({
+  const createInitialTransform = mesh => ({
     position: mesh.position.clone(),
     rotation: mesh.quaternion.clone(),
   });
@@ -52,25 +39,12 @@ export default async function collisionAmmoScene(scene) {
     const params = mesh.geometry.parameters;
     const mass = type === 'dynamic' ? 1 : 0;
 
-    const halfExtents = new Ammo.btVector3(
-      params.width / 2,
-      params.height / 2,
-      params.depth / 2,
-    );
+    const halfExtents = new Ammo.btVector3(params.width / 2, params.height / 2, params.depth / 2);
     const shape = new Ammo.btBoxShape(halfExtents);
 
     const transform = new Ammo.btTransform();
-    const origin = new Ammo.btVector3(
-      mesh.position.x,
-      mesh.position.y,
-      mesh.position.z,
-    );
-    const rotation = new Ammo.btQuaternion(
-      mesh.quaternion.x,
-      mesh.quaternion.y,
-      mesh.quaternion.z,
-      mesh.quaternion.w,
-    );
+    const origin = new Ammo.btVector3(mesh.position.x, mesh.position.y, mesh.position.z);
+    const rotation = new Ammo.btQuaternion(mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w);
 
     transform.setIdentity();
     transform.setOrigin(origin);
@@ -82,12 +56,7 @@ export default async function collisionAmmoScene(scene) {
     }
 
     const motionState = new Ammo.btDefaultMotionState(transform);
-    const bodyInfo = new Ammo.btRigidBodyConstructionInfo(
-      mass,
-      motionState,
-      shape,
-      localInertia,
-    );
+    const bodyInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia);
 
     const body = new Ammo.btRigidBody(bodyInfo);
 
@@ -121,24 +90,21 @@ export default async function collisionAmmoScene(scene) {
   addBox(objects.ramp);
   addBox(objects.platform);
 
-  const dynamicBodyA =
-    addBox(objects.dynamicA, 'dynamic');
+  const dynamicBodyA = addBox(objects.dynamicA, 'dynamic');
 
-  const dynamicBodyB =
-    addBox(objects.dynamicB, 'dynamic');
+  const dynamicBodyB = addBox(objects.dynamicB, 'dynamic');
 
-  const dynamicBodies = bodies.filter((entry) => entry.type === 'dynamic');
+  const dynamicBodies = bodies.filter(entry => entry.type === 'dynamic');
 
-  const movingBody =
-    addBox(objects.movingBox, 'kinematic');
+  const movingBody = addBox(objects.movingBox, 'kinematic');
 
-  const backend =
-    new AmmoCollisionBackend({
-      Ammo,
-      world,
-    });
+  const backend = new AmmoCollisionBackend({
+    Ammo,
+    world,
+  });
 
-  // Normally this would be passed into the constructor, but since we don't have particle system access here we have to use scene data
+  // The particle system is not available during scene setup,
+  // so expose the collision backend through scene data.
   scene.userData.__rzmps_activeCollisionBackend = backend;
 
   const syncBody = (mesh, body) => {
@@ -154,32 +120,14 @@ export default async function collisionAmmoScene(scene) {
     const position = scratchTransform.getOrigin();
     const rotation = scratchTransform.getRotation();
 
-    mesh.position.set(
-      position.x(),
-      position.y(),
-      position.z(),
-    );
+    mesh.position.set(position.x(), position.y(), position.z());
 
-    mesh.quaternion.set(
-      rotation.x(),
-      rotation.y(),
-      rotation.z(),
-      rotation.w(),
-    );
+    mesh.quaternion.set(rotation.x(), rotation.y(), rotation.z(), rotation.w());
   };
 
   const setKinematicBody = (body, position, rotation) => {
-    const origin = new Ammo.btVector3(
-      position.x,
-      position.y,
-      position.z,
-    );
-    const orientation = new Ammo.btQuaternion(
-      rotation.x,
-      rotation.y,
-      rotation.z,
-      rotation.w,
-    );
+    const origin = new Ammo.btVector3(position.x, position.y, position.z);
+    const orientation = new Ammo.btQuaternion(rotation.x, rotation.y, rotation.z, rotation.w);
 
     scratchTransform.setIdentity();
     scratchTransform.setOrigin(origin);
@@ -192,12 +140,8 @@ export default async function collisionAmmoScene(scene) {
     Ammo.destroy(orientation);
   };
 
-  const resetDynamicBody = (entry) => {
-    const origin = new Ammo.btVector3(
-      entry.initial.position.x,
-      entry.initial.position.y,
-      entry.initial.position.z,
-    );
+  const resetDynamicBody = entry => {
+    const origin = new Ammo.btVector3(entry.initial.position.x, entry.initial.position.y, entry.initial.position.z);
 
     const rotation = new Ammo.btQuaternion(
       entry.initial.rotation.x,
@@ -229,7 +173,7 @@ export default async function collisionAmmoScene(scene) {
   let elapsed = 0;
   let nextRespawn = 10;
 
-  const update = (deltaTime) => {
+  const update = deltaTime => {
     const frameDelta = Math.min(deltaTime, 0.1);
     accumulator += frameDelta;
     elapsed += frameDelta;
@@ -239,14 +183,8 @@ export default async function collisionAmmoScene(scene) {
       nextRespawn += 10;
     }
 
-    const position = new THREE.Vector3(
-      Math.sin(elapsed) * 2,
-      1,
-      2,
-    );
-    const rotation = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(0, elapsed * 0.75, 0),
-    );
+    const position = new THREE.Vector3(Math.sin(elapsed) * 2, 1, 2);
+    const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, elapsed * 0.75, 0));
 
     while (accumulator >= fixedDelta) {
       setKinematicBody(movingBody, position, rotation);
@@ -267,7 +205,7 @@ export default async function collisionAmmoScene(scene) {
 
       objects.group.removeFromParent();
 
-      bodies.forEach((entry) => {
+      bodies.forEach(entry => {
         world.removeRigidBody(entry.body);
         Ammo.destroy(entry.body);
         Ammo.destroy(entry.bodyInfo);
@@ -292,7 +230,7 @@ export default async function collisionAmmoScene(scene) {
 }
 
 collisionAmmoScene.metadata = {
-  "id": "collisionAmmo",
-  "title": "Collision (Ammo)",
-  "author": "rzmay"
+  id: 'collisionAmmo',
+  title: 'Collision (Ammo)',
+  author: 'rzmay',
 };

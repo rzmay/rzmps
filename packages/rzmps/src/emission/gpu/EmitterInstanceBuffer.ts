@@ -74,12 +74,8 @@ export class GPUEmitterInstanceRuntime {
     const floatStorage = state.floatStorage;
     const uintStorage = state.uintStorage;
 
-    const floatIndex = typeof index === 'number'
-      ? index * state.floatSlotCount
-      : index.mul(state.floatSlotCount);
-    const uintIndex = typeof index === 'number'
-      ? index * state.uintSlotCount
-      : index.mul(state.uintSlotCount);
+    const floatIndex = typeof index === 'number' ? index * state.floatSlotCount : index.mul(state.floatSlotCount);
+    const uintIndex = typeof index === 'number' ? index * state.uintSlotCount : index.mul(state.uintSlotCount);
     this.uintOffset = uintIndex;
     this.timing = floatStorage.element(
       typeof floatIndex === 'number' ? floatIndex + EmitterFloatSlot.Timing : floatIndex.add(EmitterFloatSlot.Timing),
@@ -96,18 +92,18 @@ export class GPUEmitterInstanceRuntime {
       typeof uintIndex === 'number' ? uintIndex + EmitterUintSlot.State : uintIndex.add(EmitterUintSlot.State),
     );
     this.counters = state.runtimeCounterStorage;
-    this.counterOffset = typeof index === 'number'
-      ? index * RUNTIME_COUNTER_COUNT
-      : index.mul(RUNTIME_COUNTER_COUNT);
+    this.counterOffset = typeof index === 'number' ? index * RUNTIME_COUNTER_COUNT : index.mul(RUNTIME_COUNTER_COUNT);
   }
 
   /** Per-step request groups live in the existing emitter buffer, never particle storage.
    * [exclusive request end, first birth offset, interval, unused]. */
   birthSchedule(group: number): Node<'vec4'> {
     const slot = FLOAT_SLOT_COUNT + group;
-    return this.state.floatStorage.element(typeof this.index === 'number'
-      ? this.index * this.state.floatSlotCount + slot
-      : this.index.mul(this.state.floatSlotCount).add(slot));
+    return this.state.floatStorage.element(
+      typeof this.index === 'number'
+        ? this.index * this.state.floatSlotCount + slot
+        : this.index.mul(this.state.floatSlotCount).add(slot),
+    );
   }
 
   birthOffset(claim: Node<'uint'>, burstCount: number): Node<'float'> {
@@ -117,8 +113,12 @@ export class GPUEmitterInstanceRuntime {
       const schedule = this.birthSchedule(group);
       const request = float(claim);
       // A select expression keeps empty groups harmless without another storage binding.
-      offset.assign(request.greaterThanEqual(previous).and(request.lessThan(schedule.x)).select(
-        schedule.y.add(request.sub(previous).mul(schedule.z)), offset));
+      offset.assign(
+        request
+          .greaterThanEqual(previous)
+          .and(request.lessThan(schedule.x))
+          .select(schedule.y.add(request.sub(previous).mul(schedule.z)), offset),
+      );
       previous = schedule.x;
     }
     return offset;
@@ -133,9 +133,7 @@ export class GPUEmitterInstanceRuntime {
     const overflowIndex = index - 1;
     const slot = BASE_UINT_SLOT_COUNT + Math.floor(overflowIndex / 4);
     const packed = this.state.uintStorage.element(
-      typeof this.uintOffset === 'number'
-        ? this.uintOffset + slot
-        : this.uintOffset.add(slot),
+      typeof this.uintOffset === 'number' ? this.uintOffset + slot : this.uintOffset.add(slot),
     );
     return packed[['x', 'y', 'z', 'w'][overflowIndex % 4] as 'x' | 'y' | 'z' | 'w'];
   }
@@ -158,9 +156,7 @@ export class GPUEmitterInstanceRuntime {
 
   private counter(index: number): Node<'uint'> {
     return this.counters.element(
-      typeof this.counterOffset === 'number'
-        ? this.counterOffset + index
-        : this.counterOffset.add(index),
+      typeof this.counterOffset === 'number' ? this.counterOffset + index : this.counterOffset.add(index),
     );
   }
 
@@ -176,10 +172,7 @@ export class GPUEmitterInstanceRuntime {
   }
 
   addRequestCount(value: Node<'uint'> | number): void {
-    atomicAdd(this.counter(EmitterRuntimeCounter.RequestedParticles), typeof value === 'number'
-      ? uint(value)
-      : value
-    );
+    atomicAdd(this.counter(EmitterRuntimeCounter.RequestedParticles), typeof value === 'number' ? uint(value) : value);
   }
 
   reserveRequestCount(value: Node<'uint'> | number): Node<'uint'> {
@@ -214,10 +207,7 @@ export class GPUEmitterInstanceRuntime {
   }
 
   setPendingRequestCount(value: Node<'uint'> | number): void {
-    atomicStore(
-      this.counter(EmitterRuntimeCounter.PendingRequests),
-      typeof value === 'number' ? uint(value) : value,
-    );
+    atomicStore(this.counter(EmitterRuntimeCounter.PendingRequests), typeof value === 'number' ? uint(value) : value);
   }
 }
 
@@ -237,7 +227,10 @@ export class GPUEmitterInstanceBufferState {
   private readonly uintData: Uint32Array;
   private readonly runtimeCounterData: Uint32Array;
 
-  constructor(capacity: number, readonly maxBurstCount = 0) {
+  constructor(
+    capacity: number,
+    readonly maxBurstCount = 0,
+  ) {
     this.capacity = Math.max(1, Math.floor(capacity));
     this.floatSlotCount = FLOAT_SLOT_COUNT + maxBurstCount + 3;
     this.burstWordCount = Math.max(1, Math.ceil(Math.max(0, maxBurstCount) / 32));
@@ -248,16 +241,8 @@ export class GPUEmitterInstanceBufferState {
     this.floatAttribute = new StorageBufferAttribute(this.floatData, 4);
     this.uintAttribute = new StorageBufferAttribute(this.uintData, 4);
     this.runtimeCounterAttribute = new StorageBufferAttribute(this.runtimeCounterData, 1);
-    this.floatStorage = storage(
-      this.floatAttribute,
-      'vec4',
-      this.capacity * this.floatSlotCount,
-    ) as PackedFloatStorage;
-    this.uintStorage = storage(
-      this.uintAttribute,
-      'uvec4',
-      this.capacity * this.uintSlotCount,
-    ) as PackedUintStorage;
+    this.floatStorage = storage(this.floatAttribute, 'vec4', this.capacity * this.floatSlotCount) as PackedFloatStorage;
+    this.uintStorage = storage(this.uintAttribute, 'uvec4', this.capacity * this.uintSlotCount) as PackedUintStorage;
     this.runtimeCounterStorage = storage(
       this.runtimeCounterAttribute,
       'uint',
@@ -304,41 +289,34 @@ export class GPUEmitterInstanceBufferState {
       throw new Error(`GPU emitter instance index ${index} is outside capacity ${this.capacity}.`);
     }
 
-    writePackedVec4(
-      this.floatData,
-      index,
-      EmitterFloatSlot.Timing,
-      this.floatSlotCount,
-      [record.startTime, record.lastSpawn, record.distanceCredit, record.elapsedTime],
-    );
-    writePackedVec4(
-      this.floatData,
-      index,
-      EmitterFloatSlot.LastDistancePositionDuration,
-      this.floatSlotCount,
-      [record.lastDistancePosition.x, record.lastDistancePosition.y, record.lastDistancePosition.z, record.duration],
-    );
-    writePackedVec4(
-      this.uintData,
-      index,
-      EmitterUintSlot.Identity,
-      this.uintSlotCount,
-      [record.active ? 1 : 0, record.parentSlot, record.parentGeneration, record.emitterIndex],
-    );
-    writePackedVec4(
-      this.uintData,
-      index,
-      EmitterUintSlot.State,
-      this.uintSlotCount,
-      [record.runId, record.flags, record.firedBurstWords?.[0] ?? record.firedBurstsMask, 0],
-    );
+    writePackedVec4(this.floatData, index, EmitterFloatSlot.Timing, this.floatSlotCount, [
+      record.startTime,
+      record.lastSpawn,
+      record.distanceCredit,
+      record.elapsedTime,
+    ]);
+    writePackedVec4(this.floatData, index, EmitterFloatSlot.LastDistancePositionDuration, this.floatSlotCount, [
+      record.lastDistancePosition.x,
+      record.lastDistancePosition.y,
+      record.lastDistancePosition.z,
+      record.duration,
+    ]);
+    writePackedVec4(this.uintData, index, EmitterUintSlot.Identity, this.uintSlotCount, [
+      record.active ? 1 : 0,
+      record.parentSlot,
+      record.parentGeneration,
+      record.emitterIndex,
+    ]);
+    writePackedVec4(this.uintData, index, EmitterUintSlot.State, this.uintSlotCount, [
+      record.runId,
+      record.flags,
+      record.firedBurstWords?.[0] ?? record.firedBurstsMask,
+      0,
+    ]);
     const burstWords = record.firedBurstWords ?? [record.firedBurstsMask];
     burstWords.slice(1, this.burstWordCount).forEach((word, overflowIndex) => {
-      const offset = (
-        index * this.uintSlotCount
-        + BASE_UINT_SLOT_COUNT
-        + Math.floor(overflowIndex / 4)
-      ) * 4 + overflowIndex % 4;
+      const offset =
+        (index * this.uintSlotCount + BASE_UINT_SLOT_COUNT + Math.floor(overflowIndex / 4)) * 4 + (overflowIndex % 4);
       this.uintData[offset] = word;
     });
   }
@@ -357,20 +335,23 @@ export class GPUEmitterInstanceBufferState {
       const state = readPackedVec4(uints, index, EmitterUintSlot.State, this.uintSlotCount);
       if (identity[0] === 0) continue;
 
-      const firedBurstWords = [state[2], ...Array.from(
-        { length: this.burstWordCount - 1 },
-        (_, overflowIndex) => {
-          const offset = (
-            index * this.uintSlotCount
-            + BASE_UINT_SLOT_COUNT
-            + Math.floor(overflowIndex / 4)
-          ) * 4 + overflowIndex % 4;
+      const firedBurstWords = [
+        state[2],
+        ...Array.from({ length: this.burstWordCount - 1 }, (_, overflowIndex) => {
+          const offset =
+            (index * this.uintSlotCount + BASE_UINT_SLOT_COUNT + Math.floor(overflowIndex / 4)) * 4 +
+            (overflowIndex % 4);
           return uints[offset];
-        },
-      )];
+        }),
+      ];
 
       const timing = readPackedVec4(floats, index, EmitterFloatSlot.Timing, this.floatSlotCount);
-      const distance = readPackedVec4(floats, index, EmitterFloatSlot.LastDistancePositionDuration, this.floatSlotCount);
+      const distance = readPackedVec4(
+        floats,
+        index,
+        EmitterFloatSlot.LastDistancePositionDuration,
+        this.floatSlotCount,
+      );
 
       records.push({
         active: true,

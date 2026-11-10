@@ -1,4 +1,3 @@
-import uvDebugScene from 'examples/scenes/uvDebug.js';
 import * as THREE from 'three';
 import {
   AudioRenderer,
@@ -86,10 +85,7 @@ export default async function dopplerBulletPreset() {
         alignment: 1,
         initialValues: {
           lifetime: 1.9,
-          velocity: [
-            new THREE.Vector3(-0.38, -0.16, -31),
-            new THREE.Vector3(0.38, 0.16, -36),
-          ],
+          velocity: [new THREE.Vector3(-0.38, -0.16, -31), new THREE.Vector3(0.38, 0.16, -36)],
           scale: 0.22,
           color: '#d7c091',
           alpha: 1,
@@ -157,12 +153,13 @@ export default async function dopplerBulletPreset() {
         minimumVertexDistance: 0.1,
         dieWithParticles: false,
         width: 0.055,
-        widthOverTrail: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-        colorOverTrail: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#f9e6ae'),
-          new THREE.Color('#8391a5'),
-          THREE.MathUtils.clamp(time, 0, 1),
-        ),
+        widthOverTrail: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+        colorOverTrail: time =>
+          new THREE.Color().lerpColors(
+            new THREE.Color('#f9e6ae'),
+            new THREE.Color('#8391a5'),
+            THREE.MathUtils.clamp(time, 0, 1),
+          ),
         inheritParticleColor: true,
         textureMode: TrailTextureMode.Stretch,
         materialOptions: {
@@ -270,14 +267,8 @@ function createSmokeWake() {
         radialSpeed: 0.1,
         initialValues: {
           lifetime: [0.55, 0.95],
-          scale: [
-            0.18,
-            0.34,
-          ],
-          velocity: [
-            new THREE.Vector3(-0.18, 0.02, -0.25),
-            new THREE.Vector3(0.18, 0.35, 0.25),
-          ],
+          scale: [0.18, 0.34],
+          velocity: [new THREE.Vector3(-0.18, 0.02, -0.25), new THREE.Vector3(0.18, 0.35, 0.25)],
           color: ['#9a9fa4', '#d8d0c0'],
           alpha: 0.1,
         },
@@ -294,7 +285,7 @@ function createSmokeWake() {
         frequency: 1.6,
       }),
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.85 + 2.35 * Easing.cubic.out(t);
           return size;
@@ -302,7 +293,7 @@ function createSmokeWake() {
       }),
       new ColorOverLifetime({
         color: '#d0c8bc',
-        alpha: (time) => fadeInOut(time, 0.18, 0.65),
+        alpha: time => fadeInOut(time, 0.18, 0.65),
       }),
       new RotationOverLifetime({
         angularVelocity: [-1, 1],
@@ -341,14 +332,8 @@ function createHeatWake(alphaMap, distortionMap) {
         radialSpeed: 0.18,
         initialValues: {
           lifetime: [0.5, 0.85],
-          scale: [
-            0.9,
-            1.45,
-          ],
-          velocity: [
-            new THREE.Vector3(-0.04, 0.02, 0.25),
-            new THREE.Vector3(0.04, 0.16, 0.65),
-          ],
+          scale: [0.9, 1.45],
+          velocity: [new THREE.Vector3(-0.04, 0.02, 0.25), new THREE.Vector3(0.04, 0.16, 0.65)],
           color: '#ffffff',
         },
       }),
@@ -357,17 +342,17 @@ function createHeatWake(alphaMap, distortionMap) {
     // #region docs:modules:2
     modules: [
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.45 + 1.75 * Easing.cubic.out(t);
           return size;
         },
       }),
       new DistortionOverLifetime({
-        distortionStrength: (time) => fadeInOut(time, 0.15, 0.55),
+        distortionStrength: time => fadeInOut(time, 0.15, 0.55),
       }),
       new ColorOverLifetime({
-        alpha: (time) => 0.95 * fadeInOut(time, 0.12, 0.58),
+        alpha: time => 0.95 * fadeInOut(time, 0.12, 0.58),
       }),
     ],
     // #endregion docs:modules:2
@@ -406,14 +391,8 @@ function createMuzzleFlash(texture) {
         radialSpeed: [0.2, 0.8],
         initialValues: {
           lifetime: [0.22, 0.36],
-          scale: [
-            1.0,
-            1.8,
-          ],
-          velocity: [
-            new THREE.Vector3(-0.35, -0.12, -0.2),
-            new THREE.Vector3(0.35, 0.32, 0.8),
-          ],
+          scale: [1.0, 1.8],
+          velocity: [new THREE.Vector3(-0.35, -0.12, -0.2), new THREE.Vector3(0.35, 0.32, 0.8)],
           color: ['#ffffff', '#ffd07a'],
           alpha: 1,
           rotation: [-Math.PI, Math.PI],
@@ -424,19 +403,20 @@ function createMuzzleFlash(texture) {
     // #region docs:modules:3
     modules: [
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = (0.32 + 1.45 * Easing.cubic.out(t)) * (1 - 0.35 * Easing.cubic.in(t));
           return size;
         },
       }),
       new ColorOverLifetime({
-        color: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#fff8d7'),
-          new THREE.Color('#ff9f45'),
-          THREE.MathUtils.clamp(time, 0, 1),
-        ),
-        alpha: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+        color: time =>
+          new THREE.Color().lerpColors(
+            new THREE.Color('#fff8d7'),
+            new THREE.Color('#ff9f45'),
+            THREE.MathUtils.clamp(time, 0, 1),
+          ),
+        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
     ],
     // #endregion docs:modules:3
@@ -485,14 +465,14 @@ function createSpawnShockwave(alphaMap, distortionMap) {
     // #region docs:modules:4
     modules: [
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.28 + 4.5 * Easing.cubic.out(t);
           return size;
         },
       }),
       new DistortionOverLifetime({
-        distortionStrength: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+        distortionStrength: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
     ],
     // #endregion docs:modules:4
@@ -564,10 +544,7 @@ function createImpactDust() {
 }
 
 function createBulletMesh() {
-  return new THREE.Mesh(
-    new THREE.SphereGeometry(0.5, 24, 16),
-    bulletMaterial(),
-  );
+  return new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 16), bulletMaterial());
 }
 
 function bulletMaterial() {
@@ -607,16 +584,29 @@ function fadeInOut(time, fadeInEnd, fadeOutStart) {
 
 /** @type {import("../types").ExampleMetadata} */
 dopplerBulletPreset.metadata = {
-  author: "rzmay",
-  "id": "dopplerBullet",
-  "title": "Doppler Bullet",
-  "description":
-    "A fast, piercing bullet leaves surface-blended bullet holes, with Doppler audio, smoke, trails, and distortion.",
-  "tags": [
-    "dopplerBullet", "bullet", "projectile", "piercing", "decals", "materials", "compositing",
-    "sources", "events", "dust", "smoke", "audio", "doppler", "trails", "distortion"
+  author: 'rzmay',
+  id: 'dopplerBullet',
+  title: 'Doppler Bullet',
+  description:
+    'A fast, piercing bullet leaves surface-blended bullet holes, with Doppler audio, smoke, trails, and distortion.',
+  tags: [
+    'dopplerBullet',
+    'bullet',
+    'projectile',
+    'piercing',
+    'decals',
+    'materials',
+    'compositing',
+    'sources',
+    'events',
+    'dust',
+    'smoke',
+    'audio',
+    'doppler',
+    'trails',
+    'distortion',
   ],
-  "category": "effects",
+  category: 'effects',
   previewSettings: {
     scene: cornellBoxScene,
     cameraPosition: [4, 3, 4],

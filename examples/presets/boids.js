@@ -1,25 +1,11 @@
 import * as THREE from 'three';
-import {
-  Boids,
-  Emitter,
-  EmissionShape,
-  MeshRenderer,
-  OrientToDirection,
-  ParticleSystem,
-} from '@rzmps/rzmps';
+import { Boids, Emitter, EmissionShape, MeshRenderer, OrientToDirection, ParticleSystem } from '@rzmps/rzmps';
 import boidAffectorsScene from 'examples/scenes/boidAffectors.js';
 
 export default async function boidsPreset() {
-  const flockColors = new Set([
-    '#7ce7ff',
-    '#c7fff3',
-    '#95ff7c',
-  ]);
+  const flockColors = new Set(['#7ce7ff', '#c7fff3', '#95ff7c']);
 
-  const hazardColors = new Set([
-    '#ff4c5f',
-    '#ff9a4c',
-  ]);
+  const hazardColors = new Set(['#ff4c5f', '#ff9a4c']);
 
   const flockSource = EmissionShape.Sphere(12, 32, 16);
   const hazardSource = EmissionShape.Torus(7.5, 0.45, 16, 48);
@@ -85,10 +71,7 @@ export default async function boidsPreset() {
           lifetime: [9, 16],
           speed: [3.2, 4.8],
           color: flockColors,
-          scale: [
-            0.34,
-            0.48,
-          ],
+          scale: [0.34, 0.48],
           alpha: 0.88,
         },
       }),
@@ -101,10 +84,7 @@ export default async function boidsPreset() {
           lifetime: [14, 22],
           speed: [2.6, 3.7],
           color: hazardColors,
-          scale: [
-            0.65,
-            1.05,
-          ],
+          scale: [0.65, 1.05],
           alpha: 0.95,
         },
       }),
@@ -160,18 +140,18 @@ export default async function boidsPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 boidsPreset.metadata = {
-  author: "rzmay",
-  "id": "boids",
-  "title": "Boids",
+  author: 'rzmay',
+  id: 'boids',
+  title: 'Boids',
   // eslint-disable-next-line max-len -- Documentation discovery requires a single literal description.
-  "description": "Flocking particles using ParticleOctree aggregation, with red hazard particles acting as tagged particle affectors.",
-  "tags": [
-    "boids"
-  ],
-  "category": "effects",
+  description:
+    'Flocking particles using ParticleOctree aggregation, with red hazard ' +
+    'particles acting as tagged particle affectors.',
+  tags: ['boids'],
+  category: 'effects',
   previewSettings: {
     cameraPosition: [20, 15, 30],
     cameraTarget: [0, 2, 0],
-    scene: boidAffectorsScene
+    scene: boidAffectorsScene,
   },
 };

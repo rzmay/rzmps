@@ -33,10 +33,21 @@
     "pr:prepare": "npm test && npm run build:modules && npm run benchmark:update-report && npm run docs:generate && npm run docs:check && npm run build --workspace demo && git --no-pager diff --check && git --no-pager diff --cached --check",
     "check:dependencies": "depcruise --config .dependency-cruiser.cjs --output-type err-long packages/rzmps/src",
     "test:dependencies": "node --test scripts/tests/dependencies/report.test.mjs",
-    "test:source": "node --test scripts/tests/source/imports.test.mjs"
+    "test:source": "node --test scripts/tests/source/imports.test.mjs",
+    "lint": "npm run lint:library && npm run lint:demo && npm run lint:scripts && npm run lint:examples",
+    "lint:library": "eslint packages/*/src --ext .ts --max-warnings 0",
+    "lint:demo": "eslint apps/demo/src --ext .js,.jsx --max-warnings 0",
+    "lint:scripts": "eslint scripts --ext .js,.mjs,.cjs --max-warnings 0",
+    "lint:examples": "eslint examples --ext .js,.cjs --max-warnings 0"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/parser": "^8.71.0",
     "dependency-cruiser": "^18.7.2",
+    "eslint": "~8.57.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "prettier": "^3.6.2",
     "skills": "^1.7.2",
     "tsdown": "^0.23.0",
     "typedoc": "^0.28.20",

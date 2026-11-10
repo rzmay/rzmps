@@ -1,7 +1,11 @@
 import type { MaterialCompositeCallback, MaterialCompositeGPUCallback } from '../rendering/compositing/composite.utils';
 import Appearance from '../rendering/compositing/Appearance';
 import type { TextureAtlasOptions } from '../rendering/TextureAtlas';
-import { MaterialCopyRegistry, MaterialCopySampleMode, type MaterialTarget } from '../rendering/compositing/MaterialCopyRegistry';
+import {
+  MaterialCopyRegistry,
+  MaterialCopySampleMode,
+  type MaterialTarget,
+} from '../rendering/compositing/MaterialCopyRegistry';
 import EventReceiver, { type EventReceiverOptions } from '../events/EventReceiver';
 import Particle from './Particle';
 import groupRendererParticles, { rendererGroupCount } from '../rendering/groupRendererParticles';
@@ -79,22 +83,29 @@ export default abstract class Renderer extends EventReceiver {
   private _materialCompositeGPU?: MaterialCompositeGPUCallback;
   private _appearanceDirty = false;
   private _appearanceBackend?: 'webgl' | 'webgpu';
-  get materialComposite(): MaterialCompositeCallback | undefined { return this._materialComposite; }
+  get materialComposite(): MaterialCompositeCallback | undefined {
+    return this._materialComposite;
+  }
   set materialComposite(value: MaterialCompositeCallback | undefined) {
     this._materialComposite = value;
     this._appearanceDirty = true;
     this.needsUpdate = true;
   }
-  get materialCompositeGPU(): MaterialCompositeGPUCallback | undefined { return this._materialCompositeGPU; }
+  get materialCompositeGPU(): MaterialCompositeGPUCallback | undefined {
+    return this._materialCompositeGPU;
+  }
   set materialCompositeGPU(value: MaterialCompositeGPUCallback | undefined) {
     this._materialCompositeGPU = value;
     this._appearanceDirty = true;
     this.needsUpdate = true;
   }
-  protected get materialCopyCacheKey(): string { return this.appearance?.cacheKey ?? `${this.version}`; }
+  protected get materialCopyCacheKey(): string {
+    return this.appearance?.cacheKey ?? `${this.version}`;
+  }
 
   private readonly _preparedMaterialTextures = new WeakMap<
-    NonNullable<ParticleSystem['sceneRenderer']>, WeakSet<Texture>
+    NonNullable<ParticleSystem['sceneRenderer']>,
+    WeakSet<Texture>
   >();
 
   /** Upload ready material images during normal preparation, before a deferred variant is first drawn. */
@@ -126,8 +137,13 @@ export default abstract class Renderer extends EventReceiver {
   protected prepareAppearance(system: ParticleSystem): void {
     if (!this.supportsMaterialCopy) return;
 
-    if (this.materialTarget || this._materialComposite || this._materialCompositeGPU || this._materialCopyRequested
-      || system.hasMaterialCopySources) {
+    if (
+      this.materialTarget ||
+      this._materialComposite ||
+      this._materialCompositeGPU ||
+      this._materialCopyRequested ||
+      system.hasMaterialCopySources
+    ) {
       this.enableMaterialCopy(system.materialCopyRegistry, system.sceneRenderer);
     }
     if (this._appearanceDirty && this.appearance) {
@@ -149,10 +165,16 @@ export default abstract class Renderer extends EventReceiver {
     if (!registry || this.appearance?.registry === registry) return;
 
     this.appearance?.dispose();
-    this.appearance = new Appearance(registry, () => ({
-      materialComposite: this._appearanceBackend === 'webgl' ? this.materialComposite : undefined,
-      materialCompositeGPU: this._appearanceBackend === 'webgpu' ? this.materialCompositeGPU : undefined,
-      version: this.version }), this.atlasOptions, this.textureCopyQuality);
+    this.appearance = new Appearance(
+      registry,
+      () => ({
+        materialComposite: this._appearanceBackend === 'webgl' ? this.materialComposite : undefined,
+        materialCompositeGPU: this._appearanceBackend === 'webgpu' ? this.materialCompositeGPU : undefined,
+        version: this.version,
+      }),
+      this.atlasOptions,
+      this.textureCopyQuality,
+    );
     this.onMaterialCopyChange();
     this.needsUpdate = true;
   }
@@ -169,7 +191,7 @@ export default abstract class Renderer extends EventReceiver {
     return this.onMaterialCopyChange !== Renderer.prototype.onMaterialCopyChange;
   }
 
-  protected onMaterialCopyChange(): void { }
+  protected onMaterialCopyChange(): void {}
 
   protected disposeMaterialCopy(): void {
     this.appearance?.dispose();
@@ -185,10 +207,16 @@ export default abstract class Renderer extends EventReceiver {
   protected _groupCount: number;
   ratio: number;
   groupingRadius: number;
-  get count(): number { return this._groupCount; }
-  set count(value: number) { this._groupCount = value; }
+  get count(): number {
+    return this._groupCount;
+  }
+  set count(value: number) {
+    this._groupCount = value;
+  }
   /** Event-oriented renderers retain their existing ratio selection policy. */
-  protected get groupingRatio(): number { return this.ratio; }
+  protected get groupingRatio(): number {
+    return this.ratio;
+  }
   private _gpuGrouping?: GPURendererGrouping;
   children: RendererChildrenOptions;
   compensation: CompensationMode | `${CompensationMode}`;
@@ -203,7 +231,9 @@ export default abstract class Renderer extends EventReceiver {
   private _usesGPUChildren = false;
   protected readonly evaluateDynamicGPU = new GPUDynamicParameterStore();
   /** @deprecated Use evaluateDynamicGPU; retained for existing component subclasses. */
-  protected get gpuParameters(): GPUDynamicParameterStore { return this.evaluateDynamicGPU; }
+  protected get gpuParameters(): GPUDynamicParameterStore {
+    return this.evaluateDynamicGPU;
+  }
 
   /** Additional visual particles; GPU diagnostics refresh asynchronously when requested. */
   get renderedChildCount(): number {
@@ -255,14 +285,12 @@ export default abstract class Renderer extends EventReceiver {
   /** Creates rendering resources when attached to a system. */
   public abstract setup(system: ParticleSystem): void;
 
-  protected abstract _update(
-    particles: Particle[],
-    system: ParticleSystem,
-    deltaTime: number,
-  ): void;
+  protected abstract _update(particles: Particle[], system: ParticleSystem, deltaTime: number): void;
 
   /** @internal CPU-readback renderers consume their batch when the CPU preprocessing actually executes. */
-  get supportsGPUEventInput(): boolean { return this.supportsGPUInput && !this.updateGPUUsesCPUReadback; }
+  get supportsGPUEventInput(): boolean {
+    return this.supportsGPUInput && !this.updateGPUUsesCPUReadback;
+  }
 
   /** Whether this renderer can consume GPU particle buffers without a selective CPU readback. */
   get supportsGPUInput(): boolean {
@@ -281,7 +309,9 @@ export default abstract class Renderer extends EventReceiver {
     const signature = [
       this.tags?.join('|') ?? '',
       this.compensation,
-      this._groupCount, this.groupingRatio, this.groupingRadius,
+      this._groupCount,
+      this.groupingRatio,
+      this.groupingRadius,
       JSON.stringify(this.children, (_key, value) => {
         if (typeof value === 'function') return value.toString();
         return value instanceof Set ? [...value] : value;
@@ -299,7 +329,7 @@ export default abstract class Renderer extends EventReceiver {
     return '';
   }
 
-  protected onGPUConfigurationChange(): void { }
+  protected onGPUConfigurationChange(): void {}
 
   /** Consumes GPU simulation or render-output storage without materializing CPU particles. */
   protected _updateGPU(
@@ -314,25 +344,24 @@ export default abstract class Renderer extends EventReceiver {
   }
 
   /** Expands render-only children and compensation before delegating to the view. */
-  public update(
-    particles: Particle[],
-    system: ParticleSystem,
-    deltaTime: number = 0,
-  ): void {
+  public update(particles: Particle[], system: ParticleSystem, deltaTime: number = 0): void {
     this.prepareAppearance(system);
 
     this.beginExecution(system, deltaTime);
     this._usesGPUChildren = false;
-    const eligible = system.quality === 0 ? [] : particles.filter(particle => (
-      particle.alive && (!this.tags || tagsIntersect(this.tags, particle.tags ?? []))
-    ));
+    const eligible =
+      system.quality === 0
+        ? []
+        : particles.filter(particle => particle.alive && (!this.tags || tagsIntersect(this.tags, particle.tags ?? [])));
     this.preparePopulation(eligible.length);
     const visible = groupRendererParticles(eligible, this._groupCount, this.groupingRatio, this.groupingRadius, system);
     this.updateView(visible, particles, system, deltaTime);
   }
 
   /** Resource reservation hook; count refers to the eligible simulation population. */
-  protected preparePopulation(count: number): void { void count; }
+  protected preparePopulation(count: number): void {
+    void count;
+  }
 
   private updateView(visible: Particle[], particles: Particle[], system: ParticleSystem, deltaTime: number): void {
     const originalCount = visible.length;
@@ -349,16 +378,9 @@ export default abstract class Renderer extends EventReceiver {
           this.generateChild(
             parent,
             child,
-            Math.max(
-              0,
-              evaluateDynamicNumber(
-                this.children.radius,
-                parent.time,
-                `${parent.id}:${child}`
-              ) ?? 0
-            ),
-            true
-          )
+            Math.max(0, evaluateDynamicNumber(this.children.radius, parent.time, `${parent.id}:${child}`) ?? 0),
+            true,
+          ),
         );
       }
     }
@@ -396,11 +418,9 @@ export default abstract class Renderer extends EventReceiver {
 
     const random = seedrandom.tychei(child.id);
     const distance = Math.cbrt(random.quick());
-    child.position.setFromSphericalCoords(
-      distance * radius,
-      Math.acos(2 * random.quick() - 1),
-      random.quick() * Math.PI * 2,
-    ).add(parent.position);
+    child.position
+      .setFromSphericalCoords(distance * radius, Math.acos(2 * random.quick() - 1), random.quick() * Math.PI * 2)
+      .add(parent.position);
 
     if (applyDistanceScaling) {
       const options = this.children;
@@ -410,7 +430,7 @@ export default abstract class Renderer extends EventReceiver {
       const multiplier = (value: ValueByParameter<number> | undefined, amount: number, variation: number) => {
         let t = MathUtils.clamp((radius > 0 ? distance : 0) + amount * variation, 0, 1);
         if (options.radialFalloff) t = options.radialFalloff(t);
-        return typeof value === 'number' || value === undefined ? value ?? 1 : evaluateByParameterNumber(value, t);
+        return typeof value === 'number' || value === undefined ? (value ?? 1) : evaluateByParameterNumber(value, t);
       };
       const scale = multiplier(options.scale, options.randomizeScale ?? 0, scaleVariation);
       if (scale !== 1) child.scale = parent.scale.clone().multiplyScalar(scale);
@@ -439,32 +459,30 @@ export default abstract class Renderer extends EventReceiver {
     const needsGrouping = rendererGroupCount(buffers.count, this._groupCount, this.groupingRatio) < buffers.count;
     const grouping = needsGrouping ? (this._gpuGrouping ??= new GPURendererGrouping()) : undefined;
     const tagMask = system.getGPURendererTagMask(this.tags);
-    const grouped = grouping?.prepare(buffers, system, this._groupCount,
-      this.groupingRatio, this.groupingRadius, tagMask) ?? buffers;
+    const grouped =
+      grouping?.prepare(buffers, system, this._groupCount, this.groupingRatio, this.groupingRadius, tagMask) ?? buffers;
     if (grouped !== buffers && this.updateGPUUsesCPUReadback) {
       this._usesGPUChildren = false;
       if (!this._gpuReadbackPending) {
         const sequence = ++this._gpuReadbackSequence;
         this._gpuReadbackPending = true;
-        void grouping!.readback().then(particles => {
-          if (sequence !== this._gpuReadbackSequence) return;
-          this.preparePopulation(grouping!.eligibleCount);
-          this.updateView(particles, particles, system, deltaTime);
-        }).finally(() => {
-          if (sequence === this._gpuReadbackSequence) this._gpuReadbackPending = false;
-        });
+        void grouping!
+          .readback()
+          .then(particles => {
+            if (sequence !== this._gpuReadbackSequence) return;
+            this.preparePopulation(grouping!.eligibleCount);
+            this.updateView(particles, particles, system, deltaTime);
+          })
+          .finally(() => {
+            if (sequence === this._gpuReadbackSequence) this._gpuReadbackPending = false;
+          });
       }
       return;
     }
     // Readback implementations expand once through the CPU update entry point.
-    const visual = this.updateGPUUsesCPUReadback ? buffers : this._gpuChildren.prepare(
-      grouped,
-      system,
-      this.children,
-      this.compensation,
-      this.version,
-      tagMask,
-    );
+    const visual = this.updateGPUUsesCPUReadback
+      ? buffers
+      : this._gpuChildren.prepare(grouped, system, this.children, this.compensation, this.version, tagMask);
     this._updateGPU(visual, system, deltaTime);
   }
 
@@ -515,11 +533,12 @@ export default abstract class Renderer extends EventReceiver {
     const sequence = this._gpuReadbackSequence + 1;
     this._gpuReadbackSequence = sequence;
     this._gpuReadbackPending = true;
-    void system.selectiveReadback(Math.min(buffers.count, limit), fields)
-      .then((results) => {
+    void system
+      .selectiveReadback(Math.min(buffers.count, limit), fields)
+      .then(results => {
         if (sequence !== this._gpuReadbackSequence) return;
         this.update(
-          results.filter((result) => result.valid).map((result) => result.particle),
+          results.filter(result => result.valid).map(result => result.particle),
           system,
           deltaTime,
         );

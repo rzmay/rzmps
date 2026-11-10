@@ -1,4 +1,4 @@
-import React from 'react';
+import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
@@ -10,9 +10,9 @@ if (new URLSearchParams(location.search).has('preview')) {
 const root = createRoot(document.getElementById('root'));
 
 root.render(
-  <React.StrictMode>
+  <StrictMode>
     <App />
-  </React.StrictMode>,
+  </StrictMode>,
 );
 
 reportWebVitals();

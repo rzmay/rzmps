@@ -11,14 +11,28 @@ export function adaptBenchmarkPage(source) {
   if (!cases.test(source) || !source.includes('active.current.system.update();')) {
     throw new Error('Benchmark page cannot accept shared selection/clock controls; update its compatibility adapter');
   }
-  const imports = `import { selectBenchmarkCases, readBenchmarkOptions, updateBenchmarkSystem } from ${JSON.stringify(benchmarkControlModule)};\n`
-    + 'const benchmarkOptions = readBenchmarkOptions(window.location.search);\n';
-  return imports + source.replace(cases,
-    'const cases = useMemo(() => { const selected = selectBenchmarkCases(allCases, benchmarkOptions.selection); '
-    + 'return caseFilter ? selected.filter(({ name }) => name.toLowerCase().includes(caseFilter)) : selected; '
-    + '}, [allCases, caseFilter]);')
-    .replace('active.current.system.update();',
-      'updateBenchmarkSystem(active.current.system, benchmarkOptions.simulationClock);')
-    .replace('if (elapsed >= caseDurationMs) {',
-      'if (elapsed >= caseDurationMs && active.current.frameSamples.length >= 3) {');
+  const imports =
+    `import { selectBenchmarkCases, readBenchmarkOptions, updateBenchmarkSystem ` +
+    `} from ` +
+    `${JSON.stringify(benchmarkControlModule)}` +
+    `;\n` +
+    'const benchmarkOptions = readBenchmarkOptions(window.location.search);\n';
+  return (
+    imports +
+    source
+      .replace(
+        cases,
+        'const cases = useMemo(() => { const selected = selectBenchmarkCases(allCases, benchmarkOptions.selection); ' +
+          'return caseFilter ? selected.filter(({ name }) => name.toLowerCase().includes(caseFilter)) : selected; ' +
+          '}, [allCases, caseFilter]);',
+      )
+      .replace(
+        'active.current.system.update();',
+        'updateBenchmarkSystem(active.current.system, benchmarkOptions.simulationClock);',
+      )
+      .replace(
+        'if (elapsed >= caseDurationMs) {',
+        'if (elapsed >= caseDurationMs && active.current.frameSamples.length >= 3) {',
+      )
+  );
 }
