@@ -9,7 +9,9 @@ Collision-triggered subsystems and sound effects with physics-driven EQ filterin
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Metal Balls](https://rzmps.rzmay.com/docs/previews/collisionSubEmitters.png)
+Category: effects. Tags: collisionSubEmitters.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/collisionSubEmitters.png)
 
 ## Particle System Configuration
 
@@ -90,16 +92,13 @@ The parent loops every five seconds under gravity and uses live cubemap reflecti
         initialValues: {
           lifetime: [0.18, 0.42],
           scale: [0.05, 0.15],
-          color: [
-            '#fff4b0',
-            '#ff8a3d',
-          ],
+          color: ['#fff4b0', '#ff8a3d'],
         },
       }),
     ],
     modules: [
       new ColorOverLifetime({
-        alpha: (time) => Math.max(0, 1 - time),
+        alpha: time => Math.max(0, 1 - time),
       }),
     ],
     renderers: [
@@ -163,10 +162,7 @@ The balls emit at five per second with lifetime eight, keeping the population ne
         initialValues: {
           lifetime: [0.18, 0.42],
           scale: [0.05, 0.15],
-          color: [
-            '#fff4b0',
-            '#ff8a3d',
-          ],
+          color: ['#fff4b0', '#ff8a3d'],
         },
       }),
     ],
@@ -191,12 +187,12 @@ The parent Collision module retains bounce 0.75 and dampen 0.05, so balls can st
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L115)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L112)
 
 ```js
     modules: [
       new ColorOverLifetime({
-        alpha: (time) => Math.max(0, 1 - time),
+        alpha: time => Math.max(0, 1 - time),
       }),
     ],
 ```
@@ -234,7 +230,7 @@ Lit sprites with metalness 0.6 and roughness 0.2 make live reflections visible. 
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L122)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L119)
 
 ```js
     renderers: [

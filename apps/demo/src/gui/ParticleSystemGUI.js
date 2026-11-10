@@ -407,6 +407,7 @@ export class ParticleSystemGUI {
   getPresetMetadata(entry) {
     const factory = this.getPresetFactory(entry);
     return {
+      id: entry?.id ?? factory?.metadata?.id,
       sourceUrl: entry?.sourceUrl ?? factory?.sourceUrl,
       author: entry?.author ?? factory?.metadata?.author,
       description: entry?.description ?? factory?.metadata?.description,

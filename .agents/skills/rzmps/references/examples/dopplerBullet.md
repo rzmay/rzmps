@@ -9,14 +9,16 @@ A piercing bullet leaves surface-blended bullet holes, with Doppler audio, smoke
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Doppler Bullet](https://rzmps.rzmay.com/docs/previews/dopplerBullet.png)
+Category: effects. Tags: dopplerBullet, bullet, projectile, piercing, decals, materials, compositing, sources, events, dust, smoke, audio, doppler, trails, distortion.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/dopplerBullet.png)
 
 ## Particle System Configuration
 
 The root loops over 5.5 seconds, caps at eight particles, and disables gravity for nearly straight flight. Five subsystems provide smoke wake, heat wake, muzzle flash, spawn shockwave, and impact dust. Their inheritance factors are zeroed so the small fast bullet does not force every secondary effect to copy its scale or velocity.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L68)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L67)
 
 ```js
   const bulletSystem = new ParticleSystem({
@@ -39,10 +41,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
         alignment: 1,
         initialValues: {
           lifetime: 1.9,
-          velocity: [
-            new THREE.Vector3(-0.38, -0.16, -31),
-            new THREE.Vector3(0.38, 0.16, -36),
-          ],
+          velocity: [new THREE.Vector3(-0.38, -0.16, -31), new THREE.Vector3(0.38, 0.16, -36)],
           scale: 0.22,
           color: '#d7c091',
           alpha: 1,
@@ -108,12 +107,13 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
         minimumVertexDistance: 0.1,
         dieWithParticles: false,
         width: 0.055,
-        widthOverTrail: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-        colorOverTrail: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#f9e6ae'),
-          new THREE.Color('#8391a5'),
-          THREE.MathUtils.clamp(time, 0, 1),
-        ),
+        widthOverTrail: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+        colorOverTrail: time =>
+          new THREE.Color().lerpColors(
+            new THREE.Color('#f9e6ae'),
+            new THREE.Color('#8391a5'),
+            THREE.MathUtils.clamp(time, 0, 1),
+          ),
         inheritParticleColor: true,
         textureMode: TrailTextureMode.Stretch,
         materialOptions: {
@@ -129,7 +129,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:6](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L226)
+[Source: system:6](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L223)
 
 ```js
   bulletSystem.addSubSystem(createImpactDust(), {
@@ -151,7 +151,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L259)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L256)
 
 ```js
   return new ParticleSystem({
@@ -167,14 +167,8 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
         radialSpeed: 0.1,
         initialValues: {
           lifetime: [0.55, 0.95],
-          scale: [
-            0.18,
-            0.34,
-          ],
-          velocity: [
-            new THREE.Vector3(-0.18, 0.02, -0.25),
-            new THREE.Vector3(0.18, 0.35, 0.25),
-          ],
+          scale: [0.18, 0.34],
+          velocity: [new THREE.Vector3(-0.18, 0.02, -0.25), new THREE.Vector3(0.18, 0.35, 0.25)],
           color: ['#9a9fa4', '#d8d0c0'],
           alpha: 0.1,
         },
@@ -189,7 +183,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
         frequency: 1.6,
       }),
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.85 + 2.35 * Easing.cubic.out(t);
           return size;
@@ -197,7 +191,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
       }),
       new ColorOverLifetime({
         color: '#d0c8bc',
-        alpha: (time) => fadeInOut(time, 0.18, 0.65),
+        alpha: time => fadeInOut(time, 0.18, 0.65),
       }),
       new RotationOverLifetime({
         angularVelocity: [-1, 1],
@@ -219,7 +213,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L332)
+[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L323)
 
 ```js
   return new ParticleSystem({
@@ -233,31 +227,25 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
         radialSpeed: 0.18,
         initialValues: {
           lifetime: [0.5, 0.85],
-          scale: [
-            0.9,
-            1.45,
-          ],
-          velocity: [
-            new THREE.Vector3(-0.04, 0.02, 0.25),
-            new THREE.Vector3(0.04, 0.16, 0.65),
-          ],
+          scale: [0.9, 1.45],
+          velocity: [new THREE.Vector3(-0.04, 0.02, 0.25), new THREE.Vector3(0.04, 0.16, 0.65)],
           color: '#ffffff',
         },
       }),
     ],
     modules: [
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.45 + 1.75 * Easing.cubic.out(t);
           return size;
         },
       }),
       new DistortionOverLifetime({
-        distortionStrength: (time) => fadeInOut(time, 0.15, 0.55),
+        distortionStrength: time => fadeInOut(time, 0.15, 0.55),
       }),
       new ColorOverLifetime({
-        alpha: (time) => 0.95 * fadeInOut(time, 0.12, 0.58),
+        alpha: time => 0.95 * fadeInOut(time, 0.12, 0.58),
       }),
     ],
     renderers: [
@@ -278,7 +266,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L396)
+[Source: system:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L381)
 
 ```js
   return new ParticleSystem({
@@ -293,14 +281,8 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
         radialSpeed: [0.2, 0.8],
         initialValues: {
           lifetime: [0.22, 0.36],
-          scale: [
-            1.0,
-            1.8,
-          ],
-          velocity: [
-            new THREE.Vector3(-0.35, -0.12, -0.2),
-            new THREE.Vector3(0.35, 0.32, 0.8),
-          ],
+          scale: [1.0, 1.8],
+          velocity: [new THREE.Vector3(-0.35, -0.12, -0.2), new THREE.Vector3(0.35, 0.32, 0.8)],
           color: ['#ffffff', '#ffd07a'],
           alpha: 1,
           rotation: [-Math.PI, Math.PI],
@@ -309,19 +291,20 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
     ],
     modules: [
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = (0.32 + 1.45 * Easing.cubic.out(t)) * (1 - 0.35 * Easing.cubic.in(t));
           return size;
         },
       }),
       new ColorOverLifetime({
-        color: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#fff8d7'),
-          new THREE.Color('#ff9f45'),
-          THREE.MathUtils.clamp(time, 0, 1),
-        ),
-        alpha: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+        color: time =>
+          new THREE.Color().lerpColors(
+            new THREE.Color('#fff8d7'),
+            new THREE.Color('#ff9f45'),
+            THREE.MathUtils.clamp(time, 0, 1),
+          ),
+        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
     ],
     renderers: [
@@ -340,7 +323,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L463)
+[Source: system:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L443)
 
 ```js
   return new ParticleSystem({
@@ -365,14 +348,14 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
     ],
     modules: [
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.28 + 4.5 * Easing.cubic.out(t);
           return size;
         },
       }),
       new DistortionOverLifetime({
-        distortionStrength: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+        distortionStrength: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
     ],
     renderers: [
@@ -393,7 +376,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 ```
 
 
-[Source: system:7](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L521)
+[Source: system:7](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L501)
 
 ```js
   const dust = new ParticleSystem({
@@ -440,7 +423,7 @@ The root loops over 5.5 seconds, caps at eight particles, and disables gravity f
 The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 to -36. Its source cone is placed near z=34, giving it a long path across the scene. Smoke uses rateOverDistance 5, maintaining wake spacing as the bullet moves; flash and shockwave use time-zero bursts rather than continuous emission.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L80)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L79)
 
 ```js
     emitters: [
@@ -452,10 +435,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
         alignment: 1,
         initialValues: {
           lifetime: 1.9,
-          velocity: [
-            new THREE.Vector3(-0.38, -0.16, -31),
-            new THREE.Vector3(0.38, 0.16, -36),
-          ],
+          velocity: [new THREE.Vector3(-0.38, -0.16, -31), new THREE.Vector3(0.38, 0.16, -36)],
           scale: 0.22,
           color: '#d7c091',
           alpha: 1,
@@ -466,7 +446,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L265)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L262)
 
 ```js
     emitters: [
@@ -477,14 +457,8 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
         radialSpeed: 0.1,
         initialValues: {
           lifetime: [0.55, 0.95],
-          scale: [
-            0.18,
-            0.34,
-          ],
-          velocity: [
-            new THREE.Vector3(-0.18, 0.02, -0.25),
-            new THREE.Vector3(0.18, 0.35, 0.25),
-          ],
+          scale: [0.18, 0.34],
+          velocity: [new THREE.Vector3(-0.18, 0.02, -0.25), new THREE.Vector3(0.18, 0.35, 0.25)],
           color: ['#9a9fa4', '#d8d0c0'],
           alpha: 0.1,
         },
@@ -493,7 +467,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L337)
+[Source: emitters:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L328)
 
 ```js
     emitters: [
@@ -503,14 +477,8 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
         radialSpeed: 0.18,
         initialValues: {
           lifetime: [0.5, 0.85],
-          scale: [
-            0.9,
-            1.45,
-          ],
-          velocity: [
-            new THREE.Vector3(-0.04, 0.02, 0.25),
-            new THREE.Vector3(0.04, 0.16, 0.65),
-          ],
+          scale: [0.9, 1.45],
+          velocity: [new THREE.Vector3(-0.04, 0.02, 0.25), new THREE.Vector3(0.04, 0.16, 0.65)],
           color: '#ffffff',
         },
       }),
@@ -518,7 +486,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L401)
+[Source: emitters:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L386)
 
 ```js
     emitters: [
@@ -529,14 +497,8 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
         radialSpeed: [0.2, 0.8],
         initialValues: {
           lifetime: [0.22, 0.36],
-          scale: [
-            1.0,
-            1.8,
-          ],
-          velocity: [
-            new THREE.Vector3(-0.35, -0.12, -0.2),
-            new THREE.Vector3(0.35, 0.32, 0.8),
-          ],
+          scale: [1.0, 1.8],
+          velocity: [new THREE.Vector3(-0.35, -0.12, -0.2), new THREE.Vector3(0.35, 0.32, 0.8)],
           color: ['#ffffff', '#ffd07a'],
           alpha: 1,
           rotation: [-Math.PI, Math.PI],
@@ -546,7 +508,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L468)
+[Source: emitters:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L448)
 
 ```js
     emitters: [
@@ -568,7 +530,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:6](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L527)
+[Source: emitters:6](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L507)
 
 ```js
     emitters: new Emitter({
@@ -591,7 +553,7 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 The root has no explicit module list; piercing marks use no Collision module and never change bullet velocity. Secondary smoke uses force, noise, growth, rotation, and a fade envelope. Heat and shockwave systems grow while distortion fades; flash color shifts from pale yellow to orange. These separate timing curves keep the initial flash brief while the slower wake remains visible.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L288)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L279)
 
 ```js
     modules: [
@@ -603,7 +565,7 @@ The root has no explicit module list; piercing marks use no Collision module and
         frequency: 1.6,
       }),
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.85 + 2.35 * Easing.cubic.out(t);
           return size;
@@ -611,7 +573,7 @@ The root has no explicit module list; piercing marks use no Collision module and
       }),
       new ColorOverLifetime({
         color: '#d0c8bc',
-        alpha: (time) => fadeInOut(time, 0.18, 0.65),
+        alpha: time => fadeInOut(time, 0.18, 0.65),
       }),
       new RotationOverLifetime({
         angularVelocity: [-1, 1],
@@ -620,69 +582,70 @@ The root has no explicit module list; piercing marks use no Collision module and
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L358)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L343)
 
 ```js
     modules: [
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.45 + 1.75 * Easing.cubic.out(t);
           return size;
         },
       }),
       new DistortionOverLifetime({
-        distortionStrength: (time) => fadeInOut(time, 0.15, 0.55),
+        distortionStrength: time => fadeInOut(time, 0.15, 0.55),
       }),
       new ColorOverLifetime({
-        alpha: (time) => 0.95 * fadeInOut(time, 0.12, 0.58),
+        alpha: time => 0.95 * fadeInOut(time, 0.12, 0.58),
       }),
     ],
 ```
 
 
-[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L425)
+[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L404)
 
 ```js
     modules: [
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = (0.32 + 1.45 * Easing.cubic.out(t)) * (1 - 0.35 * Easing.cubic.in(t));
           return size;
         },
       }),
       new ColorOverLifetime({
-        color: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#fff8d7'),
-          new THREE.Color('#ff9f45'),
-          THREE.MathUtils.clamp(time, 0, 1),
-        ),
-        alpha: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+        color: time =>
+          new THREE.Color().lerpColors(
+            new THREE.Color('#fff8d7'),
+            new THREE.Color('#ff9f45'),
+            THREE.MathUtils.clamp(time, 0, 1),
+          ),
+        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
     ],
 ```
 
 
-[Source: modules:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L486)
+[Source: modules:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L466)
 
 ```js
     modules: [
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const t = THREE.MathUtils.clamp(time, 0, 1);
           const size = 0.28 + 4.5 * Easing.cubic.out(t);
           return size;
         },
       }),
       new DistortionOverLifetime({
-        distortionStrength: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+        distortionStrength: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
     ],
 ```
 
 
-[Source: modules:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L541)
+[Source: modules:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L521)
 
 ```js
     modules: [
@@ -731,7 +694,7 @@ filters keep that event from replaying the gunshot effects or leaving a wake on 
 Choose **UV debug** to see the holes on its wall and ramp. The preset itself adds no scene geometry.
 
 
-[Source: renderers:7](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L51)
+[Source: renderers:7](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L50)
 
 ```js
   // Damage maps use projector UVs; the albedo alpha masks their combined lighting.
@@ -751,7 +714,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L102)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L98)
 
 ```js
     renderers: [
@@ -812,12 +775,13 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
         minimumVertexDistance: 0.1,
         dieWithParticles: false,
         width: 0.055,
-        widthOverTrail: (time) => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-        colorOverTrail: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#f9e6ae'),
-          new THREE.Color('#8391a5'),
-          THREE.MathUtils.clamp(time, 0, 1),
-        ),
+        widthOverTrail: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+        colorOverTrail: time =>
+          new THREE.Color().lerpColors(
+            new THREE.Color('#f9e6ae'),
+            new THREE.Color('#8391a5'),
+            THREE.MathUtils.clamp(time, 0, 1),
+          ),
         inheritParticleColor: true,
         textureMode: TrailTextureMode.Stretch,
         materialOptions: {
@@ -832,7 +796,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L313)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L304)
 
 ```js
     renderers: [
@@ -850,7 +814,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L375)
+[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L360)
 
 ```js
     renderers: [
@@ -870,7 +834,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L444)
+[Source: renderers:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L424)
 
 ```js
     renderers: [
@@ -888,7 +852,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L500)
+[Source: renderers:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L480)
 
 ```js
     renderers: [
@@ -908,7 +872,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:6](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L549)
+[Source: renderers:6](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L529)
 
 ```js
     renderers: new SpriteRenderer(Textures.Default, {

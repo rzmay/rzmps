@@ -9,7 +9,9 @@ Lit smoke sprites with soft particles and lifetime scale/color shaping.
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Smoke](https://rzmps.rzmay.com/docs/previews/smoke.png)
+Category: effects. Tags: smoke.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/smoke.png)
 
 ## Particle System Configuration
 

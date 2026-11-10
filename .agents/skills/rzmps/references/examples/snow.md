@@ -9,7 +9,9 @@ Depth-based fading, noise-driven motion, warmup, and broad low-cost emission.
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Snow](https://rzmps.rzmay.com/docs/previews/snow.png)
+Category: effects. Tags: snow.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/snow.png)
 
 ## Particle System Configuration
 

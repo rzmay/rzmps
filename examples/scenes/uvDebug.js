@@ -47,7 +47,7 @@ export default async function uvDebugScene(scene) {
 }
 
 uvDebugScene.metadata = {
-  "id": "uvDebug",
-  "title": "UV debug",
-  "author": "rzmay"
+  'id': 'uvDebug',
+  'title': 'UV debug',
+  'author': 'rzmay'
 };

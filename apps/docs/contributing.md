@@ -41,7 +41,7 @@ opening an interactive pager.
 
 ## Adding or updating an example
 
-Keep the implementation in `examples/presets/<id>.js` (TypeScript is also supported by the generator). Export its existing async default factory and attach a literal `factory.metadata` object containing id, title, author, description, tags, and category. Keep configuration inside the factory; the registry discovers files automatically. Preserve factory author information and return a normal ParticleSystem so the demo GUI and serializer continue to work.
+Keep the implementation in `examples/presets/<id>.js` (TypeScript is also supported by the generator). Export its existing async default factory and attach a literal `factory.metadata` object containing id, title, author, description and tags. Keep configuration inside the factory; the registry discovers files automatically. Preserve factory author information and return a normal ParticleSystem so the demo GUI and serializer continue to work.
 
 Mark actual source using balanced `// #region docs:system`, `docs:emitters`, `docs:modules`, and `docs:renderers` comments, closing each with the matching `// #endregion docs:...`. Named suffixes select individual systems or setup blocks. Nested regions are supported; interleaved closures are errors. Repeated region names concatenate their source blocks. If an optional module list is absent, mark a relevant system declaration and explain its absence.
 
@@ -212,7 +212,7 @@ code can import `examples/index.js`, `examples/scenes/index.js`, or an individua
 scene directly. Run `npm install` after workspace changes to refresh local links.
 Both catalog indexes discover factories automatically with `import.meta.glob`.
 Attach metadata as `factory.metadata` (including `id`, `title` and `author`); preset
-metadata also includes `description`, `tags` and `category`. Source URLs come from
+metadata also includes `description` and `tags`. Source URLs come from
 the factory's filename. Shared media lives in `examples/assets/` and helpers in
 `examples/utils/`. The demo consumes the catalogs directly.
 

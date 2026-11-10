@@ -9,7 +9,9 @@ Lit sprite particles with spherical normals for a 3D effect.
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Spheres](https://rzmps.rzmay.com/docs/previews/spheres.png)
+Category: effects. Tags: spheres.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/spheres.png)
 
 ## Particle System Configuration
 

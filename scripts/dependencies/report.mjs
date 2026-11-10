@@ -104,20 +104,20 @@ export function formatReport(report, runUrl) {
     '## Dependency analysis',
     `**New: ${diff.added.length} · Resolved: ${diff.resolved.length} · Existing: ${diff.existing.length}**`,
     `Base: ${report.base.length} warnings · PR: ${report.head.length} warnings.`,
-    `Compared ` +
+    'Compared ' +
       `${code(metadata.baseSha.slice(0, 12))}` +
-      ` → ` +
+      ' → ' +
       `${code(metadata.headSha.slice(0, 12))}` +
-      ` using the same current rules for both revisions.`,
+      ' using the same current rules for both revisions.',
     'Architectural warnings do not block CI. Analysis execution failures still fail the CI step.',
     details('New warnings', diff.added),
     details('Resolved warnings', diff.resolved),
     details('Existing warnings', diff.existing),
-    `[Full results and CI logs](` +
+    '[Full results and CI logs](' +
       `${runUrl}` +
-      `) — download the dependency-report-` +
+      ') — download the dependency-report-' +
       `${metadata.runAttempt}` +
-      ` artifact for complete JSON results.`,
+      ' artifact for complete JSON results.',
   ].join('\n\n');
 }
 

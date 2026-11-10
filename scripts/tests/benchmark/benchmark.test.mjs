@@ -361,7 +361,7 @@ test('benchmark retries only transient GPU failures and discards failed sample r
   const { isRetryableBenchmarkError, runBenchmarkWithRetry } = await import('../../benchmark/benchmark-failures.mjs');
   const allocation = size =>
     new RangeError(
-      `Failed to execute 'createBuffer' on 'GPUDevice': ` +
+      'Failed to execute \'createBuffer\' on \'GPUDevice\': ' +
         `createBuffer failed, size (${size}) is too large for the implementation when mappedAtCreation == true`,
     );
   assert.equal(isRetryableBenchmarkError(allocation(2048)), true);

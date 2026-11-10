@@ -8,7 +8,9 @@ Drifting fireflies respond to neighboring flashes with native events, attached g
 [View live example](https://rzmps.rzmay.com/?preset=Fireflies)
 
 Preset by [rzmay](https://github.com/rzmay).
-![Generated preview of Fireflies](https://rzmps.rzmay.com/docs/previews/fireflies.png)
+
+Category: effects. Tags: fireflies, gpu, events, spatial-grid, lights.
+![Example preview](https://rzmps.rzmay.com/docs/previews/fireflies.png)
 
 ## Particle System Configuration
 

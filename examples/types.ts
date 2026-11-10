@@ -7,7 +7,6 @@ export interface ExampleMetadata {
   title: string;
   description: string;
   tags: string[];
-  category: string;
   author: string | { name: string; url?: string };
   previewSettings?: ExamplePreviewSettings;
 }
@@ -16,13 +15,16 @@ export interface ExampleMetadata {
 export interface ExamplePreviewSettings {
   backend?: 'webgl' | 'webgpu';
   format?: 'mp4' | 'webm';
+  /** Clip length in seconds; usually matches the root system's duration. */
   duration?: number;
   fps?: number;
+  /** Video compression override; lower CRF preserves more detail (shared default: 18). */
   crf?: number;
   frames?: number;
   interval?: number;
   warmup?: number;
   deltaTime?: number;
+  /** Poster and video capture dimensions; shared defaults are 1920 × 1080. */
   width?: number;
   height?: number;
   seed?: number;

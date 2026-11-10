@@ -37,8 +37,31 @@
   }
 }
 
-.example-search { margin: 1rem 0; }
-.example-search input { width: 100%; padding: .5rem; color: inherit; background: #ffffff12; border: 1px solid #ffffff40; border-radius: 4px; }
-.example-search ul { max-height: 12rem; overflow: auto; list-style: none; padding: 0; }
-.example-search button { color: inherit; cursor: pointer; background: transparent; border: 0; padding: .3rem; text-align: left; }
-.example-search button[aria-pressed="true"] { text-decoration: underline; }
+/* Shared sidebar tokens also reach the portalled results through :root. */
+.example-search { position: relative; flex-shrink: 0; }
+.example-search > svg {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--sidebar-muted); pointer-events: none;
+}
+.example-search input {
+  box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 10px 8px 36px;
+  color: var(--sidebar-text); background: var(--sidebar-background);
+  border: 1px solid var(--sidebar-border); border-radius: 0;
+  font: inherit; font-size: 13px; line-height: 22px;
+}
+.example-search input::placeholder { color: var(--sidebar-muted); }
+.example-search input:focus-visible { outline: 2px solid var(--sidebar-blue); outline-offset: 2px; }
+.example-search-results {
+  --anchor-gap: 6px; z-index: 3000;
+  width: var(--input-width); max-width: calc(100vw - 32px);
+  max-height: min(420px, 60vh); overflow-y: auto; padding: 4px; box-sizing: border-box;
+  color: var(--sidebar-text); background: var(--sidebar-background);
+  border: 1px solid var(--sidebar-border); border-radius: 0;
+  box-shadow: 0 6px 18px #00000014; font: 13px/1.6 var(--sidebar-font);
+}
+.example-search-option { display: grid; gap: 4px; padding: 8px; border-radius: 0; cursor: pointer; }
+.example-search-option[data-focus] { background: #007ebf0d; }
+.example-search-option strong { font-weight: 500; }
+.example-search-option span { color: var(--sidebar-muted); font-size: 12px; }
+.example-search-option small { color: var(--sidebar-blue); font-size: 11px; }
+.example-search-results p { padding: 8px; }

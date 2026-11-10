@@ -362,7 +362,7 @@ export default async function cornellBoxScene(scene, renderer) {
 }
 
 cornellBoxScene.metadata = {
-  "id": "cornellBox",
-  "title": "Cornell Box",
-  "author": "rzmay"
+  'id': 'cornellBox',
+  'title': 'Cornell Box',
+  'author': 'rzmay'
 };

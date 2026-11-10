@@ -3,11 +3,13 @@ title: "Fireflies"
 example: fireflies
 ---
 
-# Fireflies
+[View live example](https://rzmps.rzmay.com/example/fireflies)
+
+# Fireflies <ExampleAttribution />
+
+<ExampleTags />
 
 Drifting fireflies respond to neighboring flashes with native events, attached glow pulses, and small lights.
-
-[View live example](https://rzmps.rzmay.com/?preset=Fireflies)
 
 <ExampleAttribution />
 <ExamplePreview />

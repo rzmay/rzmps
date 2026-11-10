@@ -8,7 +8,9 @@ Green acid pools emit rotating smoke and floating refractive bubbles. Select Che
 [View live example](https://rzmps.rzmay.com/?preset=Acid)
 
 Preset by [rzmay](https://github.com/rzmay).
-![Generated preview of Acid](https://rzmps.rzmay.com/docs/previews/acid.png)
+
+Category: effects. Tags: acid, decals, sources, events, smoke.
+![Example preview](https://rzmps.rzmay.com/docs/previews/acid.png)
 
 ## Particle System Configuration
 

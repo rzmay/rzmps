@@ -9,7 +9,9 @@ Instanced mesh rendering with randomized cube particles and simple lifetime rota
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Cube Instances](https://rzmps.rzmay.com/docs/previews/cubes.png)
+Category: effects. Tags: cubes.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/cubes.png)
 
 ## Particle System Configuration
 

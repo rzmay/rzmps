@@ -147,9 +147,9 @@ boidsPreset.metadata = {
   description:
     'Flocking particles using ParticleOctree aggregation, with red hazard ' +
     'particles acting as tagged particle affectors.',
-  tags: ['boids'],
-  category: 'effects',
+  tags: ['boids', 'flocking', 'meshes', 'spatial-effects', 'fish', 'octree', 'spatial', 'aggregate'],
   previewSettings: {
+    duration: 24,
     cameraPosition: [20, 15, 30],
     cameraTarget: [0, 2, 0],
     scene: boidAffectorsScene,

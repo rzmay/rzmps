@@ -68,12 +68,12 @@ export default async function spheresPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 spheresPreset.metadata = {
-  author: "rzmay",
-  "id": "spheres",
-  "title": "Spheres",
-  "description": "Lit sprite particles with spherical normals for a 3D effect.",
-  "tags": [
-    "spheres"
-  ],
-  "category": "effects"
+  author: 'rzmay',
+  'id': 'spheres',
+  'title': 'Spheres',
+  'description': 'Lit sprite particles with spherical normals for a 3D effect.',
+  tags: ['spheres', 'sprites', 'lighting', 'spherical-normals', 'effects'],
+  previewSettings: {
+    duration: 10,
+  },
 };

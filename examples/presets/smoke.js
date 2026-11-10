@@ -92,12 +92,12 @@ export default async function smokePreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 smokePreset.metadata = {
-  author: "rzmay",
-  "id": "smoke",
-  "title": "Smoke",
-  "description": "Lit smoke sprites with soft particles and lifetime scale/color shaping.",
-  "tags": [
-    "smoke"
-  ],
-  "category": "effects"
+  author: 'rzmay',
+  'id': 'smoke',
+  'title': 'Smoke',
+  'description': 'Lit smoke sprites with soft particles and lifetime scale/color shaping.',
+  tags: ['smoke', 'sprites', 'noise', 'transparency', 'effects'],
+  previewSettings: {
+    duration: 10,
+  },
 };

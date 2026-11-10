@@ -1,3 +1,4 @@
+import { createAudioCapture } from './audioCapture.mjs';
 import * as THREE from 'three';
 import { readTargetPNG } from './readback.utils.mjs';
 import { resolveScene } from './resolveScene.mjs';
@@ -22,6 +23,7 @@ async function capture(options) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
   let renderer, system, sceneHandle, captureTarget;
+  let audioCapture, originalAudioContext;
   let step = 0;
   let deviceLost;
   const report = (phase, details = {}) => window.rzmpsPreviewReport?.({ phase, step, ...details });
@@ -52,6 +54,11 @@ async function capture(options) {
       : examples.find(e => e.id === options.example);
     if (!example)
       throw new Error(`Unknown example ${options.example}. Available: ${examples.map(e => e.id).join(', ')}`);
+    if (options.format && options.format !== 'png' && example.tags?.includes('audio')) {
+      originalAudioContext = THREE.AudioContext.getContext();
+      audioCapture = createAudioCapture(options);
+      THREE.AudioContext.setContext(audioCapture.context);
+    }
     await report('renderer-init');
     if (options.backend === 'webgpu') {
       if (!navigator.gpu || !(await navigator.gpu.requestAdapter()))
@@ -163,6 +170,7 @@ async function capture(options) {
           if (typeof object.advanceFrames === 'function' && !object.isSubSystem) roots.push(object);
         });
         for (const root of roots) root.advanceFrames(1, deltaTime);
+        await audioCapture?.advance(deltaTime);
         step++;
         // Let asynchronous GPU lifecycle consumers (including persistent decals)
         // observe frames during warmup, as they do in a real animation loop.
@@ -295,8 +303,11 @@ async function capture(options) {
     const frameValidation = (await system.userData.validateSimulationFrames?.(renderer)) ?? [];
     const contactSheet = options.format && options.format !== 'png' ? null : await makeContactSheet(frames, options);
     if (options.streamFrames) for (const frame of frames) delete frame.data;
+    await report('audio-render');
+    const audio = await audioCapture?.finish();
     await report('complete');
     return {
+      audio,
       backend: renderer.backend?.isWebGPUBackend ? 'webgpu' : 'webgl',
       frames,
       contactSheet,
@@ -319,6 +330,7 @@ async function capture(options) {
     } finally {
       THREE.DefaultLoadingManager.onError = oldOnError;
       Math.random = originalRandom;
+      if (originalAudioContext) THREE.AudioContext.setContext(originalAudioContext);
     }
   }
 }

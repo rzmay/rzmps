@@ -17,6 +17,7 @@ function getPresetMetadata(presets, name) {
   const factory = typeof entry === 'function' ? entry : entry?.create;
 
   return {
+    id: entry?.id ?? factory?.metadata?.id,
     sourceUrl: entry?.sourceUrl ?? factory?.sourceUrl,
     author: entry?.author ?? factory?.metadata?.author,
     description: entry?.description ?? factory?.metadata?.description,
@@ -53,7 +54,6 @@ function setQueryParam(name, value) {
 
 function DemoScene({
   statsParent,
-  searchQuery,
   onCodeChange,
   onMetadataChange,
   onParticleCountChange,
@@ -70,7 +70,6 @@ function DemoScene({
       <Stats parent={statsParent} className="demo-stats" />
       <CameraControls />
       <ParticleSystemDisplay
-        searchQuery={searchQuery}
         initialPreset={particlePreset}
         initialScene={scenePreset}
         onCodeChange={onCodeChange}
@@ -114,7 +113,9 @@ function PresetAttribution({ metadata }) {
       </div>
 
       <div className="preset-attribution-sources">
-        <a href="/docs/">Documentation</a>
+        <a href={metadata.particle?.id ? `/docs/examples/${metadata.particle.id}.html` : '/docs/examples/'}>
+          Documentation
+        </a>
         {metadata.particle?.sourceUrl && (
           <a href={metadata.particle.sourceUrl} target="_blank" rel="noreferrer">
             Particle source
@@ -132,7 +133,6 @@ function PresetAttribution({ metadata }) {
 
 function DemoPage() {
   const demoRef = useRef(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [code, setCode] = useState('');
   const particleCountRef = useRef(null);
   const [showCode, setShowCode] = useState(false);
@@ -168,6 +168,23 @@ function DemoPage() {
     setScenePreset(name);
   }, []);
 
+  const handleExampleSelect = useCallback(
+    name => {
+      const example = examples.find(entry => entry.title === name);
+      if (!example) return;
+      // Resolve a fresh example route so the previous scene query cannot override
+      // the preset's preferred scene. Preserve the user's current renderer.
+      const selection = resolveDemoSelection(
+        new URL(`/example/${example.id}`, window.location.origin),
+        examples,
+        scenePresets,
+      );
+      handlePresetChange(selection.preset);
+      handleSceneChange(selection.scene);
+    },
+    [handlePresetChange, handleSceneChange],
+  );
+
   const handleParticleCountChange = useCallback(stats => {
     if (particleCountRef.current) {
       const count = typeof stats === 'number' ? stats : stats.particles;
@@ -192,12 +209,7 @@ function DemoPage() {
   }, []);
 
   return (
-    <LandingLayout
-      searchQuery={searchQuery}
-      onSearchChange={setSearchQuery}
-      onExampleSelect={handlePresetChange}
-      selectedExample={particlePreset}
-    >
+    <LandingLayout onExampleSelect={handleExampleSelect} selectedExample={particlePreset}>
       <div className="demo-shell" ref={demoRef}>
         <Canvas
           key={rendererMode}
@@ -207,7 +219,6 @@ function DemoPage() {
         >
           <DemoScene
             statsParent={demoRef}
-            searchQuery={searchQuery}
             onCodeChange={setCode}
             onMetadataChange={setMetadata}
             onParticleCountChange={handleParticleCountChange}
@@ -248,7 +259,6 @@ function IndexPage() {
 export default IndexPage;
 
 DemoScene.propTypes = {
-  searchQuery: PropTypes.string,
   statsParent: PropTypes.object,
   onCodeChange: PropTypes.func.isRequired,
   onMetadataChange: PropTypes.func.isRequired,
@@ -266,6 +276,7 @@ const authorType = PropTypes.oneOfType([
   PropTypes.shape({ name: PropTypes.string, url: PropTypes.string }),
 ]);
 const attributionType = PropTypes.shape({
+  id: PropTypes.string,
   author: authorType,
   description: PropTypes.string,
   sourceUrl: PropTypes.string,

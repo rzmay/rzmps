@@ -9,7 +9,9 @@ Chained subsystems, event bursts, audio cues, particle lights, and colorful spri
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Fireworks](https://rzmps.rzmay.com/docs/previews/fireworks.png)
+Category: effects. Tags: fireworks.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/fireworks.png)
 
 ## Particle System Configuration
 

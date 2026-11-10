@@ -261,15 +261,13 @@ export default async function fireworksPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 fireworksPreset.metadata = {
-  author: "rzmay",
-  "id": "fireworks",
-  "title": "Fireworks",
-  "description": "Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks.",
-  "tags": [
-    "fireworks"
-  ],
-  "category": "effects",
+  author: 'rzmay',
+  'id': 'fireworks',
+  'title': 'Fireworks',
+  'description': 'Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks.',
+  tags: ['fireworks', 'audio', 'bursts', 'subsystems', 'events', 'lights', 'trails', 'sprite-sheet', 'effects'],
   previewSettings: {
+    duration: 2.6,
     cameraPosition: [8,15,32],
     cameraTarget: [0,12,0],
   },

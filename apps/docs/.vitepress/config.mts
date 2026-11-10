@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitepress';
-import { renderSearchPage } from '../../../scripts/docs/search.mjs';
+import { renderSearchPage, exampleSearchPlugin } from '../../../scripts/docs/search.mjs';
 import { exampleSEO } from '../../../scripts/docs/seo.mjs';
 import { docsUrl } from '../../../scripts/docs/site.mjs';
 import path from 'node:path';
@@ -31,7 +31,7 @@ export default defineConfig({
   },
   vite: {
     server: { port: 5174, strictPort: true },
-    plugins: [{
+    plugins: [exampleSearchPlugin(), {
       name: 'rzmps-source-regions',
       enforce: 'pre',
       configureServer(server) {

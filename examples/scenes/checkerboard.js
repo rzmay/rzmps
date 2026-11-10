@@ -59,7 +59,7 @@ export default function checkerboardScene(scene) {
 }
 
 checkerboardScene.metadata = {
-  "id": "checkerboard",
-  "title": "Checkerboard",
-  "author": "rzmay"
+  'id': 'checkerboard',
+  'title': 'Checkerboard',
+  'author': 'rzmay'
 };

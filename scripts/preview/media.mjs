@@ -28,7 +28,17 @@ export function encodingArguments(options) {
     String(options.fps),
     '-i',
     path.join(options.output, 'frame-%03d.png'),
-    '-an',
+    ...(options.audio
+      ? [
+          '-i',
+          path.join(options.output, 'audio.wav'),
+          '-c:a',
+          options.format === 'mp4' ? 'aac' : 'libopus',
+          '-b:a',
+          '128k',
+          '-shortest',
+        ]
+      : ['-an']),
     '-c:v',
     container.encoder,
     '-crf',
@@ -66,6 +76,8 @@ export async function inspectMedia(file, expected, { image = false } = {}) {
   if (!stream || stream.width !== expected.width || stream.height !== expected.height)
     throw new Error(`${file}: unexpected dimensions`);
   if (!image) {
+    if (expected.audio && !info.streams.some(s => s.codec_type === 'audio'))
+      throw new Error(`${file}: missing captured audio`);
     const duration = Number(info.format.duration ?? stream.duration);
     const [n, d] = stream.avg_frame_rate.split('/').map(Number);
     if (
@@ -105,5 +117,11 @@ export async function inspectMedia(file, expected, { image = false } = {}) {
   if (max - min < 3) throw new Error(`${file}: blank or uniform preview; refusing to publish`);
   const stat = await fs.stat(file);
   if (!stat.size) throw new Error(`${file}: empty media`);
-  return { width: stream.width, height: stream.height, duration: Number(info.format.duration ?? 0), bytes: stat.size };
+  return {
+    width: stream.width,
+    height: stream.height,
+    duration: Number(info.format.duration ?? 0),
+    bytes: stat.size,
+    audio: info.streams.some(s => s.codec_type === 'audio'),
+  };
 }

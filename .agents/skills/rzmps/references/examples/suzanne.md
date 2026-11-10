@@ -9,7 +9,9 @@ Mesh-surface emission from a model with lit sprite rendering.
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Suzanne](https://rzmps.rzmay.com/docs/previews/suzanne.png)
+Category: effects. Tags: suzanne.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/suzanne.png)
 
 ## Particle System Configuration
 

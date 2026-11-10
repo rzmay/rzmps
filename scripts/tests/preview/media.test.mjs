@@ -66,7 +66,14 @@ for (const format of ['mp4', 'webm'])
         '--output',
         output,
       ]);
+      execFileSync(
+        'ffmpeg',
+        ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', path.join(output, 'audio.wav')],
+        { timeout: 10000 },
+      );
+      options.audio = true;
       const info = await encodeVideo(options);
+      assert.equal(info.audio, true);
       assert.equal(info.width, 64);
       assert.ok(Math.abs(info.duration - 1) < 0.1);
       await inspectMedia(path.join(output, 'poster.png'), options, { image: true });

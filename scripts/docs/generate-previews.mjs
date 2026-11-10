@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { parseArgs } from 'node:util';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -14,7 +15,7 @@ import {
   readPreviewManifest,
   previewIsCurrent,
 } from './preview-manifest.mjs';
-export async function generatePreviews({ force = false } = {}) {
+export async function generatePreviews({ force = false, ids = [] } = {}) {
   const examples = discoverExamples();
   const tools = { ...toolVersions(), chrome: PUPPETEER_REVISIONS.chrome };
   const inputs = previewInputs(examples, tools);
@@ -23,8 +24,10 @@ export async function generatePreviews({ force = false } = {}) {
   const diagnosticRoot = path.resolve(
     process.env.RZMPS_PREVIEW_DIAGNOSTICS_DIR ?? 'benchmark-results/preview-diagnostics',
   );
+  for (const id of ids) if (!examples.some(example => example.id === id)) throw new Error(`Unknown example: ${id}`);
   let capture;
   for (const example of examples) {
+    if (ids.length && !ids.includes(example.id)) continue;
     const destination = path.join(previewDirectory, example.id + '.png');
     const entry = manifest.examples[example.id];
     const cachedFiles = Object.fromEntries(
@@ -88,6 +91,7 @@ export async function generatePreviews({ force = false } = {}) {
         tools,
         browserVersion: result.browserVersion,
         actualBackend: result.actualBackend,
+        audio: result.audio,
         backend: options.backend,
         width: options.width,
         height: options.height,
@@ -110,13 +114,14 @@ export async function generatePreviews({ force = false } = {}) {
       for (const extension of ['png', 'mp4', 'webm'])
         await fs.rm(path.join(previewDirectory, id + '.' + extension), { force: true });
     }
-  for (const id of Object.keys(manifest.examples))
-    if (!inputs.has(id)) {
-      delete manifest.examples[id];
-      await fs.rm(path.join(previewDirectory, id + '.png'), { force: true });
-    }
   await fs.writeFile(path.join(previewDirectory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  await generatePreviews({ force: process.argv.includes('--force') });
+  const { values } = parseArgs({
+    options: {
+      force: { type: 'boolean', default: false },
+      example: { type: 'string', multiple: true },
+    },
+  });
+  await generatePreviews({ force: values.force, ids: values.example });
 }

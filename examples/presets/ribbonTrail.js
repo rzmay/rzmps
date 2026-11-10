@@ -64,12 +64,12 @@ export default async function ribbonTrailPreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 ribbonTrailPreset.metadata = {
-  author: "rzmay",
-  "id": "ribbonTrail",
-  "title": "Ribbon Trail",
-  "description": "Ribbon trail rendering for continuous streaks with lifetime fading.",
-  "tags": [
-    "ribbonTrail"
-  ],
-  "category": "effects"
+  author: 'rzmay',
+  'id': 'ribbonTrail',
+  'title': 'Ribbon Trail',
+  'description': 'Ribbon trail rendering for continuous streaks with lifetime fading.',
+  tags: ['ribbonTrail', 'trails', 'ribbon', 'effects'],
+  previewSettings: {
+    duration: 4,
+  },
 };

@@ -8,7 +8,7 @@ import {
 } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-export default async function cubesPreset() {
+export default async function cubeInstancesPreset() {
   const colors = new Set([
     '#ff3333',
     '#33ff66',
@@ -77,13 +77,13 @@ export default async function cubesPreset() {
 }
 
 /** @type {import("../types").ExampleMetadata} */
-cubesPreset.metadata = {
-  author: "rzmay",
-  "id": "cubes",
-  "title": "Cube Instances",
-  "description": "Instanced mesh rendering with randomized cube particles and simple lifetime rotation and fade-out.",
-  "tags": [
-    "cubes"
-  ],
-  "category": "effects"
+cubeInstancesPreset.metadata = {
+  author: 'rzmay',
+  'id': 'cubes',
+  'title': 'Cube Instances',
+  'description': 'Instanced mesh rendering with randomized cube particles and simple lifetime rotation and fade-out.',
+  tags: ['cubes', 'meshes', 'instancing', 'rotation', 'effects'],
+  previewSettings: {
+    duration: 10,
+  },
 };

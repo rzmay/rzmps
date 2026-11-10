@@ -948,11 +948,11 @@ export default class GPUSimulation {
     this._stagedBirthCount.value = count;
     const key =
       `${births.capacity}` +
-      `:` +
+      ':' +
       `${context.buffers.version}` +
-      `:` +
+      ':' +
       `${context.buffers.capacity}` +
-      `:` +
+      ':' +
       `${context.eventWriter?.version}`;
     if (this._stagedBirthCompute?.key !== key) {
       this._stagedBirthCompute?.nodes.forEach(node => node.dispose());
@@ -1007,7 +1007,7 @@ export default class GPUSimulation {
       `parent:${parentBuffers.version}:${parentBuffers.capacity}`,
       `child:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
-      `options:` +
+      'options:' +
         `${emitters.map(emitter => this._getSubSystemGPUOptionsSignature(this.system.getEmitterOptions(emitter)))}`,
       `initializers:${this._getParticleInitializationSignature()}`,
       `emitters:${emitters.map(emitter => `${this._getObjectSignature(emitter)}@${emitter.version}`).join(',')}`,
@@ -1198,7 +1198,7 @@ export default class GPUSimulation {
       `child:${context.buffers.version}:${context.buffers.capacity}`,
       `instances:${emitterInstances.capacity}`,
       `options:${configurations.map(options => this._getSubSystemGPUOptionsSignature(options)).join('|')}`,
-      `producers:` +
+      'producers:' +
         `${origins.map(values => values.map(owner => `${owner.id}:${[...owner.eventRuntime._eventTypes]}`)).join('|')}`,
       `ranges:${readers.map(reader => reader.versionKey).join('|')}`,
       `initializers:${this._getParticleInitializationSignature()}`,

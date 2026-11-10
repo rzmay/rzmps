@@ -669,11 +669,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
             const accelerated = system.particles.filter(particle => Math.abs(particle.velocity.length() - 1) > 0.05);
             if (accelerated.length > 0) {
               throw new Error(
-                `GPU Boids changed base velocity magnitude for ` +
+                'GPU Boids changed base velocity magnitude for ' +
                   `${accelerated.length}` +
-                  `/` +
+                  '/' +
                   `${system.particles.length}` +
-                  ` particles.`,
+                  ' particles.',
               );
             }
           },
@@ -1604,11 +1604,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
             const spawn = system.__rzmpsBenchmarkSpawnPositions[0];
             if (!spawn || spawn.z < 25) {
               throw new Error(
-                `Doppler Bullet [` +
+                'Doppler Bullet [' +
                   `${mode.toUpperCase()}` +
-                  `] spawned at ` +
+                  '] spawned at ' +
                   `${spawn?.toArray().join(', ') ?? 'no position'}` +
-                  `; expected the offset cone near z=34.`,
+                  '; expected the offset cone near z=34.',
               );
             }
           },

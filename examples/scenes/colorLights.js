@@ -128,7 +128,7 @@ export default function colorLightsScene(scene) {
 }
 
 colorLightsScene.metadata = {
-  "id": "colorLights",
-  "title": "Color Lights",
-  "author": "rzmay"
+  'id': 'colorLights',
+  'title': 'Color Lights',
+  'author': 'rzmay'
 };

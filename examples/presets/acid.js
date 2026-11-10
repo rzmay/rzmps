@@ -120,7 +120,7 @@ export default async function acidPreset() {
   // #region docs:modules:1
   class PoolBubbling extends Module {
     constructor() {
-      super(() => {}, { modifyGPU() {} });
+      super(() => { }, { modifyGPU() { } });
       this.remaining = new Map();
     }
 
@@ -186,11 +186,12 @@ acidPreset.metadata = {
   title: 'Acid',
   description: 'Green acid pools emit rotating smoke and floating refractive bubbles. Select Checkerboard for a floor.',
   tags: ['acid', 'decals', 'sources', 'events', 'smoke'],
-  category: 'effects',
   previewSettings: {
+    // Matches the root Splatter system inherited by this preset.
+    duration: 8,
     scene: checkerboardScene,
     warmup: 900,
-    cameraPosition: [6,4,9],
-    cameraTarget: [0,1,0],
+    cameraPosition: [6, 4, 9],
+    cameraTarget: [0, 1, 0],
   },
 };

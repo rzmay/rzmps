@@ -1,3 +1,12 @@
+:root {
+  --sidebar-background: #fff;
+  --sidebar-text: #444;
+  --sidebar-muted: #767676;
+  --sidebar-border: #e8e8e8;
+  --sidebar-blue: #007ebf;
+  --sidebar-font: 'Roboto Mono', monospace;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -39,11 +48,6 @@ code {
   --sidebar-offset: 0px;
   --sidebar-duration: 200ms;
   --sidebar-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --sidebar-background: #fff;
-  --sidebar-text: #444;
-  --sidebar-muted: #767676;
-  --sidebar-border: #e8e8e8;
-  --sidebar-blue: #007ebf;
   position: relative;
   width: 100%;
   height: 100%;
@@ -67,7 +71,7 @@ code {
   color: var(--sidebar-text);
   background: var(--sidebar-background);
   border-right: 1px solid var(--sidebar-border);
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--sidebar-font);
   font-size: 14px;
   line-height: 24px;
   transform: translateX(-100%);
@@ -194,7 +198,7 @@ code {
 }
 
 @media (prefers-color-scheme: dark) {
-  .landing-layout {
+  :root {
     --sidebar-background: #222;
     --sidebar-text: #bbb;
     --sidebar-muted: #999;

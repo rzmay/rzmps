@@ -9,7 +9,9 @@ Ribbon trail rendering for continuous streaks with lifetime fading.
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Ribbon Trail](https://rzmps.rzmay.com/docs/previews/ribbonTrail.png)
+Category: effects. Tags: ribbonTrail.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/ribbonTrail.png)
 
 ## Particle System Configuration
 

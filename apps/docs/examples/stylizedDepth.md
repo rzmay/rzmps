@@ -3,13 +3,13 @@ title: "Stylized Depth"
 example: stylizedDepth
 ---
 
-# Stylized Depth
+[View live example](https://rzmps.rzmay.com/example/stylizedDepth)
+
+# Stylized Depth <ExampleAttribution />
+
+<ExampleTags />
 
 Depth-based color, scale, speed, rotation, and velocity modules for stylized perspective effects.
-
-[View live example](https://rzmps.rzmay.com/?preset=Stylized%20Depth)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

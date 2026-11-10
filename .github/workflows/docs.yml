@@ -43,7 +43,7 @@ jobs:
           sudo apt-get install -y ffmpeg
           npx puppeteer browsers install chrome --install-deps
       - name: Verify headless WebGPU capture
-        run: node --test scripts/tests/preview/readback.test.mjs scripts/tests/preview/player.test.mjs
+        run: node --test scripts/tests/preview/readback.test.mjs scripts/tests/preview/player.test.mjs scripts/tests/preview/audio.test.mjs scripts/tests/site/search.test.mjs
       - name: Restore generated previews
         uses: actions/cache@v4
         with:

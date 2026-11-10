@@ -621,7 +621,7 @@ export default async function lightProbesScene(
 }
 
 lightProbesScene.metadata = {
-  "id": "lightProbes",
-  "title": "Light Probe Room",
-  "author": "mrdoob"
+  'id': 'lightProbes',
+  'title': 'Light Probe Room',
+  'author': 'mrdoob'
 };

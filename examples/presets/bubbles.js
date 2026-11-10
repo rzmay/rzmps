@@ -164,9 +164,9 @@ bubblesPreset.metadata = {
   description:
     'Refractive sprite transmission with spherical normals and size-driven ' +
     'distortion. Both continuous sounds and collision-triggered bubble pops.',
-  tags: ['bubbles'],
-  category: 'effects',
+  tags: ['bubbles', 'audio', 'sprites', 'events', 'effects', 'distortion', 'refraction'],
   previewSettings: {
+    duration: 10,
     scene: cornellBoxScene,
   },
 };

@@ -176,10 +176,10 @@ function apiFixture(states, { existing, failCreateAfterSaving = false, wrongIden
         return value;
       },
       compare: value =>
-        `<!-- rzmps-benchmark-report -->\n\n## 📊 Benchmark comparison\n\n| Case | ` +
-        `Avg Update |\n| test | ` +
+        '<!-- rzmps-benchmark-report -->\n\n## 📊 Benchmark comparison\n\n| Case | ' +
+        'Avg Update |\n| test | ' +
         `${value.base.metadata.sampleCount}` +
-        ` |\n`,
+        ' |\n',
     },
   };
 }

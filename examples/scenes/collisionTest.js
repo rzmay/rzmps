@@ -44,7 +44,7 @@ export default async function collisionTestScene(scene) {
 }
 
 collisionTestScene.metadata = {
-  "id": "collisionTest",
-  "title": "Collision (builtin/Octree)",
-  "author": "rzmay"
+  'id': 'collisionTest',
+  'title': 'Collision (builtin/Octree)',
+  'author': 'rzmay'
 };

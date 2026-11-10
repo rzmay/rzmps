@@ -46,6 +46,9 @@ test('scene metadata rejects display names, unbound identifiers and executable e
 test('omitted preview settings inherit defaults; overrides preserve zero and serialize vectors', () => {
   const basic = parseOptions(previewArguments({ id: 'example' }, '/tmp/preview'));
   assert.equal(basic.backend, 'webgl');
+  assert.equal(previewDefaults.width, 1920);
+  assert.equal(previewDefaults.height, 1080);
+  assert.equal(basic.crf, 18);
   assert.equal(basic.width, previewDefaults.width);
   assert.equal(basic.height, previewDefaults.height);
   assert.equal(basic.scene, null);
@@ -83,7 +86,11 @@ test('scene resolution uses the actual factory and preserves explicit CLI preced
 
 test('all canonical example overrides pass capture option validation', () => {
   const examples = discoverExamples();
-  for (const example of examples) parseOptions(previewArguments(example, '/tmp/preview'));
+  for (const example of examples) {
+    assert.ok(example.previewSettings.duration > 0, `${example.id}: clip timing belongs in preset metadata`);
+    const options = parseOptions(previewArguments(example, '/tmp/preview'));
+    assert.equal(options.duration, Math.round(example.previewSettings.duration * options.fps) / options.fps);
+  }
   assert.equal(examples.find(example => example.id === 'fireflies').previewSettings.backend, 'webgpu');
   assert.ok(examples.find(example => example.id === 'fire').previewSettings.scene.module.endsWith('checkerboard.js'));
 });

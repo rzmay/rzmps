@@ -9,7 +9,9 @@ Unified population LOD with density compensation.
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of LOD Stress Test](https://rzmps.rzmay.com/docs/previews/lodStress.png)
+Category: effects. Tags: lodStress.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/lodStress.png)
 
 ## Particle System Configuration
 

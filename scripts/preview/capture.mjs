@@ -71,7 +71,7 @@ export function parseOptions(args) {
     cameraPosition: vector('camera-position', [8, 6, 12]),
     cameraTarget: vector('camera-target', [0, 2, 0]),
     cameraFov: Number(values['camera-fov'] ?? 50),
-    output: path.resolve(values.output ?? `previews/${values.example ?? 'fire'}`),
+    output: path.resolve(values.output ?? `benchmark-results/previews/${values.example ?? 'fire'}`),
   };
   if (options.format !== 'png' && !containers[options.format]) throw new Error('--format must be png, mp4 or webm');
   const video = options.format !== 'png';
@@ -130,7 +130,7 @@ export async function capturePreview(options) {
   await fs.mkdir(options.output, { recursive: true });
   // Replace artifacts owned by this tool, preserving unrelated user files.
   for (const file of await fs.readdir(options.output)) {
-    if (/^frame-\d+\.png$|^(contact-sheet|poster)\.png$|^preview\.(mp4|webm)$/.test(file))
+    if (/^frame-\d+\.png$|^(contact-sheet|poster)\.png$|^preview\.(mp4|webm)$|^audio\.wav$/.test(file))
       await fs.unlink(path.join(options.output, file));
   }
   let server, browser, browserDiagnostics;
@@ -233,11 +233,13 @@ export async function capturePreview(options) {
       if (frame.data) await png(`frame-${String(index).padStart(3, '0')}.png`, frame.data);
     }
     if (result.contactSheet) await png('contact-sheet.png', result.contactSheet);
-    if (options.format !== 'png') metadata.video = await encodeVideo(options);
+    if (result.audio) await fs.writeFile(path.join(options.output, 'audio.wav'), Buffer.from(result.audio, 'base64'));
+    if (options.format !== 'png') metadata.video = await encodeVideo({ ...options, audio: !!result.audio });
     Object.assign(metadata, {
       status: 'complete',
       scene: result.scene ?? options.scene,
       actualBackend: result.backend,
+      audio: !!result.audio,
       captures: (streamedFrames.length ? streamedFrames : result.frames).map(({ data, ...rest }) => rest),
       camera: result.camera,
       rendererInfo: result.rendererInfo,

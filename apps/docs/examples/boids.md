@@ -3,13 +3,13 @@ title: "Boids"
 example: boids
 ---
 
-# Boids
+[View live example](https://rzmps.rzmay.com/example/boids)
+
+# Boids <ExampleAttribution />
+
+<ExampleTags />
 
 Flocking particles using ParticleOctree aggregation, with red hazard particles acting as tagged particle affectors.
-
-[View live example](https://rzmps.rzmay.com/?preset=Boids)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

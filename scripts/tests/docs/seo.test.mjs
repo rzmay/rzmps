@@ -15,12 +15,18 @@ test('all examples have canonical SEO, absolute social URLs and searchable visib
     for (const [, attrs] of head)
       if (attrs.property?.match(/^og:(image|video)(:secure_url)?$/)) assert.match(attrs.content, /^https:\/\//);
     assert.ok(head.some(([, attrs]) => attrs.property === 'og:video:type' && attrs.content === 'video/mp4'));
-    const text = resolveExample('<ExampleAttribution />\n<ExamplePreview />', example);
-    for (const term of [example.category, ...example.tags]) assert.ok(text.includes(term));
-    for (const term of [example.title, example.description, example.category, ...example.tags, example.author.name]) {
+    const text = resolveExample('<ExampleAttribution />\n<ExampleTags />\n<ExamplePreview />', example);
+    for (const term of example.tags) assert.ok(text.includes(term));
+    for (const term of [example.title, example.description, ...example.tags, example.author.name]) {
       assert.ok(filterExamples(examples, term.toUpperCase()).includes(example));
     }
     assert.ok(text.includes('<ExampleVideo'));
+    assert.ok(text.includes('class="example-tag"'));
+    assert.ok(text.includes('class="example-author"'));
+    const live = resolveExample(`[View live example](https://rzmps.rzmay.com/example/${example.id})`, example);
+    assert.ok(live.includes(`href="/example/${example.id}"`));
+    for (const origin of ['http://localhost:5173', 'https://rzmps.rzmay.com'])
+      assert.equal(new URL(`/example/${example.id}`, origin).origin, origin);
   }
   assert.equal(filterExamples(examples, 'a term no example contains 928347').length, 0);
   assert.equal(filterExamples(examples, '  ').length, examples.length);
@@ -104,7 +110,42 @@ test('VitePress raw-Markdown search renderer indexes tags and respects search ex
   const html = renderSearchPage(raw.replace(example.description, ''), {}, markdown);
   assert.ok(html.includes(example.description), 'metadata description is indexed even if authored prose differs');
   for (const tag of example.tags) assert.ok(html.includes(tag));
-  assert.ok(html.includes('Category:'));
+  assert.ok(html.includes('example-tags'));
   assert.equal(renderSearchPage('---\nsearch: false\n---\n# Hidden', {}, markdown), '');
   assert.match(renderSearchPage('# Normal guide', {}, markdown), /Normal guide/);
+});
+
+test('every preset using AudioRenderer is discoverable through the audio tag', () => {
+  for (const example of discoverExamples()) {
+    const source = fs.readFileSync(new URL(`../../../examples/${example.file}`, import.meta.url), 'utf8');
+    if (source.includes('AudioRenderer')) assert.ok(example.tags.includes('audio'), example.id);
+  }
+  assert.ok(filterExamples(discoverExamples(), 'audio').some(e => e.title === 'Metal Balls'));
+});
+
+test('metadata edits rebuild search once, while simulation edits preserve normal HMR', async () => {
+  const { exampleSearchPlugin } = await import('../../docs/search.mjs');
+  const { exampleSourcePath, root } = await import('../../docs/examples.mjs');
+  const { join } = await import('node:path');
+  const example = { ...discoverExamples().find(entry => entry.id === 'tags') };
+  const watched = [];
+  let restarts = 0;
+  const server = {
+    watcher: { add: file => watched.push(file) },
+    restart: async () => {
+      restarts++;
+    },
+  };
+  const plugin = exampleSearchPlugin(() => [example]);
+  plugin.configureServer(server);
+  assert.deepEqual(watched, [join(root, 'examples/presets')]);
+  const context = { file: exampleSourcePath(example), server };
+  await plugin.handleHotUpdate(context);
+  assert.equal(restarts, 0, 'simulation-only changes do not restart the server');
+  example.tags = [...example.tags, 'new-search-term'];
+  assert.deepEqual(await plugin.handleHotUpdate(context), []);
+  assert.equal(restarts, 1);
+  await plugin.handleHotUpdate(context);
+  await plugin.handleHotUpdate({ file: join(root, 'apps/docs/examples/tags.md'), server });
+  assert.equal(restarts, 1, 'repeated notifications and Markdown edits must not restart again');
 });

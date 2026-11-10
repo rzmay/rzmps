@@ -94,7 +94,11 @@ test(
       await page.goto(`http://127.0.0.1:${server.address().port}`, { waitUntil: 'networkidle0' });
       assert.equal(requests, 0);
       assert.equal(await page.$eval('video', v => v.paused && !v.hasAttribute('autoplay')), true);
-      await page.click('button');
+      assert.equal(await page.$('button'), null, 'native controls replace the redundant preview button');
+      assert.equal(await page.$eval('video', v => v.controls && v.muted), true);
+      // The source must exist even in reduced-motion mode so the native play control works.
+      assert.ok(await page.$eval('video', v => v.src.endsWith('/preview.mp4')));
+      await page.$eval('video', v => v.play());
       await page.waitForFunction(
         () => !document.querySelector('video').paused && document.querySelector('video').currentTime > 0,
       );

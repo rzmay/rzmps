@@ -9,7 +9,9 @@ Tag-based module and renderer filtering by mixing cubes and spheres in one parti
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Cubes and Spheres](https://rzmps.rzmay.com/docs/previews/tags.png)
+Category: effects. Tags: tags.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/tags.png)
 
 ## Particle System Configuration
 

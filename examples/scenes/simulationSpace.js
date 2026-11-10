@@ -136,7 +136,7 @@ export default function simulationSpaceScene(scene) {
 }
 
 simulationSpaceScene.metadata = {
-  "id": "simulationSpace",
-  "title": "World Simulation Space",
-  "author": "rzmay"
+  'id': 'simulationSpace',
+  'title': 'World Simulation Space',
+  'author': 'rzmay'
 };

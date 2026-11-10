@@ -168,9 +168,9 @@ function createHeatDistortion(alphaMap, distortionMap) {
       }),
       new ColorOverLifetime({
         alpha: (time) =>
-          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
+          ? 1 - 0.15 * (((time) - 0.2) / 0.55)
+          : 0.85 * (1 - (((time) - 0.75) / 0.25))),
       }),
       new RotationOverLifetime({
         angularVelocity: [-0.45, 0.45],
@@ -198,16 +198,28 @@ function createHeatDistortion(alphaMap, distortionMap) {
 
 /** @type {import("../types").ExampleMetadata} */
 fireballPreset.metadata = {
-  author: "rzmay",
-  "id": "fireball",
-  "title": "Fireball",
-  "description":
-    "Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks.",
-  "tags": [
-    "fireball", "explosion", "bursts", "sprites", "sprite-sheet", "lights", "distortion", "decals", "scorch"
+  author: 'rzmay',
+  'id': 'fireball',
+  'title': 'Fireball',
+  'description':
+    'Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks.',
+  tags: [
+    'fireball',
+    'explosion',
+    'bursts',
+    'sprites',
+    'sprite-sheet',
+    'lights',
+    'distortion',
+    'decals',
+    'scorch',
+    'soot',
+    'ash',
+    'effects',
   ],
-  "category": "effects",
   previewSettings: {
+    // Two burst cycles include the lingering explosion and smoke.
+    duration: 2.5,
     scene: checkerboardScene,
   },
 };

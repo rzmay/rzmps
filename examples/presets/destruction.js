@@ -300,7 +300,6 @@ destructionPreset.metadata = {
   author: 'rzmay',
   id: 'destruction',
   title: 'Destruction',
-  category: 'effects',
   tags: [
     'destruction',
     'collision',
@@ -308,14 +307,16 @@ destructionPreset.metadata = {
     'meshes',
     'batching',
     'materials',
-    'material-copy',
     'uv-patch',
     'decals',
     'compositing',
     'impulse',
+    'effects',
   ],
   description: 'Metal ball impacts leave concrete cracks and fragments carrying the contacted surface UV footprint.',
   previewSettings: {
+    // Matches ParticleSystem's default duration.
+    duration: 10,
     scene: cornellBoxScene,
     warmup: 150,
     cameraPosition: [7, 6, 10],

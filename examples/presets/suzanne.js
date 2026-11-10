@@ -77,12 +77,12 @@ export default async function suzannePreset() {
 
 /** @type {import("../types").ExampleMetadata} */
 suzannePreset.metadata = {
-  author: "rzmay",
-  "id": "suzanne",
-  "title": "Suzanne",
-  "description": "Mesh-surface emission from a model with lit sprite rendering.",
-  "tags": [
-    "suzanne"
-  ],
-  "category": "effects"
+  author: 'rzmay',
+  'id': 'suzanne',
+  'title': 'Suzanne',
+  'description': 'Mesh-surface emission from a model with lit sprite rendering.',
+  tags: ['suzanne', 'meshes', 'surface', 'emission', 'emission-source', 'sprites', 'effects'],
+  previewSettings: {
+    duration: 10,
+  },
 };

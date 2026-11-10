@@ -9,7 +9,9 @@ Depth-based color, scale, speed, rotation, and velocity modules for stylized per
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Stylized Depth](https://rzmps.rzmay.com/docs/previews/stylizedDepth.png)
+Category: effects. Tags: stylizedDepth.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/stylizedDepth.png)
 
 ## Particle System Configuration
 

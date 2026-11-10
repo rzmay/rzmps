@@ -3,13 +3,13 @@ title: "Snow"
 example: snow
 ---
 
-# Snow
+[View live example](https://rzmps.rzmay.com/example/snow)
+
+# Snow <ExampleAttribution />
+
+<ExampleTags />
 
 Depth-based fading, noise-driven motion, warmup, and broad low-cost emission.
-
-[View live example](https://rzmps.rzmay.com/?preset=Snow)
-
-<ExampleAttribution />
 
 <ExamplePreview />
 

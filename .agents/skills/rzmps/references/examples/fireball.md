@@ -9,7 +9,9 @@ Burst emission, animated sprite growth, particle lights, heat distortion, and pe
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Fireball](https://rzmps.rzmay.com/docs/previews/fireball.png)
+Category: effects. Tags: fireball, explosion, bursts, sprites, sprite-sheet, lights, distortion, decals, scorch.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/fireball.png)
 
 ## Particle System Configuration
 

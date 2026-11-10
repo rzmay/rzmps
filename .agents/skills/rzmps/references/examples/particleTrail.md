@@ -9,7 +9,9 @@ Per-particle trail rendering with inherited color and alpha over moving particle
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Particle Trail](https://rzmps.rzmay.com/docs/previews/particleTrail.png)
+Category: effects. Tags: particleTrail.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/particleTrail.png)
 
 ## Particle System Configuration
 

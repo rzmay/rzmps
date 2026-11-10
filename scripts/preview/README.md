@@ -63,3 +63,22 @@ WebAssembly, and WebGPU remain enabled. Interactive rendering and benchmarking
 browser settings are unchanged. The pixel preflight additionally exercises the
 actual Three.js shader constant formatter repeatedly. Ubuntu runner and Puppeteer
 versions are pinned, and failure diagnostics remain uploaded for native CI results.
+
+Documentation media lives in `apps/docs/public/previews/` and is ignored by Git.
+`npm run docs:previews` generates the complete set; use
+`npm run docs:previews -- --example collisionSubEmitters` for one example (repeat
+`--example` to select several). Source/docs generation alone does not capture media.
+Manual CLI and smoke-test captures live under `benchmark-results/previews/`.
+
+Examples tagged `audio` capture the actual Three.js listener mix through an
+OfflineAudioContext. Its clock advances alongside simulation steps, and warmup is
+trimmed from the stereo PCM before FFmpeg encodes AAC (MP4) or Opus (WebM). Native
+video controls allow unmuting; autoplay always starts muted and respects reduced
+motion. PNG/contact-sheet captures retain their existing behavior.
+
+Shared documentation quality is configured in `scripts/docs/preview-settings.mjs`:
+1920×1080 for both PNG posters and video frames, 30 fps, and CRF 18 video encoding.
+Each factory's `metadata.previewSettings.duration` sets its clip length. It normally
+matches the root ParticleSystem duration; Fireflies samples 10 seconds of its
+120-second ambient cycle, and Fireball captures two 1.25-second bursts. Individual
+presets can also override width, height, fps, format, or crf in `previewSettings`.

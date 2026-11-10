@@ -81,6 +81,6 @@ createNativeEvents.author = 'rzmay';
 export const metadata = {
   id: 'nativeEvents', title: 'Native Custom Events',
   description: 'Native GPU vent events use three vec4 payloads to drive nested splashes without event readback.',
-  tags: ['gpu', 'events', 'payload', 'acid'], category: 'effects',
+  tags: ['gpu', 'events', 'payload', 'acid', 'effects'],
 };
 createNativeEvents.description = metadata.description;

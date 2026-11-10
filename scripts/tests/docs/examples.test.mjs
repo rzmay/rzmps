@@ -42,7 +42,7 @@ test('new guide templates require human explanations', () => {
   assert.match(template, /TODO/);
   assert.doesNotMatch(template, /actualSource/);
   assert.throws(() => validateGuide(template, example), /explanation|TODO/);
-  assert.throws(() => validateGuide(template, { ...example, title: 'Renamed example' }, false), /stale live example/);
+  assert.throws(() => validateGuide(template, { ...example, id: 'renamed-example' }, false), /stale live example/);
 });
 test('all canonical examples are discoverable and structurally valid', () => {
   const examples = discoverExamples();

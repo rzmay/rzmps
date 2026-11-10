@@ -3,15 +3,17 @@ title: Destruction
 example: destruction
 ---
 
-# Destruction
+[View live example](https://rzmps.rzmay.com/example/destruction)
+
+# Destruction <ExampleAttribution />
+
+<ExampleTags />
 
 Metal balls emit surface fragments only when they collide. The incoming balls keep their own
 metal material; the fragments inherit the impacted surface's maps and material parameters.
 Each impact also leaves a concrete crack blended into the surface's original UV chart.
 Choose the **UV debug** scene to inspect the texture footprint on its ramp, floor and wall.
 The particle preset contains no scene geometry.
-
-[View live example](https://rzmps.rzmay.com/?preset=Destruction)
 
 <ExampleAttribution />
 <ExamplePreview />

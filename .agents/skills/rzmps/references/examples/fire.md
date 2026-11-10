@@ -9,7 +9,9 @@ Sprite-sheet flames, particle lights, heat distortion, and persistent textured s
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Fire](https://rzmps.rzmay.com/docs/previews/fire.png)
+Category: effects. Tags: fire, flames, sprites, sprite-sheet, lights, distortion, decals, scorch.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/fire.png)
 
 ## Particle System Configuration
 

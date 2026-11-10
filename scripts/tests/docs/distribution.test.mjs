@@ -98,7 +98,7 @@ test('website discovers the canonical GitHub skill without a hosted duplicate', 
 test('example credit is resolved from the canonical factory author', () => {
   const example = discoverExamples().find(e => e.id === 'fire');
   const rendered = resolveExample('<ExampleAttribution />\n<ExamplePreview />', example);
-  assert.match(rendered, /Preset by \[rzmay\]\(https:\/\/github.com\/rzmay\)/);
+  assert.match(rendered, /Preset by <a href="https:\/\/github.com\/rzmay" rel="author">rzmay<\/a>/);
   assert.match(rendered, /\/previews\/fire.png/);
 });
 test('example guides require generated preview and attribution components', () => {

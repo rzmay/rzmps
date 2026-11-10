@@ -605,9 +605,11 @@ dopplerBulletPreset.metadata = {
     'doppler',
     'trails',
     'distortion',
+    'shockwave',
+    'effects',
   ],
-  category: 'effects',
   previewSettings: {
+    duration: 5.5,
     scene: cornellBoxScene,
     cameraPosition: [4, 3, 4],
     cameraTarget: [0, 0.5, -4],

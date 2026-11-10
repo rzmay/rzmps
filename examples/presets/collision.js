@@ -67,9 +67,9 @@ collisionPreset.metadata = {
     'and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, ' +
     'Rapier, and Ammo can be used as external physics backends, allowing ' +
     'particles to affect other physics objects in the scene.',
-  tags: ['collision'],
-  category: 'effects',
+  tags: ['collision', 'physics', 'sprites', 'effects', 'ammo', 'jolt', 'rapier'],
   previewSettings: {
+    duration: 5,
     scene: collisionTestScene,
   },
 };

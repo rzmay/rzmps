@@ -3,11 +3,13 @@ title: "Acid"
 example: acid
 ---
 
-# Acid
+[View live example](https://rzmps.rzmay.com/example/acid)
+
+# Acid <ExampleAttribution />
+
+<ExampleTags />
 
 Green acid pools emit rotating smoke and floating refractive bubbles. Select Checkerboard for a floor.
-
-[View live example](https://rzmps.rzmay.com/?preset=Acid)
 
 <ExampleAttribution />
 <ExamplePreview />

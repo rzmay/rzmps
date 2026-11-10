@@ -151,9 +151,9 @@ export async function reportBenchmarkProgress({
         const interrupted = run.status === 'completed' && cached.metadata.stage < 3;
         const key =
           `${cached.metadata.stage}` +
-          `:` +
+          ':' +
           `${interrupted}` +
-          `:` +
+          ':' +
           `${run.status === 'completed' ? run.conclusion : 'running'}`;
         if (published !== key) {
           // Recheck the live PR and attempt before each write, including an interruption update.

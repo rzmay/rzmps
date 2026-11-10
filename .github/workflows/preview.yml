@@ -15,13 +15,13 @@ jobs:
       - run: npm ci
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npx puppeteer browsers install chrome --install-deps
-      - run: node --test scripts/tests/preview/readback.test.mjs
+      - run: node --test scripts/tests/preview/readback.test.mjs scripts/tests/preview/audio.test.mjs scripts/tests/site/search.test.mjs
       - run: npm run build:modules
       - run: npm run site:deploy
       - run: npm run site:browser-check
       - run: npm run preview:smoke
         env:
-          RZMPS_PREVIEW_OUTPUT: previews/smoke
+          RZMPS_PREVIEW_OUTPUT: benchmark-results/previews/smoke
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -33,5 +33,5 @@ jobs:
         if: always()
         with:
           name: canvas-previews
-          path: previews/smoke
+          path: benchmark-results/previews/smoke
           if-no-files-found: ignore

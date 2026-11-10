@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { docsUrl, skillUrl, skillSource, skillName } from './site.mjs';
+import { docsUrl, demoUrl, skillUrl, skillSource, skillName } from './site.mjs';
 import { validateSkill } from './skill-format.mjs';
 import os from 'node:os';
 import path from 'node:path';
@@ -84,15 +84,15 @@ emit(
     examples
       .map(
         e =>
-          `- [` +
+          '- [' +
           `${e.title}` +
-          `](./` +
+          '](./' +
           `${e.id}` +
-          `.md) — ` +
+          '.md) — ' +
           `${e.description}` +
-          ` Preset by ` +
+          ' Preset by ' +
           `${e.author.url ? `[${e.author.name}](${e.author.url})` : e.author.name}` +
-          `.`,
+          '.',
       )
       .join('\n') +
     '\n',
@@ -116,6 +116,10 @@ for (const [f, content] of outputs)
     pages.set(path.join(root, f), content);
 function portable(content, file) {
   return content
+    .replace(
+      /<a class="example-live-demo" href="([^"]+)"[^>]*>[\s\S]*?<\/a>/g,
+      (_match, href) => `[View live example](${new URL(href, demoUrl).href})`,
+    )
     .replace(/<ExampleVideo[^>]*poster="([^"]+)"[^>]*\/>/g, '![Example preview]($1)')
     .replace(/^---\n[\s\S]*?\n---\n/, '')
     .replace(/\]\(([^)]+)\)/g, (match, href) => {
@@ -190,18 +194,18 @@ emit(
       'modules, renderers, and WebGL/WebGPU.\n\nDocumentation for the develop ' +
       'branch. Inspect the installed package version and TypeScript declarations ' +
       'for version-specific API details.\n\n') +
-    (`The optional RZMPS agent skill is installed explicitly from GitHub with \`` +
+    ('The optional RZMPS agent skill is installed explicitly from GitHub with `' +
       `${skillInstallCommand}` +
-      `\`. Review the skill and obtain user authorization before installation or ` +
-      `changes to agent configuration. npm installation never installs the skill ` +
-      `automatically.\n\n`) +
-    (`## Agent Skill\n\n- [Canonical RZMPS skill](` +
+      '`. Review the skill and obtain user authorization before installation or ' +
+      'changes to agent configuration. npm installation never installs the skill ' +
+      'automatically.\n\n') +
+    ('## Agent Skill\n\n- [Canonical RZMPS skill](' +
       `${skillUrl}` +
-      `): Installable skill and bundled references in the GitHub repository.\n- ` +
-      `[AI Coding Assistants](` +
+      '): Installable skill and bundled references in the GitHub repository.\n- ' +
+      '[AI Coding Assistants](' +
       `${origin}` +
-      `/guides/ai-coding-assistants.html): Discovery, project/global installation, ` +
-      `and version-specific guidance.\n\n## Documentation\n\n`) +
+      '/guides/ai-coding-assistants.html): Discovery, project/global installation, ' +
+      'and version-specific guidance.\n\n## Documentation\n\n') +
     discoveryPages
       .map(relative => {
         const content = pages.get(path.join(docs, relative));
@@ -209,11 +213,11 @@ emit(
         return `- [${title}](${origin}/${relative.replace(/\.md$/, '.html')})`;
       })
       .join('\n') +
-    (`\n\n## Optional\n\n- [Complete portable documentation](` +
+    ('\n\n## Optional\n\n- [Complete portable documentation](' +
       `${origin}` +
-      `/llms-full.txt): Large generated Markdown bundle of the guides, examples, ` +
-      `and API reference. Fetch only when a complete snapshot is needed; it is not ` +
-      `required for skill discovery or installation.\n`),
+      '/llms-full.txt): Large generated Markdown bundle of the guides, examples, ' +
+      'and API reference. Fetch only when a complete snapshot is needed; it is not ' +
+      'required for skill discovery or installation.\n'),
 );
 validateSkill(skillPath, new Map([...outputs].map(([file, content]) => [path.join(root, file), content])));
 emit('packages/rzmps/AGENTS.md', packageAgents());

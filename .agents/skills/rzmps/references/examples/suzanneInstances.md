@@ -9,7 +9,9 @@ Mesh instancing with Suzanne particles and randomized transforms.
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Suzanne Instances](https://rzmps.rzmay.com/docs/previews/suzanneInstances.png)
+Category: effects. Tags: suzanneInstances.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/suzanneInstances.png)
 
 ## Particle System Configuration
 

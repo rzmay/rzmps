@@ -21,7 +21,7 @@ const lod = {
   continuous: true,
 };
 
-export default async function lodStressPreset() {
+export default async function lodStressTestPreset() {
   // #region docs:system:1
   const system = new ParticleSystem({
     duration: 10,
@@ -95,13 +95,13 @@ export default async function lodStressPreset() {
 }
 
 /** @type {import("../types").ExampleMetadata} */
-lodStressPreset.metadata = {
-  author: "rzmay",
-  "id": "lodStress",
-  "title": "LOD Stress Test",
-  "description": "Unified LOD with density compensation under a dense simulation load.",
-  "tags": [
-    "lodStress"
-  ],
-  "category": "effects"
+lodStressTestPreset.metadata = {
+  author: 'rzmay',
+  'id': 'lodStress',
+  'title': 'LOD Stress Test',
+  'description': 'Unified LOD with density compensation under a dense simulation load.',
+  tags: ['lodStress', 'lod', 'performance', 'sprites', 'effects'],
+  previewSettings: {
+    duration: 10,
+  },
 };

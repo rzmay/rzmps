@@ -102,7 +102,7 @@ export default function vortexScene(scene) {
 }
 
 vortexScene.metadata = {
-  "id": "vortex",
-  "title": "Vortex",
-  "author": "rzmay"
+  'id': 'vortex',
+  'title': 'Vortex',
+  'author': 'rzmay'
 };

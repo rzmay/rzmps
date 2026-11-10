@@ -9,7 +9,9 @@ Additive blending with soft particles and layered lifetime color ramps for lumin
 
 Preset by [rzmay](https://github.com/rzmay).
 
-![Generated preview of Additive Smoke](https://rzmps.rzmay.com/docs/previews/additiveSmoke.png)
+Category: effects. Tags: additiveSmoke.
+
+![Example preview](https://rzmps.rzmay.com/docs/previews/additiveSmoke.png)
 
 ## Particle System Configuration
 
