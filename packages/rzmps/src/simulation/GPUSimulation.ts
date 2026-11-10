@@ -2262,6 +2262,7 @@ export default class GPUSimulation {
       const spatialGrid = modifier.getParticleSpatialGrid(this.system);
       const moduleContext = {
         ...context,
+        module: modifier,
         events: modifier.gpuExecutionContext.events,
         spatialGrid,
       };

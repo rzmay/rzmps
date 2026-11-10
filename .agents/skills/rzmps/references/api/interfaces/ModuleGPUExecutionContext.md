@@ -156,6 +156,18 @@ gravityNode: Node<"vec3">;
 
 ***
 
+<a id="module"></a>
+
+### module
+
+```ts
+readonly module: Module;
+```
+
+Owning module, including its cached dynamic GPU value evaluator.
+
+***
+
 <a id="simulationtoworldnode"></a>
 
 ### simulationToWorldNode

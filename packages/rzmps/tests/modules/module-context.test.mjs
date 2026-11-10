@@ -15,6 +15,7 @@ test('functional preparation, conditions, and updates share one frozen context a
   const updates = [];
   const module = new Module((particle, dt, context) => {
     updates.push(context);
+    assert.equal(context.module, module);
     assert.equal(dt, context.deltaTime);
     assert.equal(context.octree, module.getParticleOctree());
     if (particle === context.system.particles[0]) context.system.emitEvent('tick', { step: 2 });
@@ -23,12 +24,14 @@ test('functional preparation, conditions, and updates share one frozen context a
     useOctree: true,
     prepare(context) {
       preparations.push(context);
+      assert.equal(context.module, module);
       assert.ok(context.octree);
       assert.ok(Object.isFrozen(context));
       assert.ok(Object.isFrozen(context.events));
     },
     condition(_particle, _dt, context) {
       conditions.push(context);
+      assert.equal(context.module, module);
       return true;
     },
   });

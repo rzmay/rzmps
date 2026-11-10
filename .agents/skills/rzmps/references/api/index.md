@@ -100,6 +100,7 @@ Build advanced GPU extensions with particle-node views, buffers, selective readb
 - [GPUAllocationWriter](classes/GPUAllocationWriter.md)
 - [GPUCollisionEventBufferState](Supporting-Types/classes/GPUCollisionEventBufferState.md)
 - [GPUCollisionEventWriter](Supporting-Types/classes/GPUCollisionEventWriter.md)
+- [GPUDynamicParameterStore](Supporting-Types/classes/GPUDynamicParameterStore.md)
 - [GPUEmissionRunBufferState](classes/GPUEmissionRunBufferState.md)
 - [GPUEmitterInstanceBufferState](classes/GPUEmitterInstanceBufferState.md)
 - [GPUEmitterInstanceRuntime](Supporting-Types/classes/GPUEmitterInstanceRuntime.md)

@@ -120,6 +120,11 @@ Its per-particle callbacks intentionally do nothing. The demo factory returns a 
 keep scheduling on the system's clock without owning an animation loop. Applications with their own animation loop
 can instead schedule events there before calling the root system's update().
 
+CPU preparation, conditions, and particle callbacks also receive `context.module`, the owning module.
+Use it from arrow functions instead of relying on a `this` binding. The context object is frozen;
+its module reference points to the live module, and `context.octree` stays live when preparation
+creates the managed tree.
+
 ## Managed Octree
 
 Particle-to-particle comparisons should use a managed `ParticleOctree` instead of scanning the

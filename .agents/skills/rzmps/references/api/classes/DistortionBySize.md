@@ -101,6 +101,22 @@ dependents: Module[] = [];
 
 ***
 
+<a id="evaluatedynamicgpu"></a>
+
+### evaluateDynamicGPU
+
+```ts
+readonly evaluateDynamicGPU: GPUDynamicParameterStore;
+```
+
+Cached GPU dynamic values, shared by class methods and functional GPU callbacks.
+
+#### Inherited from
+
+[`Module`](Module.md).[`evaluateDynamicGPU`](Module.md#evaluatedynamicgpu)
+
+***
+
 <a id="events"></a>
 
 ### events

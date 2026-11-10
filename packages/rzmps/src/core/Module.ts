@@ -21,9 +21,13 @@ import ParticleOctree, {
 } from '../spatial/structures/ParticleOctree';
 
 export interface ModuleExecutionContext extends EventExecutionContext {
+  /** Owning module; available to functional callbacks without a `this` binding. */
+  readonly module: Module;
   readonly octree?: ParticleOctree<unknown>;
 }
 export interface ModuleGPUExecutionContext extends GPUParticleUpdateContext {
+  /** Owning module, including its cached dynamic GPU value evaluator. */
+  readonly module: Module;
   readonly events: GPUEventBatch;
   readonly spatialGrid?: ParticleSpatialGrid;
 }
@@ -136,7 +140,8 @@ export default class Module extends EventReceiver {
 
   priority = Priority.Permanent;
   modifyGPU: ModuleGPUUpdate;
-  protected readonly evaluateDynamicGPU = new GPUDynamicParameterStore();
+  /** Cached GPU dynamic values, shared by class methods and functional GPU callbacks. */
+  public readonly evaluateDynamicGPU = new GPUDynamicParameterStore();
   /** @deprecated Use evaluateDynamicGPU; retained for existing component subclasses. */
   protected get gpuParameters(): GPUDynamicParameterStore { return this.evaluateDynamicGPU; }
   private _gpuParameterVersion = 0;
@@ -217,7 +222,7 @@ export default class Module extends EventReceiver {
   /** @internal Freezes one event batch for preparation, conditions, and all particle callbacks. */
   protected override createExecutionContext(context: EventExecutionContext): ModuleExecutionContext {
     // Preparation can create the managed tree; keep the shared context's octree access live.
-    return Object.freeze(Object.defineProperty({ ...context }, 'octree', {
+    return Object.freeze(Object.defineProperty({ ...context, module: this }, 'octree', {
       enumerable: true,
       get: () => this.octree,
     }));

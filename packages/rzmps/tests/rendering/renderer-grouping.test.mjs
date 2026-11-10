@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Vector3, Color } from 'three';
-import { Renderer, Particle, ParticleSystem, LightRenderer, Emitter, CompensationMode, createGPUParticleBufferState } from '../../build/index.mjs';
+import { Renderer, Particle, ParticleSystem, LightRenderer, Emitter, CompensationMode, createGPUParticleBufferState, createGPUParticleRenderBufferState } from '../../build/index.mjs';
 class Capture extends Renderer {
   setup() {} clear() {} destroy() { this.reset(); }
   _update(particles) { this.output = particles; }
@@ -189,3 +189,39 @@ stable.count = 2048; stable.update(dense, system);
 assert.equal(stable.output.length, 2048);
 assert.equal(stable.output.reduce((n, p) => n + p.contribution, 0), 4096);
 console.log('Stateless renderer grouping tests passed.');
+
+// CPU readback must include material-copy channels in the render-buffer stride.
+const groupedCapture = new GPUCapture({ count: 2 });
+groupedCapture.updateGPU(createGPUParticleBufferState(population), system);
+const grouping = groupedCapture._gpuGrouping;
+const output = createGPUParticleRenderBufferState(2);
+output.ensureCount(2);
+const packed = output.attributes.floatData.array;
+const stride = packed.length / 2;
+for (let index = 0; index < 2; index++) {
+  const offset = index * stride;
+  packed.set([index + 1, 2, 3, 0.5 + index * 0.1], offset);
+  packed.set([1, 0.25, 0.04, 0.3], offset + 12);
+  packed.set([4, 5, 6, 7], offset + 16);
+  packed.fill(999, offset + 20, offset + stride);
+}
+grouping.output = output;
+grouping.layout = () => ({ meta: 0 });
+grouping.renderer = {
+  getArrayBufferAsync(attribute) {
+    if (attribute === output.attributes.floatData) return Promise.resolve(packed.buffer.slice(0));
+    if (attribute === output.attributes.uintData) return Promise.resolve(new Uint32Array([1, 0, 1, 0, 1, 0, 2, 0]).buffer);
+    return Promise.resolve(new Uint32Array([8, 2]).buffer);
+  },
+};
+const groups = await grouping.readback();
+assert.equal(groups.length, 2);
+for (let index = 0; index < groups.length; index++) {
+  assert.equal(groups[index].position.x, index + 1);
+  assert.ok(Math.abs(groups[index].alpha - (0.5 + index * 0.1)) < 1e-6);
+  assert.equal(groups[index].color.r, 1);
+  assert.equal(groups[index].color.g, 0.25);
+  assert.ok(Math.abs(groups[index].color.b - 0.04) < 1e-6);
+  assert.deepEqual(groups[index].velocity.toArray(), [5, 6, 7]);
+  assert.equal(groups[index].contribution, 4);
+}
