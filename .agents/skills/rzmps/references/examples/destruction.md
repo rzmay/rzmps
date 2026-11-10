@@ -22,7 +22,7 @@ zero so the small metal ball neither shrinks nor tints its surface fragments.
 Both systems request GPU processing; WebGL uses the CPU collision path.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L125)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L139)
 
 ```js
   const system = new ParticleSystem({
@@ -86,7 +86,7 @@ Both systems request GPU processing; WebGL uses the CPU collision path.
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L192)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L206)
 
 ```js
   const debris = new ParticleSystem({
@@ -130,7 +130,7 @@ Both systems request GPU processing; WebGL uses the CPU collision path.
 ```
 
 
-[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L239)
+[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L253)
 
 ```js
   system.addSubSystem(debris, {
@@ -158,7 +158,7 @@ the five Destruction GLBs at their authored scale (about 0.08–0.16 units wide)
 The fragments have mass and two-to-three-second lifetimes; they are not normalized to unit size.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L129)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L143)
 
 ```js
     emitters: new Emitter({
@@ -176,7 +176,7 @@ The fragments have mass and two-to-three-second lifetimes; they are not normaliz
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L199)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L213)
 
 ```js
     emitters: new Emitter({
@@ -203,14 +203,14 @@ without rigid-body contact torque or a separate Coulomb-friction solver.
 Contacts retain the material, UV coordinates and world-space UV gradients of the hit triangle.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L143)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L157)
 
 ```js
     modules: new Collision({ bounce: 0.55, dampen: 0.1 }),
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L212)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L226)
 
 ```js
     modules: [
@@ -253,23 +253,35 @@ same hit data used by subsystem emission and returns per-mark overrides. Marks l
 fade in their final quarter, and have a cap of 384. They do not inherit the ball's small scale or tint.
 
 
-[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L77)
+[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L79)
 
 ```js
   // Load each matching map bundle together, then choose one whole material per impact.
   const impactURLs = [
-    { normalMap: impact1Normal, alphaMap: impact1Opacity,
-      aoMap: impact1AO, roughnessMap: impact1Roughness },
-    { normalMap: impact2Normal, alphaMap: impact2Opacity,
-      aoMap: impact2AO, roughnessMap: impact2Roughness },
-    { normalMap: impact3Normal, alphaMap: impact3Opacity,
-      aoMap: impact3AO, roughnessMap: impact3Roughness },
-    { normalMap: impact4Normal, alphaMap: impact4Opacity,
-      aoMap: impact4AO, roughnessMap: impact4Roughness },
-    { normalMap: impact5Normal, alphaMap: impact5Opacity,
-      aoMap: impact5AO, roughnessMap: impact5Roughness },
-    { normalMap: impact6Normal, alphaMap: impact6Opacity,
-      aoMap: impact6AO, roughnessMap: impact6Roughness },
+    {
+      normalMap: impact1Normal, alphaMap: impact1Opacity,
+      aoMap: impact1AO, roughnessMap: impact1Roughness
+    },
+    {
+      normalMap: impact2Normal, alphaMap: impact2Opacity,
+      aoMap: impact2AO, roughnessMap: impact2Roughness
+    },
+    {
+      normalMap: impact3Normal, alphaMap: impact3Opacity,
+      aoMap: impact3AO, roughnessMap: impact3Roughness
+    },
+    {
+      normalMap: impact4Normal, alphaMap: impact4Opacity,
+      aoMap: impact4AO, roughnessMap: impact4Roughness
+    },
+    {
+      normalMap: impact5Normal, alphaMap: impact5Opacity,
+      aoMap: impact5AO, roughnessMap: impact5Roughness
+    },
+    {
+      normalMap: impact6Normal, alphaMap: impact6Opacity,
+      aoMap: impact6AO, roughnessMap: impact6Roughness
+    },
   ];
   const [fragments, impactTextures] = await Promise.all([
     loadFragments(),
@@ -296,7 +308,7 @@ fade in their final quarter, and have a cap of 384. They do not inherit the ball
 ```
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L146)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L160)
 
 ```js
     renderers: [
@@ -343,7 +355,7 @@ fade in their final quarter, and have a cap of 384. They do not inherit the ball
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/destruction.js#L226)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L240)
 
 ```js
     // Neutral factors preserve the source appearance. Render each fragment only once.

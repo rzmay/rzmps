@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import Module, { type ModuleExecutionContext, ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleExecutionContext, ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 
 export interface SpeedByDepthOptions extends Partial<ModuleOptions> {
   speed: ValueByParameter<number>;
@@ -47,7 +47,7 @@ class SpeedByDepth extends Module {
       priority: Module.Priority.PreMovementTransient,
       modifyGPU: (particle) => {
           particle.speed.assign(
-            particle.speed.mul(this.gpuParameters.parameterNumber(
+            particle.speed.mul(this.evaluateDynamicGPU.parameterNumber(
               'speed',
               () => this.options.speed,
               this.getDepthTimeGPU(particle.position),

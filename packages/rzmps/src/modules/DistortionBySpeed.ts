@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
-import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 import { SpeedRange } from './ColorBySpeed';
 
 export interface DistortionBySpeedOptions extends Partial<ModuleOptions> {
@@ -31,7 +31,7 @@ class DistortionBySpeed extends Module {
       modifyGPU: (particle) => {
           particle.distortionStrength.assign(
             particle.distortionStrength.mul(
-              this.gpuParameters.parameterNumber(
+              this.evaluateDynamicGPU.parameterNumber(
                 'distortionStrength',
                 () => this.options.distortionStrength,
                 this.getSpeedTimeGPU(particle.velocity.length()),
@@ -52,10 +52,10 @@ class DistortionBySpeed extends Module {
   }
 
   private getSpeedTimeGPU(speed: Node<'float'>) {
-    const min = this.gpuParameters.number('speedRange.min', () => (
+    const min = this.evaluateDynamicGPU.number('speedRange.min', () => (
       Array.isArray(this.options.speedRange) ? this.options.speedRange[0] : this.options.speedRange?.min
     ), speed, 0);
-    const max = this.gpuParameters.number('speedRange.max', () => (
+    const max = this.evaluateDynamicGPU.number('speedRange.max', () => (
       Array.isArray(this.options.speedRange) ? this.options.speedRange[1] : this.options.speedRange?.max
     ), speed, 1);
     return speed.sub(min).div(max.sub(min).max(Number.EPSILON)).clamp(0, 1);

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import Module, { type ModuleExecutionContext, ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleExecutionContext, ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 
 export interface DistortionByDepthOptions extends Partial<ModuleOptions> {
   distortionStrength: ValueByParameter<number>;
@@ -49,7 +49,7 @@ class DistortionByDepth extends Module {
       priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           particle.distortionStrength.assign(
-            particle.distortionStrength.mul(this.gpuParameters.parameterNumber(
+            particle.distortionStrength.mul(this.evaluateDynamicGPU.parameterNumber(
               'distortionStrength',
               () => this.options.distortionStrength,
               this.getDepthTimeGPU(particle.position),

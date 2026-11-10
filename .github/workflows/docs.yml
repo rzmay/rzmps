@@ -9,6 +9,7 @@ on:
         "examples/**",
         "packages/rzmps/**",
         "scripts/docs/**",
+        "scripts/preview/**",
         "scripts/site/**",
         "typedoc.json",
         "package*.json",
@@ -20,7 +21,7 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PUPPETEER_SKIP_DOWNLOAD: "true"
     steps:
@@ -30,8 +31,17 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npx puppeteer browsers install chrome
+      - run: node --test scripts/tests/preview/readback.test.mjs
       - run: npm run site:build
       - run: npm run site:check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preview-diagnostics
+          path: benchmark-results/preview-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: combined-static-site

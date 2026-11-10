@@ -1,0 +1,40 @@
+name: PR Dependency Comment
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  issues: write
+
+concurrency:
+  group: dependency-comment-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Update dependency warning comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url');
+            const path = require('node:path');
+            const { commentDependencies } = await import(pathToFileURL(path.resolve('scripts/dependencies/comment.mjs')).href);
+            await commentDependencies({ github, context, core });

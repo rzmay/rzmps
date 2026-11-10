@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress';
 import { docsUrl } from '../../../scripts/docs/site.mjs';
 import path from 'node:path';
-import { discoverExamples, resolveExample } from '../../../scripts/docs/examples.mjs';
+import { discoverExamples, resolveExample, exampleSourcePath } from '../../../scripts/docs/examples.mjs';
 import { guideNavigation } from '../../../scripts/docs/navigation.mjs';
 import examples from './examples.generated.json';
 import apiSections from './api.generated.json';
@@ -38,7 +38,7 @@ export default defineConfig({
         const exampleId = code.match(/^example: ([\w-]+)$/m)?.[1];
         const example = discoverExamples().find(e=>e.id===exampleId);
         if (!example) throw new Error(`Unknown example: ${id}`);
-        this.addWatchFile(path.resolve(import.meta.dirname, '../../../examples', example.file));
+        this.addWatchFile(exampleSourcePath(example));
         return resolveExample(code, example);
       },
     }],

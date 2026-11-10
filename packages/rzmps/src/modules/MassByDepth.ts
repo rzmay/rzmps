@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import Module, { type ModuleExecutionContext, ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleExecutionContext, ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import evaluateByParameterNumber from '../helpers/evaluateByParameterNumber';
+import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 
 export interface MassByDepthOptions extends Partial<ModuleOptions> {
   mass: ValueByParameter<number>;
@@ -49,7 +49,7 @@ class MassByDepth extends Module {
       priority: Module.Priority.Transient,
       modifyGPU: (particle) => {
           particle.mass.assign(
-            particle.mass.mul(this.gpuParameters.parameterNumber(
+            particle.mass.mul(this.evaluateDynamicGPU.parameterNumber(
               'mass',
               () => this.options.mass,
               this.getDepthTimeGPU(particle.position),

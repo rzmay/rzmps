@@ -344,7 +344,7 @@ CPU readback. CPU listeners, CPU-only predicates or CPU event handlers can requi
 particle and allocation diagnostics have their own independent readback behavior.
 
 Three separate limits matter: distinct event names (32), floats per payload (12), and records in the shared event buffer
-per frame (`ParticleSystem.GPU_EVENT_BUFFER_CAPACITY`). Custom events share capacity with spawn, death and collision
+per frame (`ParticleSystem.Settings.GPU_EVENT_BUFFER_CAPACITY`). Custom events share capacity with spawn, death and collision
 records. Overflow bounds-checks writes, discards excess records and increments the existing overflow diagnostic.
 Concurrent persistent runs also have a finite destination capacity; size child `maxParticles` and event capacity for the
 intended overlap. CPU-staged births obey child particle capacity and available GPU slots. Very dense events can be

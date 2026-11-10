@@ -11,6 +11,7 @@ Start with ParticleSystem, which owns simulation, and Particle, which holds each
 - [ParticleSystem](classes/ParticleSystem.md)
 - [Particle](classes/Particle.md)
 - [EventReceiver](classes/EventReceiver.md)
+- [GlobalSettings](Supporting-Types/classes/GlobalSettings.md)
 - [RegisteredEmissionSource](classes/RegisteredEmissionSource.md)
 
 ## Emitters

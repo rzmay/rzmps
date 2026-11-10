@@ -2,11 +2,11 @@
   "generatedBy": "npm run docs:previews",
   "examples": {
     "acid": {
-      "inputHash": "d2f1432e942e05c79f36e84db73570bf908773d4c1feebcc614dfb07c6939213",
-      "imageHash": "edfa2d0dae274ca1c03e4cb51cc0b34fa7cc43c375f482327451e2bdcb25dc84",
+      "inputHash": "c2e61e112d3a83e90af54961e6f1a6fd1abbf4334ccec6203da16f8a97cb935d",
+      "imageHash": "e6c19a2c4958b7b1288c645d723b10953d3d1d362cd674f3e67e93be12dbcdc9",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -86,11 +86,11 @@
       "warnings": []
     },
     "additiveSmoke": {
-      "inputHash": "61a399e533107110c1e37f270b9fc74d13c5ab3e205e9dc7e9e798b35c67dd24",
-      "imageHash": "c7f00b0d2a5461d1603313ba299e9aa16693db7953860156795b7591f5c801e9",
+      "inputHash": "b5a2dd78eaa8313b1c6fc4d2eee71ed3010429cc275215e7614f7b1e66fa7776",
+      "imageHash": "133cbedfc56fb0db9bd2c2cd0feca091d6c2b233cd21331e3465a1f93c8983da",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -134,11 +134,11 @@
       "warnings": []
     },
     "boids": {
-      "inputHash": "74576d520800c311332afd8a4117c2959c28c5a6d6056c6d3dc14213bd3a159b",
-      "imageHash": "608a0876bb475d672e3aad91e2b1d1d019024c6df4ec2703981dca8496a5c402",
+      "inputHash": "3c703c83e82785395aedf806c8bdabb8a4f26094f2d073d668807c86ac9b9b08",
+      "imageHash": "71a002563d5a66d2065ddc18086f84086723f7e04d5f8b6771a5ba089be2ce5d",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -182,18 +182,18 @@
       "warnings": []
     },
     "bubbles": {
-      "inputHash": "c2e1d320980e2a44a99e2b96717fefdc78b989d0009810689709320266eb7e55",
-      "imageHash": "0e736147bed9442a7d9b20d83762edfc03e53ca9969ef2b10863ad75d2663fa6",
+      "inputHash": "f28e9336f2a98c0e07d49898e6be7ddcb4e36e23a5964355d8decc8890b8afc7",
+      "imageHash": "a9986521b1ce02bc6725697b9277803183cd2cca43c5d0753d7728f0f6d49eb5",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
             "name": "Audio Bubbles",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 17,
+            "simulated": 11,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -210,7 +210,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 17,
+        "particles": 11,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -230,11 +230,11 @@
       "warnings": []
     },
     "collision": {
-      "inputHash": "9747a61073f7dd0afcf9de3be30ba20fa0b68ef50cdde94e9cdbcbd5f0a24d10",
-      "imageHash": "6387eafaf0d13c3963e9f69abab159b002c58b50d28dd0b00c48e8e610b677f6",
+      "inputHash": "302795382eb3ac04841db013b5244cf1145bdf6a2d2412ab2c03ab9f490ab59d",
+      "imageHash": "816547b6ad1b01f41847eb0cfa5ebe5df9b8228b45968e7b0625eed25f69e4d2",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -278,11 +278,11 @@
       "warnings": []
     },
     "collisionSubEmitters": {
-      "inputHash": "b00a51e28816b27f442a9c58f2f08dcccae38ccc4fe3a0c8afbbbb9f4728fee2",
-      "imageHash": "0abf4008a17ca5a5a8cb3ba23b5bdd4a5c10484fbc0c817a48c196a089952d8b",
+      "inputHash": "75554dc41554a0998b7dc5b4a3a448af3fb8774a8e5ba43449481b40649807ff",
+      "imageHash": "f0d48de38b39666173f311e4ca4e2ccc77f94039619803abd7536f49e3c96720",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -344,11 +344,11 @@
       "warnings": []
     },
     "cubes": {
-      "inputHash": "701807f856391b892b1dba3246fb7daabe983235e9171dc40e3c21b29d09850e",
-      "imageHash": "97bda36bd717446b026aeae69703d2ee955209cdd12ca57ef55ff2e4e984a1ba",
+      "inputHash": "ba2ffdf192b40ec8c5b9dfeea7825404cb50bd10228497e044c5e8614d7973a4",
+      "imageHash": "0a55a2ad97cd057ba196b38917abb754e041356ee64ce695e926e7a6dd7bfc0a",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -392,11 +392,11 @@
       "warnings": []
     },
     "destruction": {
-      "inputHash": "66e60b448ba3f95574e377e212453d67cee1910d54c67c1ceaacce9969882602",
-      "imageHash": "5285993b84cbd664078e7c5258dd4f51cc3e88f7263350bde5b336669131a885",
+      "inputHash": "68f55d8a495da2827225d715a6312c5ec26e346ae6efbb9b89ee79b191282de1",
+      "imageHash": "577058a589704a20acaaa647f0fae805b1bf33c5c83272faf4601fc4fab7b407",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -421,7 +421,7 @@
             "name": "Surface Fragments",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 167,
+            "simulated": 121,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -438,7 +438,7 @@
         ],
         "time": 2.5,
         "step": 150,
-        "particles": 174,
+        "particles": 128,
         "simulationSpeed": 1,
         "simulatedSeconds": 2.5
       },
@@ -458,11 +458,11 @@
       "warnings": []
     },
     "dopplerBullet": {
-      "inputHash": "91c14cab22a501775507ed8854be3a4f7d7df44349e9b7d434a08869c5a40670",
-      "imageHash": "f421b0195a408d834ab270cb2da96ee1b4a0c40a07d47c1b8c9bddb4dfb2f6b2",
+      "inputHash": "16744ff4fe297140cfc6b0e94efaaee662edfc42b04a7cdd1b7b21dbea489778",
+      "imageHash": "d2bd2a06c8616a0645796f51fd859fee89384dd1c77e3a7b422191826a0f90b2",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -487,7 +487,7 @@
             "name": "",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 219,
+            "simulated": 233,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -505,7 +505,7 @@
             "name": "",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 30,
+            "simulated": 31,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -559,7 +559,7 @@
             "name": "Bullet Impact Dust",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 5,
+            "simulated": 2,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -576,7 +576,7 @@
         ],
         "time": 4,
         "step": 240,
-        "particles": 256,
+        "particles": 268,
         "simulationSpeed": 1,
         "simulatedSeconds": 4
       },
@@ -596,11 +596,11 @@
       "warnings": []
     },
     "fire": {
-      "inputHash": "1b3d751af047bd06265695e60633a59a22092a3c9c3c690d6504ba3284688979",
-      "imageHash": "1c4229c10e02de4c9ff6880997a49cd9d298b03dd785ef9af758e3347da2e7f1",
+      "inputHash": "a524e22b9f9ea77fd8621c29598e8f5b453ccefdd260f3e8c817a0e6e2e2b393",
+      "imageHash": "e645bf351874f3afe324f638a3fd2dedff886e777180f5759c5ba3a7c65e98fa",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -618,14 +618,14 @@
             "lights": {
               "count": 18,
               "active": 18,
-              "peakIntensity": 1.6207508691757697
+              "peakIntensity": 1.6401609132680903
             }
           },
           {
             "name": "",
             "quality": 1,
             "gpuProcessingActive": false,
-            "simulated": 247,
+            "simulated": 245,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -642,7 +642,7 @@
         ],
         "time": 3,
         "step": 180,
-        "particles": 368,
+        "particles": 366,
         "simulationSpeed": 1,
         "simulatedSeconds": 3
       },
@@ -662,11 +662,11 @@
       "warnings": []
     },
     "fireball": {
-      "inputHash": "a7dee3ef60f11fe38d8b4029010cf374b82250cec67b40ccbb6ec80bd18553da",
-      "imageHash": "b4d0a2d318dbe22294ad69fb39fa89c017b7d6e5bb0a496a029683f80ab2ea5f",
+      "inputHash": "442b82a33a291c450f66b0e4a9992785ac797a7a8997ecaad63267092689fb97",
+      "imageHash": "5e6ebccd6b12ce5ec2a0660f8e6750de048efce7bcd7334b9a89e62586fd0100",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -684,7 +684,7 @@
             "lights": {
               "count": 2,
               "active": 2,
-              "peakIntensity": 2.1064814814814583
+              "peakIntensity": 2.1064814814814588
             }
           },
           {
@@ -728,11 +728,11 @@
       "warnings": []
     },
     "fireflies": {
-      "inputHash": "a0cd11e9a7848a086652fa261f76f327ef3b1a730bc7a468f83f4e08c90446c2",
-      "imageHash": "e032854f91ca2c0535a6984ada414a1231c2b868f32810fcd65d4b334a497834",
+      "inputHash": "3a0dce125e305f45fd2a51f29b5316b4f7d9713e4da2b81c59b8df871abfc95a",
+      "imageHash": "ea200847db8f13124f172274c70eaac3ecac06155f75b1a9189d3bab2128f8c6",
       "backend": "webgpu",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -757,7 +757,7 @@
             "name": "Firefly Pulses",
             "quality": 1,
             "gpuProcessingActive": true,
-            "simulated": 12,
+            "simulated": 9,
             "events": {
               "readbackCount": 0,
               "buffers": 0,
@@ -766,19 +766,19 @@
               "nextDispatchSequence": 1
             },
             "lights": {
-              "count": 3,
+              "count": 5,
               "active": 2,
-              "peakIntensity": 0.496574035297839
+              "peakIntensity": 0.3643590718211613
             }
           }
         ],
         "attachmentValidation": {
-          "pulses": 12,
-          "maxDistance": 0.006501584096997659
+          "pulses": 9,
+          "maxDistance": 0.006906130362072819
         },
         "time": 6,
         "step": 360,
-        "particles": 108,
+        "particles": 105,
         "simulationSpeed": 1,
         "simulatedSeconds": 6
       },
@@ -827,11 +827,11 @@
       ]
     },
     "fireworks": {
-      "inputHash": "517cba051e6feb03952fac145b712da1bb376212f5cd7880ad4befc4b1ac8658",
-      "imageHash": "d35447c7d670a668ae2ecc03b81cf2183b1a11d236d25bf4a73352f44803c0df",
+      "inputHash": "dba350e6464197530fea29929a63ce7207237e7b0ac5057cc88e809f2512c18e",
+      "imageHash": "20c1f66a5a600057b436ab1457c009f7b4abe8fea64df8608bbc147ed92160b7",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -885,7 +885,7 @@
             "lights": {
               "count": 10,
               "active": 10,
-              "peakIntensity": 33.928194587415504
+              "peakIntensity": 33.9281945874155
             }
           }
         ],
@@ -911,11 +911,11 @@
       "warnings": []
     },
     "lodStress": {
-      "inputHash": "919cf1a358273872334ac50408ffbceff7388aa3cb9080fc347d9adb2d362b28",
-      "imageHash": "070ed01eae1362052b7b92f88c9b481c083bc1e5f512e73132663e512a8e8ca4",
+      "inputHash": "ed12cf2c2f08263590cf9e83ec6790556818ba760d56d67a820846a183d1a072",
+      "imageHash": "bc078ac06e015a7ef1330ec5254da0a49a31223ee95ddef7994659d3f2574c90",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -959,11 +959,11 @@
       "warnings": []
     },
     "particleTrail": {
-      "inputHash": "a47245295c291ce778640fc3c4557ae8a45ca598a763596e97f3d75224091c12",
-      "imageHash": "8fc7732178b9716b9e4fdb42f08c0071e06021ca79399e24b26ba2bd3ae299bc",
+      "inputHash": "09c41fa096fc46e00386ab27a5be9dd4b524107057dd611538958d88e7fd88a4",
+      "imageHash": "7102e63c5ada6492118509a625dc447eedeb1f76e126ba6cba45020e0b11b413",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -1007,11 +1007,11 @@
       "warnings": []
     },
     "ribbonTrail": {
-      "inputHash": "12a759157a325da0c9c8e6d0d6aebc6d39cc854dc5c1ba68385ab273a92b0681",
-      "imageHash": "9a75d4d64fa082a8ac925590caeb52a74900a65ea4e42ea1bd11f7b39f9a00e1",
+      "inputHash": "1bdea512c61b8b8e2a5edfa5db5452e4b3a807c3a06c6779927f67a17349e736",
+      "imageHash": "5f559cf60bf2f0192079ec67fa7eca99931ab933a93b852071a2bea32bc03790",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -1055,11 +1055,11 @@
       "warnings": []
     },
     "smoke": {
-      "inputHash": "38b24cb3e49ccc55932e8e755aa4c522b7373c00be51b8679cfe5559acbe2767",
-      "imageHash": "e3b6a46d319bfad2310669ad71487462af53f4c834417643aec8bb777c972264",
+      "inputHash": "e7d9b2932fd2841dbd9ec920435b625c46cc7736dd7b21f18a230af00566a095",
+      "imageHash": "a03ba13b3c7858227c2049cbae81182314c9111f83cd3483581d10197f1298aa",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -1103,11 +1103,11 @@
       "warnings": []
     },
     "snow": {
-      "inputHash": "86d12ee9ee7cdcd90e42e2bc54d61015dcf4eecdd93883457bca7d4e7933f727",
-      "imageHash": "163a02dc0e713573ad136d9589ca8d9b4e61d47c77755a3657268cba5d7d95ae",
+      "inputHash": "233c0ecbcfc5280813d9522f186c28359fde96f698b73f7719c11b9a707c5d46",
+      "imageHash": "01870efb5c71eaee54744b60f6216ec059a009b9b271776af01a7beb60806e87",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -1151,11 +1151,11 @@
       "warnings": []
     },
     "spheres": {
-      "inputHash": "22f59e1c92c9823dff3a453047545db70e7ac31090b93cb9225b61f457595e51",
-      "imageHash": "086b675e123ab704651c20f6940751b55feec42962a2b80f08cee7cca8fec102",
+      "inputHash": "02ba793b5bd1724c404420443278c3ecd98de7578894ca65f083d176c6c814d0",
+      "imageHash": "a72794fd38454765247b864ba63fc664dc4c93db7c9991dd6a18af6c44165fc4",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -1199,11 +1199,11 @@
       "warnings": []
     },
     "splatter": {
-      "inputHash": "52e04a5665b0245441bdef4d5e6656e987000b96fc26d9da018040b5392936a1",
-      "imageHash": "db8eb0b1a04967cd792b04c8ab27707d3b1ca65d5351e6b26d91426908c73177",
+      "inputHash": "6760b75c544897095021421c4d12c96670a2d14944bb6153a9088e49098af834",
+      "imageHash": "cd1235ccc68505926d24ff43d1b595e5fc82b7f7ab740bb28a824a954a4e2a78",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -1247,11 +1247,11 @@
       "warnings": []
     },
     "stylizedDepth": {
-      "inputHash": "abafd56248cb59cad9ffba95fe71c39cf971e9c7afa4b1095b41559adfb2a545",
-      "imageHash": "16a1ea65a6bea8f47f8897dcc8e7bb1914d2799b92d53c810340477b2e8c224d",
+      "inputHash": "b7cb47a54ef39c28316c652f32cee17a4a66c1f1bd999de2f9f4187a13ea1a74",
+      "imageHash": "4576c7ffe7e6ace22d453c85e8520ab2106e9e2910f858f40e80c01172a4d26c",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -1295,11 +1295,11 @@
       "warnings": []
     },
     "suzanne": {
-      "inputHash": "adecb65bf0256d40adf393c95da1e5ab93ab74e32f9bd09a83e5808a46fb4571",
-      "imageHash": "e76d160891566fbd3426da4d764e2c799904669067229213ac3a80f67587a7db",
+      "inputHash": "dd7d0ff30c1e1ad9e030e3b699e48aea4f09611ea8a58d38eac764a8ac2944eb",
+      "imageHash": "d73bd68f7ab737e8a79db6731623fbb396d34c81599f36a612e3fc2bc148960e",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -1343,11 +1343,11 @@
       "warnings": []
     },
     "suzanneInstances": {
-      "inputHash": "75522c9956fc40010804698de6898e5a1b340c24a635db6f57c3366d7eac8e91",
-      "imageHash": "6980761eb4b1cd2a526f3b5c4a54546f30ed417822317cb9a37f2c542f95ca72",
+      "inputHash": "cb70f5f7f19057f30857af5af4fa7401efa1492743cadc46fa5be81d72c62637",
+      "imageHash": "304037e7fe4683589889cf12cc6cf5fdf259c7a0f5294d1ef35e19640d1163de",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {
@@ -1391,11 +1391,11 @@
       "warnings": []
     },
     "tags": {
-      "inputHash": "ff6b1bb4b5f6178030d6425a13ed7cf13451bcd26d2a5cb77491510c7d9d00c1",
-      "imageHash": "3a2fa6c765fa45890989c9b7bb1392970797b03e34cf5473ec780ff6b06f29bf",
+      "inputHash": "2162075523674570082b88b1b8243587186f85ec1cdd3bf879b42d2e80910838",
+      "imageHash": "16f61ebab1323e2d16b8ee2101196f8f914d9f0368eedfa1cfaab2d48eb99bac",
       "backend": "webgl",
-      "width": 640,
-      "height": 400,
+      "width": 1920,
+      "height": 1080,
       "capture": {
         "systems": [
           {

@@ -9,7 +9,7 @@ export const buildArtifacts = [
   'apps/docs/public/llms.txt',
   'apps/docs/public/llms-full.txt',
   'apps/docs/public/favicon.png',
-  'examples/index.js',
-  'packages/rzmps/AGENTS.md',
+  'apps/docs/public/previews/',
 ];
-export const isBuildArtifact = file => buildArtifacts.some(entry => entry.endsWith('/') ? file.startsWith(entry) : file === entry);
+export const isBuildArtifact = file =>
+  buildArtifacts.some(entry => (entry.endsWith('/') ? file.startsWith(entry) : file === entry));

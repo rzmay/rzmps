@@ -1,10 +1,10 @@
-import type { ColorInput } from '../types/ValueInput';
+import type { ColorInput } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
-import evaluateDynamicColor from '../helpers/evaluateDynamicColor';
-import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { DynamicValue } from '../values/dynamicValue.types';
+import evaluateDynamicColor from '../values/evaluateDynamicColor';
+import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
 
 export interface ColorOverLifetimeOptions extends Partial<ModuleOptions> {
     color?: DynamicValue<ColorInput>;
@@ -32,14 +32,14 @@ class ColorOverLifetime extends Module {
       modifyGPU: (particle) => {
           if (this.options.color !== undefined) {
             particle.color.assign(
-              particle.color.mul(this.gpuParameters.color(
+              particle.color.mul(this.evaluateDynamicGPU.color(
                 'color', () => this.options.color, particle.time, new THREE.Color(), particle.index,
               )),
             );
           }
           if (this.options.alpha !== undefined) {
             particle.alpha.assign(
-              particle.alpha.mul(this.gpuParameters.number(
+              particle.alpha.mul(this.evaluateDynamicGPU.number(
                 'alpha', () => this.options.alpha, particle.time, 1, particle.index,
               )),
             );

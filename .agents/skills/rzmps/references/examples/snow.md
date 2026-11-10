@@ -18,7 +18,7 @@ demo begins; the preview CLI instead uses its explicit warmup count. Gravity mod
 long 16-second particle lifetime.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/snow.js#L18)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L18)
 
 ```js
   const snow = new ParticleSystem({
@@ -91,7 +91,7 @@ instances at full lifetime, so the 0.25-unit flakes remain individually small. R
 velocity is -0.35, avoiding an outward blast from the box.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/snow.js#L24)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L24)
 
 ```js
     emitters: [
@@ -123,7 +123,7 @@ between depths 6 and 24 and remove flakes very near the camera between depths 1 
 population turnover.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/snow.js#L43)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L43)
 
 ```js
     modules: [
@@ -162,7 +162,7 @@ lighting 0.25 and spherical normals 0.1 keep shading subtle instead of making fl
 geometric work than individually modeled snowflakes at the same population.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/snow.js#L71)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L71)
 
 ```js
     renderers: [

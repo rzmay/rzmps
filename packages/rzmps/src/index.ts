@@ -1,12 +1,12 @@
 // ParticleSystem
-export { default as ParticleSystem } from './ParticleSystem';
+export { default as ParticleSystem } from './core/ParticleSystem';
 export type {
   ParticleListener,
   ParticleSystemGPUEmissionSupportReport,
   ParticleSystemOptions,
   SubSystemOptions,
-} from './ParticleSystem';
-export { default as Particle } from './Particle';
+} from './core/ParticleSystem';
+export { default as Particle } from './core/Particle';
 export {
   GPUParticleContext,
   GPUParticleRenderContext,
@@ -15,7 +15,7 @@ export {
   createEmptyGPUParticleBufferState,
   createGPUParticleBufferState,
   createGPUParticleRenderBufferState,
-} from './gpu/Particle';
+} from './simulation/gpu/Particle';
 export type {
   GPUParticleAttributes,
   GPUParticleBufferInitialization,
@@ -27,39 +27,24 @@ export type {
   GPUParticleVectorField,
   GPUReadbackRenderer,
   GPUStorageBufferRenderer,
-} from './gpu/Particle';
-export {
-  GPUEventBufferState,
-  GPUEventType,
-  GPU_EVENT_FLOAT_SLOT_COUNT,
-} from './gpu/EventBuffer';
-export type {
-  GPUEventReadbackBatch,
-  GPUEventRecord,
-} from './gpu/EventBuffer';
-export {
-  GPUAllocationBufferState,
-  GPUAllocationWriter,
-} from './gpu/AllocationBuffer';
-export type {
-  GPUAllocationDiagnostics,
-} from './gpu/AllocationBuffer';
-export { GPUEmitterInstanceBufferState } from './gpu/EmitterInstanceBuffer';
-export type { GPUEmitterInstanceRecord } from './gpu/EmitterInstanceBuffer';
-export { GPUEmissionRunBufferState } from './gpu/Emission';
-export type { GPUEmissionRunNode } from './gpu/Emission';
-export { buildGPUSystemSchedule } from './gpu/SystemScheduler';
-export type {
-  GPUSystemSchedule,
-  GPUSystemScheduleNode,
-} from './gpu/SystemScheduler';
-export { GPUSelectiveReadbackState } from './gpu/SelectiveReadback';
+} from './simulation/gpu/Particle';
+export { GPUEventBufferState, GPUEventType, GPU_EVENT_FLOAT_SLOT_COUNT } from './events/gpu/EventBuffer';
+export type { GPUEventReadbackBatch, GPUEventRecord } from './events/gpu/EventBuffer';
+export { GPUAllocationBufferState, GPUAllocationWriter } from './simulation/gpu/AllocationBuffer';
+export type { GPUAllocationDiagnostics } from './simulation/gpu/AllocationBuffer';
+export { GPUEmitterInstanceBufferState } from './emission/gpu/EmitterInstanceBuffer';
+export type { GPUEmitterInstanceRecord } from './emission/gpu/EmitterInstanceBuffer';
+export { GPUEmissionRunBufferState } from './emission/gpu/Emission';
+export type { GPUEmissionRunNode } from './emission/gpu/Emission';
+export { buildGPUSystemSchedule } from './simulation/gpu/buildGPUSystemSchedule';
+export type { GPUSystemSchedule, GPUSystemScheduleNode } from './simulation/gpu/buildGPUSystemSchedule';
+export { GPUSelectiveReadbackState } from './simulation/gpu/SelectiveReadback';
 export type {
   GPUParticleReadbackField,
   GPUSelectiveReadbackRequest,
   GPUSelectiveReadbackResult,
-} from './gpu/SelectiveReadback';
-export { GPUSpatialEffectRegistry, isBatchableEffect } from './gpu/SpatialEffectRegistry';
+} from './simulation/gpu/SelectiveReadback';
+export { GPUSpatialEffectRegistry, isBatchableEffect } from './spatial/effects/gpu/SpatialEffectRegistry';
 export type {
   GPUSpatialBatchableEffect,
   GPUSpatialEffectRecord,
@@ -67,64 +52,69 @@ export type {
   GPUSpatialParameterAccessor,
   GPUSpatialParameterField,
   GPUSpatialParameterLayout,
-} from './gpu/SpatialEffectRegistry';
-export {
-  getGPUEmitterSupport,
-  getGPUEmissionShapeSupport,
-} from './gpu/Emission';
-export type {
-  GPUEmissionSupportLevel,
-  GPUEmissionSupportReport,
-} from './gpu/Emission';
-export { default as LODHelper } from './LODHelper';
-export type { LODSettings, LODSettingsOptions } from './LODHelper';
+} from './spatial/effects/gpu/SpatialEffectRegistry';
+export { getGPUEmitterSupport, getGPUEmissionShapeSupport } from './emission/gpu/Emission';
+export type { GPUEmissionSupportLevel, GPUEmissionSupportReport } from './emission/gpu/Emission';
+export { default as LODHelper } from './core/LODHelper';
+export type { LODSettings, LODSettingsOptions } from './core/LODHelper';
 export { EndBehavior } from './enums/EndBehavior';
 export { SimulationSpace } from './enums/SimulationSpace';
 export { MaxCulling } from './enums/MaxCulling';
 
 // Emitter
-export { default as EmissionShape } from './EmissionShape';
+export { default as EmissionShape } from './emission/EmissionShape';
 export type {
   EmissionShapeFactoryOptions,
   EmissionShapeOptions,
   VolumeSample,
   VolumeSampleCount,
-} from './EmissionShape';
-export { default as Emitter } from './Emitter';
-export type {
-  EmissionContext,
-  EmitterOptions,
-  SpawnBurst,
-} from './Emitter';
+} from './emission/EmissionShape';
+export { default as Emitter } from './emission/Emitter';
+export type { EmissionContext, EmitterOptions, SpawnBurst } from './emission/Emitter';
 export { EmissionSource } from './enums/EmissionSource';
-export { default as RegisteredEmissionSource } from './EmissionSource';
-export type { EmissionSourceData, SubSystemSource } from './EmissionSource';
-export type { CPUEventHandler, GPUEventHandler, GPUEventPayload, GPUEventData, GPUEmissionContext,
-  EventSubscriptions, ParameterEventHandler, ParameterEventSubscription, ParameterEventSubscriptions } from './Events';
+export { default as RegisteredEmissionSource } from './emission/EmissionSource';
+export type { EmissionSourceData, SubSystemSource } from './emission/EmissionSource';
+export type {
+  CPUEventHandler,
+  GPUEventHandler,
+  GPUEventPayload,
+  GPUEventData,
+  GPUEmissionContext,
+  EventSubscriptions,
+  ParameterEventHandler,
+  ParameterEventSubscription,
+  ParameterEventSubscriptions,
+} from './events/events.utils';
 export { TagSelectionMethod } from './enums/TagSelectionMethod';
 
 // Renderers
-export { default as Renderer } from './Renderer';
-export type { RendererOptions } from './Renderer';
-export { default as LightRenderer } from './renderers/LightRenderer';
-export type { LightRendererAllocationOptions } from './renderers/LightRenderer';
-export { default as MeshRenderer } from './renderers/MeshRenderer';
-export { default as SpriteRenderer } from './renderers/SpriteRenderer';
-export { default as AudioRenderer } from './renderers/AudioRenderer';
-export type { AudioParameters } from './renderers/AudioRenderer';
-export { default as DecalRenderer, DECAL_RENDERER_USER_DATA_KEY } from './renderers/DecalRenderer';
-export type { DecalInstance, DecalRendererOptions, DecalDirectionSampler, DecalProjectionContext,
-  DecalDirection, DecalHitSelection, DecalParameters }
-  from './renderers/DecalRenderer';
+export { default as Renderer } from './core/Renderer';
+export type { RendererOptions } from './core/Renderer';
+export { default as LightRenderer } from './rendering/renderers/LightRenderer';
+export type { LightRendererAllocationOptions } from './rendering/renderers/LightRenderer';
+export { default as MeshRenderer } from './rendering/renderers/MeshRenderer';
+export { default as SpriteRenderer } from './rendering/renderers/SpriteRenderer';
+export { default as AudioRenderer } from './rendering/renderers/AudioRenderer';
+export type { AudioParameters } from './rendering/renderers/AudioRenderer';
+export { default as DecalRenderer, DECAL_RENDERER_USER_DATA_KEY } from './rendering/renderers/DecalRenderer';
+export type {
+  DecalInstance,
+  DecalRendererOptions,
+  DecalDirectionSampler,
+  DecalProjectionContext,
+  DecalDirection,
+  DecalHitSelection,
+  DecalParameters,
+} from './rendering/renderers/DecalRenderer';
 export { SpriteMaterialType } from './enums/SpriteMaterialType';
-export { default as TrailRenderer } from './renderers/TrailRenderer';
+export { default as TrailRenderer } from './rendering/renderers/TrailRenderer';
 export { TrailMode } from './enums/TrailMode';
 export { TrailTextureMode } from './enums/TrailTextureMode';
-export { default as LiveCubemap } from './renderers/LiveCubemap';
-export type { LiveCubemapOptions } from './renderers/LiveCubemap';
+export { default as LiveCubemap } from './rendering/renderers/LiveCubemap';
+export type { LiveCubemapOptions } from './rendering/renderers/LiveCubemap';
 
 // Modules
-export { default as Module } from './Module';
+export { default as Module } from './core/Module';
 export type {
   ModuleCondition,
   ModuleGPUCondition,
@@ -132,7 +122,7 @@ export type {
   ModuleOptions,
   ModuleUpdate,
   SpatialEffectConstructor,
-} from './Module';
+} from './core/Module';
 export { default as NoiseModule } from './modules/NoiseModule';
 export { default as ForceOverLifetime } from './modules/ForceOverLifetime';
 export { default as LimitVelocityOverLifetime } from './modules/LimitVelocityOverLifetime';
@@ -163,14 +153,11 @@ export { default as MassBySize } from './modules/MassBySize';
 export { default as MassByDepth } from './modules/MassByDepth';
 export { default as MassOverLifetime } from './modules/MassOverLifetime';
 export { default as Boids } from './modules/Boids';
-export type {
-  BoidParticleAffectorOptions,
-  BoidsOptions,
-} from './modules/Boids';
-export { default as BoidAffector } from './spatial/BoidAffector';
-export type { BoidAffectorOptions } from './spatial/BoidAffector';
-export { default as BoidAffectorHelper } from './spatial/BoidAffectorHelper';
-export { default as SpatialEffect, SpatialEffectUpdatePolicy } from './SpatialEffect';
+export type { BoidParticleAffectorOptions, BoidsOptions } from './modules/Boids';
+export { default as BoidAffector } from './spatial/effects/BoidAffector';
+export type { BoidAffectorOptions } from './spatial/effects/BoidAffector';
+export { default as BoidAffectorHelper } from './spatial/effects/BoidAffectorHelper';
+export { default as SpatialEffect, SpatialEffectUpdatePolicy } from './spatial/effects/SpatialEffect';
 export type {
   SpatialEffectFeatherUpdate,
   SpatialEffectGPUCondition,
@@ -180,92 +167,111 @@ export type {
   SpatialEffectOptions,
   SpatialEffectTest,
   SpatialEffectUpdate,
-} from './SpatialEffect';
-export { default as SpatialEffectHelper } from './spatial/SpatialEffectHelper';
-export { default as KillZone } from './spatial/KillZone';
-export type { KillZoneOptions } from './spatial/KillZone';
+} from './spatial/effects/SpatialEffect';
+export { default as SpatialEffectHelper } from './spatial/effects/SpatialEffectHelper';
+export { default as KillZone } from './spatial/effects/KillZone';
+export type { KillZoneOptions } from './spatial/effects/KillZone';
 export { default as Collision } from './modules/Collision';
 export type { CollisionListener, CollisionOptions } from './modules/Collision';
 
 // Force Fields
-export { default as ParticleForceField } from './spatial/ParticleForceField';
-export type { ForceFieldOptions } from './spatial/ParticleForceField';
-export { default as ParticleForceFieldHelper } from './spatial/ParticleForceFieldHelper';
+export { default as ParticleForceField } from './spatial/effects/ParticleForceField';
+export type { ForceFieldOptions } from './spatial/effects/ParticleForceField';
+export { default as ParticleForceFieldHelper } from './spatial/effects/ParticleForceFieldHelper';
 
 // Collision
-export type { ICollisionBackend, CollisionHit, CollisionQuery } from './interfaces/ICollisionBackend';
+export type { ICollisionBackend, CollisionHit, CollisionQuery } from './collision/collision.types';
 export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBackend';
 export type { ThreeCollisionBackendOptions } from './collision/ThreeCollisionBackend';
 export { default as ThreeGPUCollisionBackend } from './collision/ThreeGPUCollisionBackend';
-export {
-  CollisionGeometryUpdatePolicy,
-} from './collision/ThreeGPUCollisionBackend';
+export { CollisionGeometryUpdatePolicy } from './collision/ThreeGPUCollisionBackend';
 export type {
   ThreeGPUCollisionBackendOptions,
   ThreeGPUCollisionBackendStats,
 } from './collision/ThreeGPUCollisionBackend';
 
 // Dynamic Value
-export { default as sampleDynamicValue } from './helpers/sampleDynamicValue';
-export { default as maxDynamicNumber } from './helpers/maxDynamicNumber';
-export { default as minDynamicNumber } from './helpers/minDynamicNumber';
-export { default as maxDynamicVector } from './helpers/maxDynamicVector';
-export { default as minDynamicVector } from './helpers/minDynamicVector';
-export { default as maxDynamicColor } from './helpers/maxDynamicColor';
-export { default as minDynamicColor } from './helpers/minDynamicColor';
-export type { ColorInput, Vector3Input } from './types/ValueInput';
-export type { DynamicValue, DynamicUntimedValue } from './types/DynamicValue';
-export type { ValueByParameter } from './types/ValueByParameter';
-export { default as ParticleOctree } from './helpers/ParticleOctree';
+export { default as sampleDynamicValue } from './values/sampleDynamicValue';
+export { default as maxDynamicNumber } from './values/maxDynamicNumber';
+export { default as minDynamicNumber } from './values/minDynamicNumber';
+export { default as maxDynamicVector } from './values/maxDynamicVector';
+export { default as minDynamicVector } from './values/minDynamicVector';
+export { default as maxDynamicColor } from './values/maxDynamicColor';
+export { default as minDynamicColor } from './values/minDynamicColor';
+export type { ColorInput, Vector3Input } from './values/valueInput.types';
+export type { DynamicValue, DynamicUntimedValue } from './values/dynamicValue.types';
+export type { ValueByParameter } from './values/valueByParameter.types';
+export { default as ParticleOctree } from './spatial/structures/ParticleOctree';
 export type {
   OctreeAggregator,
   OctreeConfig,
   OctreeNode,
   ParticleOctreeQueryOptions,
-} from './helpers/ParticleOctree';
-export { default as ParticleSpatialGrid } from './gpu/ParticleSpatialGrid';
-export type { GPUComputeRange } from './gpu/ComputeDispatch';
-export { SpatialLevels } from './enums/SpatialLevels';
-export type { SpatialLevelsInput, SpatialGridOptions } from './enums/SpatialLevels';
-export type { SpatialBackend, SpatialAggregator, SpatialAggregateLayout, SpatialAggregateType,
-  SpatialAggregateNodes, GPUSpatialRegion } from './types/SpatialAggregator';
-export type { GPUSpatialRegionRange, GPURegionParticleIndices } from './gpu/grid/Regions';
+} from './spatial/structures/ParticleOctree';
+export { default as ParticleSpatialGrid } from './spatial/structures/ParticleSpatialGrid';
+export type { GPUComputeRange } from './utils/gpu/computeDispatch.utils';
+export { SpatialLevels } from './enums/resolveSpatialLevels';
+export type { SpatialLevelsInput, SpatialGridOptions } from './enums/resolveSpatialLevels';
+export type {
+  SpatialBackend,
+  SpatialAggregator,
+  SpatialAggregateLayout,
+  SpatialAggregateType,
+  SpatialAggregateNodes,
+  GPUSpatialRegion,
+} from './types/spatialAggregator.types';
+export type { GPUSpatialRegionRange, GPURegionParticleIndices } from './spatial/structures/gpu/GPUSpatialRegions';
 export type {
   ParticleSpatialGridOptions,
   ParticleSpatialGridDiagnostics,
   ParticleSpatialGridQueryOptions,
   ParticleSpatialGridVisitor,
-} from './gpu/ParticleSpatialGrid';
+} from './spatial/structures/ParticleSpatialGrid';
 
 // Texture helper
-export * as Textures from './Textures';
+export * as Textures from './rendering/textures';
 
-export { CompensationMode } from './Renderer';
-export type { RendererChildrenOptions } from './Renderer';
+export { CompensationMode } from './core/Renderer';
+export type { RendererChildrenOptions } from './core/Renderer';
 
-export { default as TextureAtlas } from './TextureAtlas';
-export type { TextureAtlasOptions } from './TextureAtlas';
-export { MaterialCopySampleMode } from './material-copy/Surface';
-export type { MaterialTarget, SurfacePatch } from './material-copy/Surface';
+export { default as TextureAtlas } from './rendering/TextureAtlas';
+export type { TextureAtlasOptions } from './rendering/TextureAtlas';
+export { MaterialCopySampleMode } from './rendering/compositing/MaterialCopyRegistry';
+export type { MaterialTarget, SurfacePatch } from './rendering/compositing/MaterialCopyRegistry';
 
-export type { TaggedValue } from './types/TaggedValue';
-export { default as prepareTaggedSelection } from './helpers/prepareTaggedSelection';
-export type { TaggedSelection } from './helpers/prepareTaggedSelection';
-export { default as selectByTags } from './helpers/selectByTags';
-export { default as selectByTagsGPU } from './helpers/selectByTagsGPU';
-export { default as EventReceiver } from './EventReceiver';
+export type { TaggedValue } from './types/taggedValue.types';
+export { default as prepareTaggedSelection } from './core/tags/prepareTaggedSelection';
+export type { TaggedSelection } from './core/tags/prepareTaggedSelection';
+export { default as selectByTags } from './core/tags/selectByTags';
+export { default as selectByTagsGPU } from './core/tags/selectByTagsGPU';
+export { default as EventReceiver } from './events/EventReceiver';
 export type {
-  EventOrigin, EventScope, SimulationEvent, EventExecutionContext, GPUEventExecutionContext, EventReceiverOptions,
-} from './EventReceiver';
-export type { ModuleExecutionContext, ModuleGPUExecutionContext } from './Module';
-export type { GPUEventBatch } from './gpu/EventBatch';
+  EventOrigin,
+  EventScope,
+  SimulationEvent,
+  EventExecutionContext,
+  GPUEventExecutionContext,
+  EventReceiverOptions,
+} from './events/EventReceiver';
+export type { ModuleExecutionContext, ModuleGPUExecutionContext } from './core/Module';
+export type { GPUEventBatch } from './events/gpu/EventBatch';
 
-export type { ParticleInitializationContext, GPUParticleInitializationContext,
-  ParticleInitializer, GPUParticleInitializer } from './Particle';
+export type {
+  ParticleInitializationContext,
+  GPUParticleInitializationContext,
+  ParticleInitializer,
+  GPUParticleInitializer,
+} from './core/Particle';
 
 export { default as MaterialCopy, MaterialCopySource } from './modules/MaterialCopy';
 export type { MaterialCopyOptions, MaterialCopyInput, GPUMaterialCopyInput } from './modules/MaterialCopy';
 
-export type { MaterialChannels, GPUMaterialChannels, MaterialChannel, MaterialCompositeCallback,
-  MaterialCompositeGPUCallback, MaterialCompositeContext, MaterialCompositeGPUContext }
-  from './material-copy/Composite';
+export type {
+  MaterialChannels,
+  GPUMaterialChannels,
+  MaterialChannel,
+  MaterialCompositeCallback,
+  MaterialCompositeGPUCallback,
+  MaterialCompositeContext,
+  MaterialCompositeGPUContext,
+} from './rendering/compositing/composite.utils';

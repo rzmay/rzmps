@@ -1,5 +1,5 @@
 /* eslint-disable react/no-unknown-property */
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useFrame, extend, useThree } from '@react-three/fiber';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';

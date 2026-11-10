@@ -1,12 +1,12 @@
-import type { Vector3Input } from '../types/ValueInput';
+import type { Vector3Input } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { type ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { DynamicValue } from '../types/DynamicValue';
+import Module, { type ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { DynamicValue } from '../values/dynamicValue.types';
 import type { Node } from 'three/webgpu';
 import { abs, float, max, sign, vec3 } from 'three/tsl';
-import evaluateDynamicNumber from '../helpers/evaluateDynamicNumber';
-import evaluateDynamicVector from '../helpers/evaluateDynamicVector3';
+import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
+import evaluateDynamicVector from '../values/evaluateDynamicVector3';
 
 export interface LimitVelocityOverLifetimeOptions extends Partial<ModuleOptions> {
     /** Absolute per-axis velocity limits, sampled by normalized particle age. */
@@ -54,7 +54,7 @@ class LimitVelocityOverLifetime extends Module {
     }, {
       ...options,
       modifyGPU: (particle, deltaTime) => {
-          const limit = this.gpuParameters.vector(
+          const limit = this.evaluateDynamicGPU.vector(
             'limit',
             () => this.options.limit,
             particle.time,
@@ -70,7 +70,7 @@ class LimitVelocityOverLifetime extends Module {
           ));
 
           if (this.options.drag !== undefined) {
-            let drag = this.gpuParameters.number(
+            let drag = this.evaluateDynamicGPU.number(
               'drag', () => this.options.drag, particle.time, 0, particle.index,
             );
             if (this.options.multiplyDragBySize) {

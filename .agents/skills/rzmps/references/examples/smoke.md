@@ -16,7 +16,7 @@ Preset by [rzmay](https://github.com/rzmay).
 The 10-second loop sustains a plume while particles live for 4.5 seconds. The small negative gravity modifier reverses the default downward acceleration, adding slow buoyancy. Long particle lifetimes let the plume accumulate and spread instead of looking like short flame tongues.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/smoke.js#L18)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L18)
 
 ```js
   const smoke = new ParticleSystem({
@@ -90,7 +90,7 @@ A cone of radius 0.75 and height 1.2 provides a broad source. Rate 36 and lifeti
 Uniform scale values and color strings use the standard input shortcuts.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/smoke.js#L23)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L23)
 
 ```js
     emitters: [
@@ -118,7 +118,7 @@ Uniform scale values and color strings use the standard input shortcuts.
 Noise is stronger horizontally (0.65) than vertically (0.35), producing rolling lateral motion. Velocity limits and drag prevent indefinite acceleration. The scale multiplier grows from 0.35 to 1.8, representing dispersal, and the alpha curve hides the first fifth and final quarter of the lifetime. Random angular velocity breaks up repeated texture orientation.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/smoke.js#L42)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L42)
 
 ```js
     modules: [
@@ -156,7 +156,7 @@ Noise is stronger horizontally (0.65) than vertically (0.35), producing rolling 
 Lit sprites use the smoke alpha image as their silhouette. Roughness 1 avoids glossy highlights; spherical normals 1 and normal lighting 0.5 give each billboard some volume under scene lighting. Soft-particle distance 1 reduces hard lines where the smoke intersects geometry.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/smoke.js#L71)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L71)
 
 ```js
     renderers: [

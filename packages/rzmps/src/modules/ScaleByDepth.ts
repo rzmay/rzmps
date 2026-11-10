@@ -1,11 +1,11 @@
-import type { Vector3Input } from '../types/ValueInput';
+import type { Vector3Input } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { type ModuleExecutionContext, ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleExecutionContext, ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
+import evaluateByParameterVector from '../values/evaluateByParameterVector3';
 
 export interface ScaleByDepthOptions extends Partial<ModuleOptions> {
   scale: ValueByParameter<Vector3Input>;
@@ -68,20 +68,20 @@ class ScaleByDepth extends Module {
           const time = this.getDepthTimeGPU(particle.position);
 
           particle.scale.assign(
-            particle.scale.mul(this.gpuParameters.parameterVector(
+            particle.scale.mul(this.evaluateDynamicGPU.parameterVector(
               'scale', () => this.options.scale,
               time,
               new THREE.Vector3(1, 1, 1),
             )),
           );
           particle.scalarVelocity.assign(
-            particle.scalarVelocity.add(this.gpuParameters.parameterVector(
+            particle.scalarVelocity.add(this.evaluateDynamicGPU.parameterVector(
               'scalarVelocity', () => this.options.scalarVelocity,
               time,
             )),
           );
           particle.scalarAcceleration.assign(
-            particle.scalarAcceleration.add(this.gpuParameters.parameterVector(
+            particle.scalarAcceleration.add(this.evaluateDynamicGPU.parameterVector(
               'scalarAcceleration', () => this.options.scalarAcceleration,
               time,
             )),

@@ -23,11 +23,11 @@ Use `npm run docs:dev` for the same startup sequence without package watchers.
 `npm run docs:generate` still generates both documentation sources and previews;
 `npm run docs:generate -- --skip-previews` defers previews to `npm run docs:previews`.
 
-Preview images and their manifest in `apps/docs/public/previews/` are committed for review.
-Run `npm run docs:generate` locally and commit the updated images and manifest with source changes.
-Documentation checks, CI, and deployment validate their source and image hashes without launching a browser.
-Missing or stale previews fail the build with regeneration instructions. Current local captures are reused.
-The separate visual-test workflow continues to exercise browser rendering, including WebGPU.
+Preview images and their manifest in `apps/docs/public/previews/` are ignored build
+artifacts. Run `npm run docs:generate` to rebuild missing or stale images locally.
+CI and deployment install Chrome and generate documentation and captures before
+validating their source and image hashes. Current local captures are reused.
+The optional preview workflow exercises representative rendering on both backends.
 
 Build the core package:
 

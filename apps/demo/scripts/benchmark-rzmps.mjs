@@ -1,13 +1,13 @@
-import { readBenchmarkOptions } from '../../../scripts/benchmark-selection.mjs';
+import { readBenchmarkOptions } from '../../../scripts/benchmark/benchmark-selection.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { createSiteServer } from '../../../scripts/site/serve.mjs';
-import { validateBenchmark, validateBenchmarkCompletion } from '../../../scripts/benchmark-payload.mjs';
+import { validateBenchmark, validateBenchmarkCompletion } from '../../../scripts/benchmark/benchmark-payload.mjs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
-import { isExpectedWebGPUTeardownError, runBenchmarkWithRetry, withBenchmarkTimeout, cleanupBenchmark } from '../../../scripts/benchmark-failures.mjs';
+import { isExpectedWebGPUTeardownError, runBenchmarkWithRetry, withBenchmarkTimeout, cleanupBenchmark } from '../../../scripts/benchmark/benchmark-failures.mjs';
 
 const host = '127.0.0.1';
 const port = Number(process.env.RZMPS_BENCHMARK_PORT ?? 0);

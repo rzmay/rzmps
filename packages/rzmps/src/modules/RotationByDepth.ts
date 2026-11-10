@@ -1,11 +1,11 @@
-import type { Vector3Input } from '../types/ValueInput';
+import type { Vector3Input } from '../values/valueInput.types';
 import * as THREE from 'three';
-import Module, { type ModuleExecutionContext, ModuleOptions } from '../Module';
-import Particle from '../Particle';
-import type { ValueByParameter } from '../types/ValueByParameter';
+import Module, { type ModuleExecutionContext, ModuleOptions } from '../core/Module';
+import Particle from '../core/Particle';
+import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { Node } from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import evaluateByParameterVector from '../helpers/evaluateByParameterVector3';
+import evaluateByParameterVector from '../values/evaluateByParameterVector3';
 
 export interface RotationByDepthOptions extends Partial<ModuleOptions> {
   /** Angular values are radians; scalar inputs expand uniformly across axes. */
@@ -69,19 +69,19 @@ class RotationByDepth extends Module {
           const time = this.getDepthTimeGPU(particle.position);
 
           particle.rotation.assign(
-            particle.rotation.add(this.gpuParameters.parameterVector(
+            particle.rotation.add(this.evaluateDynamicGPU.parameterVector(
               'angle', () => this.options.angle,
               time,
             )),
           );
           particle.angularVelocity.assign(
-            particle.angularVelocity.add(this.gpuParameters.parameterVector(
+            particle.angularVelocity.add(this.evaluateDynamicGPU.parameterVector(
               'angularVelocity', () => this.options.angularVelocity,
               time,
             )),
           );
           particle.angularAcceleration.assign(
-            particle.angularAcceleration.add(this.gpuParameters.parameterVector(
+            particle.angularAcceleration.add(this.evaluateDynamicGPU.parameterVector(
               'angularAcceleration', () => this.options.angularAcceleration,
               time,
             )),

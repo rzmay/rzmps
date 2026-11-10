@@ -15,6 +15,7 @@
 
 ## Classes
 
+- [GlobalSettings](classes/GlobalSettings.md)
 - [GPUCollisionEventBufferState](classes/GPUCollisionEventBufferState.md)
 - [GPUCollisionEventWriter](classes/GPUCollisionEventWriter.md)
 - [GPUEmitterInstanceRuntime](classes/GPUEmitterInstanceRuntime.md)

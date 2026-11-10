@@ -212,18 +212,6 @@ modules: Module[] = [];
 
 ***
 
-<a id="particleoctree"></a>
-
-### particleOctree?
-
-```ts
-optional particleOctree?: ParticleOctree<unknown>;
-```
-
-System-owned CPU spatial data, created lazily for density compensation.
-
-***
-
 <a id="particles"></a>
 
 ### particles
@@ -426,72 +414,12 @@ useSpatialEffects: boolean;
 
 ***
 
-<a id="gpu_debug"></a>
+<a id="settings"></a>
 
-### GPU\_DEBUG
-
-```ts
-static GPU_DEBUG: boolean = false;
-```
-
-***
-
-<a id="gpu_debug_interval"></a>
-
-### GPU\_DEBUG\_INTERVAL
+### Settings
 
 ```ts
-static GPU_DEBUG_INTERVAL: number = 30;
-```
-
-***
-
-<a id="gpu_dynamic_value_resolution"></a>
-
-### GPU\_DYNAMIC\_VALUE\_RESOLUTION
-
-```ts
-static GPU_DYNAMIC_VALUE_RESOLUTION: number = 16;
-```
-
-***
-
-<a id="gpu_event_buffer_capacity"></a>
-
-### GPU\_EVENT\_BUFFER\_CAPACITY
-
-```ts
-static GPU_EVENT_BUFFER_CAPACITY: number = 4096;
-```
-
-***
-
-<a id="gpu_initial_buffer_size"></a>
-
-### GPU\_INITIAL\_BUFFER\_SIZE
-
-```ts
-static GPU_INITIAL_BUFFER_SIZE: number = 256;
-```
-
-***
-
-<a id="gpu_readback_rate"></a>
-
-### GPU\_READBACK\_RATE
-
-```ts
-static GPU_READBACK_RATE: number = 24;
-```
-
-***
-
-<a id="gpu_selective_readback_pool_size"></a>
-
-### GPU\_SELECTIVE\_READBACK\_POOL\_SIZE
-
-```ts
-static GPU_SELECTIVE_READBACK_POOL_SIZE: number = 8;
+readonly static Settings: typeof GlobalSettings = GlobalSettings;
 ```
 
 ## Accessors
@@ -928,6 +856,38 @@ get liveParticleCount(): number;
 
 ***
 
+<a id="particleoctree"></a>
+
+### particleOctree
+
+#### Get Signature
+
+```ts
+get particleOctree(): ParticleOctree<unknown> | undefined;
+```
+
+##### Returns
+
+[`ParticleOctree`](ParticleOctree.md)\<`unknown`\> \| `undefined`
+
+#### Set Signature
+
+```ts
+set particleOctree(value): void;
+```
+
+##### Parameters
+
+###### value
+
+[`ParticleOctree`](ParticleOctree.md)\<`unknown`\> \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
 <a id="paused"></a>
 
 ### paused
@@ -1064,8 +1024,6 @@ Active renderer captured by the context object during rendering.
 get simulationSpace(): SimulationSpace;
 ```
 
-Selects the particle reference frame. Explicit child modes are preserved when parenting.
-
 ##### Returns
 
 [`SimulationSpace`](../enumerations/SimulationSpace.md)
@@ -1101,8 +1059,6 @@ set simulationSpace(value): void;
 ```ts
 get simulationSpaceTransform(): Matrix4 | Object3D<Object3DEventMap> | null;
 ```
-
-Live Object3D or caller-managed world matrix for Transform mode; null uses identity.
 
 ##### Returns
 
@@ -1149,14 +1105,14 @@ Immediate attachment parent; event scopes never traverse beyond this relationshi
 ### acquireParticleSpatialGrid()
 
 ```ts
-acquireParticleSpatialGrid(gridOrOptions?): ParticleSpatialGrid;
+acquireParticleSpatialGrid(options?): ParticleSpatialGrid;
 ```
 
 Acquires a compatible system-owned grid, or registers a caller-owned instance.
 
 #### Parameters
 
-##### gridOrOptions?
+##### options?
 
   \| `Partial`\<[`ParticleSpatialGridOptions`](../interfaces/ParticleSpatialGridOptions.md)\>
   \| [`ParticleSpatialGrid`](ParticleSpatialGrid.md)\<[`SpatialAggregateLayout`](../type-aliases/SpatialAggregateLayout.md)\> = `{}`
@@ -1368,6 +1324,44 @@ Finite systems can naturally end, including their configured end behavior.
 
 ***
 
+<a id="bindparticlesource"></a>
+
+### bindParticleSource()
+
+```ts
+bindParticleSource(particle, source?): void;
+```
+
+#### Parameters
+
+##### particle
+
+[`Particle`](Particle.md)
+
+##### source?
+
+`Readonly`\<`Pick`\<[`Particle`](Particle.md),
+  \| `"time"`
+  \| `"alpha"`
+  \| `"id"`
+  \| `"realtime"`
+  \| `"color"`
+  \| `"position"`
+  \| `"scale"`
+  \| `"rotation"`
+  \| `"velocity"`
+  \| `"mass"`
+  \| `"distortionStrength"`
+  \| `"tags"`
+  \| `"lifetime"`
+  \| `"alive"`\>\>
+
+#### Returns
+
+`void`
+
+***
+
 <a id="clearparticles"></a>
 
 ### clearParticles()
@@ -1478,11 +1472,6 @@ Targets either a registered source or a live simulated particle by its stable ID
 estimateParticleCount(tags?): number;
 ```
 
-Predicts peak population from rate * lifetime plus configured bursts, capped by maxParticles.
-Uses the GPU allocation estimator without its minimum-buffer/power-of-two padding.
-Results are shared within a simulation step. Optional tags conservatively select emitters.
-Movement-driven emission, event subsystems and opaque TSL values may require later growth.
-
 #### Parameters
 
 ##### tags?
@@ -1569,6 +1558,38 @@ getGPURendererTagMask(tags): number | undefined;
 
 ***
 
+<a id="getparticleemissiontransform"></a>
+
+### getParticleEmissionTransform()
+
+```ts
+getParticleEmissionTransform(
+   source,
+   inheritScale?,
+   alignUpTo?
+): Matrix4;
+```
+
+#### Parameters
+
+##### source
+
+[`SubSystemSource`](../type-aliases/SubSystemSource.md)
+
+##### inheritScale?
+
+`number` = `0`
+
+##### alignUpTo?
+
+`Vector3`
+
+#### Returns
+
+`Matrix4`
+
+***
+
 <a id="getparticlespacing"></a>
 
 ### getParticleSpacing()
@@ -1576,8 +1597,6 @@ getGPURendererTagMask(tags): number | undefined;
 ```ts
 getParticleSpacing(particle, population?): number;
 ```
-
-Stable per-root local spacing shared by all CPU renderer views.
 
 #### Parameters
 
@@ -1603,9 +1622,6 @@ Stable per-root local spacing shared by all CPU renderer views.
 getParticleSpacingGPU(): PackedFloatStorage;
 ```
 
-System-owned GPU spacing pass; all native renderers share its output.
-Values are keyed by simulation slot generation and never read back to CPU.
-
 #### Returns
 
 [`PackedFloatStorage`](../Supporting-Types/type-aliases/PackedFloatStorage.md)
@@ -1619,8 +1635,6 @@ Values are keyed by simulation slot generation and never read back to CPU.
 ```ts
 getSimulationToWorldMatrix(target?): Matrix4;
 ```
-
-Resolves the common frame used by modules, spatial queries, renderers, and readback.
 
 #### Parameters
 
@@ -1642,8 +1656,6 @@ Resolves the common frame used by modules, spatial queries, renderers, and readb
 getSimulationWorldQuaternion(target?): Quaternion;
 ```
 
-World orientation of the common simulation frame.
-
 #### Parameters
 
 ##### target?
@@ -1653,6 +1665,60 @@ World orientation of the common simulation frame.
 #### Returns
 
 `Quaternion`
+
+***
+
+<a id="getsourceemissionframe"></a>
+
+### getSourceEmissionFrame()
+
+```ts
+getSourceEmissionFrame(source?): Matrix4 | undefined;
+```
+
+#### Parameters
+
+##### source?
+
+`Readonly`\<`Pick`\<[`Particle`](Particle.md),
+  \| `"time"`
+  \| `"alpha"`
+  \| `"id"`
+  \| `"realtime"`
+  \| `"color"`
+  \| `"position"`
+  \| `"scale"`
+  \| `"rotation"`
+  \| `"velocity"`
+  \| `"mass"`
+  \| `"distortionStrength"`
+  \| `"tags"`
+  \| `"lifetime"`
+  \| `"alive"`\>\>
+
+#### Returns
+
+`Matrix4` \| `undefined`
+
+***
+
+<a id="getsourceproducer"></a>
+
+### getSourceProducer()
+
+```ts
+getSourceProducer(source): ParticleSystem;
+```
+
+#### Parameters
+
+##### source
+
+[`SubSystemSource`](../type-aliases/SubSystemSource.md)
+
+#### Returns
+
+`ParticleSystem`
 
 ***
 
@@ -2024,8 +2090,6 @@ Stop, clear all CPU/GPU state and timing, then begin a fresh run.
 resolveSimulationFrame(particle?, target?): Matrix4;
 ```
 
-Resolves an attached particle's source frame in world coordinates.
-
 #### Parameters
 
 ##### particle?
@@ -2050,10 +2114,7 @@ Resolves an attached particle's source frame in world coordinates.
 selectiveReadback(limit?, fields?): Promise<GPUSelectiveReadbackResult[]>;
 ```
 
-Reads a bounded selection of active GPU particles asynchronously.
-
-Request only the fields the caller consumes. The bounded readback pool can return an empty
-array while busy, and results may trail the current simulation frame.
+Reads selected fields from GPU particles.
 
 #### Parameters
 
@@ -2078,8 +2139,6 @@ readonly [`GPUParticleReadbackField`](../type-aliases/GPUParticleReadbackField.m
 ```ts
 simulationToWorld(position): Vector3;
 ```
-
-Converts a position from the system's common simulation frame to world coordinates.
 
 #### Parameters
 
@@ -2228,8 +2287,6 @@ Updates CPU attributes only; repeated updates coalesce at the next frame.
 ```ts
 worldToSimulation(position): Vector3;
 ```
-
-Converts a world position to the system's common simulation frame.
 
 #### Parameters
 

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { build } from 'vite';
 import react from '@vitejs/plugin-react';
-import { adaptBenchmarkPage, benchmarkControlModule } from '../../../scripts/benchmark-adapter.mjs';
+import { adaptBenchmarkPage, benchmarkControlModule } from '../../../scripts/benchmark/benchmark-adapter.mjs';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 const { values } = parseArgs({ options: {
@@ -18,7 +18,7 @@ await build({
   configFile: false,
   root: demoRoot,
   plugins: [{ name: 'rzmps-benchmark-compatibility', enforce: 'pre',
-    resolveId(id) { if (id.endsWith('/scripts/benchmark-selection.mjs')) return benchmarkControlModule; },
+    resolveId(id) { if (id.endsWith('/scripts/benchmark/benchmark-selection.mjs') || id.endsWith('/scripts/benchmark-selection.mjs')) return benchmarkControlModule; },
     transform(source, id) {
       if (id.replaceAll('\\', '/').endsWith('/src/pages/BenchmarkPage.jsx')) return adaptBenchmarkPage(source);
     },

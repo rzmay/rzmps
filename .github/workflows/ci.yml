@@ -12,13 +12,16 @@ permissions:
 jobs:
   test-and-build:
     name: Test and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       PUPPETEER_SKIP_DOWNLOAD: "true"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -29,6 +32,36 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint maintained source
+        run: npm run lint
+
+      - name: Test preview diagnostics
+        run: npm run test:preview-diagnostics
+
+      - name: Check source import casing
+        run: npm run test:source
+
+      - name: Report architecture warnings
+        if: github.event_name != 'pull_request'
+        run: npm run check:dependencies
+
+      - name: Compare PR architecture warnings
+        if: github.event_name == 'pull_request'
+        run: node scripts/dependencies/analyze.mjs
+
+      - name: Upload dependency analysis
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-report-${{ github.run_attempt }}
+          path: .dependency-report/*.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Test dependency reporting
+        run: npm run test:dependencies
+
       - name: Run core tests
         run: npm test
 
@@ -37,6 +70,24 @@ jobs:
 
       - name: Build packages
         run: npm run build:modules
+
+      - name: Install preview browser
+        run: npx puppeteer browsers install chrome
+
+      - name: Verify headless WebGPU pixels
+        run: node --test scripts/tests/preview/readback.test.mjs
+
+      - name: Generate documentation and preview artifacts
+        run: npm run docs:generate
+
+      - name: Upload preview failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-diagnostics
+          path: benchmark-results/preview-diagnostics
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Build demo
         run: npm run build --workspace demo

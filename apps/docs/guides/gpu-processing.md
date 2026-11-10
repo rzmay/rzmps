@@ -129,7 +129,7 @@ capacity clearing remains allocation-sized, while scans and aggregate work use o
 
 Dynamic numbers, vectors, colors, ranges, sets, and callbacks are available to built-in GPU
 components. Callback curves are sampled into interpolated uniform tables at
-`ParticleSystem.GPU_DYNAMIC_VALUE_RESOLUTION`; increase it when a high-frequency curve needs more
+`ParticleSystem.Settings.GPU_DYNAMIC_VALUE_RESOLUTION`; increase it when a high-frequency curve needs more
 fidelity. TSL nodes can be supplied directly where a dynamic value is evaluated by GPU code.
 
 ## Emitters and Spatial Effects

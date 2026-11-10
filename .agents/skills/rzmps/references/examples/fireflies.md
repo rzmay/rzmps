@@ -24,7 +24,7 @@ attached to the moving firefly through Source simulation space. GPU processing u
 rejecting a dead or reused source slot. Both systems remain owned and updated by the root.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L20)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L21)
 
 ```js
   // Sparse neighbors allow local flash clusters without synchronizing the entire population.
@@ -232,7 +232,7 @@ Source space carries independent particle motion with the source, so the emitter
 pulse drift away from the insect.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L121)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L122)
 
 ```js
     emitters: new Emitter({
@@ -249,7 +249,7 @@ pulse drift away from the insect.
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L160)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L161)
 
 ```js
     emitters: new Emitter({
@@ -289,7 +289,7 @@ attributes. ColorOverLifetime supplies the smooth sine opacity pulse. No per-par
 the glow population is separate from the insects.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L35)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L36)
 
 ```js
   // Mass is an application-owned charge accumulator here: negative values are the refractory period.
@@ -374,7 +374,7 @@ the glow population is separate from the insects.
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L173)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L174)
 
 ```js
     modules: [
@@ -402,7 +402,7 @@ The LightRenderer uses bounded selective particle readback to position Three.js 
 event buffer. Disabling that renderer leaves the particle effect and event processing entirely on the GPU.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L144)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L145)
 
 ```js
     renderers: new SpriteRenderer(fireflyImage, {
@@ -411,7 +411,7 @@ event buffer. Disabling that renderer leaves the particle effect and event proce
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/fireflies.js#L179)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L180)
 
 ```js
     renderers: [

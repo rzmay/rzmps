@@ -4,14 +4,29 @@ import os from 'node:os';
 import path from 'node:path';
 import { build, preview } from 'vite';
 import puppeteer from 'puppeteer';
+import { previewBrowserArguments } from './browserSettings.mjs';
+import { attachBrowserDiagnostics } from './browserDiagnostics.mjs';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 export function parseOptions(args) {
   const names = [
-    'example', 'backend', 'frames', 'interval', 'warmup', 'delta-time',
-    'width', 'height', 'output', 'seed', 'scene', 'scene-light-strength',
-    'camera-position', 'camera-target', 'camera-fov', 'example-options',
+    'example',
+    'backend',
+    'frames',
+    'interval',
+    'warmup',
+    'delta-time',
+    'width',
+    'height',
+    'output',
+    'seed',
+    'scene',
+    'scene-light-strength',
+    'camera-position',
+    'camera-target',
+    'camera-fov',
+    'example-options',
   ];
   const { values } = parseArgs({
     args,
@@ -26,8 +41,11 @@ export function parseOptions(args) {
     return components.map(Number);
   }
   const exampleOptions = values['example-options'] === undefined ? undefined : JSON.parse(values['example-options']);
-  if (exampleOptions !== undefined && (!exampleOptions || Array.isArray(exampleOptions)
-    || typeof exampleOptions !== 'object')) throw new Error('--example-options must be a JSON object');
+  if (
+    exampleOptions !== undefined &&
+    (!exampleOptions || Array.isArray(exampleOptions) || typeof exampleOptions !== 'object')
+  )
+    throw new Error('--example-options must be a JSON object');
   const options = {
     ...(exampleOptions === undefined ? {} : { exampleOptions }),
     example: values.example ?? 'fire',
@@ -40,27 +58,40 @@ export function parseOptions(args) {
     height: Number(values.height ?? 600),
     seed: Number(values.seed ?? 1),
     scene: values.scene ?? null,
-    sceneLightStrength: values['scene-light-strength'] === undefined
-      ? undefined : Number(values['scene-light-strength']),
+    sceneLightStrength:
+      values['scene-light-strength'] === undefined ? undefined : Number(values['scene-light-strength']),
     cameraPosition: vector('camera-position', [8, 6, 12]),
     cameraTarget: vector('camera-target', [0, 2, 0]),
     cameraFov: Number(values['camera-fov'] ?? 50),
     output: path.resolve(values.output ?? `previews/${values.example ?? 'fire'}`),
   };
   if (!['webgl', 'webgpu'].includes(options.backend)) throw new Error('--backend must be webgl or webgpu');
-  if (options.sceneLightStrength !== undefined
-    && (!Number.isFinite(options.sceneLightStrength) || options.sceneLightStrength < 0)) {
+  if (
+    options.sceneLightStrength !== undefined &&
+    (!Number.isFinite(options.sceneLightStrength) || options.sceneLightStrength < 0)
+  ) {
     throw new Error('--scene-light-strength must be a finite nonnegative number');
   }
   for (const key of ['frames', 'interval', 'width', 'height']) {
-    if (!Number.isSafeInteger(options[key]) || options[key] <= 0) throw new Error(`--${key} must be a positive integer`);
+    if (!Number.isSafeInteger(options[key]) || options[key] <= 0)
+      throw new Error(`--${key} must be a positive integer`);
   }
-  if (!Number.isSafeInteger(options.warmup) || options.warmup < 0) throw new Error('--warmup must be a nonnegative integer');
-  if (!Number.isSafeInteger(options.seed) || options.seed < 0 || options.seed > 0xffffffff) throw new Error('--seed must be an unsigned 32-bit integer');
-  if (!Number.isFinite(options.deltaTime) || options.deltaTime <= 0) throw new Error('--delta-time must be positive and finite');
-  if (!Number.isFinite(options.cameraFov) || options.cameraFov <= 0 || options.cameraFov >= 180) throw new Error('--camera-fov must be between 0 and 180 degrees');
-  if (options.cameraPosition.every((v, i) => v === options.cameraTarget[i])) throw new Error('Camera position and target must differ');
-  if (options.frames > 60 || options.width > 4096 || options.height > 4096 || options.warmup + options.interval * (options.frames - 1) > 100000) {
+  if (!Number.isSafeInteger(options.warmup) || options.warmup < 0)
+    throw new Error('--warmup must be a nonnegative integer');
+  if (!Number.isSafeInteger(options.seed) || options.seed < 0 || options.seed > 0xffffffff)
+    throw new Error('--seed must be an unsigned 32-bit integer');
+  if (!Number.isFinite(options.deltaTime) || options.deltaTime <= 0)
+    throw new Error('--delta-time must be positive and finite');
+  if (!Number.isFinite(options.cameraFov) || options.cameraFov <= 0 || options.cameraFov >= 180)
+    throw new Error('--camera-fov must be between 0 and 180 degrees');
+  if (options.cameraPosition.every((v, i) => v === options.cameraTarget[i]))
+    throw new Error('Camera position and target must differ');
+  if (
+    options.frames > 60 ||
+    options.width > 4096 ||
+    options.height > 4096 ||
+    options.warmup + options.interval * (options.frames - 1) > 100000
+  ) {
     throw new Error('Preview exceeds limits: 60 captures, 4096px dimensions, 100000 total steps');
   }
   const columns = Math.min(3, options.frames);
@@ -78,7 +109,7 @@ export async function capturePreview(options) {
   for (const file of await fs.readdir(options.output)) {
     if (/^frame-\d+\.png$|^contact-sheet\.png$/.test(file)) await fs.unlink(path.join(options.output, file));
   }
-  let server, browser;
+  let server, browser, browserDiagnostics;
   const metadata = {
     ...options,
     status: 'initializing',
@@ -108,17 +139,14 @@ export async function capturePreview(options) {
         await fs.rm(directory, { recursive: true, force: true });
         throw error;
       }
-    })().catch(error => { demoBuild = undefined; throw error; });
+    })().catch(error => {
+      demoBuild = undefined;
+      throw error;
+    });
     viteConfig = await demoBuild;
     server = await preview({ ...viteConfig, preview: { host: '127.0.0.1', port: 0 } });
     const address = server.httpServer.address();
-    const args = ['--disable-dev-shm-usage', '--enable-unsafe-webgpu', '--autoplay-policy=no-user-gesture-required'];
-    if (process.env.CI === 'true') {
-      args.push(
-        '--no-sandbox', '--disable-setuid-sandbox', '--use-gl=angle', '--use-angle=swiftshader',
-        '--enable-unsafe-swiftshader', '--use-webgpu-adapter=swiftshader', '--use-gpu-in-tests',
-      );
-    } else args.push('--use-angle=default');
+    const args = previewBrowserArguments();
     browser = await puppeteer.launch({
       headless: true,
       args,
@@ -126,9 +154,12 @@ export async function capturePreview(options) {
     });
     const page = await browser.newPage();
     page.setDefaultTimeout(180000);
+    browserDiagnostics = await attachBrowserDiagnostics(browser, page, options, args);
+    await browserDiagnostics.snapshot();
     page.on('console', message => {
       if (['error', 'warn'].includes(message.type())) {
         diagnostics[message.type() === 'error' ? 'errors' : 'warnings'].push(message.text());
+        console.warn(`[preview ${options.example}/${options.backend}] ${message.type()}: ${message.text()}`);
       }
     });
     page.on('pageerror', error => diagnostics.errors.push(error.message));
@@ -136,6 +167,7 @@ export async function capturePreview(options) {
     page.on('response', response => {
       if (response.status() >= 400) diagnostics.errors.push(`${response.status()} ${response.url()}`);
     });
+    browserDiagnostics.report({ phase: 'page-navigation' });
     await page.goto(`http://127.0.0.1:${address.port}/?preview=1`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.rzmpsPreview);
     let captureTimeout, result;
@@ -146,10 +178,13 @@ export async function capturePreview(options) {
           captureTimeout = setTimeout(() => reject(new Error('Timed out capturing preview after 180 seconds')), 180000);
         }),
       ]);
-    } finally { clearTimeout(captureTimeout); }
+    } finally {
+      clearTimeout(captureTimeout);
+    }
     async function png(file, data) {
       const buffer = Buffer.from(data.split(',')[1], 'base64');
-      if (buffer.length < 100 || buffer.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error(`Invalid PNG: ${file}`);
+      if (buffer.length < 100 || buffer.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a')
+        throw new Error(`Invalid PNG: ${file}`);
       await fs.writeFile(path.join(options.output, file), buffer);
     }
     for (const [index, frame] of result.frames.entries()) {
@@ -158,18 +193,22 @@ export async function capturePreview(options) {
     await png('contact-sheet.png', result.contactSheet);
     Object.assign(metadata, {
       status: 'complete',
+      actualBackend: result.backend,
+      scene: result.scene ?? options.scene,
       captures: result.frames.map(({ data, ...rest }) => rest),
       camera: result.camera,
       rendererInfo: result.rendererInfo,
       childValidation: result.childValidation,
       frameValidation: result.frameValidation,
-      shaderBindings: Object.values((result.shaderBindings ?? []).reduce((stages, entry) => {
-        const key = `${entry.stage}:${entry.name}`;
-        const stage = stages[key] ??= { stage: entry.stage, name: entry.name, pipelines: 0, maxStorageBuffers: 0 };
-        stage.pipelines += 1;
-        stage.maxStorageBuffers = Math.max(stage.maxStorageBuffers, entry.storageBuffers);
-        return stages;
-      }, {})),
+      shaderBindings: Object.values(
+        (result.shaderBindings ?? []).reduce((stages, entry) => {
+          const key = `${entry.stage}:${entry.name}`;
+          const stage = (stages[key] ??= { stage: entry.stage, name: entry.name, pipelines: 0, maxStorageBuffers: 0 });
+          stage.pipelines += 1;
+          stage.maxStorageBuffers = Math.max(stage.maxStorageBuffers, entry.storageBuffers);
+          return stages;
+        }, {}),
+      ),
       userAgent: result.userAgent,
     });
     if (diagnostics.errors.length) throw new Error(`Browser errors: ${diagnostics.errors.join('\n')}`);
@@ -177,15 +216,34 @@ export async function capturePreview(options) {
     return metadata;
   } catch (error) {
     metadata.status = 'failed';
-    diagnostics.errors.push(error.message);
+    diagnostics.errors.push(error.stack ?? error.message);
+    console.error(
+      `[preview ${options.example}/${options.backend}] FAILED at ${JSON.stringify(browserDiagnostics?.state.progress)}`,
+    );
+    console.error(browserDiagnostics?.state.chromium.slice(-12000) ?? 'No Chromium stderr was captured.');
     throw error;
   } finally {
-    try { await fs.writeFile(path.join(options.output, 'metadata.json'), JSON.stringify(metadata, null, 2) + '\n'); }
-    finally { try { await browser?.close(); } finally { await server?.close(); } }
+    try {
+      if (browserDiagnostics) {
+        metadata.browserDiagnostics = browserDiagnostics.state;
+        await browserDiagnostics.save();
+      }
+      await fs.writeFile(path.join(options.output, 'metadata.json'), JSON.stringify(metadata, null, 2) + '\n');
+    } finally {
+      try {
+        await browser?.close();
+      } finally {
+        await server?.close();
+      }
+    }
   }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { await capturePreview(parseOptions(process.argv.slice(2))); }
-  catch (error) { console.error(error.message); process.exitCode = 1; }
+  try {
+    await capturePreview(parseOptions(process.argv.slice(2)));
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
 }

@@ -16,7 +16,7 @@ Preset by [rzmay](https://github.com/rzmay).
 The parent loops every five seconds under gravity and uses live cubemap reflections with intensity 3. A separate nonlooping spark system lasts 0.08 seconds as an emission window. It is triggered on contacts above impulse threshold 1.2; inheritance and impulse scaling let spark motion differ from the heavy parent.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L30)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L31)
 
 ```js
   const collision = new ParticleSystem({
@@ -70,7 +70,7 @@ The parent loops every five seconds under gravity and uses live cubemap reflecti
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L87)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L88)
 
 ```js
   const sparks = new ParticleSystem({
@@ -129,7 +129,7 @@ The parent loops every five seconds under gravity and uses live cubemap reflecti
 The balls emit at five per second with lifetime eight, keeping the population near 40 for manageable collision and audio costs. Each contact burst emits 3–6 sparks with lifetimes 0.18–0.42 and radial speed 0.5–2. The short emission window does not truncate those particle lifetimes.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L37)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L38)
 
 ```js
     emitters: [
@@ -148,7 +148,7 @@ The balls emit at five per second with lifetime eight, keeping the population ne
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L93)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L94)
 
 ```js
     emitters: [
@@ -178,7 +178,7 @@ The balls emit at five per second with lifetime eight, keeping the population ne
 The parent Collision module retains bounce 0.75 and dampen 0.05, so balls can strike surfaces repeatedly. The spark ColorOverLifetime module fades linearly. Subsystem impulse factors increase spark scale and speed for stronger contacts and align emission using the collision normal.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L52)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L53)
 
 ```js
     modules: [
@@ -191,7 +191,7 @@ The parent Collision module retains bounce 0.75 and dampen 0.05, so balls can st
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L114)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L115)
 
 ```js
     modules: [
@@ -207,7 +207,7 @@ The parent Collision module retains bounce 0.75 and dampen 0.05, so balls can st
 Lit sprites with metalness 0.6 and roughness 0.2 make live reflections visible. Collision audio uses volume 0.18, pitch variation 0.8–1.2, and impulse-dependent volume and low-pass filtering. Sparks use short 0.16-second emissive trails with depth writing disabled so their bright streaks layer cleanly. PNG previews cannot validate the sound itself.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L61)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L62)
 
 ```js
     renderers: [
@@ -234,7 +234,7 @@ Lit sprites with metalness 0.6 and roughness 0.2 make live reflections visible. 
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/collisionSubEmitters.js#L121)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collisionSubEmitters.js#L122)
 
 ```js
     renderers: [
