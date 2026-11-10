@@ -168,6 +168,20 @@ cellSize: number;
 
 ***
 
+<a id="collisionoptions"></a>
+
+### collisionOptions?
+
+```ts
+optional collisionOptions?: FluidCollisionOptions;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`collisionOptions`](FluidSimulation.md#collisionoptions)
+
+***
+
 <a id="condition"></a>
 
 ### condition

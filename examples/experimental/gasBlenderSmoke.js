@@ -11,7 +11,7 @@ export default async function createGasBlenderSmoke() {
     colorDissipation: 0,
     temperatureDissipation: 0.6,
     velocityDissipation: 0.1,
-    buoyancy: 1,
+    buoyancy: 1.5,
     weight: 0,
     scalarDiffusion: 0,
     vorticityStrength: 0.2,
@@ -22,8 +22,7 @@ export default async function createGasBlenderSmoke() {
     automaticPadding: false,
   });
   system.name = 'Gas Blender Smoke';
-  system.duration = 0.2;
-  system.looping = false;
+  system.duration = 5;
   const emitter = system.emitters[0];
   emitter.rate = 800;
   emitter.radialSpeed = 0.35;

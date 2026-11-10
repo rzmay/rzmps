@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import {
   ColorOverLifetime,
+  Collision,
   Emitter,
   EmissionShape,
   FLIPSimulation,
+  FluidBoundsPolicy,
   ParticleSystem,
   ScaleOverLifetime,
   SpriteRenderer,
@@ -21,6 +23,7 @@ export default async function createFlipFluid() {
     ),
     boundsPadding: 0,
     maxBounds: 16,
+    boundsPolicy: FluidBoundsPolicy.Kill,
     automaticPadding: true,
     velocityPaddingLookahead: 0.15,
     spatialGridOptions: {
@@ -93,7 +96,7 @@ export default async function createFlipFluid() {
 
   // #region docs:system:2
   const spray = new ParticleSystem({
-    maxParticles: 1500,
+    maxParticles: 4000,
     duration: 0,
     looping: true,
     gravity: new THREE.Vector3(0, -5.2, 0),
@@ -101,44 +104,53 @@ export default async function createFlipFluid() {
     // #region docs:emitters:2
     emitters: [new Emitter({
       source: EmissionShape.Sphere(0.015, 8, 4),
-      rate: 8,
+      rate: 24,
       radialSpeed: [0.1, 0.4],
       initialValues: {
-        lifetime: [0.35, 0.7],
-        scale: [0.12, 0.24],
-        alpha: 0.7,
+        lifetime: [0.5, 1],
+        scale: [0.35, 0.6],
+        color: new THREE.Color('white'),
+        alpha: 0.12,
         rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
+        angularVelocity: [new THREE.Vector3(0, 0, -0.5), new THREE.Vector3(0, 0, 0.5)],
       },
     })],
     // #endregion docs:emitters:2
     // #region docs:modules:3
     modules: [
       new ScaleOverLifetime({ scale: time => 1 - 0.7 * time }),
-      new ColorOverLifetime({ alpha: time => 1 - time }),
+      new ColorOverLifetime({ alpha: time => Math.min(1, time / 0.15) * (1 - time) }),
+      // The soft sprite is larger than the droplet's collision footprint.
+      new Collision({ lifetimeLoss: 1, radiusScale: 0.1 }),
     ],
     // #endregion docs:modules:3
     // #region docs:renderers:2
     renderers: [new SpriteRenderer(Textures.Default, {
       alphaMap: sprayAlpha,
-      materialOptions: { depthWrite: false, blending: THREE.NormalBlending },
+      softParticleDistance: 0.2,
+      materialOptions: { depthWrite: false, blending: THREE.AdditiveBlending },
     })],
     // #endregion docs:renderers:2
   });
   // #endregion docs:system:2
   spray.name = 'Liquid Spray';
+  const sprayCondition = FLIPSimulation.SprayCondition({
+    minimumSpeed: 0.8,
+    minimumAge: 0.05,
+    maximumNeighbors: 14,
+    neighborRadius: 1.5,
+  });
+  // Reuse the fine liquid index instead of constructing a much coarser second neighborhood grid.
+  sprayCondition.spatialGridOptions = { ...flip.spatialGridOptions };
   system.addSubSystem(spray, {
     emitContinuous: true,
-    ratio: 0.15,
+    ratio: 0.4,
     inheritVelocity: 1,
     inheritScale: 0,
     inheritLifetime: 0,
     inheritAlpha: 0,
-    shouldEmitGPU: FLIPSimulation.SprayCondition({
-      minimumSpeed: 1.5,
-      minimumAge: 0.1,
-      maximumNeighbors: 6,
-      neighborRadius: 2,
-    }),
+    inheritColor: 0,
+    shouldEmitGPU: sprayCondition,
   });
 
   system.name = 'FLIP Fluid';

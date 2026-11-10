@@ -12,14 +12,31 @@ import ParticleSpatialGrid, {
   type ParticleSpatialGridRenderer,
 } from '../spatial/structures/ParticleSpatialGrid';
 import FluidCollider from '../spatial/effects/FluidCollider';
-import ThreeGPUCollisionBackend from '../collision/ThreeGPUCollisionBackend';
+import ThreeGPUCollisionBackend, {
+  CollisionGeometryUpdatePolicy, type ThreeGPUCollisionBackendOptions,
+} from '../collision/ThreeGPUCollisionBackend';
+import { isIgnoredCollisionObject } from '../collision/isIgnoredCollisionObject';
+import getAttributeVersion from '../utils/getAttributeVersion';
 import { FluidBoundsPolicy } from '../enums/FluidBoundsPolicy';
 
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
 type FloatStorage = { element(index: Node | number): Node<'float'> };
 type UniformNode<T, TNode extends string> = Node<TNode> & { value: T };
 
+/** Mesh discovery uses the same roots and filters as Three's collision backends. */
+export type FluidCollisionOptions = Pick<ThreeGPUCollisionBackendOptions,
+  'world' | 'staticObjects' | 'dynamicObjects' | 'geometryDynamicObjects' | 'objectFilter'
+  | 'staticObjectFilter' | 'dynamicObjectFilter' | 'geometryDynamicObjectFilter' | 'updatePolicy'
+> & {
+  /** Additional contact shell in mesh-local units. Defaults to zero. */
+  surfaceThickness?: number;
+  /** Resolution of collected meshes' cached occupancy fields. Defaults to 16. */
+  bakedFieldResolution?: number;
+};
+
 export interface FluidSimulationOptions extends Partial<ModuleOptions> {
+  /** Opt-in mesh collection; omitted world uses the owning scene. Explicit lists suppress scene discovery. */
+  collisionOptions?: FluidCollisionOptions;
   bounds: THREE.Box3;
   spatialGridOptions: Partial<ParticleSpatialGridOptions>;
   pressureIterations: number;
@@ -40,6 +57,8 @@ export interface FluidSimulationOptions extends Partial<ModuleOptions> {
 }
 
 abstract class FluidSimulation extends Module {
+  collisionOptions?: FluidCollisionOptions;
+  private readonly collectedColliders = new Map<THREE.Mesh, { collider: FluidCollider; revision: string }>();
   bounds: THREE.Box3;
   readonly particleBounds = new THREE.Box3();
   automaticPaddingDistance = 0;
@@ -148,8 +167,9 @@ abstract class FluidSimulation extends Module {
       spatialGrid.centeredAtOrigin,
     );
     this.autoBounds = !options.bounds;
+    this.collisionOptions = options.collisionOptions;
     this.resolution = resolution;
-    this.cellCount = resolution ** 3;
+    this.cellCount = this.gridFieldCellCount;
     this.pressureIterations = Math.max(0, Math.floor(options.pressureIterations ?? 12));
     this.externalForce = options.externalForce?.clone() ?? new THREE.Vector3(0, -9.81, 0);
     this.maxVelocity = Math.max(0, options.maxVelocity ?? 20);
@@ -174,6 +194,7 @@ abstract class FluidSimulation extends Module {
       throw new Error('Fluid simulations require GPU particle processing with a WebGPU renderer.');
     }
     super.prepare(context);
+    this.collectColliders(particleSystem);
     const grid = this.getParticleSpatialGrid(particleSystem);
     if (grid) this.synchronizeGridBounds(grid);
     this.syncBoundsPolicy();
@@ -357,7 +378,7 @@ abstract class FluidSimulation extends Module {
     if (grid.cellsPerAxis === this.resolution) return;
     this.disposeGridFields();
     this.resolution = grid.cellsPerAxis;
-    this.cellCount = this.resolution ** 3;
+    this.cellCount = this.gridFieldCellCount;
     this.cellSize = this.bounds.getSize(new THREE.Vector3()).x / this.resolution;
     this.cellSizeNode.value = this.cellSize;
     this.allocateGridFields();
@@ -368,6 +389,9 @@ abstract class FluidSimulation extends Module {
   protected onGridResolutionChanged(renderer: ParticleSpatialGridRenderer): void {
     void renderer;
   }
+
+  /** Sparse solvers replace the initial placeholder with their resident pool after super(). */
+  protected get gridFieldCellCount(): number { return this.resolution ** 3; }
 
   private allocateGridFields(): void {
     this.velocityCurrentAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
@@ -411,7 +435,7 @@ abstract class FluidSimulation extends Module {
     context: GPUParticleUpdateContext,
     renderer: ParticleSpatialGridRenderer,
   ): void {
-    const colliders = this.spatialEffects.filter((effect): effect is FluidCollider => (
+    const colliders = this.fluidColliders.filter((effect): effect is FluidCollider => (
       effect instanceof FluidCollider && effect.visible && effect.gridOccupancy
     ));
     colliders.forEach((collider) => collider.syncGPUTransform(context.system));
@@ -445,6 +469,7 @@ abstract class FluidSimulation extends Module {
       colliders.forEach((collider) => {
         occupied.assign(max(occupied, collider.testPositionGPU(center, context)));
       });
+      // Conservatively retain every occupied sample so thin walls cannot disappear.
       this.solid.element(index).assign(occupied.greaterThan(0).select(1, 0));
     });
     this.solidNode = solidNode;
@@ -579,6 +604,8 @@ abstract class FluidSimulation extends Module {
   }
 
   public override cleanup(): void {
+    this.collectedColliders.forEach(({ collider }) => { collider.geometry = undefined; });
+    this.collectedColliders.clear();
     this.boundsGeneration += 1;
     this.pendingBounds = undefined;
     this.boundsReadPending = false;
@@ -604,7 +631,7 @@ abstract class FluidSimulation extends Module {
 
   private updateParticleCollisionBackend(system?: ParticleSystem, dt?: number): void {
     if (!this.usesParticleColliderSweeps) return;
-    const colliders = this.spatialEffects.filter((effect): effect is FluidCollider => (
+    const colliders = this.fluidColliders.filter((effect): effect is FluidCollider => (
       effect instanceof FluidCollider
       && effect.visible
       && effect.particleCollision
@@ -634,6 +661,95 @@ abstract class FluidSimulation extends Module {
       this.onParticleColliderGeometryChanged();
       this.needsUpdate = true;
     }
+  }
+
+  private get fluidColliders(): FluidCollider[] {
+    return [...this.spatialEffects.filter((effect): effect is FluidCollider => effect instanceof FluidCollider),
+      ...Array.from(this.collectedColliders.values(), ({ collider }) => collider)];
+  }
+
+  private collectColliders(system: ParticleSystem): void {
+    const options = this.collisionOptions;
+    if (options?.surfaceThickness !== undefined && !Number.isFinite(options.surfaceThickness)) {
+      throw new RangeError('Fluid collision surfaceThickness must be finite.');
+    }
+    if (options?.bakedFieldResolution !== undefined && (!Number.isInteger(options.bakedFieldResolution)
+      || options.bakedFieldResolution < 2)) {
+      throw new RangeError('Fluid collision bakedFieldResolution must be an integer of at least two.');
+    }
+
+    const selected = new Map<THREE.Mesh, SpatialEffectUpdatePolicy>();
+    const addRoot = (root: THREE.Object3D, policy?: SpatialEffectUpdatePolicy) => {
+      root.updateWorldMatrix(true, true);
+      root.traverse(object => {
+        if (!(object instanceof THREE.Mesh) || !object.geometry.getAttribute('position')) return;
+        // Effect-owned geometry and renderer descendants already have their own lifecycle.
+        for (let ancestor: THREE.Object3D | null = object; ancestor; ancestor = ancestor.parent) {
+          if (ancestor instanceof FluidCollider || isIgnoredCollisionObject(ancestor)) return;
+        }
+        if (options?.objectFilter && !options.objectFilter(object)) return;
+        const defaultPolicy = {
+          [CollisionGeometryUpdatePolicy.Static]: SpatialEffectUpdatePolicy.Static,
+          [CollisionGeometryUpdatePolicy.TransformDynamic]: SpatialEffectUpdatePolicy.TransformDynamic,
+          [CollisionGeometryUpdatePolicy.GeometryDynamic]: SpatialEffectUpdatePolicy.GeometryDynamic,
+          [CollisionGeometryUpdatePolicy.Auto]: SpatialEffectUpdatePolicy.Auto,
+        }[options?.updatePolicy ?? CollisionGeometryUpdatePolicy.Auto];
+        const classification = policy ?? (options?.geometryDynamicObjectFilter?.(object)
+          ? SpatialEffectUpdatePolicy.GeometryDynamic : options?.dynamicObjectFilter?.(object)
+            ? SpatialEffectUpdatePolicy.TransformDynamic : options?.staticObjectFilter?.(object)
+              ? SpatialEffectUpdatePolicy.Static
+              : defaultPolicy);
+        selected.set(object, classification);
+      });
+    };
+
+    if (options) {
+      const explicit = options.staticObjects !== undefined || options.dynamicObjects !== undefined
+        || options.geometryDynamicObjects !== undefined;
+      if (explicit) {
+        options.staticObjects?.forEach(root => addRoot(root, SpatialEffectUpdatePolicy.Static));
+        options.dynamicObjects?.forEach(root => addRoot(root, SpatialEffectUpdatePolicy.TransformDynamic));
+        options.geometryDynamicObjects?.forEach(root => addRoot(root, SpatialEffectUpdatePolicy.GeometryDynamic));
+      } else if (options.world ?? system.scene) {
+        addRoot((options.world ?? system.scene)!);
+      }
+    }
+
+    this.collectedColliders.forEach(({ collider }, mesh) => {
+      if (!selected.has(mesh)) {
+        collider.geometry = undefined;
+        this.collectedColliders.delete(mesh);
+      }
+    });
+
+    selected.forEach((policy, mesh) => {
+      let entry = this.collectedColliders.get(mesh);
+      if (!entry || entry.collider.geometry !== mesh.geometry) {
+        if (entry) entry.collider.geometry = undefined;
+        const collider = new CollectedFluidCollider({
+          geometry: mesh.geometry,
+          updatePolicy: policy,
+          // Mesh vertex edits must use their actual geometry, including deformed primitive meshes.
+          testGPU: (particle, _context, effect) => effect.bakedFieldGPU(particle),
+        });
+        collider.matrixAutoUpdate = false;
+        entry = { collider, revision: '' };
+        this.collectedColliders.set(mesh, entry);
+      }
+      const { collider } = entry;
+      const revision = [policy, getAttributeVersion(mesh.geometry.getAttribute('position')),
+        getAttributeVersion(mesh.geometry.index), options?.surfaceThickness ?? 0,
+        options?.bakedFieldResolution ?? 16].join(':');
+      if (!collider.matrix.equals(mesh.matrixWorld)) {
+        collider.matrix.copy(mesh.matrixWorld);
+        collider.matrixWorldNeedsUpdate = true;
+      }
+      collider.updatePolicy = policy;
+      collider.surfaceThickness = Math.max(0, options?.surfaceThickness ?? 0);
+      collider.bakedFieldResolution = Math.max(2, Math.floor(options?.bakedFieldResolution ?? 16));
+      if (revision !== entry.revision) collider.needsUpdate = true;
+      entry.revision = revision;
+    });
   }
 
   static padBounds(bounds: THREE.Box3, ratio: number): THREE.Box3 {
@@ -681,6 +797,14 @@ abstract class FluidSimulation extends Module {
 }
 
 export default FluidSimulation;
+
+/** Collected meshes have a fixed baked test, rather than an arbitrary user callback. */
+class CollectedFluidCollider extends FluidCollider {
+  override get canCacheGridOccupancy(): boolean {
+    return this.updatePolicy === SpatialEffectUpdatePolicy.Static
+      || this.updatePolicy === SpatialEffectUpdatePolicy.TransformDynamic;
+  }
+}
 
 function attributeVersion(attribute?: THREE.BufferAttribute | THREE.InterleavedBufferAttribute): number {
   if (!attribute) return -1;

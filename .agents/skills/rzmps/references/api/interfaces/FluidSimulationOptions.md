@@ -68,6 +68,18 @@ Contain retains a reached cap instead of shrinking away closed field walls.
 
 ***
 
+<a id="collisionoptions"></a>
+
+### collisionOptions?
+
+```ts
+optional collisionOptions?: FluidCollisionOptions;
+```
+
+Opt-in mesh collection; omitted world uses the owning scene. Explicit lists suppress scene discovery.
+
+***
+
 <a id="condition"></a>
 
 ### condition?

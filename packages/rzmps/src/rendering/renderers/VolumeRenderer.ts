@@ -13,7 +13,6 @@ import {
   cameraProjectionMatrix,
   cameraViewMatrix,
   float,
-  ceil,
   floor,
   hash,
   max,
@@ -669,10 +668,11 @@ class VolumeRenderer extends Renderer {
         If(start.greaterThanEqual(far), () => Discard());
         const metric = direction.mul(this.gpuBoundsSize).length().toVar('volumeMetric');
         const worldLength = metric.mul(far.sub(start));
-        const count = ceil(worldLength.div(this.gpuCellSize.mul(this.gpuStepSize)))
-          .clamp(1, Math.min(512, Math.floor(this.steps))).toVar('volumeCount');
-        // Preserve the original sampling spacing when geometry shortens the interval.
-        const baseStep = far.sub(start).div(count).toVar('volumeBaseStep');
+        // Do not redistribute every sample when a ray crosses an integer sample-count boundary.
+        const worldStep = max(this.gpuCellSize.mul(this.gpuStepSize),
+          worldLength.div(Math.max(1, Math.min(512, Math.floor(this.steps)))));
+        // Preserve the original spacing when scene depth clips the integration interval.
+        const baseStep = worldStep.div(metric).toVar('volumeBaseStep');
         const rawDepth = this.depthTest ? viewportDepthTexture().toVar('volumeSceneDepth') : float(1);
         const orthographic = cameraProjectionMatrix.mul(vec4(0, 0, 0, 1)).w.equal(1);
         const sceneZ = orthographic.select(orthographicDepthToViewZ(rawDepth, cameraNear, cameraFar),

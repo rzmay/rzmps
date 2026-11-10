@@ -280,7 +280,7 @@ export type {
 } from './rendering/compositing/composite.utils';
 
 export { default as FluidSimulation } from './modules/FluidSimulation';
-export type { FluidSimulationOptions } from './modules/FluidSimulation';
+export type { FluidSimulationOptions, FluidCollisionOptions } from './modules/FluidSimulation';
 export { default as GasSimulation } from './modules/GasSimulation';
 export type { GasSimulationOptions } from './modules/GasSimulation';
 export { default as FLIPSimulation } from './modules/FLIPSimulation';

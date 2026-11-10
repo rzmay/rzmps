@@ -149,6 +149,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [FLIPSimulationOptions](api/interfaces/FLIPSimulationOptions.md)
 - [FLIPSprayConditionOptions](api/interfaces/FLIPSprayConditionOptions.md)
 - [FluidColliderOptions](api/type-aliases/FluidColliderOptions.md)
+- [FluidCollisionOptions](api/type-aliases/FluidCollisionOptions.md)
 - [FluidSimulationOptions](api/interfaces/FluidSimulationOptions.md)
 - [ForceFieldOptions](api/interfaces/ForceFieldOptions.md)
 - [ForceOverLifetimeOptions](api/Supporting-Types/interfaces/ForceOverLifetimeOptions.md)

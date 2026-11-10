@@ -24,6 +24,8 @@ const reviewAdvection = new URLSearchParams(location.search).get('reviewAdvectio
 const reviewGrid = new URLSearchParams(location.search).get('reviewGrid')?.split(',').map(Number);
 const reviewBricks = new URLSearchParams(location.search).get('reviewBricks');
 const reviewParticles = new URLSearchParams(location.search).get('reviewParticles');
+const measureStartup = new URLSearchParams(location.search).has('measureStartup');
+const constructorStart = performance.now();
 const system = await experimentalExamples.find(({ id }) => id === example).create({
   ...(reviewBricks ? { maxActiveBricks: Number(reviewBricks) } : {}),
   ...(reviewGrid ? { spatialGridOptions: {
@@ -37,6 +39,7 @@ const system = await experimentalExamples.find(({ id }) => id === example).creat
   automaticPadding: false,
   } : {}),
 });
+const constructorMs = performance.now() - constructorStart;
 // Long-running numerical regressions keep their original finite source and quality;
 // demoLiquid explicitly exercises the current interactive preset instead.
 if (example === 'flipFluid' && !new URLSearchParams(location.search).has('demoLiquid')) {
@@ -52,6 +55,7 @@ if (example === 'flipFluid' && !new URLSearchParams(location.search).has('demoLi
   system.duration = 14;
   system.looping = false;
   system.emitters[0].initialValues.lifetime = 60;
+  system.modules[0].boundsPolicy = 'Ballistic';
   system.modules[0].setSpatialGridOptions({ brickSubdivisions: 2, cellSubdivisions: 4 });
 }
 if (reviewGrid) system.modules[0].setSpatialGridOptions({
@@ -95,8 +99,30 @@ if (new URLSearchParams(location.search).get('reviewDispatch') === 'pool') {
 scene.userData.__rzmps_particleRoot.add(system);
 scene.updateMatrixWorld(true);
 if (new URLSearchParams(location.search).has('sourceWall')) addGasWall();
+const initialTexture = system.modules[0].getVolumeField?.().texture;
+const firstDispatches = [];
+const compute = renderer.compute.bind(renderer);
+if (measureStartup) renderer.compute = function (nodes, ...args) {
+  const start = performance.now();
+  const result = compute(nodes, ...args);
+  firstDispatches.push({ name: Array.isArray(nodes) ? 'batch' : nodes.name, ms: performance.now() - start });
+  return result;
+};
+const renderStart = performance.now();
 await renderer.renderAsync(scene, camera);
+const initialRenderMs = performance.now() - renderStart;
+const updateStart = performance.now();
 system.advanceFrames(1, 1 / 60);
+const firstUpdateCpuMs = performance.now() - updateStart;
+if (measureStartup) {
+  await renderer.backend.device.queue.onSubmittedWorkDone();
+  renderer.compute = compute;
+  window.fluidStartup = { constructorMs, initialRenderMs, firstUpdateCpuMs,
+    firstUpdateFencedMs: performance.now() - updateStart,
+    textureRetained: initialTexture === system.modules[0].getVolumeField?.().texture,
+    dispatches: firstDispatches.length,
+    slowestDispatches: firstDispatches.sort((a, b) => b.ms - a.ms).slice(0, 6) };
+}
 const flip = system.modules[0];
 if (example === 'flipFluid' && new URLSearchParams(location.search).get('reviewLiquidWork') === 'dense') {
   flip.workGrid.computeDense = (callback, faces = false) => Fn(() => callback(instanceIndex))()

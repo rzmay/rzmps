@@ -101,6 +101,22 @@ Swept boundary passes per frame. Additional passes resolve simultaneous contacts
 
 ***
 
+<a id="collisionoptions"></a>
+
+### collisionOptions?
+
+```ts
+optional collisionOptions?: FluidCollisionOptions;
+```
+
+Opt-in mesh collection; omitted world uses the owning scene. Explicit lists suppress scene discovery.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`collisionOptions`](FluidSimulationOptions.md#collisionoptions)
+
+***
+
 <a id="condition"></a>
 
 ### condition?

@@ -104,6 +104,22 @@ buoyancy: number;
 
 ***
 
+<a id="collisionoptions"></a>
+
+### collisionOptions?
+
+```ts
+optional collisionOptions?: FluidCollisionOptions;
+```
+
+Opt-in mesh collection; omitted world uses the owning scene. Explicit lists suppress scene discovery.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`collisionOptions`](FluidSimulationOptions.md#collisionoptions)
+
+***
+
 <a id="colordissipation"></a>
 
 ### colorDissipation

@@ -162,6 +162,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
     this.maxActiveBricks = options.maxActiveBricks ?? 512;
     this.volumeGrid = new SparseVolumeGrid(this.spatialGridOptions!, this.maxActiveBricks);
+    this.sparseStructureKey = [this.volumeGrid.brickSubdivisions,
+      this.volumeGrid.cellSubdivisions, this.maxActiveBricks].join('|');
     this.resizeGridFields(this.volumeGrid.cellCount);
     this.allocateGasFields();
     this.density = {
@@ -179,6 +181,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       version: 0,
     };
   }
+
+  protected override get gridFieldCellCount(): number { return 1; }
 
   /** Density field available to volume renderers and other field consumers. */
   public getVolumeField(): VolumeField {

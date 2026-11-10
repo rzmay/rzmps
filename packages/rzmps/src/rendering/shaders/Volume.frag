@@ -56,8 +56,9 @@ void main() {
 
   float rayLength = max(bounds.y - bounds.x, 0.0);
   float worldLength = length(rayDir * boundsSize) * rayLength;
-  float count = clamp(ceil(worldLength / (cellSize * stepSizeMultiplier)), 1.0, min(512.0, floor(steps)));
-  float stepSize = rayLength / count;
+  // Keep world-space spacing stable across integer sample-count boundaries.
+  float worldStep = max(cellSize * stepSizeMultiplier, worldLength / min(512.0, floor(steps)));
+  float stepSize = worldStep / length(rayDir * boundsSize);
   float offset = jitter ? random(vec3(12.9898, 78.233, 37.719), frame) : 0.5;
   float distanceAlongRay = bounds.x;
 

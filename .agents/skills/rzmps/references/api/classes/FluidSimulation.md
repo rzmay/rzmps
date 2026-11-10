@@ -135,6 +135,16 @@ cellSize: number;
 
 ***
 
+<a id="collisionoptions"></a>
+
+### collisionOptions?
+
+```ts
+optional collisionOptions?: FluidCollisionOptions;
+```
+
+***
+
 <a id="condition"></a>
 
 ### condition

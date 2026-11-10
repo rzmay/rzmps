@@ -84,6 +84,8 @@ test('fluid presets preserve scenes, the teapot fills, and reference gas fields 
       await page.goto(`${origin}/@fs${fixture}?example=${example}`, { waitUntil: 'networkidle0' });
       await page.waitForFunction(() => window.ready);
       const initial = await page.evaluate(() => window.runFrames(30));
+      // Measure decay independently of the interactive presets' longer source durations.
+      await page.evaluate(() => window.stopGasSources());
       const cooled = await page.evaluate(() => window.runFrames(210));
       assert.ok(initial.field.sum > 0, `${example}: the particle burst must inject gas`);
       if (example === 'gasNiagaraBurst') {
