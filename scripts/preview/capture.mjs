@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { build, preview } from 'vite';
 import puppeteer from 'puppeteer';
+import { previewBrowserArguments } from './browserSettings.mjs';
+import { attachBrowserDiagnostics } from './browserDiagnostics.mjs';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
@@ -107,7 +109,7 @@ export async function capturePreview(options) {
   for (const file of await fs.readdir(options.output)) {
     if (/^frame-\d+\.png$|^contact-sheet\.png$/.test(file)) await fs.unlink(path.join(options.output, file));
   }
-  let server, browser;
+  let server, browser, browserDiagnostics;
   const metadata = {
     ...options,
     status: 'initializing',
@@ -144,18 +146,7 @@ export async function capturePreview(options) {
     viteConfig = await demoBuild;
     server = await preview({ ...viteConfig, preview: { host: '127.0.0.1', port: 0 } });
     const address = server.httpServer.address();
-    const args = ['--disable-dev-shm-usage', '--enable-unsafe-webgpu', '--autoplay-policy=no-user-gesture-required'];
-    if (process.env.CI === 'true') {
-      args.push(
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--use-gl=angle',
-        '--use-angle=swiftshader',
-        '--enable-unsafe-swiftshader',
-        '--use-webgpu-adapter=swiftshader',
-        '--use-gpu-in-tests',
-      );
-    } else args.push('--use-angle=default');
+    const args = previewBrowserArguments();
     browser = await puppeteer.launch({
       headless: true,
       args,
@@ -163,9 +154,12 @@ export async function capturePreview(options) {
     });
     const page = await browser.newPage();
     page.setDefaultTimeout(180000);
+    browserDiagnostics = await attachBrowserDiagnostics(browser, page, options, args);
+    await browserDiagnostics.snapshot();
     page.on('console', message => {
       if (['error', 'warn'].includes(message.type())) {
         diagnostics[message.type() === 'error' ? 'errors' : 'warnings'].push(message.text());
+        console.warn(`[preview ${options.example}/${options.backend}] ${message.type()}: ${message.text()}`);
       }
     });
     page.on('pageerror', error => diagnostics.errors.push(error.message));
@@ -173,6 +167,7 @@ export async function capturePreview(options) {
     page.on('response', response => {
       if (response.status() >= 400) diagnostics.errors.push(`${response.status()} ${response.url()}`);
     });
+    browserDiagnostics.report({ phase: 'page-navigation' });
     await page.goto(`http://127.0.0.1:${address.port}/?preview=1`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.rzmpsPreview);
     let captureTimeout, result;
@@ -198,6 +193,7 @@ export async function capturePreview(options) {
     await png('contact-sheet.png', result.contactSheet);
     Object.assign(metadata, {
       status: 'complete',
+      actualBackend: result.backend,
       scene: result.scene ?? options.scene,
       captures: result.frames.map(({ data, ...rest }) => rest),
       camera: result.camera,
@@ -220,10 +216,18 @@ export async function capturePreview(options) {
     return metadata;
   } catch (error) {
     metadata.status = 'failed';
-    diagnostics.errors.push(error.message);
+    diagnostics.errors.push(error.stack ?? error.message);
+    console.error(
+      `[preview ${options.example}/${options.backend}] FAILED at ${JSON.stringify(browserDiagnostics?.state.progress)}`,
+    );
+    console.error(browserDiagnostics?.state.chromium.slice(-12000) ?? 'No Chromium stderr was captured.');
     throw error;
   } finally {
     try {
+      if (browserDiagnostics) {
+        metadata.browserDiagnostics = browserDiagnostics.state;
+        await browserDiagnostics.save();
+      }
       await fs.writeFile(path.join(options.output, 'metadata.json'), JSON.stringify(metadata, null, 2) + '\n');
     } finally {
       try {

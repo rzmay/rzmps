@@ -23,14 +23,10 @@ export function previewInputs(examples) {
     ...tree(path.join(root, 'examples/scenes')),
     ...tree(path.join(root, 'examples/utils')),
     ...tree(path.join(root, 'apps/demo/src/rendering')),
-    ...[
-      'scripts/preview/capture.mjs',
-      'scripts/preview/harness.js',
-      'scripts/preview/resolveScene.mjs',
-      'scripts/docs/preview-settings.mjs',
-      'apps/demo/vite.config.mjs',
-      'package-lock.json',
-    ].map(f => path.join(root, f)),
+    ...tree(path.join(root, 'scripts/preview')),
+    ...['scripts/docs/preview-settings.mjs', 'apps/demo/vite.config.mjs', 'package-lock.json'].map(f =>
+      path.join(root, f),
+    ),
   ];
   const common = createHash('sha256');
   for (const file of sharedFiles) common.update(path.relative(root, file)).update(fs.readFileSync(file));

@@ -17,6 +17,9 @@ export async function generatePreviews({ force = false } = {}) {
   const inputs = previewInputs(examples);
   const manifest = readPreviewManifest();
   await fs.mkdir(previewDirectory, { recursive: true });
+  const diagnosticRoot = path.resolve(
+    process.env.RZMPS_PREVIEW_DIAGNOSTICS_DIR ?? 'benchmark-results/preview-diagnostics',
+  );
   let capture;
   for (const example of examples) {
     const destination = path.join(previewDirectory, example.id + '.png');
@@ -37,25 +40,34 @@ export async function generatePreviews({ force = false } = {}) {
       let result;
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
+          console.log(`${example.id}: capturing ${options.backend}, attempt ${attempt}/3`);
           result = await capture.capturePreview(options);
           break;
         } catch (error) {
+          const saved = path.join(diagnosticRoot, example.id, `attempt-${attempt}`);
+          await fs.mkdir(saved, { recursive: true });
+          for (const file of ['metadata.json', 'diagnostics.json', 'chromium.log']) {
+            await fs.copyFile(path.join(output, file), path.join(saved, file)).catch(() => {});
+          }
+          await fs.cp(path.join(output, 'shaders'), path.join(saved, 'shaders'), { recursive: true }).catch(() => {});
+          console.error(`${example.id}: ${error.stack ?? error.message}\nDiagnostics: ${saved}`);
           if (
             options.backend !== 'webgpu' ||
             attempt === 3 ||
-            !error?.message?.includes('A valid external Instance reference no longer exists')
+            !/external Instance reference|WebGPU device lost|Instance dropped/i.test(error?.message ?? '')
           )
             throw error;
           // capturePreview closes its browser before rejecting, so every retry starts fresh.
           console.warn(`${example.id}: WebGPU device lost; retrying preview (${attempt + 1}/3) in a fresh browser.`);
         }
       }
+      if (result.actualBackend !== options.backend) throw new Error(`${example.id}: captured an unexpected backend`);
       const image = await fs.readFile(path.join(output, 'frame-000.png'));
       await fs.writeFile(destination, image);
       manifest.examples[example.id] = {
         inputHash: inputs.get(example.id),
         imageHash: checksum(image),
-        backend: options.backend,
+        backend: result.actualBackend,
         width: options.width,
         height: options.height,
         capture: result.captures[0],

@@ -38,7 +38,9 @@
     "lint:library": "eslint packages/*/src --ext .ts --max-warnings 0",
     "lint:demo": "eslint apps/demo/src --ext .js,.jsx --max-warnings 0",
     "lint:scripts": "eslint scripts --ext .js,.mjs,.cjs --max-warnings 0",
-    "lint:examples": "eslint examples --ext .js,.cjs --max-warnings 0"
+    "lint:examples": "eslint examples --ext .js,.cjs --max-warnings 0",
+    "preview:linux": "node scripts/preview/linux.mjs",
+    "test:preview-diagnostics": "node --test scripts/tests/preview/diagnostics.test.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.71.0",
