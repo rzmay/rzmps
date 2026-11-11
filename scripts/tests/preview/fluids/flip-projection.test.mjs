@@ -31,6 +31,8 @@ try {
         .or(c.z.lessThan(20)).or(c.z.greaterThan(28)).or(c.y.lessThan(20));
       const fluid = solid.not().and(c.y.lessThanEqual(28));
       flip.solid.element(index).assign(solid.select(1, 0));
+      flip.faceOpenness.element(index).assign(solid.select(vec4(0), vec4(1)));
+      flip.solidVelocity.element(index).assign(vec4(0));
       flip.velocityNext.element(index).assign(vec4(0, -0.1, 0, fluid.select(2, 0)));
       flip.velocityBefore.element(index).assign(vec4(0, 0, 0, fluid.select(1, 0)));
     }));

@@ -1,4 +1,5 @@
 import GPUSubSystemPredicates from '../emission/gpu/SubSystemPredicates';
+import Benchmarks from '../core/Benchmarks';
 import GlobalSettings from '../core/GlobalSettings';
 import * as THREE from 'three';
 import {
@@ -106,10 +107,35 @@ export interface GPUSimulationExecution {
  * The public system supplies configuration; narrow callbacks coordinate time and event delivery.
  */
 export default class GPUSimulation {
+  readonly benchmarks = new Benchmarks({ beforeSnapshot: () => {
+    this.benchmarks.reconcile('buffers', this._gpuBuffers ? [this._gpuBuffers] : []);
+  } });
   constructor(
     readonly system: ParticleSystem,
     readonly execution: GPUSimulationExecution,
-  ) {}
+  ) {
+    const gauge = (name: string, get: () => number | null, unit = 'count') =>
+      this.benchmarks.register(name, { type: 'gauge', unit, get });
+    gauge('allocatedSlots', () => this._gpuBuffers?.capacity ?? 0);
+    gauge('usedSlots', () => this.system.gpuBufferStats.activeSlots);
+    this.benchmarks.derive('slotUtilization', ['usedSlots', 'allocatedSlots'],
+      ({ usedSlots, allocatedSlots }) => allocatedSlots > 0 ? usedSlots / allocatedSlots : 0);
+    gauge('allocatedBytes', () => this._gpuBuffers
+      ? this._gpuBuffers.attributes.floatData.array.byteLength
+        + this._gpuBuffers.attributes.uintData.array.byteLength : 0,
+    'bytes');
+    gauge('bufferCount', () => this._gpuBuffers ? 2 : 0);
+    gauge('uploadBytes', () => this._gpuBuffers?.uploadBytes ?? 0, 'bytes');
+    gauge('nativeSpawnCount', () => this.system.gpuAllocationStats?.allocationSuccesses ?? null);
+    gauge('nativeDeathCount', () => this.system.gpuAllocationStats?.recycledDeaths ?? null);
+    gauge('readbackBytes', () => this.system.gpuSelectiveReadbackStats.bytes, 'bytes');
+    gauge('readbackLatency', () => this.system.gpuSelectiveReadbackStats.latencyMs, 'ms');
+    gauge('pipelineBuilds', () => this._gpuPipelineBuildCount);
+    gauge('resourceBuilds', () => this._gpuResourceBuildCount);
+    gauge('parameterUploads', () => this.system.gpuConfigurationStats.parameterUploads);
+    this.benchmarks.register('dispatchCount', { type: 'counter', unit: 'count', perFrame: true,
+      source: 'renderer.info.compute.calls delta during this simulation submission' });
+  }
   _gpuLODCull?: { buffers: GPUParticleBufferState; count: number; version: number; node: ComputeNode };
 
   readonly _gpuLODQuality = uniform(1, 'float');
@@ -271,6 +297,17 @@ export default class GPUSimulation {
   _isGPUProcessingActive = false;
 
   _processParticlesGPU(modules: Module[], spatialEffects: SpatialEffect[]): void {
+    const renderer = this.system.sceneRenderer;
+    const before = this.benchmarks.enabled && isWebGPURenderer(renderer) ? renderer.info.compute.calls : undefined;
+    const end = this.benchmarks.begin('submissionTime');
+    try { this.processParticles(modules, spatialEffects); } finally {
+      end?.();
+      if (before !== undefined && isWebGPURenderer(renderer))
+        this.benchmarks.increment('dispatchCount', Math.max(0, renderer.info.compute.calls - before));
+    }
+  }
+
+  private processParticles(modules: Module[], spatialEffects: SpatialEffect[]): void {
     const sceneRenderer = this.system.sceneRenderer;
     if (!isWebGPURenderer(sceneRenderer)) return;
     this._flushTargetedGPUEvents();
@@ -306,7 +343,10 @@ export default class GPUSimulation {
     this._isGPUProcessingActive = true;
 
     modules.forEach(module => module.beginExecution(this.system, this.execution.deltaTime()));
-    modules.forEach(module => module.prepare(module.executionContext!));
+    modules.forEach(module => {
+      const end = module.benchmarks.begin('prepare');
+      try { module.prepare(module.executionContext!); } finally { end?.(); }
+    });
 
     this._logGPUDebug('prepared modules', {
       modifiers: this._describeGPUModules(modules),
@@ -1632,7 +1672,9 @@ export default class GPUSimulation {
         builtGrids.add(grid);
       }
 
-      if (modifier instanceof Module) modifier.computeGPU(context, renderer, grid);
+      if (modifier instanceof Module) {
+        modifier.benchmarks.span('compute', () => modifier.computeGPU(context, renderer, grid));
+      }
 
       if (modifier instanceof Collision) {
         if (modifier.hasGPUCollisionBackend()) {
@@ -2301,6 +2343,7 @@ export default class GPUSimulation {
       const spatialGrid = modifier.getParticleSpatialGrid(this.system);
       const moduleContext = {
         ...context,
+        module: modifier,
         events: modifier.gpuExecutionContext.events,
         spatialGrid,
       };

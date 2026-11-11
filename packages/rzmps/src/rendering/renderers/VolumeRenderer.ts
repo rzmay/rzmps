@@ -72,7 +72,7 @@ export interface VolumeRendererOptions extends RendererOptions {
   field?: VolumeField | (() => VolumeField | undefined);
   colorField?: VolumeField | (() => VolumeField | undefined);
   baseColor: THREE.ColorRepresentation;
-  /** Opacity per cell of ray travel, after density mapping. Defaults to 0.25. */
+  /** Opacity over one simulation unit of ray travel, after density mapping. Defaults to 0.25. */
   opacity: number;
   threshold: number;
   range: number;
@@ -180,7 +180,6 @@ class VolumeRenderer extends Renderer {
   private readonly gpuBoundsMinimum = uniform(new THREE.Vector3());
   private readonly gpuBoundsSize = uniform(new THREE.Vector3(1, 1, 1));
   private readonly gpuCellSize = uniform(1);
-  private readonly gpuReferenceCellSize = uniform(1);
   private readonly gpuStepSize = uniform(1);
   private readonly gpuDensityGain = uniform(1);
   private readonly gpuDensityRange = uniform(new THREE.Vector2(0, 1));
@@ -320,7 +319,6 @@ class VolumeRenderer extends Renderer {
     this.webglMaterial.uniforms.steps.value = this.steps;
     this.webglMaterial.uniforms.jitter.value = this.jitter;
     this.webglMaterial.uniforms.cellSize.value = this.gpuCellSize.value;
-    this.webglMaterial.uniforms.referenceCellSize.value = this.gpuReferenceCellSize.value;
     this.webglMaterial.uniforms.stepSizeMultiplier.value = this.stepSizeMultiplier;
     this.webglMaterial.uniforms.densityGain.value = this.densityGain;
     this.webglMaterial.uniforms.densityRange.value.set(...this.densityRange);
@@ -541,7 +539,6 @@ class VolumeRenderer extends Renderer {
   private updateBounds(): void {
     this.bounds.makeEmpty();
     let cellSize = Infinity;
-    let referenceCellSize = Infinity;
     for (const layer of this.layers) {
       const field = layer.density.field;
       const center = field.bounds.getCenter(new THREE.Vector3()).add(layer.offset.value);
@@ -549,11 +546,8 @@ class VolumeRenderer extends Renderer {
       this.bounds.union(new THREE.Box3().setFromCenterAndSize(center, size));
       const cell = size.divide(field.resolution);
       cellSize = Math.min(cellSize, cell.x, cell.y, cell.z);
-      referenceCellSize = Math.min(referenceCellSize,
-        cell.x / layer.scale.value, cell.y / layer.scale.value, cell.z / layer.scale.value);
     }
     this.gpuCellSize.value = Math.max(1e-6, Number.isFinite(cellSize) ? cellSize : 1);
-    this.gpuReferenceCellSize.value = Math.max(1e-6, Number.isFinite(referenceCellSize) ? referenceCellSize : 1);
     this.mesh.visible = !this.bounds.isEmpty();
     if (!this.mesh.visible) return;
     this.bounds.getCenter(this.boundsCenter);
@@ -609,7 +603,6 @@ class VolumeRenderer extends Renderer {
         frame: { value: 0 },
         jitter: { value: this.jitter },
         cellSize: { value: 1 },
-        referenceCellSize: { value: 1 },
         stepSizeMultiplier: { value: this.stepSizeMultiplier },
         densityGain: { value: this.densityGain },
         densityRange: { value: new THREE.Vector2(...this.densityRange) },
@@ -717,7 +710,7 @@ class VolumeRenderer extends Renderer {
             density = masked;
           }
           const alpha = float(1).sub(pow(float(1).sub(this.renderOpacity(density)),
-            metric.mul(segment).div(this.gpuReferenceCellSize)));
+            metric.mul(segment)));
           const color = sample.rgb.div(max(sample.a, 1e-6));
           const contribution = float(1).sub(accumulated.a).mul(alpha);
           accumulated.rgb.addAssign(color.mul(contribution));

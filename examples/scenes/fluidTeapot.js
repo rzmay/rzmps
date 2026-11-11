@@ -1,21 +1,12 @@
 import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { FluidCollider } from '@rzmps/rzmps';
 import teapotModel from '../assets/models/utah_teapot_quad.obj?url';
 import studioEnvironment from '../assets/images/ferndale_studio_11_1k.hdr?url';
 import {
   createSceneParticleRoot,
   disposeSceneParticleRoot,
 } from '../utils/particleRoot.js';
-
-function createTeapotColliderGeometry(source) {
-  // Collision only needs positions; UV and normal seams must not prevent welding.
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', source.getAttribute('position').clone());
-  return mergeVertices(geometry, 1e-4);
-}
 
 export default async function createFluidTeapot(scene) {
   const previousEnvironment = scene.environment;
@@ -47,10 +38,8 @@ export default async function createFluidTeapot(scene) {
   teapot.name = 'Lidless Utah Teapot';
   teapot.scale.setScalar(0.76);
   teapot.position.y = -0.43;
-  let teapotGeometry;
   teapot.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
-    teapotGeometry ??= object.geometry;
     object.material = material;
     object.castShadow = true;
     object.receiveShadow = true;
@@ -60,21 +49,6 @@ export default async function createFluidTeapot(scene) {
   vessel.position.y = pivotHeight;
   teapot.position.y -= pivotHeight;
   vessel.add(teapot);
-  if (teapotGeometry) {
-    const collider = new FluidCollider({
-      geometry: createTeapotColliderGeometry(teapotGeometry),
-      surfaceThickness: 0.02,
-      gridOccupancy: true,
-      bakedFieldResolution: 48,
-      particleCollision: true,
-      updatePolicy: 'transform-dynamic',
-    });
-    collider.name = 'Utah Teapot Fluid Collider';
-    collider.position.copy(teapot.position);
-    collider.quaternion.copy(teapot.quaternion);
-    collider.scale.copy(teapot.scale);
-    vessel.add(collider);
-  }
 
   const localBounds = modelBounds.clone().translate(new THREE.Vector3(0, -pivotHeight, 0));
   const corners = Array.from({ length: 8 }, (_, i) => new THREE.Vector3(
@@ -99,10 +73,6 @@ export default async function createFluidTeapot(scene) {
   floor.position.y = -0.62;
   floor.receiveShadow = true;
   root.add(floor);
-  const floorCollider = FluidCollider.Box({ surfaceThickness: 0.015, updatePolicy: 'static' }, 18, 2, 14);
-  floorCollider.name = 'Fluid Studio Floor Collider';
-  floorCollider.position.set(floor.position.x, floor.position.y - 0.9, floor.position.z);
-  root.add(floorCollider);
 
   const hemisphere = new THREE.HemisphereLight('#edf7ff', '#75504a', 1.3);
   const key = new THREE.DirectionalLight('#fff2dc', 3.5);
@@ -124,7 +94,6 @@ export default async function createFluidTeapot(scene) {
     const geometries = new Set();
     root.traverse((object) => {
       if (object instanceof THREE.Mesh) geometries.add(object.geometry);
-      if (object instanceof FluidCollider && object.geometry) geometries.add(object.geometry);
     });
     geometries.forEach((geometry) => geometry.dispose());
     material.dispose();

@@ -12,6 +12,7 @@ let browser;
 try {
   browser = await puppeteer.launch({ headless: true, args: ['--enable-unsafe-webgpu'] });
   const page = await browser.newPage();
+  page.setDefaultNavigationTimeout(120000);
   const errors = [];
   page.on('pageerror', error => { errors.push(error.message); console.error(error.message); });
   page.on('console', message => {
@@ -53,6 +54,7 @@ try {
       capacity: flip.volumeGrid.capacity, activeBricks: (await flip.readGridDiagnostics(renderer)).activeBricks,
       sourceParticles: state.count, field: state.field };
   });
+  console.log('Gas diagnostic:', JSON.stringify(gas));
   assert(gas.startup.textureRetained, 'startup must retain the constructor field bindings');
   assert.equal(gas.collected, 1);
   assert.equal(gas.solidCell, 1, 'collected mesh interiors must block gas cells');

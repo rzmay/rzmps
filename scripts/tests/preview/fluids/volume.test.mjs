@@ -80,7 +80,7 @@ test('volume providers combine density/color with tags on WebGL and WebGPU', { t
         volume.generateChildren = false;
         volume.densityMapping = 'Linear';
         volume.densityRange = [0, 1];
-        volume.opacity = 0.03;
+        volume.opacity = 1 - 0.97 ** 8;
         volume.steps = 512;
         red.density.data.fill(0.4);
         red.density.version++;
@@ -138,7 +138,7 @@ test('volume providers combine density/color with tags on WebGL and WebGPU', { t
           const { red, volume, system } = window.volumeFixture;
           volume.interpolation = 'Linear';
           volume.densityMapping = 'Linear';
-          volume.opacity = 0.03;
+          volume.opacity = 1 - 0.97 ** 8;
           red.density.data.fill(0.4);
           red.density.version++;
           const baseline = await window.renderVolume(['red']);

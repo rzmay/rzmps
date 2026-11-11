@@ -19,6 +19,18 @@
 
 ## Properties
 
+<a id="adaptivetimestep"></a>
+
+### adaptiveTimestep?
+
+```ts
+optional adaptiveTimestep?: boolean;
+```
+
+Requests CFL-limited system steps; other modules share the resulting step. Defaults to true.
+
+***
+
 <a id="automaticpadding"></a>
 
 ### automaticPadding
@@ -65,6 +77,18 @@ boundsPolicy:
 
 Behavior at the finite maxBounds cap, not intermediate adaptive edges. Defaults to Ballistic.
 Contain retains a reached cap instead of shrinking away closed field walls.
+
+***
+
+<a id="cfl"></a>
+
+### cfl?
+
+```ts
+optional cfl?: number;
+```
+
+Maximum travel per cell per step. Defaults to 2.
 
 ***
 
@@ -191,6 +215,18 @@ Power-of-two grids round this limit down. Particle behavior is selected by bound
 
 ***
 
+<a id="maxfluidsubsteps"></a>
+
+### maxFluidSubsteps?
+
+```ts
+optional maxFluidSubsteps?: number;
+```
+
+Maximum additional fluid steps per incoming interval. Defaults to 4.
+
+***
+
 <a id="maxvelocity"></a>
 
 ### maxVelocity
@@ -275,6 +311,18 @@ Shared preparation work, called once before processing particles.
 
 ***
 
+<a id="pressurediagnostics"></a>
+
+### pressureDiagnostics?
+
+```ts
+optional pressureDiagnostics?: boolean;
+```
+
+Collect asynchronous pressure and divergence diagnostics through benchmarks. Defaults to false.
+
+***
+
 <a id="pressureiterations"></a>
 
 ### pressureIterations
@@ -282,6 +330,54 @@ Shared preparation work, called once before processing particles.
 ```ts
 pressureIterations: number;
 ```
+
+***
+
+<a id="pressuremaxiterations"></a>
+
+### pressureMaxIterations?
+
+```ts
+optional pressureMaxIterations?: number;
+```
+
+Maximum pressure sweeps. Omission follows pressureIterations.
+
+***
+
+<a id="pressureminiterations"></a>
+
+### pressureMinIterations?
+
+```ts
+optional pressureMinIterations?: number;
+```
+
+Minimum pressure sweeps. Omission follows pressureIterations for a fixed solve.
+
+***
+
+<a id="pressuretolerance"></a>
+
+### pressureTolerance?
+
+```ts
+optional pressureTolerance?: number;
+```
+
+Maximum absolute Poisson residual; zero disables convergence checks.
+
+***
+
+<a id="pressurewarmstart"></a>
+
+### pressureWarmStart?
+
+```ts
+optional pressureWarmStart?: boolean;
+```
+
+Preserve pressure between compatible solves. Defaults to true.
 
 ***
 

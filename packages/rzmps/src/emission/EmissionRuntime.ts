@@ -90,12 +90,15 @@ export default class EmissionRuntime {
     const stage =
       (parent && relationship && this.execution.canUpdateAsGPUChild(parent, relationship)) ||
       (!this.system.isSubSystem && this.execution.nativeEmission());
-    const particles = instance.emitter.update(
-      stage ? this._stagedBirths : this.system.particles,
-      { ...context, deltaTime: this.execution.deltaTime() },
-      this.system,
-      instance,
-    );
+    const end = instance.emitter.benchmarks.begin('update');
+    let particles;
+    try {
+      particles = instance.emitter.update(
+        stage ? this._stagedBirths : this.system.particles,
+        { ...context, deltaTime: this.execution.deltaTime() }, this.system, instance,
+      );
+    } finally { end?.(); }
+    if (instance.emitter.benchmarks.enabled) instance.emitter.benchmarks.increment('spawnCount', particles.length);
     if (!stage) particles.forEach(p => this.execution.notifySpawn(p));
   }
 

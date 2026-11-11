@@ -21,6 +21,11 @@ export default async function createFlipFluid() {
       new THREE.Vector3(-4, -4, -4),
       new THREE.Vector3(4, 4, 4),
     ),
+    // Use the same membership settings accepted by Three's collision backends.
+    collisionOptions: {
+      surfaceThickness: 0.02,
+      bakedFieldResolution: 48,
+    },
     boundsPadding: 0,
     maxBounds: 16,
     boundsPolicy: FluidBoundsPolicy.Kill,

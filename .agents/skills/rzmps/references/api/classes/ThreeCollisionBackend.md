@@ -36,6 +36,20 @@ new ThreeCollisionBackend(options?): ThreeCollisionBackend;
 
 ## Properties
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Implementation of
+
+[`ICollisionBackend`](../interfaces/ICollisionBackend.md).[`benchmarks`](../interfaces/ICollisionBackend.md#benchmarks)
+
+***
+
 <a id="dynamicobjectfilter"></a>
 
 ### dynamicObjectFilter?

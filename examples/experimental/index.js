@@ -1,13 +1,13 @@
 import createFlipFluid, { metadata as flipMetadata } from './flipFluid.js';
 import createGasVolume, { metadata as gasMetadata } from './gasVolume.js';
-import createGasNiagaraBurst, { metadata as niagaraMetadata } from './gasNiagaraBurst.js';
-import createGasBlenderSmoke, { metadata as blenderMetadata } from './gasBlenderSmoke.js';
+import createSteamBurst, { metadata as steamMetadata } from './steamBurst.js';
+import createVolumetricSmoke, { metadata as smokeMetadata } from './volumetricSmoke.js';
 
 export const experimentalExamples = [
   { ...flipMetadata, create: createFlipFluid },
   { ...gasMetadata, create: createGasVolume },
-  { ...niagaraMetadata, create: createGasNiagaraBurst },
-  { ...blenderMetadata, create: createGasBlenderSmoke },
+  { ...steamMetadata, create: createSteamBurst },
+  { ...smokeMetadata, create: createVolumetricSmoke },
 ].map((example) => {
   const sourceUrl = `https://github.com/rzmay/rzmps/blob/develop/examples/experimental/${example.id}.js`;
   example.create.sourceUrl = sourceUrl;

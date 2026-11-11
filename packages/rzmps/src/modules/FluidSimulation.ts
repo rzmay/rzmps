@@ -3,6 +3,8 @@ import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgp
 import {
   Fn, If, clamp, float, floor, instanceIndex, int, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4,
 } from 'three/tsl';
+import { initializeStorageAttribute } from '../utils/gpu/storage.utils';
+import FluidReduction from '../simulation/gpu/FluidReduction';
 import Module, { type ModuleExecutionContext, type ModuleOptions } from '../core/Module';
 import { SpatialEffectUpdatePolicy } from '../spatial/effects/SpatialEffect';
 import type ParticleSystem from '../core/ParticleSystem';
@@ -17,6 +19,8 @@ import ThreeGPUCollisionBackend, {
 } from '../collision/ThreeGPUCollisionBackend';
 import { isIgnoredCollisionObject } from '../collision/isIgnoredCollisionObject';
 import getAttributeVersion from '../utils/getAttributeVersion';
+import type { ThreeCollisionBackendOptions } from '../collision/ThreeCollisionBackend';
+import type { FluidPressureDiagnostics, FluidPressureControls } from '../simulation/gpu/FluidPressureProjection';
 import { FluidBoundsPolicy } from '../enums/FluidBoundsPolicy';
 
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
@@ -27,7 +31,7 @@ type UniformNode<T, TNode extends string> = Node<TNode> & { value: T };
 export type FluidCollisionOptions = Pick<ThreeGPUCollisionBackendOptions,
   'world' | 'staticObjects' | 'dynamicObjects' | 'geometryDynamicObjects' | 'objectFilter'
   | 'staticObjectFilter' | 'dynamicObjectFilter' | 'geometryDynamicObjectFilter' | 'updatePolicy'
-> & {
+> & Pick<ThreeCollisionBackendOptions, 'staticAfter'> & {
   /** Additional contact shell in mesh-local units. Defaults to zero. */
   surfaceThickness?: number;
   /** Resolution of collected meshes' cached occupancy fields. Defaults to 16. */
@@ -40,6 +44,22 @@ export interface FluidSimulationOptions extends Partial<ModuleOptions> {
   bounds: THREE.Box3;
   spatialGridOptions: Partial<ParticleSpatialGridOptions>;
   pressureIterations: number;
+  /** Requests CFL-limited system steps; other modules share the resulting step. Defaults to true. */
+  adaptiveTimestep?: boolean;
+  /** Maximum travel per cell per step. Defaults to 2. */
+  cfl?: number;
+  /** Maximum additional fluid steps per incoming interval. Defaults to 4. */
+  maxFluidSubsteps?: number;
+  /** Minimum pressure sweeps. Omission follows pressureIterations for a fixed solve. */
+  pressureMinIterations?: number;
+  /** Maximum pressure sweeps. Omission follows pressureIterations. */
+  pressureMaxIterations?: number;
+  /** Maximum absolute Poisson residual; zero disables convergence checks. */
+  pressureTolerance?: number;
+  /** Collect asynchronous pressure and divergence diagnostics through benchmarks. Defaults to false. */
+  pressureDiagnostics?: boolean;
+  /** Preserve pressure between compatible solves. Defaults to true. */
+  pressureWarmStart?: boolean;
   externalForce: THREE.Vector3;
   maxVelocity: number;
   boundsPadding: number;
@@ -58,13 +78,35 @@ export interface FluidSimulationOptions extends Partial<ModuleOptions> {
 
 abstract class FluidSimulation extends Module {
   collisionOptions?: FluidCollisionOptions;
-  private readonly collectedColliders = new Map<THREE.Mesh, { collider: FluidCollider; revision: string }>();
+  private readonly collectedColliders = new Map<THREE.Mesh, {
+    collider: FluidCollider; revision: string; lastMovedAt: number;
+  }>();
+  private collisionElapsed = 0;
   bounds: THREE.Box3;
   readonly particleBounds = new THREE.Box3();
   automaticPaddingDistance = 0;
   resolution: number;
   cellSize: number;
   pressureIterations: number;
+  adaptiveTimestep: boolean;
+  cfl: number;
+  maxFluidSubsteps: number;
+  pressureMinIterations?: number;
+  pressureMaxIterations?: number;
+  pressureTolerance: number;
+  pressureDiagnostics: boolean;
+  pressureWarmStart: boolean;
+  /** Last completed GPU diagnostic sample; null until explicitly collected. */
+  readonly pressureStats: FluidPressureDiagnostics = {
+    pressureResidual: null,
+    maxDivergenceBeforeProjection: null,
+    meanDivergenceBeforeProjection: null,
+    maxDivergenceAfterProjection: null,
+    meanDivergenceAfterProjection: null,
+    pressureIterations: null,
+    maxVelocity: null,
+    nonFiniteSamples: null,
+  };
   externalForce: THREE.Vector3;
   maxVelocity: number;
   boundsPadding: number;
@@ -89,6 +131,8 @@ abstract class FluidSimulation extends Module {
   private boundsReconcileKey = '';
   private boundsReconcileNode?: ComputeNode;
   private boundsReconcileBuffers?: GPUParticleBufferState;
+  private lastParticleBuffers?: GPUParticleBufferState;
+  private fluidStateGeneration = 0;
   protected velocityCurrentAttribute!: StorageBufferAttribute;
   protected velocityNextAttribute!: StorageBufferAttribute;
   protected pressureCurrentAttribute!: StorageBufferAttribute;
@@ -101,14 +145,27 @@ abstract class FluidSimulation extends Module {
   protected pressureNext!: FloatStorage;
   protected divergence!: FloatStorage;
   protected solid!: FloatStorage;
+  protected boundaryAttribute!: StorageBufferAttribute;
+  protected faceOpenness!: Vec4Storage;
+  protected solidVelocity!: Vec4Storage;
+  private readonly boundaryMotion = new Map<FluidCollider, {
+    previous: THREE.Matrix4;
+    transform: UniformNode<THREE.Matrix4, 'mat4'>;
+  }>();
+  private readonly boundaryDt = uniform(1) as UniformNode<number, 'float'>;
   private lastBoundsRead = 0;
   private boundsReadPending = false;
   private boundsGeneration = 0;
   private pendingBounds?: { grid: ParticleSpatialGrid; bounds: THREE.Box3 };
   private compactBoundsReadCount = 0;
   private solidNode?: ComputeNode;
+  private solidFreshNode?: ComputeNode;
+  private boundaryReduction?: FluidReduction;
+  private boundaryReadPending = false;
+  private readonly boundaryReductionKey = {};
   private solidCacheKey = '';
   private solidStateKey = '';
+  private boundaryWasMoving = false;
   private _boundsHelper?: THREE.Group;
   private _particleBoundsHelper?: THREE.Box3Helper;
   private _gridBoundsHelper?: THREE.Box3Helper;
@@ -171,6 +228,17 @@ abstract class FluidSimulation extends Module {
     this.resolution = resolution;
     this.cellCount = this.gridFieldCellCount;
     this.pressureIterations = Math.max(0, Math.floor(options.pressureIterations ?? 12));
+    this.adaptiveTimestep = options.adaptiveTimestep ?? true;
+    this.cfl = options.cfl ?? 2;
+    this.maxFluidSubsteps = options.maxFluidSubsteps ?? 4;
+    this.pressureMinIterations = options.pressureMinIterations;
+    this.pressureMaxIterations = options.pressureMaxIterations;
+    this.pressureTolerance = options.pressureTolerance ?? 0;
+    this.pressureDiagnostics = options.pressureDiagnostics ?? false;
+    this.pressureWarmStart = options.pressureWarmStart ?? true;
+    for (const key of Object.keys(this.pressureStats)) this.benchmarks.register(key, {
+      type: 'gauge', get: () => this.pressureStats[key as keyof FluidPressureDiagnostics],
+    });
     this.externalForce = options.externalForce?.clone() ?? new THREE.Vector3(0, -9.81, 0);
     this.maxVelocity = Math.max(0, options.maxVelocity ?? 20);
     this.boundsPadding = Math.max(0, options.boundsPadding ?? 0.25);
@@ -188,12 +256,52 @@ abstract class FluidSimulation extends Module {
     this.allocateGridFields();
   }
 
+  public override async prepareResources(system: ParticleSystem, renderer: ParticleSpatialGridRenderer): Promise<void> {
+    // Resource preparation deliberately bypasses per-step callbacks and transform history.
+    this.prepareSpatialEffects(system);
+    this.collectColliders(system);
+    for (const collider of this.fluidColliders) {
+      collider.syncGPUTransform(system);
+      this.benchmarks.span('staticBoundaryBake', () => {
+        collider.bakedFieldGPU({ position: vec3(0) } as unknown as GPUParticleLike);
+      });
+    }
+    for (const attribute of [this.velocityCurrentAttribute, this.velocityNextAttribute,
+      this.pressureCurrentAttribute, this.pressureNextAttribute, this.divergenceAttribute,
+      this.solidAttribute, this.boundaryAttribute]) initializeStorageAttribute(renderer, attribute);
+  }
+
+  public override getSimulationSubstepLimit(): number {
+    if (!Number.isSafeInteger(this.maxFluidSubsteps) || this.maxFluidSubsteps < 1) {
+      throw new RangeError('maxFluidSubsteps must be a positive integer.');
+    }
+    return this.maxFluidSubsteps;
+  }
+
+  public override getSimulationTimestep(requestedDt: number): number {
+    if (!this.adaptiveTimestep) return Infinity;
+    if (!Number.isFinite(this.cfl) || this.cfl <= 0
+      || !Number.isSafeInteger(this.maxFluidSubsteps) || this.maxFluidSubsteps < 1) {
+      throw new RangeError('Fluid CFL must be positive and maxFluidSubsteps a positive integer.');
+    }
+    // Until a measured field speed is available, the existing velocity safety
+    // ceiling is conservative. Async observations never stall the render thread.
+    const speed = Math.max(this.pressureStats.maxVelocity ?? this.maxVelocity, 1e-6);
+    const safeDt = this.cfl * this.cellSize / speed;
+    const count = Math.min(this.maxFluidSubsteps, Math.max(1, Math.ceil(requestedDt / safeDt)));
+    this.benchmarks.set('fluidSubsteps', count);
+    this.benchmarks.set('requestedDt', requestedDt);
+    this.benchmarks.set('effectiveSolverDt', Math.min(requestedDt, safeDt));
+    return Math.min(requestedDt, safeDt);
+  }
+
   public override prepare(context: ModuleExecutionContext): void {
     const { system: particleSystem, deltaTime: dt } = context;
     if (!particleSystem.isGPUProcessingActive) {
       throw new Error('Fluid simulations require GPU particle processing with a WebGPU renderer.');
     }
     super.prepare(context);
+    this.collisionElapsed += Math.max(0, dt);
     this.collectColliders(particleSystem);
     const grid = this.getParticleSpatialGrid(particleSystem);
     if (grid) this.synchronizeGridBounds(grid);
@@ -254,6 +362,20 @@ abstract class FluidSimulation extends Module {
     renderer: ParticleSpatialGridRenderer,
     grid?: ParticleSpatialGrid,
   ): void {
+    if (this.lastParticleBuffers && this.lastParticleBuffers !== context.buffers) {
+      this.boundaryMotion.clear();
+      this.boundaryWasMoving = false;
+      this.boundsGeneration++;
+      this.pendingBounds = undefined;
+      this.boundsReadPending = false;
+      this.lastBoundsRead = 0;
+      this.onParticleStateReset(renderer);
+      this.resetGridNodes();
+      for (const key of Object.keys(this.pressureStats)) {
+        this.pressureStats[key as keyof FluidPressureDiagnostics] = null;
+      }
+    }
+    this.lastParticleBuffers = context.buffers;
     if (!grid || !Number.isFinite(this.maxBounds) || this.boundsPolicy === FluidBoundsPolicy.Ballistic) return;
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
     const key = [context.buffers.version, context.eventWriter?.version, context.eventWriter?.capacity,
@@ -272,7 +394,7 @@ abstract class FluidSimulation extends Module {
             context.buffers.storage.storeParticle(particle);
           };
           if (this.conditionGPU) If(this.conditionGPU(particle, context.deltaTimeNode,
-            { ...context, events: this.gpuExecutionContext.events, spatialGrid: grid }), reconcile);
+            { ...context, module: this, events: this.gpuExecutionContext.events, spatialGrid: grid }), reconcile);
           else reconcile();
         });
       })().compute(context.buffers.count);
@@ -280,6 +402,9 @@ abstract class FluidSimulation extends Module {
     renderer.compute(this.boundsReconcileNode!);
     grid.rebuild(renderer, context.buffers, {});
   }
+
+  /** A new particle storage identity denotes clear/reset, unlike an in-place capacity increase. */
+  protected onParticleStateReset(_renderer: ParticleSpatialGridRenderer): void { void _renderer; }
 
   protected cellIndex(coordinate: Node<'ivec3'>): Node<'uint'> {
     return uint(coordinate.x.add(coordinate.y.mul(this.resolution))
@@ -290,8 +415,8 @@ abstract class FluidSimulation extends Module {
     return Fn(() => callback(instanceIndex))().compute(this.cellCount);
   }
 
-  protected resizeGridFields(count: number): void {
-    this.disposeGridFields();
+  protected resizeGridFields(count: number, dispose = true): void {
+    if (dispose) this.disposeGridFields();
     this.cellCount = count;
     this.allocateGridFields();
     this.resetGridNodes();
@@ -405,11 +530,22 @@ abstract class FluidSimulation extends Module {
     this.pressureCurrent = storage(this.pressureCurrentAttribute, 'float', this.cellCount) as FloatStorage;
     this.pressureNext = storage(this.pressureNextAttribute, 'float', this.cellCount) as FloatStorage;
     this.divergence = storage(this.divergenceAttribute, 'float', this.cellCount) as FloatStorage;
+    this.boundaryAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 8), 4);
+    const boundary = storage(this.boundaryAttribute, 'vec4', this.cellCount * 2);
+    const stride = this.cellCount;
+    this.faceOpenness = boundary;
+    this.solidVelocity = { element: index => boundary.element(
+      typeof index === 'number' ? index + stride : uint(index as Node<'uint'>).add(stride),
+    ) };
     this.solid = storage(this.solidAttribute, 'float', this.cellCount) as FloatStorage;
   }
 
   private resetGridNodes(): void {
+    this.fluidStateGeneration++;
+    this.boundaryReduction?.dispose();
+    this.boundaryReduction = undefined;
     this.solidNode = undefined;
+    this.solidFreshNode = undefined;
     this.solidCacheKey = '';
     this.solidStateKey = '';
   }
@@ -420,6 +556,11 @@ abstract class FluidSimulation extends Module {
     return this.computeCells(callback);
   }
 
+  protected computeNewSolidCells(_callback: (index: Node<'uint'>) => void): ComputeNode | undefined {
+    void _callback;
+    return undefined;
+  }
+
   private disposeGridFields(): void {
     [
       this.velocityCurrentAttribute,
@@ -428,6 +569,7 @@ abstract class FluidSimulation extends Module {
       this.pressureNextAttribute,
       this.divergenceAttribute,
       this.solidAttribute,
+      this.boundaryAttribute,
     ].forEach((attribute) => attribute?.dispose());
   }
 
@@ -438,7 +580,24 @@ abstract class FluidSimulation extends Module {
     const colliders = this.fluidColliders.filter((effect): effect is FluidCollider => (
       effect instanceof FluidCollider && effect.visible && effect.gridOccupancy
     ));
-    colliders.forEach((collider) => collider.syncGPUTransform(context.system));
+    const inverseSystem = context.system.getSimulationToWorldMatrix().clone().invert();
+    this.boundaryDt.value = Math.max(Number((context.deltaTimeNode as UniformNode<number, 'float'>).value ?? 0), 1e-6);
+    let moving = false;
+    colliders.forEach(collider => {
+      collider.syncGPUTransform(context.system);
+      const current = inverseSystem.clone().multiply(collider.matrixWorld);
+      let motion = this.boundaryMotion.get(collider);
+      if (!motion) {
+        motion = { previous: current.clone(), transform: uniform(new THREE.Matrix4()) };
+        this.boundaryMotion.set(collider, motion);
+      }
+      motion.transform.value.copy(motion.previous).multiply(current.clone().invert());
+      moving ||= !motion.previous.equals(current);
+      motion.previous.copy(current);
+    });
+    for (const collider of this.boundaryMotion.keys()) {
+      if (!colliders.includes(collider)) this.boundaryMotion.delete(collider);
+    }
     const cacheKey = colliders
       .map(collider => [collider.uuid, collider.version, collider.geometry?.uuid,
         collider.bakedFieldResolution, collider.surfaceThickness, collider.inverted].join(':'))
@@ -446,6 +605,7 @@ abstract class FluidSimulation extends Module {
     if (cacheKey !== this.solidCacheKey) {
       this.solidCacheKey = cacheKey;
       this.solidNode = undefined;
+      this.solidFreshNode = undefined;
       this.solidStateKey = '';
     }
 
@@ -460,9 +620,16 @@ abstract class FluidSimulation extends Module {
       ].join(',')),
     ].join('|') : '';
     const cacheable = this.cacheSolidOccupancy && colliders.every(collider => collider.canCacheGridOccupancy);
-    if (cacheable && this.solidNode && stateKey === this.solidStateKey) return;
+    // One final rebuild clears wall velocities on the first stationary frame.
+    if (cacheable && !moving && this.solidNode && stateKey === this.solidStateKey
+      && !this.boundaryWasMoving) {
+      if (this.solidFreshNode) renderer.compute(this.solidFreshNode);
+      this.collectBoundaryDiagnostics(renderer);
+      return;
+    }
+    this.boundaryWasMoving = moving;
 
-    const solidNode = this.solidNode ?? this.computeSolidCells(index => {
+    const bake = (index: Node<'uint'>) => {
       const center = this.cellCenter(this.cellCoordinate(index));
       const occupied = this.capEnabledNode.greaterThan(0.5).and(this.boundsPolicyNode.equal(2))
         .and(this.isInsideCap(center).not()).select(float(1), float(0)).toVar('fluidSolidCell');
@@ -471,14 +638,108 @@ abstract class FluidSimulation extends Module {
       });
       // Conservatively retain every occupied sample so thin walls cannot disappear.
       this.solid.element(index).assign(occupied.greaterThan(0).select(1, 0));
-    });
+
+      // Face quadrature represents flux apertures independently of particle containment.
+      const openness: Node<'float'>[] = [];
+      const wallVelocity: Node<'float'>[] = [];
+      for (let axis = 0; axis < 3; axis++) {
+        const open = float(0).toVar();
+        const velocity = float(0).toVar();
+        for (const u of [-0.25, 0.25]) for (const v of [-0.25, 0.25]) {
+          const offset = axis === 0 ? vec3(-0.5, u, v) : axis === 1 ? vec3(u, -0.5, v) : vec3(u, v, -0.5);
+          const position = center.add(offset.mul(this.cellSizeNode));
+          const blocked = float(0).toVar();
+          const motion = float(0).toVar();
+          colliders.forEach(collider => {
+            const hit = collider.testPositionGPU(position, context).greaterThan(0);
+            const previous = this.boundaryMotion.get(collider)!.transform.mul(vec4(position, 1)).xyz;
+            const component = (['x', 'y', 'z'] as const)[axis];
+            motion.assign(hit.select(position.sub(previous)[component].div(this.boundaryDt), motion));
+            blocked.assign(hit.select(float(1), blocked));
+          });
+          open.addAssign(float(1).sub(blocked).mul(0.25));
+          velocity.addAssign(motion.mul(blocked).mul(0.25));
+        }
+        openness.push(open);
+        wallVelocity.push(velocity.div(float(1).sub(open).max(1e-6)));
+      }
+      // Positive cell volume keeps partially covered cells in pressure/advection.
+      const fluid = float(0).toVar();
+      for (const x of [-0.25, 0.25]) for (const y of [-0.25, 0.25]) for (const z of [-0.25, 0.25]) {
+        const point = center.add(vec3(x, y, z).mul(this.cellSizeNode));
+        const blocked = float(0).toVar();
+        colliders.forEach(collider => {
+          blocked.assign(max(blocked, collider.testPositionGPU(point, context).greaterThan(0).select(1, 0)));
+        });
+        fluid.addAssign(float(1).sub(blocked).mul(0.125));
+      }
+      const unresolved = occupied.greaterThan(0).and(fluid.greaterThan(0.999))
+        .and(openness[0].greaterThan(0.999)).and(openness[1].greaterThan(0.999)).and(openness[2].greaterThan(0.999));
+      this.faceOpenness.element(index).assign(unresolved.select(vec4(0),
+        vec4(openness[0], openness[1], openness[2], fluid)));
+      this.solidVelocity.element(index).assign(vec4(wallVelocity[0], wallVelocity[1], wallVelocity[2], 0));
+    };
+    const solidNode = this.solidNode ?? this.computeSolidCells(bake);
+    this.solidFreshNode ??= this.computeNewSolidCells(bake);
     this.solidNode = solidNode;
-    renderer.compute(solidNode);
+    this.benchmarks.span('boundaryUpdate', () => renderer.compute(solidNode));
     this.solidStateKey = stateKey;
+    this.collectBoundaryDiagnostics(renderer);
+  }
+
+  protected diagnosticCellActive(index: Node<'uint'>): Node<'bool'> {
+    return index.lessThan(this.cellCount);
+  }
+
+  /** Optional GPU reduction; only aggregate counts cross back to the CPU. */
+  public async readBoundaryDiagnostics(renderer: ParticleSpatialGridRenderer): Promise<{
+    boundaryCells: number; partiallyOpenFaces: number; fullyBlockedFaces: number;
+  }> {
+    this.boundaryReduction ??= new FluidReduction(this.cellCount);
+    this.boundaryReduction.compute(renderer, this.boundaryReductionKey, index => {
+      const face = this.faceOpenness.element(index);
+      const partial = float(0).toVar();
+      const blocked = float(0).toVar();
+      for (const axis of ['x', 'y', 'z'] as const) {
+        partial.addAssign(face[axis].greaterThan(0).and(face[axis].lessThan(1)).select(1, 0));
+        blocked.addAssign(face[axis].lessThanEqual(0).select(1, 0));
+      }
+      const boundary = face.w.greaterThan(0).and(face.w.lessThan(1)).or(partial.greaterThan(0));
+      return vec4(boundary.select(1, 0), partial, blocked, 0);
+    }, index => this.diagnosticCellActive(index));
+    const values = new Float32Array(await renderer.getArrayBufferAsync(this.boundaryReduction.attribute));
+    return {
+      boundaryCells: Math.round(values[4] * values[8]),
+      partiallyOpenFaces: Math.round(values[5] * values[8]),
+      fullyBlockedFaces: Math.round(values[6] * values[8]),
+    };
+  }
+
+  private collectBoundaryDiagnostics(renderer: ParticleSpatialGridRenderer): void {
+    if (!this.benchmarks.enabled || this.boundaryReadPending) return;
+    this.boundaryReadPending = true;
+    void this.readBoundaryDiagnostics(renderer).then(stats => {
+      for (const [name, value] of Object.entries(stats)) this.benchmarks.set(name, value);
+    }).catch(() => {}).finally(() => { this.boundaryReadPending = false; });
+  }
+
+  protected get pressureControls(): FluidPressureControls {
+    const generation = this.fluidStateGeneration;
+    return {
+      minIterations: this.pressureMinIterations ?? this.pressureIterations,
+      maxIterations: this.pressureMaxIterations ?? this.pressureIterations,
+      tolerance: this.pressureTolerance,
+      warmStart: this.pressureWarmStart,
+      diagnostics: this.pressureDiagnostics || this.benchmarks.enabled,
+      measureVelocity: this.adaptiveTimestep,
+      report: stats => {
+        if (generation === this.fluidStateGeneration) Object.assign(this.pressureStats, stats);
+      },
+    };
   }
 
   protected isSolid(index: Node | number = instanceIndex): Node<'bool'> {
-    return this.solid.element(index).greaterThanEqual(0.5);
+    return this.faceOpenness.element(index).w.lessThanEqual(0);
   }
 
   protected targetDivergence(index: Node<'uint'>): Node<'float'> {
@@ -604,8 +865,14 @@ abstract class FluidSimulation extends Module {
   }
 
   public override cleanup(): void {
+    this.fluidStateGeneration++;
+    this.boundaryReduction?.dispose();
+    this.boundaryReduction = undefined;
     this.collectedColliders.forEach(({ collider }) => { collider.geometry = undefined; });
     this.collectedColliders.clear();
+    this.collisionElapsed = 0;
+    this.boundaryMotion.clear();
+    this.lastParticleBuffers = undefined;
     this.boundsGeneration += 1;
     this.pendingBounds = undefined;
     this.boundsReadPending = false;
@@ -733,21 +1000,31 @@ abstract class FluidSimulation extends Module {
           testGPU: (particle, _context, effect) => effect.bakedFieldGPU(particle),
         });
         collider.matrixAutoUpdate = false;
-        entry = { collider, revision: '' };
+        entry = { collider, revision: '', lastMovedAt: this.collisionElapsed };
         this.collectedColliders.set(mesh, entry);
       }
       const { collider } = entry;
-      const revision = [policy, getAttributeVersion(mesh.geometry.getAttribute('position')),
+      const revision = [getAttributeVersion(mesh.geometry.getAttribute('position')),
         getAttributeVersion(mesh.geometry.index), options?.surfaceThickness ?? 0,
         options?.bakedFieldResolution ?? 16].join(':');
       if (!collider.matrix.equals(mesh.matrixWorld)) {
+        entry.lastMovedAt = this.collisionElapsed;
         collider.matrix.copy(mesh.matrixWorld);
         collider.matrixWorldNeedsUpdate = true;
       }
-      collider.updatePolicy = policy;
+      // Automatic wrappers track geometry revisions explicitly, so rigid/static fields can be cached.
+      if (revision !== entry.revision) entry.lastMovedAt = this.collisionElapsed;
+      collider.updatePolicy = policy === SpatialEffectUpdatePolicy.Auto
+        ? this.collisionElapsed - entry.lastMovedAt >= Math.max(0, options?.staticAfter ?? 2)
+          ? SpatialEffectUpdatePolicy.Static : SpatialEffectUpdatePolicy.TransformDynamic
+        : policy;
       collider.surfaceThickness = Math.max(0, options?.surfaceThickness ?? 0);
       collider.bakedFieldResolution = Math.max(2, Math.floor(options?.bakedFieldResolution ?? 16));
-      if (revision !== entry.revision) collider.needsUpdate = true;
+      if (revision !== entry.revision) {
+        // Rebuild a stale local BVH even when its previous classification was static or rigid.
+        collider.geometry = mesh.geometry;
+        collider.needsUpdate = true;
+      }
       entry.revision = revision;
     });
   }

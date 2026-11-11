@@ -11,7 +11,6 @@ uniform float steps;
 uniform float frame;
 uniform bool jitter;
 uniform float cellSize;
-uniform float referenceCellSize;
 uniform float stepSizeMultiplier;
 uniform float densityGain;
 uniform vec2 densityRange;
@@ -73,7 +72,7 @@ void main() {
 
     vec4 volume = sampleVolume(p);
     float d = volume.a;
-    float a = 1.0 - pow(1.0 - renderOpacity(d), length(rayDir * boundsSize) * segment / referenceCellSize);
+    float a = 1.0 - pow(1.0 - renderOpacity(d), length(rayDir * boundsSize) * segment);
     vec3 sampleColor = volume.rgb;
 
     color.rgb += (1.0 - color.a) * a * sampleColor;

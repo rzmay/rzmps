@@ -59,6 +59,20 @@ Wraps a per-particle callback; options select filtering, spatial collection, and
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`NoiseModule`](NoiseModule.md).[`benchmarks`](NoiseModule.md#benchmarks)
+
+***
+
 <a id="condition"></a>
 
 ### condition
@@ -98,6 +112,22 @@ dependents: Module[] = [];
 #### Inherited from
 
 [`NoiseModule`](NoiseModule.md).[`dependents`](NoiseModule.md#dependents)
+
+***
+
+<a id="evaluatedynamicgpu"></a>
+
+### evaluateDynamicGPU
+
+```ts
+readonly evaluateDynamicGPU: GPUDynamicParameterStore;
+```
+
+Cached GPU dynamic values, shared by class methods and functional GPU callbacks.
+
+#### Inherited from
+
+[`NoiseModule`](NoiseModule.md).[`evaluateDynamicGPU`](NoiseModule.md#evaluatedynamicgpu)
 
 ***
 
@@ -990,6 +1020,52 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 ***
 
+<a id="getsimulationsubsteplimit"></a>
+
+### getSimulationSubstepLimit()
+
+```ts
+getSimulationSubstepLimit(): number;
+```
+
+Maximum solver steps recovered in one incoming interval. Infinity preserves normal catch-up behavior.
+
+#### Returns
+
+`number`
+
+#### Inherited from
+
+[`NoiseModule`](NoiseModule.md).[`getSimulationSubstepLimit`](NoiseModule.md#getsimulationsubsteplimit)
+
+***
+
+<a id="getsimulationtimestep"></a>
+
+### getSimulationTimestep()
+
+```ts
+getSimulationTimestep(_requestedDt): number;
+```
+
+Requests a maximum simulation step; Infinity leaves system timing unchanged.
+
+#### Parameters
+
+##### \_requestedDt
+
+`number`
+
+#### Returns
+
+`number`
+
+#### Inherited from
+
+[`NoiseModule`](NoiseModule.md).[`getSimulationTimestep`](NoiseModule.md#getsimulationtimestep)
+
+***
+
 <a id="initializeparticle"></a>
 
 ### initializeParticle()?
@@ -1109,6 +1185,36 @@ Prepares shared work once per system update; the base implementation collects ma
 #### Inherited from
 
 [`NoiseModule`](NoiseModule.md).[`prepare`](NoiseModule.md#prepare)
+
+***
+
+<a id="prepareresources"></a>
+
+### prepareResources()
+
+```ts
+prepareResources(_system, _renderer): Promise<void>;
+```
+
+Optional non-advancing resource preparation. Does not run ordinary prepare/update callbacks.
+
+#### Parameters
+
+##### \_system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### \_renderer
+
+[`ParticleSpatialGridRenderer`](../Supporting-Types/interfaces/ParticleSpatialGridRenderer.md)
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Inherited from
+
+[`NoiseModule`](NoiseModule.md).[`prepareResources`](NoiseModule.md#prepareresources)
 
 ***
 

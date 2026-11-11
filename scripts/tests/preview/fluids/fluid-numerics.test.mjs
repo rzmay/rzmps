@@ -17,7 +17,7 @@ test('fluid runtime changes and bounded gas transport preserve numerical invaria
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;
     const fixture = path.resolve(import.meta.dirname, 'fixtures/fluid.html');
-    const open = async (example = 'gasBlenderSmoke') => {
+    const open = async (example = 'volumetricSmoke') => {
       await page.goto(`${origin}/@fs${fixture}?example=${example}&reviewGrid=2,4`, { waitUntil: 'networkidle0' });
       await page.waitForFunction(() => window.ready).catch(error => {
         throw new Error(`${error.message}\n${errors.join('\n')}`);

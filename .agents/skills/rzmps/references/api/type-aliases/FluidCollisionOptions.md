@@ -18,7 +18,7 @@ type FluidCollisionOptions = Pick<ThreeGPUCollisionBackendOptions,
   | "staticObjectFilter"
   | "dynamicObjectFilter"
   | "geometryDynamicObjectFilter"
-  | "updatePolicy"> & object;
+  | "updatePolicy"> & Pick<ThreeCollisionBackendOptions, "staticAfter"> & object;
 ```
 
 Mesh discovery uses the same roots and filters as Three's collision backends.

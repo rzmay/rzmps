@@ -38,6 +38,12 @@ export class ModuleGUI extends GUIEditorBase {
     if (candidate instanceof FluidSimulation) {
       const tuning = [
         'pressureIterations',
+        'pressureTolerance',
+        'pressureWarmStart',
+        'adaptiveTimestep',
+        'cfl',
+        'maxFluidSubsteps',
+        'initialBrickCapacity',
         'externalForce',
         'maxVelocity',
         'boundsPadding',
@@ -78,6 +84,9 @@ export class ModuleGUI extends GUIEditorBase {
         .add(candidate, 'boundsPolicy', Object.values(FluidBoundsPolicy))
         .name('Bounds Policy')
         .onChange(() => this.emitCode());
+      if ('pressureSolver' in candidate) {
+        folder.add(candidate, 'pressureSolver', ['Iterative', 'Multigrid']).name('Pressure Solver');
+      }
       if ('advectionMethod' in candidate) {
         folder.add(candidate, 'advectionMethod', ['SemiLagrangian', 'MacCormack']).name('Advection Method');
       }

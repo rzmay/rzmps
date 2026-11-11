@@ -31,6 +31,41 @@ by the GPU path rather than moving the entire system to CPU. Inspect `supportsGP
 custom components. Changing `gpuProcessing` starts a fresh run because CPU objects and GPU buffers
 are separate authoritative states.
 
+## Non-Advancing Resource Preparation
+
+An initialized WebGPU renderer can prepare component resources before the first update:
+
+```ts
+await renderer.init();
+scene.add(particles);
+await particles.prepare(renderer);
+renderer.render(scene, camera); // Captures the renderer used by subsequent GPU updates.
+```
+
+`ParticleSystem.prepare(renderer)` awaits `Module.prepareResources(system, renderer)` on
+attached modules, dependents, and registered subsystems. It does not call ordinary module
+`prepare(context)`, emit particles, increment age, or advance simulation time. An extension
+can allocate storage, bake static geometry, and call Three.js `compileComputeAsync` there.
+Custom implementations must preserve that non-advancing contract. Await completion before
+updating or disposing the system.
+
+Preparation is optional: normal updates can still build resources lazily. It does not promise
+that every renderer, material, or population-dependent kernel is compiled. CPU/WebGL systems
+should use their normal lifecycle instead of calling this WebGPU preparation method.
+
+A module can also override `getSimulationTimestep(requestedDt)` to request a positive maximum
+step in seconds. The default is `Infinity`. The system combines requests with its configured
+substep interval and includes registered subsystems, keeping emission, modifiers, integration,
+and collision on the same clock. This hook must return a CPU number, not a shader node or a
+synchronous GPU readback.
+
+`getSimulationSubstepLimit()` optionally limits the number of solver steps recovered in one
+incoming interval. Its default is `Infinity`; the system uses the smallest requested limit,
+including subsystem requests. Excess time follows the existing time-skipping path rather than
+accumulating unbounded catch-up work. Fluid modules expose this through `maxFluidSubsteps`.
+A smaller timestep and a work limit serve different purposes: one limits integration error,
+the other bounds recovery work after a stall.
+
 ## Writing CPU and GPU Modules
 
 The CPU callback mutates a JavaScript `Particle`. `modifyGPU` builds a Three.js Shading Language

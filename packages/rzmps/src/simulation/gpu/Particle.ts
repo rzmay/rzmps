@@ -1,3 +1,4 @@
+import Benchmarks from '../../core/Benchmarks';
 import type { GPUEventBatch } from '../../events/gpu/EventBatch';
 import type { GPUEventPayload } from '../../events/events.utils';
 import type { Tag } from '../../types/tag.types';
@@ -543,6 +544,9 @@ export class GPUParticleRenderStorage {
 
 /** Owns the canonical simulation attributes and their CPU synchronization paths. */
 export class GPUParticleBufferState {
+  readonly benchmarks = new Benchmarks();
+  /** Cumulative bytes queued through CPU particle uploads, excluding GPU-to-GPU copies. */
+  uploadBytes = 0;
   readonly floatStride = FLOAT_SLOT_COUNT * 4;
   count = 0;
   capacity: number;
@@ -562,6 +566,7 @@ export class GPUParticleBufferState {
     tagMaskForParticle?: (particle: Particle) => number,
     generationForParticle?: (particle: Particle, index: number) => number,
   ) {
+    this.benchmarks.register('uploadBytes', { type: 'counter', unit: 'bytes', get: () => this.uploadBytes });
     this.capacity = capacity;
     this.floatData = new Float32Array(capacity * FLOAT_SLOT_COUNT * 4);
     this.uintData = new Uint32Array(capacity * UINT_SLOT_COUNT * 4);
@@ -598,6 +603,7 @@ export class GPUParticleBufferState {
       writeState(this.uintData, index, 0, 0, 0);
     }
 
+    this.uploadBytes += this.floatData.byteLength + this.uintData.byteLength;
     this.attributes.floatData.needsUpdate = true;
     this.attributes.uintData.needsUpdate = true;
   }
@@ -612,6 +618,7 @@ export class GPUParticleBufferState {
     this.ensureCapacity(index + 1);
     this.writeParticle(index, particle, tagMaskForParticle, generationForParticle);
 
+    this.uploadBytes += (FLOAT_SLOT_COUNT + UINT_SLOT_COUNT) * 4 * 4;
     const floatStart = index * FLOAT_SLOT_COUNT * 4;
     const uintStart = index * UINT_SLOT_COUNT * 4;
 
@@ -739,6 +746,7 @@ export class GPUParticleBufferState {
   }
 
   dispose(renderer?: GPUStorageBufferRenderer): void {
+    this.benchmarks.detach();
     destroyGPUStorageAttribute(renderer, this.attributes.floatData);
     destroyGPUStorageAttribute(renderer, this.attributes.uintData);
   }

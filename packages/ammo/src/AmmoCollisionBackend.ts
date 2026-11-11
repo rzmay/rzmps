@@ -1,3 +1,4 @@
+import { Benchmarks } from '@rzmps/rzmps';
 /* eslint-disable no-continue */
 /* eslint-disable no-restricted-syntax */
 /* eslint-disable class-methods-use-this */
@@ -33,6 +34,7 @@ export interface AmmoCollisionBackendOptions {
 }
 
 class AmmoCollisionBackend implements ICollisionBackend {
+  readonly benchmarks = new Benchmarks();
   private Ammo: AmmoLike;
 
   private world: AmmoWorldLike;

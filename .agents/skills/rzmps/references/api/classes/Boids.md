@@ -89,6 +89,20 @@ alignmentWeight: DynamicValue<number>;
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`benchmarks`](Module.md#benchmarks)
+
+***
+
 <a id="cohesionweight"></a>
 
 ### cohesionWeight
@@ -138,6 +152,22 @@ dependents: Module[] = [];
 #### Inherited from
 
 [`Module`](Module.md).[`dependents`](Module.md#dependents)
+
+***
+
+<a id="evaluatedynamicgpu"></a>
+
+### evaluateDynamicGPU
+
+```ts
+readonly evaluateDynamicGPU: GPUDynamicParameterStore;
+```
+
+Cached GPU dynamic values, shared by class methods and functional GPU callbacks.
+
+#### Inherited from
+
+[`Module`](Module.md).[`evaluateDynamicGPU`](Module.md#evaluatedynamicgpu)
 
 ***
 
@@ -950,6 +980,52 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 ***
 
+<a id="getsimulationsubsteplimit"></a>
+
+### getSimulationSubstepLimit()
+
+```ts
+getSimulationSubstepLimit(): number;
+```
+
+Maximum solver steps recovered in one incoming interval. Infinity preserves normal catch-up behavior.
+
+#### Returns
+
+`number`
+
+#### Inherited from
+
+[`Module`](Module.md).[`getSimulationSubstepLimit`](Module.md#getsimulationsubsteplimit)
+
+***
+
+<a id="getsimulationtimestep"></a>
+
+### getSimulationTimestep()
+
+```ts
+getSimulationTimestep(_requestedDt): number;
+```
+
+Requests a maximum simulation step; Infinity leaves system timing unchanged.
+
+#### Parameters
+
+##### \_requestedDt
+
+`number`
+
+#### Returns
+
+`number`
+
+#### Inherited from
+
+[`Module`](Module.md).[`getSimulationTimestep`](Module.md#getsimulationtimestep)
+
+***
+
 <a id="initializeparticle"></a>
 
 ### initializeParticle()?
@@ -1069,6 +1145,36 @@ Prepares shared work once per system update; the base implementation collects ma
 #### Overrides
 
 [`Module`](Module.md).[`prepare`](Module.md#prepare)
+
+***
+
+<a id="prepareresources"></a>
+
+### prepareResources()
+
+```ts
+prepareResources(_system, _renderer): Promise<void>;
+```
+
+Optional non-advancing resource preparation. Does not run ordinary prepare/update callbacks.
+
+#### Parameters
+
+##### \_system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### \_renderer
+
+[`ParticleSpatialGridRenderer`](../Supporting-Types/interfaces/ParticleSpatialGridRenderer.md)
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Inherited from
+
+[`Module`](Module.md).[`prepareResources`](Module.md#prepareresources)
 
 ***
 

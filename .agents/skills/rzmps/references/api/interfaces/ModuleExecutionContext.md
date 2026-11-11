@@ -42,6 +42,18 @@ readonly events: readonly SimulationEvent<unknown>[];
 
 ***
 
+<a id="module"></a>
+
+### module
+
+```ts
+readonly module: Module;
+```
+
+Owning module; available to functional callbacks without a `this` binding.
+
+***
+
 <a id="octree"></a>
 
 ### octree?

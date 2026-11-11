@@ -14,6 +14,22 @@
 
 ## Properties
 
+<a id="adaptivetimestep"></a>
+
+### adaptiveTimestep?
+
+```ts
+optional adaptiveTimestep?: boolean;
+```
+
+Requests CFL-limited system steps; other modules share the resulting step. Defaults to true.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`adaptiveTimestep`](FluidSimulationOptions.md#adaptivetimestep)
+
+***
+
 <a id="advectionmethod"></a>
 
 ### advectionMethod
@@ -101,6 +117,22 @@ Contain retains a reached cap instead of shrinking away closed field walls.
 ```ts
 buoyancy: number;
 ```
+
+***
+
+<a id="cfl"></a>
+
+### cfl?
+
+```ts
+optional cfl?: number;
+```
+
+Maximum travel per cell per step. Defaults to 2.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`cfl`](FluidSimulationOptions.md#cfl)
 
 ***
 
@@ -230,6 +262,18 @@ externalForce: Vector3;
 
 ***
 
+<a id="initialbrickcapacity"></a>
+
+### initialBrickCapacity
+
+```ts
+initialBrickCapacity: number;
+```
+
+Initially reserved bricks. The pool grows geometrically without shrinking. Defaults to 64.
+
+***
+
 <a id="initializeparticle"></a>
 
 ### initializeParticle?
@@ -266,7 +310,7 @@ optional initializeParticleGPU?: GPUParticleInitializer;
 maxActiveBricks: number;
 ```
 
-Maximum resident gas bricks. Defaults to 512, capped by logical brick count. Lower to reduce reserved memory.
+Resident brick limit, also settable via maxBrickCapacity. Defaults to 512, capped by logical brick count.
 
 ***
 
@@ -284,6 +328,34 @@ Power-of-two grids round this limit down. Particle behavior is selected by bound
 #### Inherited from
 
 [`FluidSimulationOptions`](FluidSimulationOptions.md).[`maxBounds`](FluidSimulationOptions.md#maxbounds)
+
+***
+
+<a id="maxbrickcapacity"></a>
+
+### maxBrickCapacity
+
+```ts
+maxBrickCapacity: number;
+```
+
+Maximum resident bricks; omission uses maxActiveBricks.
+
+***
+
+<a id="maxfluidsubsteps"></a>
+
+### maxFluidSubsteps?
+
+```ts
+optional maxFluidSubsteps?: number;
+```
+
+Maximum additional fluid steps per incoming interval. Defaults to 4.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`maxFluidSubsteps`](FluidSimulationOptions.md#maxfluidsubsteps)
 
 ***
 
@@ -405,6 +477,22 @@ Shared preparation work, called once before processing particles.
 
 ***
 
+<a id="pressurediagnostics"></a>
+
+### pressureDiagnostics?
+
+```ts
+optional pressureDiagnostics?: boolean;
+```
+
+Collect asynchronous pressure and divergence diagnostics through benchmarks. Defaults to false.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`pressureDiagnostics`](FluidSimulationOptions.md#pressurediagnostics)
+
+***
+
 <a id="pressureiterations"></a>
 
 ### pressureIterations
@@ -416,6 +504,82 @@ pressureIterations: number;
 #### Inherited from
 
 [`FluidSimulationOptions`](FluidSimulationOptions.md).[`pressureIterations`](FluidSimulationOptions.md#pressureiterations)
+
+***
+
+<a id="pressuremaxiterations"></a>
+
+### pressureMaxIterations?
+
+```ts
+optional pressureMaxIterations?: number;
+```
+
+Maximum pressure sweeps. Omission follows pressureIterations.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`pressureMaxIterations`](FluidSimulationOptions.md#pressuremaxiterations)
+
+***
+
+<a id="pressureminiterations"></a>
+
+### pressureMinIterations?
+
+```ts
+optional pressureMinIterations?: number;
+```
+
+Minimum pressure sweeps. Omission follows pressureIterations for a fixed solve.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`pressureMinIterations`](FluidSimulationOptions.md#pressureminiterations)
+
+***
+
+<a id="pressuresolver"></a>
+
+### pressureSolver
+
+```ts
+pressureSolver: "Multigrid" | "Iterative";
+```
+
+Sparse V-cycle corrections, or the iterative reference path. Defaults to Iterative.
+
+***
+
+<a id="pressuretolerance"></a>
+
+### pressureTolerance?
+
+```ts
+optional pressureTolerance?: number;
+```
+
+Maximum absolute Poisson residual; zero disables convergence checks.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`pressureTolerance`](FluidSimulationOptions.md#pressuretolerance)
+
+***
+
+<a id="pressurewarmstart"></a>
+
+### pressureWarmStart?
+
+```ts
+optional pressureWarmStart?: boolean;
+```
+
+Preserve pressure between compatible solves. Defaults to true.
+
+#### Inherited from
+
+[`FluidSimulationOptions`](FluidSimulationOptions.md).[`pressureWarmStart`](FluidSimulationOptions.md#pressurewarmstart)
 
 ***
 
@@ -689,6 +853,18 @@ velocityDissipation: number;
 ```
 
 Exponential velocity decay rate in inverse seconds. Zero preserves velocity.
+
+***
+
+<a id="velocitypaddinglookahead"></a>
+
+### velocityPaddingLookahead
+
+```ts
+velocityPaddingLookahead: number;
+```
+
+Particle-motion lookahead for automatic domain padding, in seconds. Defaults to one.
 
 ***
 

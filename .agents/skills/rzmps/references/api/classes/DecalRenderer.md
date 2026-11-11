@@ -58,6 +58,20 @@ readonly atlasOptions: TextureAtlasOptions;
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`benchmarks`](Renderer.md#benchmarks)
+
+***
+
 <a id="children"></a>
 
 ### children
@@ -884,6 +898,28 @@ get version(): number;
 
 [`Renderer`](Renderer.md).[`version`](Renderer.md#version)
 
+***
+
+<a id="visibleinstancecount"></a>
+
+### visibleInstanceCount
+
+#### Get Signature
+
+```ts
+get visibleInstanceCount(): number;
+```
+
+Current renderer population, including generated children; GPU counts use available render-output state.
+
+##### Returns
+
+`number`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`visibleInstanceCount`](Renderer.md#visibleinstancecount)
+
 ## Methods
 
 <a id="begin"></a>
@@ -1444,3 +1480,37 @@ Deterministic Fibonacci sphere, with exactly subdivisions unit directions.
 #### Returns
 
 [`DecalDirectionSampler`](../type-aliases/DecalDirectionSampler.md)
+
+***
+
+<a id="random"></a>
+
+### Random()
+
+```ts
+static Random(
+   hits,
+   particle,
+   n?
+): Intersection<Object3D<Object3DEventMap>>[];
+```
+
+Shuffles candidates without replacement; defaults to one random hit. Negative n returns every hit shuffled.
+
+#### Parameters
+
+##### hits
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+##### particle
+
+[`Particle`](Particle.md)
+
+##### n?
+
+`number` = `1`
+
+#### Returns
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]

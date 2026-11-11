@@ -148,6 +148,18 @@ export default class DecalRenderer extends Renderer {
     return hits.slice(0, n < 0 ? undefined : n);
   }
 
+  /** Shuffles candidates without replacement; defaults to one random hit. Negative n returns every hit shuffled. */
+  static Random(hits: THREE.Intersection[], particle: Particle, n = 1): THREE.Intersection[] {
+    const shuffled = hits.slice();
+
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    return DecalRenderer.All(shuffled, particle, n);
+  }
+
   /** Deterministic Fibonacci sphere, with exactly subdivisions unit directions. */
   static Radial(subdivisions: number): DecalDirectionSampler {
     const sd = Math.max(1, Math.floor(Number.isFinite(subdivisions) ? subdivisions : 1));

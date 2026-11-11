@@ -44,6 +44,16 @@ THREE.Object3D.constructor
 
 ## Properties
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+***
+
 <a id="boundingbox"></a>
 
 ### boundingBox
@@ -1953,6 +1963,29 @@ Freezes emission and simulation while playing; propagates to subsystems and opti
 #### Returns
 
 `void`
+
+***
+
+<a id="prepare"></a>
+
+### prepare()
+
+```ts
+prepare(renderer?): Promise<void>;
+```
+
+Allocate/compile component resources without emitting, advancing time, or dispatching simulation work.
+The renderer must already be initialized. Ordinary update remains valid without this optional call.
+
+#### Parameters
+
+##### renderer?
+
+`WebGPURenderer` = `...`
+
+#### Returns
+
+`Promise`\<`void`\>
 
 ***
 

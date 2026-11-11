@@ -158,6 +158,7 @@ conventions; transform them with the target's normal matrix for world-space comp
 | `DecalRenderer.Nearest` | One closest | Up to four closest |
 | `DecalRenderer.Farthest` | One farthest | Up to four farthest |
 | `DecalRenderer.All` | All in ray order | First four in ray order |
+| `DecalRenderer.Random` | One random hit | Up to four random hits, without replacement |
 
 The built-ins leave the input array unchanged. Negative `maxHits` disables truncation; zero creates no marks. A custom
 selector may return fewer candidates. Explicit nonnegative `maxHits` also caps its valid result. Distinct intersections

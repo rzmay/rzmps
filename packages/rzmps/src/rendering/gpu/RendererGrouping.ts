@@ -40,6 +40,7 @@ import {
   type GPUParticleBufferState,
 } from '../../simulation/gpu/Particle';
 import ParticleSpatialGrid from '../../spatial/structures/ParticleSpatialGrid';
+import { RENDER_FLOAT_SLOT_COUNT } from '../../simulation/gpu/particleLayout.utils';
 import {
   nextPowerOfTwo,
   orderedFloatNode,
@@ -575,7 +576,9 @@ export default class GPURendererGrouping {
     this.eligibleCount = counts[0];
     return Array.from({ length: Math.min(counts[1], output.count) }, (_, i) => {
       const p = new Particle();
-      const o = i * 20;
+      // Material-copy channels extend the layout beyond the original five vec4s.
+      // A stale stride reads later lights' colors/alpha from unrelated fields.
+      const o = i * RENDER_FLOAT_SLOT_COUNT * 4;
       p.position.fromArray(data, o);
       p.alpha = data[o + 3];
       p.rotation.fromArray(data, o + 4);

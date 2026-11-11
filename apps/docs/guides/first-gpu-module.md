@@ -37,6 +37,33 @@ The two callbacks should express the same behavior, but they need not use identi
 `conditionGPU`. After the renderer initializes, use `particles.isGPUProcessingActive` to check the
 backend actually selected.
 
+## Functional Callback Context
+
+Both CPU and GPU modification and condition callbacks receive the owning module as
+`context.module`. GPU callbacks can use its cached `evaluateDynamicGPU` evaluator without
+capturing a variable or relying on `this`:
+
+```ts
+const lift = (time) => 0.25 + time;
+const updraft = new Module(
+  (particle, deltaTime) => {
+    particle.velocity.y += lift(particle.time) * deltaTime;
+  },
+  {
+    modifyGPU: (particle, deltaTime, { module }) => {
+      const strength = module.evaluateDynamicGPU.number(
+        'lift', () => lift, particle.time, 0, particle.index,
+      );
+      particle.velocity.y.addAssign(strength.mul(deltaTime));
+    },
+  },
+);
+```
+
+Use stable evaluator keys and getters, just as in class-defined modules. CPU preparation
+also receives `context.module`; GPU callbacks still build TSL graphs rather than executing
+once per particle in JavaScript.
+
 ## Conditions and Spatial Queries
 
 A custom CPU `condition` also needs a TSL equivalent:

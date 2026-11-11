@@ -1,24 +1,17 @@
 import * as THREE from 'three';
-import { FluidCollider } from '@rzmps/rzmps';
 import {
   createSceneParticleRoot,
   disposeSceneParticleRoot,
 } from '../utils/particleRoot.js';
 
-function addBoxCollider(root, size, position, material, name, rotationZ = 0) {
-  const collider = FluidCollider.Box({}, ...size);
-  collider.name = `${name} Collider`;
-  collider.position.set(...position);
-  collider.rotation.z = rotationZ;
-
+function addBox(root, size, position, material, name, rotationZ = 0) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
   mesh.name = name;
-  mesh.position.copy(collider.position);
-  mesh.rotation.copy(collider.rotation);
+  mesh.position.set(...position);
+  mesh.rotation.z = rotationZ;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  root.add(collider, mesh);
-  return collider;
+  root.add(mesh);
 }
 
 export default function createGasFlow(scene) {
@@ -41,22 +34,18 @@ export default function createGasFlow(scene) {
     roughness: 0.9,
   });
 
-  addBoxCollider(root, [5.8, 0.32, 4.2], [0, 3.25, 0], colliderMaterial, 'Gas Canopy');
-  addBoxCollider(root, [0.38, 1.9, 3.2], [-1.55, 2.2, 0], accentMaterial, 'Left Baffle', -0.24);
-  addBoxCollider(root, [0.38, 1.9, 3.2], [1.55, 2.2, 0], accentMaterial, 'Right Baffle', 0.24);
+  addBox(root, [5.8, 0.32, 4.2], [0, 3.25, 0], colliderMaterial, 'Gas Canopy');
+  addBox(root, [0.38, 1.9, 3.2], [-1.55, 2.2, 0], accentMaterial, 'Left Baffle', -0.24);
+  addBox(root, [0.38, 1.9, 3.2], [1.55, 2.2, 0], accentMaterial, 'Right Baffle', 0.24);
 
-  const sphereCollider = FluidCollider.Sphere({
-    position: new THREE.Vector3(0, 2.2, 0),
-  }, 0.62, 24, 16);
-  sphereCollider.name = 'Gas Splitter Collider';
   const sphere = new THREE.Mesh(
     new THREE.SphereGeometry(0.62, 32, 20),
     colliderMaterial,
   );
   sphere.name = 'Gas Splitter';
-  sphere.position.copy(sphereCollider.position);
+  sphere.position.set(0, 2.2, 0);
   sphere.castShadow = true;
-  root.add(sphereCollider, sphere);
+  root.add(sphere);
 
   const floor = new THREE.Mesh(new THREE.BoxGeometry(18, 0.2, 14), floorMaterial);
   floor.name = 'Gas Lab Floor';
@@ -82,7 +71,6 @@ export default function createGasFlow(scene) {
     const geometries = new Set();
     root.traverse((object) => {
       if (object instanceof THREE.Mesh) geometries.add(object.geometry);
-      if (object instanceof FluidCollider && object.geometry) geometries.add(object.geometry);
     });
     geometries.forEach((geometry) => geometry.dispose());
     [colliderMaterial, accentMaterial, floorMaterial].forEach((material) => material.dispose());

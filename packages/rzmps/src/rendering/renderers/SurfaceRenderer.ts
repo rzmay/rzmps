@@ -51,6 +51,7 @@ export default class SurfaceRenderer extends Renderer {
   receiveShadow: boolean;
   private surface?: LiquidSurface;
   private resourceKey = '';
+  private diagnosticsPending = false;
   private gpuRenderer?: WebGPURenderer;
 
   constructor(options: Partial<SurfaceRendererOptions> = {}) {
@@ -122,6 +123,14 @@ export default class SurfaceRenderer extends Renderer {
       system.getGPURendererTagMask(this.tags), system.quality,
       this.compensation === 'size' && system.quality > 0 ? 1 / Math.sqrt(system.quality) : 1,
       this.smoothingIterations, this.smoothingStrength);
+    if (this.benchmarks.enabled && !this.diagnosticsPending) {
+      this.diagnosticsPending = true;
+      void this.surface.readDiagnostics().then(stats => {
+        this.benchmarks.set('triangleCount', stats.triangles);
+        this.benchmarks.set('activeBricks', stats.activeBricks);
+        this.benchmarks.set('activeSurfaceCells', stats.vertices);
+      }).catch(() => {}).finally(() => { this.diagnosticsPending = false; });
+    }
     this.mesh.visible = true;
     this.mesh.castShadow = this.castShadow;
     this.mesh.receiveShadow = this.receiveShadow;

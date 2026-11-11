@@ -31,7 +31,7 @@ class Source extends Module {
 }
 const red = new Source(-1.5, 0.5, 8, 0.5, [1, 0, 0], 'red');
 const blue = new Source(-0.5, 1.5, 16, 1.5, [0, 0, 1], 'blue');
-const volume = new VolumeRenderer({ generateChildren: false, steps: 64, threshold: 0.1, range: 0.05, opacity: 0.08,
+const volume = new VolumeRenderer({ generateChildren: false, steps: 64, threshold: 0.1, range: 0.05, opacity: 1 - 0.92 ** 8,
   children: { count: 1000 }, compensation: 'children' });
 const system = new ParticleSystem({ emitters: [], modules: [red, blue], renderers: [] });
 scene.add(system);

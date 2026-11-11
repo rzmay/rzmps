@@ -61,6 +61,16 @@ Wraps a per-particle callback; options select filtering, spatial collection, and
 
 ***
 
+<a id="adaptivetimestep"></a>
+
+### adaptiveTimestep
+
+```ts
+adaptiveTimestep: boolean;
+```
+
+***
+
 <a id="autobounds"></a>
 
 ### autoBounds
@@ -88,6 +98,20 @@ automaticPadding: boolean;
 ```ts
 automaticPaddingDistance: number = 0;
 ```
+
+***
+
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`Module`](Module.md).[`benchmarks`](Module.md#benchmarks)
 
 ***
 
@@ -131,6 +155,16 @@ boundsPolicy:
 
 ```ts
 cellSize: number;
+```
+
+***
+
+<a id="cfl"></a>
+
+### cfl
+
+```ts
+cfl: number;
 ```
 
 ***
@@ -184,6 +218,22 @@ dependents: Module[] = [];
 #### Inherited from
 
 [`Module`](Module.md).[`dependents`](Module.md#dependents)
+
+***
+
+<a id="evaluatedynamicgpu"></a>
+
+### evaluateDynamicGPU
+
+```ts
+readonly evaluateDynamicGPU: GPUDynamicParameterStore;
+```
+
+Cached GPU dynamic values, shared by class methods and functional GPU callbacks.
+
+#### Inherited from
+
+[`Module`](Module.md).[`evaluateDynamicGPU`](Module.md#evaluatedynamicgpu)
 
 ***
 
@@ -277,6 +327,16 @@ maxBounds: number;
 
 ***
 
+<a id="maxfluidsubsteps"></a>
+
+### maxFluidSubsteps
+
+```ts
+maxFluidSubsteps: number;
+```
+
+***
+
 <a id="maxvelocity"></a>
 
 ### maxVelocity
@@ -353,12 +413,74 @@ readonly particleBounds: Box3;
 
 ***
 
+<a id="pressurediagnostics"></a>
+
+### pressureDiagnostics
+
+```ts
+pressureDiagnostics: boolean;
+```
+
+***
+
 <a id="pressureiterations"></a>
 
 ### pressureIterations
 
 ```ts
 pressureIterations: number;
+```
+
+***
+
+<a id="pressuremaxiterations"></a>
+
+### pressureMaxIterations?
+
+```ts
+optional pressureMaxIterations?: number;
+```
+
+***
+
+<a id="pressureminiterations"></a>
+
+### pressureMinIterations?
+
+```ts
+optional pressureMinIterations?: number;
+```
+
+***
+
+<a id="pressurestats"></a>
+
+### pressureStats
+
+```ts
+readonly pressureStats: FluidPressureDiagnostics;
+```
+
+Last completed GPU diagnostic sample; null until explicitly collected.
+
+***
+
+<a id="pressuretolerance"></a>
+
+### pressureTolerance
+
+```ts
+pressureTolerance: number;
+```
+
+***
+
+<a id="pressurewarmstart"></a>
+
+### pressureWarmStart
+
+```ts
+pressureWarmStart: boolean;
 ```
 
 ***
@@ -969,6 +1091,52 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 ***
 
+<a id="getsimulationsubsteplimit"></a>
+
+### getSimulationSubstepLimit()
+
+```ts
+getSimulationSubstepLimit(): number;
+```
+
+Maximum solver steps recovered in one incoming interval. Infinity preserves normal catch-up behavior.
+
+#### Returns
+
+`number`
+
+#### Overrides
+
+[`Module`](Module.md).[`getSimulationSubstepLimit`](Module.md#getsimulationsubsteplimit)
+
+***
+
+<a id="getsimulationtimestep"></a>
+
+### getSimulationTimestep()
+
+```ts
+getSimulationTimestep(requestedDt): number;
+```
+
+Requests a maximum simulation step; Infinity leaves system timing unchanged.
+
+#### Parameters
+
+##### requestedDt
+
+`number`
+
+#### Returns
+
+`number`
+
+#### Overrides
+
+[`Module`](Module.md).[`getSimulationTimestep`](Module.md#getsimulationtimestep)
+
+***
+
 <a id="initializeparticle"></a>
 
 ### initializeParticle()?
@@ -1088,6 +1256,66 @@ Prepares shared work once per system update; the base implementation collects ma
 #### Overrides
 
 [`Module`](Module.md).[`prepare`](Module.md#prepare)
+
+***
+
+<a id="prepareresources"></a>
+
+### prepareResources()
+
+```ts
+prepareResources(system, renderer): Promise<void>;
+```
+
+Optional non-advancing resource preparation. Does not run ordinary prepare/update callbacks.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### renderer
+
+[`ParticleSpatialGridRenderer`](../Supporting-Types/interfaces/ParticleSpatialGridRenderer.md)
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Overrides
+
+[`Module`](Module.md).[`prepareResources`](Module.md#prepareresources)
+
+***
+
+<a id="readboundarydiagnostics"></a>
+
+### readBoundaryDiagnostics()
+
+```ts
+readBoundaryDiagnostics(renderer): Promise<{
+  boundaryCells: number;
+  fullyBlockedFaces: number;
+  partiallyOpenFaces: number;
+}>;
+```
+
+Optional GPU reduction; only aggregate counts cross back to the CPU.
+
+#### Parameters
+
+##### renderer
+
+[`ParticleSpatialGridRenderer`](../Supporting-Types/interfaces/ParticleSpatialGridRenderer.md)
+
+#### Returns
+
+`Promise`\<\{
+  `boundaryCells`: `number`;
+  `fullyBlockedFaces`: `number`;
+  `partiallyOpenFaces`: `number`;
+\}\>
 
 ***
 

@@ -427,7 +427,7 @@ Exponent applied to the contrast-adjusted density mask. Zero disables masking. W
 opacity: number;
 ```
 
-Opacity per cell of ray travel, after density mapping. Defaults to 0.25.
+Opacity over one simulation unit of ray travel, after density mapping. Defaults to 0.25.
 
 ***
 

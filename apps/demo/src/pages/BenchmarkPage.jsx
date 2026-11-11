@@ -23,6 +23,7 @@ import {
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import {
+  profileRenderer,
   Boids,
   ColorOverLifetime,
   ColorByDepth,
@@ -273,80 +274,56 @@ function configureHierarchyGPU(system, enabled) {
   system.subSystems.forEach((_options, child) => configureHierarchyGPU(child, enabled));
 }
 
-function percentile(values, p) {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0;
-}
-
-function slowestFrameAverage(values, fraction) {
-  if (values.length === 0) return 0;
-
-  const sorted = [...values].sort((a, b) => b - a);
-  const count = Math.max(1, Math.ceil(values.length * fraction));
-  const slowest = sorted.slice(0, count);
-  return slowest.reduce((sum, value) => sum + value, 0) / slowest.length;
-}
-
 function summarize({
   name,
   particleCount,
   system,
-  updateSamples,
-  frameSamples,
-  particleSamples,
+  benchmarks,
   measuredDurationMs,
   maxHeapMB,
   requireGPU,
-  gpuActiveSamples,
-  computeDispatchSamples,
-  simulationDispatchSamples,
-  renderOutputDispatchSamples,
   rendererType,
   simulationNodeBuilds,
   benchmarkMode,
 }) {
-  const updateTotal = updateSamples.reduce((sum, value) => sum + value, 0);
-  const frameTotal = frameSamples.reduce((sum, value) => sum + value, 0);
-  const slowestOnePercentFrameMs = slowestFrameAverage(frameSamples, 0.01);
-  const p99FrameMs = percentile(frameSamples, 0.99);
-  const p95UpdateMs = percentile(updateSamples, 0.95);
-  const computeTotal = computeDispatchSamples.reduce((sum, value) => sum + value, 0);
-  const simulationDispatchTotal = simulationDispatchSamples.reduce((sum, value) => sum + value, 0);
-  const renderOutputDispatchTotal = renderOutputDispatchSamples.reduce((sum, value) => sum + value, 0);
-  const gpuBufferStats = system.gpuBufferStats;
-  const estimatedPersistentGPUBufferMB = (gpuBufferStats.allocated * 12 * 4 * 4) / (1024 * 1024);
+  const report = benchmarks.report();
+  const metric = name => report.metrics[`benchmark/${name}`];
+  const update = metric('update'), frame = metric('frame'), particles = metric('particleCount');
+  const compute = metric('computeDispatches'), simulation = metric('simulationDispatches');
+  const renderOutput = metric('renderOutputDispatches'), gpuActive = metric('gpuActive');
+  const slowestOnePercentFrameMs = frame.slowestOnePercentMean;
+  const estimatedPersistentGPUBufferMB = (benchmarks.snapshot()['gpu/allocatedBytes'] ?? 0) / (1024 * 1024);
 
   return {
     name,
     benchmarkMode,
     particles: particleCount,
-    minSimulatedParticles: Math.min(...particleSamples),
-    maxSimulatedParticles: Math.max(...particleSamples),
+    minSimulatedParticles: particles.min,
+    maxSimulatedParticles: particles.max,
     finalSimulatedParticles: system.particles.length,
     maxParticlesLimit: system.maxParticles,
     lodEnabled: Boolean(system.lod),
     quality: system.quality,
-    frames: frameSamples.length,
-    avgFps: frameSamples.length / (measuredDurationMs / 1000),
+    frames: frame.count,
+    avgFps: frame.count / (measuredDurationMs / 1000),
     onePercentLowFps: 1000 / slowestOnePercentFrameMs,
-    avgFrameMs: frameTotal / frameSamples.length,
+    avgFrameMs: frame.mean,
     slowestOnePercentFrameMs,
-    p99FrameMs,
-    maxFrameMs: Math.max(...frameSamples),
-    avgUpdateMs: updateTotal / updateSamples.length,
-    p95UpdateMs,
+    p99FrameMs: frame.p99,
+    maxFrameMs: frame.max,
+    avgUpdateMs: update.mean,
+    p95UpdateMs: update.p95,
     maxHeapMB,
     gpuProcessingRequested: Boolean(requireGPU),
-    gpuActiveFrames: gpuActiveSamples.filter(Boolean).length,
-    gpuMeasuredFrames: gpuActiveSamples.length,
-    gpuProcessingActive: gpuActiveSamples.length > 0 && gpuActiveSamples.every(Boolean),
-    avgComputeDispatches: computeDispatchSamples.length > 0 ? computeTotal / computeDispatchSamples.length : 0,
-    maxComputeDispatches: computeDispatchSamples.length > 0 ? Math.max(...computeDispatchSamples) : 0,
-    avgSimulationDispatches:
-      simulationDispatchSamples.length > 0 ? simulationDispatchTotal / simulationDispatchSamples.length : 0,
-    avgRenderOutputDispatches:
-      renderOutputDispatchSamples.length > 0 ? renderOutputDispatchTotal / renderOutputDispatchSamples.length : 0,
+    gpuActiveFrames: gpuActive.sum,
+    gpuMeasuredFrames: gpuActive.count,
+    gpuProcessingActive: gpuActive.count > 0 && gpuActive.min === 1,
+    avgComputeDispatches: compute.mean ?? 0,
+    maxComputeDispatches: compute.max ?? 0,
+    avgSimulationDispatches: simulation.mean ?? 0,
+    avgRenderOutputDispatches: renderOutput.mean ?? 0,
     estimatedPersistentGPUBufferMB,
+    measurements: report,
     rendererType,
     deathEvents: system.__rzmpsBenchmarkDeathEvents,
     gpuEventStats: system.gpuEventStats,
@@ -461,15 +438,12 @@ function BenchmarkScene({ onComplete, onProgress }) {
             if (!system.__dynamicSpatialDiagnostics && registry && system.gpuSimulation._gpuSimulationComputeCache) {
               const diagnostics = {
                 baselinePipelineBuilds: system.gpuConfigurationStats.pipelineBuilds,
-                updateTimeMs: 0,
                 updates: 0,
                 frame: 0,
               };
               const update = registry.update.bind(registry);
               registry.update = (...args) => {
-                const started = performance.now();
-                const result = update(...args);
-                diagnostics.updateTimeMs += performance.now() - started;
+                const result = system.benchmarks.span('benchmark/spatialUpdate', () => update(...args));
                 diagnostics.updates += 1;
                 return result;
               };
@@ -496,7 +470,10 @@ function BenchmarkScene({ onComplete, onProgress }) {
             if (stats.structuralBuilds !== 1 || stats.bvhRefits === 0) {
               throw new Error(`Moving effects missed the incremental BVH path: ${JSON.stringify(stats)}.`);
             }
-            diagnostics.averageRegistryUpdateMs = diagnostics.updateTimeMs / diagnostics.updates;
+            const timing = system.benchmarks.report().metrics['benchmark/spatialUpdate'];
+            diagnostics.updateTimeMs = timing.sum;
+            diagnostics.updates = timing.count;
+            diagnostics.averageRegistryUpdateMs = timing.mean;
             diagnostics.registryStats = stats;
             geometry.dispose();
           },
@@ -529,15 +506,12 @@ function BenchmarkScene({ onComplete, onProgress }) {
             if (!system.__dynamicSpatialDiagnostics && backend.stats.fullBuilds > 0) {
               const diagnostics = {
                 baselinePipelineBuilds: system.gpuConfigurationStats.pipelineBuilds,
-                updateTimeMs: 0,
                 updates: 0,
                 frame: 0,
               };
               const update = backend.update.bind(backend);
               backend.update = (...args) => {
-                const started = performance.now();
-                const result = update(...args);
-                diagnostics.updateTimeMs += performance.now() - started;
+                const result = system.benchmarks.span('benchmark/spatialUpdate', () => update(...args));
                 diagnostics.updates += 1;
                 return result;
               };
@@ -577,7 +551,10 @@ function BenchmarkScene({ onComplete, onProgress }) {
             if (!updateGeometry && backend.stats.transformUpdates !== 0) {
               throw new Error('Static collision geometry scheduled transform uploads.');
             }
-            diagnostics.averageBackendUpdateMs = diagnostics.updateTimeMs / diagnostics.updates;
+            const timing = system.benchmarks.report().metrics['benchmark/spatialUpdate'];
+            diagnostics.updateTimeMs = timing.sum;
+            diagnostics.updates = timing.count;
+            diagnostics.averageBackendUpdateMs = timing.mean;
             diagnostics.collisionStats = { ...backend.stats };
             new Set(meshes.map(mesh => mesh.geometry)).forEach(geometry => geometry.dispose());
           },
@@ -2105,16 +2082,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
       sceneObjects,
       phase: 'warmup',
       phaseStartedAt: performance.now(),
-      updateSamples: [],
-      frameSamples: [],
-      particleSamples: [],
-      gpuActiveSamples: [],
-      computeDispatchSamples: [],
-      simulationDispatchSamples: [],
-      renderOutputDispatchSamples: [],
+      benchmarks: system.benchmarks,
       simulationNodes: new WeakSet(),
       simulationNodeBuilds: 0,
       maxHeapMB: 0,
+      measuredFrames: 0,
       rendererType: gl.isWebGPURenderer ? 'WebGPURenderer' : gl.constructor.name,
     };
     lastFrame.current = undefined;
@@ -2139,7 +2111,8 @@ function BenchmarkScene({ onComplete, onProgress }) {
     }
 
     const frameStart = performance.now();
-    const updateStart = performance.now();
+    const endUpdate = active.current.phase === 'measure'
+      ? active.current.benchmarks.begin('benchmark/update') : undefined;
     const computeDispatchesBefore =
       suite === 'emitter-instances'
         ? gl.__rzmpsBenchmarkComputeDispatches
@@ -2168,11 +2141,12 @@ function BenchmarkScene({ onComplete, onProgress }) {
       active.current.system.__rzmpsBenchmarkSimulationDispatches ?? simulationDispatchesBefore;
     const renderOutputDispatchesAfter =
       active.current.system.__rzmpsBenchmarkRenderOutputDispatches ?? renderOutputDispatchesBefore;
-    const updateMs = performance.now() - updateStart;
+    endUpdate?.();
     let elapsed = frameStart - active.current.phaseStartedAt;
 
     if (active.current.phase === 'warmup') {
       if (elapsed >= warmupMs) {
+        active.current.benchmarks.start({ maxSamples: 100000 });
         active.current.phase = 'measure';
         active.current.phaseStartedAt = frameStart;
         lastFrame.current = frameStart;
@@ -2193,7 +2167,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       elapsed = active.current.measuredDurationMs;
     }
 
-    recordBenchmarkFrame(active.current, lastFrame.current, frameStart, updateMs, {
+    recordBenchmarkFrame(active.current, lastFrame.current, frameStart, undefined, {
       compute: computeDispatchesAfter - computeDispatchesBefore,
       simulation: simulationDispatchesAfter - simulationDispatchesBefore,
       renderOutput: renderOutputDispatchesAfter - renderOutputDispatchesBefore,
@@ -2211,7 +2185,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
     // Software rendering or a delayed frame can consume the entire time window.
     // Keep measuring until the payload validator's minimum frame count is met.
-    if (isBenchmarkMeasurementComplete(elapsed, caseDurationMs, active.current.frameSamples.length)) {
+    if (isBenchmarkMeasurementComplete(elapsed, caseDurationMs, active.current.measuredFrames)) {
       if (active.current.phase === 'measure' && awaitingExpectedEvents) {
         active.current.phase = 'drain';
         active.current.phaseStartedAt = frameStart;
@@ -2230,10 +2204,12 @@ function BenchmarkScene({ onComplete, onProgress }) {
       }
       try {
         active.current.validate?.(active.current.system);
+        active.current.benchmarks.assert(active.current.assertions ?? []);
       } catch (error) {
         fail(error);
       }
       results.current.push(summarize(active.current));
+      active.current.benchmarks.stop();
       window.__RZMPS_BENCHMARK_RESULTS__ = [...results.current];
       gl.info.reset();
       void startNextCase().catch(error => {
@@ -2241,6 +2217,11 @@ function BenchmarkScene({ onComplete, onProgress }) {
       });
     }
   });
+
+  // R3F's default render follows the update callback; profiling preserves that ordering and timestep.
+  useFrame((_state, delta) => {
+    profileRenderer(active.current?.benchmarks, gl, () => gl.render(scene, camera), delta * 1000);
+  }, 1);
 
   return null;
 }

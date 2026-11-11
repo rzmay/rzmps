@@ -5,6 +5,7 @@ import {
 } from 'three/tsl';
 import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../spatial/structures/ParticleSpatialGrid';
+import FluidReduction from '../simulation/gpu/FluidReduction';
 import Collision from './Collision';
 import FluidPressureProjection from '../simulation/gpu/FluidPressureProjection';
 import SparseVolumeGrid from '../spatial/structures/gpu/SparseVolumeGrid';
@@ -86,6 +87,11 @@ class FLIPSimulation extends FluidSimulation {
   private _particleSpacing = 0;
   private _collisionIterations = 0;
   private boundaryCollisions: Collision[] = [];
+  private transferReduction?: FluidReduction;
+  private transferReductionCapacity = 0;
+  private readonly transferReductionKeys = new WeakMap<object, object[]>();
+  private transferReadPending = false;
+  private clearNewPressureNode?: ComputeNode;
   private gatherNode?: ComputeNode;
   private forceNodeCompute?: ComputeNode;
   private transferNode?: ComputeNode;
@@ -170,6 +176,34 @@ class FLIPSimulation extends FluidSimulation {
     this.needsUpdate = true;
   }
 
+  private initializeTransferFields(): void {
+    if (!this.velocityBeforeAttribute) {
+      this.velocityCurrentAttribute.dispose();
+      this.velocityCurrentAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 8), 4);
+      const packed = storage(this.velocityCurrentAttribute, 'vec4', this.cellCount * 2);
+      this.velocityCurrent = packed;
+      this.velocityBeforeAttribute = this.velocityCurrentAttribute;
+      this.velocityBefore = { element: index => packed.element(
+        typeof index === 'number' ? index + this.cellCount : uint(index as Node<'uint'>).add(this.cellCount),
+      ) };
+    }
+  }
+
+  public override async prepareResources(
+    system: import('../core/ParticleSystem').default,
+    renderer: ParticleSpatialGridRenderer,
+  ): Promise<void> {
+    this.workGrid ??= new SparseVolumeGrid(
+      this.spatialGridOptions!, (2 ** this.spatialGridOptions!.brickSubdivisions!) ** 3,
+    );
+    this.workGrid.updateDispatch(renderer);
+    this.initializeTransferFields();
+    await super.prepareResources(system, renderer);
+    await this.getPressureProjection().prepare(
+      renderer, this.velocityNext, this.velocityCurrent, this.pressureIterations, this.velocityBefore,
+    );
+  }
+
   public override computeGPU(
     context: GPUParticleUpdateContext,
     renderer: ParticleSpatialGridRenderer,
@@ -190,25 +224,19 @@ class FLIPSimulation extends FluidSimulation {
       this.workGrid.updateDispatch(renderer);
     }
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
-    if (!this.velocityBeforeAttribute) {
-      this.velocityCurrentAttribute.dispose();
-      this.velocityCurrentAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 8), 4);
-      const packed = storage(this.velocityCurrentAttribute, 'vec4', this.cellCount * 2);
-      this.velocityCurrent = packed;
-      this.velocityBeforeAttribute = this.velocityCurrentAttribute;
-      this.velocityBefore = { element: index => packed.element(
-        typeof index === 'number' ? index + this.cellCount : uint(index as Node<'uint'>).add(this.cellCount),
-      ) };
-    }
+    this.initializeTransferFields();
     const clearFields = (index: Node<'uint'>) => {
       this.velocityCurrent.element(index).assign(vec4(0));
       this.velocityNext.element(index).assign(vec4(0));
       this.velocityBefore!.element(index).assign(vec4(0));
-      this.pressureCurrent.element(index).assign(0);
+
       this.divergence.element(index).assign(0);
     };
     if (this.resetFields) {
       renderer.compute(Fn(() => clearFields(instanceIndex))().compute(this.cellCount));
+      renderer.compute(Fn(() => {
+        this.pressureCurrent.element(instanceIndex).assign(0);
+      })().compute(this.cellCount));
       this.resetFields = false;
     }
     this.clearFieldsNode ??= this.computeCells(clearFields);
@@ -218,6 +246,13 @@ class FLIPSimulation extends FluidSimulation {
     this.workGrid.bounds.copy(this.bounds);
     this.workGrid.rebuild(context, renderer, undefined, undefined,
       this.boundsMinNode, this.cellSizeNode, float(0), tagMask);
+    // Stable dense addresses retain pressure; newly activated bricks must not
+    // inherit the pressure of an earlier, retired liquid region.
+    this.clearNewPressureNode ??= this.workGrid.compute(index => {
+      const coordinate = this.workGrid!.coordinate(index);
+      this.pressureCurrent.element(this.cellIndex(coordinate)).assign(0);
+    }, false, true);
+    renderer.compute(this.clearNewPressureNode);
     this.computeSolidField(context, renderer);
 
     const cacheKey = [grid.resourceVersion, context.buffers.version, tagMask].join('|');
@@ -231,6 +266,7 @@ class FLIPSimulation extends FluidSimulation {
       this.separationApplyNode = undefined;
     }
 
+    this.measureTransfer(context, renderer, false);
     const gather = this.gatherNode ?? this.computeCells(index => {
       const coordinate = this.cellCoordinate(index);
       const center = this.cellCenter(coordinate);
@@ -282,7 +318,7 @@ class FLIPSimulation extends FluidSimulation {
       );
     });
     this.gatherNode = gather;
-    renderer.compute(gather);
+    this.benchmarks.span('particleToGrid', () => renderer.compute(gather));
 
     const force = this.forceNodeCompute ?? this.computeCells(index => {
       const velocity = vec3(this.velocityCurrent.element(index).xyz);
@@ -312,7 +348,8 @@ class FLIPSimulation extends FluidSimulation {
       context.buffers.storage.storeParticle(particle);
     })().compute(context.buffers.count);
     this.transferNode = transfer;
-    renderer.compute(transfer);
+    this.benchmarks.span('gridToParticle', () => renderer.compute(transfer));
+    this.measureTransfer(context, renderer, true);
 
     if (this.particleSeparation > 0 && this.particleSpacing > 0) {
       if (this.separationAttribute?.count !== context.buffers.capacity) {
@@ -410,12 +447,75 @@ class FLIPSimulation extends FluidSimulation {
       this.separationApplyNode = apply;
       // Grid advection may have moved markers since the system built the hash.
       if (this.advectParticlesEnabled) grid.rebuild(renderer, context.buffers, {});
-      renderer.compute(separation);
-      renderer.compute(apply);
+      this.benchmarks.span('separation', () => {
+        renderer.compute(separation);
+        renderer.compute(apply);
+      });
     }
   }
 
+  protected override onParticleStateReset(): void {
+    this.resetFields = true;
+    this.pressureProjection?.invalidate();
+  }
+
+  private measureTransfer(
+    context: GPUParticleUpdateContext,
+    renderer: ParticleSpatialGridRenderer,
+    after: boolean,
+  ): void {
+    if (!this.benchmarks.enabled || this.transferReadPending) return;
+    if (this.transferReductionCapacity !== context.buffers.count) {
+      this.transferReduction?.dispose();
+      this.transferReductionCapacity = context.buffers.count;
+      this.transferReduction = new FluidReduction(context.buffers.count);
+    }
+    let keys = this.transferReductionKeys.get(context.buffers);
+    if (!keys) { keys = [{}, {}, {}, {}]; this.transferReductionKeys.set(context.buffers, keys); }
+    const tagMask = context.system.getGPUFilterTagMask(this.tags);
+    this.transferReduction!.compute(renderer, keys[after ? 1 : 0], index => {
+      const particle = context.buffers.storage.createParticle(index, true);
+      const velocity = particle.velocity.mul(particle.speed);
+      return vec4(velocity.lengthSq().mul(particle.mass.max(0)).mul(0.5), velocity);
+    }, index => {
+      const particle = context.buffers.storage.createParticle(index, true);
+      return particle.alive.notEqual(0).and(tagMask === undefined ? uint(1).equal(1)
+        : particle.tagMask.bitAnd(uint(tagMask)).notEqual(0));
+    }, false);
+    const key = after ? 'kineticEnergyAfterTransfer' : 'kineticEnergyBeforeTransfer';
+    const read = renderer.getArrayBufferAsync(this.transferReduction!.attribute).then(buffer => {
+      const values = new Float32Array(buffer);
+      const count = values[8];
+      this.benchmarks.set(key, values[4] * count);
+      this.benchmarks.set('markerCount', count);
+      this.benchmarks.set('picContribution', this.picRatio);
+      this.benchmarks.set('flipContribution', 1 - this.picRatio);
+      this.benchmarks.set(after ? 'meanVelocityAfterTransfer' : 'meanVelocityBeforeTransfer',
+        Math.hypot(values[5], values[6], values[7]));
+    });
+    this.transferReduction!.compute(renderer, keys[after ? 3 : 2], index => {
+      const particle = context.buffers.storage.createParticle(index, true);
+      const velocity = particle.velocity.mul(particle.speed);
+      return vec4(velocity.lengthSq(), velocity);
+    }, index => {
+      const particle = context.buffers.storage.createParticle(index, true);
+      return particle.alive.notEqual(0).and(tagMask === undefined ? uint(1).equal(1)
+        : particle.tagMask.bitAnd(uint(tagMask)).notEqual(0));
+    }, false);
+    const varianceRead = renderer.getArrayBufferAsync(this.transferReduction!.attribute).then(buffer => {
+      const values = new Float32Array(buffer);
+      const variance = Math.max(0, values[4] - values[5] ** 2 - values[6] ** 2 - values[7] ** 2);
+      const name = after ? 'velocityVarianceAfterTransfer' : 'velocityVarianceBeforeTransfer';
+      this.benchmarks.set(name, variance);
+    });
+    if (after) this.transferReadPending = true;
+    void Promise.all([read, varianceRead]).catch(() => {}).finally(() => {
+      if (after) this.transferReadPending = false;
+    });
+  }
+
   protected override onGridResolutionChanged(): void {
+    this.clearNewPressureNode = undefined;
     this.movingWallsNode = undefined;
     this.movingWallsKey = '';
     this.workGrid?.dispose();
@@ -440,8 +540,17 @@ class FLIPSimulation extends FluidSimulation {
     return this.workGrid ? this.workGrid.computeDense(callback) : super.computeCells(callback);
   }
 
+  protected override diagnosticCellActive(index: Node<'uint'>): Node<'bool'> {
+    return this.workGrid ? this.workGrid.active(this.workGrid.index(this.cellCoordinate(index)))
+      : super.diagnosticCellActive(index);
+  }
+
   protected override computeSolidCells(callback: (index: Node<'uint'>) => void): ComputeNode {
-    return Fn(() => callback(instanceIndex))().compute(this.cellCount);
+    return this.computeCells(callback);
+  }
+
+  protected override computeNewSolidCells(callback: (index: Node<'uint'>) => void): ComputeNode | undefined {
+    return this.workGrid?.computeDense(callback, false, true);
   }
 
   protected override get cacheSolidOccupancy(): boolean { return true; }
@@ -497,18 +606,25 @@ class FLIPSimulation extends FluidSimulation {
     grid.rebuild(renderer, context.buffers, {});
   }
 
+  private getPressureProjection(): FluidPressureProjection {
+    this.pressureProjection ??= new FluidPressureProjection(
+      this.resolution, this.cellSizeNode, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
+      this.closedMinNode, this.closedMaxNode, undefined, this.velocityNext, index => this.targetDivergence(index),
+      this.workGrid, this.faceOpenness, this.solidVelocity, () => this.pressureControls,
+    );
+    return this.pressureProjection;
+  }
+
   protected override solveProjection(
     renderer: ParticleSpatialGridRenderer,
     input: { element(index: Node | number): Node<'vec4'> },
     output: { element(index: Node | number): Node<'vec4'> },
   ): void {
-    this.pressureProjection ??= new FluidPressureProjection(
-      this.resolution, this.cellSizeNode, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
-      this.closedMinNode, this.closedMaxNode, undefined, input, index => this.targetDivergence(index),
-      this.workGrid,
-    );
-    this.pressureProjection.captureBefore(renderer, this.velocityBefore!);
-    this.pressureProjection.solve(renderer, input, output, this.pressureIterations);
+    this.getPressureProjection();
+    this.pressureProjection!.captureBefore(renderer, this.velocityBefore!);
+    this.benchmarks.span('pressureSolve', () => {
+      this.pressureProjection!.solve(renderer, input, output, this.pressureIterations);
+    });
   }
 
   protected override targetDivergence(index: Node<'uint'>): Node<'float'> {
@@ -517,6 +633,9 @@ class FLIPSimulation extends FluidSimulation {
   }
 
   public override cleanup(): void {
+    this.transferReduction?.dispose();
+    this.transferReduction = undefined;
+    this.transferReductionCapacity = 0;
     this.separationAttribute?.dispose();
     this.separationAttribute = undefined;
     this.separationPositions = undefined;

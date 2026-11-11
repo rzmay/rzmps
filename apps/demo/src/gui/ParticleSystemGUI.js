@@ -48,6 +48,8 @@ export class ParticleSystemGUI {
     this.onRendererChange = options.onRendererChange;
     this.onSceneChange = options.onSceneChange;
     this.onMetadataChange = options.onMetadataChange;
+    this.beforeSceneChange = options.beforeSceneChange;
+    this.sceneLoading = false;
     this.onCodeChange = options.onCodeChange;
     this.onShowCodeChange = options.onShowCodeChange;
     this.currentPresetName = options.initialPreset;
@@ -294,33 +296,40 @@ export class ParticleSystemGUI {
   async setScene(name) {
     if (!this.scene || !this.scenes[name]) return;
     const version = ++this.sceneLoadVersion;
-    this.sceneCleanup?.();
-    this.sceneCleanup = undefined;
-    this.sceneUpdate = undefined;
-    this.configureCollisionBackend(this.system);
-    this.currentSceneName = name;
-    this.onSceneChange?.(name);
-    this.applyDefaultSceneState();
-    const sceneBuilder = this.getPresetFactory(this.scenes[name]);
-    if (!sceneBuilder) return;
-    const sceneLifecycle = await sceneBuilder(this.scene, this.renderer);
-    if (version !== this.sceneLoadVersion) {
-      if (typeof sceneLifecycle === 'function') sceneLifecycle();
-      else sceneLifecycle?.cleanup?.();
-      return;
+    this.sceneLoading = true;
+    try {
+      // Reparenting releases module resources, so finish any pending compilation first.
+      await this.beforeSceneChange?.();
+      this.sceneCleanup?.();
+      this.sceneCleanup = undefined;
+      this.sceneUpdate = undefined;
+      this.configureCollisionBackend(this.system);
+      this.currentSceneName = name;
+      this.onSceneChange?.(name);
+      this.applyDefaultSceneState();
+      const sceneBuilder = this.getPresetFactory(this.scenes[name]);
+      if (!sceneBuilder) return;
+      const sceneLifecycle = await sceneBuilder(this.scene, this.renderer);
+      if (version !== this.sceneLoadVersion) {
+        if (typeof sceneLifecycle === 'function') sceneLifecycle();
+        else sceneLifecycle?.cleanup?.();
+        return;
+      }
+      if (typeof sceneLifecycle === 'function') {
+        this.sceneCleanup = sceneLifecycle;
+      } else {
+        this.sceneCleanup = sceneLifecycle?.cleanup;
+        this.sceneUpdate = sceneLifecycle?.update;
+      }
+      this.sceneGUI = sceneLifecycle?.gui ?? sceneBuilder.gui;
+      this.syncRendererBackground();
+      getSceneParticleRoot(this.scene).add(this.system);
+      this.configureSystemForScene(this.system);
+      this.rebuild();
+      this.emitCode();
+    } finally {
+      if (version === this.sceneLoadVersion) this.sceneLoading = false;
     }
-    if (typeof sceneLifecycle === 'function') {
-      this.sceneCleanup = sceneLifecycle;
-    } else {
-      this.sceneCleanup = sceneLifecycle?.cleanup;
-      this.sceneUpdate = sceneLifecycle?.update;
-    }
-    this.sceneGUI = sceneLifecycle?.gui ?? sceneBuilder.gui;
-    this.syncRendererBackground();
-    getSceneParticleRoot(this.scene).add(this.system);
-    this.configureSystemForScene(this.system);
-    this.rebuild();
-    this.emitCode();
   }
 
   applyDefaultSceneState() {

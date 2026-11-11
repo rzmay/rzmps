@@ -22,7 +22,7 @@ try {
     await page.goto(`${origin}/@fs${fixture}?example=${example}`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.ready);
   };
-  await open('gasBlenderSmoke');
+  await open('volumetricSmoke');
   await page.evaluate(() => window.runFrames(30));
   for (const mode of ['smooth', 'checkerboard']) {
     for (const iterations of [0, 16, 64]) {
@@ -47,7 +47,7 @@ try {
     results[`flip-limit-${limit ?? 'unlimited'}`] = stats;
   }
   for (const strength of [0, 0.2, 2]) {
-    await open('gasBlenderSmoke');
+    await open('volumetricSmoke');
     await page.evaluate(() => window.runFrames(30));
     await page.evaluate(strength => {
       window.seedGas();

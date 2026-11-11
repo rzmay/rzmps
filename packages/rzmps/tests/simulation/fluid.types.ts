@@ -51,3 +51,14 @@ new GasSimulation({
   // @ts-expect-error Only supported advection enum values and their strings are accepted.
   advectionMethod: 'unsupported',
 });
+
+
+// A shared membership object can configure both an octree collision backend and fluid collection.
+const sharedCollisionOptions: import('../../build/index.mjs').ThreeCollisionBackendOptions = {
+  world: new (await import('three')).Scene(),
+  staticAfter: 2,
+  staticObjectFilter: object => object.name === 'floor',
+  dynamicObjectFilter: object => object.name === 'moving wall',
+};
+new FLIPSimulation({ collisionOptions: sharedCollisionOptions });
+new GasSimulation({ collisionOptions: sharedCollisionOptions });

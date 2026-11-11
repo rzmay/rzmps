@@ -59,6 +59,8 @@ new RotationByDepth({ angle: 1, angularVelocity: () => 2, angularAcceleration: [
 new Module((particle, deltaTime, context) => {
   particle.alpha = context.events.length ? 1 : 0;
   context.system.getSimulationToWorldMatrix();
+  const module: Module = context.module;
+  module.needsUpdate = true;
   context.octree?.particlesInRadius(particle.position, deltaTime);
 }, {
   prepare(context) {
@@ -66,6 +68,10 @@ new Module((particle, deltaTime, context) => {
   },
   condition: (_particle, _dt, context) => context.events.length > 0,
   modifyGPU(particle, _dt, context) {
+    const module: Module = context.module;
+    particle.alpha.assign(module.evaluateDynamicGPU.number(
+      'alpha', () => 0.5, particle.time, 1, particle.index,
+    ));
     context.spatialGrid?.forEachParticleInRadius(particle.position, particle.mass, () => {});
     context.events.forEach('pulse', event => { particle.mass.assign(event.data[0].x); });
   },

@@ -87,7 +87,9 @@ if (new URLSearchParams(location.search).get('reviewDispatch') === 'pool') {
     if (!this.clearNewNodes.length) {
       for (const field of [this.velocityCurrent, this.velocityNext, this.densityCurrent, this.densityNext,
         this.colorCurrent, this.colorNext, this.curl, this.visualDensity, this.visualColor]) {
-        this.clearNewNodes.push(this.volumeGrid.compute(index => { field.element(index).assign(vec4(0)); }, false, true));
+        this.clearNewNodes.push(this.volumeGrid.compute(index => {
+          field.element(index).assign(vec4(0));
+        }, false, true));
       }
       for (const field of [this.pressureCurrent, this.pressureNext, this.divergence, this.solid]) {
         this.clearNewNodes.push(this.volumeGrid.compute(index => { field.element(index).assign(0); }, false, true));
@@ -186,12 +188,17 @@ function activateDiagnosticGasDomain() {
     flip.maxActiveBricks = capacity;
     system.advanceFrames(1, 1 / 60);
   }
+  flip.growBrickPool(renderer, capacity);
   const grid = flip.volumeGrid;
   renderer.compute(Fn(() => {
     grid.pages.element(instanceIndex).assign(instanceIndex.add(1));
     grid.slots.element(instanceIndex).assign(instanceIndex.add(1));
   })().compute(capacity));
   grid.updateDispatch(renderer);
+  renderer.compute(flip.computeCells(index => {
+    flip.faceOpenness.element(index).assign(flip.solid.element(index).greaterThan(0).select(vec4(0), vec4(1)));
+    flip.solidVelocity.element(index).assign(vec4(0));
+  }));
 }
 window.probe = async (start, end, radius = 0.06) => {
   const output = new StorageBufferAttribute(new Float32Array(12), 4);

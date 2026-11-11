@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type Benchmarks from '../../core/Benchmarks';
 import { IndirectStorageBufferAttribute, StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
   Fn, If, atomicAdd, atomicLoad, atomicOr, atomicStore, clamp, float, instanceIndex, ivec3, max, mix,
@@ -16,6 +17,7 @@ import SparseVolumeGrid from '../../spatial/structures/gpu/SparseVolumeGrid';
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
 
 export interface LiquidSurfaceOptions {
+  benchmarks?: Benchmarks;
   bounds: THREE.Box3;
   voxelSize: number;
   maxActiveBricks: number;
@@ -197,17 +199,26 @@ export default class LiquidSurface {
         this.field.element(index).assign(vec4(color, total));
       });
     }
-    this.renderer.compute(this.fieldNode!);
-    this.renderer.compute(this.verticesNode);
-    this.renderer.compute(this.indicesNode);
+    this.computeStage('fieldReconstruction', () => this.renderer.compute(this.fieldNode!));
+    this.computeStage('surfaceExtraction', () => {
+      this.renderer.compute(this.verticesNode);
+      this.renderer.compute(this.indicesNode);
+    });
     if (smoothingIterations > 0 && smoothingStrength > 0) {
       this.smoothingWeight.value = smoothingStrength * 0.5;
-      for (let iteration = 0; iteration < smoothingIterations; iteration++) {
-        this.smoothNodes.forEach(node => this.renderer.compute(node));
-      }
-      this.renderer.compute(this.shadingNode);
+      this.computeStage('surfaceSmoothing', () => {
+        for (let iteration = 0; iteration < smoothingIterations; iteration++) {
+          this.smoothNodes.forEach(node => this.renderer.compute(node));
+        }
+        this.renderer.compute(this.shadingNode);
+      });
     }
-    this.renderer.compute(this.drawNode);
+    this.computeStage('meshUpdate', () => this.renderer.compute(this.drawNode));
+  }
+
+  private computeStage(name: string, callback: () => void): void {
+    if (this.options.benchmarks) this.options.benchmarks.span(name, callback);
+    else callback();
   }
 
   private point(coordinate: Node<'ivec3'>): Node<'vec3'> {

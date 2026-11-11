@@ -1,5 +1,8 @@
 # Fluid infrastructure review
 
+See [the corrective update](fluid-corrective-update.md) for the later pressure, boundary, allocation,
+and preparation changes. The measurements below describe the earlier implementation.
+
 November 10, 2026. This is a bounded corrective pass, not a replacement fluid solver.
 
 ## Current structure

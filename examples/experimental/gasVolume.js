@@ -15,6 +15,7 @@ import {
 export default async function createGasVolume(simulationOptions = {}) {
   // #region docs:modules:1
   const gas = new GasSimulation({
+    collisionOptions: { surfaceThickness: 0.02, bakedFieldResolution: 32 },
     pressureIterations: 16,
     externalForce: new THREE.Vector3(0, 0.05, 0),
     densityDissipation: 0.9,
@@ -33,8 +34,13 @@ export default async function createGasVolume(simulationOptions = {}) {
       new THREE.Color('#ff9a4d'),
     ],
     temperatureRange: [0, 1],
-    vorticityStrength: 2,
-    turbulenceStrength: 0.75,
+    vorticityStrength: 4,
+    turbulenceStrength: 2,
+    // Reserve the expected plume domain before emission; automatic padding remains enabled.
+    bounds: new THREE.Box3(new THREE.Vector3(-8, -8, -8), new THREE.Vector3(8, 8, 8)),
+    boundsPadding: 0,
+    automaticPadding: true,
+    velocityPaddingLookahead: 1,
     noiseFrequency: 1.4,
     noiseSpeed: 0.45,
     noiseOctaves: 2,
@@ -105,7 +111,7 @@ export default async function createGasVolume(simulationOptions = {}) {
     // #region docs:renderers:1
     renderers: [
       new VolumeRenderer({
-        opacity: 0.16,
+        opacity: 0.75,
         threshold: 0.025,
         range: 0.02,
         steps: 128,

@@ -60,6 +60,20 @@ Wraps a per-particle callback; options select filtering, spatial collection, and
 
 ***
 
+<a id="adaptivetimestep"></a>
+
+### adaptiveTimestep
+
+```ts
+adaptiveTimestep: boolean;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`adaptiveTimestep`](FluidSimulation.md#adaptivetimestep)
+
+***
+
 <a id="advectionmethod"></a>
 
 ### advectionMethod
@@ -112,6 +126,20 @@ automaticPaddingDistance: number = 0;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`automaticPaddingDistance`](FluidSimulation.md#automaticpaddingdistance)
+
+***
+
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`benchmarks`](FluidSimulation.md#benchmarks)
 
 ***
 
@@ -182,6 +210,20 @@ cellSize: number;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`cellSize`](FluidSimulation.md#cellsize)
+
+***
+
+<a id="cfl"></a>
+
+### cfl
+
+```ts
+cfl: number;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`cfl`](FluidSimulation.md#cfl)
 
 ***
 
@@ -291,6 +333,22 @@ dependents: Module[] = [];
 
 ***
 
+<a id="evaluatedynamicgpu"></a>
+
+### evaluateDynamicGPU
+
+```ts
+readonly evaluateDynamicGPU: GPUDynamicParameterStore;
+```
+
+Cached GPU dynamic values, shared by class methods and functional GPU callbacks.
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`evaluateDynamicGPU`](FluidSimulation.md#evaluatedynamicgpu)
+
+***
+
 <a id="events"></a>
 
 ### events
@@ -375,6 +433,16 @@ gpuExecutionContext: GPUEventExecutionContext;
 
 ***
 
+<a id="initialbrickcapacity"></a>
+
+### initialBrickCapacity
+
+```ts
+initialBrickCapacity: number;
+```
+
+***
+
 <a id="maxactivebricks"></a>
 
 ### maxActiveBricks
@@ -396,6 +464,20 @@ maxBounds: number;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`maxBounds`](FluidSimulation.md#maxbounds)
+
+***
+
+<a id="maxfluidsubsteps"></a>
+
+### maxFluidSubsteps
+
+```ts
+maxFluidSubsteps: number;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`maxFluidSubsteps`](FluidSimulation.md#maxfluidsubsteps)
 
 ***
 
@@ -513,6 +595,20 @@ readonly particleBounds: Box3;
 
 ***
 
+<a id="pressurediagnostics"></a>
+
+### pressureDiagnostics
+
+```ts
+pressureDiagnostics: boolean;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`pressureDiagnostics`](FluidSimulation.md#pressurediagnostics)
+
+***
+
 <a id="pressureiterations"></a>
 
 ### pressureIterations
@@ -524,6 +620,88 @@ pressureIterations: number;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`pressureIterations`](FluidSimulation.md#pressureiterations)
+
+***
+
+<a id="pressuremaxiterations"></a>
+
+### pressureMaxIterations?
+
+```ts
+optional pressureMaxIterations?: number;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`pressureMaxIterations`](FluidSimulation.md#pressuremaxiterations)
+
+***
+
+<a id="pressureminiterations"></a>
+
+### pressureMinIterations?
+
+```ts
+optional pressureMinIterations?: number;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`pressureMinIterations`](FluidSimulation.md#pressureminiterations)
+
+***
+
+<a id="pressuresolver"></a>
+
+### pressureSolver
+
+```ts
+pressureSolver: "Multigrid" | "Iterative";
+```
+
+***
+
+<a id="pressurestats"></a>
+
+### pressureStats
+
+```ts
+readonly pressureStats: FluidPressureDiagnostics;
+```
+
+Last completed GPU diagnostic sample; null until explicitly collected.
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`pressureStats`](FluidSimulation.md#pressurestats)
+
+***
+
+<a id="pressuretolerance"></a>
+
+### pressureTolerance
+
+```ts
+pressureTolerance: number;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`pressureTolerance`](FluidSimulation.md#pressuretolerance)
+
+***
+
+<a id="pressurewarmstart"></a>
+
+### pressureWarmStart
+
+```ts
+pressureWarmStart: boolean;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`pressureWarmStart`](FluidSimulation.md#pressurewarmstart)
 
 ***
 
@@ -767,6 +945,18 @@ velocityDissipation: number;
 
 ***
 
+<a id="velocitypaddinglookahead"></a>
+
+### velocityPaddingLookahead
+
+```ts
+velocityPaddingLookahead: number;
+```
+
+Particle-motion lookahead for automatic domain padding, in seconds. Defaults to one.
+
+***
+
 <a id="velocitysourcestrength"></a>
 
 ### velocitySourceStrength
@@ -896,6 +1086,38 @@ get gpuParameterUploadCount(): number;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`gpuParameterUploadCount`](FluidSimulation.md#gpuparameteruploadcount)
+
+***
+
+<a id="maxbrickcapacity"></a>
+
+### maxBrickCapacity
+
+#### Get Signature
+
+```ts
+get maxBrickCapacity(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set maxBrickCapacity(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
 
 ***
 
@@ -1261,6 +1483,52 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 ***
 
+<a id="getsimulationsubsteplimit"></a>
+
+### getSimulationSubstepLimit()
+
+```ts
+getSimulationSubstepLimit(): number;
+```
+
+Maximum solver steps recovered in one incoming interval. Infinity preserves normal catch-up behavior.
+
+#### Returns
+
+`number`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`getSimulationSubstepLimit`](FluidSimulation.md#getsimulationsubsteplimit)
+
+***
+
+<a id="getsimulationtimestep"></a>
+
+### getSimulationTimestep()
+
+```ts
+getSimulationTimestep(requestedDt): number;
+```
+
+Requests a maximum simulation step; Infinity leaves system timing unchanged.
+
+#### Parameters
+
+##### requestedDt
+
+`number`
+
+#### Returns
+
+`number`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`getSimulationTimestep`](FluidSimulation.md#getsimulationtimestep)
+
+***
+
 <a id="getvolumecolorfield"></a>
 
 ### getVolumeColorField()
@@ -1420,6 +1688,70 @@ Prepares shared work once per system update; the base implementation collects ma
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`prepare`](FluidSimulation.md#prepare)
+
+***
+
+<a id="prepareresources"></a>
+
+### prepareResources()
+
+```ts
+prepareResources(system, renderer): Promise<void>;
+```
+
+Optional non-advancing resource preparation. Does not run ordinary prepare/update callbacks.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### renderer
+
+[`ParticleSpatialGridRenderer`](../Supporting-Types/interfaces/ParticleSpatialGridRenderer.md)
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Overrides
+
+[`FluidSimulation`](FluidSimulation.md).[`prepareResources`](FluidSimulation.md#prepareresources)
+
+***
+
+<a id="readboundarydiagnostics"></a>
+
+### readBoundaryDiagnostics()
+
+```ts
+readBoundaryDiagnostics(renderer): Promise<{
+  boundaryCells: number;
+  fullyBlockedFaces: number;
+  partiallyOpenFaces: number;
+}>;
+```
+
+Optional GPU reduction; only aggregate counts cross back to the CPU.
+
+#### Parameters
+
+##### renderer
+
+[`ParticleSpatialGridRenderer`](../Supporting-Types/interfaces/ParticleSpatialGridRenderer.md)
+
+#### Returns
+
+`Promise`\<\{
+  `boundaryCells`: `number`;
+  `fullyBlockedFaces`: `number`;
+  `partiallyOpenFaces`: `number`;
+\}\>
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`readBoundaryDiagnostics`](FluidSimulation.md#readboundarydiagnostics)
 
 ***
 

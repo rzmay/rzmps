@@ -25,9 +25,13 @@ import ParticleOctree, {
 } from '../spatial/structures/ParticleOctree';
 
 export interface ModuleExecutionContext extends EventExecutionContext {
+  /** Owning module; available to functional callbacks without a `this` binding. */
+  readonly module: Module;
   readonly octree?: ParticleOctree<unknown>;
 }
 export interface ModuleGPUExecutionContext extends GPUParticleUpdateContext {
+  /** Owning module, including its cached dynamic GPU value evaluator. */
+  readonly module: Module;
   readonly events: GPUEventBatch;
   readonly spatialGrid?: ParticleSpatialGrid;
 }
@@ -140,7 +144,8 @@ export default class Module extends EventReceiver {
 
   priority = Priority.Permanent;
   modifyGPU: ModuleGPUUpdate;
-  protected readonly evaluateDynamicGPU = new GPUDynamicParameterStore();
+  /** Cached GPU dynamic values, shared by class methods and functional GPU callbacks. */
+  public readonly evaluateDynamicGPU = new GPUDynamicParameterStore();
   /** @deprecated Use evaluateDynamicGPU; retained for existing component subclasses. */
   protected get gpuParameters(): GPUDynamicParameterStore { return this.evaluateDynamicGPU; }
   private _gpuParameterVersion = 0;
@@ -210,6 +215,11 @@ export default class Module extends EventReceiver {
 
   /** Applies tag and condition selection before invoking the particle callback. */
   public modify(particles: Particle[], deltaTime: number, context: ModuleExecutionContext): void {
+    const end = this.benchmarks.begin('update');
+    try { this.modifyPopulation(particles, deltaTime, context); } finally { end?.(); }
+  }
+
+  private modifyPopulation(particles: Particle[], deltaTime: number, context: ModuleExecutionContext): void {
     particles.filter((p) => (
       p.alive
       && (!this.tags || tagsIntersect(this.tags, p.tags ?? []))
@@ -221,7 +231,7 @@ export default class Module extends EventReceiver {
   /** @internal Freezes one event batch for preparation, conditions, and all particle callbacks. */
   protected override createExecutionContext(context: EventExecutionContext): ModuleExecutionContext {
     // Preparation can create the managed tree; keep the shared context's octree access live.
-    return Object.freeze(Object.defineProperty({ ...context }, 'octree', {
+    return Object.freeze(Object.defineProperty({ ...context, module: this }, 'octree', {
       enumerable: true,
       get: () => this.octree,
     }));
@@ -235,6 +245,21 @@ export default class Module extends EventReceiver {
       this,
     ]
   }
+
+  /** Optional non-advancing resource preparation. Does not run ordinary prepare/update callbacks. */
+  public async prepareResources(_system: ParticleSystem, _renderer: ParticleSpatialGridRenderer): Promise<void> {
+    void _system;
+    void _renderer;
+  }
+
+  /** Requests a maximum simulation step; Infinity leaves system timing unchanged. */
+  public getSimulationTimestep(_requestedDt: number): number {
+    void _requestedDt;
+    return Infinity;
+  }
+
+  /** Maximum solver steps recovered in one incoming interval. Infinity preserves normal catch-up behavior. */
+  public getSimulationSubstepLimit(): number { return Infinity; }
 
   /** Prepares shared work once per system update; the base implementation collects matching spatial effects. */
   public prepare(context: ModuleExecutionContext): void {

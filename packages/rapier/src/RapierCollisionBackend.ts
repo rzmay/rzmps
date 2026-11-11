@@ -1,3 +1,4 @@
+import { Benchmarks } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type {
@@ -16,6 +17,7 @@ export interface RapierCollisionBackendOptions {
 }
 
 class RapierCollisionBackend implements ICollisionBackend {
+  readonly benchmarks = new Benchmarks();
   private RAPIER: typeof RAPIER;
 
   private world: RAPIER.World;

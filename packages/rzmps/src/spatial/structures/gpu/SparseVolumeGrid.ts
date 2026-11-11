@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { IndirectStorageBufferAttribute, StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
-  Break, Fn, If, Loop, atomicMax, atomicLoad, atomicOr, atomicStore, clamp, float, floor,
-  globalId, instanceIndex, int, ivec3, max, min, storage, uint, vec3, workgroupId,
+  Fn, If, Loop, atomicAdd, atomicMax, atomicLoad, atomicOr, atomicStore, clamp, float, floor,
+  globalId, instanceIndex, int, ivec3, max, min, storage, uint, uniform, vec3, workgroupId,
 } from 'three/tsl';
 import SpatialGrid from '../SpatialGrid';
 import type { ParticleSpatialGridOptions, ParticleSpatialGridRenderer } from '../ParticleSpatialGrid';
@@ -44,7 +44,12 @@ export default class SparseVolumeGrid extends SpatialGrid {
   private readonly counters: UintStorage;
   private resetNode?: ComputeNode;
   private allocateNode?: ComputeNode;
+  private releaseNode?: ComputeNode;
+  private readonly freeOffset: number;
   private markNodes = new WeakMap<object, ComputeNode>();
+  private remapMarkNodes = new WeakMap<object, ComputeNode>();
+  private readonly previousMinimum = uniform(new THREE.Vector3());
+  private readonly previousCellSize = uniform(1);
   private particleNode?: ComputeNode;
   private particleKey = '';
   private particleBuffers?: GPUParticleUpdateContext['buffers'];
@@ -62,6 +67,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
     new IndirectStorageBufferAttribute(new Uint32Array(3), 1)
   ));
   private scheduleNode?: ComputeNode;
+  private readonly coarseNodes = new WeakMap<SparseVolumeGrid, ComputeNode>();
 
   constructor(options: Partial<ParticleSpatialGridOptions>, capacity: number) {
     super();
@@ -82,10 +88,12 @@ export default class SparseVolumeGrid extends SpatialGrid {
     this.cellCount = this.capacity * this.cellsPerBrick + 1;
     const attribute = (count: number) => new StorageBufferAttribute(new Uint32Array(count), 1);
     this.previousPagesAttribute = attribute(this.brickCount);
-    this.pagesAttribute = attribute(this.sourceMaskOffset + this.sourceMaskWords);
+    this.pagesAttribute = attribute(this.sourceMaskOffset + this.sourceMaskWords + 1);
     this.slotsAttribute = this.pagesAttribute;
     this.newSlotsAttribute = this.pagesAttribute;
-    this.requestsAttribute = attribute(this.brickCount + this.sourceMaskWords);
+    this.freeOffset = this.brickCount + this.sourceMaskWords;
+    // Shared scratch: free slot list, its length, allocation cursor, and overflow count.
+    this.requestsAttribute = attribute(this.freeOffset + this.capacity + 3);
     this.diagnosticsAttribute = attribute(2);
     const node = (value: StorageBufferAttribute) => storage(value, 'uint', value.count) as UintStorage;
     this.pages = node(this.pagesAttribute);
@@ -106,13 +114,21 @@ export default class SparseVolumeGrid extends SpatialGrid {
     throw new Error('Change sparse field structure through the owning module spatialGridOptions.');
   }
 
+  /** GPU-produced compact range; its count shares the page binding used for address mapping. */
+  get activeCellCount(): Node<'uint'> { return this.pages.element(this.pagesAttribute.count - 1); }
+
+  compactCell(index: Node<'uint'>): Node<'uint'> {
+    return this.activeSlots.element(index.div(this.cellsPerBrick)).mul(this.cellsPerBrick)
+      .add(index.mod(this.cellsPerBrick));
+  }
+
   active(index: Node<'uint'>): Node<'bool'> {
     const slot = uint(min(float(index.div(this.cellsPerBrick)), this.capacity - 1));
-    return index.lessThan(this.cellCount - 1).and(this.slots.element(slot).greaterThan(0));
+    return index.lessThan(this.cellCount - 1).and(this.slots.element(slot).greaterThan(uint(0)));
   }
 
   isNew(index: Node<'uint'>): Node<'bool'> {
-    return this.fresh.element(uint(min(float(index.div(this.cellsPerBrick)), this.capacity - 1))).greaterThan(0);
+    return this.fresh.element(uint(min(float(index.div(this.cellsPerBrick)), this.capacity - 1))).greaterThan(uint(0));
   }
 
   /** Dispatches stable pool addresses through compact active/new slot lists. */
@@ -131,7 +147,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
   }
 
   /** Compact brick execution with dense field addresses, including uniquely owned shared faces. */
-  computeDense(callback: (index: Node<'uint'>) => void, faces = false): ComputeNode {
+  computeDense(callback: (index: Node<'uint'>) => void, faces = false, fresh = false): ComputeNode {
     return this.compute(index => {
       const b = this.brickSide;
       const size = faces ? (b + 1) ** 3 : this.cellsPerBrick;
@@ -155,12 +171,59 @@ export default class SparseVolumeGrid extends SpatialGrid {
       for (const z of [0, 1]) for (const y of [0, 1]) for (const x of [0, 1]) {
         const candidate = ivec3(x ? owner.x : lower.x, y ? owner.y : lower.y, z ? owner.z : lower.z);
         const encoded = this.pages.element(this.flatten(candidate, 2 ** this.brickSubdivisions));
-        If(encoded.greaterThan(0), () => selected.assign(encoded));
+        If(encoded.greaterThan(uint(0)), () => { selected.assign(encoded); });
       }
       If(owns.and(selected.equal(slot.add(1))), () => {
         callback(this.flatten(coordinate, this.cellsPerAxis + 1));
       });
-    }, faces);
+    }, faces, fresh);
+  }
+
+  /** Derive sparse coarse occupancy without allocating absent fine regions. @internal */
+  restrictOccupancyTo(renderer: ParticleSpatialGridRenderer, target: SparseVolumeGrid): void {
+    const sameBricks = target.brickSubdivisions === this.brickSubdivisions;
+    const fineSide = 2 ** this.brickSubdivisions;
+    const coarseSide = 2 ** target.brickSubdivisions;
+    const node = this.coarseNodes.get(target) ?? Fn(() => {
+      const next = uint(0).toVar();
+      Loop(target.capacity, ({ i }) => { target.slots.element(uint(i)).assign(0); });
+      Loop(target.brickCount, ({ i }) => {
+        const brick = uint(i);
+        const occupied = uint(0).toVar();
+        if (sameBricks) occupied.assign(this.pages.element(brick));
+        else {
+          const base = target.unpack(brick, coarseSide).mul(2);
+          for (const z of [0, 1]) for (const y of [0, 1]) for (const x of [0, 1]) {
+            occupied.assign(uint(max(float(occupied),
+              float(this.pages.element(this.flatten(base.add(ivec3(x, y, z)), fineSide))))));
+          }
+        }
+        target.pages.element(brick).assign(0);
+        If(occupied.greaterThan(uint(0)).and(next.lessThan(target.capacity)), () => {
+          target.pages.element(brick).assign(next.add(1));
+          target.slots.element(next).assign(brick.add(1));
+          next.addAssign(1);
+        });
+      });
+      target.counters.element(0).assign(next);
+      target.counters.element(1).assign(0);
+    })().compute(1);
+    this.coarseNodes.set(target, node);
+    renderer.compute(node);
+    target.updateDispatch(renderer);
+  }
+
+  /** Preserve page identities when replacing a pool with a larger capacity. @internal */
+  migrateTo(renderer: ParticleSpatialGridRenderer, target: SparseVolumeGrid): void {
+    if (target.capacity < this.capacity || target.brickCount !== this.brickCount
+      || target.brickSide !== this.brickSide) throw new Error('Sparse migration requires compatible growing storage.');
+    renderer.compute(Fn(() => {
+      target.pages.element(instanceIndex).assign(this.pages.element(instanceIndex));
+    })().compute(this.brickCount));
+    renderer.compute(Fn(() => {
+      target.slots.element(instanceIndex).assign(this.slots.element(instanceIndex));
+    })().compute(this.capacity));
+    target.updateDispatch(renderer);
   }
 
   /** Rebuilds GPU-only work lists after page assignments change. */
@@ -170,15 +233,18 @@ export default class SparseVolumeGrid extends SpatialGrid {
       const fresh = uint(0).toVar();
       Loop(this.capacity, ({ i }) => {
         const slot = uint(i);
-        If(this.slots.element(slot).greaterThan(0), () => {
+        If(this.slots.element(slot).greaterThan(uint(0)), () => {
           this.activeSlots.element(active).assign(slot);
           active.addAssign(1);
-          If(this.fresh.element(slot).greaterThan(0), () => {
+          If(this.fresh.element(slot).greaterThan(uint(0)), () => {
             this.freshSlots.element(fresh).assign(slot);
             fresh.addAssign(1);
           });
         });
       });
+      this.pages.element(this.pagesAttribute.count - 1).assign(active.mul(this.cellsPerBrick));
+      this.counters.element(0).assign(active);
+      this.counters.element(1).assign(atomicLoad(this.requests.element(this.freeOffset + this.capacity + 2)));
       for (let command = 0; command < 4; command++) {
         const args = storage(this.dispatchAttributes[command], 'uint', 3);
         const size = command % 2 ? (this.brickSide + 1) ** 3 : this.cellsPerBrick;
@@ -252,7 +318,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
 
   coordinate(index: Node<'uint'>): Node<'ivec3'> {
     const slot = uint(min(float(index.div(this.cellsPerBrick)), this.capacity - 1));
-    const brick = uint(max(float(this.slots.element(slot)), 1)).sub(1);
+    const brick = this.slots.element(slot).greaterThan(uint(0)).select(this.slots.element(slot), uint(1)).sub(1);
     return this.unpack(brick, 2 ** this.brickSubdivisions).mul(this.brickSide)
       .add(this.unpack(index.mod(this.cellsPerBrick), this.brickSide)) as Node<'ivec3'>;
   }
@@ -261,8 +327,9 @@ export default class SparseVolumeGrid extends SpatialGrid {
     const brick = ivec3(floor(vec3(coordinate).div(this.brickSide)));
     const page = pages.element(this.flatten(brick, 2 ** this.brickSubdivisions));
     const local = coordinate.mod(this.brickSide);
-    const address = uint(max(float(page), 1)).sub(1).mul(this.cellsPerBrick).add(this.flatten(local, this.brickSide));
-    return page.greaterThan(0).select(address, uint(this.cellCount - 1)) as Node<'uint'>;
+    const address = page.greaterThan(uint(0)).select(page, uint(1)).sub(1).mul(this.cellsPerBrick)
+      .add(this.flatten(local, this.brickSide));
+    return page.greaterThan(uint(0)).select(address, uint(this.cellCount - 1)) as Node<'uint'>;
   }
 
   unpack(index: Node<'uint'>, side: number): Node<'ivec3'> {
@@ -317,15 +384,18 @@ export default class SparseVolumeGrid extends SpatialGrid {
       });
       this.markNodes.set(density, mark);
       if (previousBounds) {
-        const oldMin = vec3(previousBounds.min);
-        const oldSize = previousBounds.getSize(new THREE.Vector3()).x / this.cellsPerAxis;
-        renderer.compute(this.compute(index => {
+        this.previousMinimum.value.copy(previousBounds.min);
+        this.previousCellSize.value = previousBounds.getSize(new THREE.Vector3()).x / this.cellsPerAxis;
+        const remapMark = this.remapMarkNodes.get(density) ?? this.compute(index => {
           If(density.element(index).x.greaterThanEqual(cutoff), () => {
-            const position = vec3(this.coordinate(index)).add(0.5).mul(oldSize).add(oldMin);
+            const position = vec3(this.coordinate(index)).add(0.5)
+              .mul(this.previousCellSize).add(this.previousMinimum);
             const travel = velocity.element(index).xyz.length().mul(context.deltaTimeNode).div(cellSize);
             this.request(position.sub(minimum).div(cellSize), travel.add(4));
           });
-        }));
+        });
+        this.remapMarkNodes.set(density, remapMark);
+        renderer.compute(remapMark);
       } else renderer.compute(mark);
     }
 
@@ -351,45 +421,50 @@ export default class SparseVolumeGrid extends SpatialGrid {
     }
     this.particleNode!.count = context.buffers.count;
     renderer.compute(this.particleNode!);
-    this.allocateNode ??= Fn(() => { If(instanceIndex.equal(0), () => {
-      this.counters.element(0).assign(0);
-      this.counters.element(1).assign(0);
-      Loop(this.capacity, ({ i }) => {
-        const slot = uint(i);
-        this.fresh.element(slot).assign(0);
-        const brick = this.slots.element(slot).toVar();
-        If(brick.greaterThan(0), () => {
-          If(atomicLoad(this.requests.element(brick.sub(1))).equal(0), () => {
-            this.pages.element(brick.sub(1)).assign(0);
-            this.slots.element(slot).assign(0);
-          });
+    const freeCount = this.freeOffset + this.capacity;
+    const cursor = freeCount + 1;
+    const overflow = freeCount + 2;
+    // Release in parallel, then publish all free slots before any new page can claim one.
+    this.releaseNode ??= Fn(() => {
+      const slot = instanceIndex;
+      this.fresh.element(slot).assign(0);
+      const brick = this.slots.element(slot).toVar();
+      If(brick.greaterThan(uint(0)), () => {
+        If(atomicLoad(this.requests.element(brick.sub(1))).equal(0), () => {
+          this.pages.element(brick.sub(1)).assign(0);
+          this.slots.element(slot).assign(0);
         });
       });
-      // Direct-indexed brick requests are already unique; sorting them would add work.
-      namedLoop({ start: 0, end: this.brickCount, name: 'brickIndex' }, ({ brickIndex }) => {
-        const brick = uint(brickIndex);
-        If(atomicLoad(this.requests.element(brick)).greaterThan(0), () => {
-          If(this.pages.element(brick).equal(0), () => {
-            const allocated = uint(0).toVar();
-            namedLoop({ start: 0, end: this.capacity, name: 'freeSlot' }, ({ freeSlot }) => {
-              const slot = uint(freeSlot);
-              If(this.slots.element(slot).equal(0), () => {
-                this.pages.element(brick).assign(slot.add(1));
-                this.slots.element(slot).assign(brick.add(1));
-                this.fresh.element(slot).assign(1);
-                allocated.assign(1);
-                Break();
-              });
-            });
-            If(allocated.equal(0), () => this.counters.element(1).addAssign(1));
-          });
-          If(this.pages.element(brick).greaterThan(0), () => this.counters.element(0).addAssign(1));
-        });
+      If(this.slots.element(slot).equal(0), () => {
+        const ticket = atomicAdd(this.requests.element(freeCount), uint(1));
+        atomicStore(this.requests.element(ticket.add(this.freeOffset)), slot);
       });
-    }); })().compute(1);
+    })().compute(this.capacity).setName('rzmps.volume.release');
+    renderer.compute(this.releaseNode);
+
+    // One invocation per logical brick. Retained pages keep their stable addresses.
+    this.allocateNode ??= Fn(() => {
+      const brick = instanceIndex;
+      If(atomicLoad(this.requests.element(brick)).greaterThan(uint(0))
+        .and(this.pages.element(brick).equal(0)), () => {
+        const ticket = atomicAdd(this.requests.element(cursor), uint(1));
+        If(ticket.lessThan(atomicLoad(this.requests.element(freeCount))), () => {
+          const slot = atomicLoad(this.requests.element(ticket.add(this.freeOffset))).toVar();
+          this.pages.element(brick).assign(slot.add(1));
+          this.slots.element(slot).assign(brick.add(1));
+          this.fresh.element(slot).assign(1);
+        }).Else(() => { atomicAdd(this.requests.element(overflow), uint(1)); });
+      });
+    })().compute(this.brickCount).setName('rzmps.volume.allocate');
     renderer.compute(this.allocateNode);
     this.updateDispatch(renderer);
     this.copySourceMask(renderer);
+  }
+
+  get allocatedBytes(): number {
+    return [this.pagesAttribute, this.previousPagesAttribute, this.requestsAttribute,
+      this.diagnosticsAttribute, ...this.dispatchAttributes]
+      .reduce((sum, attribute) => sum + attribute.array.byteLength, 0);
   }
 
   dispose(renderer?: ParticleSpatialGridRenderer): void {

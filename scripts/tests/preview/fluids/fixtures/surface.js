@@ -33,7 +33,7 @@ scene.add(system);
 await renderer.renderAsync(scene, camera);
 system.advanceFrames(1, 1 / 60);
 
-window.seedSurface = async samples => {
+window.seedSurface = async (samples, diagnostics = true) => {
   const buffers = system.gpuSimulation._gpuBuffers;
   renderer.compute(Fn(() => {
     const p = buffers.storage.createParticle(undefined, true);
@@ -55,7 +55,7 @@ window.seedSurface = async samples => {
   })().compute(buffers.count));
   surface.updateGPU(buffers, system);
   await renderer.renderAsync(scene, camera);
-  return window.readSurface();
+  return diagnostics ? window.readSurface() : null;
 };
 window.readSurface = async () => {
   const helper = surface.surface;
@@ -109,8 +109,23 @@ window.readSurface = async () => {
   return { ...diagnostics, bounds: [diagnostics.bounds.min.toArray(), diagnostics.bounds.max.toArray()],
     volume: Math.abs(volume), normalVariation: normalVariation / Math.max(1, edges.size),
     invalid, reversed, red, blue, mixed, openEdges: [...edges.values()].filter(count => count !== 2).length,
+    boundaryEdges: [...edges.values()].filter(count => count === 1).length,
+    nonManifoldEdges: [...edges.values()].filter(count => count > 2).length,
     components: new Set([...components.keys()].map(root)).size, draw: [...draw],
     storageLimit: renderer.backend.device.limits.maxStorageBuffersPerShaderStage };
 };
 window.surfaceFixture = { renderer, scene, camera, surface, system, THREE, ColorOverLifetime, ScaleOverLifetime };
 window.ready = true;
+
+// Isolate reconstruction from particle integration, collision and liquid transfer.
+window.reconstructSurface = async (samples, settings) => {
+  Object.assign(surface, settings);
+  surface.benchmarks.start({ gpuTiming: true, maxSamples: 64 });
+  const start = performance.now();
+  await window.seedSurface(samples, false);
+  await renderer.backend.device.queue.onSubmittedWorkDone();
+  const fencedMs = performance.now() - start;
+  const result = await window.readSurface();
+  surface.benchmarks.frame();
+  return { ...result, fencedMs, stages: surface.benchmarks.snapshot() };
+};

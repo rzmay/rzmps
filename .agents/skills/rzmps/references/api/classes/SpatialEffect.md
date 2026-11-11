@@ -75,6 +75,16 @@ bakedFieldResolution: number;
 
 ***
 
+<a id="benchmarks"></a>
+
+### benchmarks
+
+```ts
+readonly benchmarks: Benchmarks;
+```
+
+***
+
 <a id="condition"></a>
 
 ### condition

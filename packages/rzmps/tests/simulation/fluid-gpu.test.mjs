@@ -97,7 +97,7 @@ assert.equal(gas.supportsGPU, true);
 assert.equal(flip.supportsGPU, true);
 assert.equal(gas.resolution, 32);
 assert.equal(gas.maxActiveBricks, 512);
-assert.equal(gas.volumeGrid.capacity, 64, 'reservation is capped by logical brick count');
+assert.equal(gas.volumeGrid.capacity, 64, 'initial reservation fits the logical grid without reserving the full limit');
 assert.equal(flip.resolution, 64);
 assert.equal(gas.autoBounds, true);
 assert.equal(gas.automaticPadding, true);

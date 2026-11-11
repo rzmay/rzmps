@@ -22,7 +22,8 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
         const result = await page.evaluate(async () => {
           const { red, volume, system, renderer, scene, camera, THREE } = window.volumeFixture;
           Object.assign(volume, { generateChildren: false, densityMapping: 'Linear', densityRange: [0, 1],
-            opacity: 0.3, transmittanceThreshold: 0, stepSizeMultiplier: 0.1, jitter: false });
+            opacity: 0.3, transmittanceThreshold: 0,
+            stepSizeMultiplier: 0.1, jitter: false });
           red.density.data.fill(1);
           red.density.bounds.set(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1));
           red.density.version++;
@@ -43,7 +44,16 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
               adaptiveStepThreshold: 0.1, adaptiveStepFactor: factor });
             variants.push({ steps, factor, red: await pixel() });
           }
-          if (!renderer.isWebGPURenderer) return { variants };
+          const resolutions = [];
+          for (const resolution of [8, 16, 32]) {
+            red.density.resolution = new THREE.Vector3(resolution, resolution, resolution);
+            red.density.data = new Float32Array(resolution ** 3).fill(1);
+            red.density.version++;
+            volume.steps = 160;
+            volume.adaptiveStepping = false;
+            resolutions.push(await pixel());
+          }
+          if (!renderer.isWebGPURenderer) return { variants, resolutions };
           Object.assign(volume, { steps: 160, adaptiveStepping: true, sceneDepthClipping: true, sceneDepthBias: 0 });
           const plane = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshBasicMaterial({ color: 0 }));
           scene.add(plane);
@@ -74,10 +84,12 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
           const oblique = await pixel();
           plane.position.z = 2;
           const obliqueHidden = await pixel();
-          return { variants, depth, halfReference, fullReference, orthographicHalf, orthographicHidden,
+          return { variants, resolutions, depth, halfReference, fullReference, orthographicHalf, orthographicHidden,
             inside, insideClipped, oblique, obliqueHidden };
         });
         console.log(backend, 'marching', JSON.stringify(result));
+        assert(Math.max(...result.resolutions) - Math.min(...result.resolutions) <= 2,
+          'constant-density opacity must be independent of field resolution');
         const reference = result.variants[0].red;
         assert.ok(reference > 50, 'uniform volume must be visible');
         for (const variant of result.variants) assert.ok(Math.abs(variant.red - reference) <= 2,

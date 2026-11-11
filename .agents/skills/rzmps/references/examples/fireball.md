@@ -77,16 +77,19 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
-        continuousRate: 4,
-        direction: (particle) => DecalRenderer.Radial(24)(particle),
-        maxDistance: 3,
+        ratio: 0.5,
+        continuousRate: 5,
+        direction: DecalRenderer.Radial(24),
+        hitSelection: DecalRenderer.Nearest,
+        maxHits: 5,
+        maxDistance: 2,
         depth: 0.06,
         size: 2.5,
         inheritColor: 0,
         inheritScale: 0,
         inheritAlpha: 0,
         lifetime: 8,
-        opacity: (t) => 0.035 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+        opacity: (t) => 0.05 * THREE.MathUtils.smoothstep(t, 0, 0.025)
           * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
         maxDecals: 128,
       }),
@@ -95,7 +98,7 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L135)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L138)
 
 ```js
   return new ParticleSystem({
@@ -186,7 +189,7 @@ The main emitter has no continuous rate: five particles burst at time zero from 
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L139)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L142)
 
 ```js
     emitters: [
@@ -229,7 +232,7 @@ The main scale multiplier grows from 0.35 to 1.8, making the explosion expand ra
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L155)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L158)
 
 ```js
     modules: [
@@ -291,16 +294,19 @@ The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft in
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
-        continuousRate: 4,
-        direction: (particle) => DecalRenderer.Radial(24)(particle),
-        maxDistance: 3,
+        ratio: 0.5,
+        continuousRate: 5,
+        direction: DecalRenderer.Radial(24),
+        hitSelection: DecalRenderer.Nearest,
+        maxHits: 5,
+        maxDistance: 2,
         depth: 0.06,
         size: 2.5,
         inheritColor: 0,
         inheritScale: 0,
         inheritAlpha: 0,
         lifetime: 8,
-        opacity: (t) => 0.035 * THREE.MathUtils.smoothstep(t, 0, 0.01)
+        opacity: (t) => 0.05 * THREE.MathUtils.smoothstep(t, 0, 0.025)
           * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
         maxDecals: 128,
       }),
@@ -308,7 +314,7 @@ The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft in
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L181)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L184)
 
 ```js
     renderers: [

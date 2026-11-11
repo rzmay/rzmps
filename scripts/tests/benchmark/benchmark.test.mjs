@@ -1,4 +1,5 @@
 import test from 'node:test';
+import Benchmarks from '../../../packages/rzmps/src/core/Benchmarks.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -361,7 +362,7 @@ test('benchmark retries only transient GPU failures and discards failed sample r
   const { isRetryableBenchmarkError, runBenchmarkWithRetry } = await import('../../benchmark/benchmark-failures.mjs');
   const allocation = size =>
     new RangeError(
-      'Failed to execute \'createBuffer\' on \'GPUDevice\': ' +
+      "Failed to execute 'createBuffer' on 'GPUDevice': " +
         `createBuffer failed, size (${size}) is too large for the implementation when mappedAtCreation == true`,
     );
   assert.equal(isRetryableBenchmarkError(allocation(2048)), true);
@@ -537,4 +538,32 @@ test('the real CLI handles success, page-error races, early crashes and teardown
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('API collections preserve measured frame statistics and exclude event drains', () => {
+  const b = new Benchmarks();
+  b.register('system/particleCount', { type: 'gauge', get: () => 10 });
+  b.register('system/gpuActive', { type: 'gauge', get: () => 1 });
+  const state = { benchmarks: b, system: { benchmarks: b }, phase: 'warmup', phaseStartedAt: 0, measuredFrames: 0 };
+  const dispatches = { compute: 3, simulation: 2, renderOutput: 1 };
+  b.start();
+  recordBenchmarkFrame(state, 0, 100, undefined, dispatches);
+  assert.equal(state.measuredFrames, 0);
+  state.phase = 'measure';
+  b.record('benchmark/update', 2);
+  recordBenchmarkFrame(state, 0, 20, undefined, dispatches);
+  b.record('benchmark/update', 4);
+  recordBenchmarkFrame(state, 20, 50, undefined, dispatches);
+  state.phase = 'drain';
+  recordBenchmarkFrame(state, 50, 1000, undefined, dispatches);
+  const { metrics: m } = b.stop();
+  assert.equal(state.measuredFrames, 2);
+  assert.equal(state.measuredDurationMs, 50);
+  assert.equal(m['benchmark/frame'].mean, 25);
+  assert.equal(m['benchmark/frame'].p99, 30);
+  assert.equal(m['benchmark/frame'].slowestOnePercentMean, 30);
+  assert.equal(m['benchmark/update'].mean, 3);
+  assert.equal(m['benchmark/computeDispatches'].mean, 3);
+  assert.equal(m['benchmark/particleCount'].min, 10);
+  assert.equal(m['benchmark/gpuActive'].sum, 2);
 });
