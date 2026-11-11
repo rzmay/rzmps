@@ -125,7 +125,7 @@ try {
         page.waitForFunction(() => window.runtimeDone, { timeout: 240000 }), failure,
       ]).catch(error => { console.error('Runtime failed:', error.message); throw error; });
       await page.screenshot({ path: path.join(output, `${preset.replaceAll(' ', '-')}.png`) });
-      const result = await page.evaluate(async () => {
+      const result = await page.evaluate(async compareExtraction => {
         const system = window.runtimeSystem;
         const fluid = system.modules[0];
         const renderer = system.sceneRenderer;
@@ -133,6 +133,9 @@ try {
         await renderer.backend.device.queue.onSubmittedWorkDone();
         const backlogMs = performance.now() - start;
         const field = await fluid.getPressureProjection().readDiagnostics(renderer, fluid.velocityCurrent);
+        // Read actual frame diagnostics before stage replay mutates atomic counters.
+        const surface = system.renderers.find(item => item.readSurfaceDiagnostics);
+        const surfaceStats = await surface?.readSurfaceDiagnostics();
         const stages = {};
         // Replay the final dispatch sequence after pausing, fencing each group separately.
         // These are queue-fenced wall times, not hardware timestamps or additive stage costs.
@@ -151,11 +154,18 @@ try {
             stages[stage] = samples;
           }
         } finally { renderer.render = render; }
-        const surface = system.renderers.find(item => item.readSurfaceDiagnostics);
-        const surfaceStats = await surface?.readSurfaceDiagnostics();
-        return { frames: window.runtimeFrames, backlogMs, field, stages, surfaceStats,
+        const extractionStats = {};
+        if (compareExtraction && surface) {
+          for (const extraction of ['SurfaceNets', 'MarchingCubes']) {
+            surface.extraction = extraction;
+            surface.updateGPU(system.gpuSimulation._gpuBuffers, system);
+            await renderer.backend.device.queue.onSubmittedWorkDone();
+            extractionStats[extraction] = await surface.readSurfaceDiagnostics();
+          }
+        }
+        return { frames: window.runtimeFrames, backlogMs, field, stages, surfaceStats, extractionStats,
           text: document.querySelector('.particle-count-monitor')?.textContent };
-      });
+      }, process.env.SURFACE_EXTRACTION_COMPARE === '1');
       assert(result.frames.every(frame => frame.steps <= 4), 'fluid work must stay within its frame budget');
       assert.equal(result.field.nonFiniteSamples, 0);
       if (process.env.FORCE_RESIZES === '1') assert(

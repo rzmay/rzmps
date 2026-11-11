@@ -3,6 +3,7 @@ import {
   AudioRenderer,
   VolumeRenderer,
   SurfaceRenderer,
+  SurfaceExtraction,
   VolumeInterpolation,
   VolumeDensityMapping,
   DecalRenderer,
@@ -160,11 +161,27 @@ export class RendererGUI extends GUIEditorBase {
   }
 
   buildSurfaceRenderer(folder, renderer) {
+    if (typeof renderer.extraction !== 'function') {
+      folder.add(renderer, 'extraction', SurfaceExtraction).name('Extraction');
+    }
     folder.add(renderer, 'smoothingIterations', 0, 16, 1).name('Smoothing Iterations');
     folder.add(renderer, 'smoothingStrength', 0, 1, 0.01).name('Smoothing Strength');
     for (const key of [
       'voxelSize',
-      'particleRadiusScale',
+      'particleRadius',
+      'influenceRadius',
+      'anisotropy',
+      'anisotropyMinNeighbors',
+      'anisotropyMaxStretch',
+      'anisotropyRadius',
+      'dropletSupportMin',
+      'dropletSupportMax',
+      'fieldSmoothingIterations',
+      'fieldSmoothing',
+      'fieldClosing',
+      'flowSmoothing',
+      'velocityDetailRange',
+      'vorticityDetailRange',
       'isoLevel',
       'maxActiveBricks',
       'maxTriangles',
@@ -180,6 +197,13 @@ export class RendererGUI extends GUIEditorBase {
       this.addValue(grid, renderer.spatialGridOptions, key, this.prettyName(key));
     }
     const material = folder.addFolder('Material');
+    if (renderer.material instanceof SurfaceRenderer.LiquidMaterial) {
+      const flow = material.addFolder('Flow Appearance');
+      // Rebuild only the material graph when an appearance curve changes.
+      const settings = { ...renderer.material.flow };
+      flow.onChange(() => renderer.material.setFlow(settings));
+      for (const key of Object.keys(settings)) this.addValue(flow, settings, key, this.prettyName(key));
+    }
     for (const key of [
       'color',
       'roughness',
@@ -194,6 +218,7 @@ export class RendererGUI extends GUIEditorBase {
       'transparent',
       'wireframe',
     ]) {
+      if (key === 'roughness' && renderer.material instanceof SurfaceRenderer.LiquidMaterial) continue;
       if (key in renderer.material) this.addValue(material, renderer.material, key, this.prettyName(key));
     }
   }

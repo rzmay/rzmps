@@ -14,6 +14,54 @@
 
 ## Properties
 
+<a id="anisotropy"></a>
+
+### anisotropy
+
+```ts
+anisotropy: number;
+```
+
+Bounded covariance anisotropy from zero through one. Zero disables it (default).
+
+***
+
+<a id="anisotropymaxstretch"></a>
+
+### anisotropyMaxStretch
+
+```ts
+anisotropyMaxStretch: number;
+```
+
+Maximum principal-axis stretch and reciprocal compression. Defaults to two.
+
+***
+
+<a id="anisotropyminneighbors"></a>
+
+### anisotropyMinNeighbors
+
+```ts
+anisotropyMinNeighbors: number;
+```
+
+Minimum actual neighbors before anisotropy is allowed. Defaults to six.
+
+***
+
+<a id="anisotropyradius"></a>
+
+### anisotropyRadius
+
+```ts
+anisotropyRadius: number;
+```
+
+Neighborhood radius relative to kernel support. Defaults to two.
+
+***
+
 <a id="atlasoptions"></a>
 
 ### atlasOptions?
@@ -104,6 +152,30 @@ Desired representative cap. Negative or Infinity means unlimited. Defaults to -1
 
 ***
 
+<a id="dropletsupportmax"></a>
+
+### dropletSupportMax
+
+```ts
+dropletSupportMax: number;
+```
+
+Weighted neighbor support where bulk reconstruction is fully active. Defaults to four.
+
+***
+
+<a id="dropletsupportmin"></a>
+
+### dropletSupportMin
+
+```ts
+dropletSupportMin: number;
+```
+
+Weighted neighbor support where isolated-droplet blending begins. Defaults to one.
+
+***
+
 <a id="events"></a>
 
 ### events?
@@ -129,6 +201,70 @@ optional eventScope?: EventScope;
 #### Inherited from
 
 [`RendererOptions`](RendererOptions.md).[`eventScope`](RendererOptions.md#eventscope)
+
+***
+
+<a id="extraction"></a>
+
+### extraction
+
+```ts
+extraction:
+  | SurfaceExtractor
+  | "SurfaceNets"
+  | "MarchingCubes"
+  | SurfaceExtraction;
+```
+
+Mesh extractor; changing it rebuilds reconstruction resources. Defaults to SurfaceNets.
+
+***
+
+<a id="fieldclosing"></a>
+
+### fieldClosing
+
+```ts
+fieldClosing: number;
+```
+
+Optional six-neighbor closing strength, zero through one. Defaults to zero.
+
+***
+
+<a id="fieldsmoothing"></a>
+
+### fieldSmoothing
+
+```ts
+fieldSmoothing: number;
+```
+
+Scalar-field smoothing strength, zero through 0.5. Defaults to 0.2.
+
+***
+
+<a id="fieldsmoothingiterations"></a>
+
+### fieldSmoothingIterations
+
+```ts
+fieldSmoothingIterations: number;
+```
+
+Scalar-field smoothing/compensation pairs, zero through four. Defaults to one.
+
+***
+
+<a id="flowsmoothing"></a>
+
+### flowSmoothing
+
+```ts
+flowSmoothing: number;
+```
+
+Reduction of field smoothing in active flow, zero through one. Defaults to 0.8.
 
 ***
 
@@ -164,6 +300,18 @@ Maximum world-space assignment distance. Negative means unbounded (default -1).
 
 ***
 
+<a id="influenceradius"></a>
+
+### influenceRadius
+
+```ts
+influenceRadius: number;
+```
+
+Compact support relative to particleRadius; bulk kernel mass is normalized. Defaults to 2.2.
+
+***
+
 <a id="isolevel"></a>
 
 ### isoLevel
@@ -172,7 +320,7 @@ Maximum world-space assignment distance. Negative means unbounded (default -1).
 isoLevel: number;
 ```
 
-Positive density threshold; larger values erode the surface. Defaults to 0.2.
+Bulk density threshold; isolated droplets retain their calibrated radius. Defaults to 0.2.
 
 ***
 
@@ -184,7 +332,7 @@ Positive density threshold; larger values erode the surface. Defaults to 0.2.
 material: Material;
 ```
 
-Cloned into a renderer-owned material. Defaults to a white MeshStandardMaterial.
+Cloned into a renderer-owned material. Defaults to LiquidMaterial.
 
 ***
 
@@ -282,15 +430,15 @@ Enables built-in material vertex colors, default true. Custom shaders must consu
 
 ***
 
-<a id="particleradiusscale"></a>
+<a id="particleradius"></a>
 
-### particleRadiusScale
+### particleRadius
 
 ```ts
-particleRadiusScale: number;
+particleRadius: number;
 ```
 
-Multiplies half the largest absolute particle scale to obtain kernel radius. Defaults to 2.4.
+Intended isolated radius, multiplying half the largest particle scale. Defaults to 1.55.
 
 ***
 
@@ -385,6 +533,30 @@ Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
 #### Inherited from
 
 [`RendererOptions`](RendererOptions.md).[`textureCopyQuality`](RendererOptions.md#texturecopyquality)
+
+***
+
+<a id="velocitydetailrange"></a>
+
+### velocityDetailRange
+
+```ts
+velocityDetailRange: [number, number];
+```
+
+Speeds at which flow detail preservation begins and reaches its maximum. Defaults to [0.5, 3].
+
+***
+
+<a id="vorticitydetailrange"></a>
+
+### vorticityDetailRange
+
+```ts
+vorticityDetailRange: [number, number];
+```
+
+Curl magnitudes for flow detail preservation. Defaults to [1, 8].
 
 ***
 

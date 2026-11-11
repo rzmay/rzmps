@@ -2844,7 +2844,7 @@ it is not a historical event neighborhood. Eligibility output is shared across c
 Replacing a callback invalidates its GPU pipeline by function identity; changing captured
 JavaScript constants requires a new callback (or use TSL uniforms).
 Inspect `getGPUEmissionSupport()` when using custom selectors. See the
-[experimental liquid notes](https://github.com/rzmay/rzmps/blob/develop/examples/experimental/liquid-quality-and-whitewater.md)
+[experimental liquid notes](https://github.com/rzmay/rzmps/blob/develop/examples/experimental/README.md)
 for the opt-in spray-selection factory; it does not create or render a secondary effect by itself.
 Registered sources and named custom events also drive these same subsystem contexts. Use `tags`
 to select eligible source tags and `onEvent` for CPU or native GPU context handlers. See

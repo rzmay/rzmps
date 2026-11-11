@@ -298,6 +298,14 @@ export { default as SpatialGrid } from './spatial/structures/SpatialGrid';
 export { default as FluidCollider } from './spatial/effects/FluidCollider';
 export type { FluidColliderOptions } from './spatial/effects/FluidCollider';
 export type { VolumeField, VolumeFieldProvider } from './rendering/volumeField.types';
+export { SurfaceExtraction } from './enums/SurfaceExtraction';
 export { VolumeInterpolation } from './enums/VolumeInterpolation';
 export { VolumeDensityMapping } from './enums/VolumeDensityMapping';
 export type { SubSystemGPUCondition, SubSystemGPUContext } from './core/ParticleSystem';
+
+export type { SurfaceExtractor, SurfaceExtractionContext } from './rendering/gpu/LiquidSurface';
+export { buildSurfaceNets } from './rendering/gpu/buildSurfaceNets';
+export { buildMarchingCubes } from './rendering/gpu/buildMarchingCubes';
+
+export { default as LiquidMaterial } from './rendering/materials/LiquidMaterial';
+export type { LiquidMaterialOptions, LiquidFlowOptions } from './rendering/materials/LiquidMaterial';

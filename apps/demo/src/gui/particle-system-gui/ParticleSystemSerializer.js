@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as TSL from 'three/tsl';
 import {
   AudioRenderer,
   GasSimulation,
@@ -33,6 +34,7 @@ export class ParticleSystemSerializer {
     const imports = new Set(['EndBehavior', 'ParticleSystem', 'Emitter', 'EmissionShape', 'EmissionSource']);
     this.collectImports(this.system, imports);
     this.usesEasing = false;
+    this.tslImports = new Set();
 
     const counter = { value: 0 };
     const rootName = 'particleSystem';
@@ -42,6 +44,8 @@ export class ParticleSystemSerializer {
       "import * as THREE from 'three';",
       `import { ${Array.from(imports).sort().join(', ')} } from '@rzmps/rzmps';`,
     ];
+
+    if (this.tslImports.size) lines.push(`import { ${[...this.tslImports].sort().join(', ')} } from 'three/tsl';`);
 
     if (this.usesEasing) {
       lines.push("import { Easing } from 'eaz';");
@@ -375,12 +379,28 @@ export class ParticleSystemSerializer {
   serializeRenderer(renderer) {
     if (renderer instanceof SurfaceRenderer) {
       const materialOptions = this.serializeMaterialOptions(renderer.material, true);
-      const material = `new THREE.${renderer.material.type}(${materialOptions})`;
+      const constructor = renderer.material instanceof SurfaceRenderer.LiquidMaterial
+        ? 'SurfaceRenderer.LiquidMaterial' : `THREE.${renderer.material.type}`;
+      const material = `new ${constructor}(${materialOptions})`;
       return `new SurfaceRenderer(${this.serializeValue({
         material: this.rawCode(material),
         bounds: renderer.bounds,
         voxelSize: renderer.voxelSize,
-        particleRadiusScale: renderer.particleRadiusScale,
+        extraction: renderer.extraction,
+        particleRadius: renderer.particleRadius,
+        influenceRadius: renderer.influenceRadius,
+        anisotropy: renderer.anisotropy,
+        anisotropyMinNeighbors: renderer.anisotropyMinNeighbors,
+        anisotropyMaxStretch: renderer.anisotropyMaxStretch,
+        anisotropyRadius: renderer.anisotropyRadius,
+        dropletSupportMin: renderer.dropletSupportMin,
+        dropletSupportMax: renderer.dropletSupportMax,
+        fieldSmoothingIterations: renderer.fieldSmoothingIterations,
+        fieldSmoothing: renderer.fieldSmoothing,
+        fieldClosing: renderer.fieldClosing,
+        flowSmoothing: renderer.flowSmoothing,
+        velocityDetailRange: renderer.velocityDetailRange,
+        vorticityDetailRange: renderer.vorticityDetailRange,
         isoLevel: renderer.isoLevel,
         maxActiveBricks: renderer.maxActiveBricks,
         maxTriangles: renderer.maxTriangles,
@@ -730,6 +750,13 @@ export class ParticleSystemSerializer {
       options.metalness = material.metalness;
     }
 
+    if (material instanceof SurfaceRenderer.LiquidMaterial) options.flow = material.flow;
+
+    // Physical water controls must survive demo code export alongside base shading.
+    for (const key of ['transmission', 'thickness', 'ior', 'attenuationDistance', 'attenuationColor']) {
+      if (material[key] !== undefined) options[key] = material[key];
+    }
+
     if (material.emissive) {
       options.emissive = material.emissive;
     }
@@ -883,6 +910,10 @@ export class ParticleSystemSerializer {
     }
     if (/\bEasing\./.test(source)) {
       this.usesEasing = true;
+    }
+    // Preserve standalone TSL references used by shader callbacks in generated demo code.
+    for (const name of Object.keys(TSL)) {
+      if (new RegExp(String.raw`(?<![.\w$])${name}\s*[.(]`).test(source)) this.tslImports?.add(name);
     }
     return source;
   }

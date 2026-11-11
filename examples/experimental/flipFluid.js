@@ -83,13 +83,30 @@ export default async function createFlipFluid() {
       new SurfaceRenderer({
         bounds: new THREE.Box3(new THREE.Vector3(-8, -8, -8), new THREE.Vector3(8, 8, 8)),
         voxelSize: 0.0625,
-        maxActiveBricks: 2048,
-        maxTriangles: 262144,
+        // Spilled liquid needs field/filter pages beyond the vessel itself.
+        maxActiveBricks: 4096,
+        maxTriangles: 524288,
         spatialGridOptions: { brickSubdivisions: 3, cellSubdivisions: 3 },
-        smoothingIterations: 4,
+        fieldSmoothingIterations: 1,
+        fieldSmoothing: 0.2,
+        fieldClosing: 0.1,
+        anisotropy: 0.35,
+        anisotropyMaxStretch: 1.5,
+        smoothingIterations: 1,
         smoothingStrength: 1,
-        material: new THREE.MeshPhysicalMaterial({
-          color: 'white', roughness: 0.055, metalness: 0,
+        material: new SurfaceRenderer.LiquidMaterial({
+          color: 'white',
+          // Keep this preset's appearance independent of the material's general-purpose defaults.
+          flow: {
+            gradient: ['#a8daed', '#f5fbff'],
+            roughness: [0.025, 0.7],
+            normalStrength: [0.045, 0.22],
+            noiseFrequency: [3, 6],
+            distortion: [0, 0.65],
+            advection: [0.6, 0.6],
+            velocityRange: [0.2, 3],
+            vorticityRange: [0.5, 8],
+          },
           transmission: 0.9, thickness: 0.3, ior: 1.333,
           attenuationColor: new THREE.Color('#b7e4ee'), attenuationDistance: 3,
         }),

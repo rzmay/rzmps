@@ -5,12 +5,14 @@ import { experimentalExamples } from '../../../../../examples/experimental/index
 import createScene from '../../../../../examples/scenes/fluidTeapot.js';
 import createCheckerboard from '../../../../../examples/scenes/checkerboard.js';
 import createGasFlow from '../../../../../examples/scenes/gasFlow.js';
-import { FluidCollider } from '@rzmps/rzmps';
+import { Benchmarks, FluidCollider } from '@rzmps/rzmps';
 
+const startupStart = performance.now();
 const renderer = new WebGPURenderer({ trackTimestamp: new URLSearchParams(location.search).has('profile') });
 renderer.setSize(800, 600);
 document.body.append(renderer.domElement);
 await renderer.init();
+const rendererInitMs = performance.now() - startupStart;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, 800 / 600, 0.01, 200);
 camera.position.set(5, 4, 6);
@@ -18,7 +20,9 @@ camera.lookAt(0, 0.6, 0);
 const example = new URLSearchParams(location.search).get('example') ?? 'flipFluid';
 const gasScene = new URLSearchParams(location.search).get('scene') === 'gasFlow';
 const sceneFactory = example === 'flipFluid' ? createScene : gasScene ? createGasFlow : createCheckerboard;
+const sceneStart = performance.now();
 const sceneLifecycle = await sceneFactory(scene);
+const sceneLoadMs = performance.now() - sceneStart;
 const fixedGas = new URLSearchParams(location.search).get('fixedGas') === 'true';
 const reviewAdvection = new URLSearchParams(location.search).get('reviewAdvection');
 const reviewGrid = new URLSearchParams(location.search).get('reviewGrid')?.split(',').map(Number);
@@ -103,24 +107,82 @@ scene.updateMatrixWorld(true);
 if (new URLSearchParams(location.search).has('sourceWall')) addGasWall();
 const initialTexture = system.modules[0].getVolumeField?.().texture;
 const firstDispatches = [];
+const backendCalls = [];
+const restoreBackend = [];
+const compileCalls = [];
+const startupSpans = [];
+let computeStage = 'unattributed';
+let startupPhase = 'initialRender';
+if (measureStartup) {
+  const span = Benchmarks.prototype.span;
+  Benchmarks.prototype.span = function (name, callback) {
+    const previous = computeStage;
+    computeStage = name;
+    const start = performance.now();
+    try { return span.call(this, name, callback); } finally {
+      startupSpans.push({ name, phase: startupPhase, cpuMs: performance.now() - start });
+      computeStage = previous;
+    }
+  };
+  restoreBackend.push(() => { Benchmarks.prototype.span = span; });
+  const compile = renderer.compileComputeAsync;
+  renderer.compileComputeAsync = async function (nodes, ...args) {
+    const start = performance.now();
+    const pending = compile.call(this, nodes, ...args);
+    const submitMs = performance.now() - start;
+    await pending;
+    compileCalls.push({ phase: startupPhase, nodes: Array.isArray(nodes) ? nodes.length : 1,
+      submitMs, wallMs: performance.now() - start });
+  };
+  restoreBackend.push(() => { renderer.compileComputeAsync = compile; });
+  for (const name of ['createStorageAttribute' , 'createIndirectStorageAttribute', 'createIndexAttribute',
+    'updateAttribute', 'createComputePipeline', 'createRenderPipeline']) {
+    const original = renderer.backend[name];
+    renderer.backend[name] = function (...args) {
+      const start = performance.now();
+      try { return original.apply(this, args); } finally {
+        backendCalls.push({ name, phase: startupPhase, cpuMs: performance.now() - start,
+          bytes: name.includes('Attribute') && name !== 'updateAttribute' ? args[0].array.byteLength : 0 });
+      }
+    };
+    restoreBackend.push(() => { renderer.backend[name] = original; });
+  }
+}
 const compute = renderer.compute.bind(renderer);
 if (measureStartup) renderer.compute = function (nodes, ...args) {
   const start = performance.now();
   const result = compute(nodes, ...args);
-  firstDispatches.push({ name: Array.isArray(nodes) ? 'batch' : nodes.name, ms: performance.now() - start });
+  firstDispatches.push({ name: Array.isArray(nodes) ? 'batch' : nodes.name, stage: computeStage, phase: startupPhase, ms: performance.now() - start });
   return result;
 };
 const renderStart = performance.now();
 await renderer.renderAsync(scene, camera);
 const initialRenderMs = performance.now() - renderStart;
+let preparationMs = 0;
+if (measureStartup && new URLSearchParams(location.search).has('prepareStartup')) {
+  startupPhase = 'preparation';
+  const start = performance.now();
+  await system.prepare(renderer);
+  preparationMs = performance.now() - start;
+}
+startupPhase = 'firstUpdate';
 const updateStart = performance.now();
 system.advanceFrames(1, 1 / 60);
 const firstUpdateCpuMs = performance.now() - updateStart;
 if (measureStartup) {
   await renderer.backend.device.queue.onSubmittedWorkDone();
+  const firstUpdateFencedMs = performance.now() - updateStart;
+  startupPhase = 'firstPopulatedRender';
+  const populatedStart = performance.now();
+  await renderer.renderAsync(scene, camera);
+  await renderer.backend.device.queue.onSubmittedWorkDone();
+  const firstPopulatedRenderMs = performance.now() - populatedStart;
+  const firstPopulatedFrameMs = performance.now() - startupStart;
+  restoreBackend.forEach(restore => restore());
   renderer.compute = compute;
-  window.fluidStartup = { constructorMs, initialRenderMs, firstUpdateCpuMs,
-    firstUpdateFencedMs: performance.now() - updateStart,
+  window.fluidStartup = { rendererInitMs, sceneLoadMs, constructorMs, initialRenderMs,
+    preparationMs, firstUpdateCpuMs, firstUpdateFencedMs, firstPopulatedRenderMs, firstPopulatedFrameMs,
+    backendCalls, compileCalls, startupSpans,
     textureRetained: initialTexture === system.modules[0].getVolumeField?.().texture,
     dispatches: firstDispatches.length,
     slowestDispatches: firstDispatches.sort((a, b) => b.ms - a.ms).slice(0, 6) };

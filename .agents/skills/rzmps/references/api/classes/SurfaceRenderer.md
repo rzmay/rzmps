@@ -40,6 +40,46 @@ new SurfaceRenderer(options?): SurfaceRenderer;
 
 ## Properties
 
+<a id="anisotropy"></a>
+
+### anisotropy
+
+```ts
+anisotropy: number;
+```
+
+***
+
+<a id="anisotropymaxstretch"></a>
+
+### anisotropyMaxStretch
+
+```ts
+anisotropyMaxStretch: number;
+```
+
+***
+
+<a id="anisotropyminneighbors"></a>
+
+### anisotropyMinNeighbors
+
+```ts
+anisotropyMinNeighbors: number;
+```
+
+***
+
+<a id="anisotropyradius"></a>
+
+### anisotropyRadius
+
+```ts
+anisotropyRadius: number;
+```
+
+***
+
 <a id="atlasoptions"></a>
 
 ### atlasOptions
@@ -120,6 +160,26 @@ compensation:
 
 ***
 
+<a id="dropletsupportmax"></a>
+
+### dropletSupportMax
+
+```ts
+dropletSupportMax: number;
+```
+
+***
+
+<a id="dropletsupportmin"></a>
+
+### dropletSupportMin
+
+```ts
+dropletSupportMin: number;
+```
+
+***
+
 <a id="events"></a>
 
 ### events
@@ -162,6 +222,60 @@ optional executionContext?: EventExecutionContext;
 
 ***
 
+<a id="extraction"></a>
+
+### extraction
+
+```ts
+extraction:
+  | SurfaceExtractor
+  | "SurfaceNets"
+  | "MarchingCubes"
+  | SurfaceExtraction;
+```
+
+***
+
+<a id="fieldclosing"></a>
+
+### fieldClosing
+
+```ts
+fieldClosing: number;
+```
+
+***
+
+<a id="fieldsmoothing"></a>
+
+### fieldSmoothing
+
+```ts
+fieldSmoothing: number;
+```
+
+***
+
+<a id="fieldsmoothingiterations"></a>
+
+### fieldSmoothingIterations
+
+```ts
+fieldSmoothingIterations: number;
+```
+
+***
+
+<a id="flowsmoothing"></a>
+
+### flowSmoothing
+
+```ts
+flowSmoothing: number;
+```
+
+***
+
 <a id="generatechildren"></a>
 
 ### generateChildren
@@ -201,6 +315,16 @@ groupingRadius: number;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`groupingRadius`](Renderer.md#groupingradius)
+
+***
+
+<a id="influenceradius"></a>
+
+### influenceRadius
+
+```ts
+influenceRadius: number;
+```
 
 ***
 
@@ -282,12 +406,12 @@ particleColors: boolean;
 
 ***
 
-<a id="particleradiusscale"></a>
+<a id="particleradius"></a>
 
-### particleRadiusScale
+### particleRadius
 
 ```ts
-particleRadiusScale: number;
+particleRadius: number;
 ```
 
 ***
@@ -374,6 +498,26 @@ readonly textureCopyQuality: number;
 
 ***
 
+<a id="velocitydetailrange"></a>
+
+### velocityDetailRange
+
+```ts
+velocityDetailRange: [number, number];
+```
+
+***
+
+<a id="vorticitydetailrange"></a>
+
+### vorticityDetailRange
+
+```ts
+vorticityDetailRange: [number, number];
+```
+
+***
+
 <a id="voxelsize"></a>
 
 ### voxelSize
@@ -395,6 +539,18 @@ readonly static CAPACITY: 1024 = 1024;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`CAPACITY`](Renderer.md#capacity)
+
+***
+
+<a id="liquidmaterial"></a>
+
+### LiquidMaterial
+
+```ts
+readonly static LiquidMaterial: typeof LiquidMaterial;
+```
+
+Configurable built-in physical water material used when no material is supplied.
 
 ## Accessors
 
@@ -967,6 +1123,7 @@ Clears batches and unsubscribes when a component is removed or its system is des
 ```ts
 readSurfaceDiagnostics(): Promise<{
   activeBricks: number;
+  allocatedBytes: number;
   bounds: Box3;
   clippedParticles: number;
   overflowedBricks: number;
@@ -982,6 +1139,7 @@ Explicit asynchronous diagnostics; mesh counts and vertices are never read back 
 
 `Promise`\<\{
   `activeBricks`: `number`;
+  `allocatedBytes`: `number`;
   `bounds`: `Box3`;
   `clippedParticles`: `number`;
   `overflowedBricks`: `number`;

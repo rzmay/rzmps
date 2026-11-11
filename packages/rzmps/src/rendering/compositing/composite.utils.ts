@@ -14,6 +14,13 @@ export type MaterialChannel = keyof MaterialChannels;
 export type GPUMaterialChannels = MaterialChannels<Node<'vec3'>, Node<'float'>>;
 
 export interface MaterialCompositeContext {
+  /** Reconstructed visual flow in simulation coordinates; available on surface geometry. */
+  surfaceVelocity?: string;
+  surfaceSpeed?: string;
+  surfaceVorticity?: string;
+  surfaceVorticityMagnitude?: string;
+  /** Smooth isolated-to-bulk support metric in [0, 1]. */
+  surfaceSupport?: string;
   /** Unperturbed, normalized view-space surface normal. */
   geometricNormal: string;
   /** Product of available destination normal/roughness/metalness map alpha channels. */
@@ -25,6 +32,13 @@ export interface MaterialCompositeContext {
   function(name: string, source: string): void;
 }
 export interface MaterialCompositeGPUContext {
+  /** Reconstructed visual flow in simulation coordinates; available on surface geometry. */
+  surfaceVelocity?: Node<'vec3'>;
+  surfaceSpeed?: Node<'float'>;
+  surfaceVorticity?: Node<'vec3'>;
+  surfaceVorticityMagnitude?: Node<'float'>;
+  /** Smooth isolated-to-bulk support metric in [0, 1]. */
+  surfaceSupport?: Node<'float'>;
   geometricNormal: Node<'vec3'>;
   destMapAlpha: Node<'float'>;
   sourceUV: Node<'vec2'>;

@@ -362,6 +362,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
     cutoff: Node<'float'>,
     tagMask?: number,
     previousBounds?: THREE.Box3,
+    stencilRadius = 3,
   ): void {
     // Materialize indirect buffers before even an empty first marking dispatch.
     if (!this.scheduleNode) this.updateDispatch(renderer);
@@ -399,7 +400,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
       } else renderer.compute(mark);
     }
 
-    const key = [context.buffers.version, tagMask].join('|');
+    const key = [context.buffers.version, tagMask, stencilRadius].join('|');
     if (key !== this.particleKey || this.particleBuffers !== context.buffers) {
       this.particleKey = key;
       this.particleBuffers = context.buffers;
@@ -412,7 +413,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
           const radius = max(particle.scale.x.abs(), max(particle.scale.y.abs(), particle.scale.z.abs()))
             .mul(0.5).div(cellSize).max(1);
           this.markSource(position, radius);
-          const paddedRadius = radius.add(3);
+          const paddedRadius = radius.add(stencilRadius);
           If(position.add(paddedRadius).greaterThanEqual(vec3(0)).all()
             .and(position.sub(paddedRadius).lessThan(vec3(this.cellsPerAxis)).all()),
           () => this.request(position, paddedRadius));

@@ -7,7 +7,7 @@ import type {
 } from '../../build/index.mjs';
 import { Module, ParticleSystem } from '../../build/index.mjs';
 import type { VolumeFieldProvider, VolumeField } from '../../build/index.mjs';
-import { VolumeRenderer, VolumeInterpolation, VolumeDensityMapping } from '../../build/index.mjs';
+import { VolumeRenderer, VolumeInterpolation, VolumeDensityMapping, SurfaceRenderer } from '../../build/index.mjs';
 
 new VolumeRenderer({ interpolation: VolumeInterpolation.Cubic, densityMapping: 'Curve', densityCurve: t => t * t });
 new VolumeRenderer({ interpolation: 'Nearest', densityMapping: VolumeDensityMapping.Linear,
@@ -62,3 +62,34 @@ const sharedCollisionOptions: import('../../build/index.mjs').ThreeCollisionBack
 };
 new FLIPSimulation({ collisionOptions: sharedCollisionOptions });
 new GasSimulation({ collisionOptions: sharedCollisionOptions });
+
+
+new SurfaceRenderer({ particleRadius: 1.55, influenceRadius: 2.2, anisotropy: 0.35,
+  fieldSmoothing: 0.2, velocityDetailRange: [0.5, 3],
+  materialCompositeGPU: (_source, dest, context) => ({
+    roughness: context.surfaceSpeed?.mul(0.1) ?? dest.roughness,
+    color: context.surfaceVorticity?.abs() ?? dest.color,
+  }),
+  materialComposite: (_source, dest, context) => ({
+    roughness: context.surfaceSpeed ? `clamp(${context.surfaceSpeed}, 0.0, 1.0)` : dest.roughness,
+  }),
+});
+
+const { buildSurfaceNets, buildMarchingCubes, SurfaceExtraction } = await import('../../build/index.mjs');
+const customExtractor: import('../../build/index.mjs').SurfaceExtractor = context => buildMarchingCubes(context);
+new SurfaceRenderer({ extraction: customExtractor });
+new SurfaceRenderer({ extraction: buildSurfaceNets });
+new SurfaceRenderer({ extraction: SurfaceExtraction.MarchingCubes });
+new SurfaceRenderer({ extraction: 'SurfaceNets' });
+new SurfaceRenderer({
+  // @ts-expect-error Unsupported extraction names are rejected.
+  extraction: 'Unknown',
+});
+
+const liquidMaterial = new SurfaceRenderer.LiquidMaterial({
+  transmission: 0.8,
+  flow: { gradient: ['#246b95', '#f5fbff'], roughness: t => 0.02 + 0.7 * t,
+    normalStrength: [0.03, 0.2], vorticityRange: [0.5, 8] },
+});
+liquidMaterial.setFlow({ distortion: [0, 0.7] });
+new SurfaceRenderer({ material: liquidMaterial });

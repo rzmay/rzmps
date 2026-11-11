@@ -31,12 +31,23 @@ assert.equal(surface.voxelSize, 0.0625);
 assert.equal(surface.particleColors, true);
 assert.equal(surface.smoothingIterations, 3);
 assert.equal(surface.smoothingStrength, 1);
+assert.equal(surface.particleRadius, 1.55);
+assert.equal(surface.influenceRadius, 2.2);
+assert.equal(surface.anisotropy, 0);
+assert.equal(surface.fieldSmoothingIterations, 1);
+for (const options of [{ influenceRadius: 1 }, { anisotropy: NaN }, { anisotropyMaxStretch: 5 },
+  { anisotropyMinNeighbors: 2 }, { dropletSupportMin: 3, dropletSupportMax: 3 }]) {
+  assert.throws(() => new SurfaceRenderer(options), /support or anisotropy/);
+}
+for (const options of [{ fieldSmoothingIterations: 1.2 }, { fieldSmoothing: 0.6 }, { fieldClosing: -1 },
+  { flowSmoothing: 2 }]) assert.throws(() => new SurfaceRenderer(options), /field filtering/);
+assert.throws(() => new SurfaceRenderer({ velocityDetailRange: [3, 1] }), /detail ranges/);
 assert.notEqual(surface.material, surfaceMaterial);
 assert.equal(surface.material.vertexColors, true);
 assert.equal(surfaceMaterial.vertexColors, false, 'surface rendering must not mutate a shared input material');
 assert.doesNotThrow(() => surface.update([], { quality: 1 }));
 assert.throws(() => surface.update([{ alive: true }], { quality: 1 }), /native WebGPU/);
-for (const options of [{ voxelSize: 0 }, { particleRadiusScale: Infinity }, { isoLevel: 0 },
+for (const options of [{ voxelSize: 0 }, { particleRadius: Infinity }, { isoLevel: 0 },
   { maxActiveBricks: 0 }, { maxTriangles: 1 }, { bounds: new THREE.Box3() }]) {
   assert.throws(() => new SurfaceRenderer(options), /finite positive/);
 }
@@ -356,3 +367,23 @@ assert.ok(staleFlip.bounds.equals(originalBounds));
 assert.equal(staleFlip.pendingBounds, undefined);
 staleSystem.destroy();
 console.log('fluid-gpu tests passed');
+
+// Built-in appearance survives renderer ownership/cloning without sharing mutable curves.
+{
+  const { LiquidMaterial, SurfaceRenderer } = await import('../../build/index.mjs');
+  assert.equal(SurfaceRenderer.LiquidMaterial, LiquidMaterial);
+  const original = new LiquidMaterial({ flow: { roughness: [0.02, 0.7] } });
+  const surface = new SurfaceRenderer({ material: original });
+  assert(surface.material instanceof LiquidMaterial);
+  assert.notEqual(surface.material.flow.roughness, original.flow.roughness);
+  const callback = surface.material.compositeGPU;
+  surface.material.setFlow({ roughness: t => 0.02 + 0.7 * t });
+  assert.notEqual(surface.material.compositeGPU, callback);
+  assert.deepEqual(original.flow.roughness, [0.02, 0.7]);
+  const automatic = new SurfaceRenderer();
+  assert(automatic.material instanceof LiquidMaterial);
+  assert.throws(() => automatic.material.setFlow({ velocityRange: [1, 1] }), /increasing/);
+  surface.destroy();
+  automatic.destroy();
+  original.dispose();
+}

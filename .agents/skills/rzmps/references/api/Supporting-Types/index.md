@@ -98,4 +98,6 @@
 - [SpatialEffectFeatherEasing](type-aliases/SpatialEffectFeatherEasing.md)
 - [SpeedRange](type-aliases/SpeedRange.md)
 - [StrictMultiple](type-aliases/StrictMultiple.md)
+- [SurfaceIntegerStorage](type-aliases/SurfaceIntegerStorage.md)
+- [SurfaceVectorStorage](type-aliases/SurfaceVectorStorage.md)
 - [Tag](type-aliases/Tag.md)

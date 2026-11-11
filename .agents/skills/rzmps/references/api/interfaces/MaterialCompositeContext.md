@@ -52,6 +52,60 @@ Unperturbed, normalized view-space surface normal.
 sourceUV: string;
 ```
 
+***
+
+<a id="surfacespeed"></a>
+
+### surfaceSpeed?
+
+```ts
+optional surfaceSpeed?: string;
+```
+
+***
+
+<a id="surfacesupport"></a>
+
+### surfaceSupport?
+
+```ts
+optional surfaceSupport?: string;
+```
+
+Smooth isolated-to-bulk support metric in [0, 1].
+
+***
+
+<a id="surfacevelocity"></a>
+
+### surfaceVelocity?
+
+```ts
+optional surfaceVelocity?: string;
+```
+
+Reconstructed visual flow in simulation coordinates; available on surface geometry.
+
+***
+
+<a id="surfacevorticity"></a>
+
+### surfaceVorticity?
+
+```ts
+optional surfaceVorticity?: string;
+```
+
+***
+
+<a id="surfacevorticitymagnitude"></a>
+
+### surfaceVorticityMagnitude?
+
+```ts
+optional surfaceVorticityMagnitude?: string;
+```
+
 ## Methods
 
 <a id="function"></a>

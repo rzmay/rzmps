@@ -48,6 +48,60 @@ geometricNormal: Node<"vec3">;
 sourceUV: Node<"vec2">;
 ```
 
+***
+
+<a id="surfacespeed"></a>
+
+### surfaceSpeed?
+
+```ts
+optional surfaceSpeed?: Node<"float">;
+```
+
+***
+
+<a id="surfacesupport"></a>
+
+### surfaceSupport?
+
+```ts
+optional surfaceSupport?: Node<"float">;
+```
+
+Smooth isolated-to-bulk support metric in [0, 1].
+
+***
+
+<a id="surfacevelocity"></a>
+
+### surfaceVelocity?
+
+```ts
+optional surfaceVelocity?: Node<"vec3">;
+```
+
+Reconstructed visual flow in simulation coordinates; available on surface geometry.
+
+***
+
+<a id="surfacevorticity"></a>
+
+### surfaceVorticity?
+
+```ts
+optional surfaceVorticity?: Node<"vec3">;
+```
+
+***
+
+<a id="surfacevorticitymagnitude"></a>
+
+### surfaceVorticityMagnitude?
+
+```ts
+optional surfaceVorticityMagnitude?: Node<"float">;
+```
+
 ## Methods
 
 <a id="sampledest"></a>

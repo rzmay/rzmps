@@ -4,6 +4,7 @@ import puppeteer from 'puppeteer';
 import { startSiteDev } from '../../../site/dev.mjs';
 
 const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
+await site.demo.watcher.close();
 let browser;
 try {
   browser = await puppeteer.launch({ headless: true, args: ['--enable-unsafe-webgpu'] });
@@ -161,7 +162,7 @@ try {
     const { surface } = window.surfaceFixture;
     surface.maxActiveBricks = 1;
     const limited = await window.seedSurface(samples);
-    surface.maxActiveBricks = 128;
+    surface.maxActiveBricks = 512;
     const restored = await window.seedSurface(samples);
     return { limited, restored };
   }, samples);
@@ -184,7 +185,7 @@ try {
       attenuationColor: new THREE.Color('#b7e4ee'), attenuationDistance: 3 });
     await window.seedSurface(samples);
   }, samples);
-  for (const directory of ['/src/gui', '/src/gui/particle-system-gui']) {
+  for (const directory of ['/src/gui/particle-system-gui']) {
     const gui = await page.evaluate(async directory => {
       const { RendererGUI } = await import(`${directory}/RendererGUI.js`);
       const { ParticleSystemSerializer } = await import(`${directory}/ParticleSystemSerializer.js`);
@@ -194,6 +195,7 @@ try {
       const folder = { add(_target, key) { keys.push(key); return controller; }, addFolder() { return this; } };
       const context = { addTags() {}, addObject() {}, prettyName: key => key,
         addValue(_folder, _target, key) { keys.push(key); } };
+      Object.setPrototypeOf(context, RendererGUI.prototype);
       RendererGUI.prototype.buildRenderer.call(context, folder, surface, system);
       const code = new ParticleSystemSerializer({ system }).serializeRenderer(surface);
       return { keys, code };
