@@ -129,7 +129,10 @@ export class RendererGUI extends GUIEditorBase {
   buildVolumeRenderer(folder, renderer) {
     folder.add(renderer, 'interpolation', Object.values(VolumeInterpolation)).name('Interpolation');
     folder.add(renderer, 'densityMapping', Object.values(VolumeDensityMapping)).name('Density Mapping');
-    folder.add(renderer, 'stepSizeMultiplier', 0.1, 4, 0.1).name('Ray Step / Cell');
+    folder.add(renderer, 'samplesPerVoxel', 0.25, 8, 0.25).name('Samples / Voxel');
+    folder.add(renderer, 'jitterStrength', 0, 1, 0.01).name('Jitter Strength');
+    folder.add(renderer, 'anisotropy', -0.9, 0.9, 0.01).name('Anisotropy');
+    folder.add(renderer, 'shadowQuality', 0, 8, 0.25).name('Shadow Quality');
     folder.add(renderer, 'steps', 1, 512, 1).name('Maximum Ray Steps');
     const marching = folder.addFolder('Ray Marching');
     marching.add(renderer, 'adaptiveStepping').name('Opacity-Aware Steps');
@@ -153,7 +156,6 @@ export class RendererGUI extends GUIEditorBase {
       'densityRange',
       'densityCurve',
       'depthTest',
-      'jitter',
       'renderOrder',
     ]) {
       this.addValue(folder, renderer, key, this.prettyName(key));

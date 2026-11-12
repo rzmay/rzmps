@@ -35,6 +35,14 @@ uniform float layerAlpha${i};`).join('\n');
       total += vec4(color * density, density);
     }
   }`).join('\n');
+  const densitySamples = copies.map((index, i) => `
+  {
+    vec3 center = layerDensityMin${index} + layerDensitySize${index} * 0.5;
+    vec3 uv = ((point - center - layerOffset${i}) / layerScale${i} + center
+      - layerDensityMin${index}) / layerDensitySize${index};
+    if (insideField(uv)) total += max(readVolume(layerDensityMap${index}, uv,
+      layerDensityResolution${index}).r, 0.0) * layerAlpha${i};
+  }`).join('\n');
   let opacity = 'smoothstep(max(threshold - range, 0.000001), threshold + range, density)';
   if (mapping === VolumeDensityMapping.None) opacity = '0.0';
   if (mapping === VolumeDensityMapping.Linear) opacity = 'normalizedDensity';
@@ -66,6 +74,12 @@ vec4 readVolume(sampler3D map, vec3 uv, vec3 resolution) {
     mix(mix(texture(map, vec3(a.x, a.y, b.z)), texture(map, vec3(b.x, a.y, b.z)), g1.x),
         mix(texture(map, vec3(a.x, b.y, b.z)), texture(map, b), g1.x), g1.y), g1.z);`
     : 'return texture(map, uv);'}
+}
+float sampleDensity(vec3 coord) {
+  vec3 point = (coord + 0.5) * boundsSize + boundsMinimum;
+  float total = 0.0;
+  ${densitySamples}
+  return total;
 }
 vec4 sampleVolume(vec3 coord) {
   vec3 point = (coord + 0.5) * boundsSize + boundsMinimum;

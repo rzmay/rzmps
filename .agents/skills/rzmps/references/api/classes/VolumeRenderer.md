@@ -70,6 +70,18 @@ adaptiveStepThreshold: number;
 
 ***
 
+<a id="anisotropy"></a>
+
+### anisotropy
+
+```ts
+anisotropy: number;
+```
+
+Henyey–Greenstein anisotropy, clamped to [-0.9, 0.9]. Defaults to zero.
+
+***
+
 <a id="atlasoptions"></a>
 
 ### atlasOptions
@@ -317,13 +329,39 @@ interpolation:
 
 ***
 
-<a id="jitter"></a>
+<a id="jitterseed"></a>
 
-### jitter
+### jitterSeed
 
 ```ts
-jitter: boolean;
+jitterSeed: number;
 ```
+
+Stable volume-space sampling seed. Defaults to zero.
+
+***
+
+<a id="jitterstrength"></a>
+
+### jitterStrength
+
+```ts
+jitterStrength: number;
+```
+
+Full-stratum jitter strength, clamped to [0, 1]. Defaults to one.
+
+***
+
+<a id="light"></a>
+
+### light?
+
+```ts
+optional light?: DirectionalLight;
+```
+
+Optional directional light; otherwise resolve the dominant visible scene directional light.
 
 ***
 
@@ -449,6 +487,18 @@ renderOrder: number;
 
 ***
 
+<a id="samplespervoxel"></a>
+
+### samplesPerVoxel
+
+```ts
+samplesPerVoxel: number;
+```
+
+Samples per smallest contributing voxel. Defaults to two.
+
+***
+
 <a id="scenedepthbias"></a>
 
 ### sceneDepthBias
@@ -469,22 +519,24 @@ sceneDepthClipping: boolean;
 
 ***
 
+<a id="shadowquality"></a>
+
+### shadowQuality
+
+```ts
+shadowQuality: number;
+```
+
+Secondary light-march quality; zero disables shadows (default).
+
+***
+
 <a id="steps"></a>
 
 ### steps
 
 ```ts
 steps: number;
-```
-
-***
-
-<a id="stepsizemultiplier"></a>
-
-### stepSizeMultiplier
-
-```ts
-stepSizeMultiplier: number;
 ```
 
 ***
@@ -632,6 +684,38 @@ get gpuParameterUploadCount(): number;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`gpuParameterUploadCount`](Renderer.md#gpuparameteruploadcount)
+
+***
+
+<a id="jitter"></a>
+
+### jitter
+
+#### Get Signature
+
+```ts
+get jitter(): boolean;
+```
+
+##### Returns
+
+`boolean`
+
+#### Set Signature
+
+```ts
+set jitter(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`boolean`
+
+##### Returns
+
+`void`
 
 ***
 
@@ -808,6 +892,40 @@ readonly `string`[]
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`selectedEventNames`](Renderer.md#selectedeventnames)
+
+***
+
+<a id="stepsizemultiplier"></a>
+
+### stepSizeMultiplier
+
+#### Get Signature
+
+```ts
+get stepSizeMultiplier(): number;
+```
+
+Reciprocal shorthand retained for cell-relative spacing. Prefer samplesPerVoxel.
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set stepSizeMultiplier(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
 
 ***
 

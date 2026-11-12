@@ -306,6 +306,77 @@ Next candidates are caching/reusing collider bakes, preparing the actual first-u
 transfer and surface variants, and staging those tasks while preserving the non-advancing contract.
 No startup optimization or automatic surface capacity change is claimed in this pass.
 
+### Stratified volume sampling and directional lighting
+
+The preferred path is now `samplesPerVoxel: 2`, `jitterStrength: 1`, `jitterSeed: 0`, Linear
+interpolation, `anisotropy: 0`, and `shadowQuality: 0`. `steps` remains the maximum camera-ray
+budget, capped at 512. A budget-limited ray increases its spacing to cover the complete visible
+interval instead of truncating the far end. Each interval contributes its actual length to
+extinction; jitter changes only the evaluation point, including the last partial interval.
+
+Jitter uses a fixed obliquely scrambled simulation-space field and an irrational per-stratum
+rotation. It has no frame, screen-coordinate or elapsed-time seed. It is a cheap decorrelated
+low-discrepancy approximation, not a measured blue-noise texture spectrum. Moving a system root
+carries its sampling pattern; changing rays traverses the same simulation-space field. Animated
+density noise remains independent. No temporal reconstruction or history is introduced.
+`jitterStrength` is clamped to [0, 1]. The older `jitter` boolean and reciprocal
+`stepSizeMultiplier` remain code aliases; the GUI exposes Samples / Voxel and Jitter Strength.
+
+The renderer resolves the dominant visible scene directional light, or accepts an explicit
+`light`. With none, it uses a white unit light from a fixed direction. Incoming photon travel
+and sample-to-camera direction determine HG scattering: positive anisotropy favors forward
+scattering, negative favors backward scattering. Values clamp to [-0.9, 0.9]. The normalized HG
+phase is artistically scaled by 4π so a unit isotropic light has unit directional response.
+A fixed 0.2 ambient plus 0.8 directional weight preserves the previous isotropic fallback
+brightness. The phase is evaluated once per ray, not repeatedly per sample. Extinction remains
+separate from scattered radiance, leaving an insertion point for future emitted radiance.
+
+`shadowQuality: 0` omits secondary marching on WebGPU and bypasses it on WebGL. Positive quality
+uses cell-relative midpoint light samples, up to `ceil(quality * 8)` steps, bounded at 64. The
+march always covers its remaining light interval. Only density textures are read; directional
+radiance is attenuated by light transmittance while ambient remains. This is single-scattering
+self-shadowing, not geometry shadow-map sampling or multiple scattering. The existing animated
+density mask remains WebGPU-only, including its shadow extinction. New sampling and lighting
+controls otherwise have equivalent GLSL/TSL semantics.
+
+Both paths use Three.js material color/tone conversion. Linear render-target checks match the
+new directional response exactly in the recorded 8-bit fixture. Transparent canvas results are
+not pixel-identical: WebGL encodes/blends its direct output differently from WebGPU's output
+pass. This is a remaining presentation distinction, not evidence of different HG/extinction
+math. No renderer-wide compositing architecture was changed to hide that distinction.
+
+A bounded frozen 32-cubed density-field benchmark at 480×320 used matched camera, 2 samples/voxel,
+96 maximum steps, full jitter, no density noise and no opacity termination/adaptive stepping.
+The center camera ray has 64 primary strata; quality 2 bounds each secondary march to 16 samples.
+These counts are analytic counts/bounds, not instrumented totals over every screen pixel.
+GPU timings span the first-to-last actual render-pass timestamp, avoiding sums of overlapping
+Three.js contexts; fenced wall times measure render plus queue completion. Four measured renders
+follow two warmups per configuration. Local GPU clocks/cache effects make sub-millisecond
+comparisons noisy; these are not sustained gas-demo performance measurements.
+
+| Interpolation | Anisotropy | Shadow quality | GPU ms | Fenced wall ms |
+| --- | ---: | ---: | ---: | ---: |
+| Linear | 0 | 0 | 0.772 | 1.000 |
+| Linear | 0.5 | 0 | 0.452 | 0.700 |
+| Linear | 0.5 | 2 | 1.860 | 2.100 |
+| Cubic | 0 | 0 | 0.407 | 0.700 |
+| Cubic | 0.5 | 2 | 3.890 | 4.200 |
+
+Linear needs one hardware-trilinear density evaluation per logical sample. Cubic already groups
+B-spline weights into **eight** trilinear evaluations on both backends; it is not a naïve 64-read
+implementation. With a color field, a primary sample normally doubles those counts to 2 / 16
+per contributing layer; child copies and multiple fields multiply them further. Shadow samples
+read density only. This cache-friendly fixture does not reproduce the reported 60-to-15 FPS
+cubic regression. Larger working sets, color fields, repeated layers and light marches can make
+its eightfold texture cost much more significant. Linear remains the default; no claim is made
+that cubic is universally cheap or that its reported full-demo slowdown has been eliminated.
+
+`volume-sampling.test.mjs` validates constant-density invariance at 1/2/4 samples per voxel,
+centered/full jitter and a one-step cap, static repeatability, positive/negative HG direction,
+isotropic symmetry, shadow attenuation, and linear-target backend parity. It saves six oblique
+frozen-field captures for sampling review. Those smooth synthetic captures are not a guarantee
+that every high-frequency gas/noise configuration is free of visible banding.
+
 ## Current corrective work and open issues
 
 - Missing whole bricks during tipping were reproduced as surface-pool exhaustion: the old 2,048-page
@@ -343,6 +414,7 @@ node scripts/tests/preview/fluids/surface-quality-review.mjs
 FLUID_PRESETS='FLIP Fluid' RUNTIME_FRAMES=2100 node scripts/tests/preview/fluids/runtime-performance.mjs /tmp/fluid-runtime
 node scripts/tests/preview/fluids/gas-stage-profile.mjs /tmp/gas-stages
 node scripts/tests/preview/fluids/startup-review.mjs /tmp/fluid-startup
+node scripts/tests/preview/fluids/volume-sampling.test.mjs /tmp/volume-sampling
 ```
 
 The surface quality script saves matched screenshots, particle snapshots, topology, volume,

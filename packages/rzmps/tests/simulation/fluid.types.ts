@@ -93,3 +93,5 @@ const liquidMaterial = new SurfaceRenderer.LiquidMaterial({
 });
 liquidMaterial.setFlow({ distortion: [0, 0.7] });
 new SurfaceRenderer({ material: liquidMaterial });
+
+new VolumeRenderer({ samplesPerVoxel: 2, jitterStrength: 1, jitterSeed: 17, anisotropy: 0.6, shadowQuality: 2 });

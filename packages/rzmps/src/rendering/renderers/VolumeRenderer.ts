@@ -14,7 +14,6 @@ import {
   cameraViewMatrix,
   float,
   floor,
-  hash,
   max,
   min,
   mix,
@@ -39,6 +38,7 @@ import ParticleSystem from '../../core/ParticleSystem';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
 import type { VolumeFieldProvider } from '../volumeField.types';
 import type { VolumeField } from '../volumeField.types';
+import { volumeJitter } from '../shaders/volumeJitter';
 import volumeVert from '../shaders/Volume.vert';
 import volumeFrag from '../shaders/Volume.frag';
 import volumeLayersGLSL from '../shaders/VolumeLayers';
@@ -80,10 +80,23 @@ export interface VolumeRendererOptions extends RendererOptions {
   steps: number;
   renderOrder: number;
   depthTest: boolean;
+  /** Full-stratum jitter strength, clamped to [0, 1]. Defaults to one. */
+  jitterStrength: number;
+  /** Stable volume-space sampling seed. Defaults to zero. */
+  jitterSeed: number;
+  /** Samples per smallest contributing voxel. Defaults to two. */
+  samplesPerVoxel: number;
+  /** Henyey–Greenstein anisotropy, clamped to [-0.9, 0.9]. Defaults to zero. */
+  anisotropy: number;
+  /** Secondary light-march quality; zero disables shadows (default). */
+  shadowQuality: number;
+  /** Optional directional light; otherwise resolve the dominant visible scene directional light. */
+  light?: THREE.DirectionalLight;
+  /** Boolean shorthand for enabling/disabling jitterStrength. */
   jitter: boolean;
   /** Voxel reconstruction, independent of simulation advection. Defaults to Linear. */
   interpolation: VolumeInterpolation | `${VolumeInterpolation}`;
-  /** Cell-relative ray spacing. Smaller values take more samples, up to steps. Defaults to one. */
+  /** Reciprocal samplesPerVoxel shorthand. Defaults to 0.5 (two samples per voxel). */
   stepSizeMultiplier: number;
   /** Render-only density multiplier. Defaults to one. */
   densityGain: number;
@@ -127,9 +140,19 @@ class VolumeRenderer extends Renderer {
   steps: number;
   renderOrder: number;
   depthTest: boolean;
-  jitter: boolean;
+  /** Full-stratum jitter strength, clamped to [0, 1]. Defaults to one. */
+  jitterStrength: number;
+  /** Stable volume-space sampling seed. Defaults to zero. */
+  jitterSeed: number;
+  /** Samples per smallest contributing voxel. Defaults to two. */
+  samplesPerVoxel: number;
+  /** Henyey–Greenstein anisotropy, clamped to [-0.9, 0.9]. Defaults to zero. */
+  anisotropy: number;
+  /** Secondary light-march quality; zero disables shadows (default). */
+  shadowQuality: number;
+  /** Optional directional light; otherwise resolve the dominant visible scene directional light. */
+  light?: THREE.DirectionalLight;
   interpolation: VolumeRendererOptions['interpolation'];
-  stepSizeMultiplier: number;
   densityGain: number;
   densityMapping: VolumeRendererOptions['densityMapping'];
   densityRange: [number, number];
@@ -159,9 +182,8 @@ class VolumeRenderer extends Renderer {
 
   private bindings = new Map<VolumeField, FieldBinding>();
   private layers: VolumeLayer[] = [];
-  private frame = 0;
   private geometry = new THREE.BoxGeometry(1, 1, 1);
-  private webglMaterial: THREE.RawShaderMaterial;
+  private webglMaterial: THREE.ShaderMaterial;
   private webgpuMaterial: THREE.Material;
   private mesh: THREE.Mesh;
   private bounds = new THREE.Box3();
@@ -183,7 +205,13 @@ class VolumeRenderer extends Renderer {
   private readonly gpuStepSize = uniform(1);
   private readonly gpuDensityGain = uniform(1);
   private readonly gpuDensityRange = uniform(new THREE.Vector2(0, 1));
-  private readonly gpuFrame = uniform(0);
+  private readonly gpuJitterSeed = uniform(0);
+  private readonly gpuAnisotropy = uniform(0);
+  private readonly gpuShadowQuality = uniform(0);
+  private readonly gpuLightDirection = uniform(new THREE.Vector3(1, 1, 1).normalize());
+  private readonly gpuLightColor = uniform(new THREE.Color(1, 1, 1));
+  private readonly lightPosition = new THREE.Vector3();
+  private readonly lightTarget = new THREE.Vector3();
   private readonly gpuJitter = uniform(0);
   private materialSamplingKey = '';
   private readonly curveData = new Uint16Array(256 * 4);
@@ -209,9 +237,13 @@ class VolumeRenderer extends Renderer {
     this.steps = options.steps ?? 100;
     this.renderOrder = options.renderOrder ?? 100;
     this.depthTest = options.depthTest ?? true;
-    this.jitter = options.jitter ?? false;
+    this.jitterStrength = options.jitterStrength ?? (options.jitter === false ? 0 : 1);
+    this.jitterSeed = options.jitterSeed ?? 0;
+    this.samplesPerVoxel = options.samplesPerVoxel ?? 1 / (options.stepSizeMultiplier ?? 0.5);
+    this.anisotropy = options.anisotropy ?? 0;
+    this.shadowQuality = options.shadowQuality ?? 0;
+    this.light = options.light;
     this.interpolation = options.interpolation ?? VolumeInterpolation.Linear;
-    this.stepSizeMultiplier = options.stepSizeMultiplier ?? 1;
     this.densityGain = options.densityGain ?? 1;
     this.densityMapping = options.densityMapping ?? VolumeDensityMapping.Smoothstep;
     this.densityRange = [...(options.densityRange ?? [0, 1])];
@@ -240,13 +272,20 @@ class VolumeRenderer extends Renderer {
     this.mesh.renderOrder = this.renderOrder;
   }
 
+  /** Reciprocal shorthand retained for cell-relative spacing. Prefer samplesPerVoxel. */
+  get stepSizeMultiplier(): number { return 1 / this.samplesPerVoxel; }
+  set stepSizeMultiplier(value: number) { this.samplesPerVoxel = 1 / value; }
+
+  get jitter(): boolean { return this.jitterStrength > 0; }
+  set jitter(value: boolean) { this.jitterStrength = value ? 1 : 0; }
+
   setup(system: ParticleSystem): void {
     this.mesh.onBeforeRender = (renderer, _scene, camera) => {
       this.setActiveMaterial(renderer);
       this.updateMaterialSide(camera);
-      this.frame += 1;
-      this.gpuFrame.value = this.frame;
-      this.webglMaterial.uniforms.frame.value = this.frame;
+      this.resolveLight(_scene);
+      this.webglMaterial.uniforms.worldToVolume.value.copy(this.mesh.matrixWorld).invert();
+      this.webglMaterial.uniforms.volumeToWorld.value.copy(this.mesh.matrixWorld);
     };
 
     this._update([], system);
@@ -305,7 +344,8 @@ class VolumeRenderer extends Renderer {
       layer.density !== previous[index]?.density || layer.color !== previous[index]?.color
     ));
     this.updateBounds();
-    const samplingKey = `${this.interpolation}:${this.densityMapping}:${this.noiseStrength > 0}:${this.noiseOctaves}`;
+    const samplingKey = [this.interpolation, this.densityMapping, this.noiseStrength > 0,
+      this.noiseOctaves, this.shadowQuality > 0].join(':');
     if (changed || this.steps !== this.gpuMaterialSteps || this.depthTest !== this.gpuMaterialDepthTest
       || this.materialSamplingKey !== samplingKey) {
       this.materialSamplingKey = samplingKey;
@@ -317,7 +357,10 @@ class VolumeRenderer extends Renderer {
     this.webglMaterial.uniforms.threshold.value = this.threshold;
     this.webglMaterial.uniforms.range.value = this.range;
     this.webglMaterial.uniforms.steps.value = this.steps;
-    this.webglMaterial.uniforms.jitter.value = this.jitter;
+    this.webglMaterial.uniforms.jitterStrength.value = this.jitterStrength;
+    this.webglMaterial.uniforms.jitterSeed.value = this.jitterSeed;
+    this.webglMaterial.uniforms.anisotropy.value = this.anisotropy;
+    this.webglMaterial.uniforms.shadowQuality.value = this.shadowQuality;
     this.webglMaterial.uniforms.cellSize.value = this.gpuCellSize.value;
     this.webglMaterial.uniforms.stepSizeMultiplier.value = this.stepSizeMultiplier;
     this.webglMaterial.uniforms.densityGain.value = this.densityGain;
@@ -342,7 +385,10 @@ class VolumeRenderer extends Renderer {
     this.gpuStepSize.value = this.stepSizeMultiplier;
     this.gpuDensityGain.value = this.densityGain;
     this.gpuDensityRange.value.set(...this.densityRange);
-    this.gpuJitter.value = this.jitter ? 1 : 0;
+    this.gpuJitter.value = this.jitterStrength;
+    this.gpuJitterSeed.value = this.jitterSeed;
+    this.gpuAnisotropy.value = this.anisotropy;
+    this.gpuShadowQuality.value = this.shadowQuality;
     this.gpuNoiseStrength.value = this.noiseStrength;
     this.gpuNoiseContrast.value = this.noiseContrast;
     this.gpuNoiseFrequency.value = this.noiseFrequency;
@@ -360,7 +406,32 @@ class VolumeRenderer extends Renderer {
     return id;
   }
 
+  private resolveLight(scene: THREE.Scene): void {
+    let selected = this.light;
+    if (!selected) {
+      let brightness = -1;
+      scene.traverseVisible(object => {
+        if (!(object instanceof THREE.DirectionalLight)) return;
+        const value = object.intensity * (object.color.r * 0.2126 + object.color.g * 0.7152 + object.color.b * 0.0722);
+        if (value > brightness) { selected = object; brightness = value; }
+      });
+    }
+    if (selected) {
+      selected.getWorldPosition(this.lightPosition);
+      selected.target.getWorldPosition(this.lightTarget);
+      this.gpuLightDirection.value.copy(this.lightPosition).sub(this.lightTarget).normalize();
+      this.gpuLightColor.value.copy(selected.color).multiplyScalar(selected.intensity);
+    } else {
+      this.gpuLightDirection.value.set(1, 1, 1).normalize();
+      this.gpuLightColor.value.setRGB(1, 1, 1);
+    }
+  }
+
   private validateOptions(): void {
+    if (![this.jitterStrength, this.jitterSeed, this.anisotropy, this.shadowQuality].every(Number.isFinite)
+      || this.shadowQuality < 0) throw new RangeError('Volume jitter, lighting and shadow controls must be finite.');
+    this.jitterStrength = THREE.MathUtils.clamp(this.jitterStrength, 0, 1);
+    this.anisotropy = THREE.MathUtils.clamp(this.anisotropy, -0.9, 0.9);
     if (!Number.isFinite(this.adaptiveStepThreshold) || this.adaptiveStepThreshold < 0
       || this.adaptiveStepThreshold >= 1 || !Number.isFinite(this.adaptiveStepFactor) || this.adaptiveStepFactor < 1
       || !Number.isFinite(this.transmittanceThreshold) || this.transmittanceThreshold < 0
@@ -585,8 +656,8 @@ class VolumeRenderer extends Renderer {
     });
   }
 
-  private createWebGLMaterial(): THREE.RawShaderMaterial {
-    return new THREE.RawShaderMaterial({
+  private createWebGLMaterial(): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       side: THREE.FrontSide,
       transparent: true,
@@ -600,8 +671,14 @@ class VolumeRenderer extends Renderer {
         range: { value: this.range },
         opacity: { value: this.opacity },
         steps: { value: this.steps },
-        frame: { value: 0 },
-        jitter: { value: this.jitter },
+        jitterStrength: { value: this.jitterStrength },
+        jitterSeed: { value: this.jitterSeed },
+        anisotropy: { value: this.anisotropy },
+        shadowQuality: { value: this.shadowQuality },
+        lightDirection: this.gpuLightDirection,
+        lightColor: this.gpuLightColor,
+        worldToVolume: { value: new THREE.Matrix4() },
+        volumeToWorld: { value: this.mesh?.matrixWorld ?? new THREE.Matrix4() },
         cellSize: { value: 1 },
         stepSizeMultiplier: { value: this.stepSizeMultiplier },
         densityGain: { value: this.densityGain },
@@ -660,12 +737,6 @@ class VolumeRenderer extends Renderer {
           .toVar('volumeStart');
         If(start.greaterThanEqual(far), () => Discard());
         const metric = direction.mul(this.gpuBoundsSize).length().toVar('volumeMetric');
-        const worldLength = metric.mul(far.sub(start));
-        // Do not redistribute every sample when a ray crosses an integer sample-count boundary.
-        const worldStep = max(this.gpuCellSize.mul(this.gpuStepSize),
-          worldLength.div(Math.max(1, Math.min(512, Math.floor(this.steps)))));
-        // Preserve the original spacing when scene depth clips the integration interval.
-        const baseStep = worldStep.div(metric).toVar('volumeBaseStep');
         const rawDepth = this.depthTest ? viewportDepthTexture().toVar('volumeSceneDepth') : float(1);
         const orthographic = cameraProjectionMatrix.mul(vec4(0, 0, 0, 1)).w.equal(1);
         const sceneZ = orthographic.select(orthographicDepthToViewZ(rawDepth, cameraNear, cameraFar),
@@ -678,15 +749,30 @@ class VolumeRenderer extends Renderer {
           });
         }
         If(start.greaterThanEqual(far), () => Discard());
+        const worldLength = metric.mul(far.sub(start));
+        // Do not redistribute every sample when a ray crosses an integer sample-count boundary.
+        const worldStep = max(this.gpuCellSize.mul(this.gpuStepSize),
+          worldLength.div(Math.max(1, Math.min(512, Math.floor(this.steps)))));
+        // Use the complete visible interval if the requested sampling exceeds the step budget.
+        const baseStep = worldStep.div(metric).toVar('volumeBaseStep');
         const distance = start.toVar('volumeDistance');
-        const sampleOffset = mix(float(0.5), hash(positionGeometry.dot(vec3(12.9898, 78.233, 37.719))
-          .add(this.gpuFrame)), this.gpuJitter);
+        // Directional HG is constant along a camera ray. Scale its normalized phase by 4π
+        // so an isotropic unit light preserves the familiar unit brightness.
+        const worldDirection = modelWorldMatrix.mul(vec4(direction, 0)).xyz.normalize();
+        const cosine = worldDirection.dot(this.gpuLightDirection);
+        const g = this.gpuAnisotropy;
+        const phase = float(1).sub(g.mul(g)).div(pow(float(1).add(g.mul(g)).sub(g.mul(cosine).mul(2)), 1.5));
+        const lightDirection = modelWorldMatrixInverse.mul(vec4(this.gpuLightDirection, 0)).xyz.normalize();
         const accumulated = vec4(0).toVar('volumeAccumulated');
-        Loop({ start: 0, end: Math.max(1, Math.min(512, Math.floor(this.steps))), type: 'int' }, () => {
+        Loop({ start: 0, end: Math.max(1, Math.min(512, Math.floor(this.steps))), type: 'int' }, ({ i }) => {
           If(distance.greaterThanEqual(far), () => Break());
           const growth = mix(float(1), this.gpuAdaptiveStepFactor,
             smoothstep(this.gpuAdaptiveStepThreshold, float(1), accumulated.a).mul(this.gpuAdaptiveStepping));
           const segment = min(baseStep.mul(growth), far.sub(distance)).toVar('volumeSegment');
+          // One stable, decorrelated evaluation inside each complete integration stratum.
+          const center = origin.add(direction.mul(distance.add(segment.mul(0.5))));
+          const point = center.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
+          const sampleOffset = mix(float(0.5), volumeJitter(point, float(i), this.gpuJitterSeed), this.gpuJitter);
           const position = origin.add(direction.mul(distance.add(segment.mul(sampleOffset))));
           if (this.depthTest) {
             If(this.gpuSceneDepthClipping.lessThan(1), () => {
@@ -695,25 +781,15 @@ class VolumeRenderer extends Renderer {
             });
           }
           const sample = this.sampleVolume(position);
-          let density = sample.a;
-          if (this.noiseStrength > 0) {
-            const masked = density.toVar('maskedVolumeDensity');
-            If(density.greaterThan(0), () => {
-              const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
-              const noise = generateGPUParticleNoise4D(point.mul(this.gpuNoiseFrequency), {
-                frequency: 1, octaves: this.noiseOctaves, lacunarity: 2, persistence: 0.5,
-                time: 0, offset: new THREE.Vector3(),
-              }, this.gpuNoiseTime);
-              const mask = noise.sub(0.5).mul(this.gpuNoiseContrast).add(0.5).clamp(0, 1);
-              masked.mulAssign(pow(mask, this.gpuNoiseStrength));
-            });
-            density = masked;
-          }
+          const density = this.modulateDensity(position, sample.a);
           const alpha = float(1).sub(pow(float(1).sub(this.renderOpacity(density)),
             metric.mul(segment)));
           const color = sample.rgb.div(max(sample.a, 1e-6));
           const contribution = float(1).sub(accumulated.a).mul(alpha);
-          accumulated.rgb.addAssign(color.mul(contribution));
+          const transmission = this.shadowQuality > 0 ? this.lightTransmittance(position, lightDirection) : float(1);
+          const incident = vec3(0.2).add(this.gpuLightColor.mul(phase).mul(transmission).mul(0.8));
+          // Emitted radiance can be added here later, independently of extinction/scattering.
+          accumulated.rgb.addAssign(color.mul(incident).mul(contribution));
           accumulated.a.addAssign(contribution);
           If(float(1).sub(accumulated.a).lessThanEqual(this.gpuTransmittanceThreshold), () => Break());
           distance.addAssign(segment);
@@ -724,6 +800,56 @@ class VolumeRenderer extends Renderer {
     }
 
     return material;
+  }
+
+  private modulateDensity(position: Node<'vec3'>, density: Node<'float'>): Node<'float'> {
+    if (this.noiseStrength <= 0) return density;
+    const masked = density.toVar();
+    If(density.greaterThan(0), () => {
+      const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
+      const noise = generateGPUParticleNoise4D(point.mul(this.gpuNoiseFrequency), {
+        frequency: 1, octaves: this.noiseOctaves, lacunarity: 2, persistence: 0.5,
+        time: 0, offset: new THREE.Vector3(),
+      }, this.gpuNoiseTime);
+      masked.mulAssign(pow(noise.sub(0.5).mul(this.gpuNoiseContrast).add(0.5).clamp(0, 1), this.gpuNoiseStrength));
+    });
+    return masked;
+  }
+
+  private lightTransmittance(position: Node<'vec3'>, direction: Node<'vec3'>): Node<'float'> {
+    const inverse = direction.greaterThanEqual(0).select(vec3(1), vec3(-1)).div(direction.abs().max(1e-6));
+    const exit = max(vec3(-0.5).sub(position).mul(inverse), vec3(0.5).sub(position).mul(inverse));
+    const far = min(min(exit.x, exit.y), exit.z).max(0);
+    const metric = direction.mul(this.gpuBoundsSize).length();
+    const budget = this.gpuShadowQuality.mul(8).ceil().clamp(1, 64);
+    const step = max(this.gpuCellSize.mul(2).div(this.gpuShadowQuality.max(1e-6)), far.mul(metric).div(budget))
+      .div(metric);
+    const distance = float(0).toVar();
+    const transmission = float(1).toVar();
+    Loop(64, ({ i }) => {
+      If(float(i).greaterThanEqual(budget).or(distance.greaterThanEqual(far)), () => Break());
+      const segment = min(step, far.sub(distance));
+      const point = position.add(direction.mul(distance.add(segment.mul(0.5))));
+      const density = this.modulateDensity(point, this.sampleDensity(point));
+      transmission.mulAssign(pow(float(1).sub(this.renderOpacity(density)), segment.mul(metric)));
+      distance.addAssign(segment);
+      If(transmission.lessThanEqual(0.001), () => Break());
+    });
+    return transmission;
+  }
+
+  private sampleDensity(position: Node<'vec3'>): Node<'float'> {
+    const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
+    const total = float(0).toVar();
+    for (const layer of this.layers) {
+      const center = layer.density.minimum.add(layer.density.size.mul(0.5));
+      const uv = point.sub(center).sub(layer.offset).div(layer.scale).add(center)
+        .sub(layer.density.minimum).div(layer.density.size);
+      If(uv.greaterThanEqual(0).all().and(uv.lessThanEqual(1).all()), () => {
+        total.addAssign(max(this.readVolume(layer.density, uv).r, 0).mul(layer.alpha));
+      });
+    }
+    return total;
   }
 
   private volumeRay(): { origin: Node<'vec3'>; direction: Node<'vec3'> } {

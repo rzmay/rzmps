@@ -8,8 +8,14 @@ uniform float threshold;
 uniform float range;
 uniform float opacity;
 uniform float steps;
-uniform float frame;
-uniform bool jitter;
+uniform float jitterStrength;
+uniform float jitterSeed;
+uniform float anisotropy;
+uniform float shadowQuality;
+uniform vec3 lightDirection;
+uniform vec3 lightColor;
+uniform mat4 worldToVolume;
+uniform mat4 volumeToWorld;
 uniform float cellSize;
 uniform float stepSizeMultiplier;
 uniform float densityGain;
@@ -39,11 +45,37 @@ vec2 hitBox(vec3 orig, vec3 dir) {
   return vec2(t0, t1);
 }
 
-float random(vec3 scale, float seed) {
-  return fract(sin(dot(gl_FragCoord.xyz + seed, scale)) * 43758.5453 + seed);
+// Spatial scrambling is oblique to the voxel lattice; each stratum gets an irrational rotation.
+float volumeJitter(vec3 point, float index) {
+  vec3 cell = floor(vec3(dot(point, vec3(0.7548777, 0.5698403, 0.438289)),
+    dot(point, vec3(-0.438289, 0.7548777, 0.5698403)),
+    dot(point, vec3(0.5698403, -0.438289, 0.7548777))) * 16.0);
+  float rotation = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719)) + jitterSeed * 19.19) * 43758.5453);
+  return fract(rotation + index * 0.61803398875 + 0.5);
 }
 
 /* VOLUME_FIELDS */
+
+// Optional coarse, bounded secondary march. Samples extinction, never the color field.
+float lightTransmittance(vec3 position, vec3 direction) {
+  vec3 inverseDirection = mix(vec3(-1.0), vec3(1.0), step(vec3(0.0), direction)) / max(abs(direction), vec3(0.000001));
+  vec3 exits = max((-0.5 - position) * inverseDirection, (0.5 - position) * inverseDirection);
+  float far = max(min(min(exits.x, exits.y), exits.z), 0.0);
+  float metric = length(direction * boundsSize);
+  float budget = clamp(ceil(shadowQuality * 8.0), 1.0, 64.0);
+  float spacing = max(cellSize * 2.0 / max(shadowQuality, 0.000001), far * metric / budget) / metric;
+  float distance = 0.0;
+  float transmission = 1.0;
+  for (int i = 0; i < 64; i++) {
+    if (float(i) >= budget || distance >= far) break;
+    float segment = min(spacing, far - distance);
+    float density = sampleDensity(position + direction * (distance + segment * 0.5));
+    transmission *= pow(1.0 - renderOpacity(density), segment * metric);
+    distance += segment;
+    if (transmission <= 0.001) break;
+  }
+  return transmission;
+}
 
 void main() {
   vec3 rayDir = normalize(vDirection);
@@ -58,7 +90,12 @@ void main() {
   // Keep world-space spacing stable across integer sample-count boundaries.
   float worldStep = max(cellSize * stepSizeMultiplier, worldLength / min(512.0, floor(steps)));
   float stepSize = worldStep / length(rayDir * boundsSize);
-  float offset = jitter ? random(vec3(12.9898, 78.233, 37.719), frame) : 0.5;
+  // HG / (1 / 4π): unit brightness for isotropic scattering, directional response otherwise.
+  vec3 worldDirection = normalize((volumeToWorld * vec4(rayDir, 0.0)).xyz);
+  float cosine = dot(worldDirection, lightDirection);
+  float phase = (1.0 - anisotropy * anisotropy)
+    / pow(1.0 + anisotropy * anisotropy - 2.0 * anisotropy * cosine, 1.5);
+  vec3 shadowDirection = normalize((worldToVolume * vec4(lightDirection, 0.0)).xyz);
   float distanceAlongRay = bounds.x;
 
   vec4 color = vec4(0.0);
@@ -68,6 +105,9 @@ void main() {
     float growth = adaptiveStepping
       ? mix(1.0, adaptiveStepFactor, smoothstep(adaptiveStepThreshold, 1.0, color.a)) : 1.0;
     float segment = min(stepSize * growth, bounds.y - distanceAlongRay);
+    vec3 center = vOrigin + rayDir * (distanceAlongRay + segment * 0.5);
+    vec3 point = (center + 0.5) * boundsSize + boundsMinimum;
+    float offset = mix(0.5, volumeJitter(point, float(i)), jitterStrength);
     vec3 p = vOrigin + rayDir * (distanceAlongRay + segment * offset);
 
     vec4 volume = sampleVolume(p);
@@ -75,7 +115,10 @@ void main() {
     float a = 1.0 - pow(1.0 - renderOpacity(d), length(rayDir * boundsSize) * segment);
     vec3 sampleColor = volume.rgb;
 
-    color.rgb += (1.0 - color.a) * a * sampleColor;
+    float transmission = shadowQuality > 0.0 ? lightTransmittance(p, shadowDirection) : 1.0;
+    vec3 incident = vec3(0.2) + lightColor * (0.8 * phase * transmission);
+    // Future emitted radiance belongs alongside this scattered radiance, not in opacity.
+    color.rgb += (1.0 - color.a) * a * sampleColor * incident;
     color.a += (1.0 - color.a) * a;
 
     if (1.0 - color.a <= transmittanceThreshold) break;
@@ -86,4 +129,8 @@ void main() {
   if (color.a <= 0.0) discard;
 
   outColor = vec4(color.rgb / max(color.a, 0.000001), color.a);
+  #ifdef TONE_MAPPING
+    outColor.rgb = toneMapping(outColor.rgb);
+  #endif
+  outColor = linearToOutputTexel(outColor);
 }

@@ -4,6 +4,7 @@ import { Module, ParticleSystem, VolumeRenderer } from '@rzmps/rzmps';
 
 const gpu = new URLSearchParams(location.search).get('backend') === 'webgpu';
 const renderer = gpu ? new WebGPURenderer({
+  trackTimestamp: true,
   reversedDepthBuffer: new URLSearchParams(location.search).has('reversed'),
 }) : new THREE.WebGLRenderer();
 renderer.setSize(480, 320);

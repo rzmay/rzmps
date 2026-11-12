@@ -50,6 +50,18 @@ Accumulated opacity at which step growth begins. Defaults to 0.5.
 
 ***
 
+<a id="anisotropy"></a>
+
+### anisotropy
+
+```ts
+anisotropy: number;
+```
+
+Henyey–Greenstein anisotropy, clamped to [-0.9, 0.9]. Defaults to zero.
+
+***
+
 <a id="atlasoptions"></a>
 
 ### atlasOptions?
@@ -299,6 +311,44 @@ Voxel reconstruction, independent of simulation advection. Defaults to Linear.
 jitter: boolean;
 ```
 
+Boolean shorthand for enabling/disabling jitterStrength.
+
+***
+
+<a id="jitterseed"></a>
+
+### jitterSeed
+
+```ts
+jitterSeed: number;
+```
+
+Stable volume-space sampling seed. Defaults to zero.
+
+***
+
+<a id="jitterstrength"></a>
+
+### jitterStrength
+
+```ts
+jitterStrength: number;
+```
+
+Full-stratum jitter strength, clamped to [0, 1]. Defaults to one.
+
+***
+
+<a id="light"></a>
+
+### light?
+
+```ts
+optional light?: DirectionalLight;
+```
+
+Optional directional light; otherwise resolve the dominant visible scene directional light.
+
 ***
 
 <a id="materialcomposite"></a>
@@ -467,6 +517,18 @@ renderOrder: number;
 
 ***
 
+<a id="samplespervoxel"></a>
+
+### samplesPerVoxel
+
+```ts
+samplesPerVoxel: number;
+```
+
+Samples per smallest contributing voxel. Defaults to two.
+
+***
+
 <a id="scenedepthbias"></a>
 
 ### sceneDepthBias
@@ -491,6 +553,18 @@ Clip rays against opaque scene depth on WebGPURenderer. Defaults to true; requir
 
 ***
 
+<a id="shadowquality"></a>
+
+### shadowQuality
+
+```ts
+shadowQuality: number;
+```
+
+Secondary light-march quality; zero disables shadows (default).
+
+***
+
 <a id="steps"></a>
 
 ### steps
@@ -511,7 +585,7 @@ Maximum samples per ray, clamped to 512. Defaults to 100.
 stepSizeMultiplier: number;
 ```
 
-Cell-relative ray spacing. Smaller values take more samples, up to steps. Defaults to one.
+Reciprocal samplesPerVoxel shorthand. Defaults to 0.5 (two samples per voxel).
 
 ***
 

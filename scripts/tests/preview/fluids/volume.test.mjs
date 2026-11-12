@@ -8,6 +8,7 @@ import { startSiteDev } from '../../../site/dev.mjs';
 
 test('volume providers combine density/color with tags on WebGL and WebGPU', { timeout: 120000 }, async () => {
   const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
+  await site.demo.watcher.close();
   const output = await fs.mkdtemp(path.join(os.tmpdir(), 'rzmps-volume-'));
   let browser;
   try {

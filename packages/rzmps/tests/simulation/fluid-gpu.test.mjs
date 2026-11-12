@@ -387,3 +387,19 @@ console.log('fluid-gpu tests passed');
   automatic.destroy();
   original.dispose();
 }
+
+{
+  const volume = new VolumeRenderer();
+  assert.equal(volume.samplesPerVoxel, 2);
+  assert.equal(volume.jitterStrength, 1);
+  assert.equal(volume.jitterSeed, 0);
+  assert.equal(volume.anisotropy, 0);
+  assert.equal(volume.shadowQuality, 0);
+  volume.stepSizeMultiplier = 0.25;
+  assert.equal(volume.samplesPerVoxel, 4);
+  volume.jitter = false;
+  assert.equal(volume.jitterStrength, 0);
+  assert.equal(new VolumeRenderer({ jitterStrength: 2, anisotropy: -2 }).anisotropy, -0.9);
+  assert.throws(() => new VolumeRenderer({ samplesPerVoxel: NaN }), /stepSizeMultiplier/);
+  assert.throws(() => new VolumeRenderer({ shadowQuality: -1 }), /shadow/);
+}

@@ -1,11 +1,6 @@
 precision highp float;
 
-in vec3 position;
-
-uniform mat4 modelMatrix;
-uniform mat4 modelViewMatrix;
-uniform mat4 projectionMatrix;
-uniform vec3 cameraPosition;
+// Standard transform and position declarations are supplied by ShaderMaterial.
 
 out vec3 vOrigin;
 out vec3 vDirection;
