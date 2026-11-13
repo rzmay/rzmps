@@ -4,8 +4,11 @@ import { transformPointGPU } from '../../simulation/gpu/transforms.utils';
 import * as THREE from 'three';
 import { MeshBVH, type HitPointInfo } from 'three-mesh-bvh';
 import type { Node } from 'three/webgpu';
-import { abs, array, float, int, length, max, min, mix, texture3D, uniform, vec2, vec3, vec4 } from 'three/tsl';
-import Particle from '../../core/Particle';
+import { If, abs, array, float, int, length, max, min, mix,
+  texture3D, uint, uniform, vec2, vec3, vec4 } from 'three/tsl';
+import Particle, { type ParticleOptions } from '../../core/Particle';
+import { createSampleParticleGPU, modifyWithFeatherGPU, copyParticleValues,
+  featherParticleValues } from './spatialEffectSampling.utils';
 import type ParticleSystem from '../../core/ParticleSystem';
 import acceptMultiple from '../../utils/acceptMultiple';
 import getParticleWorldPosition from '../../simulation/getParticleWorldPosition';
@@ -107,6 +110,18 @@ export interface SpatialEffectOptions {
   /** Declares whether transforms, vertices, or neither can change after construction. */
   updatePolicy: SpatialEffectUpdatePolicy;
 }
+
+/** Supported continuous particle deltas plus a discrete kill result. CPU results are scratch-owned. */
+export type SpatialEffectDeltas = Omit<ParticleOptions, 'tags'> & { killed: boolean };
+export type SpatialEffectSampleState = Partial<ParticleOptions> & { time?: number; realtime?: number; alive?: boolean };
+export type SpatialEffectDeltasGPU = {
+  [K in keyof SpatialEffectDeltas]: K extends 'killed' ? Node<'bool'>
+    : SpatialEffectDeltas[K] extends number ? Node<'float'> : Node<'vec3'>;
+};
+
+const sampleVectors = ['position', 'orbitCenter', 'rotation', 'scale', 'velocity', 'angularVelocity',
+  'scalarVelocity', 'acceleration', 'angularAcceleration', 'scalarAcceleration'] as const;
+const sampleScalars = ['speed', 'alpha', 'mass', 'distortionStrength', 'lifetime'] as const;
 
 type BoxGeometryArgs = ConstructorParameters<typeof THREE.BoxGeometry>;
 type SphereGeometryArgs = ConstructorParameters<typeof THREE.SphereGeometry>;
@@ -249,6 +264,14 @@ class SpatialEffect extends THREE.Object3D {
   writeGPUParameters?: (target: Float32Array, offset: number, system: ParticleSystem) => void;
   featherEasing: SpatialEffectFeatherEasing;
 
+  private sampleTags?: Tag[];
+  private readonly sampleData: Record<string, unknown> = {};
+  private sampleParticle?: Particle;
+  private sampleBefore?: Particle;
+  private sampleDefaults?: Particle;
+  private sampleResult?: SpatialEffectDeltas;
+  private featherBefore?: Particle;
+  private featherAfter?: Particle;
   private readonly _modify: SpatialEffectUpdate | null = null;
   private readonly _modifyFeather?: SpatialEffectFeatherUpdate;
   private _testGPU?: SpatialEffectGPUTest;
@@ -398,6 +421,7 @@ class SpatialEffect extends THREE.Object3D {
   // This will be true for most spatial effects, but not special ones like boid affectors
   get modifiesParticles(): boolean {
     return (
+      this.modifyGPU !== SpatialEffect.GPU_UNSUPPORTED ||
       this._modify !== null ||
       this._modifyFeather !== undefined ||
       this._modifyParticle !== SpatialEffect.prototype._modifyParticle
@@ -825,10 +849,103 @@ class SpatialEffect extends THREE.Object3D {
       return;
     }
 
-    const before = particle.clone();
+    // Reuse the same before/after snapshots for ordinary updates and delta sampling.
+    const before = copyParticleValues(this.featherBefore ??= new Particle(), particle);
     this._modify(particle, deltaTime, particleSystem);
-    const after = particle.clone();
-    particle.lerp(before, 1).lerp(after, feather);
+    const after = copyParticleValues(this.featherAfter ??= new Particle(), particle);
+    featherParticleValues(particle, before, after, feather);
+  }
+
+  /** Sample normal test/condition/feather behavior without changing the caller's state.
+   * The returned CPU deltas are reused by the next sample on this effect. Position is in simulation space. */
+  sampleDeltas(
+    position: THREE.Vector3, state: SpatialEffectSampleState, deltaTime: number, system: ParticleSystem,
+  ): SpatialEffectDeltas {
+    const defaults = this.sampleDefaults ??= new Particle();
+    const particle = this.sampleParticle ??= new Particle();
+    for (const key of sampleVectors) particle[key].copy(state[key] ?? defaults[key]);
+    for (const key of sampleScalars) particle[key] = state[key] ?? defaults[key];
+    particle.color.copy(state.color ?? defaults.color);
+    particle.position.copy(position);
+    particle.time = state.time ?? 0;
+    particle.realtime = state.realtime ?? 0;
+    if (state.tags) {
+      const tags = this.sampleTags ??= [];
+      tags.length = 0;
+      for (const tag of state.tags) tags.push(tag);
+      particle.tags = tags;
+    } else particle.tags = undefined;
+    particle.parent = null;
+    particle.data = this.sampleData;
+    for (const key in this.sampleData) delete this.sampleData[key];
+    for (const key in particle.noise) delete particle.noise[key];
+    particle.alive = state.alive ?? true;
+    const before = copyParticleValues(this.sampleBefore ??= new Particle(), particle);
+
+    if (particle.alive && this.visible && this.test(particle, system) && this.condition(particle)) {
+      this._modifyParticle(particle, deltaTime, system);
+    }
+    const result = this.sampleResult ??= Object.assign(new Particle(), { killed: false });
+    for (const key of sampleVectors) result[key].copy(particle[key]).sub(before[key]);
+    for (const key of sampleScalars) result[key] = particle[key] - before[key];
+    result.color.setRGB(particle.color.r - before.color.r, particle.color.g - before.color.g,
+      particle.color.b - before.color.b);
+    result.killed = !particle.alive || particle.realtime > particle.lifetime * 1000 || particle.time > 1;
+    return result;
+  }
+
+  /** Shader-local sampling; callbacks use the same automatic feathering as ordinary particles. */
+  sampleDeltasGPU(
+    position: Node<'vec3'>, state: Partial<GPUParticleLike>, deltaTime: Node<'float'>,
+    context: GPUParticleUpdateContext,
+  ): SpatialEffectDeltasGPU {
+    if (!this.supportsGPU) throw new Error('This spatial effect cannot be sampled on the GPU.');
+    const particle = createSampleParticleGPU(position, state);
+    const before = {
+      position: particle.position.toVar(),
+      orbitCenter: particle.orbitCenter.toVar(),
+      rotation: particle.rotation.toVar(),
+      scale: particle.scale.toVar(),
+      velocity: particle.velocity.toVar(),
+      angularVelocity: particle.angularVelocity.toVar(),
+      scalarVelocity: particle.scalarVelocity.toVar(),
+      acceleration: particle.acceleration.toVar(),
+      angularAcceleration: particle.angularAcceleration.toVar(),
+      scalarAcceleration: particle.scalarAcceleration.toVar(),
+      color: particle.color.toVar(),
+      speed: particle.speed.toVar(),
+      alpha: particle.alpha.toVar(),
+      mass: particle.mass.toVar(),
+      distortionStrength: particle.distortionStrength.toVar(),
+      lifetime: particle.lifetime.toVar(),
+    };
+    if (this.visible) {
+      let strength = this.testGPU(particle, context);
+      const tagMask = context.system.getGPUFilterTagMask(this.tags);
+      if (tagMask !== undefined) strength = particle.tagMask.bitAnd(uint(tagMask)).notEqual(0).select(strength, 0);
+      If(particle.alive.notEqual(0).and(strength.greaterThan(0)), () => modifyWithFeatherGPU(this, particle, strength,
+        () => this.modifyGPU(particle, deltaTime, context, strength)));
+    }
+    return {
+      position: particle.position.sub(before.position),
+      orbitCenter: particle.orbitCenter.sub(before.orbitCenter),
+      rotation: particle.rotation.sub(before.rotation),
+      scale: particle.scale.sub(before.scale),
+      velocity: particle.velocity.sub(before.velocity),
+      angularVelocity: particle.angularVelocity.sub(before.angularVelocity),
+      scalarVelocity: particle.scalarVelocity.sub(before.scalarVelocity),
+      acceleration: particle.acceleration.sub(before.acceleration),
+      angularAcceleration: particle.angularAcceleration.sub(before.angularAcceleration),
+      scalarAcceleration: particle.scalarAcceleration.sub(before.scalarAcceleration),
+      color: particle.color.sub(before.color),
+      speed: particle.speed.sub(before.speed),
+      alpha: particle.alpha.sub(before.alpha),
+      mass: particle.mass.sub(before.mass),
+      distortionStrength: particle.distortionStrength.sub(before.distortionStrength),
+      lifetime: particle.lifetime.sub(before.lifetime),
+      killed: particle.alive.equal(0).or(particle.realtime.greaterThan(particle.lifetime.mul(1000)))
+        .or(particle.time.greaterThan(1)),
+    };
   }
 
   private easeFeather(feather: number): number {

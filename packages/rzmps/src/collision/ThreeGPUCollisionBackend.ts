@@ -141,6 +141,10 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   private invalidatedGeometry = new Set<string>();
   private ownedGeometryBVHs = new Map<THREE.BufferGeometry, MeshBVH>();
   private data?: BVHComputeDataRuntime;
+  private _resourceVersion = 0;
+  /** Structural query/buffer identity. Transforms alone do not change this version. */
+  get resourceVersion(): number { return this._resourceVersion; }
+
   private capsuleQuery?: ReturnType<typeof capsuleBVHCollisionNode>;
   private initialized = false;
   private frameToken?: unknown;
@@ -413,6 +417,9 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
         typeof capsuleBVHCollisionNode
       >[0]);
     }
+    // Preserve the backend's proxy graph; consumers still need to rebind/recompile
+    // structural changes (including a previously empty geometry collection).
+    if (topologyChanged) this._resourceVersion++;
     this.stats.fullBuilds += 1;
     if (topologyChanged && this.initialized) {
       this.stats.topologyRebuilds += Math.max(topologyGeometryCount, 1);
@@ -508,6 +515,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.data?.dispose();
     this.data = undefined;
     this.capsuleQuery = undefined;
+    this._resourceVersion++;
     this.motionAttribute?.dispose();
     this.motionAttribute = undefined;
     this.movingQuery = undefined;

@@ -45,7 +45,7 @@ function collectSystemStats(system, visited = new Set()) {
         particles: formatBounds(module.particleBounds),
         grid: formatBounds(module.bounds),
         padding: module.automaticPadding
-          ? `auto ${module.automaticPaddingDistance.toFixed(2)}`
+          ? `auto [${module.automaticPaddingDistance.toArray().map(value => value.toFixed(2)).join(', ')}]`
           : `manual ${module.boundsPadding.toFixed(2)}`,
       })) ?? [],
   };

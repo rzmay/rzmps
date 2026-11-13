@@ -15,7 +15,8 @@ import LandingLayout from '../components/LandingLayout';
 
 const particlePresets = { ...standardPresets, ...experimentalPresets };
 const examples = [...standardExamples, ...experimentalExamples];
-const GPU_FLUID_PRESETS = new Set(experimentalExamples.map(entry => entry.title));
+const GPU_FLUID_PRESETS = new Set(examples.filter(entry => entry.previewSettings?.backend === 'webgpu')
+  .map(entry => entry.title));
 
 function getPresetMetadata(presets, name) {
   const entry = presets[name];
@@ -144,7 +145,9 @@ function DemoPage() {
   const [initialSelection] = useState(() =>
     resolveDemoSelection(new URL(window.location.href), examples, scenePresets),
   );
-  const [rendererMode, setRendererMode] = useState(GPU_FLUID_PRESETS.has(initialSelection.preset) ? 'webgpu' : initialSelection.backend);
+  const [rendererMode, setRendererMode] = useState(
+    GPU_FLUID_PRESETS.has(initialSelection.preset) ? 'webgpu' : initialSelection.backend,
+  );
   const [particlePreset, setParticlePreset] = useState(initialSelection.preset);
   const [scenePreset, setScenePreset] = useState(initialSelection.scene);
   const [metadata, setMetadata] = useState(() => ({

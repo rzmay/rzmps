@@ -160,3 +160,32 @@ export function bitcastFloatToUint(value: Node<'float'>): Node<'uint'> {
 export function bitcastUintToFloat(value: Node<'uint'>): Node<'float'> {
   return uintBitsToFloat(value) as unknown as Node<'float'>;
 }
+
+/** Queue byte copies between Three-owned GPU storage buffers, without compiling migration shaders. */
+export function copyStorageAttributes(
+  renderer: GPUStorageBufferRenderer,
+  copies: readonly { source: StorageBufferAttribute; target: StorageBufferAttribute;
+    sourceOffset?: number; targetOffset?: number; byteLength?: number }[],
+): void {
+  const backend = renderer.backend as {
+    get(attribute: StorageBufferAttribute): { buffer: unknown };
+    device: { createCommandEncoder(): {
+      copyBufferToBuffer(source: unknown, sourceOffset: number,
+        target: unknown, targetOffset: number, size: number): void;
+      finish(): unknown;
+    }; queue: { submit(commands: unknown[]): void } };
+  };
+  const encoder = backend.device.createCommandEncoder();
+  for (const copy of copies) {
+    initializeStorageAttribute(renderer, copy.source);
+    initializeStorageAttribute(renderer, copy.target);
+    const size = copy.byteLength ?? copy.source.array.byteLength;
+    const from = copy.sourceOffset ?? 0, to = copy.targetOffset ?? 0;
+    if ([size, from, to].some(value => value < 0 || value % 4 !== 0)
+      || from + size > copy.source.array.byteLength || to + size > copy.target.array.byteLength) {
+      throw new RangeError('Storage migration must use aligned ranges within both attributes.');
+    }
+    encoder.copyBufferToBuffer(backend.get(copy.source).buffer, from, backend.get(copy.target).buffer, to, size);
+  }
+  backend.device.queue.submit([encoder.finish()]);
+}

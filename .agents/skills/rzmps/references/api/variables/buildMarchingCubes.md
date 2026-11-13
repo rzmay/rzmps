@@ -11,3 +11,5 @@
 ```ts
 const buildMarchingCubes: SurfaceExtractor;
 ```
+
+Marching Cubes with canonical asymptotic decisions on ambiguous faces.

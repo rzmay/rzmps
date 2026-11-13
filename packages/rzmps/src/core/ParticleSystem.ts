@@ -530,9 +530,16 @@ class ParticleSystem extends THREE.Object3D {
     const visit = async (system: ParticleSystem): Promise<void> => {
       if (visited.has(system)) return;
       visited.add(system);
-      for (const module of system.getModules(Module)) {
-        await module.benchmarks.spanAsync('resourcePreparation', () => module.prepareResources(system, renderer));
-      }
+      // Rendering can compile against persistent provider fields while simulation pipelines prepare.
+      // Providers without a field yet retain their normal first-use rendering path.
+      const renderPreparation = system.renderers.map(rendererComponent =>
+        rendererComponent.prepareResources(system, renderer));
+      const modulePreparation = async () => {
+        for (const module of system.getModules(Module)) {
+          await module.benchmarks.spanAsync('resourcePreparation', () => module.prepareResources(system, renderer));
+        }
+      };
+      await Promise.all([modulePreparation(), ...renderPreparation]);
       for (const child of system.subSystems.keys()) await visit(child);
     };
     await visit(this);
@@ -1074,6 +1081,7 @@ class ParticleSystem extends THREE.Object3D {
       this.deltaTime = nextDeltaTime;
       this.lastFrame = now;
       this._updateEmitterContextVelocity();
+      this.updateRenderers();
       return;
     }
 
@@ -1101,6 +1109,20 @@ class ParticleSystem extends THREE.Object3D {
     // Cubemap updates require a renderer and run only on normal display updates.
     this._updateLiveCubemaps();
     this._handleEndBehavior();
+  }
+
+  /**
+   * Refresh renderer configuration against the last particle/field state, without advancing time.
+   * Rebuilds affected renderer pipelines as needed. Paused display updates call this automatically.
+   * Does not rerun simulation or transient modules, emit particles, or perform a scene render.
+   */
+  public updateRenderers(children = true): void {
+    if (this._destroyed) return;
+    this.syncRendererParents();
+    if (!this.isGPUProcessingActive || !this.gpuSimulation.refreshRenderers()) {
+      this.renderers.forEach(renderer => renderer.update(this.particles, this, 0));
+    }
+    if (children) this.subSystems.forEach((_options, child) => child.updateRenderers());
   }
 
   private _updateLiveCubemaps(): void {

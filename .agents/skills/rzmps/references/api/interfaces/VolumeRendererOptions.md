@@ -78,16 +78,6 @@ Creation options shared by texture-choice, batched-mesh, and copied-material atl
 
 ***
 
-<a id="basecolor"></a>
-
-### baseColor
-
-```ts
-baseColor: ColorRepresentation;
-```
-
-***
-
 <a id="children"></a>
 
 ### children
@@ -101,6 +91,72 @@ Artistic render-only copies, generated before LOD children.
 #### Inherited from
 
 [`RendererOptions`](RendererOptions.md).[`children`](RendererOptions.md#children)
+
+***
+
+<a id="color"></a>
+
+### color
+
+```ts
+color: ColorRepresentation;
+```
+
+***
+
+<a id="colorbydensity"></a>
+
+### colorByDensity?
+
+```ts
+optional colorByDensity?:
+  | ValueByParameter<ColorRepresentation>
+  | null;
+```
+
+Density color multiplier, using minDensity/maxDensity. Defaults to null (neutral white).
+
+***
+
+<a id="colorbyspeed"></a>
+
+### colorBySpeed?
+
+```ts
+optional colorBySpeed?:
+  | ValueByParameter<ColorRepresentation>
+  | null;
+```
+
+Renderer-only speed color multiplier. Defaults to null (neutral white).
+
+***
+
+<a id="colorbytemperature"></a>
+
+### colorByTemperature?
+
+```ts
+optional colorByTemperature?:
+  | ValueByParameter<ColorRepresentation>
+  | null;
+```
+
+Renderer-only temperature color multiplier. Defaults to null (neutral white).
+
+***
+
+<a id="colorbyvorticity"></a>
+
+### colorByVorticity?
+
+```ts
+optional colorByVorticity?:
+  | ValueByParameter<ColorRepresentation>
+  | null;
+```
+
+Renderer-only vorticity color multiplier. Defaults to null (neutral white).
 
 ***
 
@@ -193,15 +249,105 @@ Defaults to Smoothstep, which uses threshold/range.
 
 ***
 
-<a id="densityrange"></a>
+<a id="densitynoisecontrast"></a>
 
-### densityRange
+### densityNoiseContrast
 
 ```ts
-densityRange: [number, number];
+densityNoiseContrast: number;
 ```
 
-Density interval mapped to zero through one in Linear/Curve modes. Defaults to [0, 1].
+Contrast around noise value 0.5, applied before the strength exponent. Defaults to one.
+
+***
+
+<a id="densitynoisecontrastbytemperature"></a>
+
+### densityNoiseContrastByTemperature?
+
+```ts
+optional densityNoiseContrastByTemperature?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Optional temperature multiplier of densityNoiseContrast, using temperatureRange. Null is neutral. WebGPU only.
+
+***
+
+<a id="densitynoisefrequency"></a>
+
+### densityNoiseFrequency
+
+```ts
+densityNoiseFrequency: number;
+```
+
+Noise frequency in simulation units, independent of field resolution.
+
+***
+
+<a id="densitynoisefrequencybytemperature"></a>
+
+### densityNoiseFrequencyByTemperature?
+
+```ts
+optional densityNoiseFrequencyByTemperature?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Optional temperature multiplier of densityNoiseFrequency, using temperatureRange. Null is neutral. WebGPU only.
+
+***
+
+<a id="densitynoiseoctaves"></a>
+
+### densityNoiseOctaves
+
+```ts
+densityNoiseOctaves: number;
+```
+
+Fractal detail layers per ray sample. Defaults to one.
+
+***
+
+<a id="densitynoisespeed"></a>
+
+### densityNoiseSpeed
+
+```ts
+densityNoiseSpeed: number;
+```
+
+Animation speed along the noise helper's fourth dimension.
+
+***
+
+<a id="densitynoisestrength"></a>
+
+### densityNoiseStrength
+
+```ts
+densityNoiseStrength: number;
+```
+
+Exponent applied to the contrast-adjusted density mask. Zero disables masking. WebGPU only.
+
+***
+
+<a id="densitynoisestrengthbytemperature"></a>
+
+### densityNoiseStrengthByTemperature?
+
+```ts
+optional densityNoiseStrengthByTemperature?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Optional temperature multiplier of densityNoiseStrength, using temperatureRange. Null is neutral. WebGPU only.
 
 ***
 
@@ -212,6 +358,42 @@ Density interval mapped to zero through one in Linear/Curve modes. Defaults to [
 ```ts
 depthTest: boolean;
 ```
+
+***
+
+<a id="downsample"></a>
+
+### downsample
+
+```ts
+downsample: number;
+```
+
+Screen-resolution divisor on WebGPURenderer: one is full, two is half. Defaults to one.
+
+***
+
+<a id="dynamicresolution"></a>
+
+### dynamicResolution
+
+```ts
+dynamicResolution: boolean | VolumeResolutionOptions;
+```
+
+Adapt screen-space resolution to measured GPU time. Defaults to true; full resolution without timestamps.
+
+***
+
+<a id="emptyspaceskipping"></a>
+
+### emptySpaceSkipping
+
+```ts
+emptySpaceSkipping: boolean;
+```
+
+Skip exactly empty visual-density regions. Defaults to true.
 
 ***
 
@@ -409,63 +591,27 @@ Optional surface whose appearance multiplies this renderer's configured appearan
 
 ***
 
-<a id="noisecontrast"></a>
+<a id="maxdensity"></a>
 
-### noiseContrast
+### maxDensity
 
 ```ts
-noiseContrast: number;
+maxDensity: number;
 ```
 
-Contrast around noise value 0.5, applied before the strength exponent. Defaults to one.
+Density at or above this value maps to full density. Defaults to one.
 
 ***
 
-<a id="noisefrequency"></a>
+<a id="mindensity"></a>
 
-### noiseFrequency
-
-```ts
-noiseFrequency: number;
-```
-
-Noise frequency in simulation units, independent of field resolution.
-
-***
-
-<a id="noiseoctaves"></a>
-
-### noiseOctaves
+### minDensity
 
 ```ts
-noiseOctaves: number;
+minDensity: number;
 ```
 
-Fractal detail layers per ray sample. Defaults to one.
-
-***
-
-<a id="noisespeed"></a>
-
-### noiseSpeed
-
-```ts
-noiseSpeed: number;
-```
-
-Animation speed along the noise helper's fourth dimension.
-
-***
-
-<a id="noisestrength"></a>
-
-### noiseStrength
-
-```ts
-noiseStrength: number;
-```
-
-Exponent applied to the contrast-adjusted density mask. Zero disables masking. WebGPU only.
+Density at or below this value renders transparent. Defaults to zero.
 
 ***
 
@@ -478,6 +624,48 @@ opacity: number;
 ```
 
 Opacity over one simulation unit of ray travel, after density mapping. Defaults to 0.25.
+
+***
+
+<a id="opacitybyspeed"></a>
+
+### opacityBySpeed?
+
+```ts
+optional opacityBySpeed?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Renderer-only speed opacity multiplier. Defaults to null (neutral one).
+
+***
+
+<a id="opacitybytemperature"></a>
+
+### opacityByTemperature?
+
+```ts
+optional opacityByTemperature?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Renderer-only temperature opacity multiplier. Defaults to null (neutral one).
+
+***
+
+<a id="opacitybyvorticity"></a>
+
+### opacityByVorticity?
+
+```ts
+optional opacityByVorticity?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Renderer-only vorticity opacity multiplier. Defaults to null (neutral one).
 
 ***
 
@@ -525,7 +713,7 @@ renderOrder: number;
 samplesPerVoxel: number;
 ```
 
-Samples per smallest contributing voxel. Defaults to two.
+Samples per smallest contributing voxel. Defaults to one; two selects high quality.
 
 ***
 
@@ -565,6 +753,18 @@ Secondary light-march quality; zero disables shadows (default).
 
 ***
 
+<a id="speedrange"></a>
+
+### speedRange?
+
+```ts
+optional speedRange?: [number, number];
+```
+
+Physical speed interval normalized to [0, 1]. Defaults to [0, 1].
+
+***
+
 <a id="steps"></a>
 
 ### steps
@@ -585,7 +785,7 @@ Maximum samples per ray, clamped to 512. Defaults to 100.
 stepSizeMultiplier: number;
 ```
 
-Reciprocal samplesPerVoxel shorthand. Defaults to 0.5 (two samples per voxel).
+Reciprocal samplesPerVoxel shorthand. Defaults to one (one sample per voxel).
 
 ***
 
@@ -602,6 +802,18 @@ Filters the simulated population by tag before rendering.
 #### Inherited from
 
 [`RendererOptions`](RendererOptions.md).[`tags`](RendererOptions.md#tags)
+
+***
+
+<a id="temperaturerange"></a>
+
+### temperatureRange?
+
+```ts
+optional temperatureRange?: [number, number];
+```
+
+Physical temperature interval normalized to [0, 1]. Defaults to [0, 1].
 
 ***
 
@@ -640,3 +852,15 @@ transmittanceThreshold: number;
 ```
 
 Stop when remaining transmittance falls below this value. Zero disables termination. Defaults to 0.01.
+
+***
+
+<a id="vorticityrange"></a>
+
+### vorticityRange?
+
+```ts
+optional vorticityRange?: [number, number];
+```
+
+Physical vorticity interval normalized to [0, 1]. Defaults to [0, 1].

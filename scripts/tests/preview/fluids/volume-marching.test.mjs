@@ -21,7 +21,7 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
         await page.waitForFunction(() => window.ready);
         const result = await page.evaluate(async () => {
           const { red, volume, system, renderer, scene, camera, THREE } = window.volumeFixture;
-          Object.assign(volume, { generateChildren: false, densityMapping: 'Linear', densityRange: [0, 1],
+          Object.assign(volume, { generateChildren: false, densityMapping: 'Linear', minDensity: 0, maxDensity: 1,
             opacity: 0.3, transmittanceThreshold: 0,
             stepSizeMultiplier: 0.1, jitter: false });
           red.density.data.fill(1);

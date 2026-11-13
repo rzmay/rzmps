@@ -109,5 +109,12 @@ try {
   assert(liquid.rough[0] > liquid.smooth[0] + 100, 'roughness function evaluates across activity');
   assert(liquid.reusedGeometry && liquid.replacedCallback, 'flow edits update appearance without rebuilding geometry');
   console.log('Built-in liquid material:', JSON.stringify(liquid));
+  const growth = await page.evaluate(() => window.testAutomaticSurfaceGrowth());
+  console.log('Automatic surface growth:', JSON.stringify(growth));
+  assert(growth.retainedWhilePreparing && growth.swapped, 'growth swaps only after separate preparation');
+  assert(growth.after.allocatedBytes > growth.before.allocatedBytes);
+  assert(growth.after.triangles > 0);
+  assert.equal(growth.after.overflowedBricks, 0);
+  assert.equal(growth.after.overflowedTriangles, 0);
   assert.deepEqual(errors, []);
 } finally { await browser?.close(); await site.close(); }

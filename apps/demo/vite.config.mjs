@@ -22,6 +22,14 @@ const rzmpsPackageJson = JSON.parse(
 
 export default defineConfig({
   plugins: [
+    {
+      name: 'rzmps-watch-example-workspace',
+      configureServer(server) {
+        // Glob catalogs live outside the app root. Watch the directory so file additions/removals
+        // invalidate the catalog too, rather than only watching files already imported by Vite.
+        server.watcher.add(path.resolve(__dirname, '../../examples'));
+      },
+    },
     react({
       include: '**/*.{jsx,tsx}',
     }),

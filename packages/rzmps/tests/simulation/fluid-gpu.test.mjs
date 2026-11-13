@@ -1,3 +1,4 @@
+/* eslint-env node */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { float, uniform } from 'three/tsl';
@@ -9,6 +10,8 @@ import {
   FluidBoundsPolicy,
   FluidCollider,
   GasSimulation,
+  GasAffector,
+  SpatialEffect,
   Module,
   ParticleOctree,
   ParticleSpatialGrid,
@@ -90,16 +93,15 @@ predicateParent.subSystems.get(predicateChild).shouldEmitGPU = spray;
 assert.equal(predicateParent.getGPUEmissionSupport().supported, true);
 predicateParent.destroy();
 const boundedFlip = new FLIPSimulation({
-  maxBounds: 20,
   bounds: new THREE.Box3(new THREE.Vector3(-32, -32, -32), new THREE.Vector3(32, 32, 32)),
-  spatialGridOptions: { autoExpand: true },
+  spatialGridOptions: { maxBounds: 20, autoExpand: true },
 });
 assert.deepEqual(boundedFlip.bounds.min.toArray(), [-8, -8, -8]);
 assert.deepEqual(boundedFlip.bounds.max.toArray(), [8, 8, 8]);
 assert.equal(boundedFlip.spatialGridOptions.autoExpand, false);
-assert.equal(flip.maxBounds, Infinity);
-assert.equal(gas.turbulenceStrength, 0);
-assert.throws(() => new FLIPSimulation({ maxBounds: 0 }), /maxBounds/);
+assert.equal(flip.spatialGridOptions.maxBounds, undefined);
+assert.equal(gas.turbulenceNoiseStrength, 0);
+assert.throws(() => new FLIPSimulation({ spatialGridOptions: { maxBounds: 0 } }), /maxBounds/);
 boundedFlip.cleanup();
 const shrinkingGas = new GasSimulation({
   spatialGridOptions: { shrinkDelay: 180 },
@@ -107,7 +109,7 @@ const shrinkingGas = new GasSimulation({
 assert.equal(gas.supportsGPU, true);
 assert.equal(flip.supportsGPU, true);
 assert.equal(gas.resolution, 32);
-assert.equal(gas.maxActiveBricks, 512);
+assert.equal(gas.maxActiveBricks, Number.MAX_SAFE_INTEGER);
 assert.equal(gas.volumeGrid.capacity, 64, 'initial reservation fits the logical grid without reserving the full limit');
 assert.equal(flip.resolution, 64);
 assert.equal(gas.autoBounds, true);
@@ -131,8 +133,9 @@ assert.equal(gas.advectionMethod, 'SemiLagrangian');
 assert.equal(gas.boundsPolicy, FluidBoundsPolicy.Ballistic);
 assert.equal(flip.boundsPolicy, FluidBoundsPolicy.Ballistic);
 assert.deepEqual(Object.values(FluidBoundsPolicy), ['Ballistic', 'Kill', 'Contain']);
-const containedGas = new GasSimulation({ boundsPolicy: 'Contain', maxBounds: 16 });
-assert.deepEqual(containedGas.closedMaxNode.value.toArray(), [0, 0, 0], 'adaptive grid edges below the cap remain open');
+const containedGas = new GasSimulation({ boundsPolicy: 'Contain', spatialGridOptions: { maxBounds: 16 } });
+assert.deepEqual(containedGas.closedMaxNode.value.toArray(), [0, 0, 0],
+  'adaptive grid edges below the cap remain open');
 containedGas.cleanup();
 assert.throws(() => new GasSimulation({ boundsPolicy: 'Open' }), /boundsPolicy/);
 assert.equal(AdvectionMethod.SemiLagrangian, 'SemiLagrangian');
@@ -142,10 +145,10 @@ assert.equal(higherOrderGas.advectionMethod, 'MacCormack');
 higherOrderGas.cleanup();
 assert.equal(gas.densityDissipation, 0.6);
 assert.equal(gas.densityCutoff, 0.01);
-assert.deepEqual(gas.temperatureRange, [0, 1]);
+assert.equal('temperatureColor' in gas, false, 'temperature appearance belongs to VolumeRenderer');
 assert.equal(gas.temperatureOverLifetime, 1);
 assert.equal('maxSplatRadius' in gas, false);
-assert.deepEqual(gas.requireSpatialEffects, [FluidCollider]);
+assert.deepEqual(gas.requireSpatialEffects, [FluidCollider, GasAffector]);
 assert.deepEqual(flip.requireSpatialEffects, [FluidCollider]);
 const fluidCollider = FluidCollider.Box({}, 2, 3, 4);
 assert.ok(fluidCollider.geometry instanceof THREE.BoxGeometry);
@@ -220,17 +223,23 @@ assert.equal(volumeRenderer.webglMaterial.side, THREE.FrontSide);
 assert.equal(volumeRenderer.webgpuMaterial.side, THREE.FrontSide);
 assert.equal(volumeRenderer.renderOrder, 100);
 assert.equal(volumeRenderer.webglMaterial.depthTest, true);
+for (const parameter of ['Temperature', 'Density', 'Speed', 'Vorticity']) {
+  assert.equal(volumeRenderer[`colorBy${parameter}`], null);
+  if (parameter !== 'Density') assert.equal(volumeRenderer[`opacityBy${parameter}`], null);
+}
 assert.equal(volumeRenderer.webgpuMaterial.depthTest, true);
 assert.ok(volumeRenderer.webgpuMaterial.depthNode, 'volume depth must use ray entry rather than the back face');
 assert.ok(volumeRenderer.webgpuMaterial.fragmentNode, 'volume color and alpha come directly from the ray march');
-assert.equal(volumeRenderer.mesh.material, volumeRenderer.webgpuMaterial, 'GPU fields select a compatible first-frame material');
+assert.equal(volumeRenderer.mesh.material, volumeRenderer.webgpuMaterial,
+  'GPU fields select a compatible first-frame material');
 volumeRenderer.destroy();
 
+assert.throws(() => new VolumeRenderer({ downsample: 0 }), /downsample/);
 assert.throws(() => new VolumeRenderer({ stepSizeMultiplier: 0 }), /stepSizeMultiplier/);
-assert.throws(() => new VolumeRenderer({ densityRange: [1, 0] }), /densityRange/);
+assert.throws(() => new VolumeRenderer({ minDensity: 1, maxDensity: 0 }), /minDensity/);
 assert.throws(() => new VolumeRenderer({ interpolation: 'invalid' }), /interpolation/);
 assert.equal(volumeRenderer.adaptiveStepping, false);
-assert.equal(volumeRenderer.noiseContrast, 1);
+assert.equal(volumeRenderer.densityNoiseContrast, 1);
 assert.equal(volumeRenderer.sceneDepthClipping, true);
 assert.equal(volumeRenderer.adaptiveStepFactor, 4);
 assert.equal(volumeRenderer.transmittanceThreshold, 0.01);
@@ -240,22 +249,23 @@ for (const options of [
   { transmittanceThreshold: 1 }, { transmittanceThreshold: NaN }, { sceneDepthBias: -1 },
 ]) assert.throws(() => new VolumeRenderer(options), /adaptive thresholds/);
 for (const options of [
-  { noiseStrength: -1 }, { noiseStrength: Infinity }, { noiseContrast: -1 }, { noiseContrast: NaN },
+  { densityNoiseStrength: -1 }, { densityNoiseStrength: Infinity }, { densityNoiseContrast: -1 }, { densityNoiseContrast: NaN },
 ]) assert.throws(() => new VolumeRenderer(options), /Volume noise/);
-const strongMask = new VolumeRenderer({ noiseStrength: 2, noiseContrast: 1.5 });
-assert.equal(strongMask.noiseStrength, 2);
-assert.equal(strongMask.noiseContrast, 1.5);
+const strongMask = new VolumeRenderer({ densityNoiseStrength: 2, densityNoiseContrast: 1.5 });
+assert.equal(strongMask.densityNoiseStrength, 2);
+assert.equal(strongMask.densityNoiseContrast, 1.5);
 strongMask.destroy();
 const copies = new VolumeRenderer({ children: { count: 2, radius: 0.2, scale: 0.8, alpha: 0.5 } });
 copies.setup(system);
-assert.equal(copies.layers.length, 3);
+assert.equal(copies.layers.length, 1);
+assert.equal(copies.layers[0].children.length, 3);
 assert.equal(copies.renderedChildCount, 2);
-assert.equal(copies.layers[1].alpha.value, 0.5);
-assert.equal(copies.layers[1].scale.value, 0.8);
-assert.equal(copies.layers[0].density, copies.layers[1].density, 'copies reuse source texture bindings');
-const offsets = copies.layers.map(layer => layer.offset.value.toArray());
+assert.equal(copies.layers[0].children[1].alpha.value, 0.5);
+assert.equal(copies.layers[0].children[1].scale.value, 0.8);
+assert.equal(copies.bindings.size, 2, 'children reuse density and color bindings');
+const offsets = copies.layers[0].children.map(child => child.offset.value.toArray());
 copies.update([], system);
-assert.deepEqual(copies.layers.map(layer => layer.offset.value.toArray()), offsets);
+assert.deepEqual(copies.layers[0].children.map(child => child.offset.value.toArray()), offsets);
 copies._gpuChildren.prepare = () => { throw new Error('Field children must not generate particle buffers'); };
 copies.updateGPU({}, system);
 copies.generateChildren = false;
@@ -267,17 +277,27 @@ copies.densityMapping = VolumeDensityMapping.Curve;
 copies.densityCurve = t => t * t;
 copies.update([], system);
 assert.ok(copies.curveTexture.version > 0);
+const materialBeforeBudgetChange = copies.webgpuMaterial;
+copies.steps = 256;
+copies.update([], system);
+assert.equal(copies.webgpuMaterial, materialBeforeBudgetChange, 'ray budget edits reuse the material');
+assert.equal(copies.gpuSteps.value, 256);
+copies.steps = 900;
+copies.update([], system);
+assert.equal(copies.gpuSteps.value, 512, 'the uniform budget respects the documented ceiling');
 copies.destroy();
 const uniformCount = uniform(1);
 const constantChildren = new VolumeRenderer({ children: { count: uniformCount, radius: 0,
   scale: float(0.8), alpha: float(0.5) } });
 constantChildren.setup(system);
-assert.equal(constantChildren.layers.length, 2);
-assert.ok(Math.abs(constantChildren.layers[1].scale.value - 0.8) < 1e-6);
-assert.equal(constantChildren.layers[1].alpha.value, 0.5);
+assert.equal(constantChildren.layers.length, 1);
+assert.equal(constantChildren.layers[0].children.length, 2);
+assert.ok(Math.abs(constantChildren.layers[0].children[1].scale.value - 0.8) < 1e-6);
+assert.equal(constantChildren.layers[0].children[1].alpha.value, 0.5);
 uniformCount.value = 2;
 constantChildren.update([], system);
-assert.equal(constantChildren.layers.length, 3);
+assert.equal(constantChildren.layers.length, 1);
+assert.equal(constantChildren.layers[0].children.length, 3);
 constantChildren.destroy();
 
 // Discovery includes dependents, deduplicates shared instances, and does not rely on GasSimulation.
@@ -361,7 +381,8 @@ staleFlip.lastBoundsRead = -Infinity;
 const originalBounds = staleFlip.bounds.clone();
 staleFlip.refreshBounds(staleGrid, {});
 staleFlip.cleanup();
-resolveMetrics({ bounds: new THREE.Box3(new THREE.Vector3(-32, -32, -32), new THREE.Vector3(32, 32, 32)), maxParticleSpeed: 10 });
+resolveMetrics({ bounds: new THREE.Box3(new THREE.Vector3(-32, -32, -32),
+  new THREE.Vector3(32, 32, 32)), maxParticleSpeed: 10, maxParticleVelocity: new THREE.Vector3(0, 10, 0) });
 await new Promise(setImmediate);
 assert.ok(staleFlip.bounds.equals(originalBounds));
 assert.equal(staleFlip.pendingBounds, undefined);
@@ -390,7 +411,7 @@ console.log('fluid-gpu tests passed');
 
 {
   const volume = new VolumeRenderer();
-  assert.equal(volume.samplesPerVoxel, 2);
+  assert.equal(volume.samplesPerVoxel, 1);
   assert.equal(volume.jitterStrength, 1);
   assert.equal(volume.jitterSeed, 0);
   assert.equal(volume.anisotropy, 0);
@@ -402,4 +423,63 @@ console.log('fluid-gpu tests passed');
   assert.equal(new VolumeRenderer({ jitterStrength: 2, anisotropy: -2 }).anisotropy, -0.9);
   assert.throws(() => new VolumeRenderer({ samplesPerVoxel: NaN }), /stepSizeMultiplier/);
   assert.throws(() => new VolumeRenderer({ shadowQuality: -1 }), /shadow/);
+}
+
+// State modifiers use independent physical ranges and representative decay for short prediction.
+{
+  const gas = new GasSimulation({ densityDissipation: 0.6 });
+  assert.deepEqual(gas.temperatureRange, [0, 1]);
+  assert.deepEqual(gas.densityRange, [0, 1]);
+  assert.equal(gas.densityDissipationByTemperature, undefined);
+  gas.densityDissipationByTemperature = [0.25, 3];
+  assert(Math.abs(gas.sampledBehaviorRate('densityDissipation') - 0.975) < 1e-9);
+  gas.densityDissipationByDensity = t => 1 + t;
+  assert(Math.abs(gas.sampledBehaviorRate('densityDissipation') - 1.4625) < 1e-9,
+    'curve averages replace the previous zero-decay worst case');
+  assert.throws(() => new GasSimulation({ temperatureRange: [1, 1] }), /finite and increasing/);
+  assert.throws(() => new GasSimulation({ densityRange: [0, Infinity] }), /finite and increasing/);
+  gas.cleanup();
+}
+
+// Rolling prediction shrinks an oversized domain without excluding detached persistent gas.
+{
+  const gas = new GasSimulation({ bounds: new THREE.Box3(new THREE.Vector3(-16, -16, -16),
+    new THREE.Vector3(16, 16, 16)), boundsPadding: 0, automaticPadding: true });
+  const owner = new ParticleSystem({ emitters: [], renderers: [], modules: [gas] });
+  const grid = gas.getParticleSpatialGrid(owner);
+  grid.shrinkDelay = 0;
+  gas.occupiedGasBounds.set(new THREE.Vector3(-2, -2, -2), new THREE.Vector3(2, 2, 2));
+  grid.readParticleMetrics = async () => ({
+    bounds: new THREE.Box3(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1)), maxParticleSpeed: 1,
+    maxParticleVelocity: new THREE.Vector3(1, 1, 1),
+  });
+  gas.readAutomaticPadding = async () => new THREE.Vector3(0.5, 0.5, 0.5);
+  gas.lastBoundsRead = -Infinity;
+  gas.refreshBounds(grid, {});
+  await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+  assert.equal(gas.pendingBounds.bounds.getSize(new THREE.Vector3()).x, 4,
+    'existing four-unit gas support must not be forecast a second time');
+  assert(gas.pendingBounds.bounds.containsBox(gas.occupiedGasBounds));
+  assert(gas.estimateBuoyantTravel(1, 1, 0.5).frames <= 30);
+  owner.destroy();
+}
+
+// Vertical predictions must not become isotropic or acquire a second growth margin.
+{
+  const gas = new GasSimulation({ boundsPadding: 0, automaticPadding: true });
+  const owner = new ParticleSystem({ emitters: [], renderers: [], modules: [gas] });
+  const grid = gas.getParticleSpatialGrid(owner);
+  grid.readParticleMetrics = async () => ({
+    bounds: new THREE.Box3(new THREE.Vector3(-0.5, 0, -0.5), new THREE.Vector3(0.5, 3, 0.5)),
+    maxParticleSpeed: 1, maxParticleVelocity: new THREE.Vector3(0, 1, 0),
+  });
+  gas.occupiedGasBounds.set(new THREE.Vector3(-2, 0, -2), new THREE.Vector3(2, 5, 2));
+  gas.readAutomaticPadding = async () => new THREE.Vector3(0.1, 5, 0.1);
+  gas.lastBoundsRead = -Infinity;
+  gas.refreshBounds(grid, {});
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(gas.automaticPaddingDistance.toArray(), [0.1, 5, 0.1]);
+  assert.deepEqual(gas.pendingBounds.bounds.min.toArray(), [-8, -8, -8]);
+  assert.deepEqual(gas.pendingBounds.bounds.max.toArray(), [8, 8, 8]);
+  owner.destroy();
 }

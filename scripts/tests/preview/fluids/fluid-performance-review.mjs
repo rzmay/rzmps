@@ -10,7 +10,7 @@ let browser;
 try {
   browser = await puppeteer.launch({ headless: true, args: ['--enable-unsafe-webgpu'] });
   const results = [];
-  for (const example of (process.env.PERF_EXAMPLE ? [process.env.PERF_EXAMPLE] : ['gasVolume', 'flipFluid'])) {
+  for (const example of (process.env.PERF_EXAMPLE ? [process.env.PERF_EXAMPLE] : ['volumetricFire', 'flipFluid'])) {
     for (const grid of ['2,4', '3,4', '2,5']) {
       const page = await browser.newPage();
       page.setDefaultTimeout(180000);
@@ -96,17 +96,17 @@ try {
         const rayQuality = [];
         if (flip.readGridDiagnostics) {
           const volume = system.renderers.find(item => item.constructor.name === 'VolumeRenderer');
-          for (const steps of [40, 80, 160, 320]) for (const noiseStrength of [0, 0.7]) {
+          for (const steps of [40, 80, 160, 320]) for (const densityNoiseStrength of [0, 0.7]) {
             volume.steps = steps;
             volume.stepSizeMultiplier = 0.1;
-            volume.noiseStrength = noiseStrength;
+            volume.densityNoiseStrength = densityNoiseStrength;
             volume._update([], system);
             for (let i = 0; i < 3; i++) await renderer.renderAsync(scene, camera);
             await fence();
             const t = performance.now();
             for (let i = 0; i < 12; i++) await renderer.renderAsync(scene, camera);
             await fence();
-            rayQuality.push({ steps, noiseStrength, ms: (performance.now() - t) / 12 });
+            rayQuality.push({ steps, densityNoiseStrength, ms: (performance.now() - t) / 12 });
           }
         }
         return { warmupMs, updateMs, updateSubmitMs, renderMs, gridMs, gridSubmitMs, bytes, gridBytes,

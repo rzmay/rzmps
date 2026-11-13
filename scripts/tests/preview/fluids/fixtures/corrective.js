@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { WebGPURenderer } from 'three/webgpu';
-import { Fn, atomicStore, float, instanceIndex, uint, uniform, vec3, vec4 } from 'three/tsl';
-import { Emitter, GasSimulation, FLIPSimulation, ParticleSystem, FluidCollider } from '@rzmps/rzmps';
+import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
+import { Fn, atomicStore, float, instanceIndex, storage, uint, uniform, vec3, vec4 } from 'three/tsl';
+import { Emitter, GasSimulation, FLIPSimulation, ParticleSystem, FluidCollider, VolumeRenderer } from '@rzmps/rzmps';
 
 const renderer = new WebGPURenderer({ trackTimestamp: true });
 await renderer.init();
@@ -70,12 +70,76 @@ window.testGrowth = async () => {
     wallVelocity: (await read(gas.boundaryAttribute)).slice(gas.cellCount * 4),
     visualColor: (await read(gas.visualAttribute)).slice(gas.cellCount * 4) };
   const capacity = gas.volumeGrid.capacity;
-  gas.growBrickPool(renderer, 64);
-  const after = { density: await read(gas.densityAttributeA),
+  const previousBytes = gas.allocatedBytes;
+  const device = renderer.backend.device;
+  const supportsTimestamp = device.features.has('timestamp-query');
+  const queries = supportsTimestamp ? device.createQuerySet({ type: 'timestamp', count: 4 }) : null;
+  const resolve = supportsTimestamp ? device.createBuffer({ size: 32,
+    usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC }) : null;
+  const result = supportsTimestamp ? device.createBuffer({ size: 32,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }) : null;
+  const timerPipeline = supportsTimestamp ? device.createComputePipeline({ layout: 'auto', compute: {
+    module: device.createShaderModule({ code: `
+      @group(0) @binding(0) var<storage, read_write> marker: atomic<u32>;
+      @compute @workgroup_size(1) fn main() { atomicAdd(&marker, 1u); }
+    ` }), entryPoint: 'main' } }) : null;
+  const marker = supportsTimestamp ? device.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE }) : null;
+  const group = supportsTimestamp ? device.createBindGroup({ layout: timerPipeline.getBindGroupLayout(0),
+    entries: [{ binding: 0, resource: { buffer: marker } }] }) : null;
+  const stamp = (encoder, first) => {
+    const pass = encoder.beginComputePass({ timestampWrites: { querySet: queries,
+      beginningOfPassWriteIndex: first, endOfPassWriteIndex: first + 1 } });
+    pass.setPipeline(timerPipeline); pass.setBindGroup(0, group); pass.dispatchWorkgroups(1); pass.end();
+  };
+  const migrate = gas.poolAllocation.options.migrate;
+  gas.poolAllocation.options.migrate = (current, replacement) => {
+    const before = supportsTimestamp ? device.createCommandEncoder() : null;
+    if (before) {
+      stamp(before, 0);
+      device.queue.submit([before.finish()]);
+    }
+    migrate(current, replacement);
+    if (supportsTimestamp) {
+      const after = device.createCommandEncoder();
+      stamp(after, 2);
+      after.resolveQuerySet(queries, 0, 4, resolve, 0);
+      after.copyBufferToBuffer(resolve, 0, result, 0, 32);
+      device.queue.submit([after.finish()]);
+    }
+  };
+  const growStart = performance.now();
+  let ready = false;
+  const growth = gas.growBrickPool(renderer, 64).finally(() => { ready = true; });
+  const visibleFrames = [];
+  // Keep submitting display frames against current resources while replacement pipelines prepare.
+  while (!ready) {
+    const frameStart = performance.now();
+    await renderer.renderAsync(scene, camera);
+    visibleFrames.push(performance.now() - frameStart);
+    await new Promise(resolve => setTimeout(resolve, 16));
+  }
+  await growth;
+  const growthWallMs = performance.now() - growStart;
+  let migrationGPUIntervalMs = null;
+  if (supportsTimestamp) {
+    await result.mapAsync(GPUMapMode.READ);
+    const values = new BigUint64Array(result.getMappedRange());
+    migrationGPUIntervalMs = Number(values[2] - values[1]) / 1e6;
+    result.unmap(); queries.destroy(); resolve.destroy(); result.destroy(); marker.destroy();
+  }
+  gas.poolAllocation.options.migrate = migrate;
+  const growthMetrics = { ...gas.poolAllocation.metrics, growthWallMs, migrationGPUIntervalMs,
+    visibleFrames: visibleFrames.length, frameHitchesOver50ms: visibleFrames.filter(ms => ms > 50).length,
+    maximumFrameCpuMs: Math.max(0, ...visibleFrames), temporaryPeakBytes: previousBytes + gas.allocatedBytes };
+  const after = { density: await read(gas.densityCurrent.value ?? gas.densityAttributeA),
     velocity: await read(gas.velocityCurrentAttribute), pressure: await read(gas.pressureCurrentAttribute),
     wallVelocity: (await read(gas.boundaryAttribute)).slice(gas.cellCount * 4),
     visualColor: (await read(gas.visualAttribute)).slice(gas.cellCount * 4) };
-  return { capacity, next: gas.volumeGrid.capacity, firstUpdateCpuMs, firstUpdateFencedMs,
+  return { growthMetrics, capacity, next: gas.volumeGrid.capacity, firstUpdateCpuMs, firstUpdateFencedMs,
+    mismatchedFields: Object.keys(before).filter(key => {
+      const channels = key === 'pressure' ? 1 : 4;
+      return before[key].slice(0, count * channels).some((value, index) => value !== after[key][index]);
+    }),
     retained: Object.keys(before).every(key => {
     const channels = key === 'pressure' ? 1 : 4;
     return before[key].slice(0, count * channels).every((value, index) => value === after[key][index]);
@@ -170,7 +234,7 @@ window.testBoundary = async () => {
 };
 window.ready = true;
 
-window.testTransfer = async picRatio => {
+window.testTransfer = async (picRatio, resize = false) => {
   const flip = new FLIPSimulation({ bounds: new THREE.Box3(new THREE.Vector3(-1, -1, -1),
     new THREE.Vector3(1, 1, 1)), boundsPadding: 0, automaticPadding: false, adaptiveTimestep: false,
     spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 2 },
@@ -190,7 +254,7 @@ window.testTransfer = async picRatio => {
     const position = vec3(float(instanceIndex.mod(4)), float(instanceIndex.div(4).mod(4)),
       float(instanceIndex.div(16).mod(4))).sub(1.5).mul(0.15);
     particle.position.assign(position);
-    particle.velocity.assign(vec3(position.y.negate(), position.x, 0));
+    particle.velocity.assign(resize ? vec3(0.7, 0.2, 0) : vec3(position.y.negate(), position.x, 0));
     buffers.storage.storeParticle(particle);
   })().compute(buffers.count));
   liquid.benchmarks.start({ maxSamples: 64 });
@@ -198,9 +262,24 @@ window.testTransfer = async picRatio => {
   await renderer.backend.device.queue.onSubmittedWorkDone();
   await new Promise(resolve => setTimeout(resolve, 20));
   const metrics = flip.benchmarks.snapshot();
+  let resized;
+  if (resize) {
+    const before = (await liquid.selectiveReadback(64, ['velocity'])).filter(p => p.valid);
+    const previous = flip.bounds.clone();
+    // Deliberately stale pressure must not survive a world-to-grid remapping.
+    renderer.compute(flip.computeCells(index => { flip.pressureCurrent.element(index).assign(30); }));
+    flip.pressureIterations = 32;
+    flip.pendingBounds = { grid: flip.getParticleSpatialGrid(liquid), bounds: previous.clone().expandByScalar(1) };
+    liquid.advanceFrames(1, 1 / 120);
+    const after = (await liquid.selectiveReadback(64, ['velocity'])).filter(p => p.valid);
+    resized = { previousSide: previous.getSize(new THREE.Vector3()).x,
+      side: flip.bounds.getSize(new THREE.Vector3()).x,
+      before: before.reduce((sum, p) => sum + p.particle.velocity.length(), 0) / before.length,
+      after: after.reduce((sum, p) => sum + p.particle.velocity.length(), 0) / after.length };
+  }
   liquid.destroy();
   scene.remove(liquid);
-  return { picRatio, ...metrics };
+  return { picRatio, resized, ...metrics };
 };
 
 let boundaryHelper;
@@ -320,3 +399,60 @@ window.testSparseAllocation = async () => {
   grid.dispose(renderer);
   return { full, recycled, retained, empty };
 };
+
+window.testBoundaryRemoval = async () => {
+  const existing = [];
+  scene.traverse(object => { if (object instanceof FluidCollider) existing.push(object); });
+  existing.forEach(object => object.removeFromParent());
+  gas.explicitSpatialEffects = undefined;
+  const wall = FluidCollider.Box({}, 0.5, 1, 1);
+  scene.add(wall);
+  system.advanceFrames(1, 1 / 60);
+  const blocked = await gas.readBoundaryDiagnostics(renderer);
+  scene.remove(wall);
+  system.advanceFrames(1, 1 / 60);
+  const removed = await gas.readBoundaryDiagnostics(renderer);
+  const volume = new VolumeRenderer({ field: gas.getVolumeField() });
+  system.addRenderer(volume);
+  system.pause();
+  const time = system._elapsedTime, version = gas.getVolumeField().version;
+  volume.opacity = 0.41; volume.steps = 79; volume.colorByTemperature = null;
+  system.update();
+  const paused = { time, after: system._elapsedTime, version, afterVersion: gas.getVolumeField().version,
+    opacity: volume.gpuOpacity.value, steps: volume.gpuMaterialSteps, color: volume.colorByTemperature };
+  system._paused = false;
+  system.removeRenderer(volume); volume.destroy();
+  return { blocked, removed, paused };
+};
+
+window.testFractionalVisualCoverage = async () => {
+  const attribute = new StorageBufferAttribute(new Float32Array(gas.cellCount * 4), 4);
+  const output = storage(attribute, 'vec4', gas.cellCount);
+  renderer.compute(gas.computeCells(index => {
+    gas.densityCurrent.element(index).assign(vec4(2, 6, 0, 0));
+    gas.velocityCurrent.element(index).assign(vec4(1, 0, 0, 0));
+    const coverage = index.mod(3).equal(0).select(0, index.mod(3).equal(1).select(0.25, 1));
+    gas.faceOpenness.element(index).assign(vec4(1, 1, 1, coverage));
+  }));
+  const before = await read(gas.densityCurrent.value);
+  renderer.compute(gas.computeCells(index => {
+    const physical = gas.densityCurrent.element(index);
+    output.element(index).assign(gas.outputParameters(index, physical.x, physical.y));
+  }));
+  const visual = await read(attribute), after = await read(gas.densityCurrent.value);
+  let empty = 0, partial = 0, full = 0, invalidTemperature = 0;
+  for (let i = 0; i < gas.cellCount; i++) {
+    if (before[i * 4] !== 2) continue;
+    const density = visual[i * 4];
+    if (density === 0) empty++;
+    else if (density === 0.5) partial++;
+    else if (density === 2) full++;
+    if (density > 0 && Math.abs(visual[i * 4 + 1] / density - 3) > 1e-6) invalidTemperature++;
+  }
+  const physicsUnchanged = before.every((value, index) => value === after[index]);
+  attribute.dispose();
+  return { empty, partial, full, invalidTemperature, physicsUnchanged };
+};
+
+window.debugBehavior = { renderer, scene, camera, THREE, StorageBufferAttribute,
+  tsl: { Fn, storage, vec3, vec4, float, uint } };

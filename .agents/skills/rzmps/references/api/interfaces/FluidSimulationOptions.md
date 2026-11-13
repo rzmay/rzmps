@@ -75,7 +75,7 @@ boundsPolicy:
   | FluidBoundsPolicy;
 ```
 
-Behavior at the finite maxBounds cap, not intermediate adaptive edges. Defaults to Ballistic.
+Behavior at the finite spatialGridOptions.maxBounds cap, not intermediate adaptive edges. Defaults to Ballistic.
 Contain retains a reached cap instead of shrinking away closed field walls.
 
 ***
@@ -199,19 +199,6 @@ optional initializeParticleGPU?: GPUParticleInitializer;
 #### Inherited from
 
 [`ModuleOptions`](ModuleOptions.md).[`initializeParticleGPU`](ModuleOptions.md#initializeparticlegpu)
-
-***
-
-<a id="maxbounds"></a>
-
-### maxBounds
-
-```ts
-maxBounds: number;
-```
-
-Maximum domain side length in simulation units. Infinity leaves growth unlimited.
-Power-of-two grids round this limit down. Particle behavior is selected by boundsPolicy.
 
 ***
 
@@ -406,11 +393,11 @@ negative is permanent before movement,
 
 ```ts
 optional requireSpatialEffects?:
-  | SpatialEffectConstructor<SpatialEffect>
-  | SpatialEffectConstructor<SpatialEffect>[];
+  | SpatialEffectRequirement
+  | SpatialEffectRequirement[];
 ```
 
-Constructors selecting scene effects for this module during prepare.
+Constructors discover scene matches; instances include that exact effect directly.
 
 #### Inherited from
 

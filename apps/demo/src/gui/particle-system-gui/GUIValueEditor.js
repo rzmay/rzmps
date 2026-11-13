@@ -170,6 +170,11 @@ export class GUIValueEditor {
         seen = new WeakSet(),
     ) {
         const value = object[key];
+        // Runtime GPU/scene objects are not configuration. Never expand their storage or graph links.
+        if (value && typeof value === 'object' && (
+            ArrayBuffer.isView(value) || value.isBufferAttribute || value.isObject3D || value.isNode
+            || value.isTexture
+        )) return;
         if (typeof value === 'function') {
             const state = { value: 'ƒ(t) — function driven' };
             folder.add(state, 'value').name(label).disable();
@@ -193,6 +198,8 @@ export class GUIValueEditor {
             return;
         }
         if (Array.isArray(value)) {
+            if (seen.has(value)) return;
+            seen.add(value);
             const arrayFolder = folder.addFolder(label);
             arrayFolder.close();
 

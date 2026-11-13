@@ -196,3 +196,19 @@ assert.equal(unfilteredBoids.octree.root.aggregate.particleAffectors.get(0).coun
 
 system.destroy();
 console.log('particle-spatial-grid tests passed');
+
+// The grid owns the cap for externally supplied bounds as well as automatic growth.
+const cappedGrid = new ParticleSpatialGrid({ bounds: configuredBounds, cubicBounds: true, maxBounds: 10 });
+assert.deepEqual(cappedGrid.bounds.getSize(new THREE.Vector3()).toArray(), [8, 8, 8]);
+cappedGrid.setBounds(new THREE.Box3(new THREE.Vector3(-32, -32, -32), new THREE.Vector3(32, 32, 32)));
+assert.deepEqual(cappedGrid.bounds.getSize(new THREE.Vector3()).toArray(), [8, 8, 8]);
+cappedGrid.maxBounds = 4;
+assert.deepEqual(cappedGrid.bounds.getSize(new THREE.Vector3()).toArray(), [4, 4, 4]);
+cappedGrid.setOptions({ powerOfTwoBounds: false, maxBounds: 3 });
+assert.deepEqual(cappedGrid.bounds.getSize(new THREE.Vector3()).toArray(), [3, 3, 3]);
+assert.throws(() => new ParticleSpatialGrid({ maxBounds: 0 }), /maxBounds/);
+assert.throws(() => { cappedGrid.maxBounds = NaN; }, /maxBounds/);
+const capOwner = new ParticleSystem({ emitters: [], renderers: [] });
+assert.notEqual(capOwner.acquireParticleSpatialGrid({ maxBounds: 8 }),
+  capOwner.acquireParticleSpatialGrid({ maxBounds: 16 }), 'different caps cannot share a managed grid');
+capOwner.destroy();

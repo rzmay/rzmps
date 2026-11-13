@@ -23,6 +23,7 @@ import {
   max,
   storage,
   uint,
+  uniform,
   vec3,
   vec4,
 } from 'three/tsl';
@@ -62,6 +63,9 @@ enum BoundsReduction {
   ShrinkFrames,
   MaximumParticleRadius,
   MaximumParticleSpeed,
+  MaximumVelocityX,
+  MaximumVelocityY,
+  MaximumVelocityZ,
 }
 const REDUCTION_WORDS = enumValueCount(BoundsReduction);
 const DEFAULT_BOUNDS = new THREE.Box3(
@@ -84,6 +88,8 @@ export interface ParticleSpatialGridOptions extends SpatialGridOptions {
   centeredAtOrigin: boolean;
   /** Expands GPU bounds when live particles approach the configured volume. Defaults to true. */
   autoExpand: boolean;
+  /** Maximum side length of normalized grid bounds; Infinity (default) leaves growth uncapped. */
+  maxBounds: number;
   /** Shrinks an oversized power-of-two volume after a stable delay. Defaults to true. */
   autoShrink: boolean;
   /** Stable frames required before automatic shrinking. Defaults to 600. */
@@ -128,6 +134,8 @@ export interface ParticleSpatialGridDiagnostics {
 export interface ParticleSpatialGridMetrics {
   bounds: THREE.Box3;
   maxParticleSpeed: number;
+  /** Per-axis absolute physical velocity, including the particle speed multiplier. */
+  maxParticleVelocity: THREE.Vector3;
 }
 
 /**
@@ -146,6 +154,15 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
   expansionHysteresis: number;
   timeQuality: number;
   maxQuerySteps: number;
+
+  /** Maximum grid side length. Changing the ceiling immediately normalizes the current CPU bounds. */
+  get maxBounds(): number { return this._maxBounds; }
+  set maxBounds(value: number) {
+    if (!(value > 0)) throw new RangeError('maxBounds must be positive.');
+    this._maxBounds = value;
+    this.updateMaximumBounds();
+    this.setBounds(this.bounds);
+  }
 
   get resourceVersion(): number { return this.version; }
   /** Maintained depths, normalized and including the mandatory finest neighbor index. */
@@ -177,6 +194,8 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
   private heads?: AtomicUintStorage;
   private coordinates?: PackedIntStorage;
   private gpuBounds?: PackedFloatStorage;
+  private _maxBounds = Infinity;
+  private readonly maximumBoundsNode = uniform(3.402823e38);
   private reductions?: AtomicUintStorage;
   private diagnostics?: AtomicUintStorage;
 
@@ -190,11 +209,14 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
     this.powerOfTwoBounds = options.powerOfTwoBounds ?? true;
     this.cubicBounds = options.cubicBounds ?? false;
     this.centeredAtOrigin = options.centeredAtOrigin ?? true;
+    this._maxBounds = options.maxBounds ?? Infinity;
+    this.updateMaximumBounds();
     this.bounds = ParticleSpatialGrid.normalizeBounds(
       options.bounds ?? DEFAULT_BOUNDS,
       this.powerOfTwoBounds,
       this.cubicBounds,
       this.centeredAtOrigin,
+      this.maxBounds,
     );
     this.autoExpand = options.autoExpand ?? true;
     this.autoShrink = options.autoShrink ?? true;
@@ -221,6 +243,10 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
 
   /** Applies grid options and rebuilds structural GPU work on the next update. */
   setOptions(options: Partial<Omit<ParticleSpatialGridOptions, 'bounds'>>): this {
+    if (options.maxBounds !== undefined) {
+      if (!(options.maxBounds > 0)) throw new RangeError('maxBounds must be positive.');
+      this._maxBounds = options.maxBounds;
+    }
     if (options.levels !== undefined) this.levelsInput = options.levels;
     if (options.brickSubdivisions !== undefined) {
       this.brickSubdivisions = options.brickSubdivisions;
@@ -245,6 +271,7 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
     if (options.maxQuerySteps !== undefined) {
       this.maxQuerySteps = Math.max(0, Math.floor(options.maxQuerySteps));
     }
+    this.updateMaximumBounds();
     this.bounds.copy(this.resolveBounds(this.bounds));
     this.lastBufferVersion = -1;
     this.version += 1;
@@ -479,11 +506,18 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
           const coordinate = ivec3(int(gridX), int(gridY), int(gridZ));
           const bucket = this.hashCoordinateNode(coordinate);
           const encoded = atomicLoad(this.heads!.element(bucket)).toVar('spatialGridLink');
+          const chainSteps = uint(0).toVar('spatialGridChainSteps');
 
           Loop(() => {
             If(encoded.equal(uint(EMPTY_LINK)), () => {
               Break();
             });
+            // A valid bucket visits each slot at most once. This integrity bound is exact,
+            // independent of the optional query-quality budget, and prevents cyclic GPU hangs.
+            If(chainSteps.greaterThanEqual(uint(this.capacity)), () => {
+              Break();
+            });
+            chainSteps.addAssign(1);
             const slot = encoded.sub(1).toVar('spatialGridSlot');
             If(slot.greaterThanEqual(uint(this.capacity)), () => {
               Break();
@@ -536,8 +570,12 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
   setBoundsNode(minimum: Node<'vec3'>, maximum: Node<'vec3'>): void {
     this.assertReady();
     const size = maximum.sub(minimum).max(vec3(1e-6));
-    this.gpuBounds!.element(0).assign(vec4(minimum.sub(size.mul(0.001)), 0));
-    this.gpuBounds!.element(1).assign(vec4(minimum.add(size.mul(1.001)), 0));
+    const lower = minimum.sub(size.mul(0.001));
+    const upper = minimum.add(size.mul(1.001));
+    const center = lower.add(upper).mul(0.5).toVar();
+    const half = upper.sub(lower).min(vec3(this.maximumBoundsNode)).mul(0.5).toVar();
+    this.gpuBounds!.element(0).assign(vec4(center.sub(half), 0));
+    this.gpuBounds!.element(1).assign(vec4(center.add(half), 0));
   }
 
   /** Exact nearest neighbor, pruning hash cells against the current best distance.
@@ -559,11 +597,17 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
 
       If(delta.lengthSq().lessThanEqual(best), () => {
         const encoded = atomicLoad(this.heads!.element(this.hashCoordinateNode(cell))).toVar();
+        const chainSteps = uint(0).toVar();
 
         Loop(() => {
           If(encoded.equal(uint(0)), () => { Break(); });
+          If(chainSteps.greaterThanEqual(uint(this.capacity)), () => {
+            Break();
+          });
+          chainSteps.addAssign(1);
 
           const slot = encoded.sub(1).toVar();
+          If(slot.greaterThanEqual(uint(this.capacity)), () => { Break(); });
           const record = this.coordinates!.element(slot);
           const p = this.currentBuffers!.storage.createParticle(slot);
           const exact = record.x.equal(cell.x).and(record.y.equal(cell.y)).and(record.z.equal(cell.z));
@@ -712,7 +756,7 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
     }
     const values = new Uint32Array(await renderer.getArrayBufferAsync(this.reductionAttribute));
     if (values[BoundsReduction.HasParticles] === 0) {
-      return { bounds: new THREE.Box3(), maxParticleSpeed: 0 };
+      return { bounds: new THREE.Box3(), maxParticleSpeed: 0, maxParticleVelocity: new THREE.Vector3() };
     }
     const radius = unorderedFloatBits(values[BoundsReduction.MaximumParticleRadius]);
     return {
@@ -731,6 +775,11 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
       maxParticleSpeed: Math.max(
         0,
         unorderedFloatBits(values[BoundsReduction.MaximumParticleSpeed]),
+      ),
+      maxParticleVelocity: new THREE.Vector3(
+        unorderedFloatBits(values[BoundsReduction.MaximumVelocityX]),
+        unorderedFloatBits(values[BoundsReduction.MaximumVelocityY]),
+        unorderedFloatBits(values[BoundsReduction.MaximumVelocityZ]),
       ),
     };
   }
@@ -813,8 +862,8 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
         If(instanceIndex.equal(uint(BoundsReduction.MaximumParticleRadius)), () => {
           atomicStore(this.reductions!.element(BoundsReduction.MaximumParticleRadius), uint(0));
         });
-        If(instanceIndex.equal(uint(BoundsReduction.MaximumParticleSpeed)), () => {
-          atomicStore(this.reductions!.element(BoundsReduction.MaximumParticleSpeed), uint(0));
+        If(instanceIndex.greaterThanEqual(uint(BoundsReduction.MaximumParticleSpeed)), () => {
+          atomicStore(this.reductions!.element(instanceIndex), uint(0));
         });
       });
 
@@ -840,10 +889,16 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
           this.reductions!.element(BoundsReduction.MaximumParticleRadius),
           orderedFloatNode(radius),
         );
+        // Render snapshots carry velocity without a separate speed channel; simulation views have both.
+        const velocity = particle.velocity.mul(particle.speed ?? 1).abs();
         atomicMax(
           this.reductions!.element(BoundsReduction.MaximumParticleSpeed),
-          orderedFloatNode(particle.velocity.length()),
+          orderedFloatNode(velocity.length()),
         );
+        (['x', 'y', 'z'] as const).forEach((axis, index) => {
+          atomicMax(this.reductions!.element(BoundsReduction.MaximumVelocityX + index),
+            orderedFloatNode(velocity[axis]));
+        });
       });
     }, range).setName('rzmps.grid.reduce');
 
@@ -960,12 +1015,16 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
 
     const finalizeRadius = Fn(() => {
       const boundsMin = this.gpuBounds!.element(0);
+      const boundsMax = this.gpuBounds!.element(1);
+      const center = boundsMin.xyz.add(boundsMax.xyz).mul(0.5).toVar();
+      const half = boundsMax.xyz.sub(boundsMin.xyz).min(vec3(this.maximumBoundsNode)).mul(0.5).toVar();
       this.gpuBounds!.element(0).assign(vec4(
-        boundsMin.xyz,
+        center.sub(half),
         unorderedFloatNode(atomicLoad(
           this.reductions!.element(BoundsReduction.MaximumParticleRadius),
         )),
       ));
+      this.gpuBounds!.element(1).assign(vec4(center.add(half), boundsMax.w));
     })().compute(1);
 
     const insert = this.computeParticles(particle => {
@@ -1014,13 +1073,15 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
       .bitAnd(uint(this.hashCapacity - 1));
   }
 
-  private resolveBounds(bounds: THREE.Box3): THREE.Box3 {
+  /** Resolve the final normalized, capped domain for externally supplied support bounds. */
+  resolveBounds(bounds: THREE.Box3): THREE.Box3 {
     const resolved = bounds.isEmpty() ? DEFAULT_BOUNDS : bounds;
     return ParticleSpatialGrid.normalizeBounds(
       resolved,
       this?.powerOfTwoBounds ?? false,
       this?.cubicBounds ?? false,
       this?.centeredAtOrigin ?? false,
+      this.maxBounds,
     );
   }
 
@@ -1031,11 +1092,19 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
       this.powerOfTwoBounds,
       this.cubicBounds,
       this.centeredAtOrigin,
+      this.maxBounds,
     );
     const array = this.boundsAttribute.array as Float32Array;
     array.set([resolved.min.x, resolved.min.y, resolved.min.z, 0], 0);
     array.set([resolved.max.x, resolved.max.y, resolved.max.z, 0], 4);
     this.boundsAttribute.needsUpdate = true;
+  }
+
+  private updateMaximumBounds(): void {
+    if (!(this._maxBounds > 0)) throw new RangeError('maxBounds must be positive.');
+    const limit = this.powerOfTwoBounds && Number.isFinite(this._maxBounds)
+      ? 2 ** Math.floor(Math.log2(this._maxBounds)) : this._maxBounds;
+    this.maximumBoundsNode.value = Number.isFinite(limit) ? limit : 3.402823e38;
   }
 
   private assertReady(): void {

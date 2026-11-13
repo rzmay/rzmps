@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { Color, Vector3 } from 'three';
 import { float, uniform, vec3 } from 'three/tsl';
 import {
-  sampleDynamicValue, maxDynamicNumber, minDynamicNumber, maxDynamicVector, minDynamicVector,
+  sampleDynamicValue, averageDynamicNumber, medianDynamicNumber, maxDynamicNumber, minDynamicNumber, maxDynamicVector, minDynamicVector,
   maxDynamicColor, minDynamicColor, Emitter, ParticleSystem,
 } from '../../build/index.mjs';
 
@@ -65,4 +65,17 @@ try {
   emitter.initialValues.lifetime = () => [2, 4];
   assert.equal(emitter.getMaxLifetime(), 4);
 } finally { ParticleSystem.Settings.GPU_DYNAMIC_VALUE_RESOLUTION = resolution; }
-console.log('Shared dynamic reductions, numeric/vector/color extrema, functions, nodes, isolation and lifetime sampling passed.');
+
+assert.equal(averageDynamicNumber([2, 10]), 6);
+assert.equal(medianDynamicNumber(new Set([1, 3, 100])), 3);
+assert.equal(medianDynamicNumber([2, 10]), 6);
+assert(Math.abs(averageDynamicNumber(t => t === 0 ? 100 : 0, 4) - 25) < 1e-10);
+assert.equal(medianDynamicNumber(t => t === 0 ? 100 : 0, 4), 0);
+assert.equal(averageDynamicNumber(uniform(4)), 4);
+assert.equal(medianDynamicNumber(new Set(), 16, 7), 7);
+assert.equal(averageDynamicNumber(() => { throw new Error('unreadable'); }, 16, 7), 7);
+assert.equal(averageDynamicNumber(vec3(1), 16, 7), 7);
+assert.equal(medianDynamicNumber(Infinity, 16, 7), 7);
+assert.equal(averageDynamicNumber(cyclic), 2);
+
+console.log('Dynamic extrema, averages, medians, functions, nodes and lifetime sampling passed.');

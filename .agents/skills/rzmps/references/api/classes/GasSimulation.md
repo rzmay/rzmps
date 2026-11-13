@@ -120,8 +120,10 @@ automaticPadding: boolean;
 ### automaticPaddingDistance
 
 ```ts
-automaticPaddingDistance: number = 0;
+readonly automaticPaddingDistance: Vector3;
 ```
+
+Predicted distance on each axis, applied to source bounds before retaining existing field support.
 
 #### Inherited from
 
@@ -251,6 +253,26 @@ colorDissipation: number;
 
 ***
 
+<a id="colordissipationbydensity"></a>
+
+### colorDissipationByDensity?
+
+```ts
+optional colorDissipationByDensity?: ValueByParameter<number>;
+```
+
+***
+
+<a id="colordissipationbytemperature"></a>
+
+### colorDissipationByTemperature?
+
+```ts
+optional colorDissipationByTemperature?: ValueByParameter<number>;
+```
+
+***
+
 <a id="colorfield"></a>
 
 ### colorField
@@ -315,6 +337,36 @@ densityCutoff: number;
 
 ```ts
 densityDissipation: number;
+```
+
+***
+
+<a id="densitydissipationbydensity"></a>
+
+### densityDissipationByDensity?
+
+```ts
+optional densityDissipationByDensity?: ValueByParameter<number>;
+```
+
+***
+
+<a id="densitydissipationbytemperature"></a>
+
+### densityDissipationByTemperature?
+
+```ts
+optional densityDissipationByTemperature?: ValueByParameter<number>;
+```
+
+***
+
+<a id="densityrange"></a>
+
+### densityRange
+
+```ts
+densityRange: [number, number];
 ```
 
 ***
@@ -453,20 +505,6 @@ maxActiveBricks: number;
 
 ***
 
-<a id="maxbounds"></a>
-
-### maxBounds
-
-```ts
-maxBounds: number;
-```
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`maxBounds`](FluidSimulation.md#maxbounds)
-
-***
-
 <a id="maxfluidsubsteps"></a>
 
 ### maxFluidSubsteps
@@ -506,36 +544,6 @@ modifyGPU: ModuleGPUUpdate;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`modifyGPU`](FluidSimulation.md#modifygpu)
-
-***
-
-<a id="noisefrequency"></a>
-
-### noiseFrequency
-
-```ts
-noiseFrequency: number;
-```
-
-***
-
-<a id="noiseoctaves"></a>
-
-### noiseOctaves
-
-```ts
-noiseOctaves: number;
-```
-
-***
-
-<a id="noisespeed"></a>
-
-### noiseSpeed
-
-```ts
-noiseSpeed: number;
-```
 
 ***
 
@@ -724,7 +732,7 @@ priority: Priority = Priority.Permanent;
 ### requireSpatialEffects?
 
 ```ts
-optional requireSpatialEffects?: SpatialEffectConstructor<SpatialEffect>[];
+optional requireSpatialEffects?: SpatialEffectRequirement[];
 ```
 
 #### Inherited from
@@ -815,20 +823,6 @@ optional spatialEffectFilter?: (spatialEffect) => boolean;
 
 ***
 
-<a id="spatialeffects"></a>
-
-### spatialEffects
-
-```ts
-spatialEffects: SpatialEffect[] = [];
-```
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`spatialEffects`](FluidSimulation.md#spatialeffects)
-
-***
-
 <a id="spatialgridoptions"></a>
 
 ### spatialGridOptions?
@@ -857,22 +851,32 @@ optional tags?: string[];
 
 ***
 
-<a id="temperaturecolor"></a>
-
-### temperatureColor?
-
-```ts
-optional temperatureColor?: ValueByParameter<Color>;
-```
-
-***
-
 <a id="temperaturedissipation"></a>
 
 ### temperatureDissipation
 
 ```ts
 temperatureDissipation: number;
+```
+
+***
+
+<a id="temperaturedissipationbydensity"></a>
+
+### temperatureDissipationByDensity?
+
+```ts
+optional temperatureDissipationByDensity?: ValueByParameter<number>;
+```
+
+***
+
+<a id="temperaturedissipationbytemperature"></a>
+
+### temperatureDissipationByTemperature?
+
+```ts
+optional temperatureDissipationByTemperature?: ValueByParameter<number>;
 ```
 
 ***
@@ -897,12 +901,82 @@ temperatureRange: [number, number];
 
 ***
 
-<a id="turbulencestrength"></a>
+<a id="turbulencenoisefrequency"></a>
 
-### turbulenceStrength
+### turbulenceNoiseFrequency
 
 ```ts
-turbulenceStrength: number;
+turbulenceNoiseFrequency: number;
+```
+
+***
+
+<a id="turbulencenoisefrequencybydensity"></a>
+
+### turbulenceNoiseFrequencyByDensity?
+
+```ts
+optional turbulenceNoiseFrequencyByDensity?: ValueByParameter<number>;
+```
+
+***
+
+<a id="turbulencenoisefrequencybytemperature"></a>
+
+### turbulenceNoiseFrequencyByTemperature?
+
+```ts
+optional turbulenceNoiseFrequencyByTemperature?: ValueByParameter<number>;
+```
+
+***
+
+<a id="turbulencenoiseoctaves"></a>
+
+### turbulenceNoiseOctaves
+
+```ts
+turbulenceNoiseOctaves: number;
+```
+
+***
+
+<a id="turbulencenoisespeed"></a>
+
+### turbulenceNoiseSpeed
+
+```ts
+turbulenceNoiseSpeed: number;
+```
+
+***
+
+<a id="turbulencenoisestrength"></a>
+
+### turbulenceNoiseStrength
+
+```ts
+turbulenceNoiseStrength: number;
+```
+
+***
+
+<a id="turbulencenoisestrengthbydensity"></a>
+
+### turbulenceNoiseStrengthByDensity?
+
+```ts
+optional turbulenceNoiseStrengthByDensity?: ValueByParameter<number>;
+```
+
+***
+
+<a id="turbulencenoisestrengthbytemperature"></a>
+
+### turbulenceNoiseStrengthByTemperature?
+
+```ts
+optional turbulenceNoiseStrengthByTemperature?: ValueByParameter<number>;
 ```
 
 ***
@@ -945,6 +1019,26 @@ velocityDissipation: number;
 
 ***
 
+<a id="velocitydissipationbydensity"></a>
+
+### velocityDissipationByDensity?
+
+```ts
+optional velocityDissipationByDensity?: ValueByParameter<number>;
+```
+
+***
+
+<a id="velocitydissipationbytemperature"></a>
+
+### velocityDissipationByTemperature?
+
+```ts
+optional velocityDissipationByTemperature?: ValueByParameter<number>;
+```
+
+***
+
 <a id="velocitypaddinglookahead"></a>
 
 ### velocityPaddingLookahead
@@ -973,6 +1067,26 @@ velocitySourceStrength: number;
 
 ```ts
 vorticityStrength: number;
+```
+
+***
+
+<a id="vorticitystrengthbydensity"></a>
+
+### vorticityStrengthByDensity?
+
+```ts
+optional vorticityStrengthByDensity?: ValueByParameter<number>;
+```
+
+***
+
+<a id="vorticitystrengthbytemperature"></a>
+
+### vorticityStrengthByTemperature?
+
+```ts
+optional vorticityStrengthByTemperature?: ValueByParameter<number>;
 ```
 
 ***
@@ -1188,6 +1302,78 @@ readonly `string`[]
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`selectedEventNames`](FluidSimulation.md#selectedeventnames)
+
+***
+
+<a id="spatialeffects"></a>
+
+### spatialEffects
+
+#### Get Signature
+
+```ts
+get spatialEffects(): SpatialEffectCollection;
+```
+
+##### Returns
+
+[`SpatialEffectCollection`](SpatialEffectCollection.md)
+
+#### Set Signature
+
+```ts
+set spatialEffects(effects): void;
+```
+
+##### Parameters
+
+###### effects
+
+[`SpatialEffect`](SpatialEffect.md)[]
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+FluidSimulation.spatialEffects
+```
+
+***
+
+<a id="supportforcefields"></a>
+
+### supportForceFields
+
+#### Get Signature
+
+```ts
+get supportForceFields(): boolean;
+```
+
+Virtual shorthand for editing the force-field constructor in requireSpatialEffects.
+
+##### Returns
+
+`boolean`
+
+#### Set Signature
+
+```ts
+set supportForceFields(enabled): void;
+```
+
+##### Parameters
+
+###### enabled
+
+`boolean`
+
+##### Returns
+
+`void`
 
 ***
 
@@ -1685,7 +1871,7 @@ Prepares shared work once per system update; the base implementation collects ma
 
 `void`
 
-#### Inherited from
+#### Overrides
 
 [`FluidSimulation`](FluidSimulation.md).[`prepare`](FluidSimulation.md#prepare)
 
@@ -1968,7 +2154,7 @@ static padBoundsByDistance(bounds, distance): Box3;
 
 ##### distance
 
-`number`
+`number` \| `Vector3`
 
 #### Returns
 

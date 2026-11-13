@@ -26,3 +26,5 @@
 - [Stylized Depth](examples/./stylizedDepth.md) — Depth-based color, scale, speed, rotation, and velocity modules for stylized perspective effects. Preset by [rzmay](https://github.com/rzmay).
 - [Suzanne](examples/./suzanne.md) — Mesh-surface emission from a model with lit sprite rendering. Preset by [rzmay](https://github.com/rzmay).
 - [Suzanne Instances](examples/./suzanneInstances.md) — Mesh instancing with Suzanne particles and randomized transforms. Preset by [rzmay](https://github.com/rzmay).
+- [Volumetric Fire](examples/./volumetricFire.md) — Flickering volumetric flames, cooling smoke, particle lights and secondary heat distortion. Preset by [rzmay](https://github.com/rzmay).
+- [Volumetric Smoke](examples/./volumetricSmoke.md) — The original rolling Gas Volume flow, with continuous warm-gray smoke and a subtle reddish tint. Preset by [rzmay](https://github.com/rzmay).

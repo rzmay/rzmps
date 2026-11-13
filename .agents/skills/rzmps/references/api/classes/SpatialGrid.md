@@ -197,7 +197,8 @@ static normalizeBounds(
    bounds,
    powerOfTwo,
    cubic?,
-   centeredAtOrigin?
+   centeredAtOrigin?,
+   maxBounds?
 ): Box3;
 ```
 
@@ -218,6 +219,10 @@ static normalizeBounds(
 ##### centeredAtOrigin?
 
 `boolean` = `false`
+
+##### maxBounds?
+
+`number` = `Infinity`
 
 #### Returns
 

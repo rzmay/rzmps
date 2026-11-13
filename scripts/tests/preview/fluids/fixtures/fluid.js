@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
-import { Fn, If, float, instanceIndex, storage, uint, vec3, vec4 } from 'three/tsl';
+import { Fn, If, float, instanceIndex, storage, uint, vec3, vec4, ivec4 } from 'three/tsl';
+import { examples } from '../../../../../examples/index.js';
 import { experimentalExamples } from '../../../../../examples/experimental/index.js';
 import createScene from '../../../../../examples/scenes/fluidTeapot.js';
 import createCheckerboard from '../../../../../examples/scenes/checkerboard.js';
@@ -8,7 +9,10 @@ import createGasFlow from '../../../../../examples/scenes/gasFlow.js';
 import { Benchmarks, FluidCollider } from '@rzmps/rzmps';
 
 const startupStart = performance.now();
-const renderer = new WebGPURenderer({ trackTimestamp: new URLSearchParams(location.search).has('profile') });
+const renderer = new WebGPURenderer({
+  antialias: new URLSearchParams(location.search).has('antialias'),
+  trackTimestamp: new URLSearchParams(location.search).has('profile'),
+});
 renderer.setSize(800, 600);
 document.body.append(renderer.domElement);
 await renderer.init();
@@ -30,7 +34,7 @@ const reviewBricks = new URLSearchParams(location.search).get('reviewBricks');
 const reviewParticles = new URLSearchParams(location.search).get('reviewParticles');
 const measureStartup = new URLSearchParams(location.search).has('measureStartup');
 const constructorStart = performance.now();
-const system = await experimentalExamples.find(({ id }) => id === example).create({
+const system = await [...examples, ...experimentalExamples].find(({ id }) => id === example).create({
   ...(reviewBricks ? { maxActiveBricks: Number(reviewBricks) } : {}),
   ...(reviewGrid ? { spatialGridOptions: {
     brickSubdivisions: reviewGrid[0], cellSubdivisions: reviewGrid[1],
@@ -39,7 +43,7 @@ const system = await experimentalExamples.find(({ id }) => id === example).creat
   ...(fixedGas ? {
   bounds: new THREE.Box3(new THREE.Vector3(-8, -8, -8), new THREE.Vector3(8, 8, 8)),
   boundsPadding: 0,
-  maxBounds: 16,
+  spatialGridOptions: { maxBounds: 16 },
   automaticPadding: false,
   } : {}),
 });
@@ -152,7 +156,8 @@ const compute = renderer.compute.bind(renderer);
 if (measureStartup) renderer.compute = function (nodes, ...args) {
   const start = performance.now();
   const result = compute(nodes, ...args);
-  firstDispatches.push({ name: Array.isArray(nodes) ? 'batch' : nodes.name, stage: computeStage, phase: startupPhase, ms: performance.now() - start });
+  firstDispatches.push({ name: Array.isArray(nodes) ? 'batch' : nodes.name,
+    stage: computeStage, phase: startupPhase, ms: performance.now() - start });
   return result;
 };
 const renderStart = performance.now();
@@ -162,7 +167,16 @@ let preparationMs = 0;
 if (measureStartup && new URLSearchParams(location.search).has('prepareStartup')) {
   startupPhase = 'preparation';
   const start = performance.now();
-  await system.prepare(renderer);
+  const preparing = system.prepare(renderer);
+  if (new URLSearchParams(location.search).has('renderDuringPreparation')) {
+    let done = false;
+    void preparing.finally(() => { done = true; });
+    while (!done) {
+      await renderer.renderAsync(scene, camera);
+      await new Promise(resolve => setTimeout(resolve, 16));
+    }
+  }
+  await preparing;
   preparationMs = performance.now() - start;
 }
 startupPhase = 'firstUpdate';
@@ -297,10 +311,12 @@ window.runFrames = async (frames, dt = 1 / 60) => {
   let field;
   if (flip.densityCurrent) {
     const values = await readField(flip.densityCurrent.value);
-    let sum = 0, peak = 0, heat = 0, centroidX = 0;
+    let sum = 0, peak = 0, heat = 0, centroidX = 0, centroidY = 0;
     for (let i = 0; i < values.length; i += 4) {
       sum += values[i];
       centroidX += values[i] * (flip.bounds.min.x + (i / 4 % flip.resolution + 0.5) * flip.cellSize);
+      centroidY += values[i] * (flip.bounds.min.y
+        + (Math.floor(i / 4 / flip.resolution) % flip.resolution + 0.5) * flip.cellSize);
       peak = Math.max(peak, values[i]);
       heat += values[i + 1];
     }
@@ -340,7 +356,7 @@ window.runFrames = async (frames, dt = 1 / 60) => {
         expectedSum += expected;
       }
     }
-    field = { sum, peak, heat, centroidX: centroidX / Math.max(sum, 1e-6),
+    field = { sum, peak, heat, centroidY: centroidY / Math.max(sum, 1e-6), centroidX: centroidX / Math.max(sum, 1e-6),
       rmsSpeed: Math.sqrt(energy / Math.max(sum, 1e-6)),
       coolSpeed: Math.sqrt(coolEnergy / Math.max(coolDensity, 1e-6)), coolDensity,
       negative, nonfinite, minTemperature, maxTemperature, maxColor,
@@ -369,7 +385,7 @@ window.seedGas = (kind = 'rotating') => {
   flip.externalForce.set(0, 0, 0);
   flip.buoyancy = 0;
   flip.weight = 0;
-  flip.turbulenceStrength = 0;
+  flip.turbulenceNoiseStrength = 0;
   flip.velocityDissipation = 0;
   if (gaussian) {
     flip.densityDissipation = 0;
@@ -407,11 +423,10 @@ window.addGasWall = addGasWall;
 window.seedGasSource = (remaining = 1, alpha = 1) => {
   system.emitters.forEach(emitter => { emitter.rate = 0; emitter.rateOverDistance = 0; });
   flip.externalForce.set(0, 0, 0);
-  flip.buoyancy = flip.weight = flip.turbulenceStrength = flip.vorticityStrength = 0;
+  flip.buoyancy = flip.weight = flip.turbulenceNoiseStrength = flip.vorticityStrength = 0;
   flip.velocityDissipation = flip.densityDissipation = flip.colorDissipation = 0;
   flip.temperatureDissipation = flip.scalarDiffusion = flip.velocitySourceStrength = 0;
   flip.automaticPadding = false;
-  flip.temperatureColor = undefined;
   flip.sourceStrength = 1;
   flip.sourceTemperature = 1;
   flip.temperatureOverLifetime = 1;
@@ -679,4 +694,46 @@ window.gasCapFlux = async () => {
     }
   }
   return flux;
+};
+
+// Exercise a malformed hash chain without relying on an intermittent browser hang to reproduce it.
+window.checkGridBoundsAndCycle = async () => {
+  const grid = flip.spatialGrid;
+  grid.setOptions({ autoExpand: true, maxBounds: 4 });
+  const buffers = system.gpuSimulation._gpuBuffers;
+  // Force a genuine automatic expansion request well beyond the cap.
+  renderer.compute(Fn(() => {
+    const particle = buffers.storage.createParticle(uint(0), true);
+    particle.alive.assign(uint(1));
+    particle.position.assign(vec3(20, 0, 0));
+    buffers.storage.storeParticle(particle);
+  })().compute(1));
+  grid.rebuild(renderer, buffers, Symbol('capped-grid-check'));
+  const bounds = await grid.readBounds(renderer);
+  const coordinate = new THREE.Vector3().setScalar(grid.cellsPerAxis / 2);
+  const position = coordinate.clone().addScalar(0.5)
+    .multiply(bounds.getSize(new THREE.Vector3()).divideScalar(grid.cellsPerAxis)).add(bounds.min);
+  const bucket = grid.constructor.hashCoordinate(coordinate, grid.hashCapacity);
+  const heads = storage(grid.headAttribute, 'uint', grid.headAttribute.count);
+  const coordinates = storage(grid.coordinateAttribute, 'ivec4', grid.coordinateAttribute.count);
+  const output = new StorageBufferAttribute(new Float32Array(4), 4);
+  const result = storage(output, 'vec4', 1);
+  renderer.compute(Fn(() => {
+    const particle = buffers.storage.createParticle(uint(0), true);
+    particle.alive.assign(uint(1));
+    particle.position.assign(vec3(position));
+    buffers.storage.storeParticle(particle);
+    heads.element(bucket).assign(uint(1));
+    heads.element(grid.hashCapacity).assign(uint(1)); // Slot zero links to itself.
+    coordinates.element(0).assign(ivec4(coordinate.x, coordinate.y, coordinate.z, particle.generation));
+  })().compute(1));
+  renderer.compute(Fn(() => {
+    const count = float(0).toVar();
+    grid.forEachParticleInRadius(vec3(position), float(1e-5), () => { count.addAssign(1); });
+    result.element(0).assign(vec4(count, float(grid.nearestParticleIndexNode(vec3(position), float(1e-5))), 0, 0));
+  })().compute(1));
+  const values = new Float32Array(await renderer.getArrayBufferAsync(output));
+  output.dispose();
+  return { bounds: bounds.getSize(new THREE.Vector3()).toArray(),
+    visits: values[0], nearest: values[1], capacity: grid.capacity };
 };

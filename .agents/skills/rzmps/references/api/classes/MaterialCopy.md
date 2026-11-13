@@ -283,7 +283,7 @@ priority: Priority = Priority.Permanent;
 ### requireSpatialEffects?
 
 ```ts
-optional requireSpatialEffects?: SpatialEffectConstructor<SpatialEffect>[];
+optional requireSpatialEffects?: SpatialEffectRequirement[];
 ```
 
 #### Inherited from
@@ -313,20 +313,6 @@ optional spatialEffectFilter?: (spatialEffect) => boolean;
 #### Inherited from
 
 [`Module`](Module.md).[`spatialEffectFilter`](Module.md#spatialeffectfilter)
-
-***
-
-<a id="spatialeffects"></a>
-
-### spatialEffects
-
-```ts
-spatialEffects: SpatialEffect[] = [];
-```
-
-#### Inherited from
-
-[`Module`](Module.md).[`spatialEffects`](Module.md#spatialeffects)
 
 ***
 
@@ -558,6 +544,44 @@ readonly `string`[]
 
 ***
 
+<a id="spatialeffects"></a>
+
+### spatialEffects
+
+#### Get Signature
+
+```ts
+get spatialEffects(): SpatialEffectCollection;
+```
+
+##### Returns
+
+[`SpatialEffectCollection`](SpatialEffectCollection.md)
+
+#### Set Signature
+
+```ts
+set spatialEffects(effects): void;
+```
+
+##### Parameters
+
+###### effects
+
+[`SpatialEffect`](SpatialEffect.md)[]
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+Module.spatialEffects
+```
+
+***
+
 <a id="supportsgpu"></a>
 
 ### supportsGPU
@@ -734,7 +758,7 @@ Optional GPU compute pass, scheduled after the spatial grid is built and before 
 
 ##### \_context
 
-[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+[`ModuleGPUExecutionContext`](../interfaces/ModuleGPUExecutionContext.md)
 
 ##### \_renderer
 
@@ -1084,7 +1108,7 @@ Optional render-time GPU pass, after transient particle attributes have been eva
 
 ##### \_context
 
-[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+[`ModuleGPUExecutionContext`](../interfaces/ModuleGPUExecutionContext.md)
 
 ##### \_renderBuffers
 

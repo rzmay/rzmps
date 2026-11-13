@@ -21,7 +21,7 @@ import evaluateDynamicNumber from '../../values/evaluateDynamicNumber';
 import seedrandom from 'seedrandom';
 import { SpriteMaterialType } from '../../enums/SpriteMaterialType';
 import { TRAIL_RENDERER_USER_DATA_KEY } from './TrailRenderer';
-import LiveCubemap from './LiveCubemap';
+import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY } from './LiveCubemap';
 import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
 import {
   cameraPosition,
@@ -1345,7 +1345,13 @@ class SpriteRenderer extends Renderer {
       const isSpriteRenderer = object.userData[SPRITE_RENDERER_USER_DATA_KEY];
       const isTrailRenderer = includeTrails && object.userData[TRAIL_RENDERER_USER_DATA_KEY];
 
-      if (!isSpriteRenderer && !isTrailRenderer) return;
+      // Transparent field renderers are not opaque scene depth. In particular, a volume proxy
+      // must not become a solid depth box or launch nested volume passes during soft-particle depth capture.
+      const materials = object instanceof THREE.Mesh
+        ? Array.isArray(object.material) ? object.material : [object.material] : [];
+      const isTransparentParticleRenderer = includeTrails && object.userData[PARTICLE_RENDERER_OBJECT_KEY]
+        && materials.length > 0 && materials.every(material => material.transparent || !material.depthWrite);
+      if (!isSpriteRenderer && !isTrailRenderer && !isTransparentParticleRenderer) return;
 
       hidden.push({
         object,

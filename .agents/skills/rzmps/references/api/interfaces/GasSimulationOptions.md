@@ -101,7 +101,7 @@ boundsPolicy:
   | FluidBoundsPolicy;
 ```
 
-Behavior at the finite maxBounds cap, not intermediate adaptive edges. Defaults to Ballistic.
+Behavior at the finite spatialGridOptions.maxBounds cap, not intermediate adaptive edges. Defaults to Ballistic.
 Contain retains a reached cap instead of shrinking away closed field walls.
 
 #### Inherited from
@@ -164,6 +164,30 @@ Exponential accumulated-color decay rate in inverse seconds. Zero preserves colo
 
 ***
 
+<a id="colordissipationbydensity"></a>
+
+### colorDissipationByDensity?
+
+```ts
+optional colorDissipationByDensity?: ValueByParameter<number>;
+```
+
+Nonnegative density-driven multiplier of colorDissipation; omitted means one without shader evaluation.
+
+***
+
+<a id="colordissipationbytemperature"></a>
+
+### colorDissipationByTemperature?
+
+```ts
+optional colorDissipationByTemperature?: ValueByParameter<number>;
+```
+
+Nonnegative temperature-driven multiplier of colorDissipation; omitted means one without shader evaluation.
+
+***
+
 <a id="condition"></a>
 
 ### condition?
@@ -220,6 +244,42 @@ Exponential density decay rate in inverse seconds. Zero preserves density.
 
 ***
 
+<a id="densitydissipationbydensity"></a>
+
+### densityDissipationByDensity?
+
+```ts
+optional densityDissipationByDensity?: ValueByParameter<number>;
+```
+
+Nonnegative density-driven multiplier of densityDissipation; omitted means one without shader evaluation.
+
+***
+
+<a id="densitydissipationbytemperature"></a>
+
+### densityDissipationByTemperature?
+
+```ts
+optional densityDissipationByTemperature?: ValueByParameter<number>;
+```
+
+Nonnegative temperature-driven multiplier of densityDissipation; omitted means one without shader evaluation.
+
+***
+
+<a id="densityrange"></a>
+
+### densityRange
+
+```ts
+densityRange: [number, number];
+```
+
+Physical density interval shared by simulation modifiers, independent of rendering.
+
+***
+
 <a id="events"></a>
 
 ### events?
@@ -270,7 +330,7 @@ externalForce: Vector3;
 initialBrickCapacity: number;
 ```
 
-Initially reserved bricks. The pool grows geometrically without shrinking. Defaults to 64.
+Initially reserved bricks. Omission selects a modest reserve; growth is automatic and geometric.
 
 ***
 
@@ -310,24 +370,7 @@ optional initializeParticleGPU?: GPUParticleInitializer;
 maxActiveBricks: number;
 ```
 
-Resident brick limit, also settable via maxBrickCapacity. Defaults to 512, capped by logical brick count.
-
-***
-
-<a id="maxbounds"></a>
-
-### maxBounds
-
-```ts
-maxBounds: number;
-```
-
-Maximum domain side length in simulation units. Infinity leaves growth unlimited.
-Power-of-two grids round this limit down. Particle behavior is selected by boundsPolicy.
-
-#### Inherited from
-
-[`FluidSimulationOptions`](FluidSimulationOptions.md).[`maxBounds`](FluidSimulationOptions.md#maxbounds)
+Resident brick limit, also settable via maxBrickCapacity. Omission uses device and logical limits.
 
 ***
 
@@ -386,36 +429,6 @@ TSL modifier used when GPU processing is active.
 #### Inherited from
 
 [`ModuleOptions`](ModuleOptions.md).[`modifyGPU`](ModuleOptions.md#modifygpu)
-
-***
-
-<a id="noisefrequency"></a>
-
-### noiseFrequency
-
-```ts
-noiseFrequency: number;
-```
-
-***
-
-<a id="noiseoctaves"></a>
-
-### noiseOctaves
-
-```ts
-noiseOctaves: number;
-```
-
-***
-
-<a id="noisespeed"></a>
-
-### noiseSpeed
-
-```ts
-noiseSpeed: number;
-```
 
 ***
 
@@ -608,11 +621,11 @@ negative is permanent before movement,
 
 ```ts
 optional requireSpatialEffects?:
-  | SpatialEffectConstructor<SpatialEffect>
-  | SpatialEffectConstructor<SpatialEffect>[];
+  | SpatialEffectRequirement
+  | SpatialEffectRequirement[];
 ```
 
-Constructors selecting scene effects for this module during prepare.
+Constructors discover scene matches; instances include that exact effect directly.
 
 #### Inherited from
 
@@ -740,6 +753,18 @@ Configures and implicitly enables the managed GPU ParticleSpatialGrid.
 
 ***
 
+<a id="supportforcefields"></a>
+
+### supportForceFields?
+
+```ts
+optional supportForceFields?: boolean;
+```
+
+Opt into sampling ordinary ParticleForceFields directly on gas cells. Defaults to false.
+
+***
+
 <a id="tags"></a>
 
 ### tags?
@@ -756,18 +781,6 @@ Restricts processing to particles sharing a selected tag; omission accepts every
 
 ***
 
-<a id="temperaturecolor"></a>
-
-### temperatureColor
-
-```ts
-temperatureColor:
-  | ValueByParameter<Color>
-  | undefined;
-```
-
-***
-
 <a id="temperaturedissipation"></a>
 
 ### temperatureDissipation
@@ -777,6 +790,30 @@ temperatureDissipation: number;
 ```
 
 Exponential specific-temperature decay rate in inverse seconds. Zero preserves temperature.
+
+***
+
+<a id="temperaturedissipationbydensity"></a>
+
+### temperatureDissipationByDensity?
+
+```ts
+optional temperatureDissipationByDensity?: ValueByParameter<number>;
+```
+
+Nonnegative density-driven multiplier of temperatureDissipation; omitted means one without shader evaluation.
+
+***
+
+<a id="temperaturedissipationbytemperature"></a>
+
+### temperatureDissipationByTemperature?
+
+```ts
+optional temperatureDissipationByTemperature?: ValueByParameter<number>;
+```
+
+Nonnegative temperature multiplier of temperatureDissipation; omitted means no shader evaluation.
 
 ***
 
@@ -798,17 +835,97 @@ temperatureOverLifetime: DynamicValue<number>;
 temperatureRange: [number, number];
 ```
 
+Physical specific-temperature interval shared by simulation modifiers, independent of rendering.
+
 ***
 
-<a id="turbulencestrength"></a>
+<a id="turbulencenoisefrequency"></a>
 
-### turbulenceStrength
+### turbulenceNoiseFrequency
 
 ```ts
-turbulenceStrength: number;
+turbulenceNoiseFrequency: number;
+```
+
+***
+
+<a id="turbulencenoisefrequencybydensity"></a>
+
+### turbulenceNoiseFrequencyByDensity?
+
+```ts
+optional turbulenceNoiseFrequencyByDensity?: ValueByParameter<number>;
+```
+
+Nonnegative density-driven multiplier of turbulenceNoiseFrequency; omitted means one without shader evaluation.
+
+***
+
+<a id="turbulencenoisefrequencybytemperature"></a>
+
+### turbulenceNoiseFrequencyByTemperature?
+
+```ts
+optional turbulenceNoiseFrequencyByTemperature?: ValueByParameter<number>;
+```
+
+Nonnegative temperature-driven turbulenceNoiseFrequency multiplier. Omitted means no shader evaluation.
+
+***
+
+<a id="turbulencenoiseoctaves"></a>
+
+### turbulenceNoiseOctaves
+
+```ts
+turbulenceNoiseOctaves: number;
+```
+
+***
+
+<a id="turbulencenoisespeed"></a>
+
+### turbulenceNoiseSpeed
+
+```ts
+turbulenceNoiseSpeed: number;
+```
+
+***
+
+<a id="turbulencenoisestrength"></a>
+
+### turbulenceNoiseStrength
+
+```ts
+turbulenceNoiseStrength: number;
 ```
 
 Independent animated noise acceleration in simulation units per second squared.
+
+***
+
+<a id="turbulencenoisestrengthbydensity"></a>
+
+### turbulenceNoiseStrengthByDensity?
+
+```ts
+optional turbulenceNoiseStrengthByDensity?: ValueByParameter<number>;
+```
+
+Nonnegative density-driven multiplier of turbulenceNoiseStrength; omitted means one without shader evaluation.
+
+***
+
+<a id="turbulencenoisestrengthbytemperature"></a>
+
+### turbulenceNoiseStrengthByTemperature?
+
+```ts
+optional turbulenceNoiseStrengthByTemperature?: ValueByParameter<number>;
+```
+
+Nonnegative temperature-driven turbulenceNoiseStrength multiplier. Omitted means no shader evaluation.
 
 ***
 
@@ -856,6 +973,30 @@ Exponential velocity decay rate in inverse seconds. Zero preserves velocity.
 
 ***
 
+<a id="velocitydissipationbydensity"></a>
+
+### velocityDissipationByDensity?
+
+```ts
+optional velocityDissipationByDensity?: ValueByParameter<number>;
+```
+
+Nonnegative density-driven multiplier of velocityDissipation; omitted means one without shader evaluation.
+
+***
+
+<a id="velocitydissipationbytemperature"></a>
+
+### velocityDissipationByTemperature?
+
+```ts
+optional velocityDissipationByTemperature?: ValueByParameter<number>;
+```
+
+Nonnegative temperature-driven multiplier of velocityDissipation; omitted means one without shader evaluation.
+
+***
+
 <a id="velocitypaddinglookahead"></a>
 
 ### velocityPaddingLookahead
@@ -887,6 +1028,30 @@ vorticityStrength: number;
 ```
 
 Curl-confinement strength; restores small-scale rotation lost to advection.
+
+***
+
+<a id="vorticitystrengthbydensity"></a>
+
+### vorticityStrengthByDensity?
+
+```ts
+optional vorticityStrengthByDensity?: ValueByParameter<number>;
+```
+
+Nonnegative density-driven multiplier of vorticityStrength; omitted means one without shader evaluation.
+
+***
+
+<a id="vorticitystrengthbytemperature"></a>
+
+### vorticityStrengthByTemperature?
+
+```ts
+optional vorticityStrengthByTemperature?: ValueByParameter<number>;
+```
+
+Nonnegative temperature-driven multiplier of vorticityStrength; omitted means one without shader evaluation.
 
 ***
 

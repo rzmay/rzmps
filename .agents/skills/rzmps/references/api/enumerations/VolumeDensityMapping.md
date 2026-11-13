@@ -20,7 +20,7 @@ Converts render density into per-cell opacity, without modifying the simulated d
 Curve: "Curve";
 ```
 
-Evaluate densityCurve using densityRange-normalized density.
+Evaluate densityCurve using minDensity/maxDensity-normalized density.
 
 ***
 
@@ -32,7 +32,7 @@ Evaluate densityCurve using densityRange-normalized density.
 Linear: "Linear";
 ```
 
-Linearly map densityRange to zero through one.
+Linearly map minDensity/maxDensity to zero through one.
 
 ***
 

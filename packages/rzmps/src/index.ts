@@ -129,6 +129,7 @@ export type {
   ModuleOptions,
   ModuleUpdate,
   SpatialEffectConstructor,
+  SpatialEffectRequirement,
 } from './core/Module';
 export { default as NoiseModule } from './modules/NoiseModule';
 export { default as ForceOverLifetime } from './modules/ForceOverLifetime';
@@ -166,6 +167,9 @@ export type { BoidAffectorOptions } from './spatial/effects/BoidAffector';
 export { default as BoidAffectorHelper } from './spatial/effects/BoidAffectorHelper';
 export { default as SpatialEffect, SpatialEffectUpdatePolicy } from './spatial/effects/SpatialEffect';
 export type {
+  SpatialEffectDeltas,
+  SpatialEffectDeltasGPU,
+  SpatialEffectSampleState,
   SpatialEffectFeatherUpdate,
   SpatialEffectGPUCondition,
   SpatialEffectGPUTest,
@@ -175,6 +179,9 @@ export type {
   SpatialEffectTest,
   SpatialEffectUpdate,
 } from './spatial/effects/SpatialEffect';
+export { default as SpatialEffectCollection } from './spatial/effects/SpatialEffectCollection';
+export { default as GasAffector } from './spatial/effects/GasAffector';
+export type { GasAffectorOptions, GasCellGPU, GasModifier } from './spatial/effects/GasAffector';
 export { default as SpatialEffectHelper } from './spatial/effects/SpatialEffectHelper';
 export { default as KillZone } from './spatial/effects/KillZone';
 export type { KillZoneOptions } from './spatial/effects/KillZone';
@@ -201,6 +208,8 @@ export type {
 export { default as sampleDynamicValue } from './values/sampleDynamicValue';
 export { default as maxDynamicNumber } from './values/maxDynamicNumber';
 export { default as minDynamicNumber } from './values/minDynamicNumber';
+export { default as averageDynamicNumber } from './values/averageDynamicNumber';
+export { default as medianDynamicNumber } from './values/medianDynamicNumber';
 export { default as maxDynamicVector } from './values/maxDynamicVector';
 export { default as minDynamicVector } from './values/minDynamicVector';
 export { default as maxDynamicColor } from './values/maxDynamicColor';
@@ -293,6 +302,7 @@ export type { FLIPSimulationOptions, FLIPSprayConditionOptions } from './modules
 export { default as SurfaceRenderer } from './rendering/renderers/SurfaceRenderer';
 export type { SurfaceRendererOptions } from './rendering/renderers/SurfaceRenderer';
 export { default as VolumeRenderer } from './rendering/renderers/VolumeRenderer';
+export type { VolumeResolutionOptions } from './rendering/gpu/VolumeRenderTarget';
 export type { VolumeRendererOptions } from './rendering/renderers/VolumeRenderer';
 export { default as SpatialGrid } from './spatial/structures/SpatialGrid';
 export { default as FluidCollider } from './spatial/effects/FluidCollider';
@@ -309,3 +319,5 @@ export { buildMarchingCubes } from './rendering/gpu/buildMarchingCubes';
 
 export { default as LiquidMaterial } from './rendering/materials/LiquidMaterial';
 export type { LiquidMaterialOptions, LiquidFlowOptions } from './rendering/materials/LiquidMaterial';
+export { default as StagedGPUAllocation } from './utils/gpu/StagedGPUAllocation';
+export type { StagedGPUAllocationOptions } from './utils/gpu/StagedGPUAllocation';

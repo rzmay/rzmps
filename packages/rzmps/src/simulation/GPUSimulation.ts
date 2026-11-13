@@ -1,3 +1,4 @@
+import { modifyWithFeatherGPU, snapshotParticleGPU } from '../spatial/effects/spatialEffectSampling.utils';
 import GPUSubSystemPredicates from '../emission/gpu/SubSystemPredicates';
 import Benchmarks from '../core/Benchmarks';
 import GlobalSettings from '../core/GlobalSettings';
@@ -147,6 +148,7 @@ export default class GPUSimulation {
   _gpuBuffers?: GPUParticleBufferState;
 
   _gpuRenderOutputBuffers?: GPUParticleRenderBufferState;
+  private lastRenderBuffers?: GPUParticleBufferState | GPUParticleRenderBufferState;
 
   _gpuSpatialRegistry?: GPUSpatialEffectRegistry;
 
@@ -602,7 +604,9 @@ export default class GPUSimulation {
           grid.rebuild(sceneRenderer, context.buffers, this.system.spatialRuntime._gpuSpatialBuildSequence);
           rebuiltGrids.add(grid);
         }
-        module.renderGPU(context, this._gpuRenderOutputBuffers!, sceneRenderer, grid);
+        const moduleContext = { ...context, module, spatialGrid: grid,
+          spatialEffects: module.spatialEffects, events: module.gpuExecutionContext.events };
+        module.renderGPU(moduleContext, this._gpuRenderOutputBuffers!, sceneRenderer, grid);
       });
     }
 
@@ -613,6 +617,7 @@ export default class GPUSimulation {
       cpuRenderBuffer: 'main buffer',
     });
 
+    this.lastRenderBuffers = gpuRenderBuffers;
     gpuInputRenderers.forEach(renderer => {
       renderer.updateGPU(gpuRenderBuffers!, this.system, this.execution.deltaTime());
     });
@@ -1673,7 +1678,9 @@ export default class GPUSimulation {
       }
 
       if (modifier instanceof Module) {
-        modifier.benchmarks.span('compute', () => modifier.computeGPU(context, renderer, grid));
+        const moduleContext = { ...context, module: modifier, spatialGrid: grid,
+          spatialEffects: modifier.spatialEffects, events: modifier.gpuExecutionContext.events };
+        modifier.benchmarks.span('compute', () => modifier.computeGPU(moduleContext, renderer, grid));
       }
 
       if (modifier instanceof Collision) {
@@ -2206,42 +2213,7 @@ export default class GPUSimulation {
   }
 
   _snapshotGPUParticle(particle: GPUParticleLike): GPUParticleLike {
-    return {
-      kill: particle.kill.bind(particle),
-      emitEvent: particle.emitEvent.bind(particle),
-      addTag: particle.addTag.bind(particle),
-      removeTag: particle.removeTag.bind(particle),
-      id: particle.id,
-      isChild: particle.isChild,
-      parent: particle.parent,
-      root: particle.root,
-      index: particle.index,
-      position: particle.position.toVar('basePosition'),
-      orbitCenter: particle.orbitCenter.toVar('baseOrbitCenter'),
-      rotation: particle.rotation.toVar('baseRotation'),
-      scale: particle.scale.toVar('baseScale'),
-      velocity: particle.velocity.toVar('baseVelocity'),
-      angularVelocity: particle.angularVelocity.toVar('baseAngularVelocity'),
-      scalarVelocity: particle.scalarVelocity.toVar('baseScalarVelocity'),
-      acceleration: particle.acceleration.toVar('baseAcceleration'),
-      angularAcceleration: particle.angularAcceleration.toVar('baseAngularAcceleration'),
-      scalarAcceleration: particle.scalarAcceleration.toVar('baseScalarAcceleration'),
-      color: particle.color.toVar('baseColor'),
-      speed: particle.speed.toVar('baseSpeed'),
-      alpha: particle.alpha.toVar('baseAlpha'),
-      mass: particle.mass.toVar('baseMass'),
-      distortionStrength: particle.distortionStrength.toVar('baseDistortionStrength'),
-      lifetime: particle.lifetime.toVar('baseLifetime'),
-      time: particle.time.toVar('baseTime'),
-      realtime: particle.realtime.toVar('baseRealtime'),
-      alive: particle.alive.toVar('baseAlive'),
-      tagMask: particle.tagMask.toVar('baseTagMask'),
-      generation: particle.generation.toVar('baseGeneration'),
-      lodPriority: particle.lodPriority,
-      materialCopy: particle.materialCopy,
-      materialCopyU: particle.materialCopyU,
-      materialCopyV: particle.materialCopyV,
-    };
+    return snapshotParticleGPU(particle);
   }
 
   _commitGPUTransientParticle(frame: GPUParticleLike, base: GPUParticleLike, deltaTime: Node<'float'>): void {
@@ -2344,6 +2316,7 @@ export default class GPUSimulation {
       const moduleContext = {
         ...context,
         module: modifier,
+        spatialEffects: modifier.spatialEffects,
         events: modifier.gpuExecutionContext.events,
         spatialGrid,
       };
@@ -2482,37 +2455,9 @@ export default class GPUSimulation {
   }
 
   _modifyGPUSpatialEffect(
-    effect: SpatialEffect,
-    particle: GPUParticleLike,
-    strength: Node<'float'>,
-    modify: () => void,
+    effect: SpatialEffect, particle: GPUParticleLike, strength: Node<'float'>, modify: () => void,
   ): void {
-    if (!effect.automaticFeather) {
-      modify();
-      return;
-    }
-
-    const before = this._snapshotGPUParticle(particle);
-    modify();
-    const blendFloat = (start: Node<'float'>, end: Node<'float'>) => mix(start, end, strength);
-    const blendVector = (start: Node<'vec3'>, end: Node<'vec3'>) => mix(start, end, strength);
-
-    particle.lifetime.assign(blendFloat(before.lifetime, particle.lifetime));
-    particle.position.assign(blendVector(before.position, particle.position));
-    particle.orbitCenter.assign(blendVector(before.orbitCenter, particle.orbitCenter));
-    particle.rotation.assign(blendVector(before.rotation, particle.rotation));
-    particle.scale.assign(blendVector(before.scale, particle.scale));
-    particle.velocity.assign(blendVector(before.velocity, particle.velocity));
-    particle.angularVelocity.assign(blendVector(before.angularVelocity, particle.angularVelocity));
-    particle.scalarVelocity.assign(blendVector(before.scalarVelocity, particle.scalarVelocity));
-    particle.acceleration.assign(blendVector(before.acceleration, particle.acceleration));
-    particle.angularAcceleration.assign(blendVector(before.angularAcceleration, particle.angularAcceleration));
-    particle.scalarAcceleration.assign(blendVector(before.scalarAcceleration, particle.scalarAcceleration));
-    particle.speed.assign(blendFloat(before.speed, particle.speed));
-    particle.mass.assign(blendFloat(before.mass, particle.mass));
-    particle.distortionStrength.assign(blendFloat(before.distortionStrength, particle.distortionStrength));
-    particle.color.assign(blendVector(before.color, particle.color));
-    particle.alpha.assign(blendFloat(before.alpha, particle.alpha));
+    modifyWithFeatherGPU(effect, particle, strength, modify);
   }
 
   _beginGPUDebugFrame(modules: Module[]): number | undefined {
@@ -2657,6 +2602,7 @@ export default class GPUSimulation {
 
       systemModules.forEach(module => {
         module.tags?.forEach(tag => this._registerGPUTag(tag));
+        module.spatialEffects.forEach(effect => effect.tags?.forEach(tag => this._registerGPUTag(tag)));
       });
       systemSpatialEffects.forEach(spatialEffect => {
         spatialEffect.tags?.forEach(tag => this._registerGPUTag(tag));
@@ -3227,6 +3173,18 @@ export default class GPUSimulation {
       )
       .join('|');
   }
+  /** Reuse the last rendered GPU state without executing simulation or transient modules. */
+  refreshRenderers(): boolean {
+    const buffers = this.lastRenderBuffers ?? this._gpuBuffers;
+    if (!buffers) return false;
+    this.system.renderers.forEach(renderer => {
+      if (renderer.supportsGPUInput && !renderer.supportsGPUEventInput) renderer.refresh(this.system);
+      else if (renderer.supportsGPUInput) renderer.updateGPU(buffers, this.system, 0);
+      else renderer.update(this.system.particles, this.system, 0);
+    });
+    return true;
+  }
+
   clear(gpuRenderer?: WebGPURenderer): void {
     this._gpuLifecycleGeneration += 1;
     this._isGPUProcessingActive = false;
@@ -3234,6 +3192,7 @@ export default class GPUSimulation {
     this._gpuSkipTimeCompute = undefined;
     this._gpuBuffers?.dispose(gpuRenderer);
     this._gpuRenderOutputBuffers?.dispose(gpuRenderer);
+    this.lastRenderBuffers = undefined;
     this._gpuBuffers = undefined;
     this._gpuRenderOutputBuffers = undefined;
     this._gpuSpatialRegistry?.dispose(gpuRenderer);

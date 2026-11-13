@@ -286,6 +286,24 @@ get motionVersion(): number;
 
 `number`
 
+***
+
+<a id="resourceversion"></a>
+
+### resourceVersion
+
+#### Get Signature
+
+```ts
+get resourceVersion(): number;
+```
+
+Structural query/buffer identity. Transforms alone do not change this version.
+
+##### Returns
+
+`number`
+
 ## Methods
 
 <a id="collide"></a>

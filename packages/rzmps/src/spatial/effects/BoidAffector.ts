@@ -33,6 +33,8 @@ class BoidAffector extends SpatialEffect {
 
   static readonly Weight = Weight;
 
+  override get modifiesParticles(): boolean { return false; }
+
   static Box(
     modify: SpatialEffectModifier | null,
     options: Partial<BoidAffectorOptions> | null,

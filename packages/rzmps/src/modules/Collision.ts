@@ -59,6 +59,8 @@ class Collision extends Module {
   private collisionListeners: CollisionListener[] = [];
 
   private _system?: ParticleSystem;
+  private gpuBackendIdentity?: ThreeGPUCollisionBackend;
+  private gpuBackendVersion = -1;
   private _explicitBackend = false;
   private _ownsBackend = false;
 
@@ -164,6 +166,12 @@ class Collision extends Module {
       else this._backend?.update?.(deltaTime);
     } finally {
       end?.();
+    }
+    if (this._backend instanceof ThreeGPUCollisionBackend && (this.gpuBackendIdentity !== this._backend
+      || this.gpuBackendVersion !== this._backend.resourceVersion)) {
+      this.gpuBackendIdentity = this._backend;
+      this.gpuBackendVersion = this._backend.resourceVersion;
+      this.needsUpdate = true;
     }
   }
 

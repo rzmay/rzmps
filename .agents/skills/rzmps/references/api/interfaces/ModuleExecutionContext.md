@@ -64,6 +64,16 @@ readonly optional octree?: ParticleOctree<unknown>;
 
 ***
 
+<a id="spatialeffects"></a>
+
+### spatialEffects
+
+```ts
+readonly spatialEffects: SpatialEffectCollection;
+```
+
+***
+
 <a id="system"></a>
 
 ### system

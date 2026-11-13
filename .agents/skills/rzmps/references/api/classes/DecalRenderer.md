@@ -1154,6 +1154,62 @@ Subscribes through the existing event receiver and transforms each selected deca
 
 ***
 
+<a id="prepareresources"></a>
+
+### prepareResources()
+
+```ts
+prepareResources(_system, _renderer): Promise<void>;
+```
+
+Prepare optional rendering pipelines without advancing particle or simulation state.
+
+#### Parameters
+
+##### \_system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### \_renderer
+
+`WebGPURenderer`
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`prepareResources`](Renderer.md#prepareresources)
+
+***
+
+<a id="refresh"></a>
+
+### refresh()
+
+```ts
+refresh(system): void;
+```
+
+Refresh a CPU/readback renderer from its displayed state, without requesting new particles.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`refresh`](Renderer.md#refresh)
+
+***
+
 <a id="reset"></a>
 
 ### reset()

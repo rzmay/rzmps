@@ -105,6 +105,9 @@ export class RendererGUI extends GUIEditorBase {
           'setup',
           'executionContext',
           'gpuExecutionContext',
+          'benchmarks',
+          'evaluateDynamicGPU',
+          'gpuExecutionContext',
           'update',
           'destroy',
           'mesh',
@@ -135,6 +138,9 @@ export class RendererGUI extends GUIEditorBase {
     folder.add(renderer, 'shadowQuality', 0, 8, 0.25).name('Shadow Quality');
     folder.add(renderer, 'steps', 1, 512, 1).name('Maximum Ray Steps');
     const marching = folder.addFolder('Ray Marching');
+    this.addValue(marching, renderer, 'dynamicResolution', 'Dynamic Resolution');
+    marching.add(renderer, 'downsample', 1, 8, 1).name('Downsample Factor');
+    marching.add(renderer, 'emptySpaceSkipping').name('Skip Empty Space');
     marching.add(renderer, 'adaptiveStepping').name('Opacity-Aware Steps');
     marching.add(renderer, 'adaptiveStepThreshold', 0, 0.99, 0.01).name('Opacity Start');
     marching.add(renderer, 'adaptiveStepFactor', 1, 16, 0.25).name('Maximum Step Factor');
@@ -142,18 +148,35 @@ export class RendererGUI extends GUIEditorBase {
     marching.add(renderer, 'sceneDepthClipping').name('Scene Depth Clipping');
     marching.add(renderer, 'sceneDepthBias', 0, 0.1, 0.001).name('Scene Depth Bias');
     folder.add(renderer, 'densityGain', 0, 10, 0.05).name('Density Gain');
+    for (const parameter of ['Temperature', 'Density', 'Speed', 'Vorticity']) {
+      for (const kind of ['color', 'opacity']) {
+        if (parameter === 'Density' && kind === 'opacity') continue;
+        const key = `${kind}By${parameter}`;
+        this.addValue(folder, renderer, key, this.prettyName(key));
+      }
+      if (parameter !== 'Density') {
+        const key = `${parameter.toLowerCase()}Range`;
+        this.addValue(folder, renderer, key, this.prettyName(key));
+      }
+    }
     const noise = folder.addFolder('Density Noise Mask');
-    noise.add(renderer, 'noiseStrength', 0, 8, 0.01).name('Strength');
-    noise.add(renderer, 'noiseContrast', 0, 8, 0.01).name('Contrast');
-    noise.add(renderer, 'noiseFrequency', 0, 20, 0.1).name('Frequency');
-    noise.add(renderer, 'noiseSpeed', -2, 2, 0.01).name('Animation Speed');
-    noise.add(renderer, 'noiseOctaves', 1, 4, 1).name('Octaves');
+    noise.add(renderer, 'densityNoiseStrength', 0, 8, 0.01).name('Strength');
+    noise.add(renderer, 'densityNoiseContrast', 0, 8, 0.01).name('Contrast');
+    noise.add(renderer, 'densityNoiseFrequency', 0, 20, 0.1).name('Frequency');
+    noise.add(renderer, 'densityNoiseSpeed', -2, 2, 0.01).name('Animation Speed');
+    noise.add(renderer, 'densityNoiseOctaves', 1, 4, 1).name('Octaves');
     for (const key of [
-      'baseColor',
+      'densityNoiseStrengthByTemperature', 'densityNoiseContrastByTemperature', 'densityNoiseFrequencyByTemperature',
+    ]) {
+      this.addValue(noise, renderer, key, this.prettyName(key));
+    }
+    for (const key of [
+      'color',
       'opacity',
       'threshold',
       'range',
-      'densityRange',
+      'minDensity',
+      'maxDensity',
       'densityCurve',
       'depthTest',
       'renderOrder',
@@ -185,8 +208,6 @@ export class RendererGUI extends GUIEditorBase {
       'velocityDetailRange',
       'vorticityDetailRange',
       'isoLevel',
-      'maxActiveBricks',
-      'maxTriangles',
       'bounds',
       'particleColors',
       'castShadow',

@@ -1,3 +1,4 @@
+import { copyStorageAttributes } from '../../../utils/gpu/storage.utils';
 import * as THREE from 'three';
 import { IndirectStorageBufferAttribute, StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
@@ -217,12 +218,11 @@ export default class SparseVolumeGrid extends SpatialGrid {
   migrateTo(renderer: ParticleSpatialGridRenderer, target: SparseVolumeGrid): void {
     if (target.capacity < this.capacity || target.brickCount !== this.brickCount
       || target.brickSide !== this.brickSide) throw new Error('Sparse migration requires compatible growing storage.');
-    renderer.compute(Fn(() => {
-      target.pages.element(instanceIndex).assign(this.pages.element(instanceIndex));
-    })().compute(this.brickCount));
-    renderer.compute(Fn(() => {
-      target.slots.element(instanceIndex).assign(this.slots.element(instanceIndex));
-    })().compute(this.capacity));
+    copyStorageAttributes(renderer, [
+      { source: this.pagesAttribute, target: target.pagesAttribute, byteLength: this.brickCount * 4 },
+      { source: this.pagesAttribute, target: target.pagesAttribute,
+        sourceOffset: this.brickCount * 4, targetOffset: this.brickCount * 4, byteLength: this.capacity * 4 },
+    ]);
     target.updateDispatch(renderer);
   }
 

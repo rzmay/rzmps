@@ -29,7 +29,12 @@ test('Vite resolves workspace imports and all relocated scene modules and assets
       assert.equal(resolved.id, path.join(root, entry));
     }
     for (const file of ['examples/index.js', 'examples/scenes/index.js', 'scripts/preview/harness.js']) {
-      assert.ok((await server.transformRequest('/@fs/' + path.join(root, file)))?.code);
+      const result = await server.transformRequest('/@fs/' + path.join(root, file));
+      assert.ok(result?.code);
+      if (file === 'examples/index.js') {
+        assert.ok(result.code.includes('volumetricFire.js'));
+        assert.ok(result.code.includes('volumetricSmoke.js'));
+      }
     }
     for (const file of [
       'pages/index.jsx',

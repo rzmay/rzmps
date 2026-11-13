@@ -113,8 +113,10 @@ automaticPadding: boolean;
 ### automaticPaddingDistance
 
 ```ts
-automaticPaddingDistance: number = 0;
+readonly automaticPaddingDistance: Vector3;
 ```
+
+Predicted distance on each axis, applied to source bounds before retaining existing field support.
 
 #### Inherited from
 
@@ -366,20 +368,6 @@ gpuExecutionContext: GPUEventExecutionContext;
 
 ***
 
-<a id="maxbounds"></a>
-
-### maxBounds
-
-```ts
-maxBounds: number;
-```
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`maxBounds`](FluidSimulation.md#maxbounds)
-
-***
-
 <a id="maxfluidsubsteps"></a>
 
 ### maxFluidSubsteps
@@ -607,7 +595,7 @@ priority: Priority = Priority.Permanent;
 ### requireSpatialEffects?
 
 ```ts
-optional requireSpatialEffects?: SpatialEffectConstructor<SpatialEffect>[];
+optional requireSpatialEffects?: SpatialEffectRequirement[];
 ```
 
 #### Inherited from
@@ -665,20 +653,6 @@ optional spatialEffectFilter?: (spatialEffect) => boolean;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`spatialEffectFilter`](FluidSimulation.md#spatialeffectfilter)
-
-***
-
-<a id="spatialeffects"></a>
-
-### spatialEffects
-
-```ts
-spatialEffects: SpatialEffect[] = [];
-```
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`spatialEffects`](FluidSimulation.md#spatialeffects)
 
 ***
 
@@ -1013,6 +987,44 @@ readonly `string`[]
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`selectedEventNames`](FluidSimulation.md#selectedeventnames)
+
+***
+
+<a id="spatialeffects"></a>
+
+### spatialEffects
+
+#### Get Signature
+
+```ts
+get spatialEffects(): SpatialEffectCollection;
+```
+
+##### Returns
+
+[`SpatialEffectCollection`](SpatialEffectCollection.md)
+
+#### Set Signature
+
+```ts
+set spatialEffects(effects): void;
+```
+
+##### Parameters
+
+###### effects
+
+[`SpatialEffect`](SpatialEffect.md)[]
+
+##### Returns
+
+`void`
+
+#### Inherited from
+
+```ts
+FluidSimulation.spatialEffects
+```
 
 ***
 
@@ -1559,7 +1571,7 @@ Optional render-time GPU pass, after transient particle attributes have been eva
 
 ##### \_context
 
-[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+[`ModuleGPUExecutionContext`](../interfaces/ModuleGPUExecutionContext.md)
 
 ##### \_renderBuffers
 
@@ -1721,7 +1733,7 @@ static padBoundsByDistance(bounds, distance): Box3;
 
 ##### distance
 
-`number`
+`number` \| `Vector3`
 
 #### Returns
 

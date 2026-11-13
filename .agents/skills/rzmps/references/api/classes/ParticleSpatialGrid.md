@@ -285,6 +285,40 @@ readonly `number`[]
 
 ***
 
+<a id="maxbounds"></a>
+
+### maxBounds
+
+#### Get Signature
+
+```ts
+get maxBounds(): number;
+```
+
+Maximum grid side length. Changing the ceiling immediately normalizes the current CPU bounds.
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set maxBounds(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
+
+***
+
 <a id="maxdepth"></a>
 
 ### maxDepth
@@ -918,6 +952,28 @@ Alias matching the CPU utility's rebuild terminology.
 
 ***
 
+<a id="resolvebounds"></a>
+
+### resolveBounds()
+
+```ts
+resolveBounds(bounds): Box3;
+```
+
+Resolve the final normalized, capped domain for externally supplied support bounds.
+
+#### Parameters
+
+##### bounds
+
+`Box3`
+
+#### Returns
+
+`Box3`
+
+***
+
 <a id="setbounds"></a>
 
 ### setBounds()
@@ -1059,7 +1115,8 @@ static normalizeBounds(
    bounds,
    powerOfTwo,
    cubic?,
-   centeredAtOrigin?
+   centeredAtOrigin?,
+   maxBounds?
 ): Box3;
 ```
 
@@ -1080,6 +1137,10 @@ static normalizeBounds(
 ##### centeredAtOrigin?
 
 `boolean` = `false`
+
+##### maxBounds?
+
+`number` = `Infinity`
 
 #### Returns
 

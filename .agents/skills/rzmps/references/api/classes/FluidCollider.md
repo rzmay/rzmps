@@ -550,7 +550,7 @@ bakedFieldGPU(particle): Node<"float">;
 
 `Node`\<`"float"`\>
 
-#### Inherited from
+#### Overrides
 
 [`SpatialEffect`](SpatialEffect.md).[`bakedFieldGPU`](SpatialEffect.md#bakedfieldgpu)
 
@@ -683,6 +683,93 @@ modify(
 #### Inherited from
 
 [`SpatialEffect`](SpatialEffect.md).[`modify`](SpatialEffect.md#modify)
+
+***
+
+<a id="sampledeltas"></a>
+
+### sampleDeltas()
+
+```ts
+sampleDeltas(
+   position,
+   state,
+   deltaTime,
+   system
+): SpatialEffectDeltas;
+```
+
+Sample normal test/condition/feather behavior without changing the caller's state.
+The returned CPU deltas are reused by the next sample on this effect. Position is in simulation space.
+
+#### Parameters
+
+##### position
+
+`Vector3`
+
+##### state
+
+[`SpatialEffectSampleState`](../type-aliases/SpatialEffectSampleState.md)
+
+##### deltaTime
+
+`number`
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+[`SpatialEffectDeltas`](../type-aliases/SpatialEffectDeltas.md)
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`sampleDeltas`](SpatialEffect.md#sampledeltas)
+
+***
+
+<a id="sampledeltasgpu"></a>
+
+### sampleDeltasGPU()
+
+```ts
+sampleDeltasGPU(
+   position,
+   state,
+   deltaTime,
+   context
+): SpatialEffectDeltasGPU;
+```
+
+Shader-local sampling; callbacks use the same automatic feathering as ordinary particles.
+
+#### Parameters
+
+##### position
+
+`Node`\<`"vec3"`\>
+
+##### state
+
+`Partial`\<[`GPUParticleLike`](../interfaces/GPUParticleLike.md)\>
+
+##### deltaTime
+
+`Node`\<`"float"`\>
+
+##### context
+
+[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+
+#### Returns
+
+[`SpatialEffectDeltasGPU`](../type-aliases/SpatialEffectDeltasGPU.md)
+
+#### Inherited from
+
+[`SpatialEffect`](SpatialEffect.md).[`sampleDeltasGPU`](SpatialEffect.md#sampledeltasgpu)
 
 ***
 

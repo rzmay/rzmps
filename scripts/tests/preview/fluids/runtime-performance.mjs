@@ -6,7 +6,7 @@ import { startSiteDev } from '../../../site/dev.mjs';
 
 const output = process.argv[2] ?? '/tmp/rzmps-fluid-runtime';
 await fs.mkdir(output, { recursive: true });
-const presets = process.env.FLUID_PRESETS?.split(',') ?? ['Gas Volume', 'FLIP Fluid'];
+const presets = process.env.FLUID_PRESETS?.split(',') ?? ['Volumetric Fire', 'FLIP Fluid'];
 const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
 // Keep a running diagnostic isolated from the checkout's build watchers.
 await site.demo.watcher.close();

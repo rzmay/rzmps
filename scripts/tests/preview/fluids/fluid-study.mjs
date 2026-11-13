@@ -34,7 +34,7 @@ try {
   }
   for (const limit of [16, null]) {
     await open('flipFluid');
-    await page.evaluate(limit => { window.debugFluid.flip.maxBounds = limit ?? Infinity; }, limit);
+    await page.evaluate(limit => { window.debugFluid.flip.setSpatialGridOptions({ maxBounds: limit ?? Infinity }); }, limit);
     await page.evaluate(() => window.runFrames(300));
     await page.evaluate(() => window.moveParticle([30, 0, 0], [1, 0, 0]));
     await new Promise(resolve => setTimeout(resolve, 550));
@@ -59,7 +59,7 @@ try {
     await page.screenshot({ path: `${output}/curl-${strength}.png` });
   }
   for (const scenario of ['normal', 'large-step', 'no-confinement', 'no-source-velocity']) {
-    await open('gasVolume');
+    await open('volumetricFire');
     await page.evaluate(scenario => {
       const gas = window.debugFluid.flip;
       if (scenario === 'no-confinement') gas.vorticityStrength = 0;

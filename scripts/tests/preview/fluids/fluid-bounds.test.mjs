@@ -26,12 +26,12 @@ test('fluid cap policies preserve adaptive escape, constrain crossings, and clos
       await page.evaluate(() => window.runFrames(2));
     };
     const results = [];
-    for (const example of ['flipFluid', 'gasVolume']) {
+    for (const example of ['flipFluid', 'volumetricFire']) {
       for (const policy of ['Ballistic', 'Kill', 'Contain']) {
         await open(example);
         const result = await page.evaluate(async ({ example, policy }) => {
           const { system, flip, renderer } = window.debugFluid;
-          if (example === 'gasVolume') window.seedGasSource(1, 0);
+          if (example === 'volumetricFire') window.seedGasSource(1, 0);
           else { window.seedFLIPPair(); flip.particleSeparation = 0; }
           system.gravity.set(0, 0, 0);
           flip.externalForce.set(0, 0, 0);
@@ -41,7 +41,7 @@ test('fluid cap policies preserve adaptive escape, constrain crossings, and clos
             .forEach(module => { module.options.strength = 0; });
           window.capDeaths = 0;
           system.onDeath(() => { window.capDeaths++; });
-          const count = example === 'gasVolume' ? 1 : 2;
+          const count = example === 'volumetricFire' ? 1 : 2;
           for (let slot = 0; slot < count; slot++) window.moveParticle([7.9, 1, slot], [4, 0, 1], slot, 1);
           await window.runFrames(1, 0.1);
           const particles = (await system.selectiveReadback(16000, ['position', 'velocity']))
@@ -72,10 +72,10 @@ test('fluid cap policies preserve adaptive escape, constrain crossings, and clos
       await open(example);
       const intermediate = await page.evaluate(async (example) => {
         const { system, flip } = window.debugFluid;
-        if (example === 'gasVolume') window.seedGasSource(1, 0);
+        if (example === 'volumetricFire') window.seedGasSource(1, 0);
         else { window.seedFLIPPair(); flip.particleSeparation = 0; }
         flip.boundsPolicy = 'Contain';
-        flip.maxBounds = 32;
+        flip.setSpatialGridOptions({ maxBounds: 32 });
         flip.automaticPadding = false;
         const edge = flip.bounds.max.x;
         system.gravity.set(0, 0, 0);
@@ -88,7 +88,7 @@ test('fluid cap policies preserve adaptive escape, constrain crossings, and clos
       assert.deepEqual(intermediate.closed, [0, 0, 0]);
     }
 
-    await open('gasVolume');
+    await open('volumetricFire');
     await page.evaluate(() => window.seedUniformGas());
     const closed = await page.evaluate(async () => {
       window.debugFluid.flip.boundsPolicy = 'Contain';

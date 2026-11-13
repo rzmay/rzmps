@@ -27,11 +27,11 @@ export default async function createFlipFluid() {
       bakedFieldResolution: 48,
     },
     boundsPadding: 0,
-    maxBounds: 16,
     boundsPolicy: FluidBoundsPolicy.Kill,
     automaticPadding: true,
     velocityPaddingLookahead: 0.15,
     spatialGridOptions: {
+      maxBounds: 16,
       brickSubdivisions: 3,
       cellSubdivisions: 4,
       powerOfTwoBounds: true,
@@ -83,9 +83,6 @@ export default async function createFlipFluid() {
       new SurfaceRenderer({
         bounds: new THREE.Box3(new THREE.Vector3(-8, -8, -8), new THREE.Vector3(8, 8, 8)),
         voxelSize: 0.0625,
-        // Spilled liquid needs field/filter pages beyond the vessel itself.
-        maxActiveBricks: 4096,
-        maxTriangles: 524288,
         spatialGridOptions: { brickSubdivisions: 3, cellSubdivisions: 3 },
         fieldSmoothingIterations: 1,
         fieldSmoothing: 0.2,

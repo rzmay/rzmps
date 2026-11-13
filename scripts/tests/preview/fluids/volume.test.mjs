@@ -80,7 +80,8 @@ test('volume providers combine density/color with tags on WebGL and WebGPU', { t
         const expanded = await window.renderVolume(['red']);
         volume.generateChildren = false;
         volume.densityMapping = 'Linear';
-        volume.densityRange = [0, 1];
+        volume.minDensity = 0;
+        volume.maxDensity = 1;
         volume.opacity = 1 - 0.97 ** 8;
         volume.steps = 512;
         red.density.data.fill(0.4);
@@ -143,23 +144,23 @@ test('volume providers combine density/color with tags on WebGL and WebGPU', { t
           red.density.data.fill(0.4);
           red.density.version++;
           const baseline = await window.renderVolume(['red']);
-          volume.noiseStrength = 1;
+          volume.densityNoiseStrength = 1;
           const first = await window.renderVolume(['red']);
-          volume.noiseStrength = 2;
+          volume.densityNoiseStrength = 2;
           const stronger = await window.renderVolume(['red']);
-          volume.noiseStrength = 1;
+          volume.densityNoiseStrength = 1;
           volume.update([], system, 3);
           const animated = await window.renderVolume(['red']);
-          volume.noiseStrength = 0;
+          volume.densityNoiseStrength = 0;
           const restored = await window.renderVolume(['red']);
           const powers = [];
           for (const strength of [0.5, 1, 2, 4]) {
             red.density.data.fill(0.4);
             red.density.version++;
-            volume.noiseStrength = strength;
-            volume.noiseContrast = 0;
+            volume.densityNoiseStrength = strength;
+            volume.densityNoiseContrast = 0;
             const masked = await window.renderVolume(['red']);
-            volume.noiseStrength = 0;
+            volume.densityNoiseStrength = 0;
             red.density.data.fill(0.4 * 0.5 ** strength);
             red.density.version++;
             const reference = await window.renderVolume(['red']);
@@ -167,9 +168,9 @@ test('volume providers combine density/color with tags on WebGL and WebGPU', { t
           }
           red.density.data.fill(0.4);
           red.density.version++;
-          volume.noiseContrast = 1.5;
+          volume.densityNoiseContrast = 1.5;
           const disabled = await window.renderVolume(['red']);
-          volume.noiseContrast = 1;
+          volume.densityNoiseContrast = 1;
           return { baseline, first, stronger, animated, restored, disabled, powers,
             unchanged: red.density.data.every(value => value > 0.39) };
         });
@@ -183,6 +184,19 @@ test('volume providers combine density/color with tags on WebGL and WebGPU', { t
         assert.equal(mask.disabled.middle[0], mask.baseline.middle[0], 'zero strength bypasses contrast too');
         assert.equal(mask.unchanged, true, 'render noise must not modify source fields');
       }
+      const tint = await page.evaluate(async () => {
+        const { volume, red, THREE } = window.volumeFixture;
+        red.color.data.fill(1);
+        red.color.version++;
+        volume.color = new THREE.Color('white');
+        const white = (await window.renderVolume(['red'])).middle;
+        volume.color.set('#221f1f');
+        const tinted = (await window.renderVolume(['red'])).middle;
+        volume.color.set('white');
+        return { white, tinted };
+      });
+      assert(tint.tinted[0] < tint.white[0] * 0.5, `${backend}: white field preserves a dark base tint`);
+      assert(tint.tinted[0] >= tint.tinted[1], `${backend}: the base tint remains mildly reddish`);
       await page.setViewport({ width: 390, height: 844 });
       const mobilePixels = await page.evaluate(async () => {
         const { renderer, scene, camera, system, volume, red, blue } = window.volumeFixture;

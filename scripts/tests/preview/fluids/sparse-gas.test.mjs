@@ -13,7 +13,7 @@ try {
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   page.on('pageerror', error => { errors.push(error.message); console.error(error.message); });
   await openFixture(page, `http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${
-    path.resolve(import.meta.dirname, 'fixtures/fluid.html')}?example=gasVolume&fixedGas=true&reviewGrid=2,4`, errors);
+    path.resolve(import.meta.dirname, 'fixtures/fluid.html')}?example=volumetricFire&fixedGas=true&reviewGrid=2,4`, errors);
   const frames = Number(process.env.SPARSE_FRAMES ?? 120);
   const result = await page.evaluate(async frames => {
     window.debugFluid.flip.maxActiveBricks = 32;

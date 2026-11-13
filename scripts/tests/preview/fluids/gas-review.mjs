@@ -43,7 +43,7 @@ try {
   for (const fixed of [true, false]) {
     const mode = fixed ? 'fixed' : 'automatic';
     await page.setViewport({ width: 800, height: 600 });
-    const query = new URLSearchParams({ example: 'gasVolume', fixedGas: String(fixed) });
+    const query = new URLSearchParams({ example: 'volumetricFire', fixedGas: String(fixed) });
     if (process.env.GAS_SCENE) query.set('scene', process.env.GAS_SCENE);
     if (process.env.GAS_ADVECTION) query.set('reviewAdvection', process.env.GAS_ADVECTION);
     await page.goto(`${origin}/@fs${fixture}?${query}`, { waitUntil: 'networkidle0' });
@@ -54,12 +54,12 @@ try {
       const scale = system.modules.find(module => module.constructor.name === 'ScaleOverLifetime').options.scale;
       return { rate: system.emitters[0].rate, radialSpeed: system.emitters[0].radialSpeed,
         grid: [flip.spatialGridOptions.brickSubdivisions, flip.spatialGridOptions.cellSubdivisions],
-        noiseStrength: volume.noiseStrength, noiseContrast: volume.noiseContrast,
+        densityNoiseStrength: volume.densityNoiseStrength, densityNoiseContrast: volume.densityNoiseContrast,
         adaptiveStepping: volume.adaptiveStepping, scaleStart: scale(0).x, scaleEnd: scale(1).x };
     });
     if (configuration.rate !== 300 || configuration.radialSpeed !== 1.5
-      || configuration.grid.join(',') !== '3,4' || configuration.noiseStrength !== 2
-      || configuration.noiseContrast !== 1.5 || configuration.adaptiveStepping
+      || configuration.grid.join(',') !== '3,4' || configuration.densityNoiseStrength !== 2
+      || configuration.densityNoiseContrast !== 1.5 || configuration.adaptiveStepping
       || configuration.scaleStart <= configuration.scaleEnd) throw new Error('Gas preset configuration mismatch');
     if (process.env.GAS_CHILDREN || process.env.GAS_INTERPOLATION || process.env.GAS_NOISE) {
       await page.evaluate(({ children, interpolation, noise }) => {
@@ -69,7 +69,7 @@ try {
           volume.children = { count: children, radius: 0.15, scale: 1, alpha: 0.4 };
         }
         if (interpolation) volume.interpolation = interpolation;
-        if (noise) volume.noiseStrength = noise;
+        if (noise) volume.densityNoiseStrength = noise;
       }, {
         children: Number(process.env.GAS_CHILDREN ?? 0),
         interpolation: process.env.GAS_INTERPOLATION,

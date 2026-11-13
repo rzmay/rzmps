@@ -1,3 +1,4 @@
+import { copyStorageAttributes } from '../../utils/gpu/storage.utils';
 import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
   Fn, If, clamp, float, floor, instanceIndex, int, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4,
@@ -95,6 +96,13 @@ export default class FluidPressureProjection {
     }
   }
 
+  /** Suppress diagnostics/readbacks while a replacement graph is being compiled offscreen. */
+  forPreparation<T>(build: () => T): T {
+    const previous = this.preparing;
+    this.preparing = true;
+    try { return build(); } finally { this.preparing = previous; }
+  }
+
   /** Build compute graphs and compile pipelines without submitting any solver dispatch. */
   async prepare(
     renderer: ParticleSpatialGridRenderer & { compileComputeAsync?: (nodes: ComputeNode[]) => Promise<void> },
@@ -127,9 +135,8 @@ export default class FluidPressureProjection {
   /** Pool addresses remain stable during growth, including staggered face velocities. */
   migrateTo(renderer: ParticleSpatialGridRenderer, target: FluidPressureProjection): void {
     if (target.faceCount < this.faceCount || target.n !== this.n) throw new Error('Incompatible pressure migration.');
-    renderer.compute(Fn(() => {
-      target.faces.element(instanceIndex).assign(this.faces.element(instanceIndex));
-    })().compute(this.faceCount - (this.grid ? 1 : 0)));
+    const count = this.faceCount - (this.grid ? 1 : 0);
+    copyStorageAttributes(renderer, [{ source: this.attribute, target: target.attribute, byteLength: count * 16 }]);
     target.initialized = this.initialized;
     target.pressureInitialized = this.pressureInitialized;
   }
@@ -528,9 +535,11 @@ export default class FluidPressureProjection {
 
     const centerNode = this.centers.get(input) ?? this.compute(index => {
       const c = this.coordinate(index, this.n);
-      const gradient = vec3(...[0, 1, 2].map(axis => this.gradient(c, axis)
-        .add(this.gradient(c.add(this.axis(axis)), axis)).mul(0.5)) as [Node<'float'>, Node<'float'>, Node<'float'>]);
-      const velocity = input.element(index).xyz.sub(gradient);
+      // Reconstruct from the projected MAC faces, including the prescribed wall velocity.
+      // Subtracting a centered gradient from the original cell velocity leaves half a
+      // gravity step beside closed faces even when the authoritative face field is at rest.
+      const velocity = vec3(...[0, 1, 2].map(axis => this.face(c, axis)
+        .add(this.face(c.add(this.axis(axis)), axis)).mul(0.5)) as [Node<'float'>, Node<'float'>, Node<'float'>]);
       const limited = velocity.mul(clamp(this.maxVelocity.div(max(velocity.length(), float(1e-6))), 0, 1));
       output.element(index).assign(this.occupied(c).select(vec4(0), vec4(limited,
         this.occupancy ? input.element(index).w : float(0))));

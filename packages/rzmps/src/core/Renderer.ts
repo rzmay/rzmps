@@ -23,7 +23,7 @@ import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
 import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 import GPURendererChildren from '../rendering/gpu/RendererChildren';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../simulation/gpu/Particle';
-import type { Node } from 'three/webgpu';
+import type { Node, WebGPURenderer } from 'three/webgpu';
 import { bitAnd, float, uint, uniform } from 'three/tsl';
 import { GPUDynamicParameterStore } from '../values/evaluateDynamicGPU';
 import type { GPUParticleReadbackField } from '../simulation/gpu/SelectiveReadback';
@@ -298,6 +298,13 @@ export default abstract class Renderer extends EventReceiver {
   /** Creates rendering resources when attached to a system. */
   public abstract setup(system: ParticleSystem): void;
 
+  /** Prepare optional rendering pipelines without advancing particle or simulation state. */
+  public async prepareResources(_system: ParticleSystem, _renderer: WebGPURenderer): Promise<void> {
+    // Most renderers have no preparation work independent of their particle buffers.
+    void _system;
+    void _renderer;
+  }
+
   protected abstract _update(particles: Particle[], system: ParticleSystem, deltaTime: number): void;
 
   /** @internal CPU-readback renderers consume their batch when the CPU preprocessing actually executes. */
@@ -500,7 +507,7 @@ export default abstract class Renderer extends EventReceiver {
         void grouping!
           .readback()
           .then(particles => {
-            if (sequence !== this._gpuReadbackSequence) return;
+            if (sequence !== this._gpuReadbackSequence || system.paused) return;
             this.preparePopulation(grouping!.eligibleCount);
             this.updateView(particles, particles, system, deltaTime);
           })
@@ -568,7 +575,7 @@ export default abstract class Renderer extends EventReceiver {
     void system
       .selectiveReadback(Math.min(buffers.count, limit), fields)
       .then(results => {
-        if (sequence !== this._gpuReadbackSequence) return;
+        if (sequence !== this._gpuReadbackSequence || system.paused) return;
         this.update(
           results.filter(result => result.valid).map(result => result.particle),
           system,
@@ -578,6 +585,12 @@ export default abstract class Renderer extends EventReceiver {
       .finally(() => {
         if (sequence === this._gpuReadbackSequence) this._gpuReadbackPending = false;
       });
+  }
+
+  /** Refresh a CPU/readback renderer from its displayed state, without requesting new particles. */
+  public refresh(system: ParticleSystem): void {
+    void system;
+    this.cancelGPUSelectiveReadback();
   }
 
   protected cancelGPUSelectiveReadback(): void {

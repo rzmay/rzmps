@@ -96,16 +96,6 @@ readonly atlasOptions: TextureAtlasOptions;
 
 ***
 
-<a id="basecolor"></a>
-
-### baseColor
-
-```ts
-baseColor: Color;
-```
-
-***
-
 <a id="benchmarks"></a>
 
 ### benchmarks
@@ -131,6 +121,64 @@ children: RendererChildrenOptions;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`children`](Renderer.md#children)
+
+***
+
+<a id="color"></a>
+
+### color
+
+```ts
+color: Color;
+```
+
+***
+
+<a id="colorbydensity"></a>
+
+### colorByDensity
+
+```ts
+colorByDensity:
+  | ValueByParameter<ColorRepresentation>
+  | null = null;
+```
+
+***
+
+<a id="colorbyspeed"></a>
+
+### colorBySpeed
+
+```ts
+colorBySpeed:
+  | ValueByParameter<ColorRepresentation>
+  | null = null;
+```
+
+***
+
+<a id="colorbytemperature"></a>
+
+### colorByTemperature
+
+```ts
+colorByTemperature:
+  | ValueByParameter<ColorRepresentation>
+  | null = null;
+```
+
+***
+
+<a id="colorbyvorticity"></a>
+
+### colorByVorticity
+
+```ts
+colorByVorticity:
+  | ValueByParameter<ColorRepresentation>
+  | null = null;
+```
 
 ***
 
@@ -199,12 +247,88 @@ densityMapping:
 
 ***
 
-<a id="densityrange"></a>
+<a id="densitynoisecontrast"></a>
 
-### densityRange
+### densityNoiseContrast
 
 ```ts
-densityRange: [number, number];
+densityNoiseContrast: number;
+```
+
+***
+
+<a id="densitynoisecontrastbytemperature"></a>
+
+### densityNoiseContrastByTemperature
+
+```ts
+densityNoiseContrastByTemperature:
+  | ValueByParameter<number>
+  | null = null;
+```
+
+***
+
+<a id="densitynoisefrequency"></a>
+
+### densityNoiseFrequency
+
+```ts
+densityNoiseFrequency: number;
+```
+
+***
+
+<a id="densitynoisefrequencybytemperature"></a>
+
+### densityNoiseFrequencyByTemperature
+
+```ts
+densityNoiseFrequencyByTemperature:
+  | ValueByParameter<number>
+  | null = null;
+```
+
+***
+
+<a id="densitynoiseoctaves"></a>
+
+### densityNoiseOctaves
+
+```ts
+densityNoiseOctaves: number;
+```
+
+***
+
+<a id="densitynoisespeed"></a>
+
+### densityNoiseSpeed
+
+```ts
+densityNoiseSpeed: number;
+```
+
+***
+
+<a id="densitynoisestrength"></a>
+
+### densityNoiseStrength
+
+```ts
+densityNoiseStrength: number;
+```
+
+***
+
+<a id="densitynoisestrengthbytemperature"></a>
+
+### densityNoiseStrengthByTemperature
+
+```ts
+densityNoiseStrengthByTemperature:
+  | ValueByParameter<number>
+  | null = null;
 ```
 
 ***
@@ -216,6 +340,44 @@ densityRange: [number, number];
 ```ts
 depthTest: boolean;
 ```
+
+***
+
+<a id="downsample"></a>
+
+### downsample
+
+```ts
+downsample: number;
+```
+
+Screen-resolution divisor on WebGPURenderer: one is full, two is half. Defaults to one.
+
+***
+
+<a id="dynamicresolution"></a>
+
+### dynamicResolution
+
+```ts
+dynamicResolution:
+  | boolean
+  | VolumeResolutionOptions;
+```
+
+Adapt screen-space resolution to measured GPU time. Defaults to true; full resolution without timestamps.
+
+***
+
+<a id="emptyspaceskipping"></a>
+
+### emptySpaceSkipping
+
+```ts
+emptySpaceSkipping: boolean;
+```
+
+Skip exactly empty visual-density regions. Defaults to true.
 
 ***
 
@@ -393,52 +555,22 @@ optional materialTarget?: MaterialTarget;
 
 ***
 
-<a id="noisecontrast"></a>
+<a id="maxdensity"></a>
 
-### noiseContrast
+### maxDensity
 
 ```ts
-noiseContrast: number;
+maxDensity: number;
 ```
 
 ***
 
-<a id="noisefrequency"></a>
+<a id="mindensity"></a>
 
-### noiseFrequency
-
-```ts
-noiseFrequency: number;
-```
-
-***
-
-<a id="noiseoctaves"></a>
-
-### noiseOctaves
+### minDensity
 
 ```ts
-noiseOctaves: number;
-```
-
-***
-
-<a id="noisespeed"></a>
-
-### noiseSpeed
-
-```ts
-noiseSpeed: number;
-```
-
-***
-
-<a id="noisestrength"></a>
-
-### noiseStrength
-
-```ts
-noiseStrength: number;
+minDensity: number;
 ```
 
 ***
@@ -449,6 +581,42 @@ noiseStrength: number;
 
 ```ts
 opacity: number;
+```
+
+***
+
+<a id="opacitybyspeed"></a>
+
+### opacityBySpeed
+
+```ts
+opacityBySpeed:
+  | ValueByParameter<number>
+  | null = null;
+```
+
+***
+
+<a id="opacitybytemperature"></a>
+
+### opacityByTemperature
+
+```ts
+opacityByTemperature:
+  | ValueByParameter<number>
+  | null = null;
+```
+
+***
+
+<a id="opacitybyvorticity"></a>
+
+### opacityByVorticity
+
+```ts
+opacityByVorticity:
+  | ValueByParameter<number>
+  | null = null;
 ```
 
 ***
@@ -495,7 +663,7 @@ renderOrder: number;
 samplesPerVoxel: number;
 ```
 
-Samples per smallest contributing voxel. Defaults to two.
+Samples per smallest contributing voxel. Defaults to one; two selects high quality.
 
 ***
 
@@ -531,6 +699,16 @@ Secondary light-march quality; zero disables shadows (default).
 
 ***
 
+<a id="speedrange"></a>
+
+### speedRange
+
+```ts
+speedRange: [number, number];
+```
+
+***
+
 <a id="steps"></a>
 
 ### steps
@@ -552,6 +730,16 @@ optional tags?: string[];
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`tags`](Renderer.md#tags)
+
+***
+
+<a id="temperaturerange"></a>
+
+### temperatureRange
+
+```ts
+temperatureRange: [number, number];
+```
 
 ***
 
@@ -585,6 +773,16 @@ threshold: number;
 
 ```ts
 transmittanceThreshold: number;
+```
+
+***
+
+<a id="vorticityrange"></a>
+
+### vorticityRange
+
+```ts
+vorticityRange: [number, number];
 ```
 
 ***
@@ -1194,6 +1392,62 @@ Clears batches and unsubscribes when a component is removed or its system is des
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`dispose`](Renderer.md#dispose)
+
+***
+
+<a id="prepareresources"></a>
+
+### prepareResources()
+
+```ts
+prepareResources(system, renderer): Promise<void>;
+```
+
+Compile the visible volume path during preparation, overlapping simulation pipeline creation.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+##### renderer
+
+`WebGPURenderer`
+
+#### Returns
+
+`Promise`\<`void`\>
+
+#### Overrides
+
+[`Renderer`](Renderer.md).[`prepareResources`](Renderer.md#prepareresources)
+
+***
+
+<a id="refresh"></a>
+
+### refresh()
+
+```ts
+refresh(system): void;
+```
+
+Refresh a CPU/readback renderer from its displayed state, without requesting new particles.
+
+#### Parameters
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+`void`
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`refresh`](Renderer.md#refresh)
 
 ***
 

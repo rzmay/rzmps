@@ -7,6 +7,10 @@ export interface VolumeField {
   bounds: THREE.Box3;
   version: number;
   channels?: 1 | 3 | 4;
+  /** Optional physical parameters packed alongside density in RGBA. Density always occupies R. */
+  parameterChannels?: Partial<Record<'temperature' | 'speed' | 'vorticity', 1 | 2 | 3>>;
+  /** Divide interpolated parameter channels by interpolated density when true. */
+  parametersPremultiplied?: boolean;
 }
 
 

@@ -47,6 +47,7 @@ export default class SpatialRuntime {
       cubicBounds: gridOrOptions.cubicBounds ?? false,
       centeredAtOrigin: gridOrOptions.centeredAtOrigin ?? true,
       autoExpand: gridOrOptions.autoExpand ?? true,
+      maxBounds: gridOrOptions.maxBounds ?? Infinity,
       autoShrink: gridOrOptions.autoShrink ?? true,
       shrinkDelay: gridOrOptions.shrinkDelay ?? 600,
       expansionHysteresis: gridOrOptions.expansionHysteresis ?? 0.125,

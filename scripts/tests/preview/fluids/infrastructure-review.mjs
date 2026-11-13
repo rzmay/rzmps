@@ -20,7 +20,7 @@ try {
   });
   const fixture = `http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${
     path.resolve(import.meta.dirname, 'fixtures/fluid.html')}`;
-  await openFixture(page, `${fixture}?example=gasVolume&measureStartup`, errors);
+  await openFixture(page, `${fixture}?example=volumetricFire&measureStartup`, errors);
   const gas = await page.evaluate(async () => {
     const { system, renderer, flip, THREE, scene } = window.debugFluid;
     const warm = [];

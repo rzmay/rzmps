@@ -159,7 +159,7 @@ The 10-second loop schedules a continuous flame; individual flame particles last
     renderers: [
       new SpriteRenderer(Textures.Default, {
         alphaMap,
-        softParticleDistance: 2.5,
+        softParticleDistance: options.softParticleDistance ?? 2.5,
         materialOptions: {
           transmission: 1,
           distortionMap,
@@ -349,7 +349,7 @@ The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one anim
     renderers: [
       new SpriteRenderer(Textures.Default, {
         alphaMap,
-        softParticleDistance: 2.5,
+        softParticleDistance: options.softParticleDistance ?? 2.5,
         materialOptions: {
           transmission: 1,
           distortionMap,

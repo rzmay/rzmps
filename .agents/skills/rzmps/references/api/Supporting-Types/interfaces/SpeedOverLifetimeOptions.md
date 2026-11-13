@@ -201,11 +201,11 @@ negative is permanent before movement,
 
 ```ts
 optional requireSpatialEffects?:
-  | SpatialEffectConstructor<SpatialEffect>
-  | SpatialEffectConstructor<SpatialEffect>[];
+  | SpatialEffectRequirement
+  | SpatialEffectRequirement[];
 ```
 
-Constructors selecting scene effects for this module during prepare.
+Constructors discover scene matches; instances include that exact effect directly.
 
 #### Inherited from
 

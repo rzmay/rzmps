@@ -1,5 +1,7 @@
+/* eslint-env node */
 import assert from 'node:assert/strict';
-import { Module, ParticleSystem, FLIPSimulation, GasSimulation } from '../../build/index.mjs';
+import * as THREE from 'three';
+import { Module, ParticleSystem, FLIPSimulation, GasSimulation, VolumeRenderer } from '../../build/index.mjs';
 
 const gas = new GasSimulation({ maxBrickCapacity: 128 });
 assert.equal(gas.volumeGrid.capacity, 64);
@@ -50,13 +52,29 @@ limited.destroy();
 
 const system = new ParticleSystem({ emitters: [], renderers: [] });
 let prepared = 0;
+let rendererPrepared = 0;
+let finishRendererPreparation;
+const rendererPreparation = new Promise(resolve => { finishRendererPreparation = resolve; });
+const volume = new VolumeRenderer();
+volume.prepareResources = async owner => {
+  assert.equal(owner, system);
+  rendererPrepared++;
+  await rendererPreparation;
+};
+system.addRenderer(volume);
 const module = new Module(() => { throw new Error('Preparation must not call modify'); });
-module.prepareResources = async owner => { assert.equal(owner, system); prepared++; };
+module.prepareResources = async owner => {
+  assert.equal(owner, system);
+  assert.equal(rendererPrepared, 1, 'renderer preparation starts alongside module preparation');
+  prepared++;
+  finishRendererPreparation();
+};
 module.prepare = () => { throw new Error('Preparation must not call per-step prepare'); };
 system.modules = [module];
 const before = { time: system._elapsedTime, particles: system.liveParticleCount };
 await system.prepare({ isWebGPURenderer: true });
 assert.equal(prepared, 1);
+assert.equal(rendererPrepared, 1);
 assert.deepEqual({ time: system._elapsedTime, particles: system.liveParticleCount }, before);
 await assert.rejects(system.prepare({}), /WebGPU/);
 system.destroy();
@@ -70,7 +88,7 @@ console.log('Fluid pressure controls, sparse reservation, CFL and non-advancing 
   const gas = new GasSimulation({ velocityPaddingLookahead: 1.5 });
   const padding = await gas.readAutomaticPadding({
     getArrayBufferAsync: async () => new Float32Array([0, 0]).buffer,
-  }, undefined, 2);
-  assert.equal(padding, 3);
+  }, undefined, new THREE.Vector3(0.1, 2, 0.2));
+  assert.deepEqual(padding.toArray().map(value => Number(value.toPrecision(12))), [0.15, 3, 0.3]);
   gas.cleanup();
 }

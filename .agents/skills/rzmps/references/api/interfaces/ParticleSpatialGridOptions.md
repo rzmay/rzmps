@@ -124,6 +124,18 @@ optional levels?: SpatialLevelsInput;
 
 ***
 
+<a id="maxbounds"></a>
+
+### maxBounds
+
+```ts
+maxBounds: number;
+```
+
+Maximum side length of normalized grid bounds; Infinity (default) leaves growth uncapped.
+
+***
+
 <a id="maxquerysteps"></a>
 
 ### maxQuerySteps

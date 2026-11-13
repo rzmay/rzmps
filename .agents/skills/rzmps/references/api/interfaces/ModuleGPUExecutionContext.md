@@ -182,6 +182,16 @@ simulationToWorldNode: Node<"mat4">;
 
 ***
 
+<a id="spatialeffects"></a>
+
+### spatialEffects
+
+```ts
+readonly spatialEffects: SpatialEffectCollection;
+```
+
+***
+
 <a id="spatialgrid"></a>
 
 ### spatialGrid?

@@ -4,7 +4,8 @@ import test from 'node:test';
 import puppeteer from 'puppeteer';
 import { startSiteDev } from '../../../site/dev.mjs';
 
-test('fluid presets preserve scenes, the teapot fills, and reference gas fields decay as configured', { timeout: 180000 }, async () => {
+test('fluid presets preserve scenes, the teapot fills, and reference gas fields decay as configured',
+  { timeout: 180000 }, async () => {
   const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
   let browser;
   try {
@@ -22,7 +23,7 @@ test('fluid presets preserve scenes, the teapot fills, and reference gas fields 
     const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;
     await page.goto(`${origin}/?preset=Fire&scene=Checkerboard&renderer=webgl`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('.psgui-demo select');
-    for (const name of ['FLIP Fluid', 'Gas Volume', 'Steam Burst', 'Volumetric Smoke']) {
+    for (const name of ['FLIP Fluid', 'Volumetric Fire', 'Volumetric Smoke']) {
       await page.evaluate(name => {
         const select = [...document.querySelectorAll('.psgui-demo select')]
           .find(select => [...select.options].some(option => option.textContent === name));
@@ -80,22 +81,14 @@ test('fluid presets preserve scenes, the teapot fills, and reference gas fields 
     assert.ok(bounded.escapedX > 30.5, 'escaped markers remain ballistic, not contained by an artificial wall');
     assert.ok(Math.abs(bounded.escapedSpeedX - 1) < 1e-5, 'escaped markers must not sample clamped edge velocities');
 
-    for (const example of ['steamBurst', 'volumetricSmoke']) {
-      await page.goto(`${origin}/@fs${fixture}?example=${example}`, { waitUntil: 'networkidle0' });
-      await page.waitForFunction(() => window.ready);
-      const initial = await page.evaluate(() => window.runFrames(30));
-      // Measure decay independently of the interactive presets' longer source durations.
-      await page.evaluate(() => window.stopGasSources());
-      const cooled = await page.evaluate(() => window.runFrames(210));
-      assert.ok(initial.field.sum > 0, `${example}: the particle burst must inject gas`);
-      if (example === 'steamBurst') {
-        assert.ok(cooled.field.sum < initial.field.sum * 0.01, 'steam burst should fade rapidly with dissipation 3');
-      } else {
-        assert.ok(cooled.field.sum > initial.field.sum * 0.4, 'slowly dissipating volumetric smoke should persist');
-        assert.ok(cooled.field.heat / cooled.field.sum < initial.field.heat / initial.field.sum,
-          'retained smoke should cool while density dissipates slowly');
-      }
-    }
+    // The smoke preset is a finite pulse which must rise and then dissipate.
+    await page.goto(`${origin}/@fs${fixture}?example=volumetricSmoke`, { waitUntil: 'networkidle0' });
+    await page.waitForFunction(() => window.ready);
+    const initialSmoke = await page.evaluate(() => window.runFrames(30));
+    await page.evaluate(() => window.stopGasSources());
+    const fadedSmoke = await page.evaluate(() => window.runFrames(210));
+    assert.ok(initialSmoke.field.sum > 0, 'the particle pulse injects gas');
+    assert.ok(fadedSmoke.field.sum < initialSmoke.field.sum, 'smoke dissipates between pulses');
     const rotating = [];
     for (const strength of [0, 2]) {
       // Keep this numerical comparison at its reference quality, independent of demo quality changes.

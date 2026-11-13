@@ -9,7 +9,7 @@ try {
   browser = await puppeteer.launch({ headless: true, args: ['--enable-unsafe-webgpu'] });
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${
-    path.resolve(import.meta.dirname, 'fixtures/fluid.html')}?example=gasVolume&fixedGas=true`);
+    path.resolve(import.meta.dirname, 'fixtures/fluid.html')}?example=volumetricFire&fixedGas=true`);
   await page.waitForFunction(() => window.ready);
   for (const directory of ['/src/gui', '/src/gui/particle-system-gui']) {
     const controls = await page.evaluate(async directory => {
@@ -38,9 +38,9 @@ try {
     for (const key of ['runtimeDataForOtherModules', 'volumeGrid', 'velocityCurrent', 'maxima', 'useSpatialGrid']) {
       assert(!controls.module.includes(key), `${directory}: internal ${key} leaked into GUI`);
     }
-    assert(controls.renderer.includes('noiseStrength'));
-    assert(controls.renderer.includes('noiseContrast'));
-    assert(controls.serialized.includes('noiseContrast:'));
+    assert(controls.renderer.includes('densityNoiseStrength'));
+    assert(controls.renderer.includes('densityNoiseContrast'));
+    assert(controls.serialized.includes('densityNoiseContrast:'));
     assert(controls.renderer.includes('steps'));
     for (const key of ['adaptiveStepping', 'adaptiveStepThreshold', 'adaptiveStepFactor',
       'transmittanceThreshold', 'sceneDepthClipping', 'sceneDepthBias']) {

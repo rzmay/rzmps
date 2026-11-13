@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import StagedGPUAllocation from '../../utils/gpu/StagedGPUAllocation';
 import LiquidMaterial from '../materials/LiquidMaterial';
 import type { WebGPURenderer } from 'three/webgpu';
 import Renderer, { type RendererOptions } from '../../core/Renderer';
@@ -98,6 +99,13 @@ export default class SurfaceRenderer extends Renderer {
   castShadow: boolean;
   receiveShadow: boolean;
   private surface?: LiquidSurface;
+  private allocation?: StagedGPUAllocation<LiquidSurface>;
+  private requiredTier = 0;
+  private surfaceLimits = { bricks: 0, triangles: 0 };
+  private resourceFailure?: Error;
+  private maximumTier = 1;
+  private readonly initialBricks: number;
+  private readonly initialTriangles: number;
   private resourceExtraction?: SurfaceExtractor;
   private resourceKey = '';
   // Retained only for controlled comparisons with the original radial field.
@@ -129,8 +137,10 @@ export default class SurfaceRenderer extends Renderer {
     this.velocityDetailRange = [...(options.velocityDetailRange ?? [0.5, 3])];
     this.vorticityDetailRange = [...(options.vorticityDetailRange ?? [1, 8])];
     this.isoLevel = options.isoLevel ?? 0.2;
-    this.maxActiveBricks = options.maxActiveBricks ?? 512;
-    this.maxTriangles = options.maxTriangles ?? 131072;
+    this.maxActiveBricks = options.maxActiveBricks ?? Number.MAX_SAFE_INTEGER;
+    this.initialBricks = options.maxActiveBricks ?? 128;
+    this.initialTriangles = options.maxTriangles ?? 32768;
+    this.maxTriangles = options.maxTriangles ?? Number.MAX_SAFE_INTEGER;
     this.smoothingIterations = options.smoothingIterations ?? 3;
     this.smoothingStrength = options.smoothingStrength ?? 1;
     this.spatialGridOptions = {
@@ -186,6 +196,9 @@ export default class SurfaceRenderer extends Renderer {
       throw new Error('SurfaceRenderer requires native WebGPU particle processing.');
     }
     this.validate();
+    const gpu = renderer.backend as unknown as { device: {
+      limits: { maxStorageBufferBindingSize: number }; queue: { onSubmittedWorkDone(): Promise<void> };
+    } };
     const key = JSON.stringify([
       this.bounds.min.toArray(),
       this.bounds.max.toArray(),
@@ -202,16 +215,54 @@ export default class SurfaceRenderer extends Renderer {
       this.gpuRenderer !== renderer ||
       !this.surface
     ) {
-      if (this.surface) this.surface.dispose();
-      else this.mesh.geometry.dispose();
+      this.allocation?.cancelPending();
+      this.allocation = undefined;
+      if (this.surface) {
+        const previous = this.surface;
+        void gpu.device.queue.onSubmittedWorkDone().then(() => previous.dispose());
+      } else this.mesh.geometry.dispose();
       this.surface = undefined;
       this.mesh.visible = false;
-      this.surface = new LiquidSurface(this, renderer, this.reconstructionVersion === 1, this.extraction);
+      const limits = gpu.device.limits;
+      const extent = this.bounds.getSize(new THREE.Vector3()).divideScalar(this.voxelSize);
+      const cells = 2 ** Math.max(3, Math.ceil(Math.log2(Math.max(extent.x, extent.y, extent.z))));
+      const maximumBricks = Math.min(this.maxActiveBricks, (cells / 8) ** 3,
+        Math.floor((limits.maxStorageBufferBindingSize - 48) / (512 * 48)));
+      const maximumTriangles = Math.min(this.maxTriangles, Math.floor(limits.maxStorageBufferBindingSize / 48));
+      this.surfaceLimits = { bricks: maximumBricks, triangles: maximumTriangles };
+      this.resourceFailure = undefined;
+      const baseBricks = Math.min(this.initialBricks, maximumBricks);
+      const baseTriangles = Math.min(this.initialTriangles, maximumTriangles);
+      const create = (tier: number) => {
+        const options = Object.create(this) as ConstructorParameters<typeof LiquidSurface>[0];
+        Object.defineProperties(options, {
+          maxActiveBricks: { value: Math.min(maximumBricks, baseBricks * tier) },
+          maxTriangles: { value: Math.min(maximumTriangles, baseTriangles * tier) },
+        });
+        return new LiquidSurface(options, renderer, this.reconstructionVersion === 1, this.extraction);
+      };
+      this.maximumTier = 2 ** Math.ceil(Math.log2(Math.max(maximumBricks / baseBricks,
+        maximumTriangles / baseTriangles)));
+      this.surface = create(1);
+      this.requiredTier = 0;
+      this.allocation = new StagedGPUAllocation(this.surface, 1, {
+        maximumCapacity: this.maximumTier,
+        create,
+        prepare: surface => surface.prepare(() => this.updateSurface(surface, buffers, system)),
+        // Surface fields are ephemeral: rebuild from authoritative render particles before first drawing.
+        migrate: () => {},
+        swap: surface => { this.surface = surface; this.mesh.geometry = surface.geometry; },
+        fence: () => gpu.device.queue.onSubmittedWorkDone(),
+        dispose: surface => surface.dispose(),
+      });
       this.mesh.geometry = this.surface.geometry;
       this.gpuRenderer = renderer;
       this.resourceKey = key;
       this.resourceExtraction = typeof this.extraction === 'function' ? this.extraction : undefined;
     }
+    this.allocation!.commit();
+    this.allocation!.request(this.requiredTier);
+    this.requiredTier = 0;
     this.syncMaterialColor();
     const composite =
       this.materialCompositeGPU ?? (this.material instanceof LiquidMaterial ? this.material.compositeGPU : undefined);
@@ -226,21 +277,27 @@ export default class SurfaceRenderer extends Renderer {
       this.materialStateKey = materialKey;
       applySurfaceMaterial(this.material, this.particleColors, composite, this.materialComposite);
     }
-    this.surface.update(
-      buffers,
-      this.particleRadius,
-      this.isoLevel,
-      system.getGPURendererTagMask(this.tags),
-      system.quality,
-      this.compensation === 'size' && system.quality > 0 ? 1 / Math.sqrt(system.quality) : 1,
-      this.smoothingIterations,
-      this.smoothingStrength,
-    );
-    if (this.benchmarks.enabled && !this.diagnosticsPending) {
+    this.updateSurface(this.surface, buffers, system);
+    if (!this.diagnosticsPending) {
       this.diagnosticsPending = true;
-      void this.surface
-        .readDiagnostics()
+      const observed = this.surface;
+      void observed.readDiagnostics()
         .then(stats => {
+          if (observed !== this.surface) return;
+          if (stats.activeBricks + stats.overflowedBricks > this.surfaceLimits.bricks
+            || stats.triangles + stats.overflowedTriangles > this.surfaceLimits.triangles) {
+            if (!this.resourceFailure) {
+              console.warn('Surface reconstruction exceeds device/configured resource limits.', stats);
+            }
+            this.resourceFailure = new Error('Surface reconstruction exceeds device/configured resource limits.');
+          }
+          const requestedBricks = stats.activeBricks + stats.overflowedBricks;
+          // Account for triangles in pages that could not yet be reconstructed, avoiding
+          // a second immediate grow when a wider source footprint first becomes visible.
+          const coverage = Math.max(1, requestedBricks / Math.max(1, stats.activeBricks));
+          const predictedTriangles = (stats.triangles + stats.overflowedTriangles) * coverage;
+          this.requiredTier = Math.min(this.maximumTier,
+            Math.max(requestedBricks / this.initialBricks, predictedTriangles / this.initialTriangles));
           this.benchmarks.set('triangleCount', stats.triangles);
           this.benchmarks.set('activeBricks', stats.activeBricks);
           this.benchmarks.set('activeSurfaceCells', stats.vertices);
@@ -255,6 +312,13 @@ export default class SurfaceRenderer extends Renderer {
     this.mesh.visible = true;
     this.mesh.castShadow = this.castShadow;
     this.mesh.receiveShadow = this.receiveShadow;
+  }
+
+  private updateSurface(surface: LiquidSurface,
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState, system: ParticleSystem): void {
+    surface.update(buffers, this.particleRadius, this.isoLevel, system.getGPURendererTagMask(this.tags),
+      system.quality, this.compensation === 'size' && system.quality > 0 ? 1 / Math.sqrt(system.quality) : 1,
+      this.smoothingIterations, this.smoothingStrength);
   }
 
   private syncMaterialColor(): void {
@@ -346,7 +410,7 @@ export default class SurfaceRenderer extends Renderer {
     }
   }
 
-  /** Explicit asynchronous diagnostics; mesh counts and vertices are never read back during ordinary updates. */
+  /** Compact allocation counters; vertex/index buffers are never read back during ordinary updates. */
   async readSurfaceDiagnostics(): Promise<{
     triangles: number;
     vertices: number;
@@ -384,7 +448,9 @@ export default class SurfaceRenderer extends Renderer {
   destroy(): void {
     super.reset();
     this.mesh.removeFromParent();
-    this.surface?.dispose();
+    if (this.allocation) this.allocation.dispose();
+    else this.surface?.dispose();
+    this.allocation = undefined;
     if (!this.surface) this.mesh.geometry.dispose();
     this.surface = undefined;
     this.material.dispose();

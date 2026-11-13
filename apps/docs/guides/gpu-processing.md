@@ -90,6 +90,12 @@ the returned kernel uses the current CPU count; update its `count` when that pop
 Callbacks decide whether dead slots participate. These kernels require an initialized grid and
 must be rebuilt if the grid's underlying particle storage is replaced.
 
+`spatialGridOptions.maxBounds` optionally caps each axis of the final spatial domain. It defaults
+to `Infinity`; power-of-two grids round a finite cap down to the nearest power of two. The grid applies
+this ceiling to supplied bounds and automatic GPU expansion. Runtime changes use
+`module.setSpatialGridOptions({ maxBounds: 16 })` or `grid.maxBounds = 16`. Fluid modules supply padded
+particle/field support to the grid and retain their own `boundsPolicy` for particles at the cap.
+
 ### Spatial Aggregation And Levels
 
 `SpatialAggregator<T, "cpu">` preserves the octree's existing `new` and `combine` members

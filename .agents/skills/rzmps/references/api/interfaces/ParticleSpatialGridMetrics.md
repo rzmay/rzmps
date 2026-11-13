@@ -27,3 +27,15 @@ bounds: Box3;
 ```ts
 maxParticleSpeed: number;
 ```
+
+***
+
+<a id="maxparticlevelocity"></a>
+
+### maxParticleVelocity
+
+```ts
+maxParticleVelocity: Vector3;
+```
+
+Per-axis absolute physical velocity, including the particle speed multiplier.

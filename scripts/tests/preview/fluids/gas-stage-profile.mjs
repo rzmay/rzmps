@@ -27,7 +27,7 @@ try {
       Math.random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
     });
     const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;
-    const query = new URLSearchParams({ example: 'gasVolume', reviewGrid: grid, scene: 'gasFlow', profile: 'true' });
+    const query = new URLSearchParams({ example: 'volumetricFire', reviewGrid: grid, scene: 'gasFlow', profile: 'true' });
     await page.goto(`${origin}/@fs${path.resolve(import.meta.dirname, 'fixtures/fluid.html')}?${query}`);
     await page.waitForFunction(() => window.ready);
     measuring = true;
@@ -171,10 +171,10 @@ try {
         return Number(end - origin) / 1e6;
       };
       const rays = [];
-      for (const steps of [80, 160]) for (const noiseStrength of [0, 0.7]) {
+      for (const steps of [80, 160]) for (const densityNoiseStrength of [0, 0.7]) {
         const modes = [[false, false], [false, true], [true, false], [true, true]];
         for (const [adaptiveStepping, sceneDepthClipping] of modes) {
-          Object.assign(volume, { steps, noiseStrength, adaptiveStepping, sceneDepthClipping,
+          Object.assign(volume, { steps, densityNoiseStrength, adaptiveStepping, sceneDepthClipping,
             stepSizeMultiplier: 0.25 });
           volume._update([], system);
           for (let i = 0; i < 3; i++) {
@@ -189,7 +189,7 @@ try {
             wall.push(performance.now() - start);
             gpu.push(await resolve('render'));
           }
-          rays.push({ steps, noiseStrength, adaptiveStepping, sceneDepthClipping,
+          rays.push({ steps, densityNoiseStrength, adaptiveStepping, sceneDepthClipping,
             gpuMs: median(gpu), wallMs: median(wall), renderIntervals });
         }
       }

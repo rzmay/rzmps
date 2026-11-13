@@ -69,8 +69,9 @@ float lightTransmittance(vec3 position, vec3 direction) {
   for (int i = 0; i < 64; i++) {
     if (float(i) >= budget || distance >= far) break;
     float segment = min(spacing, far - distance);
-    float density = sampleDensity(position + direction * (distance + segment * 0.5));
-    transmission *= pow(1.0 - renderOpacity(density), segment * metric);
+    vec4 physical = samplePhysical(position + direction * (distance + segment * 0.5));
+    float multiplier = volumeAppearance(physical).a;
+    transmission *= pow(1.0 - clamp(renderOpacity(physical.y) * multiplier, 0.0, 1.0), segment * metric);
     distance += segment;
     if (transmission <= 0.001) break;
   }
@@ -101,6 +102,7 @@ void main() {
   vec4 color = vec4(0.0);
 
   for (int i = 0; i < 512; i++) {
+    if (!adaptiveStepping) distanceAlongRay = bounds.x + float(i) * stepSize;
     if (float(i) >= floor(steps) || distanceAlongRay >= bounds.y) break;
     float growth = adaptiveStepping
       ? mix(1.0, adaptiveStepFactor, smoothstep(adaptiveStepThreshold, 1.0, color.a)) : 1.0;
@@ -110,9 +112,10 @@ void main() {
     float offset = mix(0.5, volumeJitter(point, float(i)), jitterStrength);
     vec3 p = vOrigin + rayDir * (distanceAlongRay + segment * offset);
 
-    vec4 volume = sampleVolume(p);
+    float opacityMultiplier;
+    vec4 volume = sampleVolume(p, opacityMultiplier);
     float d = volume.a;
-    float a = 1.0 - pow(1.0 - renderOpacity(d), length(rayDir * boundsSize) * segment);
+    float a = 1.0 - pow(1.0 - clamp(renderOpacity(d) * opacityMultiplier, 0.0, 1.0), length(rayDir * boundsSize) * segment);
     vec3 sampleColor = volume.rgb;
 
     float transmission = shadowQuality > 0.0 ? lightTransmittance(p, shadowDirection) : 1.0;

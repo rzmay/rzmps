@@ -13,14 +13,15 @@ let browser;
 try {
   browser = await puppeteer.launch({ headless: true, args: ['--enable-unsafe-webgpu'] });
   const results = {};
-  for (const example of ['gasVolume', 'flipFluid']) {
+  for (const example of process.env.FLUID_EXAMPLES?.split(',') ?? ['volumetricFire', 'flipFluid']) {
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     const fixture = path.resolve(import.meta.dirname, 'fixtures/fluid.html');
     await openFixture(page, `http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${fixture}` +
-      `?example=${example}&demoLiquid=true&measureStartup&prepareStartup&scene=gasFlow`, errors);
+      `?example=${example}&demoLiquid=true&measureStartup&prepareStartup&scene=gasFlow`
+      + (process.env.RENDER_DURING_PREPARATION ? '&renderDuringPreparation' : ''), errors);
     const result = await page.evaluate(async () => {
       const { system, renderer, scene, camera } = window.debugFluid;
       const warm = [];

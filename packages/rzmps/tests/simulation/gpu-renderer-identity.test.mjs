@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
+import { setTimeout } from 'node:timers';
 import * as THREE from 'three';
 import {
   createGPUParticleBufferState,
   LightRenderer,
+  SpriteRenderer,
   MeshRenderer,
   Particle,
+  ParticleSystem,
   TrailMode,
   TrailRenderer,
 } from '../../build/index.mjs';
@@ -129,7 +132,52 @@ assert.ok(requestedLimit < 1000);
 resolveReadback([]);
 await new Promise((resolve) => setTimeout(resolve, 0));
 
+// Paused configuration refresh preserves the published selection and rejects in-flight readbacks.
+const pausedSystem = new ParticleSystem({ emitters: [], modules: [], renderers: [] });
+const pausedLights = new LightRenderer({ count: 1, brightness: 1 });
+pausedSystem.addRenderer(pausedLights);
+pausedLights.update([firstLightParticle], pausedSystem);
+let finishPausedReadback, pauseReadbacks = 0;
+pausedSystem.selectiveReadback = () => {
+  pauseReadbacks++;
+  return new Promise(resolve => { finishPausedReadback = resolve; });
+};
+pausedLights.updateGPU({ count: 8 }, pausedSystem);
+pausedSystem.start(); pausedSystem.pause();
+pausedSystem.gpuSimulation._gpuBuffers = { count: 8 };
+pausedSystem.gpuSimulation.refreshRenderers();
+finishPausedReadback([{ valid: true, particle: reusedLightParticle }]);
+await new Promise(resolve => setTimeout(resolve, 0));
+assert.deepEqual(pausedLights.lights[0].position.toArray(), [1, 2, 3]);
+assert.equal(pauseReadbacks, 1, 'paused refresh must not request fresh selections');
+firstLightParticle.position.x = 99;
+pausedLights.brightness = 2;
+pausedSystem.gpuSimulation.refreshRenderers();
+assert.deepEqual(pausedLights.lights[0].position.toArray(), [1, 2, 3], 'published views own their vector snapshots');
+assert.equal(pausedLights.lights[0].intensity, 2, 'CPU light configuration remains editable while paused');
+pausedLights.clear(); pausedLights.refresh(pausedSystem);
+assert.equal(pausedLights.lights[0].intensity, 0, 'clear must not resurrect cached light samples');
+pausedSystem.gpuSimulation._gpuBuffers = undefined;
+pausedSystem.destroy();
+
 particleTrail.destroy();
 ribbonTrail.destroy();
 lightRenderer.destroy();
 meshRenderer.destroy();
+
+// Soft-particle depth excludes transparent volume proxies but retains opaque scene geometry.
+{
+  const view = new SpriteRenderer(new THREE.Texture());
+  const owner = new ParticleSystem({ emitters: [], modules: [], renderers: [] });
+  const scene = new THREE.Scene(); scene.add(owner);
+  const proxy = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({ transparent: true }));
+  const opaque = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+  owner.addRendererObject(proxy); scene.add(opaque);
+  const hidden = view.hideParticleRenderers(scene);
+  assert.equal(proxy.visible, false, 'volume proxy boxes do not contribute opaque depth');
+  assert.equal(opaque.visible, true);
+  view.restoreParticleRenderers(hidden);
+  assert.equal(proxy.visible, true);
+  view.destroy(); owner.destroy();
+  for (const mesh of [proxy, opaque]) { mesh.geometry.dispose(); mesh.material.dispose(); }
+}

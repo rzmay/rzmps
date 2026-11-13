@@ -94,6 +94,8 @@ Apply shared scene influences, force fields, and spatial selection.
 - [BoidAffector](classes/BoidAffector.md)
 - [KillZone](classes/KillZone.md)
 - [FluidCollider](classes/FluidCollider.md)
+- [GasAffector](classes/GasAffector.md)
+- [SpatialEffectCollection](classes/SpatialEffectCollection.md)
 - [SpatialGrid](classes/SpatialGrid.md)
 
 ## GPU Infrastructure
@@ -118,6 +120,7 @@ Build advanced GPU extensions with particle-node views, buffers, selective readb
 - [GPUParticleRenderStorage](classes/GPUParticleRenderStorage.md)
 - [GPUParticleStorage](classes/GPUParticleStorage.md)
 - [GPUSpatialEffectRegistry](classes/GPUSpatialEffectRegistry.md)
+- [StagedGPUAllocation](classes/StagedGPUAllocation.md)
 
 ## Types
 
@@ -155,6 +158,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [FluidSimulationOptions](interfaces/FluidSimulationOptions.md)
 - [ForceFieldOptions](interfaces/ForceFieldOptions.md)
 - [ForceOverLifetimeOptions](Supporting-Types/interfaces/ForceOverLifetimeOptions.md)
+- [GasAffectorOptions](interfaces/GasAffectorOptions.md)
 - [GasSimulationOptions](interfaces/GasSimulationOptions.md)
 - [KillZoneOptions](type-aliases/KillZoneOptions.md)
 - [LightRendererAllocationOptions](interfaces/LightRendererAllocationOptions.md)
@@ -192,6 +196,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [SpeedBySizeOptions](Supporting-Types/interfaces/SpeedBySizeOptions.md)
 - [SpeedOverLifetimeOptions](Supporting-Types/interfaces/SpeedOverLifetimeOptions.md)
 - [SpriteRendererOptions](Supporting-Types/interfaces/SpriteRendererOptions.md)
+- [StagedGPUAllocationOptions](interfaces/StagedGPUAllocationOptions.md)
 - [SubSystemOptions](interfaces/SubSystemOptions.md)
 - [SurfaceRendererOptions](interfaces/SurfaceRendererOptions.md)
 - [TextureAtlasOptions](interfaces/TextureAtlasOptions.md)
@@ -204,6 +209,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [VelocityBySizeOptions](Supporting-Types/interfaces/VelocityBySizeOptions.md)
 - [VelocityOverLifetimeOptions](Supporting-Types/interfaces/VelocityOverLifetimeOptions.md)
 - [VolumeRendererOptions](interfaces/VolumeRendererOptions.md)
+- [VolumeResolutionOptions](interfaces/VolumeResolutionOptions.md)
 
 ### Dynamic Values
 
@@ -239,6 +245,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 ### Callbacks
 
 - [CollisionListener](type-aliases/CollisionListener.md)
+- [GasModifier](type-aliases/GasModifier.md)
 - [ModuleGPUUpdate](type-aliases/ModuleGPUUpdate.md)
 - [ModuleUpdate](type-aliases/ModuleUpdate.md)
 - [NoiseModuleGPUUpdate](Supporting-Types/type-aliases/NoiseModuleGPUUpdate.md)
@@ -284,6 +291,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [EventScope](type-aliases/EventScope.md)
 - [EventSubscriptions](type-aliases/EventSubscriptions.md)
 - [FluidPressureDiagnostics](Supporting-Types/interfaces/FluidPressureDiagnostics.md)
+- [GasCellGPU](interfaces/GasCellGPU.md)
 - [GPUAllocationDiagnostics](interfaces/GPUAllocationDiagnostics.md)
 - [GPUCollisionEventNodeRecord](Supporting-Types/interfaces/GPUCollisionEventNodeRecord.md)
 - [GPUComputeRange](interfaces/GPUComputeRange.md)
@@ -376,8 +384,12 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [SpatialAggregator](type-aliases/SpatialAggregator.md)
 - [SpatialBackend](type-aliases/SpatialBackend.md)
 - [SpatialEffectConstructor](type-aliases/SpatialEffectConstructor.md)
+- [SpatialEffectDeltas](type-aliases/SpatialEffectDeltas.md)
+- [SpatialEffectDeltasGPU](type-aliases/SpatialEffectDeltasGPU.md)
 - [SpatialEffectFeatherEasing](Supporting-Types/type-aliases/SpatialEffectFeatherEasing.md)
 - [SpatialEffectGPUCondition](type-aliases/SpatialEffectGPUCondition.md)
+- [SpatialEffectRequirement](type-aliases/SpatialEffectRequirement.md)
+- [SpatialEffectSampleState](type-aliases/SpatialEffectSampleState.md)
 - [SpatialLevelsInput](type-aliases/SpatialLevelsInput.md)
 - [SpawnBurst](type-aliases/SpawnBurst.md)
 - [SpeedRange](Supporting-Types/type-aliases/SpeedRange.md)

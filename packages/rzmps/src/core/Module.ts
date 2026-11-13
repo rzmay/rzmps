@@ -9,6 +9,8 @@ import type { StrictMultiple } from '../types/multiple.types';
 import acceptMultiple from '../utils/acceptMultiple';
 import tagsIntersect from './tags/tagsIntersect';
 import SpatialEffect from '../spatial/effects/SpatialEffect';
+import SpatialEffectCollection, { type SpatialEffectRequirement } from '../spatial/effects/SpatialEffectCollection';
+export type { SpatialEffectConstructor, SpatialEffectRequirement } from '../spatial/effects/SpatialEffectCollection';
 import Priority from '../enums/Priority';
 import type { GPUEventBatch } from '../events/gpu/EventBatch';
 import type {
@@ -28,12 +30,14 @@ export interface ModuleExecutionContext extends EventExecutionContext {
   /** Owning module; available to functional callbacks without a `this` binding. */
   readonly module: Module;
   readonly octree?: ParticleOctree<unknown>;
+  readonly spatialEffects: SpatialEffectCollection;
 }
 export interface ModuleGPUExecutionContext extends GPUParticleUpdateContext {
   /** Owning module, including its cached dynamic GPU value evaluator. */
   readonly module: Module;
   readonly events: GPUEventBatch;
   readonly spatialGrid?: ParticleSpatialGrid;
+  readonly spatialEffects: SpatialEffectCollection;
 }
 
 export type ModuleUpdate = (
@@ -60,10 +64,6 @@ export type ModuleGPUCondition = (
   deltaTime: Node<'float'>,
   context: ModuleGPUExecutionContext,
 ) => Node<'bool'>;
-
-export type SpatialEffectConstructor<T extends SpatialEffect = SpatialEffect> = {
-  new (...args: never[]): T;
-};
 
 export interface ModuleOptions extends EventReceiverOptions {
   initializeParticle?: ParticleInitializer;
@@ -92,7 +92,8 @@ export interface ModuleOptions extends EventReceiverOptions {
   /** Filters effects collected by this module. */
   spatialEffectFilter: (spatialEffect: SpatialEffect) => boolean;
   /** Constructors selecting scene effects for this module during prepare. */
-  requireSpatialEffects: SpatialEffectConstructor | SpatialEffectConstructor[];
+  /** Constructors discover scene matches; instances include that exact effect directly. */
+  requireSpatialEffects: SpatialEffectRequirement | SpatialEffectRequirement[];
   /** Enables a managed CPU ParticleOctree with default options. */
   useOctree: boolean;
   /** Configures and implicitly enables the managed CPU ParticleOctree. */
@@ -130,10 +131,16 @@ export default class Module extends EventReceiver {
   condition: ModuleCondition;
   conditionGPU?: ModuleGPUCondition;
   private readonly _hasCustomCondition: boolean;
-  spatialEffects: SpatialEffect[] = [];
+  private readonly collectedSpatialEffects = new SpatialEffectCollection();
+
+  get spatialEffects(): SpatialEffectCollection { return this.collectedSpatialEffects; }
+  set spatialEffects(effects: SpatialEffect[]) {
+    this.collectedSpatialEffects.replace(effects, this.requireSpatialEffects);
+  }
+
   explicitSpatialEffects?: SpatialEffect[];
   spatialEffectFilter?: (spatialEffect: SpatialEffect) => boolean;
-  requireSpatialEffects?: SpatialEffectConstructor[];
+  requireSpatialEffects?: SpatialEffectRequirement[];
   octree?: ParticleOctree<unknown>;
   readonly useOctree: boolean;
   readonly octreeOptions: Partial<OctreeConfig>;
@@ -231,7 +238,8 @@ export default class Module extends EventReceiver {
   /** @internal Freezes one event batch for preparation, conditions, and all particle callbacks. */
   protected override createExecutionContext(context: EventExecutionContext): ModuleExecutionContext {
     // Preparation can create the managed tree; keep the shared context's octree access live.
-    return Object.freeze(Object.defineProperty({ ...context, module: this }, 'octree', {
+    const extended = { ...context, module: this, spatialEffects: this.spatialEffects };
+    return Object.freeze(Object.defineProperty(extended, 'octree', {
       enumerable: true,
       get: () => this.octree,
     }));
@@ -317,7 +325,7 @@ export default class Module extends EventReceiver {
 
   /** Optional GPU compute pass, scheduled after the spatial grid is built and before this module modifies particles. */
   public computeGPU(
-    _context: GPUParticleUpdateContext,
+    _context: ModuleGPUExecutionContext,
     _renderer: ParticleSpatialGridRenderer,
     _grid?: ParticleSpatialGrid,
   ): void {
@@ -328,7 +336,7 @@ export default class Module extends EventReceiver {
 
   /** Optional render-time GPU pass, after transient particle attributes have been evaluated. */
   public renderGPU(
-    _context: GPUParticleUpdateContext,
+    _context: ModuleGPUExecutionContext,
     _renderBuffers: GPUParticleRenderBufferState,
     _renderer: ParticleSpatialGridRenderer,
     _grid?: ParticleSpatialGrid,
@@ -361,28 +369,24 @@ export default class Module extends EventReceiver {
   }
 
   protected prepareSpatialEffects(particleSystem: ParticleSystem): void {
+    const requirements = this.requireSpatialEffects ?? [];
+    const matches = (effect: SpatialEffect) => !requirements.length || requirements.some(entry =>
+      typeof entry === 'function' ? effect instanceof entry : effect === entry);
+    const effects = new Set<SpatialEffect>();
+    const include = (effect: SpatialEffect) => {
+      if (!this.spatialEffectFilter || this.spatialEffectFilter(effect)) effects.add(effect);
+    };
+
+    // Direct requirements need no scene membership. Explicit lists still suppress scene traversal.
+    for (const entry of requirements) if (entry instanceof SpatialEffect) include(entry);
     if (Array.isArray(this.explicitSpatialEffects)) {
-      this.spatialEffects = this.explicitSpatialEffects
-        .filter((effect) => (
-          (!this.requireSpatialEffects?.length
-            || this.requireSpatialEffects.some((constructor) => effect instanceof constructor))
-          && (!this.spatialEffectFilter || this.spatialEffectFilter(effect))
-        ));
-      return;
+      for (const effect of this.explicitSpatialEffects) if (matches(effect)) include(effect);
+    } else if (requirements.length) {
+      particleSystem.scene?.traverse(object => {
+        if (object instanceof SpatialEffect && matches(object)) include(object);
+      });
     }
-
-    this.spatialEffects = [];
-
-    if (!this.requireSpatialEffects?.length) return;
-
-    particleSystem.scene?.traverse((object) => {
-      if (
-        object instanceof SpatialEffect
-        && (!this.requireSpatialEffects?.length
-          || this.requireSpatialEffects.some((constructor) => object instanceof constructor))
-        && (!this.spatialEffectFilter || this.spatialEffectFilter(object))
-      ) this.spatialEffects.push(object);
-    });
+    this.collectedSpatialEffects.replace(effects, requirements);
   }
 
   // Recursively describe GPU option structure; numeric values stay in dynamic parameter storage.

@@ -16,7 +16,7 @@ test('source masks preserve exhaustive gathers, transient attributes and source 
       page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
       const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;
       const fixture = path.resolve(import.meta.dirname, 'fixtures/fluid.html');
-      await page.goto(`${origin}/@fs${fixture}?example=gasVolume&fixedGas=true&reviewGrid=2,4`,
+      await page.goto(`${origin}/@fs${fixture}?example=volumetricFire&fixedGas=true&reviewGrid=2,4`,
         { waitUntil: 'networkidle0' });
       await page.waitForFunction(() => window.ready);
       const results = await page.evaluate(async () => {

@@ -203,7 +203,7 @@ function createHeatDistortion(alphaMap, distortionMap, options) {
     renderers: [
       new SpriteRenderer(Textures.Default, {
         alphaMap,
-        softParticleDistance: 2.5,
+        softParticleDistance: options.softParticleDistance ?? 2.5,
         materialOptions: {
           transmission: 1,
           distortionMap,

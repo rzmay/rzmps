@@ -18,7 +18,7 @@ test('gas source lifetime, alpha and source-particle collision bound grid inject
     const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;
     const fixture = path.resolve(import.meta.dirname, 'fixtures/fluid.html');
     const open = async (wall = false) => {
-      const query = new URLSearchParams({ example: 'gasVolume', fixedGas: 'true', reviewGrid: '2,4' });
+      const query = new URLSearchParams({ example: 'volumetricFire', fixedGas: 'true', reviewGrid: '2,4' });
       if (wall) query.set('sourceWall', 'true');
       await page.goto(`${origin}/@fs${fixture}?${query}`, { waitUntil: 'networkidle0' });
       await page.waitForFunction(() => window.ready);

@@ -19,7 +19,7 @@ try {
   const results = {};
   for (const overlay of [true, false]) for (const coarse of [true, false]) {
     const key = `${overlay ? 'overlay' : 'physical'}-${coarse ? 'coarse' : 'fine'}`;
-    await page.goto(`${origin}/@fs${path.resolve(import.meta.dirname, 'fixtures/fluid.html')}?example=gasVolume&fixedGas=true`, { waitUntil: 'networkidle0' });
+    await page.goto(`${origin}/@fs${path.resolve(import.meta.dirname, 'fixtures/fluid.html')}?example=volumetricFire&fixedGas=true`, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.ready);
     await page.evaluate(() => window.runFrames(30));
     results[key] = await page.evaluate(async ({ overlay, coarse }) => {

@@ -45,9 +45,11 @@ export default abstract class SpatialGrid {
     powerOfTwo: boolean,
     cubic = false,
     centeredAtOrigin = false,
+    maxBounds = Infinity,
   ): THREE.Box3 {
+    if (!(maxBounds > 0)) throw new RangeError('maxBounds must be positive.');
     const result = bounds.clone();
-    if (!powerOfTwo && !cubic && !centeredAtOrigin) return result;
+    if (!powerOfTwo && !cubic && !centeredAtOrigin && !Number.isFinite(maxBounds)) return result;
     const center = centeredAtOrigin
       ? new THREE.Vector3()
       : result.getCenter(new THREE.Vector3());
@@ -59,12 +61,12 @@ export default abstract class SpatialGrid {
       )
       : result.getSize(new THREE.Vector3());
     if (cubic) size.setScalar(Math.max(size.x, size.y, size.z));
-    if (!powerOfTwo) return result.setFromCenterAndSize(center, size);
-    size.set(
-      nextBoundsPowerOfTwo(size.x),
-      nextBoundsPowerOfTwo(size.y),
-      nextBoundsPowerOfTwo(size.z),
+    if (powerOfTwo) size.set(
+      nextBoundsPowerOfTwo(size.x), nextBoundsPowerOfTwo(size.y), nextBoundsPowerOfTwo(size.z),
     );
+    // Quantize the ceiling downward so normalization can never expand beyond the requested cap.
+    const ceiling = powerOfTwo && Number.isFinite(maxBounds) ? 2 ** Math.floor(Math.log2(maxBounds)) : maxBounds;
+    size.min(new THREE.Vector3().setScalar(ceiling));
     return result.setFromCenterAndSize(center, size);
   }
 }

@@ -454,6 +454,19 @@ class FLIPSimulation extends FluidSimulation {
     }
   }
 
+  protected override onBoundsChanged(previous: THREE.Box3): void {
+    void previous;
+    // Dense pressure addresses now represent different world positions. P2G rebuilds
+    // world-space velocities, but the previous pressure solution cannot be warm-started.
+    this.resetFields = true;
+    this.pressureProjection?.invalidate();
+  }
+
+  protected override onBoundaryChanged(): void {
+    this.pressureProjection?.invalidate();
+    this.resetFields = true;
+  }
+
   protected override onParticleStateReset(): void {
     this.resetFields = true;
     this.pressureProjection?.invalidate();
@@ -560,6 +573,7 @@ class FLIPSimulation extends FluidSimulation {
     this.separationApplyNode = undefined;
     this.boundaryCollisions.forEach((collision) => {
       collision.radiusOffset = this.particleCollisionThicknessValue;
+      collision.needsUpdate = true;
     });
   }
 
@@ -696,9 +710,9 @@ class FLIPSimulation extends FluidSimulation {
   protected override readAutomaticPadding(
     _renderer: ParticleSpatialGridRenderer,
     _grid: ParticleSpatialGrid,
-    maximumSpeed: number,
-  ): Promise<number> {
-    return Promise.resolve(maximumSpeed * this.velocityPaddingLookahead);
+    maximumVelocity: THREE.Vector3,
+  ): Promise<THREE.Vector3> {
+    return Promise.resolve(maximumVelocity.clone().multiplyScalar(this.velocityPaddingLookahead));
   }
 }
 

@@ -233,7 +233,7 @@ class Boids extends Module {
     this.particleSystem = particleSystem;
 
     // BoidAffectors are sampled per particle, so keep their matrices fresh once per frame.
-    this.spatialEffects.forEach((effect) => {
+    this.spatialEffects.get(BoidAffector).forEach((effect) => {
       effect.updateWorldMatrix(true, false);
       if (particleSystem.isGPUProcessingActive) effect.syncGPUTransform(particleSystem);
     });
@@ -405,8 +405,8 @@ class Boids extends Module {
     const system = context.system;
     const worldPosition = transformPointGPU(particle.position, context.simulationToWorldNode);
 
-    this.spatialEffects.forEach((effect) => {
-      if (!(effect instanceof BoidAffector) || !effect.geometry) return;
+    this.spatialEffects.get(BoidAffector).forEach((effect) => {
+      if (!effect.geometry) return;
       const tagMask = system.getGPURendererTagMask(effect.tags);
       const apply = () => {
         If(worldPosition.sub(effect.getGPUWorldPosition()).lengthSq().lessThanEqual(effect.range ** 2), () => {
@@ -677,8 +677,7 @@ class Boids extends Module {
     }
 
     // Scene BoidAffectors may have custom tests, so they are sampled directly per particle.
-    return this.spatialEffects.reduce((sum, affector) => {
-      if (!(affector instanceof BoidAffector)) return sum;
+    return this.spatialEffects.get(BoidAffector).reduce((sum, affector) => {
       if (!particleSystem || !affector.test(particle, particleSystem)) return sum;
 
       affector.getInfluenceDirection(

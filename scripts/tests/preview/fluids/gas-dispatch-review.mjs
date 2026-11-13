@@ -30,7 +30,7 @@ try {
         let seed = 173;
         Math.random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
       });
-      const query = new URLSearchParams({ example: 'gasVolume', fixedGas: 'true', profile: 'true',
+      const query = new URLSearchParams({ example: 'volumetricFire', fixedGas: 'true', profile: 'true',
         reviewGrid: grid, reviewBricks: String(budget), reviewDispatch: mode, reviewAdvection: method });
       await page.goto(`http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${
         path.resolve(import.meta.dirname, 'fixtures/fluid.html')}?${query}`, { waitUntil: 'networkidle0' });

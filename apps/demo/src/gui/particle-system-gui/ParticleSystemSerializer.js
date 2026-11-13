@@ -15,6 +15,7 @@ import {
   MeshRenderer,
   Module,
   NoiseModule,
+  TransformByNoise,
   SpriteRenderer,
   Textures,
   TrailRenderer,
@@ -235,12 +236,21 @@ export class ParticleSystemSerializer {
   serializeModule(module) {
     if (module instanceof GasSimulation) {
       return `new GasSimulation(${this.serializeValue({
+        temperatureRange: module.temperatureRange,
+        supportForceFields: module.supportForceFields,
+        densityRange: module.densityRange,
+        ...Object.fromEntries(['turbulenceNoiseStrength', 'vorticityStrength', 'densityDissipation',
+          'temperatureDissipation', 'velocityDissipation', 'colorDissipation', 'turbulenceNoiseFrequency']
+          .flatMap(name => ['Temperature', 'Density'].map(state => {
+            const key = `${name}By${state}`;
+            return [key, module[key]];
+          }))),
+        collisionOptions: module.collisionOptions,
         maxActiveBricks: module.maxActiveBricks,
         advectionMethod: module.advectionMethod,
         boundsPolicy: module.boundsPolicy,
         bounds: module.autoBounds ? undefined : module.bounds,
         boundsPadding: module.boundsPadding,
-        maxBounds: Number.isFinite(module.maxBounds) ? module.maxBounds : undefined,
         automaticPadding: module.automaticPadding,
         showGridHelper: module.showGridHelper,
         spatialGridOptions: module.spatialGridOptions,
@@ -259,22 +269,20 @@ export class ParticleSystemSerializer {
         sourceTemperature: module.sourceTemperature,
         temperatureOverLifetime: module.temperatureOverLifetime,
         scalarDiffusion: module.scalarDiffusion,
-        temperatureColor: module.temperatureColor,
-        temperatureRange: module.temperatureRange,
         vorticityStrength: module.vorticityStrength,
-        turbulenceStrength: module.turbulenceStrength,
-        noiseFrequency: module.noiseFrequency,
-        noiseSpeed: module.noiseSpeed,
-        noiseOctaves: module.noiseOctaves,
+        turbulenceNoiseStrength: module.turbulenceNoiseStrength,
+        turbulenceNoiseFrequency: module.turbulenceNoiseFrequency,
+        turbulenceNoiseSpeed: module.turbulenceNoiseSpeed,
+        turbulenceNoiseOctaves: module.turbulenceNoiseOctaves,
         ...this.getLODOptions(module),
         tags: module.tags,
       })})`;
     }
     if (module instanceof FLIPSimulation) {
       return `new FLIPSimulation(${this.serializeValue({
+        collisionOptions: module.collisionOptions,
         bounds: module.autoBounds ? undefined : module.bounds,
         boundsPadding: module.boundsPadding,
-        maxBounds: Number.isFinite(module.maxBounds) ? module.maxBounds : undefined,
         boundsPolicy: module.boundsPolicy,
         automaticPadding: module.automaticPadding,
         showGridHelper: module.showGridHelper,
@@ -303,6 +311,21 @@ export class ParticleSystemSerializer {
         radiusOffset: module.radiusOffset,
         minKillSpeed: module.minKillSpeed,
         maxKillSpeed: module.maxKillSpeed,
+        ...this.getLODOptions(module),
+        tags: module.tags,
+      })})`;
+    }
+
+    // Serialize derived noise behavior before the generic base class.
+    if (module instanceof TransformByNoise) {
+      return `new TransformByNoise(${this.serializeValue({
+        ...module.options,
+        octaves: module.octaves,
+        frequency: module.frequency,
+        lacunarity: module.lacunarity,
+        persistence: module.persistence,
+        time: module.time,
+        offset: module.offset,
         ...this.getLODOptions(module),
         tags: module.tags,
       })})`;
@@ -416,13 +439,26 @@ export class ParticleSystemSerializer {
     }
     if (renderer instanceof VolumeRenderer) {
       return `new VolumeRenderer(${this.serializeValue({
-        baseColor: renderer.baseColor,
+        colorByTemperature: renderer.colorByTemperature,
+        opacityByTemperature: renderer.opacityByTemperature,
+        colorByDensity: renderer.colorByDensity,
+        colorBySpeed: renderer.colorBySpeed,
+        opacityBySpeed: renderer.opacityBySpeed,
+        colorByVorticity: renderer.colorByVorticity,
+        opacityByVorticity: renderer.opacityByVorticity,
+        temperatureRange: renderer.temperatureRange,
+        speedRange: renderer.speedRange,
+        vorticityRange: renderer.vorticityRange,
+        color: renderer.color,
         opacity: renderer.opacity,
         threshold: renderer.threshold,
         range: renderer.range,
         steps: renderer.steps,
         renderOrder: renderer.renderOrder,
         depthTest: renderer.depthTest,
+        emptySpaceSkipping: renderer.emptySpaceSkipping,
+        dynamicResolution: renderer.dynamicResolution,
+        downsample: renderer.downsample,
         jitterStrength: renderer.jitterStrength,
         jitterSeed: renderer.jitterSeed,
         anisotropy: renderer.anisotropy,
@@ -437,13 +473,17 @@ export class ParticleSystemSerializer {
         sceneDepthBias: renderer.sceneDepthBias,
         densityGain: renderer.densityGain,
         densityMapping: renderer.densityMapping,
-        densityRange: renderer.densityRange,
+        minDensity: renderer.minDensity,
+        maxDensity: renderer.maxDensity,
         densityCurve: renderer.densityCurve,
-        noiseStrength: renderer.noiseStrength,
-        noiseContrast: renderer.noiseContrast,
-        noiseFrequency: renderer.noiseFrequency,
-        noiseSpeed: renderer.noiseSpeed,
-        noiseOctaves: renderer.noiseOctaves,
+        densityNoiseStrengthByTemperature: renderer.densityNoiseStrengthByTemperature,
+        densityNoiseContrastByTemperature: renderer.densityNoiseContrastByTemperature,
+        densityNoiseFrequencyByTemperature: renderer.densityNoiseFrequencyByTemperature,
+        densityNoiseStrength: renderer.densityNoiseStrength,
+        densityNoiseContrast: renderer.densityNoiseContrast,
+        densityNoiseFrequency: renderer.densityNoiseFrequency,
+        densityNoiseSpeed: renderer.densityNoiseSpeed,
+        densityNoiseOctaves: renderer.densityNoiseOctaves,
         ...this.getLODOptions(renderer, true, true),
         tags: renderer.tags,
       })})`;

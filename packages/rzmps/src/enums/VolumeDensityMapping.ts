@@ -4,8 +4,8 @@ export enum VolumeDensityMapping {
   None = 'None',
   /** Smooth threshold/range mapping, preserving the original renderer's appearance controls. */
   Smoothstep = 'Smoothstep',
-  /** Linearly map densityRange to zero through one. */
+  /** Linearly map minDensity/maxDensity to zero through one. */
   Linear = 'Linear',
-  /** Evaluate densityCurve using densityRange-normalized density. */
+  /** Evaluate densityCurve using minDensity/maxDensity-normalized density. */
   Curve = 'Curve',
 }

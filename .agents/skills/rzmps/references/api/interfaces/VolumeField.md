@@ -40,6 +40,30 @@ optional data?: Uint8Array<ArrayBufferLike> | Float32Array<ArrayBufferLike>;
 
 ***
 
+<a id="parameterchannels"></a>
+
+### parameterChannels?
+
+```ts
+optional parameterChannels?: Partial<Record<"speed" | "temperature" | "vorticity", 1 | 2 | 3>>;
+```
+
+Optional physical parameters packed alongside density in RGBA. Density always occupies R.
+
+***
+
+<a id="parameterspremultiplied"></a>
+
+### parametersPremultiplied?
+
+```ts
+optional parametersPremultiplied?: boolean;
+```
+
+Divide interpolated parameter channels by interpolated density when true.
+
+***
+
 <a id="resolution"></a>
 
 ### resolution

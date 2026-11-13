@@ -8,6 +8,7 @@ import { openFixture } from './openFixture.mjs';
 const output = process.argv[2] ?? '/tmp/rzmps-fluid-corrective';
 await fs.mkdir(output, { recursive: true });
 const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
+await site.demo.watcher.close();
 let browser;
 try {
   browser = await puppeteer.launch({ headless: true, args: ['--enable-unsafe-webgpu'] });
@@ -61,6 +62,20 @@ try {
   await page.screenshot({ path: path.join(output, 'solid-fraction.png') });
   await page.evaluate(() => window.visualizeBoundary('faces'));
   await page.screenshot({ path: path.join(output, 'face-openness.png') });
+  const lifecycle = await page.evaluate(() => window.testBoundaryRemoval());
+  console.log('Boundary lifecycle and pause:', JSON.stringify(lifecycle));
+  assert(lifecycle.blocked.boundaryCells > 0);
+  assert.equal(lifecycle.removed.boundaryCells, 0);
+  assert.equal(lifecycle.paused.time, lifecycle.paused.after);
+  assert.equal(lifecycle.paused.version, lifecycle.paused.afterVersion);
+  assert.equal(lifecycle.paused.opacity, 0.41);
+  assert.equal(lifecycle.paused.steps, 79);
+  assert.equal(lifecycle.paused.color, null);
+  const resized = await page.evaluate(() => window.testTransfer(0, true));
+  console.log('Bounds velocity:', JSON.stringify(resized.resized));
+  assert.equal(resized.resized.side, resized.resized.previousSide * 2);
+  assert(Math.abs(resized.resized.after / resized.resized.before - 1) < 0.02,
+    'doubling the domain must preserve uniform world-space marker velocity');
   const transfers = [];
   for (const ratio of [0, 0.05]) {
     const transfer = await page.evaluate(ratio => window.testTransfer(ratio), ratio);
@@ -71,12 +86,17 @@ try {
   }
   assert(Math.abs(transfers[0].kineticEnergyAfterTransfer / transfers[0].kineticEnergyBeforeTransfer - 1) < 1e-4);
   assert(transfers[1].kineticEnergyAfterTransfer <= transfers[1].kineticEnergyBeforeTransfer * 1.01);
+  const coverage = await page.evaluate(() => window.testFractionalVisualCoverage());
+  console.log('Fractional visual coverage:', coverage);
+  assert(coverage.empty > 0 && coverage.partial > 0 && coverage.full > 0);
+  assert.equal(coverage.invalidTemperature, 0);
+  assert(coverage.physicsUnchanged);
   const restart = await page.evaluate(() => window.testRestart());
   console.log('Restart:', restart);
   assert.equal(restart.nonfinite, 0);
   assert(restart.maxDensity < 0.5, 'clear/reset must discard the previous persistent gas field');
   assert.deepEqual(errors, []);
   await fs.writeFile(path.join(output, 'metrics.json'), JSON.stringify({
-    preparation, growth, iterative, multigrid, early, boundary, transfers, restart,
+    preparation, growth, iterative, multigrid, early, boundary, lifecycle, resized, transfers, restart,
   }, null, 2));
 } finally { await browser?.close(); await site.close(); }

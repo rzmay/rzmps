@@ -43,11 +43,9 @@ export class ModuleGUI extends GUIEditorBase {
         'adaptiveTimestep',
         'cfl',
         'maxFluidSubsteps',
-        'initialBrickCapacity',
         'externalForce',
         'maxVelocity',
         'boundsPadding',
-        'maxBounds',
         'automaticPadding',
         'showGridHelper',
         'picRatio',
@@ -56,7 +54,6 @@ export class ModuleGUI extends GUIEditorBase {
         'collisionIterations',
         'particleSeparation',
         'particleSpacing',
-        'maxActiveBricks',
         'densityDissipation',
         'temperatureDissipation',
         'colorDissipation',
@@ -66,16 +63,20 @@ export class ModuleGUI extends GUIEditorBase {
         'weight',
         'sourceStrength',
         'velocitySourceStrength',
+        'supportForceFields',
         'sourceTemperature',
         'temperatureOverLifetime',
-        'temperatureColor',
-        'temperatureRange',
         'scalarDiffusion',
         'vorticityStrength',
-        'turbulenceStrength',
-        'noiseFrequency',
-        'noiseSpeed',
-        'noiseOctaves',
+        'turbulenceNoiseStrength',
+        'turbulenceNoiseFrequency',
+        'turbulenceNoiseSpeed',
+        'turbulenceNoiseOctaves',
+        'temperatureRange',
+        'densityRange',
+        ...['turbulenceNoiseStrength', 'vorticityStrength', 'densityDissipation', 'temperatureDissipation',
+          'velocityDissipation', 'colorDissipation', 'turbulenceNoiseFrequency']
+          .flatMap(name => [`${name}ByTemperature`, `${name}ByDensity`]),
       ];
       for (const key of tuning) {
         if (key in candidate) this.addValue(folder, candidate, key, this.prettyName(key));
@@ -87,15 +88,15 @@ export class ModuleGUI extends GUIEditorBase {
       if ('pressureSolver' in candidate) {
         folder.add(candidate, 'pressureSolver', ['Iterative', 'Multigrid']).name('Pressure Solver');
       }
-      if ('advectionMethod' in candidate) {
-        folder.add(candidate, 'advectionMethod', ['SemiLagrangian', 'MacCormack']).name('Advection Method');
-      }
     } else if (candidate.options && typeof candidate.options === 'object') {
       this.addObject(folder, candidate.options, new Set(['tags', 'useOctree', 'useSpatialGrid', ...LOD_GUI_KEYS]));
     } else {
       const hidden = new Set([
         'modify',
         'executionContext',
+        'gpuExecutionContext',
+        'benchmarks',
+        'evaluateDynamicGPU',
         'modifyGPU',
         'condition',
         'conditionGPU',
@@ -120,6 +121,7 @@ export class ModuleGUI extends GUIEditorBase {
         'colorAdvected',
         'spatialGrid',
         'spatialEffects',
+        'collectedSpatialEffects',
         'explicitSpatialEffects',
         'spatialEffectFilter',
         'requireSpatialEffects',
@@ -217,6 +219,7 @@ export class ModuleGUI extends GUIEditorBase {
         expansionHysteresis: grid?.expansionHysteresis ?? options.expansionHysteresis ?? 0.125,
         timeQuality: grid?.timeQuality ?? options.timeQuality ?? 1,
         maxQuerySteps: grid?.maxQuerySteps ?? options.maxQuerySteps ?? 0,
+        maxBounds: grid?.maxBounds ?? options.maxBounds ?? Infinity,
       };
       ['brickSubdivisions', 'cellSubdivisions'].forEach(key =>
         quality
@@ -237,6 +240,7 @@ export class ModuleGUI extends GUIEditorBase {
         'expansionHysteresis',
         'timeQuality',
         'maxQuerySteps',
+        'maxBounds',
       ]
         .filter(
           key =>

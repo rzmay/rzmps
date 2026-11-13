@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 import { Fn, If, float, instanceIndex, uint, vec3 } from 'three/tsl';
-import { Emitter, ParticleSystem, SurfaceRenderer, ColorOverLifetime, ScaleOverLifetime, buildSurfaceNets, buildMarchingCubes } from '@rzmps/rzmps';
+import { Emitter, ParticleSystem, SurfaceRenderer, ColorOverLifetime, ScaleOverLifetime,
+  buildSurfaceNets, buildMarchingCubes } from '@rzmps/rzmps';
 const liquidFlowMaterial = new SurfaceRenderer.LiquidMaterial().compositeGPU;
 
 const renderer = new WebGPURenderer({ trackTimestamp: true });
@@ -145,7 +146,8 @@ window.readSurface = async () => {
     components: new Set([...components.keys()].map(root)).size, draw: [...draw],
     storageLimit: renderer.backend.device.limits.maxStorageBuffersPerShaderStage };
 };
-window.surfaceFixture = { renderer, scene, camera, surface, system, THREE, ColorOverLifetime, ScaleOverLifetime, buildSurfaceNets, buildMarchingCubes };
+window.surfaceFixture = { renderer, scene, camera, surface, system, THREE, ColorOverLifetime, ScaleOverLifetime,
+  buildSurfaceNets, buildMarchingCubes };
 window.ready = true;
 
 // Isolate reconstruction from particle integration, collision and liquid transfer.
@@ -319,4 +321,39 @@ window.testLiquidMaterial = async () => {
   pixels.replacedCallback = oldCallback !== surface.material.compositeGPU;
   liquid.dispose();
   return pixels;
+};
+
+window.testAutomaticSurfaceGrowth = async () => {
+  const test = new SurfaceRenderer({ bounds: surface.bounds.clone(), voxelSize: 0.0625,
+    particleRadius: 0.65, smoothingIterations: 0, fieldSmoothingIterations: 0, fieldClosing: 0 });
+  system.addRenderer(test);
+  const buffers = system.gpuSimulation._gpuBuffers;
+  const seed = Fn(() => {
+    const particle = buffers.storage.createParticle(undefined, true);
+    particle.position.assign(vec3(float(instanceIndex.mod(8)), float(instanceIndex.div(8).mod(8)),
+      float(instanceIndex.div(64).mod(8))).sub(3.5).mul(0.45));
+    particle.scale.assign(vec3(0.5)); particle.alive.assign(1);
+    buffers.storage.storeParticle(particle);
+  })().compute(buffers.count);
+  renderer.compute(seed);
+  const first = performance.now();
+  test.updateGPU(buffers, system);
+  const before = await test.readSurfaceDiagnostics();
+  const current = test.surface;
+  const growthRequest = performance.now();
+  test.updateGPU(buffers, system);
+  const retainedWhilePreparing = test.surface === current;
+  const allocation = test.allocation;
+  await allocation.whenPrepared();
+  const prepared = performance.now();
+  const swapStart = performance.now();
+  test.updateGPU(buffers, system);
+  const swapFrameCpuMs = performance.now() - swapStart;
+  const after = await test.readSurfaceDiagnostics();
+  const result = { before, after, retainedWhilePreparing, swapped: test.surface !== current,
+    firstFrameFencedMs: growthRequest - first, preparationWallMs: prepared - growthRequest,
+    swapFrameCpuMs, lifecycle: allocation.metrics,
+    temporaryPeakBytes: before.allocatedBytes + after.allocatedBytes };
+  system.removeRenderer(test); test.destroy(); seed.dispose();
+  return result;
 };

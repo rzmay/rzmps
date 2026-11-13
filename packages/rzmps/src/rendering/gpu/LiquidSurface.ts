@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { initializeStorageAttribute } from '../../utils/gpu/storage.utils';
 import type Benchmarks from '../../core/Benchmarks';
 import { IndirectStorageBufferAttribute, StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
@@ -277,6 +278,23 @@ export default class LiquidSurface {
       const limit = uint(Math.floor(options.maxTriangles / this.triangleMultiple) * this.triangleMultiple);
       args.element(0).assign(count.lessThan(limit).select(count, limit).mul(3));
     })().compute(1);
+  }
+
+  /** Upload and compile a separate visual reconstruction without advancing the particle system. */
+  async prepare(update: () => void): Promise<void> {
+    for (const attribute of [this.fieldAttribute, this.fieldScratchAttribute, this.positionAttribute,
+      this.normalAttribute, this.colorAttribute, this.flowAttribute, this.vorticityAttribute,
+      this.smoothingAttribute, this.topologyAttribute, this.indexAttribute]) {
+      initializeStorageAttribute(this.renderer, attribute);
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    const nodes: ComputeNode[] = [], compute = this.renderer.compute;
+    this.renderer.compute = node => { nodes.push(...(Array.isArray(node) ? node : [node])); };
+    try { update(); } finally { this.renderer.compute = compute; }
+    const compiler = this.renderer as ParticleSpatialGridRenderer & {
+      compileComputeAsync(nodes: ComputeNode[]): Promise<void>;
+    };
+    await compiler.compileComputeAsync([...new Set(nodes)]);
   }
 
   update(

@@ -2403,6 +2403,30 @@ Recomputes particle bounds used by spatial processing and renderer helpers.
 
 ***
 
+<a id="updaterenderers"></a>
+
+### updateRenderers()
+
+```ts
+updateRenderers(children?): void;
+```
+
+Refresh renderer configuration against the last particle/field state, without advancing time.
+Rebuilds affected renderer pipelines as needed. Paused display updates call this automatically.
+Does not rerun simulation or transient modules, emit particles, or perform a scene render.
+
+#### Parameters
+
+##### children?
+
+`boolean` = `true`
+
+#### Returns
+
+`void`
+
+***
+
 <a id="updatesource"></a>
 
 ### updateSource()

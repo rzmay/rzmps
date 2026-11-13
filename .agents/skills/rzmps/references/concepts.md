@@ -320,7 +320,7 @@ A volume provider implements `getVolumeField()` and optionally
 unavailable. Without explicit fields, `VolumeRenderer` finds all providers
 overlapping its own tags. It samples each density field in its own bounds and
 resolution, adds densities, and blends each provider's color by its density
-contribution. A missing color uses the renderer's base color. The rendered box
+contribution. A missing color uses the renderer’s `color`. The rendered box
 encloses the union of contributing density bounds; fields contribute nothing
 outside their own bounds.
 
@@ -335,9 +335,47 @@ or `Cubic`) from integration quality (`stepSizeMultiplier`, relative to cell siz
 bounded by `steps`). Opacity is distance-corrected so quality changes do not
 silently act as density gain. `densityGain` is an explicit appearance multiplier.
 `densityMapping` selects `Smoothstep` (existing `threshold`/`range`), `Linear`,
-`Curve`, or `None`. Linear/Curve use `densityRange`; `densityCurve` follows
+`Curve`, or `None`. All mappings normalize/clamp density between `minDensity` (default 0)
+and `maxDensity` (default 1); `densityCurve` follows
 `ValueByParameter<number>` and is sampled to a lookup texture. These controls
 do not change source emission, dissipation, diffusion, or liquid dynamics.
+
+Nullable `colorByTemperature`, `colorByDensity`, `colorBySpeed` and `colorByVorticity`
+multiply `color` and the sampled field color. Nullable `opacityByTemperature`,
+`opacityBySpeed` and `opacityByVorticity` multiply opacity. Null contributes white/one.
+Density already drives opacity; `colorByDensity` uses the same min/max remapping.
+
+On `WebGPURenderer`, `downsample: 2` renders at half width and height and reconstructs
+using scene/volume depth to preserve silhouettes. Set `dynamicResolution: false` for
+fixed downsampling. Otherwise measured GPU time can lower resolution further relative
+to that fixed baseline. Neither setting changes along-ray integration quality. Automatic feedback uses rendering time;
+compute-heavy simulation alone does not reduce volume image resolution. Ray-step and
+samples-per-voxel edits update uniforms without rebuilding the raymarch material.
+
+`await system.prepare(renderer)` can overlap optional renderer pipeline preparation with module
+preparation without advancing emission or simulation. Volume rendering prepares its existing
+provider fields for the captured camera/scene; unavailable fields retain first-use compilation.
+
+Volume renderer children share their provider’s textures and raymarch. Each interval sums
+transformed child density and weighted color before lighting and opacity integration.
+Children add density and texture sampling work without allocating particle child buffers.
+
+Gas simulation separates physical behavior from volume appearance. Optional
+`ByTemperature` and `ByDensity` multipliers apply to `turbulenceNoiseStrength`,
+`vorticityStrength`, `turbulenceNoiseFrequency`, and density/temperature/velocity/color dissipation.
+The effective coefficient is the base multiplied by each present modifier. Omitted
+modifiers skip evaluation; negative multiplier results clamp to zero. These use the
+normal `ValueByParameter` rules: `[0.5, 2]` interpolates endpoints, functions define
+curves, and a scalar `1` scales with the normalized parameter. Use `[1, 1]` for a
+constant neutral multiplier.
+
+`GasSimulation.temperatureRange` and `densityRange` (both default `[0, 1]`) normalize
+physical specific temperature (heat mass divided by density) and physical density.
+They are independent of renderer appearance ranges and min/max density remapping.
+Decay remains `exp(-effectiveRate * deltaTime)`. Forces are applied before pressure
+projection. Only independent local continuous coefficients support these modifiers:
+solver iterations, timestep/grid/allocation policies and algorithm selection do not.
+Variable diffusion/viscosity requires separate conservative shared-face treatment.
 
 `start()` starts playback and resets the emission cycle, including when restarting a paused system. `pause()` freezes simulation. `stop(clearParticles)` stops emission and resets system time; surviving particles can continue moving on subsequent updates when they are retained. `destroy()` permanently releases owned resources. Removing a system from its scene performs temporary cleanup so it can be attached elsewhere. Call `destroy()` when you will no longer use it.
 
@@ -354,6 +392,27 @@ The loop duration schedules emission; it is independent of each particle's lifet
 [Subsystems](https://rzmps.rzmay.com/docs/guides/subsystems.html) attach secondary effects to lifecycle events. [Spatial effects and collections](https://rzmps.rzmay.com/docs/guides/spatial-effects.html) coordinate scene-wide behavior. Both rendering backends use this same composition model; see [compatibility](https://rzmps.rzmay.com/docs/guides/compatibility.html) and [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html).
 
 The exported `sampleDynamicValue(value, sample, resolution = 16)` reduces dynamic leaves using a custom `(a, b) => result` callback. It visits range endpoints and set members and samples functions over normalized time. `maxDynamicNumber` / `minDynamicNumber`, `maxDynamicVector` / `minDynamicVector`, and `maxDynamicColor` / `minDynamicColor` provide common reductions. Vector and color extrema are component-wise and return independent objects. These are sampled estimates for functions, not guaranteed mathematical bounds. Numeric helpers return zero for unreadable inputs unless an explicit third fallback argument is supplied; vectors return zero and colors return black. The generic reducer returns `undefined` when no readable leaf exists and accepts a fourth callback for input normalization.
+
+
+`averageDynamicNumber` and `medianDynamicNumber` use the same readable-leaf traversal as
+numeric min/max helpers: ranges visit endpoints, sets visit members, and functions sample
+normalized time uniformly (16 samples by default). They accept a fallback for unreadable
+values. These are sampled statistics, not guaranteed bounds or probability-weighted
+expectations. The median averages the central pair for even sample counts.
+
+Fluid motion forecasts and `automaticPaddingDistance` are vectors: each axis uses its measured
+maximum velocity rather than the maximum speed on every axis. Gas also integrates sampled damping
+and buoyant travel over a short lookahead; buoyancy adds vertical padding and diffusion adds isotropic
+padding. The padded particle bounds are united with measured occupied gas afterward, so existing gas
+is retained without forecasting its past travel again. There is no additional percentage growth margin.
+The spatial grid then applies its centering, cubic shape, power-of-two rounding and configured ceiling.
+An origin-centered eight-unit cube spans −4 to +4; support reaching +8 needs a sixteen-unit cube.
+Representative averages alone cannot protect fast outliers, so measured support remains authoritative.
+
+VolumeRenderer's nullable `densityNoiseStrengthByTemperature`, `densityNoiseContrastByTemperature` and
+`densityNoiseFrequencyByTemperature` multiply their corresponding density-mask settings using the
+renderer temperature range. They reuse the temperature already sampled for appearance,
+change rendering only, and require WebGPURenderer like the procedural density mask itself.
 
 
 ---
@@ -1891,6 +1950,12 @@ the returned kernel uses the current CPU count; update its `count` when that pop
 Callbacks decide whether dead slots participate. These kernels require an initialized grid and
 must be rebuilt if the grid's underlying particle storage is replaced.
 
+`spatialGridOptions.maxBounds` optionally caps each axis of the final spatial domain. It defaults
+to `Infinity`; power-of-two grids round a finite cap down to the nearest power of two. The grid applies
+this ceiling to supplied bounds and automatic GPU expansion. Runtime changes use
+`module.setSpatialGridOptions({ maxBounds: 16 })` or `grid.maxBounds = 16`. Fluid modules supply padded
+particle/field support to the grid and retain their own `boundsPolicy` for particles at the cap.
+
 ### Spatial Aggregation And Levels
 
 `SpatialAggregator<T, "cpu">` preserves the octree's existing `new` and `combine` members
@@ -2702,9 +2767,14 @@ A generic `SpatialEffect` is an Object3D containing a volume or custom test and 
 
 The `spatialEffects` constructor collection supplies explicit effects in addition to scene discovery. `spatialEffectFilter` narrows the generic effects that can modify a system. Avoid using a broad filter that accidentally excludes your intended field. Use `tags` and `condition` on an effect to select particles after the effect has been selected.
 
-Modules can collect scene effects for their own algorithms. Set `requireSpatialEffects` to one or more SpatialEffect constructors; `prepare()` traverses the scene and fills the module's `spatialEffects` list with matching instances. This is how specialized modules such as Boids can consume affectors without the affectors also acting as generic modifiers.
+Modules collect effects through `requireSpatialEffects`. Constructors discover scene instances,
+including subclasses; exact effect instances are included directly without requiring scene membership.
+The resulting collection deduplicates by object identity. This lets specialized modules such as Boids
+consume affectors without the affectors also acting as generic modifiers.
 
-For a module, explicitly supplying `spatialEffects: []` deliberately gives it an empty collection and suppresses discovery. Supplying a nonempty collection limits it to those objects. `spatialEffectFilter` and constructor requirements still filter that explicit list. Distinguish this module-level selection from the system's generic effects list.
+Explicit module `spatialEffects` lists suppress scene discovery, including when empty. Requirements
+still filter that list, while directly required instances are included independently. The module's
+`spatialEffectFilter` applies to every selected effect. This differs from the system's generic effects list.
 
 Use [First Spatial Effect](https://rzmps.rzmay.com/docs/guides/first-spatial-effect.html) to build a field. For expensive selection, cache work in `prepare()`
 rather than traversing the scene inside every particle callback. If you override `prepare()`, call
@@ -2717,6 +2787,102 @@ field, and `updatePolicy` distinguishes static, transform-only, and deforming ge
 Optional system bounds filtering applies only to effects whose built-in geometry test guarantees
 that bounds overlap is meaningful. See [GPU processing](https://rzmps.rzmay.com/docs/guides/gpu-processing.html) for callback signatures
 and update policies.
+
+## Typed module collections
+
+The module's collection remains an array: iteration, indexing, `filter()` and `length` work as usual.
+`context.spatialEffects.get(BoidAffector)` returns typed constructor matches, including subclasses.
+An effect matching multiple required constructors occurs once in the flat list and in each matching
+bucket. Constructor identity, rather than a constructor name or string key, selects the bucket.
+The flat list is canonical; constructor lookup refreshes its bucket after array mutations.
+CPU callbacks, GPU callbacks and module compute/render hooks share the owning module's collection.
+
+```ts
+const module = new Module(() => {}, {
+  requireSpatialEffects: [SpatialEffect, BoidAffector],
+  prepare(context) {
+    for (const affector of context.spatialEffects.get(BoidAffector)) {
+      // The same object is also present in the flat collection.
+      affector.updateWorldMatrix(true, false);
+    }
+  },
+});
+```
+
+## Sampling ordinary effects
+
+`effect.sampleDeltas(position, partialState, dt, system)` reuses a scratch particle and delta objects.
+Copy a CPU result if it must survive the next sample on that effect. `sampleDeltasGPU(position, state,
+dt, context)` creates shader-local state without GPU buffers or readbacks. Both paths honor normal
+conditions, geometry, transforms, inversion, tags and feathering. GPU effects still require GPU callbacks.
+
+The returned supported particle deltas include velocity, color, alpha, mass, position, rotation and
+scale, plus a discrete `killed` result. Automatic feathering uses the same before/after implementation
+as ordinary particle updates. Killing is discrete rather than fractionally reviving a particle.
+
+## Gas effects
+
+GasSimulation automatically collects GasAffector modifiers and retains FluidCollider boundary discovery.
+Other particle effects require explicit opt-in through `requireSpatialEffects`; ordinary source-particle
+effects are not automatically applied to the gas again. Constructor requirements merge at construction;
+subsequent direct assignment is authoritative. Replacing the list does not silently reinsert defaults.
+
+`supportForceFields` defaults to false and is a virtual view of whether the list contains the
+ParticleForceField constructor. Setting it adds/removes only that constructor, preserving other
+requirements. Exact force-field instances or a broad SpatialEffect requirement remain explicit opt-ins.
+Gas demos enable the shortcut. There is no separate gas-specific collection or sampling switch.
+
+Required ordinary effects sample active, non-solid cells. Their pseudoparticle has the cell center,
+velocity, specific color, density as alpha, density times cell volume as mass, and cell size as scale.
+ParticleForceField compatibility retains unit reference carrier-air mass so force acceleration does
+not diverge as smoke fades or change with resolution. Particle-compatible
+velocity, color and alpha changes map back to gas; kill clears density, heat and transported color.
+Changes to position, rotation, scale and mass do not move or resize the Eulerian cells.
+
+Permanent velocity changes occur before projection. Permanent scalar changes follow transport and
+source injection. Transient effects run in priority order on the provider's renderable fields and do
+not mutate persistent state. Transient velocity can drive render-time speed appearance; it does not
+advect gas. Vorticity remains the physical solver's curl. No duplicate volume is created per effect.
+
+GasAffector takes an unrestricted GPU gas callback as its first argument:
+
+```ts
+const heater = new GasAffector((gas, dt, context, strength) => {
+  gas.temperature.addAssign(float(2).mul(dt).mul(strength));
+  gas.velocity.y.addAssign(dt.mul(strength));
+}, { geometry: new THREE.SphereGeometry(2), feather: 1 });
+
+const simulation = new GasSimulation({
+  supportForceFields: true,
+  requireSpatialEffects: [heater],
+});
+```
+
+The callback can modify density, specific temperature, velocity and specific color. Cell position is
+the sample location; structural solver settings are not local gas state. The solver converts semantic
+temperature/color back to heat/color mass and clears them when density reaches zero. GasAffector has
+no CPU particle modifier or `modifyGPU` constructor option, and does not modify source particles.
+Optional density/temperature/velocity/drag/color convenience controls compose before the callback.
+The callback receives feather strength explicitly and applies it as appropriate for its behavior.
+Permanent velocity and scalar phases evaluate the callback separately, retaining only the relevant
+fields in each phase; transient callbacks operate on the existing visual scratch state.
+
+Shape factories also accept `(gasCallback, options, ...geometryArgs)`, along with their convenience
+options-only forms. Transforms, conditions, tags, inversion, feather and update policies remain inherited.
+Convenience curves vary from full influence (parameter zero) to the feather's outer edge (parameter one);
+literal convenience values remain constant. Effects are sampled on existing active solver cells;
+emitters provide the initial active gas support. A density source over an empty active cell starts
+with neutral white color unless the affector supplies a tint.
+
+The gas module's tags select its source group; matching effects modify that group's mixed field.
+A mixed cell does not retain separate per-particle tag identities. Configure separate tagged gas
+modules when fields need independent spatial-effect selection.
+
+Select the **Gas Spatial Effects** scene with a gas preset to compare three regions:
+a static, feathered permanent wind sphere; a static, hard-edged permanent heating box;
+and a moving, feathered Suzanne mesh that transiently tints and attenuates the rendered gas.
+The scene owns the effects, helpers and animation, independently of the selected particle preset.
+Ordinary particle presets also respond to its wind field; the gas-specific regions require GasSimulation.
 
 
 ---

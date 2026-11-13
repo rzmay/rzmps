@@ -8,6 +8,7 @@ import { startSiteDev } from '../../../site/dev.mjs';
 
 test('fluid and gas demo catalogs initialize the canvas and GUI', { timeout: 180000 }, async () => {
   const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
+  await site.demo.watcher.close();
   const output = await fs.mkdtemp(path.join(os.tmpdir(), 'rzmps-preset-loading-'));
   let browser;
 
@@ -24,7 +25,7 @@ test('fluid and gas demo catalogs initialize the canvas and GUI', { timeout: 180
       }
     });
     const origin = `http://127.0.0.1:${site.demo.httpServer.address().port}`;
-    const presets = ['FLIP Fluid', 'Gas Volume', 'Steam Burst', 'Volumetric Smoke'];
+    const presets = ['FLIP Fluid', 'Volumetric Fire', 'Volumetric Smoke'];
 
     for (const [index, preset] of presets.entries()) {
       await page.goto(`${origin}/?preset=${encodeURIComponent(preset)}&scene=Checkerboard`,
@@ -34,7 +35,7 @@ test('fluid and gas demo catalogs initialize the canvas and GUI', { timeout: 180
         .catch(error => { throw new Error(`${preset}: ${error.message}\n${errors.join('\n')}`); });
       await page.waitForFunction(() => /[1-9][\d,]* GPU slots/.test(
         document.querySelector('.particle-count-monitor')?.textContent), { timeout: 45000 });
-      // The reference gas bursts finish before network idle; continuous demos must still have live particles.
+      // The smoke pulse can finish before network idle; continuous demos must still have live particles.
       if (index < 2) {
         await page.waitForFunction(() => /^[1-9]/.test(document.querySelector('.particle-count-monitor')?.textContent),
           { timeout: 45000 });

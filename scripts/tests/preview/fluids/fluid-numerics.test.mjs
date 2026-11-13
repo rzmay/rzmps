@@ -91,10 +91,10 @@ test('fluid runtime changes and bounded gas transport preserve numerical invaria
       assert.ok(wallProjection.residualError < 1e-4, 'solid boundary stencils must match the pressure operator');
     }
 
-    await open('gasVolume');
+    await open('volumetricFire');
     await page.evaluate(() => {
       const { flip, system } = window.debugFluid;
-      flip.maxBounds = 32;
+      flip.setSpatialGridOptions({ maxBounds: 32 });
       flip.automaticPadding = true;
       const grid = flip.getParticleSpatialGrid(system);
       grid.setOptions({ autoExpand: true });
@@ -130,7 +130,7 @@ test('fluid runtime changes and bounded gas transport preserve numerical invaria
     assert.equal(await page.evaluate(() => window.debugFluid.flip.resolution), 32);
     assert.equal(rebuilt.field.nonfinite, 0, 'quality rebuilds and method changes must discard obsolete cached passes');
 
-    await open('gasVolume');
+    await open('volumetricFire');
     const plume = [];
     for (let interval = 0; interval < 6; interval++) {
       const stats = await page.evaluate(() => window.runFrames(600));

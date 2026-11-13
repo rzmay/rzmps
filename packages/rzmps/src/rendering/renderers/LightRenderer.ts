@@ -61,6 +61,7 @@ class LightRenderer extends Renderer {
 
     allocation: LightRendererAllocationOptions;
     private system?: ParticleSystem;
+    private displayedParticles: Particle[] = [];
     private belowCapacitySince?: number;
 
     constructor(options: Partial<LightRendererOptions> = {}) {
@@ -102,8 +103,15 @@ class LightRenderer extends Renderer {
       this.updateCPUFromGPU(buffers, system, deltaTime, sampleLimit, fields);
     }
 
+    override refresh(system: ParticleSystem): void {
+      super.refresh(system);
+      this._update(this.displayedParticles, system);
+    }
+
     _update(particles: Particle[], system: ParticleSystem | undefined = this.system): void {
-      this.resizeLightPool(Math.max(this.predictLightCount(system), particles.length));
+      if (!system?.paused) this.displayedParticles = particles.map(particle => particle.clone());
+      const required = Math.max(this.predictLightCount(system), particles.length);
+      if (!system?.paused || required > this.lights.length) this.resizeLightPool(required);
       this.lights.forEach((light, index) => {
         const particle = particles[index];
         // Keep reserved light nodes registered so reuse does not rebuild lighting pipelines.
@@ -208,7 +216,13 @@ class LightRenderer extends Renderer {
       this.lightContainer.removeFromParent();
     }
 
+    override reset(): void {
+      super.reset();
+      this.displayedParticles = [];
+    }
+
     clear(): void {
+      this.displayedParticles = [];
       this.cancelGPUSelectiveReadback();
       this._update([])
     }

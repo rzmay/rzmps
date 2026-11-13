@@ -17,6 +17,7 @@ Scene-space modifier volume, discovered by particle systems or collected by spec
 ## Extended by
 
 - [`BoidAffector`](BoidAffector.md)
+- [`GasAffector`](GasAffector.md)
 - [`KillZone`](KillZone.md)
 - [`ParticleForceField`](ParticleForceField.md)
 - [`FluidCollider`](FluidCollider.md)
@@ -510,6 +511,85 @@ modify(
 #### Returns
 
 `void`
+
+***
+
+<a id="sampledeltas"></a>
+
+### sampleDeltas()
+
+```ts
+sampleDeltas(
+   position,
+   state,
+   deltaTime,
+   system
+): SpatialEffectDeltas;
+```
+
+Sample normal test/condition/feather behavior without changing the caller's state.
+The returned CPU deltas are reused by the next sample on this effect. Position is in simulation space.
+
+#### Parameters
+
+##### position
+
+`Vector3`
+
+##### state
+
+[`SpatialEffectSampleState`](../type-aliases/SpatialEffectSampleState.md)
+
+##### deltaTime
+
+`number`
+
+##### system
+
+[`ParticleSystem`](ParticleSystem.md)
+
+#### Returns
+
+[`SpatialEffectDeltas`](../type-aliases/SpatialEffectDeltas.md)
+
+***
+
+<a id="sampledeltasgpu"></a>
+
+### sampleDeltasGPU()
+
+```ts
+sampleDeltasGPU(
+   position,
+   state,
+   deltaTime,
+   context
+): SpatialEffectDeltasGPU;
+```
+
+Shader-local sampling; callbacks use the same automatic feathering as ordinary particles.
+
+#### Parameters
+
+##### position
+
+`Node`\<`"vec3"`\>
+
+##### state
+
+`Partial`\<[`GPUParticleLike`](../interfaces/GPUParticleLike.md)\>
+
+##### deltaTime
+
+`Node`\<`"float"`\>
+
+##### context
+
+[`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+
+#### Returns
+
+[`SpatialEffectDeltasGPU`](../type-aliases/SpatialEffectDeltasGPU.md)
 
 ***
 

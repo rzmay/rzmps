@@ -1,3 +1,5 @@
+import FluidColliderField from './gpu/FluidColliderField';
+import type { ParticleSpatialGridRenderer } from '../structures/ParticleSpatialGrid';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import SpatialEffect, {
@@ -96,11 +98,35 @@ export default class FluidCollider extends SpatialEffect {
     return this.collisionMesh;
   }
 
+  private gpuField?: FluidColliderField;
+
+  /** Whether a geometry-backed field has been prepared without custom CPU predicates. @internal */
+  get hasPreparedGPUField(): boolean { return this.gpuField !== undefined; }
+
+  /** Prepare local occupancy on the GPU; unchanged source geometry shares its bake across systems. @internal */
+  prepareGPUField(renderer: ParticleSpatialGridRenderer): void {
+    if (!this.customOccupancy && this.geometry) {
+      const next = FluidColliderField.acquire(this.geometry, this.bakedFieldResolution,
+        this.surfaceThickness, this.inverted, renderer);
+      if (next !== this.gpuField) this.needsUpdate = true;
+      this.gpuField = next;
+    }
+  }
+
+  override bakedFieldGPU(particle: GPUParticleLike): Node<'float'> {
+    if (this.customOccupancy) return super.bakedFieldGPU(particle);
+    if (!this.gpuField) throw new Error('Fluid collider occupancy must be prepared with a GPU renderer.');
+    return this.gpuField.sample(this.getGPUParticleLocalPosition(particle), this.inverted);
+  }
+
   testPositionGPU(
     position: Node<'vec3'>,
     context: GPUParticleUpdateContext,
   ): Node<'float'> {
-    return this.testGPU({ position } as GPUParticleLike, context);
+    const particle = { position } as GPUParticleLike;
+    if (this.customOccupancy) return this.testGPU(particle, context);
+    const strength = this.bakedFieldGPU(particle);
+    return this.conditionGPU ? this.conditionGPU(particle, context, this).select(strength, 0) : strength;
   }
 
   private static resolveFactoryArgs<T extends unknown[]>(

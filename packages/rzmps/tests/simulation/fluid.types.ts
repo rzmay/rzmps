@@ -1,17 +1,14 @@
-import { Color, Vector3 } from 'three';
-import { vec3 } from 'three/tsl';
-import { AdvectionMethod, FluidBoundsPolicy, FLIPSimulation, GasSimulation, Emitter, ColorBySpeed, ScaleByDepth, TransformByNoise, DecalRenderer } from '../../build/index.mjs';
-import { MeshBasicMaterial } from 'three';
-import type {
-  ModuleCondition, ModuleGPUCondition, ModuleUpdate, ModuleGPUUpdate,
+import {
+  AdvectionMethod, FluidBoundsPolicy, FLIPSimulation, GasSimulation, DecalRenderer,
 } from '../../build/index.mjs';
+import { MeshBasicMaterial } from 'three';
 import { Module, ParticleSystem } from '../../build/index.mjs';
 import type { VolumeFieldProvider, VolumeField } from '../../build/index.mjs';
 import { VolumeRenderer, VolumeInterpolation, VolumeDensityMapping, SurfaceRenderer } from '../../build/index.mjs';
 
 new VolumeRenderer({ interpolation: VolumeInterpolation.Cubic, densityMapping: 'Curve', densityCurve: t => t * t });
 new VolumeRenderer({ interpolation: 'Nearest', densityMapping: VolumeDensityMapping.Linear,
-  densityRange: [0, 2], densityGain: 2, stepSizeMultiplier: 0.5 });
+  minDensity: 0, maxDensity: 2, densityGain: 2, stepSizeMultiplier: 0.5 });
 new VolumeRenderer({
   // @ts-expect-error Unsupported reconstruction filter.
   interpolation: 'Gaussian',
@@ -95,3 +92,31 @@ liquidMaterial.setFlow({ distortion: [0, 0.7] });
 new SurfaceRenderer({ material: liquidMaterial });
 
 new VolumeRenderer({ samplesPerVoxel: 2, jitterStrength: 1, jitterSeed: 17, anisotropy: 0.6, shadowQuality: 2 });
+
+new VolumeRenderer({ color: '#ffffff', minDensity: 0.2, maxDensity: 0.8,
+  downsample: 2, dynamicResolution: false, colorByDensity: ['blue', 'red'] });
+new VolumeRenderer({
+  // @ts-expect-error Density already determines opacity; use the density remapping controls.
+  opacityByDensity: [0, 1],
+});
+
+new GasSimulation({ temperatureRange: [0, 4], densityRange: [0, 8],
+  turbulenceNoiseStrengthByTemperature: [0.5, 2], turbulenceNoiseStrengthByDensity: t => 0.5 + t,
+  vorticityStrengthByTemperature: [0.5, 1.5], vorticityStrengthByDensity: [1, 2],
+  densityDissipationByTemperature: [0.25, 3], densityDissipationByDensity: [1, 1],
+  temperatureDissipationByTemperature: [0.5, 1.5], temperatureDissipationByDensity: [1, 1],
+  velocityDissipationByTemperature: [1.2, 0.5], velocityDissipationByDensity: [1, 1],
+  colorDissipationByTemperature: [0.5, 2], colorDissipationByDensity: [1, 1],
+  turbulenceNoiseFrequencyByTemperature: [0.6, 1.8], turbulenceNoiseFrequencyByDensity: [1, 2] });
+new GasSimulation({
+  // @ts-expect-error State-dependent solver settings are intentionally unsupported.
+  pressureIterationsByTemperature: [8, 32],
+});
+
+new VolumeRenderer({ densityNoiseStrengthByTemperature: [0.25, 1.5],
+  densityNoiseContrastByTemperature: [0.5, 1.25], densityNoiseFrequencyByTemperature: [1.25, 1] });
+
+new GasSimulation({ spatialGridOptions: { maxBounds: 16 } });
+new FLIPSimulation({ spatialGridOptions: { maxBounds: 8 }, boundsPolicy: 'Contain' });
+// @ts-expect-error The grid owns the cap; fluid modules do not accept a top-level maxBounds.
+new GasSimulation({ maxBounds: 16 });

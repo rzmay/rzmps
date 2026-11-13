@@ -94,6 +94,8 @@ Apply shared scene influences, force fields, and spatial selection.
 - [BoidAffector](api/classes/BoidAffector.md)
 - [KillZone](api/classes/KillZone.md)
 - [FluidCollider](api/classes/FluidCollider.md)
+- [GasAffector](api/classes/GasAffector.md)
+- [SpatialEffectCollection](api/classes/SpatialEffectCollection.md)
 - [SpatialGrid](api/classes/SpatialGrid.md)
 
 ## GPU Infrastructure
@@ -118,6 +120,7 @@ Build advanced GPU extensions with particle-node views, buffers, selective readb
 - [GPUParticleRenderStorage](api/classes/GPUParticleRenderStorage.md)
 - [GPUParticleStorage](api/classes/GPUParticleStorage.md)
 - [GPUSpatialEffectRegistry](api/classes/GPUSpatialEffectRegistry.md)
+- [StagedGPUAllocation](api/classes/StagedGPUAllocation.md)
 
 ## Types
 
@@ -155,6 +158,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [FluidSimulationOptions](api/interfaces/FluidSimulationOptions.md)
 - [ForceFieldOptions](api/interfaces/ForceFieldOptions.md)
 - [ForceOverLifetimeOptions](api/Supporting-Types/interfaces/ForceOverLifetimeOptions.md)
+- [GasAffectorOptions](api/interfaces/GasAffectorOptions.md)
 - [GasSimulationOptions](api/interfaces/GasSimulationOptions.md)
 - [KillZoneOptions](api/type-aliases/KillZoneOptions.md)
 - [LightRendererAllocationOptions](api/interfaces/LightRendererAllocationOptions.md)
@@ -192,6 +196,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [SpeedBySizeOptions](api/Supporting-Types/interfaces/SpeedBySizeOptions.md)
 - [SpeedOverLifetimeOptions](api/Supporting-Types/interfaces/SpeedOverLifetimeOptions.md)
 - [SpriteRendererOptions](api/Supporting-Types/interfaces/SpriteRendererOptions.md)
+- [StagedGPUAllocationOptions](api/interfaces/StagedGPUAllocationOptions.md)
 - [SubSystemOptions](api/interfaces/SubSystemOptions.md)
 - [SurfaceRendererOptions](api/interfaces/SurfaceRendererOptions.md)
 - [TextureAtlasOptions](api/interfaces/TextureAtlasOptions.md)
@@ -204,6 +209,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [VelocityBySizeOptions](api/Supporting-Types/interfaces/VelocityBySizeOptions.md)
 - [VelocityOverLifetimeOptions](api/Supporting-Types/interfaces/VelocityOverLifetimeOptions.md)
 - [VolumeRendererOptions](api/interfaces/VolumeRendererOptions.md)
+- [VolumeResolutionOptions](api/interfaces/VolumeResolutionOptions.md)
 
 ### Dynamic Values
 
@@ -239,6 +245,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 ### Callbacks
 
 - [CollisionListener](api/type-aliases/CollisionListener.md)
+- [GasModifier](api/type-aliases/GasModifier.md)
 - [ModuleGPUUpdate](api/type-aliases/ModuleGPUUpdate.md)
 - [ModuleUpdate](api/type-aliases/ModuleUpdate.md)
 - [NoiseModuleGPUUpdate](api/Supporting-Types/type-aliases/NoiseModuleGPUUpdate.md)
@@ -284,6 +291,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [EventScope](api/type-aliases/EventScope.md)
 - [EventSubscriptions](api/type-aliases/EventSubscriptions.md)
 - [FluidPressureDiagnostics](api/Supporting-Types/interfaces/FluidPressureDiagnostics.md)
+- [GasCellGPU](api/interfaces/GasCellGPU.md)
 - [GPUAllocationDiagnostics](api/interfaces/GPUAllocationDiagnostics.md)
 - [GPUCollisionEventNodeRecord](api/Supporting-Types/interfaces/GPUCollisionEventNodeRecord.md)
 - [GPUComputeRange](api/interfaces/GPUComputeRange.md)
@@ -376,8 +384,12 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [SpatialAggregator](api/type-aliases/SpatialAggregator.md)
 - [SpatialBackend](api/type-aliases/SpatialBackend.md)
 - [SpatialEffectConstructor](api/type-aliases/SpatialEffectConstructor.md)
+- [SpatialEffectDeltas](api/type-aliases/SpatialEffectDeltas.md)
+- [SpatialEffectDeltasGPU](api/type-aliases/SpatialEffectDeltasGPU.md)
 - [SpatialEffectFeatherEasing](api/Supporting-Types/type-aliases/SpatialEffectFeatherEasing.md)
 - [SpatialEffectGPUCondition](api/type-aliases/SpatialEffectGPUCondition.md)
+- [SpatialEffectRequirement](api/type-aliases/SpatialEffectRequirement.md)
+- [SpatialEffectSampleState](api/type-aliases/SpatialEffectSampleState.md)
 - [SpatialLevelsInput](api/type-aliases/SpatialLevelsInput.md)
 - [SpawnBurst](api/type-aliases/SpawnBurst.md)
 - [SpeedRange](api/Supporting-Types/type-aliases/SpeedRange.md)

@@ -35,7 +35,7 @@ A volume provider implements `getVolumeField()` and optionally
 unavailable. Without explicit fields, `VolumeRenderer` finds all providers
 overlapping its own tags. It samples each density field in its own bounds and
 resolution, adds densities, and blends each provider's color by its density
-contribution. A missing color uses the renderer's base color. The rendered box
+contribution. A missing color uses the renderer’s `color`. The rendered box
 encloses the union of contributing density bounds; fields contribute nothing
 outside their own bounds.
 
@@ -50,9 +50,47 @@ or `Cubic`) from integration quality (`stepSizeMultiplier`, relative to cell siz
 bounded by `steps`). Opacity is distance-corrected so quality changes do not
 silently act as density gain. `densityGain` is an explicit appearance multiplier.
 `densityMapping` selects `Smoothstep` (existing `threshold`/`range`), `Linear`,
-`Curve`, or `None`. Linear/Curve use `densityRange`; `densityCurve` follows
+`Curve`, or `None`. All mappings normalize/clamp density between `minDensity` (default 0)
+and `maxDensity` (default 1); `densityCurve` follows
 `ValueByParameter<number>` and is sampled to a lookup texture. These controls
 do not change source emission, dissipation, diffusion, or liquid dynamics.
+
+Nullable `colorByTemperature`, `colorByDensity`, `colorBySpeed` and `colorByVorticity`
+multiply `color` and the sampled field color. Nullable `opacityByTemperature`,
+`opacityBySpeed` and `opacityByVorticity` multiply opacity. Null contributes white/one.
+Density already drives opacity; `colorByDensity` uses the same min/max remapping.
+
+On `WebGPURenderer`, `downsample: 2` renders at half width and height and reconstructs
+using scene/volume depth to preserve silhouettes. Set `dynamicResolution: false` for
+fixed downsampling. Otherwise measured GPU time can lower resolution further relative
+to that fixed baseline. Neither setting changes along-ray integration quality. Automatic feedback uses rendering time;
+compute-heavy simulation alone does not reduce volume image resolution. Ray-step and
+samples-per-voxel edits update uniforms without rebuilding the raymarch material.
+
+`await system.prepare(renderer)` can overlap optional renderer pipeline preparation with module
+preparation without advancing emission or simulation. Volume rendering prepares its existing
+provider fields for the captured camera/scene; unavailable fields retain first-use compilation.
+
+Volume renderer children share their provider’s textures and raymarch. Each interval sums
+transformed child density and weighted color before lighting and opacity integration.
+Children add density and texture sampling work without allocating particle child buffers.
+
+Gas simulation separates physical behavior from volume appearance. Optional
+`ByTemperature` and `ByDensity` multipliers apply to `turbulenceNoiseStrength`,
+`vorticityStrength`, `turbulenceNoiseFrequency`, and density/temperature/velocity/color dissipation.
+The effective coefficient is the base multiplied by each present modifier. Omitted
+modifiers skip evaluation; negative multiplier results clamp to zero. These use the
+normal `ValueByParameter` rules: `[0.5, 2]` interpolates endpoints, functions define
+curves, and a scalar `1` scales with the normalized parameter. Use `[1, 1]` for a
+constant neutral multiplier.
+
+`GasSimulation.temperatureRange` and `densityRange` (both default `[0, 1]`) normalize
+physical specific temperature (heat mass divided by density) and physical density.
+They are independent of renderer appearance ranges and min/max density remapping.
+Decay remains `exp(-effectiveRate * deltaTime)`. Forces are applied before pressure
+projection. Only independent local continuous coefficients support these modifiers:
+solver iterations, timestep/grid/allocation policies and algorithm selection do not.
+Variable diffusion/viscosity requires separate conservative shared-face treatment.
 
 `start()` starts playback and resets the emission cycle, including when restarting a paused system. `pause()` freezes simulation. `stop(clearParticles)` stops emission and resets system time; surviving particles can continue moving on subsequent updates when they are retained. `destroy()` permanently releases owned resources. Removing a system from its scene performs temporary cleanup so it can be attached elsewhere. Call `destroy()` when you will no longer use it.
 
@@ -69,3 +107,24 @@ The loop duration schedules emission; it is independent of each particle's lifet
 [Subsystems](subsystems.md) attach secondary effects to lifecycle events. [Spatial effects and collections](spatial-effects.md) coordinate scene-wide behavior. Both rendering backends use this same composition model; see [compatibility](compatibility.md) and [GPU processing](gpu-processing.md).
 
 The exported `sampleDynamicValue(value, sample, resolution = 16)` reduces dynamic leaves using a custom `(a, b) => result` callback. It visits range endpoints and set members and samples functions over normalized time. `maxDynamicNumber` / `minDynamicNumber`, `maxDynamicVector` / `minDynamicVector`, and `maxDynamicColor` / `minDynamicColor` provide common reductions. Vector and color extrema are component-wise and return independent objects. These are sampled estimates for functions, not guaranteed mathematical bounds. Numeric helpers return zero for unreadable inputs unless an explicit third fallback argument is supplied; vectors return zero and colors return black. The generic reducer returns `undefined` when no readable leaf exists and accepts a fourth callback for input normalization.
+
+
+`averageDynamicNumber` and `medianDynamicNumber` use the same readable-leaf traversal as
+numeric min/max helpers: ranges visit endpoints, sets visit members, and functions sample
+normalized time uniformly (16 samples by default). They accept a fallback for unreadable
+values. These are sampled statistics, not guaranteed bounds or probability-weighted
+expectations. The median averages the central pair for even sample counts.
+
+Fluid motion forecasts and `automaticPaddingDistance` are vectors: each axis uses its measured
+maximum velocity rather than the maximum speed on every axis. Gas also integrates sampled damping
+and buoyant travel over a short lookahead; buoyancy adds vertical padding and diffusion adds isotropic
+padding. The padded particle bounds are united with measured occupied gas afterward, so existing gas
+is retained without forecasting its past travel again. There is no additional percentage growth margin.
+The spatial grid then applies its centering, cubic shape, power-of-two rounding and configured ceiling.
+An origin-centered eight-unit cube spans −4 to +4; support reaching +8 needs a sixteen-unit cube.
+Representative averages alone cannot protect fast outliers, so measured support remains authoritative.
+
+VolumeRenderer's nullable `densityNoiseStrengthByTemperature`, `densityNoiseContrastByTemperature` and
+`densityNoiseFrequencyByTemperature` multiply their corresponding density-mask settings using the
+renderer temperature range. They reuse the temperature already sampled for appearance,
+change rendering only, and require WebGPURenderer like the procedural density mask itself.
