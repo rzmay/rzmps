@@ -52,5 +52,12 @@ settings supply visual breakup independently of simulated turbulence. Two sample
 
 There is no temperature-driven tint or lifetime color gradient. Simulation lighting/shadows can vary
 brightness, while the transported smoke keeps its single slightly reddish gray hue.
+`lightingGridOptions` enables managed lighting with 0.25-unit probes, twelve finest directions,
+eight interval samples and a fixed sixteen-unit lighting distance. Moving scene lights,
+new lights entering range and HDRI changes refresh lighting even when particle simulation is paused.
 
 <ExampleCode region="renderers" />
+
+The demo uses three brick subdivisions and three cell subdivisions for its realtime performance budget.
+`minVolumeQuality: 8` starts it at a 0.125-unit cell width rather than oversampling its compact initial
+domain. Larger smoke support can still request a coarser automatic tier.

@@ -78,6 +78,7 @@ export function readPackedVec4(
 export function initializeStorageAttribute(
   renderer: GPUStorageBufferRenderer,
   attribute: StorageBufferAttribute,
+  upload = true,
 ): boolean {
   const backend = renderer.backend as {
     isWebGPUBackend?: boolean;
@@ -118,7 +119,8 @@ export function initializeStorageAttribute(
         mappedAtCreation: false,
       });
       const chunkSize = 256 * 1024;
-      for (let offset = 0; offset < array.byteLength; offset += chunkSize) {
+      // Fresh WebGPU buffers are zero-initialized. New zero-filled capacity storage needs no CPU upload.
+      for (let offset = 0; upload && offset < array.byteLength; offset += chunkSize) {
         const length = Math.min(chunkSize, array.byteLength - offset);
         backend.device.queue.writeBuffer(
           buffer,

@@ -7,6 +7,7 @@ import { resolveSpatialLevels } from '../../enums/resolveSpatialLevels';
 import type { PackedFloatStorage } from '../../utils/gpu/storage.utils';
 import { destroyGPUStorageAttribute, type GPUParticleBufferState } from '../../simulation/gpu/Particle';
 import ParticleOctree from './ParticleOctree';
+import { boundsVector } from './spatialGridDomain.utils';
 import ParticleSpatialGrid, { type ParticleSpatialGridOptions } from './ParticleSpatialGrid';
 
 /** Owns system spatial structures and their population/GPU cache lifetimes. */
@@ -44,10 +45,15 @@ export default class SpatialRuntime {
         ? undefined : resolveSpatialLevels(gridOrOptions.levels, gridOrOptions.brickSubdivisions ?? 3,
           gridOrOptions.cellSubdivisions ?? 4),
       powerOfTwoBounds: gridOrOptions.powerOfTwoBounds ?? true,
-      cubicBounds: gridOrOptions.cubicBounds ?? false,
-      centeredAtOrigin: gridOrOptions.centeredAtOrigin ?? true,
-      autoExpand: gridOrOptions.autoExpand ?? true,
-      maxBounds: gridOrOptions.maxBounds ?? Infinity,
+      cubicBounds: bounds ? gridOrOptions.cubicBounds ?? false : false,
+      centeredAtOrigin: bounds ? gridOrOptions.centeredAtOrigin ?? false : false,
+      autoExpand: !bounds && (gridOrOptions.autoExpand ?? true),
+      maxBounds: boundsVector(gridOrOptions.maxBounds, Infinity).toArray(),
+      minBounds: boundsVector(gridOrOptions.minBounds, 0).toArray(),
+      autoVolumeQuality: gridOrOptions.autoVolumeQuality ?? gridOrOptions.volumeQuality === undefined,
+      volumeQuality: gridOrOptions.volumeQuality ?? 2,
+      minVolumeQuality: gridOrOptions.minVolumeQuality ?? 2,
+      maxVolumeQuality: gridOrOptions.maxVolumeQuality ?? Infinity,
       autoShrink: gridOrOptions.autoShrink ?? true,
       shrinkDelay: gridOrOptions.shrinkDelay ?? 600,
       expansionHysteresis: gridOrOptions.expansionHysteresis ?? 0.125,

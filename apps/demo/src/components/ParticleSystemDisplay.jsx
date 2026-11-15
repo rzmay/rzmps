@@ -44,9 +44,10 @@ function collectSystemStats(system, visited = new Set()) {
         name: module.constructor.name.replace('Simulation', ''),
         particles: formatBounds(module.particleBounds),
         grid: formatBounds(module.bounds),
-        padding: module.automaticPadding
-          ? `auto [${module.automaticPaddingDistance.toArray().map(value => value.toFixed(2)).join(', ')}]`
-          : `manual ${module.boundsPadding.toFixed(2)}`,
+        occupied: formatBounds(module.occupiedBounds),
+        dimensions: module.gridDimensions.toArray().join(' × '),
+        cellSize: module.cellSize.toFixed(4),
+        hardCapBreaches: module.spatialGrid?.domainDiagnostics.hardCapBreaches ?? 0,
       })) ?? [],
   };
 
@@ -115,11 +116,6 @@ function ParticleSystemDisplay({
         initialScene,
         title: `🧅 RZMPS Demo v${RZMPS_VERSION}`,
         width: 340,
-        beforeSceneChange: async () => {
-          const preparation = preparations.current.get(particleSystem.current);
-          await preparation?.promise;
-          if (preparation) { preparation.ready = false; preparation.promise = undefined; }
-        },
         onSystemChange: nextSystem => {
           particleSystem.current = nextSystem;
         },

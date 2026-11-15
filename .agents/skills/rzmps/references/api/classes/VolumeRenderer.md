@@ -527,6 +527,16 @@ Optional directional light; otherwise resolve the dominant visible scene directi
 
 ***
 
+<a id="lightinggridoptions"></a>
+
+### lightingGridOptions?
+
+```ts
+optional lightingGridOptions?: Partial<LightingGridOptions>;
+```
+
+***
+
 <a id="materialcopysamplemode"></a>
 
 ### materialCopySampleMode
@@ -696,6 +706,26 @@ shadowQuality: number;
 ```
 
 Secondary light-march quality; zero disables shadows (default).
+
+***
+
+<a id="softparticledistance"></a>
+
+### softParticleDistance
+
+```ts
+softParticleDistance: number;
+```
+
+***
+
+<a id="softparticles"></a>
+
+### softParticles
+
+```ts
+softParticles: boolean;
+```
 
 ***
 

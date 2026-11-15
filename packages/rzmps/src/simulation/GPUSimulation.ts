@@ -145,6 +145,30 @@ export default class GPUSimulation {
 
   readonly _gpuEmissionFrameNode = uniform(new THREE.Matrix4(), 'mat4');
 
+  /** @internal Stable preparation bindings; no emission, integration, or event dispatch. */
+  prepareContext(renderer: WebGPURenderer): GPUParticleUpdateContext {
+    if (!this._gpuBuffers) {
+      this._gpuResourceBuildCount++;
+      this._gpuBuffers = createGPUParticleBufferState(this.system.particles, this._getInitialGPUBufferCapacity(),
+        particle => this._getParticleGPUTagMask(particle),
+        (particle, index) => this._getGPUParticleSlotGeneration(particle, index));
+    }
+    this._gpuBuffers.ensureCount(this._gpuBuffers.capacity);
+    this._gpuBuffers.initialize(renderer);
+    return { system: this.system, buffers: this._gpuBuffers, deltaTime: 0,
+      deltaTimeNode: this._gpuDeltaTimeNode, elapsedTimeNode: this._gpuElapsedTimeNode,
+      gravityNode: this._gpuGravityNode, simulationToWorldNode: this._gpuSimulationToWorldNode,
+      worldToSimulationNode: this._gpuWorldToSimulationNode };
+  }
+
+  /** @internal Shares the same render storage that the first ordinary update will fill. */
+  prepareRenderBuffers(renderer: WebGPURenderer): GPUParticleRenderBufferState {
+    this._gpuRenderOutputBuffers ??= createGPUParticleRenderBufferState(this._getInitialGPUBufferCapacity());
+    this._gpuRenderOutputBuffers.ensureCount(this._gpuBuffers?.count ?? 0);
+    this._gpuRenderOutputBuffers.initialize(renderer);
+    return this._gpuRenderOutputBuffers;
+  }
+
   _gpuBuffers?: GPUParticleBufferState;
 
   _gpuRenderOutputBuffers?: GPUParticleRenderBufferState;
@@ -461,7 +485,7 @@ export default class GPUSimulation {
       eventWriter,
       collisionEventWriter,
     };
-    const modifiers = [...modules, ...gpuSpatialEffects];
+    const modifiers = [...modules.filter(module => module.modifiesParticles), ...gpuSpatialEffects];
 
     this.system.frameRuntime._computeGPUFrameConversion(context);
     if (gpuNativeEmission || this._gpuSubSystemFrameInput) {

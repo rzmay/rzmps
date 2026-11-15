@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { MeshBasicNodeMaterial, WebGPURenderer, type Node } from 'three/webgpu';
 import {
   Fn,
+  If,
   cameraFar,
   cameraNear,
   cameraProjectionMatrix,
@@ -30,7 +31,8 @@ const timingOwners = new WeakMap<TimingBackend, { previous: boolean; owners: Set
 
 /** Pooled screen-space volume reconstruction. Simulation fields and along-ray quality stay unchanged. @internal */
 export default class VolumeRenderTarget {
-  readonly sceneDepth = new THREE.DepthTexture(1, 1);
+  private readonly emptyDepth = new THREE.DepthTexture(1, 1);
+  readonly sceneDepth = texture(this.emptyDepth);
   readonly material = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
   private readonly color = texture(new THREE.Texture());
   private readonly metadata = texture(new THREE.Texture());
@@ -38,15 +40,7 @@ export default class VolumeRenderTarget {
   private readonly size = uniform(new THREE.Vector2(1, 1));
   private readonly targets = new Map<number, THREE.RenderTarget>();
   private readonly scene = new THREE.Scene();
-  private readonly depthTarget = new THREE.RenderTarget(1, 1, { depthTexture: this.sceneDepth, samples: 0 });
-  private readonly depthMaterial = new MeshBasicNodeMaterial({
-    colorWrite: false,
-    depthWrite: true,
-    depthTest: true,
-    side: THREE.DoubleSide,
-  });
   private proxy?: THREE.Mesh;
-  private depthCamera?: THREE.Camera;
   private scale = 1;
   private downsample = 1;
   private dynamic = true;
@@ -60,7 +54,7 @@ export default class VolumeRenderTarget {
   constructor() {
     this.material.fragmentNode = Fn(() => {
       const uv = screenUV;
-      const raw = texture(this.sceneDepth).sample(uv).level(float(0)).r;
+      const raw = this.sceneDepth.sample(uv).level(float(0)).r;
       const orthographic = cameraProjectionMatrix.mul(vec4(0, 0, 0, 1)).w.equal(1);
       const viewDepth = (depth: Node<'float'>) =>
         orthographic.select(
@@ -73,6 +67,7 @@ export default class VolumeRenderTarget {
         fraction = p.sub(base);
       const sum = vec4(0).toVar(),
         weights = float(0).toVar();
+      const fallback = vec4(0).toVar(), closestDepth = float(1e30).toVar();
       // Reconstruct premultiplied radiance/transmittance; never interpolate straight RGB through vacuum.
       for (const y of [0, 1])
         for (const x of [0, 1]) {
@@ -84,12 +79,20 @@ export default class VolumeRenderTarget {
           // Reject low-resolution rays clipped by a different opaque surface, or whose
           // representative volume depth lies behind this full-resolution scene pixel.
           const compatible = info.y.greaterThanEqual(sceneZ.sub(tolerance));
-          const bilateral = exp(info.x.sub(sceneZ).abs().div(tolerance).negate()).mul(compatible.select(1, 0));
+          const difference = info.x.sub(sceneZ).abs();
+          const bilateral = exp(difference.div(tolerance).negate()).mul(compatible.select(1, 0));
           const weight = spatial.mul(this.respectDepth.greaterThan(0).select(bilateral, float(1)));
           sum.addAssign(vec4(sample.rgb.mul(sample.a), sample.a).mul(weight));
           weights.addAssign(weight);
+          // A narrow full-resolution depth gap may have no matching low-resolution depth.
+          // Retain the nearest valid contributing ray instead of dividing an empty sum into vacuum.
+          If(compatible.and(info.w.greaterThan(0)).and(sample.a.greaterThan(0))
+            .and(spatial.greaterThan(0)).and(difference.lessThan(closestDepth)), () => {
+            closestDepth.assign(difference);
+            fallback.assign(vec4(sample.rgb.mul(sample.a), sample.a));
+          });
         }
-      const result = sum.div(weights.max(1e-6));
+      const result = weights.greaterThan(1e-6).select(sum.div(weights.max(1e-6)), fallback);
       return vec4(result.rgb.div(result.a.max(1e-6)), result.a);
     })();
   }
@@ -105,7 +108,13 @@ export default class VolumeRenderTarget {
     }
     this.downsample = downsample;
     this.dynamic = dynamic;
-    if (!dynamic) this.releaseTiming();
+    if (!dynamic) {
+      this.releaseTiming();
+      if (downsample === 1) {
+        this.targets.forEach(target => target.dispose());
+        this.targets.clear();
+      }
+    }
   }
 
   /** GPU time only: pipeline compilation/CPU stalls must not lower image resolution. */
@@ -125,11 +134,11 @@ export default class VolumeRenderTarget {
 
   render(
     renderer: WebGPURenderer,
-    rootScene: THREE.Scene,
     camera: THREE.Camera,
     source: THREE.Mesh,
     rayMaterial: MeshBasicNodeMaterial,
     options: VolumeResolutionOptions,
+    opaqueDepth: THREE.DepthTexture,
   ): void {
     const backend = renderer.backend as {
       trackTimestamp?: boolean;
@@ -165,12 +174,12 @@ export default class VolumeRenderTarget {
     }
     const scale = this.resolutionScale;
     if (scale >= 1) return;
+    this.sceneDepth.value = opaqueDepth;
     this.respectDepth.value = rayMaterial.depthTest ? 1 : 0;
     const previousTarget = renderer.getRenderTarget();
     const full = previousTarget
       ? new THREE.Vector2(previousTarget.width, previousTarget.height)
       : renderer.getDrawingBufferSize(new THREE.Vector2());
-    this.depthTarget.setSize(full.x, full.y);
     let target = this.targets.get(scale);
     if (!target) {
       target = new THREE.RenderTarget(1, 1, { count: 2, type: THREE.HalfFloatType, depthBuffer: false });
@@ -181,6 +190,14 @@ export default class VolumeRenderTarget {
         map.magFilter = THREE.NearestFilter;
       }
       this.targets.set(scale, target);
+    }
+    // Retain the active scale and one recent scale, rather than every adaptive/user setting ever visited.
+    this.targets.delete(scale);
+    this.targets.set(scale, target);
+    while (this.targets.size > 2) {
+      const oldest = this.targets.keys().next().value!;
+      this.targets.get(oldest)!.dispose();
+      this.targets.delete(oldest);
     }
     target.setSize(Math.max(1, Math.ceil(full.x * scale)), Math.max(1, Math.ceil(full.y * scale)));
     this.color.value = target.textures[0];
@@ -200,39 +217,8 @@ export default class VolumeRenderTarget {
       mrt = renderer.getMRT();
     const previousBlend = rayMaterial.blending,
       depthTest = rayMaterial.depthTest;
-    const hidden: THREE.Object3D[] = [];
-    const override = rootScene.overrideMaterial;
-    rootScene.traverse(object => {
-      if (!(object instanceof THREE.Mesh) || !object.visible) return;
-      const materials = Array.isArray(object.material) ? object.material : [object.material];
-      if (object === source || materials.every(material => material.transparent || !material.depthWrite)) {
-        hidden.push(object);
-        object.visible = false;
-      }
-    });
     try {
-      // A nested offscreen pass cannot consume an unsubmitted main-pass depth copy.
-      // Render current opaque depth first, in queue order, instead of reading last-frame depth.
-      rootScene.overrideMaterial = this.depthMaterial;
-      renderer.setMRT(null);
-      renderer.setRenderTarget(this.depthTarget);
-      renderer.autoClear = true;
-      renderer.setClearColor(0, 0);
-      // Three caches render lists by scene and camera. Reusing both during onBeforeRender
-      // clears the outer pass's list while it is being iterated, aborting subsequent frames.
-      // Keep a separate camera identity, with exactly the same current projection and pose.
-      if (!this.depthCamera || this.depthCamera.constructor !== camera.constructor) {
-        this.depthCamera = camera.clone();
-      }
-      this.depthCamera.copy(camera, false);
-      this.depthCamera.matrixAutoUpdate = false;
-      this.depthCamera.matrixWorldAutoUpdate = false;
-      this.depthCamera.matrix.copy(camera.matrixWorld);
-      renderer.render(rootScene, this.depthCamera);
-      rootScene.overrideMaterial = override;
-      hidden.forEach(object => {
-        object.visible = true;
-      });
+      // The outer opaque-stage snapshot is already ordered before this nested volume draw.
       // MRT writes straight radiance and explicit metadata; composition performs blending exactly once.
       rayMaterial.blending = THREE.NoBlending;
       rayMaterial.depthTest = false;
@@ -242,10 +228,6 @@ export default class VolumeRenderTarget {
       renderer.autoClear = true;
       renderer.render(this.scene, camera);
     } finally {
-      rootScene.overrideMaterial = override;
-      hidden.forEach(object => {
-        object.visible = true;
-      });
       rayMaterial.blending = previousBlend;
       rayMaterial.depthTest = depthTest;
       renderer.setRenderTarget(previousTarget);
@@ -273,9 +255,7 @@ export default class VolumeRenderTarget {
     this.releaseTiming();
     this.targets.forEach(target => target.dispose());
     this.targets.clear();
-    this.depthTarget.dispose();
-    this.depthMaterial.dispose();
-    this.sceneDepth.dispose();
+    this.emptyDepth.dispose();
     this.material.dispose();
     this.scene.clear();
   }

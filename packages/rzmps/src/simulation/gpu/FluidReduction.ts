@@ -28,6 +28,7 @@ export default class FluidReduction {
   private readonly range?: GPUComputeRange;
   private readonly scheduleNode?: ComputeNode;
 
+  /** count reserves the complete hierarchy; compact.count is the live runtime population. */
   constructor(private readonly count: number, private readonly compact?: FluidReductionRange) {
     this.chunks = Math.max(1, Math.ceil(count / 256));
     this.partialAttribute = new StorageBufferAttribute(new Float32Array(this.chunks * 12), 4);
@@ -56,7 +57,8 @@ export default class FluidReduction {
       this.reduceNodes.push(this.buildLevel(input, output, active, groups, final));
       input = output;
       size = groups;
-      active = uint(groups);
+      // Later levels must not read stale partials after the compact population shrinks.
+      active = active.add(63).div(64);
     } while (size > 1);
   }
 

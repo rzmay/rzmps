@@ -1,6 +1,7 @@
+import * as THREE from 'three';
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
-import { FluidSimulation, FluidBoundsPolicy } from '@rzmps/rzmps';
+import { GasModule, FluidSimulation, FluidBoundsPolicy, PressureSolver } from '@rzmps/rzmps';
 
 export class ModuleGUI extends GUIEditorBase {
   buildModulesFolder(root, system = this.system) {
@@ -35,7 +36,9 @@ export class ModuleGUI extends GUIEditorBase {
     this.addTags(folder, module);
 
     const candidate = module;
-    if (candidate instanceof FluidSimulation) {
+    if (candidate instanceof GasModule) {
+      folder.add(candidate, 'enabled').name('Enabled').onChange(() => this.emitCode());
+    } else if (candidate instanceof FluidSimulation) {
       const tuning = [
         'pressureIterations',
         'pressureTolerance',
@@ -45,12 +48,10 @@ export class ModuleGUI extends GUIEditorBase {
         'maxFluidSubsteps',
         'externalForce',
         'maxVelocity',
-        'boundsPadding',
         'automaticPadding',
         'showGridHelper',
         'picRatio',
         'advectParticlesEnabled',
-        'velocityPaddingLookahead',
         'collisionIterations',
         'particleSeparation',
         'particleSpacing',
@@ -64,6 +65,7 @@ export class ModuleGUI extends GUIEditorBase {
         'sourceStrength',
         'velocitySourceStrength',
         'supportForceFields',
+        'supportSpatialEffects',
         'sourceTemperature',
         'temperatureOverLifetime',
         'scalarDiffusion',
@@ -86,7 +88,16 @@ export class ModuleGUI extends GUIEditorBase {
         .name('Bounds Policy')
         .onChange(() => this.emitCode());
       if ('pressureSolver' in candidate) {
-        folder.add(candidate, 'pressureSolver', ['Iterative', 'Multigrid']).name('Pressure Solver');
+        folder.add(candidate, 'pressureSolver', Object.values(PressureSolver)).name('Pressure Solver')
+          .onChange(() => this.emitCode());
+        const multigrid = folder.addFolder('Multigrid');
+        for (const [key, value] of [['preSmoothing', 2], ['postSmoothing', 4], ['bottomIterations', 12]]) {
+          const state = { [key]: candidate.multigrid?.[key] ?? value };
+          multigrid.add(state, key, key === 'bottomIterations' ? 1 : 0, 64, 1).onChange(value => {
+            candidate.multigrid ??= {};
+            candidate.multigrid[key] = value; this.emitCode();
+          });
+        }
       }
     } else if (candidate.options && typeof candidate.options === 'object') {
       this.addObject(folder, candidate.options, new Set(['tags', 'useOctree', 'useSpatialGrid', ...LOD_GUI_KEYS]));
@@ -212,7 +223,7 @@ export class ModuleGUI extends GUIEditorBase {
         cellSubdivisions: grid?.cellSubdivisions ?? options.cellSubdivisions ?? 4,
         powerOfTwoBounds: grid?.powerOfTwoBounds ?? options.powerOfTwoBounds ?? true,
         cubicBounds: grid?.cubicBounds ?? options.cubicBounds ?? false,
-        centeredAtOrigin: grid?.centeredAtOrigin ?? options.centeredAtOrigin ?? true,
+        centeredAtOrigin: grid?.centeredAtOrigin ?? options.centeredAtOrigin ?? false,
         autoExpand: grid?.autoExpand ?? options.autoExpand ?? true,
         autoShrink: grid?.autoShrink ?? options.autoShrink ?? true,
         shrinkDelay: grid?.shrinkDelay ?? options.shrinkDelay ?? 600,
@@ -220,6 +231,11 @@ export class ModuleGUI extends GUIEditorBase {
         timeQuality: grid?.timeQuality ?? options.timeQuality ?? 1,
         maxQuerySteps: grid?.maxQuerySteps ?? options.maxQuerySteps ?? 0,
         maxBounds: grid?.maxBounds ?? options.maxBounds ?? Infinity,
+        minBounds: grid?.minBounds ?? options.minBounds ?? 0,
+        autoVolumeQuality: grid?.autoVolumeQuality ?? options.autoVolumeQuality ?? true,
+        volumeQuality: grid?.volumeQuality ?? options.volumeQuality ?? 2,
+        minVolumeQuality: grid?.minVolumeQuality ?? options.minVolumeQuality ?? 2,
+        maxVolumeQuality: grid?.maxVolumeQuality ?? options.maxVolumeQuality ?? Infinity,
       };
       ['brickSubdivisions', 'cellSubdivisions'].forEach(key =>
         quality
@@ -240,16 +256,15 @@ export class ModuleGUI extends GUIEditorBase {
         'expansionHysteresis',
         'timeQuality',
         'maxQuerySteps',
-        'maxBounds',
+        'autoVolumeQuality',
+        'volumeQuality',
+        'minVolumeQuality',
+        'maxVolumeQuality',
       ]
-        .filter(
-          key =>
-            !(candidate instanceof FluidSimulation) || !['powerOfTwoBounds', 'cubicBounds', 'autoExpand'].includes(key),
-        )
-        .filter(
-          key =>
-            !(candidate instanceof FluidSimulation && ['powerOfTwoBounds', 'cubicBounds', 'autoExpand'].includes(key)),
-        )
+        .filter(key => options.bounds || !['cubicBounds', 'centeredAtOrigin'].includes(key))
+        .filter(key => !(candidate instanceof FluidSimulation) || ![
+          'powerOfTwoBounds', 'cubicBounds', 'centeredAtOrigin', 'autoExpand',
+        ].includes(key))
         .forEach(key =>
           quality
             .add(settings, key)
@@ -259,6 +274,17 @@ export class ModuleGUI extends GUIEditorBase {
               this.emitCode();
             }),
         );
+      for (const key of ['minBounds', 'maxBounds']) {
+        const value = settings[key];
+        const vector = typeof value === 'number' ? { x: value, y: value, z: value } : value.clone();
+        const limits = quality.addFolder(this.prettyName(key));
+        for (const axis of ['x', 'y', 'z']) {
+          limits.add(vector, axis).onChange(() => {
+            candidate.setSpatialGridOptions({ [key]: new THREE.Vector3(vector.x, vector.y, vector.z) });
+            this.emitCode();
+          });
+        }
+      }
     }
     const actions = {
       remove: () => {

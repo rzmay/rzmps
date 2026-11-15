@@ -4,6 +4,8 @@ export interface StagedGPUAllocationOptions<T> {
   prepare(resources: T): Promise<void>;
   migrate(current: T, replacement: T): void;
   swap(replacement: T): void;
+  /** Absorb newer logical layouts without canceling prepared capacity resources. */
+  canCommit?(current: T, replacement: T): boolean;
   dispose(resources: T): void;
   /** Resolve when all previously submitted uses of resources have completed. */
   fence(): Promise<unknown>;
@@ -18,7 +20,17 @@ export default class StagedGPUAllocation<T> {
   private preparing = false;
   private preparation: Promise<void> = Promise.resolve();
   private failure?: Error;
-  readonly metrics = { requests: 0, preparationMs: 0, allocationMs: 0, migrationSubmissionMs: 0, swapMs: 0 };
+  private latestDemand = 0;
+  private targetCapacity = 0;
+  private supersedingCapacity = 0;
+  /** Internal state for frame-level capacity diagnostics. */
+  get status() {
+    const state = this.preparing ? (this.targetCapacity ? 'preparing' : 'retiring') : this.pending ? 'ready' : 'idle';
+    return { state, pendingCapacity: this.targetCapacity, requestedDemand: this.latestDemand };
+  }
+  get maximumCapacity(): number { return this.options.maximumCapacity; }
+  readonly metrics = { requests: 0, preparationMs: 0, allocationMs: 0,
+    migrationSubmissionMs: 0, swapMs: 0, superseded: 0, cancellations: 0 };
 
   constructor(
     public current: T,
@@ -38,6 +50,13 @@ export default class StagedGPUAllocation<T> {
   request(demand: number): void {
     if (!Number.isFinite(demand) || demand < 0)
       throw new RangeError('Allocation demand must be finite and nonnegative.');
+    this.latestDemand = demand;
+    const desired = Math.min(this.options.maximumCapacity,
+      Math.max(this.capacity * 2, 2 ** Math.ceil(Math.log2(Math.max(1, demand)))));
+    if ((this.preparing || this.pending) && desired > Math.max(this.targetCapacity, this.supersedingCapacity)) {
+      this.metrics.superseded++;
+      this.supersedingCapacity = desired;
+    }
     if (this.disposed || this.preparing || this.pending || demand < this.capacity * 0.75) return;
     if (this.capacity >= this.options.maximumCapacity) {
       if (demand > this.capacity)
@@ -48,6 +67,8 @@ export default class StagedGPUAllocation<T> {
       this.options.maximumCapacity,
       Math.max(this.capacity * 2, 2 ** Math.ceil(Math.log2(Math.max(1, demand)))),
     );
+    this.targetCapacity = capacity;
+    this.supersedingCapacity = 0;
     const generation = this.generation;
     this.preparing = true;
     this.metrics.requests++;
@@ -80,7 +101,9 @@ export default class StagedGPUAllocation<T> {
 
   /** Cancel a stale replacement while leaving current-resource ownership with the consumer. */
   cancelPending(): void {
+    if (this.preparing || this.pending) this.metrics.cancellations++;
     this.generation++;
+    this.targetCapacity = 0;
     if (this.pending) void this.release(this.pending.resources);
     this.pending = undefined;
   }
@@ -90,6 +113,7 @@ export default class StagedGPUAllocation<T> {
     if (this.failure) throw this.failure;
     const next = this.pending;
     if (!next?.ready || this.disposed) return false;
+    if (this.options.canCommit && !this.options.canCommit(this.current, next.resources)) return false;
     const previous = this.current;
     const start = performance.now();
     this.options.migrate(previous, next.resources);
@@ -99,8 +123,11 @@ export default class StagedGPUAllocation<T> {
     this.current = next.resources;
     this.capacity = next.capacity;
     this.pending = undefined;
+    this.targetCapacity = 0;
     this.metrics.swapMs = performance.now() - swapStart;
     void this.release(previous);
+    // Finish useful work first; a newer demand starts the next tier without cancel/restart churn.
+    if (this.latestDemand >= this.capacity * 0.75) this.request(this.latestDemand);
     return true;
   }
 

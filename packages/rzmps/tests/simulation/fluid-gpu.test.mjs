@@ -10,7 +10,6 @@ import {
   FluidBoundsPolicy,
   FluidCollider,
   GasSimulation,
-  GasAffector,
   SpatialEffect,
   Module,
   ParticleOctree,
@@ -110,12 +109,11 @@ assert.equal(gas.supportsGPU, true);
 assert.equal(flip.supportsGPU, true);
 assert.equal(gas.resolution, 32);
 assert.equal(gas.maxActiveBricks, Number.MAX_SAFE_INTEGER);
-assert.equal(gas.volumeGrid.capacity, 64, 'initial reservation fits the logical grid without reserving the full limit');
+assert.equal(gas.volumeGrid.capacity, 1, 'prepare derives the reserve from physical source and receiver support');
 assert.equal(flip.resolution, 64);
 assert.equal(gas.autoBounds, true);
 assert.equal(gas.automaticPadding, true);
 assert.equal(flip.automaticPadding, true);
-assert.equal(flip.velocityPaddingLookahead, 0.5);
 assert.equal(flip.collisionIterations, 2);
 assert.equal(flip.particleSeparation, 0.05);
 assert.equal(flip.particleSpacing, 1);
@@ -124,7 +122,7 @@ flip.particleSpacing = -1;
 assert.equal(flip.particleSeparation, 1);
 assert.equal(flip.particleSpacing, 0);
 assert.equal(gas.showGridHelper, false);
-assert.ok(gas.bounds.getSize(new THREE.Vector3()).x > 2);
+assert.equal(gas.bounds.getSize(new THREE.Vector3()).x, 2);
 assert.ok(gas.density.texture.isStorageTexture);
 assert.ok(gas.colorField.texture.isStorageTexture);
 assert.equal(gas.density.data, undefined);
@@ -148,7 +146,9 @@ assert.equal(gas.densityCutoff, 0.01);
 assert.equal('temperatureColor' in gas, false, 'temperature appearance belongs to VolumeRenderer');
 assert.equal(gas.temperatureOverLifetime, 1);
 assert.equal('maxSplatRadius' in gas, false);
-assert.deepEqual(gas.requireSpatialEffects, [FluidCollider, GasAffector]);
+assert.deepEqual(gas.requireSpatialEffects, [FluidCollider]);
+assert.equal(gas.supportSpatialEffects, false);
+assert.equal(gas.supportForceFields, false);
 assert.deepEqual(flip.requireSpatialEffects, [FluidCollider]);
 const fluidCollider = FluidCollider.Box({}, 2, 3, 4);
 assert.ok(fluidCollider.geometry instanceof THREE.BoxGeometry);
@@ -207,7 +207,7 @@ assert.equal(gas.velocityCurrentAttribute, initialVelocityStorage, 'first update
 assert.equal(gas.getVolumeField().texture, initialDensityTexture, 'first update keeps the renderer field binding');
 assert.equal(grid.cellsPerAxis, gas.resolution);
 assert.equal(grid.powerOfTwoBounds, true);
-assert.equal(grid.cubicBounds, true);
+assert.equal(grid.cubicBounds, false);
 assert.equal(grid.autoExpand, false);
 assert.equal(shrinkingGas.getParticleSpatialGrid(system).shrinkDelay, 180);
 assert.ok(grid.bounds.equals(gas.bounds));
@@ -228,7 +228,8 @@ for (const parameter of ['Temperature', 'Density', 'Speed', 'Vorticity']) {
   if (parameter !== 'Density') assert.equal(volumeRenderer[`opacityBy${parameter}`], null);
 }
 assert.equal(volumeRenderer.webgpuMaterial.depthTest, true);
-assert.ok(volumeRenderer.webgpuMaterial.depthNode, 'volume depth must use ray entry rather than the back face');
+assert.ok(volumeRenderer.webgpuMaterial.depthNode,
+  'volume proxy depth must not reject against transparent depth writers');
 assert.ok(volumeRenderer.webgpuMaterial.fragmentNode, 'volume color and alpha come directly from the ray march');
 assert.equal(volumeRenderer.mesh.material, volumeRenderer.webgpuMaterial,
   'GPU fields select a compatible first-frame material');
@@ -376,13 +377,13 @@ const staleFlip = new FLIPSimulation();
 const staleSystem = new ParticleSystem({ modules: [staleFlip], emitters: [], renderers: [] });
 const staleGrid = staleFlip.getParticleSpatialGrid(staleSystem);
 let resolveMetrics;
-staleGrid.readParticleMetrics = () => new Promise((resolve) => { resolveMetrics = resolve; });
+staleGrid.readParticleBounds = () => new Promise((resolve) => { resolveMetrics = resolve; });
 staleFlip.lastBoundsRead = -Infinity;
 const originalBounds = staleFlip.bounds.clone();
+staleFlip.executionContext = { system: staleSystem };
 staleFlip.refreshBounds(staleGrid, {});
 staleFlip.cleanup();
-resolveMetrics({ bounds: new THREE.Box3(new THREE.Vector3(-32, -32, -32),
-  new THREE.Vector3(32, 32, 32)), maxParticleSpeed: 10, maxParticleVelocity: new THREE.Vector3(0, 10, 0) });
+resolveMetrics(originalBounds);
 await new Promise(setImmediate);
 assert.ok(staleFlip.bounds.equals(originalBounds));
 assert.equal(staleFlip.pendingBounds, undefined);
@@ -425,61 +426,15 @@ console.log('fluid-gpu tests passed');
   assert.throws(() => new VolumeRenderer({ shadowQuality: -1 }), /shadow/);
 }
 
-// State modifiers use independent physical ranges and representative decay for short prediction.
+// State modifiers retain independent physical ranges; forecasts now evaluate actual boundary-cell state.
 {
   const gas = new GasSimulation({ densityDissipation: 0.6 });
   assert.deepEqual(gas.temperatureRange, [0, 1]);
   assert.deepEqual(gas.densityRange, [0, 1]);
   assert.equal(gas.densityDissipationByTemperature, undefined);
   gas.densityDissipationByTemperature = [0.25, 3];
-  assert(Math.abs(gas.sampledBehaviorRate('densityDissipation') - 0.975) < 1e-9);
   gas.densityDissipationByDensity = t => 1 + t;
-  assert(Math.abs(gas.sampledBehaviorRate('densityDissipation') - 1.4625) < 1e-9,
-    'curve averages replace the previous zero-decay worst case');
   assert.throws(() => new GasSimulation({ temperatureRange: [1, 1] }), /finite and increasing/);
   assert.throws(() => new GasSimulation({ densityRange: [0, Infinity] }), /finite and increasing/);
   gas.cleanup();
-}
-
-// Rolling prediction shrinks an oversized domain without excluding detached persistent gas.
-{
-  const gas = new GasSimulation({ bounds: new THREE.Box3(new THREE.Vector3(-16, -16, -16),
-    new THREE.Vector3(16, 16, 16)), boundsPadding: 0, automaticPadding: true });
-  const owner = new ParticleSystem({ emitters: [], renderers: [], modules: [gas] });
-  const grid = gas.getParticleSpatialGrid(owner);
-  grid.shrinkDelay = 0;
-  gas.occupiedGasBounds.set(new THREE.Vector3(-2, -2, -2), new THREE.Vector3(2, 2, 2));
-  grid.readParticleMetrics = async () => ({
-    bounds: new THREE.Box3(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1)), maxParticleSpeed: 1,
-    maxParticleVelocity: new THREE.Vector3(1, 1, 1),
-  });
-  gas.readAutomaticPadding = async () => new THREE.Vector3(0.5, 0.5, 0.5);
-  gas.lastBoundsRead = -Infinity;
-  gas.refreshBounds(grid, {});
-  await new Promise(resolve => globalThis.setTimeout(resolve, 0));
-  assert.equal(gas.pendingBounds.bounds.getSize(new THREE.Vector3()).x, 4,
-    'existing four-unit gas support must not be forecast a second time');
-  assert(gas.pendingBounds.bounds.containsBox(gas.occupiedGasBounds));
-  assert(gas.estimateBuoyantTravel(1, 1, 0.5).frames <= 30);
-  owner.destroy();
-}
-
-// Vertical predictions must not become isotropic or acquire a second growth margin.
-{
-  const gas = new GasSimulation({ boundsPadding: 0, automaticPadding: true });
-  const owner = new ParticleSystem({ emitters: [], renderers: [], modules: [gas] });
-  const grid = gas.getParticleSpatialGrid(owner);
-  grid.readParticleMetrics = async () => ({
-    bounds: new THREE.Box3(new THREE.Vector3(-0.5, 0, -0.5), new THREE.Vector3(0.5, 3, 0.5)),
-    maxParticleSpeed: 1, maxParticleVelocity: new THREE.Vector3(0, 1, 0),
-  });
-  gas.occupiedGasBounds.set(new THREE.Vector3(-2, 0, -2), new THREE.Vector3(2, 5, 2));
-  gas.readAutomaticPadding = async () => new THREE.Vector3(0.1, 5, 0.1);
-  gas.lastBoundsRead = -Infinity;
-  gas.refreshBounds(grid, {});
-  await new Promise(resolve => setTimeout(resolve, 0));
-  assert.deepEqual(gas.automaticPaddingDistance.toArray(), [0.1, 5, 0.1]);
-  assert.deepEqual(gas.pendingBounds.bounds.min.toArray(), [-8, -8, -8]);
-  assert.deepEqual(gas.pendingBounds.bounds.max.toArray(), [8, 8, 8]);
-  owner.destroy();
 }

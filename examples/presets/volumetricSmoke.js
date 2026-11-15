@@ -33,7 +33,7 @@ export default async function createVolumetricSmoke() {
     // #region docs:modules:1
     modules: [
       new GasSimulation({
-        supportForceFields: true,
+        supportSpatialEffects: true,
         collisionOptions: { surfaceThickness: 0.02, bakedFieldResolution: 32 },
         pressureIterations: 16,
         // Match the initial Gas Volume solver; color is independent of heat.
@@ -56,13 +56,12 @@ export default async function createVolumetricSmoke() {
         turbulenceNoiseSpeed: 0.7,
         turbulenceNoiseOctaves: 2,
         // Reserve the original domain and retain the current grid-owned cap.
-        bounds: new THREE.Box3(new THREE.Vector3(-8, -8, -8), new THREE.Vector3(8, 8, 8)),
-        boundsPadding: 0,
         automaticPadding: true,
-        velocityPaddingLookahead: 1,
         spatialGridOptions: {
           brickSubdivisions: 3,
-          cellSubdivisions: 4,
+          cellSubdivisions: 3,
+      // 8 / 64 = 0.125 world units per cell, independently of the initially compact domain.
+      minVolumeQuality: 8,
           powerOfTwoBounds: true,
           autoExpand: false,
           shrinkDelay: 180,
@@ -84,6 +83,7 @@ export default async function createVolumetricSmoke() {
     // #region docs:renderers:1
     renderers: [
       new VolumeRenderer({
+        lightingGridOptions: { cellSize: 0.25, directions: 12, samplesPerInterval: 8, maxDistance: 16 },
         color: '#564d4d',
         opacity: 0.75,
         threshold: 0.025,

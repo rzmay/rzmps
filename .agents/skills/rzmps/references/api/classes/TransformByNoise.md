@@ -575,6 +575,28 @@ get gpuParameterUploadCount(): number;
 
 ***
 
+<a id="modifiesparticles"></a>
+
+### modifiesParticles
+
+#### Get Signature
+
+```ts
+get modifiesParticles(): boolean;
+```
+
+Whether this module participates in ordinary per-particle modification.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`NoiseModule`](NoiseModule.md).[`modifiesParticles`](NoiseModule.md#modifiesparticles)
+
+***
+
 <a id="needsupdate"></a>
 
 ### needsUpdate

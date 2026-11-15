@@ -110,6 +110,9 @@ export interface ModuleOptions extends EventReceiverOptions {
 export default class Module extends EventReceiver {
   public static readonly Priority = Priority;
 
+  /** Whether this module participates in ordinary per-particle modification. */
+  get modifiesParticles(): boolean { return true; }
+
   static CPU_UNSUPPORTED: ModuleUpdate = () => {
     throw new Error('This particle module does not support CPU processing.');
   };

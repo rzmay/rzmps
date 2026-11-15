@@ -1387,7 +1387,7 @@ class ParticleSystem extends THREE.Object3D {
       try { module.prepare(module.executionContext!); } finally { end?.(); }
     });
 
-    const modifiers = [...modules, ...spatialEffects];
+    const modifiers = [...modules.filter(module => module.modifiesParticles), ...spatialEffects];
 
     const permanentPreMovementModifiers = modifiers
       .filter(modifier => modifier.priority < 0)

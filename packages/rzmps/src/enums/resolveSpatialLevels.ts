@@ -1,3 +1,5 @@
+import type { Box3, Vector3 } from 'three';
+
 /** Optional maintained grid resolutions, relative to the brick/cell subdivision boundary. */
 export enum SpatialLevels {
   /** Keep only the mandatory finest neighbor index. */
@@ -17,6 +19,16 @@ export type SpatialLevelsInput = readonly number[] | SpatialLevels | `${SpatialL
 
 export interface SpatialGridOptions {
   levels?: SpatialLevelsInput;
+  /** Fixed physical coverage; disables automatic domain sizing and movement. */
+  bounds?: Box3;
+  /** Minimum physical size per axis. A number applies to all axes. Defaults to zero. */
+  minBounds?: number | Vector3;
+  /** Maximum physical size per axis, independent of quality. Defaults to Infinity. */
+  maxBounds?: number | Vector3;
+  /** Minimum equivalent-volume quality side; smaller values permit finer cells. Defaults to two. */
+  minVolumeQuality?: number;
+  /** Maximum equivalent-volume quality side; caps coarsening, not physical coverage. Defaults to Infinity. */
+  maxVolumeQuality?: number;
 }
 
 /** Resolves enum keys/values and explicit depths; the finest index is always retained. */

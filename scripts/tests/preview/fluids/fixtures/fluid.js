@@ -1,13 +1,14 @@
 import * as THREE from 'three';
-import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
+import { WebGPURenderer, StorageBufferAttribute, Node } from 'three/webgpu';
 import { Fn, If, float, instanceIndex, storage, uint, vec3, vec4, ivec4 } from 'three/tsl';
 import { examples } from '../../../../../examples/index.js';
 import { experimentalExamples } from '../../../../../examples/experimental/index.js';
 import createScene from '../../../../../examples/scenes/fluidTeapot.js';
 import createCheckerboard from '../../../../../examples/scenes/checkerboard.js';
 import createGasFlow from '../../../../../examples/scenes/gasFlow.js';
-import { Benchmarks, FluidCollider } from '@rzmps/rzmps';
+import { Benchmarks, FluidCollider, GasSimulation } from '@rzmps/rzmps';
 
+Node.captureStackTrace = new URLSearchParams(location.search).has('nodeTrace');
 const startupStart = performance.now();
 const renderer = new WebGPURenderer({
   antialias: new URLSearchParams(location.search).has('antialias'),
@@ -66,6 +67,20 @@ if (example === 'flipFluid' && !new URLSearchParams(location.search).has('demoLi
   system.modules[0].boundsPolicy = 'Ballistic';
   system.modules[0].setSpatialGridOptions({ brickSubdivisions: 2, cellSubdivisions: 4 });
 }
+// Self-contained demo factories do not accept simulation constructor overrides.
+// Apply the fixed-domain fixture explicitly instead of silently testing the automatic demo domain.
+if (fixedGas && system.modules[0] instanceof GasSimulation) {
+  const previous = system.modules[0];
+  const fixed = new GasSimulation({
+    bounds: new THREE.Box3(new THREE.Vector3(-8, -8, -8), new THREE.Vector3(8, 8, 8)),
+    automaticPadding: false,
+    spatialGridOptions: { brickSubdivisions: reviewGrid?.[0] ?? 2,
+      cellSubdivisions: reviewGrid?.[1] ?? 4, maxBounds: 16 },
+  });
+  system.modules = system.modules.map(module => module === previous ? fixed : module);
+  previous.cleanup();
+}
+if (reviewAdvection) system.modules[0].advectionMethod = reviewAdvection;
 if (reviewGrid) system.modules[0].setSpatialGridOptions({
   brickSubdivisions: reviewGrid[0], cellSubdivisions: reviewGrid[1],
 });

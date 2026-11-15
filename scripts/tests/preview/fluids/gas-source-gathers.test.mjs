@@ -7,6 +7,7 @@ import { startSiteDev } from '../../../site/dev.mjs';
 test('source masks preserve exhaustive gathers, transient attributes and source death',
   { timeout: 120000 }, async () => {
     const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
+    await site.demo.watcher.close();
     let browser;
     try {
       browser = await puppeteer.launch({ headless: true, args: ['--enable-unsafe-webgpu'] });
@@ -21,6 +22,9 @@ test('source masks preserve exhaustive gathers, transient attributes and source 
       await page.waitForFunction(() => window.ready);
       const results = await page.evaluate(async () => {
         const { flip: gas, system, THREE, renderer } = window.debugFluid;
+        // Isolate source transport from demo collisions/forces and their per-particle history.
+        system.modules = system.modules.filter(module => ['GasSimulation', 'ScaleOverLifetime', 'ColorOverLifetime']
+          .includes(module.constructor.name));
         gas.tags = ['source'];
         gas.densityCutoff = 1e-8;
         system.emitters[0].tags = ['source', 'other'];
@@ -60,7 +64,7 @@ test('source masks preserve exhaustive gathers, transient attributes and source 
             if (masked) {
               const metadata = new Uint32Array(await renderer.getArrayBufferAsync(grid.pagesAttribute));
               markedTiles = 0;
-              for (let word of metadata.subarray(grid.sourceMaskOffset)) {
+              for (let word of metadata.subarray(grid.sourceMaskOffset, grid.sourceMaskOffset + grid.sourceMaskWords)) {
                 while (word) { markedTiles++; word = (word & (word - 1)) >>> 0; }
               }
             }
@@ -69,7 +73,9 @@ test('source masks preserve exhaustive gathers, transient attributes and source 
           for (const key of Object.keys(states[0])) {
             let error = 0, amount = 0;
             for (let i = 0; i < states[0][key].length; i++) {
-              error = Math.max(error, Math.abs(states[0][key][i] - states[1][key][i]));
+              for (const other of states.slice(1)) {
+                error = Math.max(error, Math.abs(states[0][key][i] - other[key][i]));
+              }
               amount += Math.abs(states[0][key][i]);
             }
             errors[key] = { error, amount };
@@ -83,11 +89,11 @@ test('source masks preserve exhaustive gathers, transient attributes and source 
         const retained = await window.runFrames(1, 0.01);
         const afterDeath = await window.readGasSourceState();
         const mask = new Uint32Array(await renderer.getArrayBufferAsync(grid.pagesAttribute))
-          .subarray(grid.sourceMaskOffset);
+          .subarray(grid.sourceMaskOffset, grid.sourceMaskOffset + grid.sourceMaskWords);
         let stale = 0;
         for (const value of afterDeath.visual) stale = Math.max(stale, Math.abs(value));
         return { outcomes, retained: retained.field.sum, stale, maskEmpty: mask.every(value => value === 0),
-          markedTiles, totalTiles: grid.sourceTileSide ** 3,
+          markedTiles, totalTiles: grid.sourceTileSide.x * grid.sourceTileSide.y * grid.sourceTileSide.z,
           storageBufferLimit: renderer.backend.device.limits.maxStorageBuffersPerShaderStage };
       });
       console.log('Masked gas gathers:', JSON.stringify(results));

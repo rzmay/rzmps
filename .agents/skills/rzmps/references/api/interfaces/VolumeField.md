@@ -74,6 +74,28 @@ resolution: Vector3;
 
 ***
 
+<a id="samplevelocitygpu"></a>
+
+### sampleVelocityGPU?
+
+```ts
+optional sampleVelocityGPU?: (position) => Node<"vec3">;
+```
+
+Optional native GPU velocity sampler, in the same simulation space as bounds; no derived field required.
+
+#### Parameters
+
+##### position
+
+`Node`\<`"vec3"`\>
+
+#### Returns
+
+`Node`\<`"vec3"`\>
+
+***
+
 <a id="texture"></a>
 
 ### texture?
@@ -81,6 +103,18 @@ resolution: Vector3;
 ```ts
 optional texture?: Texture<unknown, TextureEventMap>;
 ```
+
+***
+
+<a id="textureresolution"></a>
+
+### textureResolution?
+
+```ts
+optional textureResolution?: Vector3;
+```
+
+Optional backing texture extent; resolution describes the valid lower-origin logical region.
 
 ***
 

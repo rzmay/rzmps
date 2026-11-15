@@ -27,7 +27,9 @@ const custom = new GasAffector((cell, dt, _context, strength) => {
 });
 const nativeSphere = GasAffector.Sphere((cell, dt) => cell.temperature.addAssign(dt), {}, 1);
 const requirements = new Module(() => {}, { requireSpatialEffects: [GasAffector, custom, nativeSphere] });
-const simulation = new GasSimulation({ requireSpatialEffects: [custom, BoidAffector], supportForceFields: true });
+const simulation = new GasSimulation({ requireSpatialEffects: [custom, BoidAffector],
+  supportSpatialEffects: true, supportForceFields: false });
+simulation.supportSpatialEffects = false;
 simulation.requireSpatialEffects = [custom];
 void requirements;
 // @ts-expect-error Gas callbacks belong in the primary argument, never a particle modifyGPU option.

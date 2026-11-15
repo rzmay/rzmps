@@ -5,6 +5,8 @@ import {
 } from 'three/tsl';
 import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../spatial/structures/ParticleSpatialGrid';
+import StagedGPUAllocation from '../utils/gpu/StagedGPUAllocation';
+import { copyStorageAttributes, initializeStorageAttribute } from '../utils/gpu/storage.utils';
 import FluidReduction from '../simulation/gpu/FluidReduction';
 import Collision from './Collision';
 import FluidPressureProjection from '../simulation/gpu/FluidPressureProjection';
@@ -27,14 +29,17 @@ export interface FLIPSprayConditionOptions {
 export interface FLIPSimulationOptions extends FluidSimulationOptions {
   picRatio: number;
   advectParticles: boolean;
-  /** Seconds of current maximum particle velocity reserved around live particle bounds. */
-  velocityPaddingLookahead: number;
   /** Swept boundary passes per frame. Additional passes resolve simultaneous contacts. */
   collisionIterations: number;
   /** Normalized strength of the bounded particle overlap position correction. */
   particleSeparation: number;
   /** Rest-distance multiplier applied to particle scale. */
   particleSpacing: number;
+}
+
+interface FlipPool {
+  context: FLIPSimulation; grid: SparseVolumeGrid; attributes: StorageBufferAttribute[];
+  projection?: FluidPressureProjection;
 }
 
 class FLIPSimulation extends FluidSimulation {
@@ -82,7 +87,6 @@ class FLIPSimulation extends FluidSimulation {
 
   picRatio: number;
   advectParticlesEnabled: boolean;
-  velocityPaddingLookahead: number;
   private _particleSeparation = 0;
   private _particleSpacing = 0;
   private _collisionIterations = 0;
@@ -107,6 +111,11 @@ class FLIPSimulation extends FluidSimulation {
   private pressureProjection?: FluidPressureProjection;
   private readonly picRatioNode = uniform(0);
   private workGrid?: SparseVolumeGrid;
+  private workPool?: StagedGPUAllocation<FlipPool>;
+  private requiredBrickCapacity = 0;
+  private allocationReadPending = false;
+  private allocationFrame = 0;
+  private simulationStep = 0;
   private clearFieldsNode?: ComputeNode;
   private resetFields = true;
   private movingWallsNode?: ComputeNode;
@@ -119,12 +128,12 @@ class FLIPSimulation extends FluidSimulation {
     });
     this.picRatio = THREE.MathUtils.clamp(options.picRatio ?? 0.05, 0, 1);
     this.advectParticlesEnabled = options.advectParticles ?? false;
-    this.velocityPaddingLookahead = Math.max(0, options.velocityPaddingLookahead ?? 0.5);
     this.particleSeparation = THREE.MathUtils.clamp(options.particleSeparation ?? 0.05, 0, 1);
     this.particleSpacing = Math.max(0, options.particleSpacing ?? 1);
     this.usesParticleColliderSweeps = true;
     this.modifyGPU = () => {};
     this.collisionIterations = options.collisionIterations ?? 2;
+    this.createWorkGrid();
   }
 
   get particleSeparation(): number {
@@ -176,6 +185,140 @@ class FLIPSimulation extends FluidSimulation {
     this.needsUpdate = true;
   }
 
+  protected override get gridFieldCellCount(): number { return 1; }
+
+  private createWorkGrid(capacity?: number): void {
+    if (this.workGrid) return;
+    const side = 2 ** this.spatialGridOptions!.cellSubdivisions!;
+    const logical = this.gridDimensions.x * this.gridDimensions.y * this.gridDimensions.z / side ** 3;
+    const limit = Math.floor((128 * 1024 * 1024 - 32) / (side ** 3 * 32));
+    this.workGrid = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: this.bounds },
+      capacity ?? Math.max(1, Math.min(logical, 2 ** (3 * this.spatialGridOptions!.brickSubdivisions!), limit)),
+      this.gridDimensions);
+    this.resizeGridFields(this.workGrid.cellCount);
+    this.initializeTransferFields();
+  }
+
+  protected override ensureGridResolution(renderer: ParticleSpatialGridRenderer, grid: ParticleSpatialGrid): void {
+    const old = this.workGrid;
+    if (!old || old.maxDepth !== grid.maxDepth || old.brickSubdivisions !== grid.brickSubdivisions
+      || Math.abs(old.cellSize - grid.cellSize) > 1e-9) {
+      this.onGridResolutionChanged();
+      this.gridDimensions.copy(grid.gridDimensions); this.dimensionsNode.value.copy(this.gridDimensions);
+      this.cellSize = grid.cellSize; this.cellSizeNode.value = grid.cellSize;
+      this.resolution = grid.cellsPerAxis;
+      this.createWorkGrid();
+      return;
+    }
+    if (!old.updateLayout(renderer, this.bounds, grid.gridDimensions)) {
+      const requested = this.bounds.clone();
+      this.bounds.copy(old.bounds); this.boundsMinNode.value.copy(old.bounds.min);
+      grid.setBounds(old.bounds); this.pendingBounds = { grid, bounds: requested };
+      return;
+    }
+    this.gridDimensions.copy(grid.gridDimensions); this.dimensionsNode.value.copy(this.gridDimensions);
+  }
+
+  protected override cellIndex(coordinate: Node<'ivec3'>): Node<'uint'> {
+    return this.workGrid ? this.workGrid.index(coordinate) : super.cellIndex(coordinate);
+  }
+
+  protected override cellCoordinate(index: Node<'uint'>): Node<'ivec3'> {
+    return this.workGrid ? this.workGrid.coordinate(index) : super.cellCoordinate(index);
+  }
+
+  private get fieldAttributes(): StorageBufferAttribute[] {
+    return [this.velocityCurrentAttribute, this.velocityNextAttribute, this.pressureCurrentAttribute,
+      this.pressureNextAttribute, this.divergenceAttribute, this.solidAttribute, this.boundaryAttribute];
+  }
+
+  private pollWorkCapacity(renderer: ParticleSpatialGridRenderer): void {
+    if (this.allocationReadPending || ++this.allocationFrame % 16 !== 0 || !this.workGrid) return;
+    this.allocationReadPending = true;
+    const grid = this.workGrid;
+    void renderer.getArrayBufferAsync(grid.diagnosticsAttribute).then(buffer => {
+      if (grid !== this.workGrid) return;
+      const values = new Uint32Array(buffer);
+      this.requiredBrickCapacity = this.capacityDemand(values[2], this.workPool?.metrics.preparationMs, grid.capacity);
+    }).catch(() => {}).finally(() => { this.allocationReadPending = false; });
+  }
+
+  private ensureWorkPool(context: GPUParticleUpdateContext, renderer: ParticleSpatialGridRenderer,
+    grid: ParticleSpatialGrid): void {
+    if (this.workPool) return;
+    const device = (renderer.backend as { device: { limits: { maxStorageBufferBindingSize: number };
+      queue: { onSubmittedWorkDone(): Promise<void> } } }).device;
+    const maximum = Math.floor((device.limits.maxStorageBufferBindingSize - 32) / (this.workGrid!.cellsPerBrick * 32));
+    this.workPool = new StagedGPUAllocation<FlipPool>({ context: this, grid: this.workGrid!,
+      attributes: this.fieldAttributes, projection: this.getPressureProjection() }, this.workGrid!.capacity, {
+      maximumCapacity: Math.max(this.workGrid!.capacity, maximum),
+      create: capacity => {
+        const volume = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: this.bounds },
+          capacity, this.gridDimensions, this.workGrid!.directoryCapacity);
+        const target = this.forkGridResources(volume.cellCount);
+        target.workGrid = volume; target.workPool = undefined;
+        target.velocityBeforeAttribute = undefined; target.velocityBefore = undefined;
+        target.initializeTransferFields();
+        target.pressureProjection = undefined; target.clearFieldsNode = undefined;
+        target.clearNewPressureNode = undefined; target.resetFields = false;
+        target.gatherNode = undefined; target.forceNodeCompute = undefined; target.transferNode = undefined;
+        target.separationNode = undefined; target.separationApplyNode = undefined; target.gatherCacheKey = '';
+        target.pollWorkCapacity = () => {};
+        return { context: target, grid: volume, attributes: target.fieldAttributes };
+      },
+      prepare: async pool => {
+        for (const attribute of pool.attributes) {
+          initializeStorageAttribute(renderer, attribute);
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        const nodes: ComputeNode[] = [], original = renderer.compute;
+        renderer.compute = value => nodes.push(...(Array.isArray(value) ? value : [value]));
+        try {
+          pool.context.getPressureProjection().forPreparation(() => (
+            pool.context.computeTransfer(context, renderer, grid)
+          ));
+        } finally { renderer.compute = original; }
+        await (renderer as ParticleSpatialGridRenderer & {
+          compileComputeAsync(nodes: ComputeNode[]): Promise<void>;
+        }).compileComputeAsync(nodes);
+        pool.projection = pool.context.getPressureProjection();
+      },
+      canCommit: (_old, next) => next.grid.ensureDirectory(
+        renderer, this.gridDimensions, this.workGrid!.directoryCapacity,
+      ),
+      migrate: (old, next) => {
+        old.attributes = this.fieldAttributes; old.projection = this.pressureProjection;
+        next.grid.setLayoutMetadata(this.bounds, this.gridDimensions);
+        this.workGrid!.migrateTo(renderer, next.grid);
+        const count = this.cellCount - 1;
+        copyStorageAttributes(renderer, old.attributes.flatMap((attribute, i) => {
+          const target = next.attributes[i];
+          if (attribute === this.velocityCurrentAttribute || attribute === this.boundaryAttribute) return [
+            { source: attribute, target, byteLength: count * 16 },
+            { source: attribute, target, sourceOffset: this.cellCount * 16,
+              targetOffset: next.context.cellCount * 16, byteLength: count * 16 },
+          ];
+          return [{ source: attribute, target, byteLength: count * attribute.itemSize * 4 }];
+        }));
+        this.pressureProjection?.migrateTo(renderer, next.projection!);
+        next.projection!.retainPressure();
+      },
+      swap: next => {
+        this.adoptGridResources(next.context);
+        for (const key of ['workGrid', 'velocityBeforeAttribute', 'velocityBefore', 'pressureProjection',
+          'clearFieldsNode', 'clearNewPressureNode', 'gatherNode', 'forceNodeCompute', 'transferNode',
+          'separationNode', 'separationApplyNode', 'gatherCacheKey', 'gatherBuffers', 'gatherGrid'] as const) {
+          (this as unknown as Record<string, unknown>)[key] = next.context[key];
+        }
+      },
+      dispose: pool => {
+        pool.attributes.forEach(attribute => attribute.dispose());
+        pool.projection?.dispose(); pool.grid.dispose(renderer);
+      },
+      fence: () => device.queue.onSubmittedWorkDone(),
+    });
+  }
+
   private initializeTransferFields(): void {
     if (!this.velocityBeforeAttribute) {
       this.velocityCurrentAttribute.dispose();
@@ -193,16 +336,19 @@ class FLIPSimulation extends FluidSimulation {
     system: import('../core/ParticleSystem').default,
     renderer: ParticleSpatialGridRenderer,
   ): Promise<void> {
-    this.workGrid ??= new SparseVolumeGrid(
-      this.spatialGridOptions!, (2 ** this.spatialGridOptions!.brickSubdivisions!) ** 3,
-    );
-    this.workGrid.updateDispatch(renderer);
+    this.createWorkGrid();
+    this.workGrid!.updateDispatch(renderer);
+    await this.workGrid!.prepareLayout(renderer);
     this.initializeTransferFields();
     await super.prepareResources(system, renderer);
     await this.getPressureProjection().prepare(
       renderer, this.velocityNext, this.velocityCurrent, this.pressureIterations, this.velocityBefore,
     );
+    await this.prepareGuardResources(system, renderer);
   }
+
+  /** Internal debug-grid access, not part of the public module contract. @internal */
+  protected override get visualizationGrid(): SparseVolumeGrid | undefined { return this.workGrid; }
 
   public override computeGPU(
     context: GPUParticleUpdateContext,
@@ -215,14 +361,20 @@ class FLIPSimulation extends FluidSimulation {
     this.ensureGridResolution(renderer, grid);
     this.refreshBounds(grid, renderer);
     this.computeMovingWalls(context, renderer, grid);
-    if (!this.workGrid || this.workGrid.brickSubdivisions !== grid.brickSubdivisions
-      || this.workGrid.cellSubdivisions !== grid.cellSubdivisions) {
-      this.onGridResolutionChanged();
-      this.workGrid = new SparseVolumeGrid({
-        brickSubdivisions: grid.brickSubdivisions, cellSubdivisions: grid.cellSubdivisions,
-      }, (2 ** grid.brickSubdivisions) ** 3);
-      this.workGrid.updateDispatch(renderer);
+    this.simulationStep++;
+    this.ensureWorkPool(context, renderer, grid);
+    this.workPool!.commit();
+    if (this.requiredBrickCapacity > 0) {
+      this.workPool!.request(Math.min(this.requiredBrickCapacity, this.workPool!.maximumCapacity));
     }
+    this.requiredBrickCapacity = 0;
+    this.computeTransfer(context, renderer, grid);
+    if (this.showGridHelper) this.workGrid!.updateVisualization(renderer, this.velocityCurrent, float(1.5), 'w');
+    this.updateBoundsHelper(context.system);
+  }
+
+  private computeTransfer(context: GPUParticleUpdateContext, renderer: ParticleSpatialGridRenderer,
+    grid: ParticleSpatialGrid): void {
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
     this.initializeTransferFields();
     const clearFields = (index: Node<'uint'>) => {
@@ -233,6 +385,8 @@ class FLIPSimulation extends FluidSimulation {
       this.divergence.element(index).assign(0);
     };
     if (this.resetFields) {
+      // Ordinary updates also support a cold grid without an explicit system.prepare() call.
+      this.workGrid!.updateDispatch(renderer);
       renderer.compute(Fn(() => clearFields(instanceIndex))().compute(this.cellCount));
       renderer.compute(Fn(() => {
         this.pressureCurrent.element(instanceIndex).assign(0);
@@ -243,12 +397,12 @@ class FLIPSimulation extends FluidSimulation {
     // Clear old addresses before page reassignment, including retired bricks.
     renderer.compute(this.clearFieldsNode);
     this.pressureProjection?.clearPreviousFaces(renderer);
-    this.workGrid.bounds.copy(this.bounds);
-    this.workGrid.rebuild(context, renderer, undefined, undefined,
-      this.boundsMinNode, this.cellSizeNode, float(0), tagMask);
-    // Stable dense addresses retain pressure; newly activated bricks must not
+    this.workGrid!.rebuild(context, renderer, undefined, undefined,
+      this.boundsMinNode, this.cellSizeNode, float(0), tagMask, undefined, 3, undefined, this.simulationStep);
+    this.pollWorkCapacity(renderer);
+    // Stable resident addresses retain pressure; newly activated bricks must not
     // inherit the pressure of an earlier, retired liquid region.
-    this.clearNewPressureNode ??= this.workGrid.compute(index => {
+    this.clearNewPressureNode ??= this.workGrid!.compute(index => {
       const coordinate = this.workGrid!.coordinate(index);
       this.pressureCurrent.element(this.cellIndex(coordinate)).assign(0);
     }, false, true);
@@ -456,10 +610,8 @@ class FLIPSimulation extends FluidSimulation {
 
   protected override onBoundsChanged(previous: THREE.Box3): void {
     void previous;
-    // Dense pressure addresses now represent different world positions. P2G rebuilds
-    // world-space velocities, but the previous pressure solution cannot be warm-started.
-    this.resetFields = true;
-    this.pressureProjection?.invalidate();
+    // Retained resident slots still describe the same world cells; only connectivity changed.
+    this.pressureProjection?.updateTopology();
   }
 
   protected override onBoundaryChanged(): void {
@@ -528,6 +680,7 @@ class FLIPSimulation extends FluidSimulation {
   }
 
   protected override onGridResolutionChanged(): void {
+    this.workPool?.cancelPending(); this.workPool = undefined;
     this.clearNewPressureNode = undefined;
     this.movingWallsNode = undefined;
     this.movingWallsKey = '';
@@ -550,11 +703,11 @@ class FLIPSimulation extends FluidSimulation {
   }
 
   protected override computeCells(callback: (index: Node<'uint'>) => void): ComputeNode {
-    return this.workGrid ? this.workGrid.computeDense(callback) : super.computeCells(callback);
+    return this.workGrid ? this.workGrid!.compute(callback) : super.computeCells(callback);
   }
 
   protected override diagnosticCellActive(index: Node<'uint'>): Node<'bool'> {
-    return this.workGrid ? this.workGrid.active(this.workGrid.index(this.cellCoordinate(index)))
+    return this.workGrid ? this.workGrid.active(index)
       : super.diagnosticCellActive(index);
   }
 
@@ -563,7 +716,7 @@ class FLIPSimulation extends FluidSimulation {
   }
 
   protected override computeNewSolidCells(callback: (index: Node<'uint'>) => void): ComputeNode | undefined {
-    return this.workGrid?.computeDense(callback, false, true);
+    return this.workGrid?.compute(callback, false, true);
   }
 
   protected override get cacheSolidOccupancy(): boolean { return true; }
@@ -622,9 +775,9 @@ class FLIPSimulation extends FluidSimulation {
 
   private getPressureProjection(): FluidPressureProjection {
     this.pressureProjection ??= new FluidPressureProjection(
-      this.resolution, this.cellSizeNode, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
-      this.closedMinNode, this.closedMaxNode, undefined, this.velocityNext, index => this.targetDivergence(index),
-      this.workGrid, this.faceOpenness, this.solidVelocity, () => this.pressureControls,
+      this.gridDimensions, this.cellSizeNode, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
+      this.closedMinNode, this.closedMaxNode, this.workGrid, this.velocityNext, index => this.targetDivergence(index),
+      undefined, this.faceOpenness, this.solidVelocity, () => this.pressureControls,
     );
     return this.pressureProjection;
   }
@@ -660,7 +813,7 @@ class FLIPSimulation extends FluidSimulation {
   private gridToParticleGPU(particle: GPUParticleLike, context: GPUParticleUpdateContext): void {
     const beforeSample = this.sampleTransferField(particle.position, this.velocityBefore!);
     const inside = particle.position.greaterThanEqual(this.boundsMinNode).all()
-      .and(particle.position.lessThan(this.boundsMinNode.add(this.cellSizeNode.mul(this.resolution))).all())
+      .and(particle.position.lessThan(this.boundsMinNode.add(this.cellSizeNode.mul(this.dimensionsNode))).all())
       .and(beforeSample.w.greaterThan(1e-6));
     const coordinate = particle.position.sub(this.boundsMinNode).div(this.cellSizeNode);
     const picVelocity = this.pressureProjection!.sample(coordinate);
@@ -691,7 +844,7 @@ class FLIPSimulation extends FluidSimulation {
       for (let y = 0; y <= 1; y += 1) {
         for (let x = 0; x <= 1; x += 1) {
           const index = this.cellIndex(ivec3(clamp(
-            base.add(vec3(x, y, z)), vec3(0), vec3(this.resolution - 1),
+            base.add(vec3(x, y, z)), vec3(0), this.dimensionsNode.sub(1),
           )));
           // FLIP deltas require identical donors before and after projection.
           // Density in the before field is not an interpolation weight.
@@ -707,13 +860,7 @@ class FLIPSimulation extends FluidSimulation {
     return result;
   }
 
-  protected override readAutomaticPadding(
-    _renderer: ParticleSpatialGridRenderer,
-    _grid: ParticleSpatialGrid,
-    maximumVelocity: THREE.Vector3,
-  ): Promise<THREE.Vector3> {
-    return Promise.resolve(maximumVelocity.clone().multiplyScalar(this.velocityPaddingLookahead));
-  }
+
 }
 
 function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {

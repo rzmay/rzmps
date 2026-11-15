@@ -86,6 +86,12 @@ readonly metrics: object;
 allocationMs: number = 0;
 ```
 
+#### cancellations
+
+```ts
+cancellations: number = 0;
+```
+
 #### migrationSubmissionMs
 
 ```ts
@@ -104,10 +110,68 @@ preparationMs: number = 0;
 requests: number = 0;
 ```
 
+#### superseded
+
+```ts
+superseded: number = 0;
+```
+
 #### swapMs
 
 ```ts
 swapMs: number = 0;
+```
+
+## Accessors
+
+<a id="maximumcapacity"></a>
+
+### maximumCapacity
+
+#### Get Signature
+
+```ts
+get maximumCapacity(): number;
+```
+
+##### Returns
+
+`number`
+
+***
+
+<a id="status"></a>
+
+### status
+
+#### Get Signature
+
+```ts
+get status(): object;
+```
+
+Internal state for frame-level capacity diagnostics.
+
+##### Returns
+
+`object`
+
+###### pendingCapacity
+
+```ts
+pendingCapacity: number;
+```
+
+###### requestedDemand
+
+```ts
+requestedDemand: number;
+```
+
+###### state
+
+```ts
+state: string;
 ```
 
 ## Methods

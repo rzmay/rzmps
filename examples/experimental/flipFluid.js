@@ -17,19 +17,13 @@ import sprayAlpha from '../assets/images/spray_alpha.png?url';
 export default async function createFlipFluid() {
   // #region docs:modules:1
   const flip = new FLIPSimulation({
-    bounds: new THREE.Box3(
-      new THREE.Vector3(-4, -4, -4),
-      new THREE.Vector3(4, 4, 4),
-    ),
     // Use the same membership settings accepted by Three's collision backends.
     collisionOptions: {
       surfaceThickness: 0.02,
       bakedFieldResolution: 48,
     },
-    boundsPadding: 0,
     boundsPolicy: FluidBoundsPolicy.Kill,
     automaticPadding: true,
-    velocityPaddingLookahead: 0.15,
     spatialGridOptions: {
       maxBounds: 16,
       brickSubdivisions: 3,

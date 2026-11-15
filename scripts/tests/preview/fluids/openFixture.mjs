@@ -1,5 +1,5 @@
 /** Retry Vite's cold-cache dependency reloads without hiding fixture or GPU errors. */
-export async function openFixture(page, url, errors) {
+export async function openFixture(page, url, errors, { timeout = 10000 } = {}) {
   let outdated = false;
   const response = value => {
     if (value.status() === 504 && /Outdated Optimize Dep/i.test(value.statusText())) outdated = true;
@@ -12,7 +12,7 @@ export async function openFixture(page, url, errors) {
       const start = errors.length;
       try {
         await page.goto(url, { waitUntil: 'networkidle0' });
-        await page.waitForFunction(() => window.ready, { timeout: 10000 });
+        await page.waitForFunction(() => window.ready, { timeout });
         return;
       } catch (error) {
         if (!outdated || attempt === 2) throw new Error(`${error.message}\n${errors.join('\n')}`);

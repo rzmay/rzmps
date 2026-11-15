@@ -1,28 +1,37 @@
+import type { SpatialGridDomain } from '../spatial/structures/spatialGridDomain.utils';
+import GasModule, { type GPUGasCell, type GasModuleContext } from './GasModule';
 import SpatialEffect from '../spatial/effects/SpatialEffect';
 import GasAffector from '../spatial/effects/GasAffector';
 import FluidCollider from '../spatial/effects/FluidCollider';
 import ParticleForceField from '../spatial/effects/ParticleForceField';
 import acceptMultiple from '../utils/acceptMultiple';
+import minDynamicVector from '../values/minDynamicVector';
+import maxDynamicVector from '../values/maxDynamicVector';
+import maxDynamicNumber from '../values/maxDynamicNumber';
 import type { GasCellGPU } from '../spatial/effects/GasAffector';
 import type { ModuleExecutionContext } from '../core/Module';
 import type ParticleSystem from '../core/ParticleSystem';
 import tagsIntersect from '../core/tags/tagsIntersect';
 import { sampleGasEffectGPU } from '../simulation/gpu/gasSpatialEffects.utils';
 import * as THREE from 'three';
-import { Storage3DTexture, StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
-  Fn, If, atomicMax, atomicMin, atomicStore, clamp, float, floatBitsToUint, instanceIndex, int, ivec3,
-  max, min, mix, pow, storage, textureStore, uint, uniform, vec3, vec4,
+  Storage3DTexture, StorageBufferAttribute, type ComputeNode, type Node, type WebGPURenderer,
+} from 'three/webgpu';
+import {
+  Fn, If, Loop, atomicMax, atomicMin, atomicStore, clamp, float, floatBitsToUint, instanceIndex, int, ivec3,
+  max, min, mix, pow, storage, storageTexture, textureStore, uint, uniform, vec3, vec4,
 } from 'three/tsl';
 import type {
   GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateContext,
 } from '../simulation/gpu/Particle';
+import { destroyGPUStorageAttribute } from '../simulation/gpu/Particle';
+import prepareComputePrograms from '../utils/gpu/prepareComputePrograms';
+import { readFluidBrickStates } from '../simulation/gpu/readFluidBrickStates';
+import { GUARD_PREDICTION_HORIZON, type FluidGuardSource } from '../simulation/gpu/FluidGuardPrediction';
 import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../spatial/structures/ParticleSpatialGrid';
 import { generateGPUParticleNoise4D } from '../utils/noise.utils';
 import type { VolumeField } from '../rendering/volumeField.types';
 import type { VolumeFieldProvider } from '../rendering/volumeField.types';
-import averageDynamicNumber from '../values/averageDynamicNumber';
-import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 import type { ValueByParameter } from '../values/valueByParameter.types';
 import type { DynamicValue } from '../values/dynamicValue.types';
 import FluidSimulation, { type FluidSimulationOptions } from './FluidSimulation';
@@ -30,13 +39,24 @@ import SparseVolumeGrid from '../spatial/structures/gpu/SparseVolumeGrid';
 import FluidPressureProjection from '../simulation/gpu/FluidPressureProjection';
 import StagedGPUAllocation from '../utils/gpu/StagedGPUAllocation';
 import { copyStorageAttributes, initializeStorageAttribute } from '../utils/gpu/storage.utils';
+import { PressureSolver } from '../enums/PressureSolver';
+import { pressureAutoPolicy, pressureHierarchy, selectPressureSolver } from '../simulation/gpu/pressureSolver.utils';
+import type { MultigridOptions } from '../simulation/multigrid.types';
 import { AdvectionMethod } from '../enums/AdvectionMethod';
 
 interface GasPool {
-  context: GasSimulation;
   attributes: StorageBufferAttribute[];
-  grid: SparseVolumeGrid;
-  projection?: FluidPressureProjection;
+  count: number;
+  grid?: SparseVolumeGrid;
+  pressure?: ReturnType<FluidPressureProjection['createCapacityStorage']>;
+  retired: StorageBufferAttribute[];
+  adopted?: boolean;
+}
+
+interface GasTexturePool {
+  dimensions: THREE.Vector3;
+  density: Storage3DTexture;
+  color: Storage3DTexture;
 }
 
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
@@ -51,6 +71,8 @@ type BehaviorCoefficient = typeof behaviorCoefficients[number];
 type BehaviorState = { temperature?: Node<'float'>; density?: Node<'float'> };
 
 export interface GasSimulationOptions extends FluidSimulationOptions {
+  /** Discover all compatible SpatialEffects, including force fields. Defaults to false. */
+  supportSpatialEffects?: boolean;
   /** Opt into sampling ordinary ParticleForceFields directly on gas cells. Defaults to false. */
   supportForceFields?: boolean;
   /** Physical specific-temperature interval shared by simulation modifiers, independent of rendering. */
@@ -86,10 +108,12 @@ export interface GasSimulationOptions extends FluidSimulationOptions {
   /** Nonnegative density-driven multiplier of turbulenceNoiseFrequency; omitted means one without shader evaluation. */
   turbulenceNoiseFrequencyByDensity?: ValueByParameter<number>;
 
-  /** Initially reserved bricks. Omission selects a modest reserve; growth is automatic and geometric. */
+  /** Explicit initial reserve. Omission derives source/receiver demand during prepare(), rounded geometrically. */
   initialBrickCapacity: number;
-  /** Sparse V-cycle corrections, or the iterative reference path. Defaults to Iterative. */
-  pressureSolver: 'Multigrid' | 'Iterative';
+  /** Recommended default is Auto. Supplying multigrid alone implies Multigrid. */
+  pressureSolver: PressureSolver | `${PressureSolver}`;
+  /** Optional cycle tuning; explicit pressureSolver always takes precedence. */
+  multigrid?: MultigridOptions;
   /** Maximum resident bricks; omission uses maxActiveBricks. */
   maxBrickCapacity: number;
   /** Resident brick limit, also settable via maxBrickCapacity. Omission uses device and logical limits. */
@@ -118,8 +142,6 @@ export interface GasSimulationOptions extends FluidSimulationOptions {
   vorticityStrength: number;
   /** Independent animated noise acceleration in simulation units per second squared. */
   turbulenceNoiseStrength: number;
-  /** Particle-motion lookahead for automatic domain padding, in seconds. Defaults to one. */
-  velocityPaddingLookahead: number;
   turbulenceNoiseFrequency: number;
   turbulenceNoiseSpeed: number;
   turbulenceNoiseOctaves: number;
@@ -148,13 +170,34 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
   maxActiveBricks: number;
   initialBrickCapacity: number;
-  pressureSolver: 'Multigrid' | 'Iterative';
+  pressureSolver: PressureSolver | `${PressureSolver}`;
+  multigrid?: MultigridOptions;
   get maxBrickCapacity(): number { return this.maxActiveBricks; }
   set maxBrickCapacity(value: number) { this.maxActiveBricks = value; }
+  private autoPressureSolver = PressureSolver.Iterative;
   private requiredBrickCapacity = 0;
+  private readonly initialCapacityConfigured: boolean;
+  private initialCapacityPrepared = false;
+  /** @internal Conservative initial source-support and receiver demand, before any births. */
+  readonly initialCapacityDemand = { bricks: 0, capacity: 0 };
+  /** @internal Compact asynchronous snapshots; no GUI tuning fields. */
+  readonly brickDiagnostics = { frame: 0, observedAt: 0, requested: 0, resident: 0,
+    unfulfilled: 0, fresh: 0, released: 0, activeDispatch: 0, priorityDemand: [] as number[] };
+  private guardBehaviorKey = '';
+  private guardGasKeys = new WeakMap<object, object>();
+  private guardGrid?: SparseVolumeGrid;
   private growthEvents = 0;
   private peakAllocatedBytes = 0;
   private volumeGrid: SparseVolumeGrid;
+  private sourceGrid?: ParticleSpatialGrid;
+  private readonly textureDimensions = new THREE.Vector3();
+  private readonly exportDimensions = uniform(new THREE.Vector3());
+  private readonly exportOffset = uniform(new THREE.Vector3());
+  readonly domainChanges = { logical: 0, capacity: 0, quality: 0 };
+  private densityTextureNode!: ReturnType<typeof storageTexture>;
+  private colorTextureNode!: ReturnType<typeof storageTexture>;
+  private textureAllocation?: StagedGPUAllocation<GasTexturePool>;
+  private readonly requestedTextureDimensions = new THREE.Vector3();
   private sparseStructureKey = '';
   private clearNewNodes: ComputeNode[] = [];
   private clearTexturesNode?: ComputeNode;
@@ -178,8 +221,6 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   scalarDiffusion: number;
   vorticityStrength: number;
   turbulenceNoiseStrength: number;
-  /** Particle-motion lookahead for automatic domain padding, in seconds. Defaults to one. */
-  velocityPaddingLookahead: number;
   turbulenceNoiseFrequency: number;
   turbulenceNoiseSpeed: number;
   turbulenceNoiseOctaves: number;
@@ -208,6 +249,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private velocityNodes = new WeakMap<object, ComputeNode>();
   private velocitySourceNode?: ComputeNode;
   private sourceNodes = new WeakMap<object, ComputeNode[]>();
+  private scalarModuleNodes = new WeakMap<object, ComputeNode[]>();
   private scalarSourceNodes = new WeakMap<object, ComputeNode>();
   private solidClearNodes = new WeakMap<object, ComputeNode>();
   private outputNodes = new WeakMap<object, ComputeNode>();
@@ -239,6 +281,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private advectionNodes = new WeakMap<object, ComputeNode>();
   private pressureProjection?: FluidPressureProjection;
   private poolAllocation?: StagedGPUAllocation<GasPool>;
+  private poolConfiguration = '';
+  /** @internal Capacity changes deliberately have no graph-building or compilation phase. */
+  readonly capacityMetrics = { storagePreparationMs: 0, graphConstructionMs: 0, compilationMs: 0 };
   private poolContext?: GPUParticleUpdateContext;
   private poolParticleGrid?: ParticleSpatialGrid;
   private preparingPool = false;
@@ -246,6 +291,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private permanentEffects: SpatialEffect[] = [];
   private transientEffects: SpatialEffect[] = [];
   private spatialEffectsKey = '';
+  private gasModules: GasModule[] = [];
+  private gasModulesKey = '';
   private effectNodes = new Map<string, WeakMap<object, ComputeNode>>();
   private visualStateNodes = new WeakMap<object, ComputeNode>();
 
@@ -254,8 +301,19 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.prepareGasEffects(context.system);
   }
 
-  /** Virtual shorthand for editing the force-field constructor in requireSpatialEffects. */
-  get supportForceFields(): boolean { return this.requireSpatialEffects?.includes(ParticleForceField) ?? false; }
+  /** Virtual shorthand for broad discovery through the existing requirement list. */
+  get supportSpatialEffects(): boolean { return this.requireSpatialEffects?.includes(SpatialEffect) ?? false; }
+  set supportSpatialEffects(enabled: boolean) {
+    const requirements = this.requireSpatialEffects ?? [];
+    this.requireSpatialEffects = enabled
+      ? [...new Set([...requirements, SpatialEffect])]
+      : requirements.filter(entry => entry !== SpatialEffect);
+  }
+
+  /** Effective force-field support; broad spatial-effect discovery always includes force fields. */
+  get supportForceFields(): boolean {
+    return this.supportSpatialEffects || (this.requireSpatialEffects?.includes(ParticleForceField) ?? false);
+  }
   set supportForceFields(enabled: boolean) {
     const requirements = this.requireSpatialEffects ?? [];
     this.requireSpatialEffects = enabled
@@ -264,6 +322,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   }
 
   private prepareGasEffects(system: ParticleSystem): void {
+    this.gasModules = GasModule.collect(system, this.tags, 'simulation');
+    this.gasModulesKey = this.gasModules.map(module => module.graphKey('simulation')).join('|');
     const affectors = new Set(this.spatialEffects.get(GasAffector));
     const effects = this.spatialEffects.filter(effect => effect.visible && effect.supportsGPU
       && (effect.modifiesParticles || affectors.has(effect as GasAffector))
@@ -335,11 +395,12 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     super({
       ...options,
       // Colliders remain native solver boundaries; ordinary particle modifiers require an explicit opt-in.
-      requireSpatialEffects: [...new Set([FluidCollider, GasAffector,
+      requireSpatialEffects: [...new Set([FluidCollider,
         ...(acceptMultiple(options.requireSpatialEffects) ?? [])])],
       automaticPadding: options.automaticPadding ?? true,
     });
     if (options.supportForceFields !== undefined) this.supportForceFields = options.supportForceFields;
+    if (options.supportSpatialEffects !== undefined) this.supportSpatialEffects = options.supportSpatialEffects;
     this.temperatureRange = [...(options.temperatureRange ?? [0, 1])];
     this.densityRange = [...(options.densityRange ?? [0, 1])];
     for (const name of behaviorCoefficients) {
@@ -362,20 +423,25 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.scalarDiffusion = Math.max(0, options.scalarDiffusion ?? 0);
     this.vorticityStrength = Math.max(0, options.vorticityStrength ?? 0);
     this.turbulenceNoiseStrength = Math.max(0, options.turbulenceNoiseStrength ?? 0);
-    this.velocityPaddingLookahead = Math.max(0, options.velocityPaddingLookahead ?? 1);
     this.turbulenceNoiseFrequency = Math.max(0, options.turbulenceNoiseFrequency ?? 0.75);
     this.turbulenceNoiseSpeed = options.turbulenceNoiseSpeed ?? 0.2;
     this.turbulenceNoiseOctaves = Math.max(1, Math.floor(options.turbulenceNoiseOctaves ?? 2));
 
-    this.pressureSolver = options.pressureSolver ?? 'Iterative';
+    this.pressureSolver = options.pressureSolver
+      ?? (options.multigrid !== undefined ? PressureSolver.Multigrid : PressureSolver.Auto);
+    this.multigrid = options.multigrid;
+    this.initialCapacityConfigured = options.initialBrickCapacity !== undefined;
     this.maxActiveBricks = options.maxBrickCapacity ?? options.maxActiveBricks ?? Number.MAX_SAFE_INTEGER;
-    this.initialBrickCapacity = options.initialBrickCapacity ?? Math.min(64, this.maxActiveBricks,
-      Math.max(1, Math.floor(262144 / (2 ** (this.spatialGridOptions!.cellSubdivisions ?? 3)) ** 3)));
+    // A single bootstrap slot avoids treating a fixed reserve as initial physical-support demand.
+    // prepareResources measures source/receiver support before the simulation becomes visible.
+    this.initialBrickCapacity = options.initialBrickCapacity ?? 1;
     if (!Number.isSafeInteger(this.initialBrickCapacity) || this.initialBrickCapacity < 1
       || !Number.isSafeInteger(this.maxActiveBricks) || this.maxActiveBricks < this.initialBrickCapacity) {
       throw new RangeError('Gas brick capacities must be positive integers with initial <= maximum.');
     }
-    this.volumeGrid = new SparseVolumeGrid(this.spatialGridOptions!, this.initialBrickCapacity);
+    this.volumeGrid = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: this.bounds },
+      Math.min(this.initialBrickCapacity, this.gridDimensions.x * this.gridDimensions.y * this.gridDimensions.z
+        / (2 ** this.spatialGridOptions!.cellSubdivisions!) ** 3), this.gridDimensions);
     this.benchmarks.register('allocatedBricks', { type: 'gauge', get: () => this.volumeGrid.capacity });
     this.benchmarks.register('peakAllocatedBytes', { type: 'gauge', unit: 'bytes',
       get: () => this.peakAllocatedBytes = Math.max(this.peakAllocatedBytes, this.allocatedBytes) });
@@ -385,12 +451,15 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       this.volumeGrid.cellSubdivisions].join('|');
     this.resizeGridFields(this.volumeGrid.cellCount);
     this.allocateGasFields();
+    this.exportDimensions.value.copy(this.gridDimensions);
     this.density = {
       texture: this.densityTexture,
       bounds: this.bounds.clone(),
-      resolution: new THREE.Vector3(this.resolution, this.resolution, this.resolution),
+      resolution: this.gridDimensions.clone(),
+      textureResolution: this.textureDimensions,
       channels: 4,
       parameterChannels: { temperature: 1, speed: 2, vorticity: 3 },
+      sampleVelocityGPU: position => this.sampleVelocity(position),
       parametersPremultiplied: true,
       version: 0,
     };
@@ -398,6 +467,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       texture: this.colorTexture,
       bounds: this.bounds.clone(),
       resolution: this.density.resolution.clone(),
+      textureResolution: this.textureDimensions,
       channels: 4,
       version: 0,
     };
@@ -419,7 +489,10 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     system: import('../core/ParticleSystem').default,
     renderer: ParticleSpatialGridRenderer,
   ): Promise<void> {
+    await this.prepareInitialCapacity(system, renderer);
+    this.volumeGrid.reductionCellCount = this.maximumResidentCapacity(renderer) * this.volumeGrid.cellsPerBrick + 1;
     await super.prepareResources(system, renderer);
+    await this.volumeGrid.prepareLayout(renderer);
     this.prepareGasEffects(system);
     this.fieldAttributes.forEach(attribute => initializeStorageAttribute(renderer, attribute));
     const textures = renderer as ParticleSpatialGridRenderer & { initTexture?: (texture: THREE.Texture) => void };
@@ -435,7 +508,121 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       this.getRemapNode(this.densityCurrent, this.colorCurrent, this.densityNext, this.colorNext),
       this.getRemapNode(this.densityNext, this.colorNext, this.densityCurrent, this.colorCurrent),
     ]);
+    if (compiler.compileComputeAsync) await this.prepareTransport(system, renderer);
+    await this.prepareGuardResources(system, renderer);
+
   }
+
+  /** Measure source geometry at birth, not the empty rectangular guard domain or future particle trajectories. */
+  private async prepareInitialCapacity(system: ParticleSystem, renderer: ParticleSpatialGridRenderer): Promise<void> {
+    if (this.initialCapacityPrepared || this.sparseReadFrame || this.initialCapacityConfigured) return;
+    const maximum = this.maximumResidentCapacity(renderer), requested = new Set<string>();
+    const brick = this.volumeGrid.brickSize;
+    const support = (bounds: THREE.Box3) => {
+      if (bounds.isEmpty() || ![...bounds.min.toArray(), ...bounds.max.toArray()].every(Number.isFinite)) return;
+      const low = bounds.min.clone().divideScalar(brick).floor().addScalar(-1);
+      const high = bounds.max.clone().divideScalar(brick).floor().addScalar(1);
+      for (let z = low.z; z <= high.z; z++) for (let y = low.y; y <= high.y; y++) {
+        for (let x = low.x; x <= high.x; x++) {
+          requested.add(`${x},${y},${z}`);
+          if (requested.size >= maximum) return;
+        }
+      }
+    };
+    system.updateWorldMatrix(true, false);
+    const toSimulation = system.getSimulationToWorldMatrix().clone().invert();
+    for (const emitter of system.emitters) {
+      if (this.tags && emitter.tags && !tagsIntersect(this.tags, emitter.tags)) continue;
+      if (!(maxDynamicNumber(emitter.rate) > 0 || maxDynamicNumber(emitter.rateOverDistance) > 0
+        || emitter.bursts.some(burst => maxDynamicNumber(burst.count) > 0))) {
+        continue;
+      }
+      const source = emitter.source, initial = emitter.initialValues;
+      source.updateWorldMatrix(true, false);
+      source.geometry.computeBoundingBox();
+      if (!source.geometry.boundingBox) continue;
+      const bounds = source.geometry.boundingBox.clone().applyMatrix4(source.matrix);
+      const position = typeof initial.position === 'function' ? initial.position(0) : initial.position;
+      const scale = typeof initial.scale === 'function' ? initial.scale(0) : initial.scale;
+      const lowScale = minDynamicVector(scale ?? 1), highScale = maxDynamicVector(scale ?? 1);
+      const radius = Math.max(this.cellSize, ...lowScale.toArray().map(Math.abs),
+        ...highScale.toArray().map(Math.abs)) * 0.5;
+      bounds.min.add(minDynamicVector(position));
+      bounds.max.add(maxDynamicVector(position));
+      bounds.expandByScalar(Math.max(radius, this.cellSize));
+      bounds.applyMatrix4(toSimulation.clone().multiply(source.parent?.matrixWorld ?? system.matrixWorld));
+      support(bounds);
+    }
+    for (const particle of system.particles) if (particle.alive) {
+      const size = particle.scale.clone();
+      size.set(Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)).max(new THREE.Vector3().setScalar(this.cellSize));
+      support(new THREE.Box3().setFromCenterAndSize(particle.position, size));
+    }
+    this.initialCapacityDemand.bricks = requested.size;
+    const desired = Math.min(maximum, 2 ** Math.ceil(Math.log2(Math.max(1, requested.size))));
+    if (desired > this.volumeGrid.capacity) {
+      const context = system.gpuSimulation.prepareContext(renderer as WebGPURenderer);
+      const grid = this.getParticleSpatialGrid(system)!;
+      this.poolContext = context; this.poolParticleGrid = grid;
+      this.ensurePoolAllocation(renderer, context, grid);
+      this.fieldAttributes.forEach(attribute => initializeStorageAttribute(renderer, attribute, false));
+      this.poolAllocation!.request(desired);
+      await this.poolAllocation!.whenPrepared();
+      // Initial support is a reserve, not measured live pressure to immediately request another tier.
+      this.poolAllocation!.request(0);
+      this.poolAllocation!.commit();
+    }
+    this.initialCapacityDemand.capacity = this.volumeGrid.capacity;
+    this.initialCapacityPrepared = true;
+  }
+
+  /** Capture predictable ping-pong/source/export variants against persistent particle bindings. */
+  private async prepareTransport(system: import('../core/ParticleSystem').default,
+    renderer: ParticleSpatialGridRenderer): Promise<void> {
+    const native = renderer as WebGPURenderer;
+    const context = system.gpuSimulation.prepareContext(native);
+    const grid = this.getParticleSpatialGrid(system)!;
+    const nodes: ComputeNode[] = [], original = renderer.compute;
+    const density = this.densityCurrent, color = this.colorCurrent;
+    const nextDensity = this.densityNext, nextColor = this.colorNext;
+    const densityVersion = this.density.version, colorVersion = this.colorField.version;
+    const previousPreparing = this.preparingPool;
+    const collect = () => {
+      renderer.compute = value => { nodes.push(...(Array.isArray(value) ? value : [value])); };
+      try {
+        grid.rebuild(renderer, context.buffers);
+        this.volumeGrid.updateDispatch(renderer);
+        this.volumeGrid.rebuild(context, renderer, this.densityCurrent, this.velocityCurrent,
+          this.boundsMinNode, this.cellSizeNode, this.densityCutoffNode, system.getGPUFilterTagMask(this.tags));
+        this.clearNewBricks(renderer);
+        if (this.advectionMethod === AdvectionMethod.MacCormack) this.ensureAdvectionFields();
+        this.syncSimulationUniforms();
+        this.preparingPool = true;
+        this.getPressureProjection().forPreparation(() => {
+          for (let phase = 0; phase < 2; phase++) this.computeTransport(context, renderer, grid);
+        });
+        if (system.renderers.some(component => component.supportsGPUInput)) {
+          const render = system.gpuSimulation.prepareRenderBuffers(native);
+          this.renderGPU(context, render, renderer, grid);
+          // Both scalar identities can be current when a paused/render-only refresh occurs.
+          [this.densityCurrent, this.densityNext] = [this.densityNext, this.densityCurrent];
+          [this.colorCurrent, this.colorNext] = [this.colorNext, this.colorCurrent];
+          this.renderGPU(context, render, renderer, grid);
+        }
+      } finally {
+        renderer.compute = original; this.preparingPool = previousPreparing;
+        this.densityCurrent = density; this.densityNext = nextDensity;
+        this.colorCurrent = color; this.colorNext = nextColor;
+        this.density.version = densityVersion; this.colorField.version = colorVersion;
+      }
+    };
+    this.volumeGrid.capturePreparation(collect);
+    await this.benchmarks.spanAsync('transportPipelinePreparation',
+      () => native.compileComputeAsync([...new Set(nodes)]));
+  }
+
+  /** Internal debug-grid access, not part of the public module contract. @internal */
+  protected override get visualizationGrid(): SparseVolumeGrid | undefined { return this.volumeGrid; }
 
   public override computeGPU(
     context: GPUParticleUpdateContext,
@@ -443,17 +630,22 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     grid?: ParticleSpatialGrid,
   ): void {
     if (!grid) throw new Error('GasSimulation requires a GPU spatial grid.');
-    if (!['Multigrid', 'Iterative'].includes(this.pressureSolver)) throw new RangeError('Unknown gas pressureSolver.');
+    if (!Object.values(PressureSolver).includes(this.pressureSolver as PressureSolver)) {
+      throw new RangeError('Unknown gas pressureSolver.');
+    }
     if (!Object.values(AdvectionMethod).includes(this.advectionMethod as AdvectionMethod)) {
       throw new RangeError('Unknown gas advectionMethod.');
     }
     super.computeGPU(context, renderer, grid);
     this.ensureGridResolution(renderer, grid);
+    this.updateExportLayout(renderer);
     this.poolContext = context;
     this.poolParticleGrid = grid;
     this.ensurePoolAllocation(renderer, context, grid);
     this.poolAllocation!.commit();
-    this.poolAllocation!.request(this.requiredBrickCapacity);
+    if (this.requiredBrickCapacity > 0) {
+      this.poolAllocation!.request(Math.min(this.requiredBrickCapacity, this.poolAllocation!.maximumCapacity));
+    }
     this.requiredBrickCapacity = 0;
     if (this.advectionMethod === AdvectionMethod.MacCormack) this.ensureAdvectionFields();
     this.syncSimulationUniforms();
@@ -462,7 +654,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.benchmarks.span('brickActivation', () => {
       this.volumeGrid.rebuild(context, renderer, this.densityCurrent, this.velocityCurrent,
         this.boundsMinNode, this.cellSizeNode, this.densityCutoffNode,
-        context.system.getGPUFilterTagMask(this.tags), this.pendingPreviousBounds);
+        context.system.getGPUFilterTagMask(this.tags), this.pendingPreviousBounds, 3, this.pendingPreviousGrid,
+        this.sparseReadFrame + 1);
     });
     if ((++this.sparseReadFrame % 60 === 0 || this.benchmarks.enabled || this.volumeGrid.capacity < Math.min(
       this.maxActiveBricks, this.volumeGrid.brickCount,
@@ -471,7 +664,13 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       const volumeGrid = this.volumeGrid;
       void this.readGridDiagnostics(renderer).then(diagnostics => {
         if (volumeGrid !== this.volumeGrid) return;
-        this.requiredBrickCapacity = diagnostics.activeBricks + diagnostics.overflowedBricks;
+        Object.assign(this.brickDiagnostics, { frame: diagnostics.frame, observedAt: performance.now(),
+          requested: diagnostics.requestedBricks, resident: diagnostics.activeBricks,
+          unfulfilled: diagnostics.overflowedBricks, fresh: diagnostics.freshBricks,
+          released: diagnostics.releasedBricks, activeDispatch: diagnostics.activeDispatchEntries,
+          priorityDemand: diagnostics.priorityDemand });
+        this.requiredBrickCapacity = this.capacityDemand(diagnostics.requestedBricks,
+          this.poolAllocation?.metrics.preparationMs, volumeGrid.capacity);
         this.benchmarks.set('activeBricks', diagnostics.activeBricks);
         if (diagnostics.overflowedBricks > 0 && this.volumeGrid.capacity >= this.maxActiveBricks
           && !this.sparseOverflowReported) {
@@ -487,6 +686,29 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.computeSolidField(context, renderer);
     this.getPressureProjection().initialize(renderer, this.velocityCurrent);
     this.computeTransport(context, renderer, grid);
+    if (this.showGridHelper) this.volumeGrid.updateVisualization(renderer, this.densityCurrent, this.densityCutoffNode);
+    this.updateBoundsHelper(context.system);
+  }
+
+  /** One source bucket per simulation brick avoids scanning fine empty cells inside each splat. */
+  private getSourceGrid(context: GPUParticleUpdateContext, renderer: ParticleSpatialGridRenderer,
+    grid: ParticleSpatialGrid): ParticleSpatialGrid {
+    // A staged field replacement captures the current index without submitting live indexing work.
+    if (this.preparingPool && this.sourceGrid) return this.sourceGrid;
+    const quality = grid.volumeQualityTier;
+    if (!this.sourceGrid || this.sourceGrid.brickSubdivisions !== grid.brickSubdivisions) {
+      this.sourceGrid?.dispose(renderer);
+      this.sourceGrid = new ParticleSpatialGrid({ bounds: this.bounds,
+        brickSubdivisions: grid.brickSubdivisions, cellSubdivisions: 0, autoExpand: false,
+        minVolumeQuality: quality, maxVolumeQuality: quality });
+    } else if (!this.sourceGrid.bounds.equals(this.bounds) || this.sourceGrid.volumeQualityTier !== quality) {
+      if (this.sourceGrid.volumeQualityTier !== quality) {
+        this.sourceGrid.setOptions({ minVolumeQuality: quality, maxVolumeQuality: quality });
+      }
+      this.sourceGrid.setBounds(this.bounds);
+    }
+    this.benchmarks.span('sourceSpatialIndex', () => this.sourceGrid!.rebuild(renderer, context.buffers));
+    return this.sourceGrid;
   }
 
   /** Resource-local graphs can be compiled off to the side without advancing the current fields. */
@@ -494,17 +716,20 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     grid: ParticleSpatialGrid): void {
     const dt = context.deltaTimeNode;
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
+    const sourceGrid = this.getSourceGrid(context, renderer, grid);
 
     const cacheKey = [grid.resourceVersion, context.buffers.version, tagMask,
       this.buoyancy, this.weight, this.velocitySourceStrength, this.sourceStrength,
       this.sourceTemperature, Boolean(this.temperatureOverLifetime), this.turbulenceNoiseStrength,
       this.turbulenceNoiseFrequency,
-      this.turbulenceNoiseSpeed, this.turbulenceNoiseOctaves, this.advectionMethod, this.behaviorKey].join('|');
+      this.turbulenceNoiseSpeed, this.turbulenceNoiseOctaves, this.advectionMethod,
+      this.behaviorKey, this.gasModulesKey].join('|');
     if (cacheKey !== this.gpuCacheKey) {
       this.gpuCacheKey = cacheKey;
       this.velocityNodes = new WeakMap();
       this.velocitySourceNode = undefined;
       this.sourceNodes = new WeakMap();
+      this.scalarModuleNodes = new WeakMap();
       this.scalarSourceNodes = new WeakMap();
       this.solidClearNodes = new WeakMap();
       this.outputNodes = new WeakMap();
@@ -518,13 +743,16 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     const velocity = this.velocityNodes.get(velocityDensity) ?? this.computeCells(index => {
       const coordinate = this.cellCoordinate(index);
       const center = this.cellCenter(coordinate);
-      const previous = this.advectField(this.velocityCurrent, this.velocityAdvected, center, dt, index).xyz;
+      let previous = this.advectField(this.velocityCurrent, this.velocityAdvected, center, dt, index).xyz;
       const density = velocityDensity.element(index);
-      const temperature = density.y.div(max(density.x, float(1e-6)));
+      const modules = this.evaluateGasModules(density, this.colorCurrent.element(index), previous, center, context);
+      if (modules) previous = modules.cell.velocity;
+      const temperature = modules?.cell.temperature ?? density.y.div(max(density.x, float(1e-6)));
       const state = this.behaviorState(density, [
         'turbulenceNoiseStrength', 'turbulenceNoiseFrequency', 'velocityDissipation',
       ]);
-      const lift = temperature.mul(this.buoyancy).sub(density.x.mul(this.weight));
+      const lift = temperature.mul(modules?.coefficients.buoyancy ?? float(this.buoyancy))
+        .sub((modules?.cell.density ?? density.x).mul(this.weight));
       const noiseTime = context.elapsedTimeNode.mul(this.turbulenceNoiseSpeed);
       const noiseSettings = {
         octaves: this.turbulenceNoiseOctaves,
@@ -535,9 +763,10 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         offset: new THREE.Vector3(),
       };
       // Preserve the old noise graph exactly when frequency modulation is absent.
-      const frequency = this.effectiveBehavior('turbulenceNoiseFrequency',
+      const frequency = modules?.coefficients.turbulenceNoiseFrequency
+        ?? this.effectiveBehavior('turbulenceNoiseFrequency',
         float(Math.max(0, this.turbulenceNoiseFrequency)), state);
-      const variableFrequency = this.turbulenceNoiseFrequencyByTemperature != null
+      const variableFrequency = !!modules || this.turbulenceNoiseFrequencyByTemperature != null
         || this.turbulenceNoiseFrequencyByDensity != null;
       const noise = (offset: THREE.Vector3) => variableFrequency
         ? generateGPUParticleNoise4D(center.add(vec3(offset)).mul(frequency),
@@ -547,9 +776,10 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         noise(new THREE.Vector3(17.1, 31.7, 47.3)),
         noise(new THREE.Vector3(59.7, 11.3, 23.9)),
         noise(new THREE.Vector3(37.5, 71.9, 5.7)),
-      ).mul(2).sub(1).mul(this.effectiveBehavior('turbulenceNoiseStrength',
-        float(this.turbulenceNoiseStrength), state));
-      const velocityRate = this.effectiveBehavior('velocityDissipation', this.velocityDissipationNode, state);
+      ).mul(2).sub(1).mul(modules?.coefficients.turbulenceNoiseStrength
+        ?? this.effectiveBehavior('turbulenceNoiseStrength', float(this.turbulenceNoiseStrength), state));
+      const velocityRate = modules?.coefficients.velocityDissipation
+        ?? this.effectiveBehavior('velocityDissipation', this.velocityDissipationNode, state);
       const velocityRetention = pow(float(Math.E), dt.mul(velocityRate).mul(-1));
       const advected = vec3(previous)
         .mul(velocityRetention)
@@ -569,8 +799,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         const center = this.cellCenter(coordinate);
         const momentum = vec3(0).toVar('gasSourceMomentum');
         const sourceMass = float(0).toVar('gasSourceMass');
-        const radius = max(this.cellSizeNode.mul(1.5), grid.getMaxParticleRadiusNode());
-        grid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
+        const radius = max(this.cellSizeNode.mul(1.5), sourceGrid.getMaxParticleRadiusNode());
+        sourceGrid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
           const particleRadius = this.splatRadius(particle.scale);
           const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(particleRadius)));
           const mass = max(particle.mass, float(0)).mul(particle.alpha).mul(weight)
@@ -593,67 +823,111 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
     const densityCurrent = this.densityCurrent;
     const colorCurrent = this.colorCurrent;
-    const densityNext = this.densityNext;
-    const colorNext = this.colorNext;
+    let densityNext = this.densityNext;
+    let colorNext = this.colorNext;
     if (this.advectionMethod === AdvectionMethod.MacCormack) {
       this.predictAdvection(densityCurrent, this.densityAdvected, context, renderer);
       this.predictAdvection(colorCurrent, this.colorAdvected, context, renderer);
     }
-    const targets = this.advectionMethod === AdvectionMethod.MacCormack ? [false, true] : [null];
-    const sources = this.sourceNodes.get(densityCurrent) ?? targets.map(writeColor => this.computeCells(index => {
-      const coordinate = this.cellCoordinate(index);
-      const center = this.cellCenter(coordinate);
-      let previousDensity = this.advectField(densityCurrent, this.densityAdvected, center, dt, index);
-      let previousColor = this.advectField(colorCurrent, this.colorAdvected, center, dt, index);
-      if (this.advectionMethod === AdvectionMethod.MacCormack) {
-        [previousDensity, previousColor] = this.limitSpecificFields(
-          previousDensity, previousColor, densityCurrent, colorCurrent,
-          center.sub(this.sampleVelocity(center).mul(dt)),
+    // Custom rules may read velocity/color and parameter LUTs together; reuse the existing split-output
+    // path to keep both advection methods within WebGPU's eight-storage-buffer limit.
+    const targets = this.advectionMethod === AdvectionMethod.MacCormack || this.gasModules.length
+      ? [false, true] : [null];
+
+    // MacCormack's correction already occupies the binding budget. When rules are present,
+    // finish advection first, then use the existing ping-pong pair for local rules/diffusion/decay.
+    const buildScalars = (inputDensity: Vec4Storage, inputColor: Vec4Storage,
+      outputDensity: Vec4Storage, outputColor: Vec4Storage, transport: boolean) =>
+      targets.map(writeColor => this.computeCells(index => {
+        const coordinate = this.cellCoordinate(index);
+        const center = this.cellCenter(coordinate);
+        let previousDensity = transport
+          ? this.advectField(inputDensity, this.densityAdvected, center, dt, index) : inputDensity.element(index);
+        let previousColor = transport
+          ? this.advectField(inputColor, this.colorAdvected, center, dt, index) : inputColor.element(index);
+        if (transport && this.advectionMethod === AdvectionMethod.MacCormack) {
+          [previousDensity, previousColor] = this.limitSpecificFields(
+            previousDensity, previousColor, inputDensity, inputColor,
+            center.sub(this.sampleVelocity(center).mul(dt)),
+          );
+        }
+        if (transport && this.gasModules.length) {
+          if (writeColor !== false) outputColor.element(index).assign(previousColor);
+          if (writeColor !== true) outputDensity.element(index).assign(previousDensity);
+          return;
+        }
+        // Gas rules operate on shader-local specific values; each transport stage commits only its owned fields.
+        const modules = this.evaluateGasModules(previousDensity, previousColor,
+          this.velocityCurrent.element(index).xyz, center, context,
+          mix(previousDensity, this.neighborAverage(inputDensity, coordinate),
+            clamp(this.scalarDiffusionNode.mul(dt), 0, 1)));
+        if (modules) {
+          previousDensity = vec4(modules.cell.density, modules.cell.temperature.mul(modules.cell.density), 0, 0);
+          previousColor = vec4(modules.cell.color.mul(modules.cell.density), 0);
+        }
+        const diffusion = clamp((modules?.coefficients.scalarDiffusion ?? this.scalarDiffusionNode).mul(dt), 0, 1);
+        const mixedDensity = mix(previousDensity, this.neighborAverage(inputDensity, coordinate), diffusion);
+        const mixedColor = mix(previousColor, this.neighborAverage(inputColor, coordinate), diffusion);
+        const gridCoordinate = vec3(coordinate);
+        const edgeDistances = (['x', 'y', 'z'] as const).flatMap((axis) => [
+          this.closedMinNode[axis].greaterThan(0).select(this.dimensionsNode[axis], gridCoordinate[axis]),
+          this.closedMaxNode[axis].greaterThan(0).select(this.dimensionsNode[axis],
+            this.dimensionsNode[axis].sub(1).sub(gridCoordinate[axis])),
+        ]);
+        const edgeDistance = edgeDistances.reduce((distance, value) => min(distance, value));
+        // An absorbing edge layer with a decay rate, not a per-frame multiplier.
+        const boundaryRetention = pow(clamp(edgeDistance.div(2), 0, 1), dt.mul(60));
+        // Evaluate coefficients from the transported/mixed state before any decay is applied.
+        const state = this.behaviorState(mixedDensity, [
+          'densityDissipation', 'temperatureDissipation', 'colorDissipation',
+        ]);
+        const densityRate = modules?.coefficients.densityDissipation
+          ?? this.effectiveBehavior('densityDissipation', this.densityDissipationNode, state);
+        const temperatureRate = modules?.coefficients.temperatureDissipation
+          ?? this.effectiveBehavior('temperatureDissipation', this.temperatureDissipationNode, state);
+        const colorRate = modules?.coefficients.colorDissipation
+          ?? this.effectiveBehavior('colorDissipation', this.colorDissipationNode, state);
+        const densityRetention = pow(float(Math.E), dt.mul(densityRate).mul(-1));
+        const temperatureRetention = pow(float(Math.E), dt.mul(temperatureRate).mul(-1));
+        const colorRetention = pow(float(Math.E), dt.mul(colorRate).mul(-1));
+        const rawDensity = max(float(0), mixedDensity.x
+          .mul(densityRetention).mul(boundaryRetention));
+        const keep = rawDensity.greaterThanEqual(this.densityCutoffNode);
+        const density = keep.select(rawDensity, float(0));
+        const temperature = keep.select(
+          max(float(0), mixedDensity.y
+            .mul(densityRetention).mul(temperatureRetention).mul(boundaryRetention)),
+          float(0),
         );
-      }
-      const diffusion = clamp(this.scalarDiffusionNode.mul(dt), 0, 1);
-      const mixedDensity = mix(previousDensity, this.neighborAverage(densityCurrent, coordinate), diffusion);
-      const mixedColor = mix(previousColor, this.neighborAverage(colorCurrent, coordinate), diffusion);
-      const gridCoordinate = vec3(coordinate);
-      const edgeDistances = (['x', 'y', 'z'] as const).flatMap((axis) => [
-        this.closedMinNode[axis].greaterThan(0).select(float(this.resolution), gridCoordinate[axis]),
-        this.closedMaxNode[axis].greaterThan(0).select(float(this.resolution),
-          float(this.resolution - 1).sub(gridCoordinate[axis])),
-      ]);
-      const edgeDistance = edgeDistances.reduce((distance, value) => min(distance, value));
-      // An absorbing edge layer with a decay rate, not a per-frame multiplier.
-      const boundaryRetention = pow(clamp(edgeDistance.div(2), 0, 1), dt.mul(60));
-      // Evaluate coefficients from the transported/mixed state before any decay is applied.
-      const state = this.behaviorState(mixedDensity, [
-        'densityDissipation', 'temperatureDissipation', 'colorDissipation',
-      ]);
-      const densityRate = this.effectiveBehavior('densityDissipation', this.densityDissipationNode, state);
-      const temperatureRate = this.effectiveBehavior('temperatureDissipation', this.temperatureDissipationNode, state);
-      const colorRate = this.effectiveBehavior('colorDissipation', this.colorDissipationNode, state);
-      const densityRetention = pow(float(Math.E), dt.mul(densityRate).mul(-1));
-      const temperatureRetention = pow(float(Math.E), dt.mul(temperatureRate).mul(-1));
-      const colorRetention = pow(float(Math.E), dt.mul(colorRate).mul(-1));
-      const rawDensity = max(float(0), mixedDensity.x
-        .mul(densityRetention).mul(boundaryRetention));
-      const keep = rawDensity.greaterThanEqual(this.densityCutoffNode);
-      const density = keep.select(rawDensity, float(0));
-      const temperature = keep.select(
-        max(float(0), mixedDensity.y
-          .mul(densityRetention).mul(temperatureRetention).mul(boundaryRetention)),
-        float(0),
-      );
-      const color = keep.select(
-        vec3(mixedColor.xyz).mul(colorRetention).mul(boundaryRetention),
-        vec3(0),
-      );
-      // Separate targets keep MacCormack inside WebGPU's eight-storage-buffer limit.
-      if (writeColor !== false) colorNext.element(index).assign(this.isSolid(index).select(vec4(0), vec4(color, 0)));
-      if (writeColor !== true) densityNext.element(index).assign(
-        this.isSolid(index).select(vec4(0), vec4(density, temperature, 0, 0)),
-      );
-    }));
+        const color = keep.select(
+          vec3(mixedColor.xyz).mul(colorRetention).mul(boundaryRetention),
+          vec3(0),
+        );
+        // Separate targets keep MacCormack inside WebGPU's eight-storage-buffer limit.
+        if (writeColor !== false) outputColor.element(index).assign(
+          this.isSolid(index).select(vec4(0), vec4(color, 0)),
+        );
+        if (writeColor !== true) outputDensity.element(index).assign(
+          this.isSolid(index).select(vec4(0), vec4(density, temperature, 0, 0)),
+        );
+      }));
+
+    const sources = this.sourceNodes.get(densityCurrent)
+      ?? buildScalars(densityCurrent, colorCurrent, densityNext, colorNext, true);
     this.sourceNodes.set(densityCurrent, sources);
     this.benchmarks.span('scalarAdvectionDiffusionDecay', () => sources.forEach(node => renderer.compute(node)));
+
+    if (this.gasModules.length) {
+      const rules = this.scalarModuleNodes.get(densityCurrent)
+        ?? buildScalars(densityNext, colorNext, densityCurrent, colorCurrent, false);
+      this.scalarModuleNodes.set(densityCurrent, rules);
+      this.benchmarks.span('scalarGasModules', () => rules.forEach(node => renderer.compute(node)));
+      // Rule outputs occupy the old input pair. Injection and the normal final swap retain that pair.
+      [this.densityCurrent, this.densityNext] = [this.densityNext, this.densityCurrent];
+      [this.colorCurrent, this.colorNext] = [this.colorNext, this.colorCurrent];
+      densityNext = this.densityNext;
+      colorNext = this.colorNext;
+    }
 
     const scalarSources = this.scalarSourceNodes.get(densityNext) ?? this.computeCells(index => {
       If(this.volumeGrid.sourceActive(index), () => {
@@ -661,8 +935,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         const sourceDensity = float(0).toVar('gasSourceDensity');
         const sourceTemperature = float(0).toVar('gasSourceTemperature');
         const sourceColor = vec3(0).toVar('gasSourceColor');
-        const radius = max(this.cellSizeNode.mul(1.5), grid.getMaxParticleRadiusNode());
-        grid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
+        const radius = max(this.cellSizeNode.mul(1.5), sourceGrid.getMaxParticleRadiusNode());
+        sourceGrid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
           const particleRadius = this.splatRadius(particle.scale);
           const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(particleRadius)));
           const contribution = max(particle.mass, float(0)).mul(particle.alpha)
@@ -697,6 +971,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     [this.densityCurrent, this.densityNext] = [this.densityNext, this.densityCurrent];
     [this.colorCurrent, this.colorNext] = [this.colorNext, this.colorCurrent];
 
+    this.volumeGrid.recordPhase(renderer, 'simulation');
     const outputDensity = this.densityCurrent;
     const outputColor = this.colorCurrent;
     this.clearOutputTextures(renderer);
@@ -707,14 +982,19 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         outputColor.element(index).xyz,
         density,
       );
-      textureStore(this.densityTexture, vec3(coordinate),
-        this.outputParameters(index, density, outputDensity.element(index).y)).toWriteOnly();
-      textureStore(
-        this.colorTexture, vec3(coordinate), vec4(normalized, density.greaterThan(0).select(1, 0)),
-      ).toWriteOnly();
+      const exportCoordinate = coordinate.sub(ivec3(this.exportOffset));
+      If(vec3(exportCoordinate).greaterThanEqual(0).all()
+        .and(vec3(exportCoordinate).lessThan(this.exportDimensions).all()), () => {
+        textureStore(this.densityTextureNode, vec3(exportCoordinate),
+          this.outputParameters(index, density, outputDensity.element(index).y)).toWriteOnly();
+        textureStore(
+          this.colorTextureNode, vec3(exportCoordinate), vec4(normalized, density.greaterThan(0).select(1, 0)),
+        ).toWriteOnly();
+      });
     });
     this.outputNodes.set(outputDensity, output);
     this.benchmarks.span('volumeFieldUpdate', () => renderer.compute(output));
+    this.volumeGrid.recordPhase(renderer, 'export');
     this.reduceFieldMaxima(renderer, outputDensity);
     if (!this.preparingPool) {
       this.density.version += 1;
@@ -729,6 +1009,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     grid?: ParticleSpatialGrid,
   ): void {
     if (!grid) return;
+    const sourceGrid = this.getSourceGrid(context, renderer, grid);
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
     this.volumeGrid.updateRenderSourceMask(context, renderBuffers, renderer,
       this.boundsMinNode, this.cellSizeNode, tagMask);
@@ -749,8 +1030,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         const total = float(0).toVar('visualGasDensity');
         const temperature = float(0).toVar('visualGasTemperature');
         const color = vec3(0).toVar('visualGasColor');
-        const radius = max(this.cellSizeNode.mul(1.5), grid.getMaxParticleRadiusNode());
-        grid.forEachParticleInRadius(center, radius, (particle) => {
+        const radius = max(this.cellSizeNode.mul(1.5), sourceGrid.getMaxParticleRadiusNode());
+        sourceGrid.forEachParticleInRadius(center, radius, (particle) => {
           const vectors = renderBuffers.storage.createVectorNodes(particle.index);
           const scalars = renderBuffers.storage.createScalarNodes(particle.index);
           const particleRadius = this.splatRadius(vectors.scale);
@@ -802,52 +1083,59 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
           : density.element(index).y.add(this.visualDensity.element(index).y),
         float(0),
       );
-      textureStore(this.densityTexture, vec3(coordinate),
-        this.outputParameters(index, totalDensity, totalTemperature, this.transientEffects.length
-          ? vec3(this.visualDensity.element(index).zw, this.visualColor.element(index).w) : undefined)).toWriteOnly();
-      textureStore(this.colorTexture, vec3(coordinate), vec4(
-        this.outputColor(totalColor, totalDensity),
-        totalDensity.greaterThan(0).select(1, 0),
-      )).toWriteOnly();
+      const exportCoordinate = coordinate.sub(ivec3(this.exportOffset));
+      If(vec3(exportCoordinate).greaterThanEqual(0).all()
+        .and(vec3(exportCoordinate).lessThan(this.exportDimensions).all()), () => {
+        textureStore(this.densityTextureNode, vec3(exportCoordinate),
+          this.outputParameters(index, totalDensity, totalTemperature, this.transientEffects.length
+            ? vec3(this.visualDensity.element(index).zw, this.visualColor.element(index).w) : undefined)).toWriteOnly();
+        textureStore(this.colorTextureNode, vec3(exportCoordinate), vec4(
+          this.outputColor(totalColor, totalDensity),
+          totalDensity.greaterThan(0).select(1, 0),
+        )).toWriteOnly();
+      });
     });
     this.visualOutputNodes.set(density, output);
     this.benchmarks.span('volumeFieldUpdate', () => renderer.compute(output));
+    this.volumeGrid.recordPhase(renderer, 'render');
     this.density.version += 1;
     this.colorField.version += 1;
   }
 
   protected override onParticleStateReset(): void {
+    this.occupiedGasBounds.makeEmpty();
     this.requiredBrickCapacity = 0;
     this.onGridResolutionChanged();
   }
 
   protected override onBoundsChanged(previous: THREE.Box3): void {
-    this.pressureProjection?.invalidate();
-    this.pendingPreviousBounds ??= previous;
-    this.density.bounds.copy(this.bounds);
-    this.colorField.bounds.copy(this.bounds);
+    // Same-tier topology updates preserve compatible pressure and all compiled graphs.
+    void previous;
     this.density.version += 1;
     this.colorField.version += 1;
   }
 
   protected override onGridResolutionChanged(): void {
+    this.occupiedGasBounds.makeEmpty();
+    this.cancelQualityPreparation();
     this.poolAllocation?.cancelPending(); this.poolAllocation = undefined;
     this.volumeGrid?.dispose();
     this.volumeGrid = new SparseVolumeGrid({
       ...this.spatialGridOptions,
       brickSubdivisions: this.spatialGrid!.brickSubdivisions,
       cellSubdivisions: this.spatialGrid!.cellSubdivisions,
-    }, Math.min(this.initialBrickCapacity, this.maxActiveBricks));
+      bounds: this.bounds,
+    }, Math.min(this.initialBrickCapacity, this.maxActiveBricks), this.gridDimensions);
     this.resizeGridFields(this.volumeGrid.cellCount);
     this.clearNewNodes = [];
     this.clearTexturesNode = undefined;
     this.disposeGasFields();
     this.allocateGasFields();
     this.density.texture = this.densityTexture;
-    this.density.resolution.setScalar(this.resolution);
+    this.density.resolution.copy(this.gridDimensions);
     this.density.version += 1;
     this.colorField.texture = this.colorTexture;
-    this.colorField.resolution.setScalar(this.resolution);
+    this.colorField.resolution.copy(this.gridDimensions);
     this.colorField.version += 1;
     this.pendingPreviousBounds = undefined;
     this.resetGasNodes();
@@ -857,12 +1145,12 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.gpuCacheKey = '';
     this.effectNodes = new Map();
     this.visualStateNodes = new WeakMap();
-    this.occupiedGasBounds.makeEmpty();
     this.remapNodes = new WeakMap();
     this.remapVelocityNode = undefined;
     this.velocityNodes = new WeakMap();
     this.velocitySourceNode = undefined;
     this.sourceNodes = new WeakMap();
+    this.scalarModuleNodes = new WeakMap();
     this.scalarSourceNodes = new WeakMap();
     this.solidClearNodes = new WeakMap();
     this.outputNodes = new WeakMap();
@@ -876,20 +1164,284 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.advectionNodes = new WeakMap();
   }
 
+  private qualityPreparation?: {
+    key: string; ready: boolean; grid?: SparseVolumeGrid; pressure?: FluidPressureProjection; error?: unknown;
+    completion?: Promise<void>;
+    spacing?: ReturnType<typeof uniform<'float'>>;
+    stage?: string;
+    blockedUntil?: number;
+    remaps?: WeakMap<object, ComputeNode>; copyVelocity?: ComputeNode; nodes?: ComputeNode[];
+  };
+
+  /** Prepare only the expensive pressure/directory replacement; no live fields or uniforms are advanced. */
+  protected override prepareQualityChange(domain: SpatialGridDomain, renderer: ParticleSpatialGridRenderer): boolean {
+    // Rectangle dimensions and resident capacity are runtime storage state, not program specialization.
+    const keyForCurrentPool = () => [
+      this.pressureSolver, this.pressureIterations, this.pressureMinIterations, this.pressureMaxIterations,
+      this.pressureTolerance, this.pressureDiagnostics, JSON.stringify(this.multigrid)].join(':');
+    const key = keyForCurrentPool();
+    const pending = this.qualityPreparation;
+    if (pending?.key === key) {
+      if (pending.blockedUntil && performance.now() >= pending.blockedUntil) {
+        this.qualityPreparation = undefined;
+        return this.prepareQualityChange(domain, renderer);
+      }
+      // Optional background quality work must never stop the live simulation/render loop.
+      if (pending.error) return false;
+      if (!pending.ready) return false;
+      if (pending.grid!.cellSize !== domain.cellSize) {
+        this.retargetPreparedQuality(pending, domain.cellSize, renderer);
+        return false;
+      }
+      if (pending.grid!.capacity !== this.volumeGrid.capacity) {
+        this.growPreparedQuality(pending, renderer);
+        return false;
+      }
+      if (!pending.grid!.ensureDirectory(renderer, domain.gridDimensions)) return false;
+      pending.grid!.setLayoutMetadata(domain.bounds, domain.gridDimensions);
+      pending.pressure!.updateTopology();
+      return true;
+    }
+    if (pending) {
+      if (!pending.ready) return false;
+      pending.pressure?.dispose(); pending.grid?.dispose(renderer); pending.nodes?.forEach(node => node.dispose());
+    }
+    const candidate = { key, ready: false } as NonNullable<GasSimulation['qualityPreparation']>;
+    this.qualityPreparation = candidate;
+    const started = performance.now();
+    // Yield before allocation, then compile a small batch per turn so animation can continue.
+    candidate.completion = new Promise(resolve => setTimeout(resolve, 0)).then(async () => {
+      if (this.qualityPreparation !== candidate) return;
+      if (domain.cellSize < this.cellSize) {
+        // Finer cells can require eight times as many pages. Reserve from actual live support
+        // before replacing the mapping, otherwise a refinement can discard unadmitted gas.
+        const diagnostics = await this.readGridDiagnostics(renderer);
+        const ratio = this.cellSize / domain.cellSize;
+        const targetPages = domain.gridDimensions.x * domain.gridDimensions.y * domain.gridDimensions.z
+          / this.volumeGrid.cellsPerBrick;
+        const required = Math.ceil(Math.min(targetPages, diagnostics.activeBricks * ratio ** 3));
+        const maximum = this.poolAllocation?.maximumCapacity ?? this.volumeGrid.capacity;
+        if (required > maximum) {
+          candidate.blockedUntil = performance.now() + 250;
+          this.benchmarks.set('qualityCapacityShortfall', required - maximum);
+          return;
+        }
+        if (required > this.volumeGrid.capacity) this.poolAllocation?.request(required);
+        while (this.volumeGrid.capacity < required && this.qualityPreparation === candidate) {
+          await new Promise(resolve => setTimeout(resolve, 4));
+        }
+        if (this.qualityPreparation !== candidate) return;
+        candidate.key = keyForCurrentPool();
+      }
+      const replacement = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: domain.bounds },
+        this.volumeGrid.capacity, domain.gridDimensions.clone());
+      candidate.grid = replacement;
+      replacement.reductionCellCount = this.volumeGrid.reductionCellCount;
+      candidate.spacing = uniform(domain.cellSize);
+      const pressure = this.createPressureProjection(replacement, candidate.spacing,
+        domain.gridDimensions.clone());
+      candidate.pressure = pressure;
+      candidate.stage = 'layout';
+      const remaps = new WeakMap<object, ComputeNode>(); candidate.remaps = remaps;
+      const forward = this.getRemapNode(this.densityCurrent, this.colorCurrent, this.densityNext, this.colorNext,
+        replacement, this.volumeGrid, remaps);
+      const backward = this.getRemapNode(this.densityNext, this.colorNext, this.densityCurrent, this.colorCurrent,
+        replacement, this.volumeGrid, remaps);
+      const copyVelocity = replacement.compute(index => {
+        this.velocityCurrent.element(index).assign(this.velocityNext.element(index));
+      });
+      candidate.copyVelocity = copyVelocity; candidate.nodes = [forward, backward, copyVelocity];
+      const compiler = { ...renderer, compute: renderer.compute.bind(renderer),
+        compileComputeAsync: (nodes: ComputeNode[]) => prepareComputePrograms(renderer, nodes,
+          () => this.qualityPreparation === candidate) };
+      await replacement.prepareLayout(compiler);
+      if (this.qualityPreparation !== candidate) return;
+      candidate.stage = 'pressure';
+      await pressure.prepare(compiler, this.velocityNext, this.velocityCurrent, this.pressureIterations);
+      if (this.qualityPreparation !== candidate) return;
+      // Initialization samples the retained velocity before transport; prepare that input variant too.
+      await pressure.prepare(compiler, this.velocityCurrent, this.velocityCurrent, this.pressureIterations);
+      if (this.qualityPreparation !== candidate) return;
+      candidate.stage = 'remaps';
+      await compiler.compileComputeAsync([forward, backward, copyVelocity]);
+      if (this.qualityPreparation !== candidate) return;
+      candidate.ready = true;
+      candidate.stage = 'ready';
+      this.benchmarks.set('qualityPreparationMs', performance.now() - started);
+    }).catch(error => {
+      candidate.error = error; candidate.ready = true;
+      if (this.qualityPreparation === candidate) {
+        console.warn('Gas quality preparation failed; retaining current tier.', error);
+      }
+    }).finally(() => {
+      if (this.qualityPreparation !== candidate) {
+        candidate.pressure?.dispose(); candidate.grid?.dispose(renderer);
+        candidate.nodes?.forEach(node => node.dispose());
+      }
+    });
+    return false;
+  }
+
+  /** Pressure programs already use runtime spacing; only the conservative transfer stencil changes. */
+  private retargetPreparedQuality(candidate: NonNullable<GasSimulation['qualityPreparation']>, cellSize: number,
+    renderer: ParticleSpatialGridRenderer): void {
+    candidate.ready = false;
+    candidate.stage = 'retarget';
+    candidate.completion = candidate.completion!.then(async () => {
+      const grid = candidate.grid!;
+      grid.cellSize = cellSize; grid.brickSize = cellSize * grid.brickSide;
+      candidate.spacing!.value = cellSize;
+      candidate.nodes?.forEach(node => node.dispose());
+      const remaps = new WeakMap<object, ComputeNode>(); candidate.remaps = remaps;
+      const forward = this.getRemapNode(this.densityCurrent, this.colorCurrent, this.densityNext, this.colorNext,
+        grid, this.volumeGrid, remaps);
+      const backward = this.getRemapNode(this.densityNext, this.colorNext, this.densityCurrent, this.colorCurrent,
+        grid, this.volumeGrid, remaps);
+      const copy = grid.compute(index => this.velocityCurrent.element(index).assign(this.velocityNext.element(index)));
+      candidate.copyVelocity = copy; candidate.nodes = [forward, backward, copy];
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (this.qualityPreparation !== candidate) return;
+      await prepareComputePrograms(renderer, candidate.nodes, () => this.qualityPreparation === candidate);
+      candidate.ready = true;
+    }).catch(error => { candidate.error = error; candidate.ready = true; }).finally(() => {
+      if (this.qualityPreparation !== candidate) {
+        candidate.pressure?.dispose(); candidate.grid?.dispose(renderer);
+        candidate.nodes?.forEach(node => node.dispose());
+      }
+    });
+  }
+
+  /** A preparing tier must not restart compilation whenever the live resident pool grows. */
+  private growPreparedQuality(candidate: NonNullable<GasSimulation['qualityPreparation']>,
+    renderer: ParticleSpatialGridRenderer): void {
+    candidate.ready = false;
+    candidate.stage = 'capacity';
+    candidate.completion = candidate.completion!.then(async () => {
+      const grid = candidate.grid!, pressure = candidate.pressure!;
+      const backing = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: grid.bounds },
+        this.volumeGrid.capacity, grid.gridDimensions, grid.directoryCapacity);
+      const storage = pressure.createCapacityStorage(backing.capacity);
+      const attributes = [...backing.capacityAttributes, ...storage.attributes];
+
+      // This replacement has never simulated: new zeroed scratch needs no field migration.
+      for (let i = 0; i < attributes.length; i++) {
+        initializeStorageAttribute(renderer, attributes[i], false);
+        if (i % 4 === 3) await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      if (this.qualityPreparation !== candidate) {
+        backing.dispose(renderer);
+        storage.attributes.forEach(attribute => {
+          destroyGPUStorageAttribute(renderer, attribute); attribute.dispose();
+        });
+        return;
+      }
+      const retired = [...grid.adoptCapacity(backing), ...pressure.adoptCapacityStorage(storage)];
+      retired.forEach(attribute => { destroyGPUStorageAttribute(renderer, attribute); attribute.dispose(); });
+      backing.dispatchAttributes.forEach(attribute => attribute.dispose());
+      candidate.ready = true;
+    }).catch(error => {
+      candidate.error = error; candidate.ready = true;
+      console.warn('Gas quality storage preparation failed; retaining current tier.', error);
+    }).finally(() => {
+      if (this.qualityPreparation !== candidate) {
+        candidate.pressure?.dispose(); candidate.grid?.dispose(renderer);
+        candidate.nodes?.forEach(node => node.dispose());
+      }
+    });
+  }
+
+  private cancelQualityPreparation(): void {
+    const preparation = this.qualityPreparation; this.qualityPreparation = undefined;
+    if (preparation?.ready) {
+      preparation.pressure?.dispose(); preparation.grid?.dispose(); preparation.nodes?.forEach(node => node.dispose());
+    }
+  }
+
+  private pendingPreviousGrid?: SparseVolumeGrid;
+  private pendingPreviousPreparation?: Promise<void>;
+
   protected override ensureGridResolution(renderer: ParticleSpatialGridRenderer, grid: ParticleSpatialGrid): void {
     const key = [grid.brickSubdivisions, grid.cellSubdivisions].join('|');
-    const previousResolution = this.resolution;
-    super.ensureGridResolution(renderer, grid);
-    if (key !== this.sparseStructureKey && previousResolution === this.resolution) {
-      this.onGridResolutionChanged();
+    if (key !== this.sparseStructureKey) {
+      this.resolution = grid.cellsPerAxis;
+      this.gridDimensions.copy(grid.gridDimensions); this.dimensionsNode.value.copy(this.gridDimensions);
+      this.cellSize = grid.cellSize; this.cellSizeNode.value = this.cellSize;
+      this.onGridResolutionChanged(); this.sparseStructureKey = key;
+      return;
     }
-    this.sparseStructureKey = key;
+    const old = this.volumeGrid;
+    if (old.gridDimensions.equals(grid.gridDimensions) && old.bounds.equals(this.bounds)
+      && Math.abs(old.cellSize - grid.cellSize) < 1e-9) return;
+    const sameTier = Math.abs(old.cellSize - grid.cellSize) < 1e-9;
+    if (sameTier) {
+      const start = performance.now();
+      if (!old.updateLayout(renderer, this.bounds, grid.gridDimensions)) {
+        // Keep simulating the old rectangle while directory capacity prepares. Latest target wins.
+        const requested = this.bounds.clone();
+        this.bounds.copy(old.bounds); this.boundsMinNode.value.copy(old.bounds.min);
+        // This is a coverage rollback, not a quality request. Reinterpreting the old rectangle
+        // with automatic quality can change tier before the staged solver is ready.
+        grid.setBounds(grid.resolveBounds(old.bounds.clone()));
+        this.pendingBounds = { grid, bounds: requested };
+        return;
+      }
+      this.gridDimensions.copy(grid.gridDimensions);
+      this.dimensionsNode.value.copy(this.gridDimensions);
+      this.pressureProjection?.updateTopology();
+      this.domainChanges.logical++;
+      this.benchmarks.set('logicalResizeSubmissionMs', performance.now() - start);
+      return;
+    }
+    this.domainChanges.quality++;
+    this.textureAllocation?.cancelPending(); this.textureAllocation = undefined;
+    this.poolAllocation?.cancelPending(); this.poolAllocation = undefined;
+    const pressure = this.pressureProjection; this.pressureProjection = undefined;
+    this.gridDimensions.copy(grid.gridDimensions); this.dimensionsNode.value.copy(this.gridDimensions);
+    this.cellSize = grid.cellSize; this.cellSizeNode.value = this.cellSize;
+    const prepared = this.qualityPreparation;
+    if (prepared?.ready && prepared.grid && Math.abs(prepared.grid.cellSize - this.cellSize) < 1e-9
+      && prepared.grid.gridDimensions.equals(this.gridDimensions) && prepared.grid.capacity === old.capacity) {
+      prepared.grid.updateLayout(renderer, this.bounds, this.gridDimensions);
+      this.volumeGrid = prepared.grid; this.pressureProjection = prepared.pressure;
+      this.qualityPreparation = undefined;
+    } else {
+      // Explicit edits or a changed target can bypass the automatic readiness gate. Cancel the
+      // old candidate, but keep its source directory alive until its in-flight compiler returns.
+      this.cancelQualityPreparation();
+      this.volumeGrid = this.benchmarks.span('qualityDirectoryAllocation', () => (
+        new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: this.bounds }, old.capacity, this.gridDimensions)
+      ));
+    }
+    this.resetGasNodes();
+    this.resetGridNodes();
+    if (prepared?.ready && this.pressureProjection === prepared.pressure) {
+      this.remapNodes = prepared.remaps!; this.remapVelocityNode = prepared.copyVelocity;
+    }
+    this.clearNewNodes = [];
+    this.clearTexturesNode = undefined;
+    // Export textures are derived render resources, not quality-specialized storage. Retain their
+    // backing and let updateExportLayout stage any necessary growth while simulation continues.
+    this.density.resolution.copy(this.gridDimensions); this.colorField.resolution.copy(this.gridDimensions);
+    this.pendingPreviousGrid = old; this.pendingPreviousBounds = old.bounds.clone();
+    this.pendingPreviousPreparation = prepared?.completion;
+    this.previousMinimum.value.copy(old.bounds.min); this.previousCellSize.value = old.cellSize;
+    this.retireGridResources(renderer, () => pressure?.dispose(), prepared?.completion);
+    this.density.version++; this.colorField.version++;
+  }
+
+  private retireGridResources(renderer: ParticleSpatialGridRenderer, release: () => void,
+    preparation?: Promise<void>): void {
+    const device = (renderer.backend as {
+      device?: { queue: { onSubmittedWorkDone(): Promise<void> } };
+    } | undefined)?.device;
+    // A queue fence alone cannot protect CPU-side asynchronous shader construction.
+    void (preparation ?? Promise.resolve()).then(() => device?.queue.onSubmittedWorkDone()).then(release, release);
   }
 
   private get allocatedBytes(): number {
     return this.fieldAttributes.reduce((sum, attribute) => sum + attribute.array.byteLength, 0)
       + this.volumeGrid.allocatedBytes + (this.pressureProjection?.allocatedBytes ?? 0)
-      + 2 * this.resolution ** 3 * 4 * 2;
+      + 2 * this.textureDimensions.x * this.textureDimensions.y * this.textureDimensions.z * 4 * 2;
   }
 
   private get fieldAttributes(): StorageBufferAttribute[] {
@@ -899,117 +1451,136 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       this.visualAttribute, this.maximaAttribute, this.curlAttribute, ...this.advectionAttributes];
   }
 
+  /** Capacity/binding state changes do not invalidate numerical graphs or program templates. */
   private ensurePoolAllocation(renderer: ParticleSpatialGridRenderer, context: GPUParticleUpdateContext,
     grid: ParticleSpatialGrid): void {
+    void context; void grid;
+    const configuration = `${this.advectionMethod}`;
+    if (configuration !== this.poolConfiguration) {
+      this.poolAllocation?.cancelPending();
+      this.poolConfiguration = configuration;
+    }
     if (this.poolAllocation) return;
     const backend = renderer.backend as { device: { limits: { maxStorageBufferBindingSize: number };
       queue: { onSubmittedWorkDone(): Promise<void> } } };
-    const bytesPerBrick = Math.max(this.volumeGrid.cellsPerBrick * 32, (this.volumeGrid.brickSide + 1) ** 3 * 16);
-    const deviceMaximum = Math.floor((backend.device.limits.maxStorageBufferBindingSize - 32) / bytesPerBrick);
-    const maximum = Math.min(this.volumeGrid.brickCount, this.maxActiveBricks, deviceMaximum);
-    if (maximum < this.volumeGrid.capacity) throw new Error('Initial gas pool exceeds this device storage limit.');
-    this.poolAllocation = new StagedGPUAllocation<GasPool>({ context: this, attributes: this.fieldAttributes,
-      grid: this.volumeGrid, projection: this.getPressureProjection() }, this.volumeGrid.capacity, {
+    const maximum = this.maximumResidentCapacity(renderer);
+    this.volumeGrid.reductionCellCount = maximum * this.volumeGrid.cellsPerBrick + 1;
+    const pressure = this.getPressureProjection();
+    this.poolAllocation = new StagedGPUAllocation<GasPool>({ attributes: this.fieldAttributes,
+      count: this.cellCount, retired: [], adopted: true }, this.volumeGrid.capacity, {
       maximumCapacity: maximum,
       create: capacity => {
-        const volume = new SparseVolumeGrid(this.spatialGridOptions!, capacity);
-        volume.bounds.copy(this.bounds);
-        const target = this.forkGridResources(volume.cellCount);
-        Object.defineProperty(target, 'occupiedGasBounds', { value: new THREE.Box3() });
-        target.maximaMinimum = this.maximaMinimum.clone();
-        target.volumeGrid = volume;
-        target.resolution = this.resolution;
-        target.advectionAttributes = [];
-        target.pressureProjection = undefined;
-        target.allocateGasFields();
-        // Export textures remain stable. Replacement preparation must never write the live textures.
-        target.densityTexture.dispose(); target.colorTexture.dispose();
-        target.densityTexture = this.densityTexture; target.colorTexture = this.colorTexture;
-        target.clearNewNodes = []; target.clearTexturesNode = undefined;
-        target.resetGasNodes();
-        target.preparingPool = true;
-        if (this.advectionMethod === AdvectionMethod.MacCormack) target.ensureAdvectionFields();
-        return { context: target, grid: volume, attributes: target.fieldAttributes };
+        const volume = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: this.bounds },
+          capacity, this.gridDimensions, this.volumeGrid.directoryCapacity);
+        const count = volume.cellCount;
+        const attributes = this.fieldAttributes.map(attribute => {
+          // Maxima are fixed-size reduction output, not resident-cell storage.
+          if (attribute === this.maximaAttribute) return attribute;
+          const planes = attribute.count / this.cellCount;
+          return new StorageBufferAttribute(new Float32Array(count * planes * attribute.itemSize), attribute.itemSize);
+        });
+        const pressureStorage = pressure.createCapacityStorage(capacity);
+        this.peakAllocatedBytes = Math.max(this.peakAllocatedBytes, this.allocatedBytes + volume.allocatedBytes
+          + [...attributes.filter(attribute => attribute !== this.maximaAttribute), ...pressureStorage.attributes]
+            .reduce((sum, attribute) => sum + attribute.array.byteLength, 0));
+        return { grid: volume, attributes, count, pressure: pressureStorage, retired: [] };
       },
       prepare: async pool => {
-        const target = pool.context;
-        const compiler = renderer as ParticleSpatialGridRenderer & {
-          compileComputeAsync(nodes: ComputeNode[]): Promise<void>;
-        };
-        for (const attribute of pool.attributes) {
-          initializeStorageAttribute(renderer, attribute);
-          await new Promise(resolve => setTimeout(resolve, 0));
+        const started = performance.now();
+        const attributes = [...pool.attributes.filter(attribute => attribute !== this.maximaAttribute),
+          ...pool.grid!.capacityAttributes, ...pool.pressure!.attributes];
+        let sliceStarted = performance.now();
+        for (let index = 0; index < attributes.length; index++) {
+          initializeStorageAttribute(renderer, attributes[index], false);
+          if (performance.now() - sliceStarted >= 2 && index + 1 < attributes.length) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+            sliceStarted = performance.now();
+          }
         }
-        const collect = (build: () => void) => {
-          const nodes: ComputeNode[] = [], original = renderer.compute;
-          renderer.compute = node => { nodes.push(...(Array.isArray(node) ? node : [node])); };
-          try { build(); } finally { renderer.compute = original; }
-          return nodes;
-        };
-        await compiler.compileComputeAsync(collect(() => {
-          target.volumeGrid.updateDispatch(renderer);
-          target.clearNewBricks(renderer);
-          target.computeSolidField(context, renderer);
-        }));
-        // Compile both scalar ping-pong identities sequentially; no solver dispatch is submitted.
-        for (let phase = 0; phase < 2; phase++) {
-          await compiler.compileComputeAsync(collect(() => target.getPressureProjection().forPreparation(
-            () => target.computeTransport(context, renderer, grid))));
+        this.capacityMetrics.storagePreparationMs = performance.now() - started;
+        this.capacityMetrics.graphConstructionMs = 0;
+        this.capacityMetrics.compilationMs = 0;
+      },
+      canCommit: (_current, replacement) => {
+        if (!pressure.canAdoptCapacityStorage(replacement.pressure!)) {
+          this.requiredBrickCapacity = Math.max(this.requiredBrickCapacity, replacement.grid!.capacity);
+          this.poolAllocation!.cancelPending();
+          return false;
         }
-        pool.projection = target.getPressureProjection();
-        target.preparingPool = false;
+        return replacement.grid!.ensureDirectory(renderer, this.gridDimensions, this.volumeGrid.directoryCapacity);
       },
       migrate: (current, replacement) => {
         current.attributes = this.fieldAttributes;
-        current.projection = this.pressureProjection;
-        const next = replacement.context, count = this.cellCount - 1;
-        this.volumeGrid.migrateTo(renderer, replacement.grid);
-        const old = current.attributes, fresh = replacement.attributes;
-        const copies = old.flatMap((attribute, index) => {
-          if (index >= fresh.length) return [];
-          const target = fresh[index];
-          // Packed boundary/visual planes change stride when the pool grows.
+        current.count = this.cellCount;
+        const count = this.cellCount - 1, nextCount = replacement.count;
+        const copies = current.attributes.flatMap((attribute, index) => {
+          const target = replacement.attributes[index];
+          if (attribute === target) return [];
+          // Runtime plane offsets avoid capacity-specific shaders; two GPU copies preserve packed fields.
           if (attribute === this.boundaryAttribute || attribute === this.visualAttribute) return [
             { source: attribute, target, byteLength: count * 16 },
             { source: attribute, target, sourceOffset: this.cellCount * 16,
-              targetOffset: next.cellCount * 16, byteLength: count * 16 },
+              targetOffset: nextCount * 16, byteLength: count * 16 },
           ];
-          return [{ source: attribute, target,
-            byteLength: Math.min(attribute.array.byteLength, target.array.byteLength) }];
+          return [{ source: attribute, target, byteLength: count * attribute.itemSize * 4 }];
         });
         copyStorageAttributes(renderer, copies);
-        this.pressureProjection?.migrateTo(renderer, replacement.projection!);
-        replacement.projection!.retainPressure();
-        if ((this.densityCurrent as unknown as { value: StorageBufferAttribute }).value === this.densityAttributeB) {
-          [next.densityCurrent, next.densityNext] = [next.densityNext, next.densityCurrent];
-          [next.colorCurrent, next.colorNext] = [next.colorNext, next.colorCurrent];
-        }
-        this.peakAllocatedBytes = Math.max(this.peakAllocatedBytes,
-          this.allocatedBytes + replacement.attributes.reduce((sum, a) => sum + a.array.byteLength, 0)
-            + replacement.grid.allocatedBytes + (replacement.projection?.allocatedBytes ?? 0));
+        this.volumeGrid.migrateCapacity(renderer, replacement.grid!);
+        pressure.migrateCapacityStorage(renderer, replacement.pressure!);
       },
       swap: pool => {
-        const target = pool.context;
-        this.adoptGridResources(target);
-        for (const key of ['volumeGrid', 'densityAttributeA', 'densityAttributeB', 'colorAttributeA',
-          'colorAttributeB', 'visualAttribute', 'densityCurrent', 'densityNext', 'colorCurrent', 'colorNext',
-          'visualDensity', 'visualColor', 'maximaAttribute', 'maxima', 'curlAttribute', 'curl',
-          'advectionAttributes', 'velocityAdvected', 'densityAdvected', 'colorAdvected', 'pressureProjection',
-          'clearNewNodes', 'clearTexturesNode', 'gpuCacheKey', 'velocityNodes', 'velocitySourceNode',
-          'sourceNodes', 'scalarSourceNodes', 'solidClearNodes', 'outputNodes', 'visualCacheKey',
-          'visualSourceNode', 'visualOutputNodes', 'maximaNodes', 'maximaResetNode', 'curlNode',
-          'confinementNodes', 'advectionNodes', 'remapNodes', 'remapVelocityNode',
-          'effectNodes', 'visualStateNodes'] as const) {
-          (this as unknown as Record<string, unknown>)[key] = target[key];
+        const previous = this.fieldAttributes;
+        const replacements = new Map(previous.map((attribute, index) => [attribute, pool.attributes[index]]));
+        // Every graph retains these storage nodes. Rebinding updates Three's bind groups, not its programs.
+        for (const node of [this.velocityCurrent, this.velocityNext, this.pressureCurrent, this.pressureNext,
+          this.divergence, this.solid, this.faceOpenness, this.densityCurrent, this.densityNext,
+          this.colorCurrent, this.colorNext, this.visualDensity, this.curl,
+          this.velocityAdvected, this.densityAdvected, this.colorAdvected]) {
+          const binding = node as unknown as { value: StorageBufferAttribute } | undefined;
+          const replacement = binding && replacements.get(binding.value);
+          if (binding && replacement) binding.value = replacement;
         }
+        const names = ['velocityCurrentAttribute', 'velocityNextAttribute', 'pressureCurrentAttribute',
+          'pressureNextAttribute', 'divergenceAttribute', 'solidAttribute', 'boundaryAttribute',
+          'densityAttributeA', 'densityAttributeB', 'colorAttributeA', 'colorAttributeB',
+          'visualAttribute', 'maximaAttribute', 'curlAttribute'] as const;
+        names.forEach((key, index) => { this[key] = pool.attributes[index]; });
+        this.advectionAttributes = pool.attributes.slice(names.length);
+        this.cellCount = pool.count;
+        this.fieldStrideNode.value = this.cellCount;
+        const retiredGrid = this.volumeGrid.adoptCapacity(pool.grid!);
+        const retiredPressure = pressure.adoptCapacityStorage(pool.pressure!);
+        // Attach old storage to the retiring payload; the live grid/projection themselves retain identity.
+        const old = this.poolAllocation!.current;
+        old.retired.push(...retiredGrid, ...retiredPressure);
+        pool.grid!.dispatchAttributes.forEach(attribute => attribute.dispose());
+        pool.adopted = true;
         this.growthEvents++;
+        this.domainChanges.capacity++;
       },
       dispose: pool => {
-        pool.attributes.forEach(attribute => attribute.dispose());
-        pool.projection?.dispose(); pool.grid.dispose(renderer);
+        const live = new Set(this.fieldAttributes);
+        [...new Set([...pool.attributes, ...pool.retired])].forEach(attribute => {
+          if (!live.has(attribute)) { destroyGPUStorageAttribute(renderer, attribute); attribute.dispose(); }
+        });
+        if (pool.grid && !pool.adopted) {
+          pool.grid.dispose(renderer);
+          pool.pressure?.attributes.forEach(attribute => {
+            destroyGPUStorageAttribute(renderer, attribute); attribute.dispose();
+          });
+        }
       },
       fence: () => backend.device.queue.onSubmittedWorkDone(),
     });
+  }
+
+  private maximumResidentCapacity(renderer: ParticleSpatialGridRenderer): number {
+    const device = (renderer.backend as { device: { limits: { maxStorageBufferBindingSize: number } } }).device;
+    const bytesPerBrick = Math.max(this.volumeGrid.cellsPerBrick * 32, (this.volumeGrid.brickSide + 1) ** 3 * 16);
+    const maximum = Math.min(this.maxActiveBricks,
+      Math.floor((device.limits.maxStorageBufferBindingSize - 32) / bytesPerBrick));
+    if (maximum < this.volumeGrid.capacity) throw new Error('Initial gas pool exceeds this device storage limit.');
+    return maximum;
   }
 
   /** Explicit preparation/testing can await a grow; normal simulation only requests and polls. */
@@ -1028,7 +1599,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     if (!previous) return;
     this.pendingPreviousBounds = undefined;
     this.previousMinimum.value.copy(previous.min);
-    this.previousCellSize.value = previous.getSize(new THREE.Vector3()).x / this.resolution;
+    this.previousCellSize.value = this.pendingPreviousGrid?.cellSize ?? this.previousDomain?.cellSize ?? this.cellSize;
     const remap = this.getRemapNode(this.densityCurrent, this.colorCurrent, this.densityNext, this.colorNext);
     this.benchmarks.span('boundsRemap', () => renderer.compute(remap));
     [this.densityCurrent, this.densityNext] = [this.densityNext, this.densityCurrent];
@@ -1038,40 +1609,106 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     });
     this.remapVelocityNode = copyVelocity;
     renderer.compute(copyVelocity);
+    const retired = this.pendingPreviousGrid; this.pendingPreviousGrid = undefined;
+    const preparation = this.pendingPreviousPreparation; this.pendingPreviousPreparation = undefined;
+    if (retired) this.retireGridResources(renderer, () => retired.dispose(renderer), preparation);
   }
 
   private getRemapNode(
     oldDensity: Vec4Storage, oldColor: Vec4Storage, newDensity: Vec4Storage, newColor: Vec4Storage,
+    targetGrid = this.volumeGrid, sourceGrid = this.pendingPreviousGrid ?? this.volumeGrid,
+    cache = this.remapNodes,
   ): ComputeNode {
-    const node = this.remapNodes.get(oldDensity) ?? this.computeCells(index => {
-      const center = this.cellCenter(this.cellCoordinate(index));
-      const oldCoordinate = center.sub(this.previousMinimum).div(this.previousCellSize).floor();
-      const inside = oldCoordinate.greaterThanEqual(vec3(0)).all()
-        .and(oldCoordinate.lessThan(vec3(this.resolution)).all());
-      const clamped = this.volumeGrid.index(ivec3(clamp(oldCoordinate, vec3(0), vec3(this.resolution - 1))),
-        this.volumeGrid.previousPages);
-      newDensity.element(index).assign(inside.select(oldDensity.element(clamped), vec4(0)));
-      newColor.element(index).assign(inside.select(oldColor.element(clamped), vec4(0)));
-      this.velocityNext.element(index).assign(inside.select(this.velocityCurrent.element(clamped), vec4(0)));
+    const previousDimensions = sourceGrid.getDimensionsNode();
+    const previousPages = sourceGrid !== targetGrid ? sourceGrid.pages : sourceGrid.previousPages;
+    const ratio = targetGrid.cellSize / sourceGrid.cellSize;
+    const oldVelocity = this.velocityCurrent;
+    const node = cache.get(oldDensity) ?? targetGrid.compute(index => {
+      const center = vec3(targetGrid.coordinate(index)).add(0.5).mul(this.cellSizeNode).add(this.boundsMinNode);
+      const read = (field: Vec4Storage, coordinate: Node<'ivec3'>) => {
+        const inside = vec3(coordinate).greaterThanEqual(0).all()
+          .and(vec3(coordinate).lessThan(vec3(previousDimensions)).all());
+        const address = sourceGrid.index(ivec3(clamp(vec3(coordinate), vec3(0), vec3(previousDimensions).sub(1))),
+          previousPages);
+        return inside.select(field.element(address), vec4(0));
+      };
+      const density = vec4(0).toVar(), color = vec4(0).toVar(), velocity = vec3(0).toVar();
+      if (ratio > 1 && Math.abs(ratio - Math.round(ratio)) < 1e-6) {
+        const side = Math.round(ratio);
+        const corner = center.sub(this.cellSizeNode.mul(0.5)).sub(this.previousMinimum)
+          .div(this.previousCellSize).round();
+        // A 2x coarsening averages eight scalar cells; MAC components average four fine faces.
+        Loop(side ** 3, ({ i }) => {
+          const offset = ivec3(i.mod(side), i.div(side).mod(side), i.div(side * side));
+          const coordinate = ivec3(corner).add(offset);
+          density.addAssign(read(oldDensity, coordinate).div(side ** 3));
+          color.addAssign(read(oldColor, coordinate).div(side ** 3));
+          const value = read(oldVelocity, coordinate).xyz;
+          velocity.addAssign(vec3(offset.x.equal(0).select(value.x, 0), offset.y.equal(0).select(value.y, 0),
+            offset.z.equal(0).select(value.z, 0)).div(side ** 2));
+        });
+      } else if (ratio < 1 - 1e-6) {
+        const coordinate = center.sub(this.previousMinimum).div(this.previousCellSize);
+        const interpolate = (field: Vec4Storage, offset: Node<'vec3'>) => {
+          const p = coordinate.sub(offset), base = p.floor(), fraction = p.sub(base);
+          const value = vec4(0).toVar();
+          Loop(8, ({ i }) => {
+            const delta = ivec3(i.mod(2), i.div(2).mod(2), i.div(4));
+            const weights = vec3(delta.x.equal(0).select(float(1).sub(fraction.x), fraction.x),
+              delta.y.equal(0).select(float(1).sub(fraction.y), fraction.y),
+              delta.z.equal(0).select(float(1).sub(fraction.z), fraction.z));
+            value.addAssign(read(field, ivec3(base).add(delta)).mul(weights.x.mul(weights.y).mul(weights.z)));
+          });
+          return value;
+        };
+        density.assign(interpolate(oldDensity, vec3(0.5)));
+        color.assign(interpolate(oldColor, vec3(0.5)));
+        velocity.assign(vec3(interpolate(oldVelocity, vec3(ratio * 0.5, 0.5, 0.5)).x,
+          interpolate(oldVelocity, vec3(0.5, ratio * 0.5, 0.5)).y,
+          interpolate(oldVelocity, vec3(0.5, 0.5, ratio * 0.5)).z));
+      } else {
+        const coordinate = ivec3(center.sub(this.previousMinimum).div(this.previousCellSize).floor());
+        density.assign(read(oldDensity, coordinate)); color.assign(read(oldColor, coordinate));
+        velocity.assign(read(oldVelocity, coordinate).xyz);
+      }
+      newDensity.element(index).assign(density);
+      newColor.element(index).assign(color);
+      this.velocityNext.element(index).assign(vec4(velocity, 0));
     });
-    this.remapNodes.set(oldDensity, node);
+    cache.set(oldDensity, node);
     return node;
   }
 
   public override cleanup(): void {
+    this.cancelQualityPreparation();
     this.poolAllocation?.cancelPending(); this.poolAllocation = undefined;
     super.cleanup();
+    this.sourceGrid?.dispose();
+    this.sourceGrid = undefined;
     this.disposeGasFields();
     this.volumeGrid.dispose();
   }
 
   /** Small asynchronous allocation readback, without transferring field values. */
+  /** @internal Explicit watched-brick probe; never runs automatically during simulation. */
+  readBrickDiagnostics(renderer: ParticleSpatialGridRenderer, centers: readonly THREE.Vector3[],
+    occupancy?: { texture: THREE.Texture; resolution: THREE.Vector3 }) {
+    return readFluidBrickStates(renderer, this.volumeGrid, this.densityCurrent, this.densityTexture,
+      this.textureDimensions, centers, occupancy,
+      { offset: this.exportOffset.value, resolution: this.exportDimensions.value });
+  }
+
   public async readGridDiagnostics(renderer: ParticleSpatialGridRenderer): Promise<{
     activeBricks: number; overflowedBricks: number; capacity: number; logicalBricks: number;
+    requestedBricks: number; freshBricks: number; releasedBricks: number; activeDispatchEntries: number;
+    priorityDemand: number[]; frame: number;
   }> {
-    const values = new Uint32Array(await renderer.getArrayBufferAsync(this.volumeGrid.diagnosticsAttribute));
+    const grid = this.volumeGrid, frame = grid.frameNumber;
+    const values = new Uint32Array(await renderer.getArrayBufferAsync(grid.diagnosticsAttribute));
     return { activeBricks: values[0], overflowedBricks: values[1],
-      capacity: this.volumeGrid.capacity, logicalBricks: this.volumeGrid.brickCount };
+      capacity: grid.capacity, logicalBricks: grid.brickCount, frame,
+      requestedBricks: values[2], freshBricks: values[3], releasedBricks: values[4], activeDispatchEntries: values[5],
+      priorityDemand: [...values.slice(6, 11)] };
   }
 
   protected override onBoundaryChanged(): void {
@@ -1125,12 +1762,14 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
   private clearOutputTextures(renderer: ParticleSpatialGridRenderer): void {
     this.clearTexturesNode ??= Fn(() => {
-      const n = this.resolution;
-      const coordinate = ivec3(int(instanceIndex.mod(n)), int(instanceIndex.div(n).mod(n)),
-        int(instanceIndex.div(n * n)));
-      textureStore(this.densityTexture, coordinate, vec4(0)).toWriteOnly();
-      textureStore(this.colorTexture, coordinate, vec4(0)).toWriteOnly();
-    })().compute(this.resolution ** 3);
+      const size = this.exportDimensions;
+      const coordinate = ivec3(int(instanceIndex.mod(uint(size.x))),
+        int(instanceIndex.div(uint(size.x)).mod(uint(size.y))), int(instanceIndex.div(uint(size.x.mul(size.y)))));
+      textureStore(this.densityTextureNode, coordinate, vec4(0)).toWriteOnly();
+      textureStore(this.colorTextureNode, coordinate, vec4(0)).toWriteOnly();
+    })().compute(1);
+    const size = this.exportDimensions.value;
+    this.clearTexturesNode.count = size.x * size.y * size.z;
     renderer.compute(this.clearTexturesNode);
   }
 
@@ -1149,16 +1788,18 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.colorNext = storage(this.colorAttributeB, 'vec4', this.cellCount) as Vec4Storage;
     // Both transient targets share one binding so a single gather fits the eight-buffer limit.
     const visual = storage(this.visualAttribute, 'vec4', this.cellCount * 2) as Vec4Storage;
-    const stride = this.cellCount;
+    const stride = this.fieldStrideNode;
     this.visualDensity = visual;
-    this.visualColor = { element: index => visual.element(typeof index === 'number'
-      ? index + stride : uint(index as Node<'uint'>).add(stride)) };
+    this.visualColor = { element: index => visual.element(uint(index as Node<'uint'>).add(stride)) };
     this.maxima = storage(this.maximaAttribute, 'uint', 12).toAtomic() as AtomicUintStorage;
     this.densityTexture = this.makeTexture();
     this.colorTexture = this.makeTexture();
+    this.densityTextureNode = storageTexture(this.densityTexture);
+    this.colorTextureNode = storageTexture(this.colorTexture);
   }
 
   private disposeGasFields(): void {
+    this.textureAllocation?.cancelPending(); this.textureAllocation = undefined;
     this.pressureProjection?.dispose();
     this.pressureProjection = undefined;
     this.densityTexture?.dispose();
@@ -1176,14 +1817,45 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.advectionAttributes = [];
   }
 
+  private pressureSelection(): PressureSolver {
+    if (this.pressureSolver !== PressureSolver.Auto) return this.pressureSolver as PressureSolver;
+    const maximum = this.pressureMaxIterations ?? this.pressureIterations;
+    const minimum = this.pressureMinIterations ?? this.pressureIterations;
+    // Ordinary fixed-budget warm solves have no demonstrated general MG advantage.
+    if (maximum < pressureAutoPolicy.minimumWork || !(this.pressureTolerance > 0) || minimum >= maximum) {
+      this.autoPressureSolver = PressureSolver.Iterative;
+      return PressureSolver.Iterative;
+    }
+    if (this.preparingPool || this.pressureProjection?.isPreparing) return PressureSolver.Multigrid;
+    const hierarchy = pressureHierarchy(this.gridDimensions.toArray(), this.multigrid);
+    this.autoPressureSolver = selectPressureSolver(this.brickDiagnostics.resident * this.volumeGrid.cellsPerBrick,
+      hierarchy.usefulLevels, this.autoPressureSolver);
+    return this.autoPressureSolver;
+  }
+
   private getPressureProjection(): FluidPressureProjection {
-    this.pressureProjection ??= new FluidPressureProjection(
-      this.resolution, this.cellSizeNode, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
-      this.closedMinNode, this.closedMaxNode, this.volumeGrid, undefined, undefined, undefined,
-      this.faceOpenness, this.solidVelocity, () => ({ ...this.pressureControls,
-        multigrid: this.pressureSolver === 'Multigrid' }),
-    );
-    return this.pressureProjection;
+    return this.pressureProjection ??= this.createPressureProjection();
+  }
+
+  private createPressureProjection(grid = this.volumeGrid, spacing: Node<'float'> = this.cellSizeNode,
+    dimensions = this.gridDimensions): FluidPressureProjection {
+    const projection: FluidPressureProjection = this.benchmarks.span('pressureResourceCreation',
+      () => new FluidPressureProjection(
+        dimensions, spacing, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
+        this.closedMinNode, this.closedMaxNode, grid, undefined, undefined, undefined,
+        this.faceOpenness, this.solidVelocity, () => ({ ...this.pressureControls,
+          multigrid: this.pressureSelection() === PressureSolver.Multigrid
+            || (projection?.isPreparing && this.pressureSolver === PressureSolver.Auto
+              && (this.pressureMaxIterations ?? this.pressureIterations) >= pressureAutoPolicy.minimumWork
+              && this.pressureTolerance > 0
+              && (this.pressureMinIterations ?? this.pressureIterations)
+                < (this.pressureMaxIterations ?? this.pressureIterations)),
+          autoMultigrid: this.pressureSolver === PressureSolver.Auto,
+          multigridOptions: { preSmooth: this.multigrid?.preSmoothing ?? 2,
+            postSmooth: this.multigrid?.postSmoothing ?? 4, coarseIterations: this.multigrid?.bottomIterations ?? 12 },
+          topologyVersion: this.pressureTopologyVersion }),
+    ));
+    return projection;
   }
 
   protected override sampleVelocity(position: Node<'vec3'>, field = this.velocityCurrent): Node<'vec3'> {
@@ -1203,6 +1875,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
   private ensureAdvectionFields(): void {
     if (this.advectionAttributes.length) return;
+    this.poolAllocation?.cancelPending();
     this.advectionAttributes = Array.from({ length: 3 }, () => (
       new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4)
     ));
@@ -1210,8 +1883,81 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       .map((attribute) => storage(attribute, 'vec4', this.cellCount) as Vec4Storage);
   }
 
+  /** Texture preparation must never hold back simulation coverage or page admission. */
+  private updateExportLayout(renderer: ParticleSpatialGridRenderer): void {
+    this.ensureTextureCapacity(renderer, this.gridDimensions);
+    const size = this.exportDimensions.value.copy(this.gridDimensions).min(this.textureDimensions);
+    const offset = this.exportOffset.value;
+    const support = this.occupiedBounds.isEmpty() ? this.bounds : this.occupiedBounds;
+    const center = support.getCenter(new THREE.Vector3()).sub(this.bounds.min).divideScalar(this.cellSize);
+    for (const axis of ['x', 'y', 'z'] as const) {
+      // Retain the occupied region while a larger derived texture prepares in the background.
+      offset[axis] = Math.max(0, Math.min(this.gridDimensions[axis] - size[axis],
+        Math.floor((center[axis] - size[axis] / 2) / this.volumeGrid.brickSide) * this.volumeGrid.brickSide));
+    }
+    const minimum = offset.clone().multiplyScalar(this.cellSize).add(this.bounds.min);
+    for (const field of [this.density, this.colorField]) {
+      const maximum = minimum.clone().addScaledVector(size, this.cellSize);
+      if (!field.bounds.min.equals(minimum) || !field.bounds.max.equals(maximum) || !field.resolution.equals(size)) {
+        field.bounds.set(minimum, maximum);
+        field.resolution.copy(size);
+        field.version++;
+      }
+    }
+  }
+
+  private ensureTextureCapacity(renderer: ParticleSpatialGridRenderer, dimensions: THREE.Vector3): boolean {
+    this.requestedTextureDimensions.copy(dimensions);
+    this.textureAllocation?.commit();
+    if (dimensions.toArray().every((size, axis) => size <= this.textureDimensions.getComponent(axis))) return true;
+    const device = (renderer.backend as { device: { limits: { maxTextureDimension3D: number };
+      queue: { onSubmittedWorkDone(): Promise<void> } } }).device;
+    this.textureAllocation ??= new StagedGPUAllocation<GasTexturePool>({
+      dimensions: this.textureDimensions.clone(), density: this.densityTexture, color: this.colorTexture,
+    }, 1, {
+      maximumCapacity: 2 ** 30,
+      create: () => {
+        const next = this.textureDimensions.clone(), brick = this.volumeGrid.brickSide;
+        for (const axis of ['x', 'y', 'z'] as const) if (this.requestedTextureDimensions[axis] > next[axis]) {
+          next[axis] = Math.ceil(Math.max(this.requestedTextureDimensions[axis], next[axis] * 1.5) / brick) * brick;
+        }
+        if (Math.max(...next.toArray()) > device.limits.maxTextureDimension3D) {
+          throw new RangeError('Gas texture capacity exceeds maxTextureDimension3D.');
+        }
+        return { dimensions: next, density: this.createTexture(next), color: this.createTexture(next) };
+      },
+      prepare: async next => {
+        const textures = renderer as ParticleSpatialGridRenderer & { initTexture(texture: THREE.Texture): void };
+        textures.initTexture(next.density);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        textures.initTexture(next.color);
+      },
+      // Export textures are derived fields. Re-exporting uses the authoritative resident values after swap.
+      migrate: () => {},
+      swap: next => {
+        this.textureDimensions.copy(next.dimensions);
+        this.densityTexture = next.density; this.colorTexture = next.color;
+        this.densityTextureNode.value = next.density; this.colorTextureNode.value = next.color;
+        this.density.texture = next.density; this.colorField.texture = next.color;
+        this.domainChanges.capacity++;
+      },
+      dispose: previous => { previous.density.dispose(); previous.color.dispose(); },
+      fence: () => device.queue.onSubmittedWorkDone(),
+    });
+    this.textureAllocation.request(this.textureAllocation.capacity);
+    return false;
+  }
+
   private makeTexture(): Storage3DTexture {
-    const texture = new Storage3DTexture(this.resolution, this.resolution, this.resolution);
+    if (this.textureDimensions.lengthSq() === 0) {
+      this.textureDimensions.copy(this.gridDimensions).addScalar(2 * (2 ** this.spatialGridOptions!.cellSubdivisions!));
+    }
+    this.textureDimensions.max(this.gridDimensions);
+    return this.createTexture(this.textureDimensions);
+  }
+
+  private createTexture(dimensions: THREE.Vector3): Storage3DTexture {
+    const texture = new Storage3DTexture(dimensions.x, dimensions.y, dimensions.z);
     texture.format = THREE.RGBAFormat;
     texture.type = THREE.HalfFloatType;
     texture.minFilter = THREE.LinearFilter;
@@ -1260,15 +2006,34 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     return value;
   }
 
-  /** Representative local decay for the short predictor; actual occupied support protects persistent gas. */
-  private sampledBehaviorRate(name: BehaviorCoefficient): number {
-    let rate = Math.max(0, this[name]);
-    for (const suffix of ['Temperature', 'Density'] as const) {
-      const value = this[`${name}By${suffix}`];
-      if (value == null) continue;
-      rate *= averageDynamicNumber(t => Math.max(0, evaluateByParameterNumber(value, t)), 16, 1);
-    }
-    return rate;
+  /** Inline rules at the existing coefficient sites; no coefficient fields or additional dispatches. */
+  private evaluateGasModules(
+    field: Node<'vec4'>, color: Node<'vec4'>, velocity: Node<'vec3'>,
+    position: Node<'vec3'>, context: GPUParticleUpdateContext, coefficientField = field,
+  ): { cell: GPUGasCell; coefficients: GasModuleContext } | undefined {
+    if (!this.gasModules.length) return undefined;
+    const mass = field.x.max(1e-6);
+    const cell: GPUGasCell = {
+      position, density: field.x.toVar(), temperature: field.y.div(mass).toVar(),
+      velocity: velocity.toVar(), color: color.xyz.div(mass).toVar(),
+    };
+    const state = this.behaviorState(coefficientField, behaviorCoefficients);
+    const coefficients: GasModuleContext = {
+      module: this.gasModules[0], deltaTime: context.deltaTimeNode, elapsedTime: context.elapsedTimeNode,
+      buoyancy: float(this.buoyancy).toVar(), scalarDiffusion: this.scalarDiffusionNode.toVar(),
+      turbulenceNoiseStrength: this.effectiveBehavior('turbulenceNoiseStrength',
+        float(this.turbulenceNoiseStrength), state).toVar(),
+      turbulenceNoiseFrequency: this.effectiveBehavior('turbulenceNoiseFrequency',
+        float(this.turbulenceNoiseFrequency), state).toVar(),
+      vorticityStrength: this.effectiveBehavior('vorticityStrength', this.vorticityNode, state).toVar(),
+      densityDissipation: this.effectiveBehavior('densityDissipation', this.densityDissipationNode, state).toVar(),
+      temperatureDissipation: this.effectiveBehavior('temperatureDissipation',
+        this.temperatureDissipationNode, state).toVar(),
+      colorDissipation: this.effectiveBehavior('colorDissipation', this.colorDissipationNode, state).toVar(),
+      velocityDissipation: this.effectiveBehavior('velocityDissipation', this.velocityDissipationNode, state).toVar(),
+    };
+    for (const module of this.gasModules) module.modifyGasGPU!(cell, { ...coefficients, module });
+    return { cell, coefficients };
   }
 
   private syncSimulationUniforms(): void {
@@ -1283,10 +2048,10 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   }
 
   private applyVorticity(context: GPUParticleUpdateContext, renderer: ParticleSpatialGridRenderer): void {
-    if (!(this.vorticityNode.value > 0)) return;
+    if (!(this.vorticityNode.value > 0) && !this.gasModules.length) return;
     const sample = (field: Vec4Storage, coordinate: Node<'ivec3'>, x: number, y: number, z: number) => (
       field.element(this.cellIndex(ivec3(clamp(
-        vec3(coordinate.add(ivec3(x, y, z))), vec3(0), vec3(this.resolution - 1),
+        vec3(coordinate.add(ivec3(x, y, z))), vec3(0), this.dimensionsNode.sub(1),
       ))))
     );
     const curl = this.curlNode ?? this.computeCells(index => {
@@ -1315,7 +2080,10 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       const normal = gradient.div(gradient.length().max(1e-6));
       // Fedkiw et al.: epsilon * h * (normalized grad |curl u|) cross curl u.
       const state = this.behaviorState(densityField.element(index), ['vorticityStrength']);
-      const strength = this.effectiveBehavior('vorticityStrength', this.vorticityNode, state);
+      const modules = this.evaluateGasModules(densityField.element(index), this.colorCurrent.element(index),
+        this.velocityNext.element(index).xyz, this.cellCenter(coordinate), context);
+      const strength = modules?.coefficients.vorticityStrength
+        ?? this.effectiveBehavior('vorticityStrength', this.vorticityNode, state);
       const force = normal.cross(this.curl.element(index).xyz)
         .mul(strength).mul(this.cellSizeNode);
       const velocity = this.velocityNext.element(index);
@@ -1370,17 +2138,17 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       for (let y = 0; y < 2; y += 1) {
         for (let x = 0; x < 2; x += 1) {
           const coordinate = base.add(vec3(x, y, z));
-          const index = this.cellIndex(ivec3(clamp(coordinate, vec3(0), vec3(this.resolution - 1))));
+          const index = this.cellIndex(ivec3(clamp(coordinate, vec3(0), this.dimensionsNode.sub(1))));
           const value = source.element(index);
           lower.assign(min(lower, value));
           upper.assign(max(upper, value));
           valid.assign(valid.and(coordinate.greaterThanEqual(vec3(0)).all())
-            .and(coordinate.lessThan(vec3(this.resolution)).all()).and(this.isSolid(index).not()));
+            .and(coordinate.lessThan(this.dimensionsNode).all()).and(this.isSolid(index).not()));
           const reverseCoordinate = reversePosition.sub(this.boundsMinNode).div(this.cellSizeNode)
             .sub(0.5).floor().add(vec3(x, y, z));
-          const reverseIndex = this.cellIndex(ivec3(clamp(reverseCoordinate, vec3(0), vec3(this.resolution - 1))));
+          const reverseIndex = this.cellIndex(ivec3(clamp(reverseCoordinate, vec3(0), this.dimensionsNode.sub(1))));
           valid.assign(valid.and(reverseCoordinate.greaterThanEqual(vec3(0)).all())
-            .and(reverseCoordinate.lessThan(vec3(this.resolution)).all()).and(this.isSolid(reverseIndex).not()));
+            .and(reverseCoordinate.lessThan(this.dimensionsNode).all()).and(this.isSolid(reverseIndex).not()));
         }
       }
     }
@@ -1401,7 +2169,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     for (let z = 0; z < 2; z += 1) {
       for (let y = 0; y < 2; y += 1) {
         for (let x = 0; x < 2; x += 1) {
-          const index = this.cellIndex(ivec3(clamp(base.add(vec3(x, y, z)), vec3(0), vec3(this.resolution - 1))));
+          const index = this.cellIndex(ivec3(clamp(base.add(vec3(x, y, z)), vec3(0), this.dimensionsNode.sub(1))));
           const state = density.element(index);
           const specific = vec4(state.y, color.element(index).xyz).div(state.x.max(1e-6));
           const present = state.x.greaterThan(1e-6).and(this.isSolid(index).not());
@@ -1430,41 +2198,42 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     return min(dt, max(particle.lifetime.sub(particle.realtime.div(1000)), float(0)));
   }
 
-  protected override async readAutomaticPadding(
-    renderer: ParticleSpatialGridRenderer,
-    _grid: ParticleSpatialGrid,
-    maxParticleVelocity: THREE.Vector3,
-  ): Promise<THREE.Vector3> {
-    // Predict only until the next bounds observations, not over the entire smoke lifetime.
-    // Persistent gas support is measured separately, so old smoke is retained without forecasting it again.
-    const horizon = Math.max(0, this.velocityPaddingLookahead);
-    const minimum = this.maximaMinimum.clone(), cellSize = this.maximaCellSize;
-    const data = await renderer.getArrayBufferAsync(this.maximaAttribute);
-    const values = new Float32Array(data), coordinates = new Uint32Array(data);
-    this.occupiedGasBounds.makeEmpty();
-    if (coordinates[2] !== 0xffffffff && coordinates[5] > 0) {
-      this.occupiedGasBounds.min.set(coordinates[2], coordinates[3], coordinates[4])
-        .multiplyScalar(cellSize).add(minimum);
-      this.occupiedGasBounds.max.set(coordinates[5], coordinates[6], coordinates[7])
-        .multiplyScalar(cellSize).add(minimum);
+  protected override guardSources(): FluidGuardSource[] {
+    const density = this.densityCurrent, grid = this.volumeGrid;
+    // Field nodes survive a quality swap, but their compact dispatch/page directory does not.
+    if (this.guardBehaviorKey !== this.behaviorKey || this.guardGrid !== grid) {
+      this.guardGrid = grid;
+      this.guardBehaviorKey = this.behaviorKey; this.guardGasKeys = new WeakMap();
     }
-    const maximumDensity = Math.max(0, values[0] ?? 0);
-    const maximumTemperature = Math.max(0, values[1] ?? 0);
-    const damping = this.sampledBehaviorRate('velocityDissipation');
-    const motionTime = damping > 1e-6 ? -Math.expm1(-damping * horizon) / damping : horizon;
-    // Integrate decaying gas velocity instead of extending its instantaneous peak unchanged.
-    // Emitting particles keep a ballistic guard: gas damping need not apply to their own modules.
-    const motionPadding = maxParticleVelocity.clone().multiplyScalar(horizon).max(new THREE.Vector3(
-      Math.max(0, values[9] ?? 0), Math.max(0, values[10] ?? 0), Math.max(0, values[11] ?? 0),
-    ).multiplyScalar(motionTime));
-    if (maximumDensity <= 0) return motionPadding;
+    let key = this.guardGasKeys.get(density);
+    if (!key) { key = {}; this.guardGasKeys.set(density, key); }
+    return [...super.guardSources(), { key, compute: callback => grid.compute(callback),
+      sample: index => {
+        const physical = density.element(index);
+        const rate = this.effectiveBehavior('densityDissipation', this.densityDissipationNode,
+          this.behaviorState(physical, ['densityDissipation']));
+        const lifetime = rate.greaterThan(0).and(this.densityCutoffNode.greaterThan(0)).select(
+          physical.x.div(this.densityCutoffNode.max(1e-12)).max(1).log().div(rate.max(1e-12)),
+          float(GUARD_PREDICTION_HORIZON),
+        );
+        return { position: this.cellCenter(this.cellCoordinate(index)),
+          velocity: this.velocityCurrent.element(index).xyz, remainingLifetime: lifetime,
+          active: physical.x.greaterThan(0).and(physical.x.greaterThanEqual(this.densityCutoffNode)), gas: true };
+      } }];
+  }
 
-    const estimate = this.estimateBuoyantTravel(maximumDensity, maximumTemperature, horizon);
-    const diffusionDistance = cellSize * Math.sqrt(Math.max(0, this.scalarDiffusion) * horizon);
-    // Diffusion is isotropic, but buoyancy contributes only on the vertical axis.
-    return motionPadding.max(new THREE.Vector3(
-      diffusionDistance, diffusionDistance + estimate.distance, diffusionDistance,
-    ));
+  protected override async readOccupiedFieldBounds(renderer: ParticleSpatialGridRenderer): Promise<THREE.Box3> {
+    const grid = this.volumeGrid;
+    const minimum = this.maximaMinimum.clone(), cellSize = this.maximaCellSize;
+    const coordinates = new Uint32Array(await renderer.getArrayBufferAsync(this.maximaAttribute));
+    const occupied = new THREE.Box3();
+    if (grid !== this.volumeGrid) return occupied;
+    if (coordinates[2] !== 0xffffffff && coordinates[5] > 0) {
+      occupied.min.set(coordinates[2], coordinates[3], coordinates[4]).multiplyScalar(cellSize).add(minimum);
+      occupied.max.set(coordinates[5], coordinates[6], coordinates[7]).multiplyScalar(cellSize).add(minimum);
+    }
+    this.occupiedGasBounds.copy(occupied);
+    return occupied;
   }
 
   private particleTemperature(time: Node<'float'>, seed: Node): Node<'float'> {
@@ -1510,37 +2279,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     renderer.compute(reduce);
   }
 
-  private estimateBuoyantTravel(
-    maximumDensity: number,
-    maximumTemperature: number,
-    horizon = 1,
-  ): { distance: number; frames: number } {
-    const threshold = this.densityCutoff;
-    const dt = 1 / 60;
-    const densityRetention = Math.exp(-this.sampledBehaviorRate('densityDissipation') * dt);
-    const temperatureRetention = Math.exp(-this.sampledBehaviorRate('temperatureDissipation') * dt);
-    const velocityRetention = Math.exp(-this.sampledBehaviorRate('velocityDissipation') * dt);
-    let density = maximumDensity;
-    let temperatureMass = maximumTemperature * maximumDensity;
-    let velocity = 0;
-    let distance = 0;
-    let frames = 0;
-
-    while (density > threshold && frames < Math.min(600, Math.ceil(horizon / dt))) {
-      const temperature = temperatureMass / Math.max(density, Number.EPSILON);
-      const acceleration = Math.max(0, temperature * this.buoyancy - density * this.weight);
-      velocity = Math.min(this.maxVelocity, velocity * velocityRetention + acceleration * dt);
-      distance += velocity * dt;
-      density *= densityRetention;
-      temperatureMass *= densityRetention * temperatureRetention;
-      frames += 1;
-    }
-    return { distance, frames };
-  }
-
   private neighborAverage(field: Vec4Storage, coordinate: Node<'ivec3'>): Node<'vec4'> {
     const sample = (x: number, y: number, z: number) => field.element(this.cellIndex(ivec3(clamp(
-      vec3(coordinate).add(vec3(x, y, z)), vec3(0), vec3(this.resolution - 1),
+      vec3(coordinate).add(vec3(x, y, z)), vec3(0), this.dimensionsNode.sub(1),
     ))));
     return sample(-1, 0, 0).add(sample(1, 0, 0))
       .add(sample(0, -1, 0)).add(sample(0, 1, 0))
@@ -1553,7 +2294,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     temperatureMass: Node<'float'>, visualVelocity?: Node<'vec3'>): Node<'vec4'> {
     const coordinate = this.cellCoordinate(index);
     const velocity = (x: number, y: number, z: number) => this.velocityCurrent.element(this.cellIndex(
-      ivec3(clamp(vec3(coordinate).add(vec3(x, y, z)), vec3(0), vec3(this.resolution - 1))),
+      ivec3(clamp(vec3(coordinate).add(vec3(x, y, z)), vec3(0), this.dimensionsNode.sub(1))),
     )).xyz;
     const dx = velocity(1, 0, 0).sub(velocity(-1, 0, 0));
     const dy = velocity(0, 1, 0).sub(velocity(0, -1, 0));

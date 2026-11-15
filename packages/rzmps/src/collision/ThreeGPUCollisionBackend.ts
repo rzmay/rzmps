@@ -272,7 +272,8 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     changedGeometries.forEach((geometry) => this.ensureGeometryBVH(geometry).refit());
 
     if (next.size === 0) {
-      this.disposeData();
+      // A collection that remains empty has no resource transition to announce.
+      if (this.data) this.disposeData();
       this.initialized = true;
       return;
     }

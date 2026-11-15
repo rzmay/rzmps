@@ -38,6 +38,112 @@ new SpatialGrid(): SpatialGrid;
 abstract readonly bounds: Box3;
 ```
 
+***
+
+<a id="brickdimensions"></a>
+
+### brickDimensions
+
+```ts
+readonly brickDimensions: Vector3;
+```
+
+Whole cubic brick counts along each domain axis.
+
+***
+
+<a id="bricksize"></a>
+
+### brickSize
+
+```ts
+brickSize: number = 0;
+```
+
+***
+
+<a id="cellsize"></a>
+
+### cellSize
+
+```ts
+cellSize: number = 0;
+```
+
+***
+
+<a id="domaindiagnostics"></a>
+
+### domainDiagnostics
+
+```ts
+readonly domainDiagnostics: object;
+```
+
+#### growth
+
+```ts
+growth: number[];
+```
+
+#### hardCapBreaches
+
+```ts
+hardCapBreaches: number = 0;
+```
+
+#### qualityTierChanges
+
+```ts
+qualityTierChanges: number = 0;
+```
+
+#### shift
+
+```ts
+shift: number[];
+```
+
+#### shrink
+
+```ts
+shrink: number[];
+```
+
+***
+
+<a id="equivalentvolumeside"></a>
+
+### equivalentVolumeSide
+
+```ts
+equivalentVolumeSide: number = 0;
+```
+
+***
+
+<a id="griddimensions"></a>
+
+### gridDimensions
+
+```ts
+readonly gridDimensions: Vector3;
+```
+
+Actual per-axis cell counts; cells remain cubic.
+
+***
+
+<a id="volumequalitytier"></a>
+
+### volumeQualityTier
+
+```ts
+volumeQualityTier: number = 0;
+```
+
+Quality reference side controlling cell width; physical coverage remains rectangular.
+
 ## Accessors
 
 <a id="bricksubdivisions"></a>
@@ -180,7 +286,7 @@ static locate(
 
 ##### cellsPerAxis
 
-`number`
+`number` \| `Vector3`
 
 #### Returns
 
@@ -222,7 +328,7 @@ static normalizeBounds(
 
 ##### maxBounds?
 
-`number` = `Infinity`
+`number` \| `Vector3` = `Infinity`
 
 #### Returns
 

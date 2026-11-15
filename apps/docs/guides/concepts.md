@@ -45,6 +45,20 @@ unavailability. Multiple fields are sampled in one ray march, not blended as
 separately ordered transparent boxes. Each provider adds texture sampling cost;
 composition does not merge or modify the simulations themselves.
 
+`VolumeRenderer.softParticleDistance` matches SpriteRenderer's view-space intersection fade distance:
+zero (the default) disables fading, and positive values smoothly reduce each sample's opacity near
+opaque geometry. `softParticles: false` disables the fade while preserving hard scene-depth clipping.
+Volume softness reuses the existing WebGPU scene-depth sample, including downsampled rendering;
+it adds no scene pass and does not change simulation density, collisions or bounds. It requires
+`depthTest`; the existing WebGL volume path does not supply scene depth and remains unchanged.
+
+Sprite soft-particle depth preserves scene materials' front/back/double-sided culling, visible material
+groups and alpha cutouts. Visible transparent scene surfaces still participate in that intersection
+depth; particle-renderer proxies are excluded. WebGPU volume clipping instead samples the opaque
+depth captured at the end of ordinary opaque drawing, before transmissive/transparent objects write
+depth. Full and reduced-resolution volumes reuse that snapshot, without another scene geometry pass.
+Transparent blending order still follows Three.js; this is not order-independent transparency.
+
 Volume rendering separates reconstruction (`interpolation`: `Nearest`, `Linear`,
 or `Cubic`) from integration quality (`stepSizeMultiplier`, relative to cell size,
 bounded by `steps`). Opacity is distance-corrected so quality changes do not
@@ -66,6 +80,8 @@ fixed downsampling. Otherwise measured GPU time can lower resolution further rel
 to that fixed baseline. Neither setting changes along-ray integration quality. Automatic feedback uses rendering time;
 compute-heavy simulation alone does not reduce volume image resolution. Ray-step and
 samples-per-voxel edits update uniforms without rebuilding the raymarch material.
+The renderer keeps at most two reduced-resolution targets (the current scale and one recent scale).
+Disabling adaptation at full resolution releases those unused targets.
 
 `await system.prepare(renderer)` can overlap optional renderer pipeline preparation with module
 preparation without advancing emission or simulation. Volume rendering prepares its existing

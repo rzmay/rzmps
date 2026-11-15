@@ -21,7 +21,7 @@ It remains open at the cap; outflow is absorbed rather than reflected back into 
 Scale the root system normally to change its world-space size.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L67)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L70)
 
 ```js
   const system = new ParticleSystem({
@@ -45,6 +45,15 @@ Scale the root system normally to change its world-space size.
     ],
     modules: [
       gas,
+      // Keep the configured mask authoritative: preserve dense cores and sharpen sparse hot tongues.
+      new GasModule({
+        modifyRenderGPU(cell, context) {
+          const hot = smoothstep(0.15, 0.8, cell.temperature);
+          const dense = smoothstep(0.2, 1.2, cell.density);
+          const hotContrast = mix(float(1.6), float(0.75), dense);
+          context.densityNoiseContrast.mulAssign(mix(float(1), hotContrast, hot));
+        },
+      }),
       new Collision({ lifetimeLoss: 1 }),
       new ForceOverLifetime({
         force: new THREE.Vector3(0, 0.35, 0),
@@ -66,6 +75,7 @@ Scale the root system normally to change its world-space size.
     ],
     renderers: [
       new VolumeRenderer({
+        lightingGridOptions: { cellSize: 0.25, directions: 12, samplesPerInterval: 8, maxDistance: 16 },
         // Heat-distortion sprites draw at order one and must sample the already rendered volume.
         renderOrder: 0,
         opacity: 0.75,
@@ -114,7 +124,7 @@ Their 0.1-unit scale and shrinking lifetime envelope make compact gas sources. L
 slightly longer source lifetimes produce flickering tongues rather than a uniformly filled column.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L71)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L74)
 
 ```js
     emitters: [
@@ -142,17 +152,22 @@ Density dissipation stays at 0.2, temperature dissipation at four, buoyancy at e
 dissipation at 0.15. Only a modest temperature multiplier changes density dissipation: cool gas uses
 0.2 and fully hot gas 0.24. Cooling changes appearance quickly while smoke lasts slightly longer.
 Simulation temperature normalization is independent of the renderer's temperature range.
+A render-only GasModule multiplies the existing mask contrast by up to 1.6 in sparse hot tongues,
+reduces it toward 0.75 in dense hot cores, and approaches a neutral multiplier as gas cools.
+The original simulation and renderer values remain unchanged; the module allocates no gas field.
 Collision kills source particles at surfaces, and automatic fluid-collider collection blocks grid flow.
 
-The grid uses 3 brick subdivisions plus 4 cell subdivisions. Its short rolling prediction covers the
+The grid uses 3 brick subdivisions plus 3 cell subdivisions. `maxVolumeQuality: 8` caps cell width
+at 8 / 64 = 0.125 without changing the sixteen-unit physical bounds cap. Automatic quality has
+hysteresis in both directions and prepares replacements before adopting them. Its short rolling prediction covers the
 occupied gas as well as source particles. Automatic shrinking remains enabled with the configured delay.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L25)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L27)
 
 ```js
   const gas = new GasSimulation({
-    supportForceFields: true,
+    supportSpatialEffects: true,
     collisionOptions: { surfaceThickness: 0.02, bakedFieldResolution: 32 },
     pressureIterations: 16,
     externalForce: new THREE.Vector3(0, 0.05, 0),
@@ -173,18 +188,19 @@ occupied gas as well as source particles. Automatic shrinking remains enabled wi
     // Slightly shorter-lived hot gas; retain the exported cool-smoke decay and flow settings.
     temperatureRange: [0, 1.2],
     densityDissipationByTemperature: [1.2, 1.5],
-    // Start compact and let automatic padding grow the domain up to the eight-unit cap.
-    bounds: new THREE.Box3(new THREE.Vector3(-2, -2, -2), new THREE.Vector3(2, 2, 2)),
-    boundsPadding: 0,
+    // Start compact; physical bounds and the cell-width cap remain independent.
     automaticPadding: true,
-    velocityPaddingLookahead: 0.5,
     turbulenceNoiseFrequency: 2.4,
     turbulenceNoiseSpeed: 0.95,
     turbulenceNoiseOctaves: 2,
     spatialGridOptions: {
       maxBounds: 16,
       brickSubdivisions: 3,
-      cellSubdivisions: 4,
+      cellSubdivisions: 3,
+      // Start at the authored world-space resolution instead of oversampling a tiny initial domain.
+      minVolumeQuality: 8,
+      // 8 / 2^(3 + 3) = 0.125: larger domains must not make the fire coarser.
+      maxVolumeQuality: 8,
       powerOfTwoBounds: true,
       autoExpand: false,
       shrinkDelay: 180,
@@ -193,11 +209,20 @@ occupied gas as well as source particles. Automatic shrinking remains enabled wi
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L89)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L92)
 
 ```js
     modules: [
       gas,
+      // Keep the configured mask authoritative: preserve dense cores and sharpen sparse hot tongues.
+      new GasModule({
+        modifyRenderGPU(cell, context) {
+          const hot = smoothstep(0.15, 0.8, cell.temperature);
+          const dense = smoothstep(0.2, 1.2, cell.density);
+          const hotContrast = mix(float(1.6), float(0.75), dense);
+          context.densityNoiseContrast.mulAssign(mix(float(1), hotContrast, hot));
+        },
+      }),
       new Collision({ lifetimeLoss: 1 }),
       new ForceOverLifetime({
         force: new THREE.Vector3(0, 0.35, 0),
@@ -226,13 +251,19 @@ VolumeRenderer blends orange/yellow flames into gray smoke using physical temper
 stronger strength and contrast in hot regions; cool smoke uses a gentler, slightly finer mask.
 Two samples per voxel and 256 maximum ray steps control integration quality independently of opacity.
 Two particle lights use brightness four; these lights illuminate the surrounding scene.
+`lightingGridOptions` uses 0.25-unit probes, twelve finest directions, eight interval samples and a
+fixed sixteen-unit lighting distance. It supplies their light and the selected scene's lights/environment to
+the volume. The renderer owns its lighting grid and refreshes it as those inputs change.
+Both quality limits are eight, so the 3+3 grid starts and stays at a 0.125-unit cell width.
+This avoids oversampling a compact initial domain; physical bounds still grow and shrink independently.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L112)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L124)
 
 ```js
     renderers: [
       new VolumeRenderer({
+        lightingGridOptions: { cellSize: 0.25, directions: 12, samplesPerInterval: 8, maxDistance: 16 },
         // Heat-distortion sprites draw at order one and must sample the already rendered volume.
         renderOrder: 0,
         opacity: 0.75,
@@ -283,7 +314,7 @@ subsystem timing and disposes the distortion texture when destroyed. Distortion 
 soft edges and disables the separate soft-particle depth prepass, avoiding an extra scene render each update.
 
 
-[Source: subsystems:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L156)
+[Source: subsystems:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L169)
 
 ```js
   // Keep the transmitting heat-distortion subsystem configuration beside its parent preset.

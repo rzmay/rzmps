@@ -38,6 +38,18 @@ Shrinks an oversized power-of-two volume after a stable delay. Defaults to true.
 
 ***
 
+<a id="autovolumequality"></a>
+
+### autoVolumeQuality
+
+```ts
+autoVolumeQuality: boolean;
+```
+
+Automatically request quality changes independently of physical domain growth. Defaults to true.
+
+***
+
 <a id="bounds"></a>
 
 ### bounds
@@ -47,6 +59,10 @@ bounds: Box3;
 ```
 
 Simulation-space bounds used to map positions to cells.
+
+#### Overrides
+
+[`SpatialGridOptions`](SpatialGridOptions.md).[`bounds`](SpatialGridOptions.md#bounds)
 
 ***
 
@@ -82,7 +98,7 @@ Fine cell subdivisions inside each brick, expressed as a power-of-two depth.
 centeredAtOrigin: boolean;
 ```
 
-Keeps normalized bounds centered on the simulation origin. Defaults to true.
+Legacy explicit-domain normalization. Automatic domains follow support instead of the origin.
 
 ***
 
@@ -129,10 +145,14 @@ optional levels?: SpatialLevelsInput;
 ### maxBounds
 
 ```ts
-maxBounds: number;
+maxBounds: number | Vector3;
 ```
 
-Maximum side length of normalized grid bounds; Infinity (default) leaves growth uncapped.
+Maximum physical extent per axis; a number applies to every axis. Defaults to Infinity.
+
+#### Overrides
+
+[`SpatialGridOptions`](SpatialGridOptions.md).[`maxBounds`](SpatialGridOptions.md#maxbounds)
 
 ***
 
@@ -145,6 +165,54 @@ maxQuerySteps: number;
 ```
 
 Zero means exact, unbounded traversal. A positive value explicitly truncates each query.
+
+***
+
+<a id="maxvolumequality"></a>
+
+### maxVolumeQuality
+
+```ts
+maxVolumeQuality: number;
+```
+
+Maximum quality reference side. Defaults to Infinity.
+
+#### Overrides
+
+[`SpatialGridOptions`](SpatialGridOptions.md).[`maxVolumeQuality`](SpatialGridOptions.md#maxvolumequality)
+
+***
+
+<a id="minbounds"></a>
+
+### minBounds
+
+```ts
+minBounds: number | Vector3;
+```
+
+Minimum physical extent per axis. Defaults to zero.
+
+#### Overrides
+
+[`SpatialGridOptions`](SpatialGridOptions.md).[`minBounds`](SpatialGridOptions.md#minbounds)
+
+***
+
+<a id="minvolumequality"></a>
+
+### minVolumeQuality
+
+```ts
+minVolumeQuality: number;
+```
+
+Minimum quality reference side. Defaults to two.
+
+#### Overrides
+
+[`SpatialGridOptions`](SpatialGridOptions.md).[`minVolumeQuality`](SpatialGridOptions.md#minvolumequality)
 
 ***
 
@@ -168,7 +236,7 @@ Expands normalized bounds to stable powers of two. Defaults to true.
 shrinkDelay: number;
 ```
 
-Stable frames required before automatic shrinking. Defaults to 600.
+Stable time expressed in 60 Hz frames before per-face shrinking. Defaults to 600.
 
 ***
 
@@ -181,3 +249,15 @@ timeQuality: number;
 ```
 
 Rebuild frequency from greater than zero through one. Defaults to one.
+
+***
+
+<a id="volumequality"></a>
+
+### volumeQuality
+
+```ts
+volumeQuality: number;
+```
+
+Static quality reference side; cell width is this value divided by the subdivision resolution.

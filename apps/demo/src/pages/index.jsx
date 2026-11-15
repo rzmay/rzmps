@@ -220,7 +220,9 @@ function DemoPage() {
         stats.fluidBounds?.forEach((fluid) => {
           lines.push(`${fluid.name} particle bounds: ${fluid.particles}`);
           lines.push(`${fluid.name} grid bounds: ${fluid.grid}`);
-          lines.push(`Padding: ${fluid.padding}`);
+          lines.push(`Occupied support: ${fluid.occupied}`);
+          lines.push(`Cells: ${fluid.dimensions}, cell size ${fluid.cellSize}`);
+          lines.push(`Physical cap requests: ${fluid.hardCapBreaches}`);
         });
       }
 

@@ -64,8 +64,41 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
           const halfReference = await pixel();
           volume.opacity = 0.3;
           const fullReference = await pixel();
+
+          // Runtime edits must fade each sample, not the proxy-box fragment or the entire ray.
+          plane.visible = true;
+          plane.position.z = 0;
+          Object.assign(volume, { adaptiveStepping: false, dynamicResolution: false, softParticleDistance: 1 });
+          const soft = await pixel();
+          volume.softParticles = false;
+          const softDisabled = await pixel();
+          volume.softParticles = true;
+          volume.softParticleDistance = 0;
+          const softZero = await pixel();
+          volume.softParticleDistance = 0.5;
+          const softShort = await pixel();
+          volume.softParticleDistance = 1;
+          volume.steps = 17;
+          const softCoarse = await pixel();
+          volume.steps = 160;
+          volume.sceneDepthClipping = false;
+          const softUnoptimized = await pixel();
+          volume.sceneDepthClipping = true;
+          volume.downsample = 2;
+          const softReduced = await pixel();
+          volume.downsample = 1;
+
           const ortho = new THREE.OrthographicCamera(-2, 2, 1.4, -1.4, 0.1, 30);
           ortho.position.z = 6;
+          const softOrtho = await pixel(ortho);
+          plane.position.z = -2;
+          const softBackground = await pixel();
+          plane.position.z = 2;
+          const softForeground = await pixel();
+          volume.depthTest = false;
+          const softNoDepthTest = await pixel();
+          volume.depthTest = true;
+          volume.softParticleDistance = 0;
           plane.visible = true;
           plane.position.z = 0;
           const orthographicHalf = await pixel(ortho);
@@ -85,7 +118,10 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
           plane.position.z = 2;
           const obliqueHidden = await pixel();
           return { variants, resolutions, depth, halfReference, fullReference, orthographicHalf, orthographicHidden,
-            inside, insideClipped, oblique, obliqueHidden };
+            inside, insideClipped, oblique, obliqueHidden, soft, softDisabled, softZero, softShort, softCoarse,
+            softUnoptimized, softReduced, softOrtho, softBackground, softForeground, softNoDepthTest,
+            sourceUnchanged: red.density.data.every(value => value === 1),
+            boundsUnchanged: red.density.bounds.min.z === -1 && red.density.bounds.max.z === 1 };
         });
         console.log(backend, 'marching', JSON.stringify(result));
         assert(Math.max(...result.resolutions) - Math.min(...result.resolutions) <= 2,
@@ -104,6 +140,19 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
           assert.ok(result.insideClipped > 0 && result.insideClipped < result.inside,
             'camera-inside rays clip correctly');
           assert.ok(result.oblique > 0 && result.obliqueHidden === 0, 'oblique views preserve depth occlusion');
+          assert.equal(result.softDisabled, result.depth[0], 'explicit false preserves hard clipping');
+          assert.equal(result.softZero, result.depth[0], 'zero distance preserves hard clipping');
+          assert(result.soft > 0 && result.soft < result.softShort && result.softShort < result.depth[0],
+            'larger view-space distances soften more of the intersection');
+          for (const key of ['softCoarse', 'softUnoptimized', 'softReduced', 'softOrtho']) {
+            assert(Math.abs(result[key] - result.soft) <= 2, `${key} must preserve the same soft intersection`);
+          }
+          assert.equal(result.softForeground, 0, 'softness must not reveal fog behind opaque geometry');
+          assert(Math.abs(result.softBackground - result.fullReference) <= 2,
+            'geometry beyond the fade distance preserves full fog');
+          assert(Math.abs(result.softNoDepthTest - result.fullReference) <= 2,
+            'disabling depth testing bypasses both scene clipping and soft intersections');
+          assert(result.sourceUnchanged && result.boundsUnchanged, 'softness only affects rendered opacity');
         }
       }
       assert.deepEqual(errors, []);

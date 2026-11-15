@@ -34,3 +34,25 @@ fence(); prepared(); await tick(); fence(); await tick();
 assert.equal(allocation.current, current, 'cancelled staging cannot swap after teardown');
 assert.equal(released.length, 3);
 console.log('Staged allocation lifecycle passed');
+
+// A larger later demand finishes the useful tier, then stages the next without restarting it.
+const readiness = [];
+const coalesced = new StagedGPUAllocation({ capacity: 4 }, 4, {
+  maximumCapacity: 32, create: capacity => ({ capacity }),
+  prepare: () => new Promise(resolve => readiness.push(resolve)),
+  migrate() {}, swap() {}, dispose() {}, fence: () => Promise.resolve(),
+});
+coalesced.request(3); await tick();
+coalesced.request(17); coalesced.request(17);
+assert.equal(coalesced.metrics.superseded, 1);
+assert.equal(coalesced.status.pendingCapacity, 8);
+readiness[0](); await tick();
+assert(coalesced.commit());
+assert.equal(coalesced.capacity, 8);
+await tick();
+assert.equal(coalesced.status.pendingCapacity, 32);
+readiness[1](); await tick();
+assert(coalesced.commit());
+assert.equal(coalesced.capacity, 32);
+assert.equal(coalesced.metrics.requests, 2);
+coalesced.dispose();

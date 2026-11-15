@@ -4,9 +4,9 @@ import * as THREE from 'three';
 import { Module, ParticleSystem, FLIPSimulation, GasSimulation, VolumeRenderer } from '../../build/index.mjs';
 
 const gas = new GasSimulation({ maxBrickCapacity: 128 });
-assert.equal(gas.volumeGrid.capacity, 64);
+assert.equal(gas.volumeGrid.capacity, 1, 'unprepared automatic pools only hold bootstrap storage');
 assert.equal(gas.maxBrickCapacity, 128);
-assert.equal(gas.pressureSolver, 'Iterative');
+assert.equal(gas.pressureSolver, 'Auto');
 assert.equal(gas.pressureWarmStart, true);
 assert.equal(gas.pressureTolerance, 0);
 assert.equal(gas.pressureControls.minIterations, gas.pressureIterations);
@@ -34,7 +34,7 @@ flip.cfl = 0;
 assert.throws(() => flip.getSimulationTimestep(request), /CFL/);
 for (const options of [{ initialBrickCapacity: 0 }, { initialBrickCapacity: 32, maxBrickCapacity: 16 },
   { maxBrickCapacity: Infinity }]) assert.throws(() => new GasSimulation(options), /capacities/);
-assert.equal(new GasSimulation({ maxBrickCapacity: 4 }).volumeGrid.capacity, 4);
+assert.equal(new GasSimulation({ maxBrickCapacity: 4 }).volumeGrid.capacity, 1);
 
 // A long browser frame must not multiply the fluid budget through the system's
 // smaller configured step. Non-fluid modules retain their ordinary catch-up path.
@@ -82,13 +82,3 @@ flip.cleanup();
 gas.cleanup();
 managedOwner.destroy();
 console.log('Fluid pressure controls, sparse reservation, CFL and non-advancing preparation passed.');
-
-// Particle transport is predicted even before the gas field contains measurable density.
-{
-  const gas = new GasSimulation({ velocityPaddingLookahead: 1.5 });
-  const padding = await gas.readAutomaticPadding({
-    getArrayBufferAsync: async () => new Float32Array([0, 0]).buffer,
-  }, undefined, new THREE.Vector3(0.1, 2, 0.2));
-  assert.deepEqual(padding.toArray().map(value => Number(value.toPrecision(12))), [0.15, 3, 0.3]);
-  gas.cleanup();
-}

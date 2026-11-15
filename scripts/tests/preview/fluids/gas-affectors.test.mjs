@@ -28,6 +28,12 @@ try {
   close(result.excludedVelocity[0], 0);
   close(result.enabledVelocity[0], 0.2);
   close(result.disabledVelocity[0], 0);
+  close(result.subsetVelocity[0], 0.2);
+  close(result.broadVelocity[0], 0.4);
+  close(result.broadDensity[0], 0.5);
+  close(result.broadVisual[0], 0.5);
+  close(result.broadPersistent[0], 1);
+  close(result.broadDisabled[0], 0);
   close(result.forceVelocity[0], 0.2);
   close(result.thinForceVelocity[0], result.forceVelocity[0]);
   assert.deepEqual(result.order, ['velocity', 'projection', 'scalars']);

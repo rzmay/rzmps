@@ -115,22 +115,6 @@ automaticPadding: boolean;
 
 ***
 
-<a id="automaticpaddingdistance"></a>
-
-### automaticPaddingDistance
-
-```ts
-readonly automaticPaddingDistance: Vector3;
-```
-
-Predicted distance on each axis, applied to source bounds before retaining existing field support.
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`automaticPaddingDistance`](FluidSimulation.md#automaticpaddingdistance)
-
-***
-
 <a id="benchmarks"></a>
 
 ### benchmarks
@@ -156,20 +140,6 @@ bounds: Box3;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`bounds`](FluidSimulation.md#bounds)
-
-***
-
-<a id="boundspadding"></a>
-
-### boundsPadding
-
-```ts
-boundsPadding: number;
-```
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`boundsPadding`](FluidSimulation.md#boundspadding)
 
 ***
 
@@ -385,6 +355,34 @@ dependents: Module[] = [];
 
 ***
 
+<a id="domainchanges"></a>
+
+### domainChanges
+
+```ts
+readonly domainChanges: object;
+```
+
+#### capacity
+
+```ts
+capacity: number = 0;
+```
+
+#### logical
+
+```ts
+logical: number = 0;
+```
+
+#### quality
+
+```ts
+quality: number = 0;
+```
+
+***
+
 <a id="evaluatedynamicgpu"></a>
 
 ### evaluateDynamicGPU
@@ -485,6 +483,20 @@ gpuExecutionContext: GPUEventExecutionContext;
 
 ***
 
+<a id="griddimensions"></a>
+
+### gridDimensions
+
+```ts
+readonly gridDimensions: Vector3;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`gridDimensions`](FluidSimulation.md#griddimensions)
+
+***
+
 <a id="initialbrickcapacity"></a>
 
 ### initialBrickCapacity
@@ -544,6 +556,32 @@ modifyGPU: ModuleGPUUpdate;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`modifyGPU`](FluidSimulation.md#modifygpu)
+
+***
+
+<a id="multigrid"></a>
+
+### multigrid?
+
+```ts
+optional multigrid?: MultigridOptions;
+```
+
+***
+
+<a id="occupiedbounds"></a>
+
+### occupiedBounds
+
+```ts
+readonly occupiedBounds: Box3;
+```
+
+Last accepted particle/source plus persistent-field support.
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`occupiedBounds`](FluidSimulation.md#occupiedbounds)
 
 ***
 
@@ -664,7 +702,11 @@ optional pressureMinIterations?: number;
 ### pressureSolver
 
 ```ts
-pressureSolver: "Multigrid" | "Iterative";
+pressureSolver:
+  | "Auto"
+  | "Iterative"
+  | "Multigrid"
+  | PressureSolver;
 ```
 
 ***
@@ -1039,18 +1081,6 @@ optional velocityDissipationByTemperature?: ValueByParameter<number>;
 
 ***
 
-<a id="velocitypaddinglookahead"></a>
-
-### velocityPaddingLookahead
-
-```ts
-velocityPaddingLookahead: number;
-```
-
-Particle-motion lookahead for automatic domain padding, in seconds. Defaults to one.
-
-***
-
 <a id="velocitysourcestrength"></a>
 
 ### velocitySourceStrength
@@ -1235,6 +1265,28 @@ set maxBrickCapacity(value): void;
 
 ***
 
+<a id="modifiesparticles"></a>
+
+### modifiesParticles
+
+#### Get Signature
+
+```ts
+get modifiesParticles(): boolean;
+```
+
+Whether this module participates in ordinary per-particle modification.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`modifiesParticles`](FluidSimulation.md#modifiesparticles)
+
+***
+
 <a id="needsupdate"></a>
 
 ### needsUpdate
@@ -1353,7 +1405,7 @@ FluidSimulation.spatialEffects
 get supportForceFields(): boolean;
 ```
 
-Virtual shorthand for editing the force-field constructor in requireSpatialEffects.
+Effective force-field support; broad spatial-effect discovery always includes force fields.
 
 ##### Returns
 
@@ -1396,6 +1448,40 @@ Whether modification, birth hooks and custom conditions support GPU processing.
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`supportsGPU`](FluidSimulation.md#supportsgpu)
+
+***
+
+<a id="supportspatialeffects"></a>
+
+### supportSpatialEffects
+
+#### Get Signature
+
+```ts
+get supportSpatialEffects(): boolean;
+```
+
+Virtual shorthand for broad discovery through the existing requirement list.
+
+##### Returns
+
+`boolean`
+
+#### Set Signature
+
+```ts
+set supportSpatialEffects(enabled): void;
+```
+
+##### Parameters
+
+###### enabled
+
+`boolean`
+
+##### Returns
+
+`void`
 
 ***
 
@@ -1645,7 +1731,7 @@ Returns the managed CPU structure after prepare(), when enabled.
 ### getParticleSpatialGrid()
 
 ```ts
-getParticleSpatialGrid(particleSystem):
+getParticleSpatialGrid(system):
   | ParticleSpatialGrid<SpatialAggregateLayout>
   | undefined;
 ```
@@ -1654,7 +1740,7 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 #### Parameters
 
-##### particleSystem
+##### system
 
 [`ParticleSystem`](ParticleSystem.md)
 
@@ -1948,13 +2034,17 @@ Optional GPU reduction; only aggregate counts cross back to the CPU.
 ```ts
 readGridDiagnostics(renderer): Promise<{
   activeBricks: number;
+  activeDispatchEntries: number;
   capacity: number;
+  frame: number;
+  freshBricks: number;
   logicalBricks: number;
   overflowedBricks: number;
+  priorityDemand: number[];
+  releasedBricks: number;
+  requestedBricks: number;
 }>;
 ```
-
-Small asynchronous allocation readback, without transferring field values.
 
 #### Parameters
 
@@ -1966,9 +2056,15 @@ Small asynchronous allocation readback, without transferring field values.
 
 `Promise`\<\{
   `activeBricks`: `number`;
+  `activeDispatchEntries`: `number`;
   `capacity`: `number`;
+  `frame`: `number`;
+  `freshBricks`: `number`;
   `logicalBricks`: `number`;
   `overflowedBricks`: `number`;
+  `priorityDemand`: `number`[];
+  `releasedBricks`: `number`;
+  `requestedBricks`: `number`;
 \}\>
 
 ***

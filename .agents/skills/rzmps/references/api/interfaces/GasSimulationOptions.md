@@ -75,20 +75,6 @@ bounds: Box3;
 
 ***
 
-<a id="boundspadding"></a>
-
-### boundsPadding
-
-```ts
-boundsPadding: number;
-```
-
-#### Inherited from
-
-[`FluidSimulationOptions`](FluidSimulationOptions.md).[`boundsPadding`](FluidSimulationOptions.md#boundspadding)
-
-***
-
 <a id="boundspolicy"></a>
 
 ### boundsPolicy
@@ -102,7 +88,7 @@ boundsPolicy:
 ```
 
 Behavior at the finite spatialGridOptions.maxBounds cap, not intermediate adaptive edges. Defaults to Ballistic.
-Contain retains a reached cap instead of shrinking away closed field walls.
+Quality limits do not act as physical caps.
 
 #### Inherited from
 
@@ -330,7 +316,7 @@ externalForce: Vector3;
 initialBrickCapacity: number;
 ```
 
-Initially reserved bricks. Omission selects a modest reserve; growth is automatic and geometric.
+Explicit initial reserve. Omission derives source/receiver demand during prepare(), rounded geometrically.
 
 ***
 
@@ -432,6 +418,18 @@ TSL modifier used when GPU processing is active.
 
 ***
 
+<a id="multigrid"></a>
+
+### multigrid?
+
+```ts
+optional multigrid?: MultigridOptions;
+```
+
+Optional cycle tuning; explicit pressureSolver always takes precedence.
+
+***
+
 <a id="octreeaggregator"></a>
 
 ### octreeAggregator?
@@ -514,6 +512,8 @@ Collect asynchronous pressure and divergence diagnostics through benchmarks. Def
 pressureIterations: number;
 ```
 
+Maximum pressure work: iterative sweeps or estimated fine-cell-equivalent multigrid work.
+
 #### Inherited from
 
 [`FluidSimulationOptions`](FluidSimulationOptions.md).[`pressureIterations`](FluidSimulationOptions.md#pressureiterations)
@@ -528,7 +528,7 @@ pressureIterations: number;
 optional pressureMaxIterations?: number;
 ```
 
-Maximum pressure sweeps. Omission follows pressureIterations.
+Maximum pressure-work budget. Omission follows pressureIterations.
 
 #### Inherited from
 
@@ -544,7 +544,7 @@ Maximum pressure sweeps. Omission follows pressureIterations.
 optional pressureMinIterations?: number;
 ```
 
-Minimum pressure sweeps. Omission follows pressureIterations for a fixed solve.
+Minimum pressure-work budget. Omission follows pressureIterations for a fixed solve.
 
 #### Inherited from
 
@@ -557,10 +557,14 @@ Minimum pressure sweeps. Omission follows pressureIterations for a fixed solve.
 ### pressureSolver
 
 ```ts
-pressureSolver: "Multigrid" | "Iterative";
+pressureSolver:
+  | "Auto"
+  | "Iterative"
+  | "Multigrid"
+  | PressureSolver;
 ```
 
-Sparse V-cycle corrections, or the iterative reference path. Defaults to Iterative.
+Recommended default is Auto. Supplying multigrid alone implies Multigrid.
 
 ***
 
@@ -762,6 +766,18 @@ optional supportForceFields?: boolean;
 ```
 
 Opt into sampling ordinary ParticleForceFields directly on gas cells. Defaults to false.
+
+***
+
+<a id="supportspatialeffects"></a>
+
+### supportSpatialEffects?
+
+```ts
+optional supportSpatialEffects?: boolean;
+```
+
+Discover all compatible SpatialEffects, including force fields. Defaults to false.
 
 ***
 
@@ -994,18 +1010,6 @@ optional velocityDissipationByTemperature?: ValueByParameter<number>;
 ```
 
 Nonnegative temperature-driven multiplier of velocityDissipation; omitted means one without shader evaluation.
-
-***
-
-<a id="velocitypaddinglookahead"></a>
-
-### velocityPaddingLookahead
-
-```ts
-velocityPaddingLookahead: number;
-```
-
-Particle-motion lookahead for automatic domain padding, in seconds. Defaults to one.
 
 ***
 

@@ -104,11 +104,15 @@ export default class GPUSpatialRegions<L extends SpatialAggregateLayout> {
     let words = 0;
     let aggregateCount = 0;
 
+    const levelCapacities = depths.map(depth => {
+      const dimensions = grid.gridDimensions.clone().divideScalar(2 ** (grid.maxDepth - depth)).ceil();
+      return Math.max(1, Math.min(capacity, dimensions.x * dimensions.y * dimensions.z));
+    });
     depths.forEach((depth, i) => {
-      const cells = Math.min(capacity, 2 ** (3 * depth));
+      const cells = levelCapacities[i];
       const hashCapacity = nextPowerOfTwo(cells * 2);
       const sourceCapacity =
-        i + 1 === depths.length ? capacity : nextPowerOfTwo(Math.min(capacity, 2 ** (3 * depths[i + 1])) * 2);
+        i + 1 === depths.length ? capacity : nextPowerOfTwo(levelCapacities[i + 1] * 2);
       const header = words++;
       const records = words;
       words += hashCapacity * WORDS;
@@ -246,11 +250,10 @@ export default class GPUSpatialRegions<L extends SpatialAggregateLayout> {
         floor(
           position
             .sub(bounds.min)
-            .div(bounds.max.sub(bounds.min))
-            .mul(2 ** depth),
+            .div(this.grid.getCellSizeNode().mul(2 ** (this.grid.maxDepth - depth))),
         ),
         vec3(0),
-        vec3(2 ** depth - 1),
+        this.grid.getDimensionsNode().div(2 ** (this.grid.maxDepth - depth)).ceil().sub(1),
       ),
     );
     const index = this.lookup(level, coordinate);
@@ -355,11 +358,10 @@ export default class GPUSpatialRegions<L extends SpatialAggregateLayout> {
                   buffers.storage
                     .createParticle(index)
                     .position.sub(bounds.min)
-                    .div(bounds.max.sub(bounds.min))
-                    .mul(2 ** level.depth),
+                    .div(this.grid.getCellSizeNode().mul(2 ** (this.grid.maxDepth - level.depth))),
                 ),
                 vec3(0),
-                vec3(2 ** level.depth - 1),
+                this.grid.getDimensionsNode().div(2 ** (this.grid.maxDepth - level.depth)).ceil().sub(1),
               ),
             );
       const accepted = (index: Node<'uint'>) => {

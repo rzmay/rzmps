@@ -136,6 +136,18 @@ export class RendererGUI extends GUIEditorBase {
     folder.add(renderer, 'jitterStrength', 0, 1, 0.01).name('Jitter Strength');
     folder.add(renderer, 'anisotropy', -0.9, 0.9, 0.01).name('Anisotropy');
     folder.add(renderer, 'shadowQuality', 0, 8, 0.25).name('Shadow Quality');
+    if (renderer.lightingGridOptions) {
+      const lighting = folder.addFolder('Lighting Grid'), grid = renderer.lightingGridOptions;
+      grid.levels ??= 3; grid.directions ??= 6; grid.samplesPerInterval ??= 4;
+      grid.scatteringIterations ??= 0; grid.environmentIntensity ??= 1; grid.includeSceneLights ??= true;
+      lighting.add(grid, 'levels', 1, 6, 1).name('Cascades');
+      if (typeof grid.directions === 'number') lighting.add(grid, 'directions', 2, 16, 1).name('Directions');
+      lighting.add(grid, 'samplesPerInterval', 1, 16, 1).name('Samples / Interval');
+      lighting.add(grid, 'scatteringIterations', 0, 4, 1).name('Scattering Iterations');
+      lighting.add(grid, 'environmentIntensity', 0, 4, 0.05).name('Environment Intensity');
+      lighting.add(grid, 'includeSceneLights').name('Include Scene Lights');
+      if (grid.cellSize !== undefined) lighting.add(grid, 'cellSize', 0.01, 4, 0.01).name('Probe Spacing');
+    }
     folder.add(renderer, 'steps', 1, 512, 1).name('Maximum Ray Steps');
     const marching = folder.addFolder('Ray Marching');
     this.addValue(marching, renderer, 'dynamicResolution', 'Dynamic Resolution');
@@ -147,6 +159,8 @@ export class RendererGUI extends GUIEditorBase {
     marching.add(renderer, 'transmittanceThreshold', 0, 0.1, 0.001).name('Stop Transmittance');
     marching.add(renderer, 'sceneDepthClipping').name('Scene Depth Clipping');
     marching.add(renderer, 'sceneDepthBias', 0, 0.1, 0.001).name('Scene Depth Bias');
+    marching.add(renderer, 'softParticles').name('Soft Particles');
+    marching.add(renderer, 'softParticleDistance', 0).name('Soft Particle Distance');
     folder.add(renderer, 'densityGain', 0, 10, 0.05).name('Density Gain');
     for (const parameter of ['Temperature', 'Density', 'Speed', 'Vorticity']) {
       for (const kind of ['color', 'opacity']) {

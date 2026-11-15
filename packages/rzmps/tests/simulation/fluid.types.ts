@@ -1,5 +1,5 @@
 import {
-  AdvectionMethod, FluidBoundsPolicy, FLIPSimulation, GasSimulation, DecalRenderer,
+  LightingGrid, GasModule, AdvectionMethod, FluidBoundsPolicy, FLIPSimulation, GasSimulation, DecalRenderer,
 } from '../../build/index.mjs';
 import { MeshBasicMaterial } from 'three';
 import { Module, ParticleSystem } from '../../build/index.mjs';
@@ -7,6 +7,8 @@ import type { VolumeFieldProvider, VolumeField } from '../../build/index.mjs';
 import { VolumeRenderer, VolumeInterpolation, VolumeDensityMapping, SurfaceRenderer } from '../../build/index.mjs';
 
 new VolumeRenderer({ interpolation: VolumeInterpolation.Cubic, densityMapping: 'Curve', densityCurve: t => t * t });
+new VolumeRenderer({ softParticleDistance: 0.5 });
+new VolumeRenderer({ softParticles: false, softParticleDistance: 0.5 });
 new VolumeRenderer({ interpolation: 'Nearest', densityMapping: VolumeDensityMapping.Linear,
   minDensity: 0, maxDensity: 2, densityGain: 2, stepSizeMultiplier: 0.5 });
 new VolumeRenderer({
@@ -120,3 +122,45 @@ new GasSimulation({ spatialGridOptions: { maxBounds: 16 } });
 new FLIPSimulation({ spatialGridOptions: { maxBounds: 8 }, boundsPolicy: 'Contain' });
 // @ts-expect-error The grid owns the cap; fluid modules do not accept a top-level maxBounds.
 new GasSimulation({ maxBounds: 16 });
+
+// Pressure solver values follow the existing string-enum convention.
+import { PressureSolver, type MultigridOptions } from '../../build/index.mjs';
+const multigridOptions: MultigridOptions = { preSmoothing: 2, postSmoothing: 4, bottomIterations: 12 };
+new GasSimulation({ pressureSolver: PressureSolver.Auto, multigrid: multigridOptions });
+new GasSimulation({ pressureSolver: 'Multigrid', pressureIterations: 16, pressureTolerance: 0.1 });
+new GasSimulation({ multigrid: { preSmoothing: 1 } });
+new GasSimulation({ multigrid: {
+  // @ts-expect-error Hierarchy depth is internal, not a pressure tuning option.
+  levels: 4,
+} });
+new GasSimulation({
+  // @ts-expect-error Solver names are restricted to enum keys/values.
+  pressureSolver: 'Jacobi',
+});
+
+new GasModule({
+  modifyGPU(cell, context) {
+    cell.velocity.addAssign(cell.color.mul(context.deltaTime));
+    context.turbulenceNoiseStrength.mulAssign(cell.temperature);
+    context.densityDissipation.mulAssign(cell.density);
+  },
+  modifyRenderGPU(cell, context) {
+    context.densityNoiseContrast.mulAssign(cell.density);
+    context.emission.addAssign(cell.color.mul(cell.temperature));
+    // @ts-expect-error Renderer callbacks cannot access persistent solver coefficients.
+    context.buoyancy.mulAssign(2);
+  },
+});
+
+const lightingGrid = new LightingGrid({ levels: 3, directions: [6, 12, 24], cellSize: 0.5 });
+new VolumeRenderer({ lightingGridOptions: { levels: 3, directions: [6, 12, 24], cellSize: 0.5 } });
+new VolumeRenderer({
+  // @ts-expect-error The renderer accepts configuration, not a preconstructed grid.
+  lightingGrid,
+});
+void lightingGrid;
+new LightingGrid({ margin: 1, includeSceneLights: false });
+new LightingGrid({
+  // @ts-expect-error Spatial bounds padding is a scalar or Vector3, not arbitrary text.
+  margin: 'large',
+});

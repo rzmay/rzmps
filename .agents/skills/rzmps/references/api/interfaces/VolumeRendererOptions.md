@@ -533,6 +533,18 @@ Optional directional light; otherwise resolve the dominant visible scene directi
 
 ***
 
+<a id="lightinggridoptions"></a>
+
+### lightingGridOptions?
+
+```ts
+optional lightingGridOptions?: Partial<LightingGridOptions>;
+```
+
+Options that enable a managed world-space lighting grid. Omission disables it. WebGPU only.
+
+***
+
 <a id="materialcomposite"></a>
 
 ### materialComposite?
@@ -750,6 +762,30 @@ shadowQuality: number;
 ```
 
 Secondary light-march quality; zero disables shadows (default).
+
+***
+
+<a id="softparticledistance"></a>
+
+### softParticleDistance
+
+```ts
+softParticleDistance: number;
+```
+
+View-space intersection fade distance, matching SpriteRenderer; zero disables fading. Defaults to zero.
+
+***
+
+<a id="softparticles"></a>
+
+### softParticles
+
+```ts
+softParticles: boolean;
+```
+
+Enables soft intersections when softParticleDistance is positive. Defaults to true. WebGPU only.
 
 ***
 

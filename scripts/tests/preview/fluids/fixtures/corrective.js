@@ -1,7 +1,10 @@
 import * as THREE from 'three';
+import VolumeOccupancy from '../../../../../packages/rzmps/src/rendering/gpu/VolumeOccupancy.ts';
 import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
-import { Fn, atomicStore, float, instanceIndex, storage, uint, uniform, vec3, vec4 } from 'three/tsl';
-import { Emitter, GasSimulation, FLIPSimulation, ParticleSystem, FluidCollider, VolumeRenderer } from '@rzmps/rzmps';
+import { Fn, atomicStore, float, instanceIndex, storage, uint, uniform, vec3, vec4, textureStore } from 'three/tsl';
+import {
+  Emitter, GasModule, GasSimulation, FLIPSimulation, ParticleSystem, FluidCollider, VolumeRenderer,
+} from '@rzmps/rzmps';
 
 const renderer = new WebGPURenderer({ trackTimestamp: true });
 await renderer.init();
@@ -15,7 +18,9 @@ const gas = new GasSimulation({
   bounds: new THREE.Box3(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1)),
   boundsPadding: 0, automaticPadding: false, adaptiveTimestep: false,
   spatialGridOptions: { brickSubdivisions: bricks, cellSubdivisions: cells },
-  initialBrickCapacity: 4, maxBrickCapacity: 64,
+  initialBrickCapacity: Number(parameters.get('reserve') ?? 4),
+  maxBrickCapacity: Number(parameters.get('maximum') ?? 64),
+  pressureSolver: parameters.get('solver') ?? 'Iterative',
   pressureDiagnostics: true, externalForce: new THREE.Vector3(), maxVelocity: 100,
 });
 const system = new ParticleSystem({ gpuProcessing: true, maxParticles: Math.max(sourceCount, 8),
@@ -49,12 +54,21 @@ window.testPreparation = async () => {
   return { constructionMs, prepareMs, firstRenderAfterPrepareMs, before,
     after: { time: system._elapsedTime, particles: system.liveParticleCount } };
 };
-window.testGrowth = async () => {
+window.testGrowth = async (required = 64) => {
   const firstUpdateStart = performance.now();
   system.advanceFrames(1, 1 / 60);
   const firstUpdateCpuMs = performance.now() - firstUpdateStart;
   await renderer.backend.device.queue.onSubmittedWorkDone();
   const firstUpdateFencedMs = performance.now() - firstUpdateStart;
+  // This fixture has no renderer components; warm its render-only variants explicitly before measuring growth.
+  const warmContext = system.gpuSimulation.prepareContext(renderer);
+  const warmRender = system.gpuSimulation.prepareRenderBuffers(renderer);
+  for (let phase = 0; phase < 2; phase++) {
+    gas.renderGPU(warmContext, warmRender, renderer, gas.spatialGrid);
+    [gas.densityCurrent, gas.densityNext] = [gas.densityNext, gas.densityCurrent];
+    [gas.colorCurrent, gas.colorNext] = [gas.colorNext, gas.colorCurrent];
+  }
+  await renderer.backend.device.queue.onSubmittedWorkDone();
   const seed = gas.computeCells(index => {
     gas.densityCurrent.element(index).assign(vec4(2, 3, 4, 5));
     gas.colorCurrent.element(index).assign(vec4(0.3, 0.4, 0.5, 0));
@@ -63,12 +77,38 @@ window.testGrowth = async () => {
     gas.solidVelocity.element(index).assign(vec4(4, 5, 6, 0));
     gas.visualColor.element(index).assign(vec4(0.2, 0.3, 0.4, 0));
   });
-  renderer.compute(seed);
+  const seedExtra = gas.computeCells(index => {
+    gas.pressureNext.element(index).assign(5);
+    gas.velocityNext.element(index).assign(vec4(-2, -1, 0.5, 0));
+    gas.divergence.element(index).assign(0.25);
+    gas.solid.element(index).assign(0.25);
+    gas.faceOpenness.element(index).assign(vec4(0.75));
+    gas.visualDensity.element(index).assign(vec4(0.5, 0.6, 0.7, 0.8));
+    gas.curl.element(index).assign(vec4(4, 5, 6, 7));
+  });
+  renderer.compute([seed, seedExtra]);
+  const projection = gas.getPressureProjection(), previousFaceCount = projection.faceCount;
+  renderer.compute(gas.volumeGrid.compute(index => {
+    projection.faces.element(index).assign(vec4(1.25, 2.5, 3.75, 0));
+  }, true));
   const count = gas.cellCount - 1;
+  renderer.compute(Fn(() => {
+    gas.densityCurrent.element(count).assign(vec4(99));
+    gas.pressureCurrent.element(count).assign(99);
+    projection.faces.element(previousFaceCount - 1).assign(vec4(99));
+  })().compute(1));
+  const snapshotExtra = async () => ({
+    color: await read(gas.colorCurrent.value), velocityNext: await read(gas.velocityNextAttribute),
+    pressureNext: await read(gas.pressureNextAttribute), divergence: await read(gas.divergenceAttribute),
+    solid: await read(gas.solidAttribute),
+    faceOpenness: (await read(gas.boundaryAttribute)).slice(0, gas.cellCount * 4),
+    visualDensity: (await read(gas.visualAttribute)).slice(0, gas.cellCount * 4), curl: await read(gas.curlAttribute),
+    pressureFaces: await read(gas.getPressureProjection().attribute),
+  });
   const before = { density: await read(gas.densityCurrent.value ?? gas.densityAttributeA),
     velocity: await read(gas.velocityCurrentAttribute), pressure: await read(gas.pressureCurrentAttribute),
     wallVelocity: (await read(gas.boundaryAttribute)).slice(gas.cellCount * 4),
-    visualColor: (await read(gas.visualAttribute)).slice(gas.cellCount * 4) };
+    visualColor: (await read(gas.visualAttribute)).slice(gas.cellCount * 4), ...await snapshotExtra() };
   const capacity = gas.volumeGrid.capacity;
   const previousBytes = gas.allocatedBytes;
   const device = renderer.backend.device;
@@ -107,9 +147,59 @@ window.testGrowth = async () => {
       device.queue.submit([after.finish()]);
     }
   };
+  const programs = { graphConstructionMs: 0, compilationMs: 0, pipelines: 0,
+    nodeBuildAsyncMs: 0, nativeCompilationMs: 0, bindGroupMs: 0, bindGroups: 0 };
+  const compile = renderer.compileComputeAsync, createPipeline = renderer.backend.createComputePipeline;
+  const create = gas.poolAllocation.options.create;
+  const createBuilder = renderer.backend.createNodeBuilder;
+  const nativeCompile = device.createComputePipelineAsync, createBindGroup = device.createBindGroup;
+  device.createBindGroup = function (...args) {
+    const start = performance.now();
+    try { return createBindGroup.apply(this, args); }
+    finally { programs.bindGroupMs += performance.now() - start; programs.bindGroups++; }
+  };
+  renderer.backend.createNodeBuilder = function (...args) {
+    const builder = createBuilder.apply(this, args), build = builder.buildAsync;
+    builder.buildAsync = async function (...inputs) {
+      const start = performance.now();
+      try { return await build.apply(this, inputs); }
+      finally { programs.nodeBuildAsyncMs += performance.now() - start; }
+    };
+    return builder;
+  };
+  device.createComputePipelineAsync = async function (...args) {
+    const start = performance.now();
+    try { return await nativeCompile.apply(this, args); }
+    finally { programs.nativeCompilationMs += performance.now() - start; }
+  };
+  const identity = { grid: gas.volumeGrid, pressure: gas.getPressureProjection(),
+    scalar: gas.sourceNodes, velocity: gas.velocityNodes, output: gas.outputNodes, render: gas.visualOutputNodes };
+  renderer.compileComputeAsync = async function (...args) {
+    const start = performance.now();
+    try { return await compile.apply(this, args); }
+    finally { programs.compilationMs += performance.now() - start; }
+  };
+  renderer.backend.createComputePipeline = function (...args) {
+    programs.pipelines++;
+    return createPipeline.apply(this, args);
+  };
+  gas.poolAllocation.options.create = async function (...args) {
+    const pool = await create.apply(this, args);
+    if (pool.context) {
+      for (const key of ['computeTransport', 'computeSolidField']) {
+        const original = pool.context[key];
+        pool.context[key] = function (...inputs) {
+          const start = performance.now();
+          try { return original.apply(this, inputs); }
+          finally { programs.graphConstructionMs += performance.now() - start; }
+        };
+      }
+    }
+    return pool;
+  };
   const growStart = performance.now();
   let ready = false;
-  const growth = gas.growBrickPool(renderer, 64).finally(() => { ready = true; });
+  const growth = gas.growBrickPool(renderer, required).finally(() => { ready = true; });
   const visibleFrames = [];
   // Keep submitting display frames against current resources while replacement pipelines prepare.
   while (!ready) {
@@ -120,6 +210,16 @@ window.testGrowth = async () => {
   }
   await growth;
   const growthWallMs = performance.now() - growStart;
+  const queueStart = performance.now();
+  await device.queue.onSubmittedWorkDone();
+  const queueCompletionMs = performance.now() - queueStart;
+  renderer.compileComputeAsync = compile;
+  renderer.backend.createNodeBuilder = createBuilder;
+  device.createComputePipelineAsync = nativeCompile;
+  gas.poolAllocation.options.create = create;
+  const sameGraphs = identity.grid === gas.volumeGrid && identity.pressure === gas.getPressureProjection()
+    && identity.scalar === gas.sourceNodes && identity.velocity === gas.velocityNodes
+    && identity.output === gas.outputNodes && identity.render === gas.visualOutputNodes;
   let migrationGPUIntervalMs = null;
   if (supportsTimestamp) {
     await result.mapAsync(GPUMapMode.READ);
@@ -128,21 +228,59 @@ window.testGrowth = async () => {
     result.unmap(); queries.destroy(); resolve.destroy(); result.destroy(); marker.destroy();
   }
   gas.poolAllocation.options.migrate = migrate;
-  const growthMetrics = { ...gas.poolAllocation.metrics, growthWallMs, migrationGPUIntervalMs,
+  const growthMetrics = { ...gas.poolAllocation.metrics, ...programs, growthWallMs, migrationGPUIntervalMs,
+    queueCompletionMs, capacityMetrics: gas.capacityMetrics, sameGraphs,
     visibleFrames: visibleFrames.length, frameHitchesOver50ms: visibleFrames.filter(ms => ms > 50).length,
     maximumFrameCpuMs: Math.max(0, ...visibleFrames), temporaryPeakBytes: previousBytes + gas.allocatedBytes };
   const after = { density: await read(gas.densityCurrent.value ?? gas.densityAttributeA),
     velocity: await read(gas.velocityCurrentAttribute), pressure: await read(gas.pressureCurrentAttribute),
     wallVelocity: (await read(gas.boundaryAttribute)).slice(gas.cellCount * 4),
-    visualColor: (await read(gas.visualAttribute)).slice(gas.cellCount * 4) };
-  return { growthMetrics, capacity, next: gas.volumeGrid.capacity, firstUpdateCpuMs, firstUpdateFencedMs,
+    visualColor: (await read(gas.visualAttribute)).slice(gas.cellCount * 4), ...await snapshotExtra() };
+  const newSentinelsZero = after.density[count * 4] === 0 && after.pressure[count] === 0
+    && after.pressureFaces[(previousFaceCount - 1) * 4] === 0;
+  // A retained graph must write the replacement buffers and address slots beyond the original capacity.
+  let cachedWriteExact = null, followupPipelines = null;
+  if (sameGraphs) {
+    renderer.backend.createComputePipeline = createPipeline;
+    activate();
+    const density = storage(gas.densityCurrent.value, 'vec4', gas.cellCount);
+    renderer.compute(Fn(() => density.element(instanceIndex).assign(vec4(0)))().compute(gas.cellCount));
+    renderer.backend.createComputePipeline = function (...args) {
+      programs.pipelines++;
+      return createPipeline.apply(this, args);
+    };
+    const beforeFollowup = programs.pipelines;
+    renderer.compute([seed, seedExtra]);
+    const written = await read(gas.densityCurrent.value);
+    const resident = Math.min(activeCount, gas.volumeGrid.capacity) * gas.volumeGrid.cellsPerBrick;
+    cachedWriteExact = written.slice(0, resident * 4).every((value, index) => value === [2, 3, 4, 5][index % 4]);
+    const wall = await read(gas.boundaryAttribute), visual = await read(gas.visualAttribute);
+    const plane = gas.cellCount * 4;
+    cachedWriteExact &&= wall.slice(plane, plane + resident * 4).every((value, index) =>
+      value === [4, 5, 6, 0][index % 4]);
+    cachedWriteExact &&= visual.slice(plane, plane + resident * 4).every((value, index) =>
+      Math.abs(value - [0.2, 0.3, 0.4, 0][index % 4]) < 1e-6);
+    const context = system.gpuSimulation.prepareContext(renderer);
+    gas.computeTransport(context, renderer, gas.spatialGrid);
+    gas.renderGPU(context, system.gpuSimulation.prepareRenderBuffers(renderer), renderer, gas.spatialGrid);
+    await renderer.backend.device.queue.onSubmittedWorkDone();
+    followupPipelines = programs.pipelines - beforeFollowup;
+  }
+  device.createBindGroup = createBindGroup;
+  growthMetrics.firstUseBindGroupMs = programs.bindGroupMs - growthMetrics.bindGroupMs;
+  growthMetrics.firstUseBindGroups = programs.bindGroups - growthMetrics.bindGroups;
+  renderer.backend.createComputePipeline = createPipeline;
+  return { growthMetrics, cachedWriteExact, followupPipelines, newSentinelsZero,
+    capacity, next: gas.volumeGrid.capacity, firstUpdateCpuMs, firstUpdateFencedMs,
     mismatchedFields: Object.keys(before).filter(key => {
-      const channels = key === 'pressure' ? 1 : 4;
-      return before[key].slice(0, count * channels).some((value, index) => value !== after[key][index]);
+      const channels = ['pressure', 'pressureNext', 'divergence', 'solid'].includes(key) ? 1 : 4;
+      const limit = key === 'pressureFaces' ? before[key].length - 4 : count * channels;
+      return before[key].slice(0, limit).some((value, index) => value !== after[key][index]);
     }),
     retained: Object.keys(before).every(key => {
-    const channels = key === 'pressure' ? 1 : 4;
-    return before[key].slice(0, count * channels).every((value, index) => value === after[key][index]);
+    const channels = ['pressure', 'pressureNext', 'divergence', 'solid'].includes(key) ? 1 : 4;
+    const limit = key === 'pressureFaces' ? before[key].length - 4 : count * channels;
+    return before[key].slice(0, limit).every((value, index) => value === after[key][index]);
   }) };
 };
 const activate = () => {
@@ -384,12 +522,10 @@ window.testSparseAllocation = async () => {
     renderer.compute(Fn(() => {
       for (const brick of bricks) atomicStore(grid.requests.element(brick), uint(1));
     })().compute(1));
-    renderer.compute(grid.releaseNode);
-    renderer.compute(grid.allocateNode);
-    grid.updateDispatch(renderer);
+    grid.admitRequests(renderer);
     return {
       pages: [...new Uint32Array(await renderer.getArrayBufferAsync(grid.pagesAttribute))].slice(0, grid.brickCount),
-      counters: [...new Uint32Array(await renderer.getArrayBufferAsync(grid.diagnosticsAttribute))],
+      counters: [...new Uint32Array(await renderer.getArrayBufferAsync(grid.diagnosticsAttribute)).slice(0, 2)],
     };
   };
   const full = await request([0, 1, 2, 3, 4, 5]);
@@ -419,7 +555,7 @@ window.testBoundaryRemoval = async () => {
   volume.opacity = 0.41; volume.steps = 79; volume.colorByTemperature = null;
   system.update();
   const paused = { time, after: system._elapsedTime, version, afterVersion: gas.getVolumeField().version,
-    opacity: volume.gpuOpacity.value, steps: volume.gpuMaterialSteps, color: volume.colorByTemperature };
+    opacity: volume.gpuOpacity.value, steps: volume.gpuSteps.value, color: volume.colorByTemperature };
   system._paused = false;
   system.removeRenderer(volume); volume.destroy();
   return { blocked, removed, paused };
@@ -454,5 +590,196 @@ window.testFractionalVisualCoverage = async () => {
   return { empty, partial, full, invalidTemperature, physicsUnchanged };
 };
 
-window.debugBehavior = { renderer, scene, camera, THREE, StorageBufferAttribute,
+window.debugBehavior = { renderer, scene, camera, THREE, StorageBufferAttribute, gas, system, GasModule,
   tsl: { Fn, storage, vec3, vec4, float, uint } };
+
+window.testPriorityAdmission = async () => {
+  const fluid = new GasSimulation({
+    bounds: new THREE.Box3(new THREE.Vector3(), new THREE.Vector3(8, 8, 8)),
+    spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 1 },
+    initialBrickCapacity: 4, maxBrickCapacity: 4, pressureIterations: 0,
+  });
+  const context = system.gpuSimulation.prepareContext(renderer), grid = fluid.volumeGrid;
+  grid.rebuild(context, renderer, undefined, undefined, vec3(0), float(1), float(0), 0);
+  const request = async entries => {
+    grid.frame.value++;
+    renderer.compute(grid.resetNode);
+    renderer.compute(Fn(() => {
+      for (const [brick, priority] of entries) atomicStore(grid.requests.element(brick), uint(priority));
+    })().compute(1));
+    grid.admitRequests(renderer);
+    return new Uint32Array(await renderer.getArrayBufferAsync(grid.pagesAttribute));
+  };
+  const first = await request([[0, 1], [1, 1], [2, 1], [3, 1]]);
+  const seed = fresh => renderer.compute(grid.compute(index => {
+    const coordinate = fluid.cellCoordinate(index);
+    const value = fresh ? float(coordinate.y.div(2)).floor().add(1)
+      : coordinate.x.lessThan(2).select(float(1), float(0));
+    fluid.densityCurrent.element(index).assign(vec4(value, 0, 0, 0));
+    fluid.colorCurrent.element(index).assign(vec4(0.2, 0.4, 0.8, 0));
+  }, false, fresh));
+  const exportField = () => {
+    fluid.clearOutputTextures(renderer);
+    renderer.compute(grid.compute(index => {
+      textureStore(fluid.densityTextureNode, vec3(fluid.cellCoordinate(index)),
+        fluid.densityCurrent.element(index)).toWriteOnly();
+    }));
+    grid.recordPhase(renderer, 'export');
+  };
+  seed(false); grid.recordPhase(renderer, 'simulation'); exportField();
+  const admitted = await request([[0, 5], [1, 2], [2, 1], [3, 1], [4, 5], [5, 4]]);
+  fluid.clearNewBricks(renderer);
+  const centers = [new THREE.Vector3(1, 1, 1), new THREE.Vector3(1, 3, 1), new THREE.Vector3(3, 3, 1)];
+  const cleared = await fluid.readBrickDiagnostics(renderer, centers);
+  seed(true); grid.recordPhase(renderer, 'simulation'); exportField();
+  const occupancy = new VolumeOccupancy(fluid.densityTexture, fluid.textureDimensions.clone());
+  occupancy.update(renderer, 1);
+  grid.recordPhase(renderer, 'render');
+  const written = await fluid.readBrickDiagnostics(renderer, centers, occupancy);
+  const recycledPages = await request([[0, 5], [6, 5], [7, 4]]);
+  fluid.clearNewBricks(renderer); seed(true); grid.recordPhase(renderer, 'simulation'); exportField();
+  occupancy.update(renderer, 2);
+  const recycled = await fluid.readBrickDiagnostics(renderer,
+    [new THREE.Vector3(5, 3, 1), new THREE.Vector3(7, 3, 1)], occupancy);
+  const counters = await fluid.readGridDiagnostics(renderer);
+  const result = { retained: first[0] === admitted[0],
+    admittedCritical: !!admitted[4] && !!admitted[5], evictedOptional: !admitted[2] && !admitted[3],
+    unique: new Set([...admitted.slice(0, grid.brickCount)].filter(Boolean)).size === 4,
+    cleared, written, recycled, recycledPages: [...recycledPages.slice(0, grid.brickCount)], counters };
+  // Freeze the physical fields and isolate occupancy from masking/children on a small offscreen view.
+  const volume = new VolumeRenderer({ field: fluid.getVolumeField(), steps: 128, jitter: false,
+    dynamicResolution: false, sceneDepthClipping: false, densityNoiseStrength: 0,
+    children: { count: 2, radius: 0.25 }, opacity: 0.5 });
+  const view = new ParticleSystem({ emitters: [], modules: [], renderers: [volume] });
+  const frozenScene = new THREE.Scene(); frozenScene.add(view);
+  const frozenCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  frozenCamera.position.set(5, 5, 14); frozenCamera.lookAt(3, 2, 1);
+  const target = new THREE.RenderTarget(64, 64);
+  const images = [];
+  try {
+    await renderer.renderAsync(frozenScene, frozenCamera);
+    renderer.setRenderTarget(target);
+    for (const children of [false, true]) for (const masking of [false, true]) {
+      const pair = [];
+      for (const skipping of [false, true]) {
+        volume.generateChildren = children; volume.densityNoiseStrength = masking ? 1 : 0;
+        volume.emptySpaceSkipping = skipping;
+        view.updateRenderers();
+        await renderer.renderAsync(frozenScene, frozenCamera);
+        const pixels = await renderer.readRenderTargetPixelsAsync(target, 0, 0, 64, 64);
+        const energy = pixels.reduce((sum, value, index) => sum + (index % 4 === 3 ? 0 : value), 0);
+        pair.push(energy);
+      }
+      images.push({ children, masking, withoutSkipping: pair[0], withSkipping: pair[1] });
+    }
+  } finally { renderer.setRenderTarget(null); target.dispose(); view.destroy(); }
+  result.frozenImages = images;
+  occupancy.dispose(); fluid.cleanup();
+  return result;
+};
+
+window.testTransportRequests = async () => {
+  const fluid = new GasSimulation({
+    bounds: new THREE.Box3(new THREE.Vector3(), new THREE.Vector3(8, 8, 8)),
+    spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 1 },
+    initialBrickCapacity: 32, maxBrickCapacity: 32,
+  });
+  const grid = fluid.volumeGrid, context = system.gpuSimulation.prepareContext(renderer);
+  renderer.compute(Fn(() => { grid.pages.element(0).assign(1); grid.slots.element(0).assign(1); })().compute(1));
+  grid.updateDispatch(renderer);
+  const seed = x => renderer.compute(grid.compute(index => {
+    const c = grid.coordinate(index);
+    const slab = c.x.equal(x).and(c.y.equal(0)).and(c.z.equal(0));
+    fluid.densityCurrent.element(index).assign(slab.select(vec4(1, 0, 0, 0), vec4(0)));
+    fluid.velocityCurrent.element(index).assign(vec4(0.6, 0, 0, 0));
+  }));
+  const check = async x => {
+    seed(x);
+    grid.rebuild({ buffers: context.buffers, deltaTimeNode: float(0.25) }, renderer,
+      fluid.densityCurrent, fluid.velocityCurrent, vec3(0), float(1), float(0.01), 0);
+    fluid.clearNewBricks(renderer);
+    return fluid.readBrickDiagnostics(renderer, [new THREE.Vector3(x + 1.5, 0.5, 0.5)]);
+  };
+  const first = await check(1), second = await check(3);
+  fluid.cleanup();
+  return { first: first[0], second: second[0] };
+};
+
+window.testBoundaryTopologyInvalidation = async () => {
+  const collider = FluidCollider.Box({}, 0.5, 0.5, 0.5);
+  gas.explicitSpatialEffects = [collider]; gas.prepareSpatialEffects(system);
+  gas.volumeGrid.updateDispatch(renderer);
+  const context = system.gpuSimulation.prepareContext(renderer);
+  const original = gas.onBoundaryChanged;
+  let changes = 0;
+  gas.onBoundaryChanged = function () { changes++; original.call(this); };
+  gas.computeSolidField(context, renderer);
+  const initial = changes;
+  gas.resetGridNodes(); gas.computeSolidField(context, renderer);
+  const bindingReset = changes;
+  collider.needsUpdate = true;
+  gas.computeSolidField(context, renderer);
+  const geometryChange = changes;
+  gas.onBoundaryChanged = original;
+  gas.explicitSpatialEffects = []; gas.prepareSpatialEffects(system);
+  gas.computeSolidField(context, renderer);
+  collider.geometry?.dispose(); collider.material?.dispose();
+  return { initial, bindingReset, geometryChange };
+};
+
+
+// Brick metadata is rectangular; only physical and immediate receiver pages need cells.
+window.testRectangularBrickDomain = async () => {
+  const fluid = new GasSimulation({ bounds: new THREE.Box3(new THREE.Vector3(), new THREE.Vector3(16, 16, 16)),
+    spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 2,
+      minVolumeQuality: 16, maxVolumeQuality: 16 }, initialBrickCapacity: 32, maxBrickCapacity: 32 });
+  const grid = fluid.volumeGrid, context = system.gpuSimulation.prepareContext(renderer);
+  // The only occupied cell is deep inside an interior brick, outside the old few-cell receiver margin.
+  renderer.compute(Fn(() => { grid.pages.element(21).assign(1); grid.slots.element(0).assign(22); })().compute(1));
+  grid.updateDispatch(renderer);
+  renderer.compute(grid.compute(index => {
+    const c = grid.coordinate(index);
+    const physical = c.x.equal(6).and(c.y.equal(6)).and(c.z.equal(6));
+    fluid.densityCurrent.element(index).assign(physical.select(vec4(1, 0, 0, 0), vec4(0)));
+    fluid.velocityCurrent.element(index).assign(vec4(0));
+  }));
+  grid.rebuild({ buffers: context.buffers, deltaTimeNode: float(1 / 60) }, renderer,
+    fluid.densityCurrent, fluid.velocityCurrent, vec3(0), float(1), float(0.01), 0);
+  fluid.clearNewBricks(renderer);
+  grid.updateVisualization(renderer, fluid.densityCurrent, float(0.01));
+  const readDomain = async () => {
+    const attribute = new StorageBufferAttribute(new Float32Array(grid.brickCount * 4), 4);
+    const target = storage(attribute, 'vec4', grid.brickCount);
+    const node = Fn(() => target.element(instanceIndex).assign(grid.visualization(instanceIndex)))()
+      .compute(grid.brickCount);
+    renderer.compute(node);
+    try { return new Float32Array(await renderer.getArrayBufferAsync(attribute)); }
+    finally { node.dispose(); attribute.dispose(); }
+  };
+  const visual = await readDomain();
+  const directory = new Uint32Array(await renderer.getArrayBufferAsync(grid.pagesAttribute));
+  const neighbors = [];
+  for (let z = 0; z < 3; z++) for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+    neighbors.push(Boolean(directory[x + y * 4 + z * 16]));
+  }
+  fluid.showGridHelper = true;
+  fluid.updateBoundsHelper(system);
+  const before = fluid._brickHelper.geometry.instanceCount;
+  const bounds = grid.bounds.clone(); bounds.max.x += grid.brickSize;
+  const dimensions = grid.gridDimensions.clone(); dimensions.x += grid.brickSide;
+  const oldFields = fluid.densityCurrent;
+  const grew = grid.updateLayout(renderer, bounds, dimensions);
+  fluid.bounds.copy(bounds);
+  fluid.updateBoundsHelper(system);
+  const grownVisual = await readDomain();
+  await renderer.renderAsync(scene, camera);
+  const result = { receiverRing: neighbors.every(Boolean),
+    resident: [...directory.slice(0, 64)].filter(Boolean).length,
+    distantUnallocated: directory[63] === 0,
+    occupied: [...visual].filter((v, i) => i % 4 === 3 && v > 0).length,
+    logical: visual.length / 4, before, after: fluid._brickHelper.geometry.instanceCount,
+    grew, sameFields: oldFields === fluid.densityCurrent,
+    newFaceEmpty: [...grownVisual].every((v, i) => i % 4 !== 3 || grownVisual[i - 3] !== 4 || v === 0) };
+  fluid.cleanup();
+  return result;
+};

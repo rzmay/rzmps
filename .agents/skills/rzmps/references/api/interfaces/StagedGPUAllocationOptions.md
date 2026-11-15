@@ -30,6 +30,32 @@ maximumCapacity: number;
 
 ## Methods
 
+<a id="cancommit"></a>
+
+### canCommit()?
+
+```ts
+optional canCommit(current, replacement): boolean;
+```
+
+Absorb newer logical layouts without canceling prepared capacity resources.
+
+#### Parameters
+
+##### current
+
+`T`
+
+##### replacement
+
+`T`
+
+#### Returns
+
+`boolean`
+
+***
+
 <a id="create"></a>
 
 ### create()

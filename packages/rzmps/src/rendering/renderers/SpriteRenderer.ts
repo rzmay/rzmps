@@ -1,4 +1,5 @@
 import TextureAtlas from '../TextureAtlas';
+import DepthMaterialCache from '../DepthMaterialCache';
 import prepareTaggedSelection, { type TaggedSelection } from '../../core/tags/prepareTaggedSelection';
 import selectByTags from '../../core/tags/selectByTags';
 import selectByTagsGPU from '../../core/tags/selectByTagsGPU';
@@ -22,7 +23,7 @@ import seedrandom from 'seedrandom';
 import { SpriteMaterialType } from '../../enums/SpriteMaterialType';
 import { TRAIL_RENDERER_USER_DATA_KEY } from './TrailRenderer';
 import LiveCubemap, { PARTICLE_RENDERER_OBJECT_KEY } from './LiveCubemap';
-import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
+import { WebGPURenderer } from 'three/webgpu';
 import {
   cameraPosition,
   cameraWorldMatrix,
@@ -44,8 +45,8 @@ export const SCENE_COLOR_DATA_USER_DATA_KEY = '__rzmps_sceneColorData';
 
 type SceneDepthData = {
   target: THREE.WebGLRenderTarget;
-  /** Selects lit or unlit sprite material; backend-specific implementations are chosen automatically. */
-  material: THREE.MeshDepthMaterial;
+  materials: DepthMaterialCache;
+  camera: THREE.Camera;
   frame: number;
   rendering: boolean;
 };
@@ -57,7 +58,8 @@ type SceneColorData = {
 
 type WebGPUSceneDepthData = {
   target: THREE.RenderTarget;
-  material: MeshBasicNodeMaterial;
+  materials: DepthMaterialCache;
+  camera: THREE.Camera;
   rendering: boolean;
 };
 
@@ -1212,15 +1214,10 @@ class SpriteRenderer extends Renderer {
         depthTexture,
       });
 
-      const material = new THREE.MeshDepthMaterial({
-        depthPacking: THREE.BasicDepthPacking,
-        side: THREE.DoubleSide,
-      });
-      material.colorWrite = false;
-
       data = {
         target,
-        material,
+        materials: new DepthMaterialCache(false),
+        camera: camera.clone(),
         frame: -1,
         rendering: false,
       };
@@ -1248,21 +1245,19 @@ class SpriteRenderer extends Renderer {
     }
 
     const previousTarget = renderer.getRenderTarget();
-    const previousOverrideMaterial = scene.overrideMaterial;
     const hiddenSpriteRenderers = this.hideSpriteRenderers(scene);
+    const restoreMaterials = data.materials.apply(scene);
 
     try {
-      scene.overrideMaterial = data.material;
-
       renderer.setRenderTarget(data.target);
       renderer.clear();
 
-      renderer.render(scene, camera);
+      renderer.render(scene, this.copyDepthCamera(data, camera));
 
       data.frame = renderer.info.render.frame;
     } finally {
       renderer.setRenderTarget(previousTarget);
-      scene.overrideMaterial = previousOverrideMaterial;
+      restoreMaterials();
       this.restoreSpriteRenderers(hiddenSpriteRenderers);
       data.rendering = false;
     }
@@ -1286,16 +1281,10 @@ class SpriteRenderer extends Renderer {
         samples: 0,
       });
 
-      const material = new MeshBasicNodeMaterial({
-        colorWrite: false,
-        side: THREE.DoubleSide,
-        depthTest: true,
-        depthWrite: true,
-      });
-
       data = {
         target,
-        material,
+        materials: new DepthMaterialCache(true),
+        camera: camera.clone(),
         rendering: false,
       };
 
@@ -1315,18 +1304,16 @@ class SpriteRenderer extends Renderer {
     }
 
     const previousTarget = renderer.getRenderTarget();
-    const previousOverrideMaterial = scene.overrideMaterial;
     const hiddenParticleRenderers = this.hideParticleRenderers(scene);
+    const restoreMaterials = data.materials.apply(scene);
 
     try {
-      scene.overrideMaterial = data.material;
-
       renderer.setRenderTarget(data.target);
       renderer.clear();
-      renderer.render(scene, camera);
+      renderer.render(scene, this.copyDepthCamera(data, camera));
     } finally {
       renderer.setRenderTarget(previousTarget);
-      scene.overrideMaterial = previousOverrideMaterial;
+      restoreMaterials();
       this.restoreParticleRenderers(hiddenParticleRenderers);
       data.rendering = false;
     }
@@ -1335,7 +1322,16 @@ class SpriteRenderer extends Renderer {
   }
 
   private hideSpriteRenderers(scene: THREE.Scene): HiddenSpriteRenderer[] {
-    return this.hideParticleRenderers(scene, false);
+    return this.hideParticleRenderers(scene);
+  }
+
+  private copyDepthCamera(data: { camera: THREE.Camera }, camera: THREE.Camera): THREE.Camera {
+    camera.updateWorldMatrix(true, false);
+    if (data.camera.constructor !== camera.constructor) data.camera = camera.clone();
+    data.camera.copy(camera, false);
+    data.camera.matrixAutoUpdate = data.camera.matrixWorldAutoUpdate = false;
+    data.camera.matrix.copy(camera.matrixWorld);
+    return data.camera;
   }
 
   private hideParticleRenderers(scene: THREE.Scene, includeTrails: boolean = true): HiddenSpriteRenderer[] {

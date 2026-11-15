@@ -3,6 +3,7 @@ import * as TSL from 'three/tsl';
 import {
   AudioRenderer,
   GasSimulation,
+  GasModule,
   FLIPSimulation,
   VolumeRenderer,
   SurfaceRenderer,
@@ -14,6 +15,7 @@ import {
   LightRenderer,
   MeshRenderer,
   Module,
+  ParticleForceField,
   NoiseModule,
   TransformByNoise,
   SpriteRenderer,
@@ -234,10 +236,17 @@ export class ParticleSystemSerializer {
   }
 
   serializeModule(module) {
+    if (module instanceof GasModule) {
+      return `new GasModule(${this.serializeValue({
+        ...module.options, priority: module.priority, tags: module.tags, enabled: module.enabled,
+      })})`;
+    }
     if (module instanceof GasSimulation) {
       return `new GasSimulation(${this.serializeValue({
         temperatureRange: module.temperatureRange,
-        supportForceFields: module.supportForceFields,
+        // Preserve the narrower opt-in independently of support implied by broad discovery.
+        supportForceFields: module.requireSpatialEffects?.includes(ParticleForceField) ?? false,
+        supportSpatialEffects: module.supportSpatialEffects,
         densityRange: module.densityRange,
         ...Object.fromEntries(['turbulenceNoiseStrength', 'vorticityStrength', 'densityDissipation',
           'temperatureDissipation', 'velocityDissipation', 'colorDissipation', 'turbulenceNoiseFrequency']
@@ -254,6 +263,12 @@ export class ParticleSystemSerializer {
         automaticPadding: module.automaticPadding,
         showGridHelper: module.showGridHelper,
         spatialGridOptions: module.spatialGridOptions,
+        pressureSolver: module.pressureSolver,
+        multigrid: module.multigrid,
+        pressureMinIterations: module.pressureMinIterations,
+        pressureMaxIterations: module.pressureMaxIterations,
+        pressureTolerance: module.pressureTolerance,
+        pressureWarmStart: module.pressureWarmStart,
         pressureIterations: module.pressureIterations,
         externalForce: module.externalForce,
         maxVelocity: module.maxVelocity,
@@ -292,7 +307,6 @@ export class ParticleSystemSerializer {
         maxVelocity: module.maxVelocity,
         picRatio: module.picRatio,
         advectParticles: module.advectParticlesEnabled,
-        velocityPaddingLookahead: module.velocityPaddingLookahead,
         collisionIterations: module.collisionIterations,
         particleSeparation: module.particleSeparation,
         particleSpacing: module.particleSpacing,
@@ -439,6 +453,7 @@ export class ParticleSystemSerializer {
     }
     if (renderer instanceof VolumeRenderer) {
       return `new VolumeRenderer(${this.serializeValue({
+        lightingGridOptions: renderer.lightingGridOptions,
         colorByTemperature: renderer.colorByTemperature,
         opacityByTemperature: renderer.opacityByTemperature,
         colorByDensity: renderer.colorByDensity,
@@ -471,6 +486,8 @@ export class ParticleSystemSerializer {
         transmittanceThreshold: renderer.transmittanceThreshold,
         sceneDepthClipping: renderer.sceneDepthClipping,
         sceneDepthBias: renderer.sceneDepthBias,
+        softParticles: renderer.softParticles,
+        softParticleDistance: renderer.softParticleDistance,
         densityGain: renderer.densityGain,
         densityMapping: renderer.densityMapping,
         minDensity: renderer.minDensity,

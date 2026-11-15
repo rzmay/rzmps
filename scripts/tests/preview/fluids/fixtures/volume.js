@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
-import { Module, ParticleSystem, VolumeRenderer } from '@rzmps/rzmps';
+import { Module, GasModule, ParticleSystem, VolumeRenderer } from '@rzmps/rzmps';
 
 const gpu = new URLSearchParams(location.search).get('backend') === 'webgpu';
 const renderer = gpu ? new WebGPURenderer({
+  antialias: new URLSearchParams(location.search).has('antialias'),
   trackTimestamp: true,
   reversedDepthBuffer: new URLSearchParams(location.search).has('reversed'),
 }) : new THREE.WebGLRenderer();
@@ -32,7 +33,8 @@ class Source extends Module {
 }
 const red = new Source(-1.5, 0.5, 8, 0.5, [1, 0, 0], 'red');
 const blue = new Source(-0.5, 1.5, 16, 1.5, [0, 0, 1], 'blue');
-const volume = new VolumeRenderer({ generateChildren: false, steps: 64, threshold: 0.1, range: 0.05, opacity: 1 - 0.92 ** 8,
+const volume = new VolumeRenderer({
+  generateChildren: false, steps: 64, threshold: 0.1, range: 0.05, opacity: 1 - 0.92 ** 8,
   children: { count: 1000 }, compensation: 'children' });
 const system = new ParticleSystem({ emitters: [], modules: [red, blue], renderers: [] });
 scene.add(system);
@@ -56,6 +58,6 @@ window.renderVolume = async tags => {
     children: volume.renderedChildCount,
   };
 };
-window.volumeFixture = { red, blue, volume, system, renderer, scene, camera, THREE };
+window.volumeFixture = { red, blue, volume, system, renderer, scene, camera, THREE, GasModule };
 await window.renderVolume();
 window.ready = true;

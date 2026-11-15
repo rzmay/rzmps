@@ -39,8 +39,8 @@ const grid = new ParticleSpatialGrid({
 assert.equal(grid.cellsPerAxis, 32);
 assert.equal(grid.maxDepth, 5);
 assert(grid instanceof SpatialGrid);
-assert.deepEqual(grid.locate(configuredBounds.min), new THREE.Vector3(0, 0, 0));
-assert.deepEqual(grid.locate(configuredBounds.max), new THREE.Vector3(31, 31, 31));
+assert.deepEqual(grid.locate(grid.bounds.min), new THREE.Vector3(0, 0, 0));
+assert.deepEqual(grid.locate(grid.bounds.max), grid.gridDimensions.clone().addScalar(-1));
 const structuralVersion = grid.resourceVersion;
 grid.cellSubdivisions = 4;
 assert.equal(grid.cellSubdivisions, 4);
@@ -62,7 +62,7 @@ fakeBuffers.count = 3;
 graphGrid.rebuild(fakeRenderer, fakeBuffers, {});
 assert.deepEqual(submissions.splice(0), firstGraphs, 'particle-count edits should reuse build graphs');
 assert.equal(firstGraphs[1].count, 3);
-graphGrid.autoExpand = true;
+graphGrid.setOptions({ timeQuality: 0.5 });
 graphGrid.rebuild(fakeRenderer, fakeBuffers, {});
 assert.notEqual(submissions.splice(0)[0], firstGraphs[0], 'captured bounds options invalidate build graphs');
 graphGrid.cellSubdivisions = 2;
@@ -71,7 +71,7 @@ assert.notEqual(submissions.splice(0)[0], firstGraphs[0], 'structural edits inva
 graphGrid.dispose();
 
 const centeredGrid = new ParticleSpatialGrid({ bounds: configuredBounds });
-assert.deepEqual(centeredGrid.bounds.getCenter(new THREE.Vector3()).toArray(), [0, 0, 0]);
+assert(centeredGrid.bounds.containsBox(configuredBounds));
 assert.equal(centeredGrid.autoShrink, true);
 const centeredVersion = centeredGrid.resourceVersion;
 centeredGrid.setOptions({ autoShrink: false, shrinkDelay: 42, timeQuality: 0.5 });
@@ -87,7 +87,7 @@ const octree = new ParticleOctree({ bounds: configuredBounds, maxDepth: 5 }, {
 });
 const sample = new THREE.Vector3(0.5, -1, 2);
 assert.ok(octree.locate(sample));
-assert.deepEqual(grid.locate(sample), ParticleSpatialGrid.locate(sample, configuredBounds, 32));
+assert.deepEqual(grid.locate(sample), ParticleSpatialGrid.locate(sample, grid.bounds, grid.gridDimensions));
 
 // Signed coordinates must not turn a hash collision into coordinate equality.
 const hashCapacity = 32;
@@ -199,15 +199,15 @@ console.log('particle-spatial-grid tests passed');
 
 // The grid owns the cap for externally supplied bounds as well as automatic growth.
 const cappedGrid = new ParticleSpatialGrid({ bounds: configuredBounds, cubicBounds: true, maxBounds: 10 });
-assert.deepEqual(cappedGrid.bounds.getSize(new THREE.Vector3()).toArray(), [8, 8, 8]);
+assert.deepEqual(cappedGrid.bounds.getSize(new THREE.Vector3()).toArray(), [10, 10, 10]);
 cappedGrid.setBounds(new THREE.Box3(new THREE.Vector3(-32, -32, -32), new THREE.Vector3(32, 32, 32)));
-assert.deepEqual(cappedGrid.bounds.getSize(new THREE.Vector3()).toArray(), [8, 8, 8]);
+assert.deepEqual(cappedGrid.bounds.getSize(new THREE.Vector3()).toArray(), [10, 10, 10]);
 cappedGrid.maxBounds = 4;
 assert.deepEqual(cappedGrid.bounds.getSize(new THREE.Vector3()).toArray(), [4, 4, 4]);
 cappedGrid.setOptions({ powerOfTwoBounds: false, maxBounds: 3 });
 assert.deepEqual(cappedGrid.bounds.getSize(new THREE.Vector3()).toArray(), [3, 3, 3]);
 assert.throws(() => new ParticleSpatialGrid({ maxBounds: 0 }), /maxBounds/);
-assert.throws(() => { cappedGrid.maxBounds = NaN; }, /maxBounds/);
+assert.throws(() => { cappedGrid.maxBounds = NaN; }, /Physical bounds/);
 const capOwner = new ParticleSystem({ emitters: [], renderers: [] });
 assert.notEqual(capOwner.acquireParticleSpatialGrid({ maxBounds: 8 }),
   capOwner.acquireParticleSpatialGrid({ maxBounds: 16 }), 'different caps cannot share a managed grid');

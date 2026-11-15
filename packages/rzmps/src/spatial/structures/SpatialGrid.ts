@@ -1,10 +1,65 @@
 import * as THREE from 'three';
+import {
+  boundsVector, createSpatialDomain, createGuardedSpatialDomain,
+  type SpatialDomainOptions, type SpatialGridDomain, type SpatialGuardDepth,
+} from './spatialGridDomain.utils';
 
 /** Shared logical brick/cell layout; subclasses own their data and GPU build pipelines. */
 export default abstract class SpatialGrid {
   abstract readonly bounds: THREE.Box3;
   protected _brickSubdivisions = 3;
   protected _cellSubdivisions = 4;
+  /** Actual per-axis cell counts; cells remain cubic. */
+  readonly gridDimensions = new THREE.Vector3();
+  /** Whole cubic brick counts along each domain axis. */
+  readonly brickDimensions = new THREE.Vector3();
+  cellSize = 0;
+  brickSize = 0;
+  /** Quality reference side controlling cell width; physical coverage remains rectangular. */
+  volumeQualityTier = 0;
+  equivalentVolumeSide = 0;
+  protected readonly domainTarget = new THREE.Box3();
+  protected resolvedDomains = new WeakMap<THREE.Box3, SpatialGridDomain>();
+  private readonly recordedRequests = new WeakSet<SpatialGridDomain>();
+  readonly domainDiagnostics = {
+    hardCapBreaches: 0, qualityTierChanges: 0,
+    growth: Array<number>(6).fill(0), shrink: Array<number>(6).fill(0), shift: Array<number>(6).fill(0),
+  };
+
+  protected resolveDomain(target: THREE.Box3, options: SpatialDomainOptions): SpatialGridDomain {
+    const cached = this.resolvedDomains.get(target);
+    if (cached) return cached;
+    const domain = createSpatialDomain(target, this.cellsPerAxis, 2 ** this.cellSubdivisions,
+      options, this.volumeQualityTier || undefined);
+    this.resolvedDomains.set(domain.bounds, domain);
+    return domain;
+  }
+
+  protected resolveGuardDomain(occupied: THREE.Box3, options: SpatialDomainOptions,
+    guards?: SpatialGuardDepth): SpatialGridDomain {
+    return createGuardedSpatialDomain(occupied, this.cellsPerAxis, 2 ** this.cellSubdivisions,
+      options, this.volumeQualityTier || undefined, guards);
+  }
+
+  protected adoptDomain(domain: SpatialGridDomain): void {
+    this.domainTarget.copy(domain.target);
+    this.resolvedDomains.set(this.bounds, domain);
+    if (this.volumeQualityTier && this.volumeQualityTier !== domain.qualitySide) {
+      this.domainDiagnostics.qualityTierChanges++;
+    }
+    this.recordDomainRequest(domain);
+    this.gridDimensions.copy(domain.gridDimensions);
+    this.brickDimensions.copy(domain.brickDimensions);
+    this.cellSize = domain.cellSize; this.brickSize = domain.brickSize;
+    this.volumeQualityTier = domain.qualitySide;
+    this.equivalentVolumeSide = domain.equivalentVolumeSide;
+  }
+
+  protected recordDomainRequest(domain: SpatialGridDomain): void {
+    if (!domain.hardCapBreach || this.recordedRequests.has(domain)) return;
+    this.recordedRequests.add(domain);
+    this.domainDiagnostics.hardCapBreaches++;
+  }
 
   get brickSubdivisions(): number { return this._brickSubdivisions; }
   set brickSubdivisions(value: number) {
@@ -28,16 +83,17 @@ export default abstract class SpatialGrid {
   protected abstract invalidateStructure(): void;
 
   locate(position: THREE.Vector3): THREE.Vector3 {
-    return SpatialGrid.locate(position, this.bounds, this.cellsPerAxis);
+    return SpatialGrid.locate(position, this.bounds, this.gridDimensions);
   }
 
-  static locate(position: THREE.Vector3, bounds: THREE.Box3, cellsPerAxis: number): THREE.Vector3 {
+  static locate(position: THREE.Vector3, bounds: THREE.Box3, cellsPerAxis: number | THREE.Vector3): THREE.Vector3 {
     const size = bounds.getSize(new THREE.Vector3());
+    const dimensions = typeof cellsPerAxis === 'number' ? new THREE.Vector3().setScalar(cellsPerAxis) : cellsPerAxis;
     return new THREE.Vector3(
-      Math.floor((position.x - bounds.min.x) / Math.max(size.x, Number.EPSILON) * cellsPerAxis),
-      Math.floor((position.y - bounds.min.y) / Math.max(size.y, Number.EPSILON) * cellsPerAxis),
-      Math.floor((position.z - bounds.min.z) / Math.max(size.z, Number.EPSILON) * cellsPerAxis),
-    ).clampScalar(0, cellsPerAxis - 1);
+      Math.floor((position.x - bounds.min.x) / Math.max(size.x, Number.EPSILON) * dimensions.x),
+      Math.floor((position.y - bounds.min.y) / Math.max(size.y, Number.EPSILON) * dimensions.y),
+      Math.floor((position.z - bounds.min.z) / Math.max(size.z, Number.EPSILON) * dimensions.z),
+    ).max(new THREE.Vector3()).min(dimensions.clone().addScalar(-1));
   }
 
   static normalizeBounds(
@@ -45,11 +101,12 @@ export default abstract class SpatialGrid {
     powerOfTwo: boolean,
     cubic = false,
     centeredAtOrigin = false,
-    maxBounds = Infinity,
+    maxBounds: number | THREE.Vector3 = Infinity,
   ): THREE.Box3 {
-    if (!(maxBounds > 0)) throw new RangeError('maxBounds must be positive.');
+    const maximum = boundsVector(maxBounds, Infinity);
+    if (maximum.toArray().some(value => !(value > 0))) throw new RangeError('maxBounds must be positive.');
     const result = bounds.clone();
-    if (!powerOfTwo && !cubic && !centeredAtOrigin && !Number.isFinite(maxBounds)) return result;
+    if (!powerOfTwo && !cubic && !centeredAtOrigin && maximum.toArray().every(v => !Number.isFinite(v))) return result;
     const center = centeredAtOrigin
       ? new THREE.Vector3()
       : result.getCenter(new THREE.Vector3());
@@ -64,9 +121,8 @@ export default abstract class SpatialGrid {
     if (powerOfTwo) size.set(
       nextBoundsPowerOfTwo(size.x), nextBoundsPowerOfTwo(size.y), nextBoundsPowerOfTwo(size.z),
     );
-    // Quantize the ceiling downward so normalization can never expand beyond the requested cap.
-    const ceiling = powerOfTwo && Number.isFinite(maxBounds) ? 2 ** Math.floor(Math.log2(maxBounds)) : maxBounds;
-    size.min(new THREE.Vector3().setScalar(ceiling));
+    // Legacy normalization also respects physical per-axis ceilings.
+    size.min(maximum);
     return result.setFromCenterAndSize(center, size);
   }
 }

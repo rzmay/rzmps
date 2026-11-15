@@ -10,6 +10,7 @@ uniform float opacity;
 uniform float steps;
 uniform float jitterStrength;
 uniform float jitterSeed;
+uniform sampler2D jitterMap;
 uniform float anisotropy;
 uniform float shadowQuality;
 uniform vec3 lightDirection;
@@ -45,13 +46,13 @@ vec2 hitBox(vec3 orig, vec3 dir) {
   return vec2(t0, t1);
 }
 
-// Spatial scrambling is oblique to the voxel lattice; each stratum gets an irrational rotation.
-float volumeJitter(vec3 point, float index) {
-  vec3 cell = floor(vec3(dot(point, vec3(0.7548777, 0.5698403, 0.438289)),
-    dot(point, vec3(-0.438289, 0.7548777, 0.5698403)),
-    dot(point, vec3(0.5698403, -0.438289, 0.7548777))) * 16.0);
-  float rotation = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719)) + jitterSeed * 19.19) * 43758.5453);
-  return fract(rotation + index * 0.61803398875 + 0.5);
+// One blue-noise phase per camera ray, independent of world voxels and domain resizing.
+float volumeJitterRotation() {
+  ivec2 pixel = ivec2(gl_FragCoord.xy) % ivec2(32);
+  float rotation = (texelFetch(jitterMap, pixel, 0).r * 255.0 + 0.5) / 256.0;
+  uint state = floatBitsToUint(jitterSeed) * 747796405u + 2891336453u;
+  uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+  return rotation + float((word >> 22u) ^ word) * (1.0 / 4294967296.0);
 }
 
 /* VOLUME_FIELDS */
@@ -100,6 +101,7 @@ void main() {
   float distanceAlongRay = bounds.x;
 
   vec4 color = vec4(0.0);
+  float jitterRotation = volumeJitterRotation();
 
   for (int i = 0; i < 512; i++) {
     if (!adaptiveStepping) distanceAlongRay = bounds.x + float(i) * stepSize;
@@ -107,9 +109,7 @@ void main() {
     float growth = adaptiveStepping
       ? mix(1.0, adaptiveStepFactor, smoothstep(adaptiveStepThreshold, 1.0, color.a)) : 1.0;
     float segment = min(stepSize * growth, bounds.y - distanceAlongRay);
-    vec3 center = vOrigin + rayDir * (distanceAlongRay + segment * 0.5);
-    vec3 point = (center + 0.5) * boundsSize + boundsMinimum;
-    float offset = mix(0.5, volumeJitter(point, float(i)), jitterStrength);
+    float offset = mix(0.5, fract(jitterRotation + float(i) * 0.61803398875), jitterStrength);
     vec3 p = vOrigin + rayDir * (distanceAlongRay + segment * offset);
 
     float opacityMultiplier;

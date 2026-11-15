@@ -2,10 +2,15 @@
 bool insideField(vec3 uv) {
   return all(greaterThanEqual(uv, vec3(0.0))) && all(lessThanEqual(uv, vec3(1.0)));
 }
+vec4 sampleVolume(sampler3D map, vec3 uv, vec3 resolution) {
+  vec3 halfTexel = 0.5 / resolution;
+  vec3 scale = resolution / vec3(textureSize(map, 0));
+  return textureLod(map, clamp(uv, halfTexel, 1.0 - halfTexel) * scale, 0.0);
+}
 vec4 readVolume(sampler3D map, vec3 uv, vec3 resolution) {
   #if VOLUME_INTERPOLATION == 0
   vec3 texel = clamp(floor(uv * resolution), vec3(0.0), resolution - 1.0);
-  return textureLod(map, (texel + 0.5) / resolution, 0.0);
+  return sampleVolume(map, (texel + 0.5) / resolution, resolution);
   #elif VOLUME_INTERPOLATION == 2
   vec3 p = uv * resolution - 0.5;
   vec3 f = fract(p);
@@ -18,12 +23,12 @@ vec4 readVolume(sampler3D map, vec3 uv, vec3 resolution) {
   vec3 a = (floor(p) - 0.5 + w1 / g0) / resolution;
   vec3 b = (floor(p) + 1.5 + w3 / g1) / resolution;
   return mix(
-    mix(mix(textureLod(map, a, 0.0), textureLod(map, vec3(b.x, a.y, a.z), 0.0), g1.x),
-        mix(textureLod(map, vec3(a.x, b.y, a.z), 0.0), textureLod(map, vec3(b.x, b.y, a.z), 0.0), g1.x), g1.y),
-    mix(mix(textureLod(map, vec3(a.x, a.y, b.z), 0.0), textureLod(map, vec3(b.x, a.y, b.z), 0.0), g1.x),
-        mix(textureLod(map, vec3(a.x, b.y, b.z), 0.0), textureLod(map, b, 0.0), g1.x), g1.y), g1.z);
+    mix(mix(sampleVolume(map, a, resolution), sampleVolume(map, vec3(b.x, a.y, a.z), resolution), g1.x),
+        mix(sampleVolume(map, vec3(a.x, b.y, a.z), resolution), sampleVolume(map, vec3(b.x, b.y, a.z), resolution), g1.x), g1.y),
+    mix(mix(sampleVolume(map, vec3(a.x, a.y, b.z), resolution), sampleVolume(map, vec3(b.x, a.y, b.z), resolution), g1.x),
+        mix(sampleVolume(map, vec3(a.x, b.y, b.z), resolution), sampleVolume(map, b, resolution), g1.x), g1.y), g1.z);
   #else
-  return textureLod(map, uv, 0.0);
+  return sampleVolume(map, uv, resolution);
   #endif
 }
 uniform sampler2D appearanceMap;

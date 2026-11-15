@@ -91,6 +91,8 @@ export type {
   ParameterEventSubscriptions,
 } from './events/events.utils';
 export { TagSelectionMethod } from './enums/TagSelectionMethod';
+export { PressureSolver } from './enums/PressureSolver';
+export type { MultigridOptions } from './simulation/multigrid.types';
 export { AdvectionMethod } from './enums/AdvectionMethod';
 export { FluidBoundsPolicy } from './enums/FluidBoundsPolicy';
 
@@ -295,6 +297,9 @@ export type {
 
 export { default as FluidSimulation } from './modules/FluidSimulation';
 export type { FluidSimulationOptions, FluidCollisionOptions } from './modules/FluidSimulation';
+export { default as GasModule } from './modules/GasModule';
+export type { GPUGasCell, GasModuleOptions, GasModuleContext, GasRenderModuleContext,
+  GasModuleUpdate, GasRenderModuleUpdate } from './modules/GasModule';
 export { default as GasSimulation } from './modules/GasSimulation';
 export type { GasSimulationOptions } from './modules/GasSimulation';
 export { default as FLIPSimulation } from './modules/FLIPSimulation';
@@ -321,3 +326,6 @@ export { default as LiquidMaterial } from './rendering/materials/LiquidMaterial'
 export type { LiquidMaterialOptions, LiquidFlowOptions } from './rendering/materials/LiquidMaterial';
 export { default as StagedGPUAllocation } from './utils/gpu/StagedGPUAllocation';
 export type { StagedGPUAllocationOptions } from './utils/gpu/StagedGPUAllocation';
+
+export { default as LightingGrid } from './rendering/lighting/LightingGrid';
+export type { LightingGridOptions, LightingGridSource } from './rendering/lighting/LightingGrid';

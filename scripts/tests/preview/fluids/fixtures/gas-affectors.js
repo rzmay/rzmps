@@ -63,7 +63,7 @@ function apply(phase) {
 const at = (data, index = address) => [...data.slice(index * 4, index * 4 + 4)];
 const shape = () => new THREE.SphereGeometry(1, 12, 8);
 window.runGasAffectorChecks = async () => {
-  // Discovery is native-gas-only unless the caller opts into particle compatibility.
+  // Explicit native requirements remain supported alongside the discovery convenience flags.
   const discovered = ParticleForceField.Sphere({ direction: new THREE.Vector3(2, 0, 0) }, 1);
   const native = new GasAffector((cell, dt, _context, strength) => {
     cell.temperature.addAssign(cell.density.mul(dt).mul(strength).mul(10));
@@ -121,6 +121,32 @@ window.runGasAffectorChecks = async () => {
     p.velocity.x.addAssign(dt.mul(2)); p.color.mulAssign(0.5); p.alpha.mulAssign(0.5);
     p.position.addAssign(vec3(100)); p.scale.mulAssign(4); // Unsupported gas deltas stay local.
   } });
+  scene.add(generic, discovered);
+  gas.explicitSpatialEffects = undefined;
+  gas.requireSpatialEffects = [];
+  gas.supportForceFields = true;
+  gas.prepare(gas.beginExecution(system, 0.1));
+  seed(); apply('velocity');
+  const subsetVelocity = at(await read(gas.velocityNextAttribute));
+  gas.supportSpatialEffects = true;
+  gas.supportForceFields = false;
+  gas.prepare(gas.beginExecution(system, 0.1));
+  seed(); apply('velocity');
+  const broadVelocity = at(await read(gas.velocityNextAttribute));
+  seed(); apply('scalars');
+  const broadDensity = at(await read(gas.densityCurrent.value));
+  generic.priority = 1;
+  gas.prepare(gas.beginExecution(system, 0.1));
+  seed(); gas.renderGPU(context, context.buffers, renderer, grid);
+  const broadVisual = at(await read(gas.visualAttribute));
+  const broadPersistent = at(await read(gas.densityCurrent.value));
+  gas.supportSpatialEffects = false;
+  gas.prepare(gas.beginExecution(system, 0.1));
+  seed(); apply('velocity');
+  const broadDisabled = at(await read(gas.velocityNextAttribute));
+  scene.remove(generic, discovered);
+  generic.priority = -1;
+
   select([generic]); seed(); apply('scalars');
   const persistent = { density: at(await read(gas.densityCurrent.value)),
     color: at(await read(gas.colorCurrent.value)) };
@@ -203,6 +229,7 @@ window.runGasAffectorChecks = async () => {
     benchmark.push({ count, cells: 512, dispatches, milliseconds: performance.now() - start });
   }
   return { nativeVelocity, nativeState, nativeVisual, nativePersistent,
+    subsetVelocity, broadVelocity, broadDensity, broadVisual, broadPersistent, broadDisabled,
     automaticallyDiscovered, excludedVelocity, enabledVelocity, disabledVelocity,
     forceVelocity, thinForceVelocity, order, persistent, retained, heated, reheated, moved,
     tagged, sourced, dragged,

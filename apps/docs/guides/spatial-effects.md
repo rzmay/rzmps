@@ -59,15 +59,19 @@ as ordinary particle updates. Killing is discrete rather than fractionally reviv
 
 ## Gas effects
 
-GasSimulation automatically collects GasAffector modifiers and retains FluidCollider boundary discovery.
-Other particle effects require explicit opt-in through `requireSpatialEffects`; ordinary source-particle
+GasSimulation retains FluidCollider boundary discovery. Modifier sampling is opt-in through
+`supportSpatialEffects`, `supportForceFields` or explicit `requireSpatialEffects`; ordinary source-particle
 effects are not automatically applied to the gas again. Constructor requirements merge at construction;
 subsequent direct assignment is authoritative. Replacing the list does not silently reinsert defaults.
 
-`supportForceFields` defaults to false and is a virtual view of whether the list contains the
-ParticleForceField constructor. Setting it adds/removes only that constructor, preserving other
-requirements. Exact force-field instances or a broad SpatialEffect requirement remain explicit opt-ins.
-Gas demos enable the shortcut. There is no separate gas-specific collection or sampling switch.
+Both convenience flags default to false. `supportSpatialEffects: true` adds the SpatialEffect constructor
+to the existing requirements, collecting all compatible modifiers, including force fields and GasAffector.
+With broad support disabled, `supportForceFields: true` adds only ParticleForceField. Both disabled means
+no automatic modifier sampling; collider boundaries are independent. Explicit custom requirements remain
+authoritative. Setting either flag only adds/removes its constructor, preserving other requirements.
+The effective `supportForceFields` getter remains true while broad discovery is enabled, even if its
+narrower flag is set false. Gas demos enable broad discovery. Discovery, filtering and delta sampling
+use the same path as explicit requirements; there is no second effect system or new field storage.
 
 Required ordinary effects sample active, non-solid cells. Their pseudoparticle has the cell center,
 velocity, specific color, density as alpha, density times cell volume as mass, and cell size as scale.

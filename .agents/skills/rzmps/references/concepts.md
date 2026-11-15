@@ -330,6 +330,20 @@ unavailability. Multiple fields are sampled in one ray march, not blended as
 separately ordered transparent boxes. Each provider adds texture sampling cost;
 composition does not merge or modify the simulations themselves.
 
+`VolumeRenderer.softParticleDistance` matches SpriteRenderer's view-space intersection fade distance:
+zero (the default) disables fading, and positive values smoothly reduce each sample's opacity near
+opaque geometry. `softParticles: false` disables the fade while preserving hard scene-depth clipping.
+Volume softness reuses the existing WebGPU scene-depth sample, including downsampled rendering;
+it adds no scene pass and does not change simulation density, collisions or bounds. It requires
+`depthTest`; the existing WebGL volume path does not supply scene depth and remains unchanged.
+
+Sprite soft-particle depth preserves scene materials' front/back/double-sided culling, visible material
+groups and alpha cutouts. Visible transparent scene surfaces still participate in that intersection
+depth; particle-renderer proxies are excluded. WebGPU volume clipping instead samples the opaque
+depth captured at the end of ordinary opaque drawing, before transmissive/transparent objects write
+depth. Full and reduced-resolution volumes reuse that snapshot, without another scene geometry pass.
+Transparent blending order still follows Three.js; this is not order-independent transparency.
+
 Volume rendering separates reconstruction (`interpolation`: `Nearest`, `Linear`,
 or `Cubic`) from integration quality (`stepSizeMultiplier`, relative to cell size,
 bounded by `steps`). Opacity is distance-corrected so quality changes do not
@@ -351,6 +365,8 @@ fixed downsampling. Otherwise measured GPU time can lower resolution further rel
 to that fixed baseline. Neither setting changes along-ray integration quality. Automatic feedback uses rendering time;
 compute-heavy simulation alone does not reduce volume image resolution. Ray-step and
 samples-per-voxel edits update uniforms without rebuilding the raymarch material.
+The renderer keeps at most two reduced-resolution targets (the current scale and one recent scale).
+Disabling adaptation at full resolution releases those unused targets.
 
 `await system.prepare(renderer)` can overlap optional renderer pipeline preparation with module
 preparation without advancing emission or simulation. Volume rendering prepares its existing
@@ -1924,6 +1940,51 @@ accumulating unbounded catch-up work. Fluid modules expose this through `maxFlui
 A smaller timestep and a work limit serve different purposes: one limits integration error,
 the other bounds recovery work after a stall.
 
+## Gas Pressure Solvers
+
+`GasSimulation` recommends `PressureSolver.Auto`, its default. Iterative projection has lower fixed
+cost; multigrid targets larger systems with useful coarse levels and stricter pressure goals.
+Auto uses an internal measured crossover with hysteresis and retains iterative projection for
+ordinary fixed-budget workloads and changing pressure topology. Its thresholds are implementation
+policy, not tuning parameters.
+
+```ts
+import { GasSimulation, PressureSolver } from '@rzmps/rzmps';
+
+const gas = new GasSimulation({
+  pressureSolver: PressureSolver.Auto,
+  pressureIterations: 64,
+  pressureMinIterations: 2,
+  pressureTolerance: 0.1,
+  // Optional; most users can leave these at their defaults.
+  multigrid: {
+    preSmoothing: 2,
+    postSmoothing: 4,
+    bottomIterations: 12,
+  },
+});
+```
+
+`pressureIterations` is a maximum pressure-work budget shared by the solvers. Iterative spends it
+on fine sweeps. Multigrid accounts for estimated coarse smoothing/transfers in fine-cell-equivalent
+units, fits complete cycles and spends any short remainder on ordinary smoothing. It does not
+expose a cycle count. `pressureMinIterations` and `pressureMaxIterations` bound the same work units.
+Without explicit bounds, they follow `pressureIterations`; lower the minimum to permit early
+completion. A positive `pressureTolerance` requests a maximum absolute residual goal; zero disables
+convergence checks. GPU convergence checks do not synchronize the CPU between cycles.
+
+With neither option supplied, the solver is Auto. Supplying `multigrid: { ... }` without an explicit
+`pressureSolver` selects Multigrid. An explicit solver always wins: Iterative ignores the multigrid
+execution settings, while Multigrid uses them even for small supported problems. If the budget
+cannot fit a complete cycle, its remainder is smoothing. Enum values and their string spellings
+(`'Auto'`, `'Iterative'`, `'Multigrid'`) are accepted.
+
+Compatible solver changes retain fine pressure as the warm start. Coarse corrections are transient;
+unchanged page/boundary topology can reuse operator metadata while refreshing RHS. Moving/removing
+colliders, recycled pages, bounds/quality changes and fractional openings invalidate that metadata.
+Auto conservatively uses the iterative reference while the topology settles. It does not promise
+that every high-resolution or high-density plume is faster with multigrid.
+
 ## Writing CPU and GPU Modules
 
 The CPU callback mutates a JavaScript `Particle`. `modifyGPU` builds a Three.js Shading Language
@@ -1950,11 +2011,107 @@ the returned kernel uses the current CPU count; update its `count` when that pop
 Callbacks decide whether dead slots participate. These kernels require an initialized grid and
 must be rebuilt if the grid's underlying particle storage is replaced.
 
-`spatialGridOptions.maxBounds` optionally caps each axis of the final spatial domain. It defaults
-to `Infinity`; power-of-two grids round a finite cap down to the nearest power of two. The grid applies
-this ceiling to supplied bounds and automatic GPU expansion. Runtime changes use
-`module.setSpatialGridOptions({ maxBounds: 16 })` or `grid.maxBounds = 16`. Fluid modules supply padded
-particle/field support to the grid and retain their own `boundsPolicy` for particles at the cap.
+Automatic grids use rectangular, offset domains with cubic cells and brick-aligned faces.
+`grid.gridDimensions` and `grid.brickDimensions` describe actual per-axis dimensions; `cellsPerAxis`
+is the subdivision reference resolution. Explicit `bounds` opt out of automatic sizing/movement.
+
+`spatialGridOptions.minBounds` and `maxBounds` independently constrain physical dimensions per axis.
+Numbers are cube shortcuts; Vector3 values support anisotropic limits. Defaults are zero/Infinity.
+Physical caps fit whole bricks and do not implicitly cap quality. Runtime changes use
+`module.setSpatialGridOptions({ maxBounds: new THREE.Vector3(4, 16, 4) })` or `grid.maxBounds = 16`.
+
+Automatic quality uses the longest side of constrained **unquantized** support as its reference floor.
+Its power-of-two tier, divided by `2^(brickSubdivisions + cellSubdivisions)`, determines cubic cell width.
+Rectangular coverage saves empty space while keeping the enclosing cube's linear-resolution reference;
+anisotropy no longer implicitly increases samples along the long axis. `equivalentVolumeSide` remains
+a volume diagnostic. A 2 × 2 × 16 quality target has reference floor 16; coverage remains rectangular.
+`minVolumeQuality` (default 2) and `maxVolumeQuality` (default Infinity) explicitly constrain that reference.
+After initial selection, a retained tier has a bounded hysteresis band in both directions:
+coarsening waits until support exceeds 1.1 times the current side, and refinement waits until it
+falls below 0.45 times that side. Quality requests then debounce for one second independently of
+physical `autoShrink` and `shrinkDelay`. Explicit quality limits remain authoritative.
+The separate deferred quality request/transition can temporarily leave the active grid at its old tier.
+Gas prepares replacement pressure and resampling shaders asynchronously in small batches before
+adopting automatic tier changes; the current grid continues running and growing guards meanwhile.
+Export texture backing is retained, with any required growth handled by the existing staged allocator.
+Coarsening averages scalar cells conservatively (eight for a 2x change) and averages tangential MAC
+faces (four per component); refinement uses trilinear sampling at the correct scalar/face locations.
+Pressure operators change with spacing/topology, so their preparation is distinct from the averaging
+pass. Manual subdivision changes still require structural rebuilds.
+`autoVolumeQuality` defaults to true; set it to false to freeze quality independently of bounds growth.
+Supplying `volumeQuality` selects a static side unless `autoVolumeQuality: true` is also supplied.
+For example, `{ volumeQuality: 4, brickSubdivisions: 3, cellSubdivisions: 4 }` fixes cell width at
+4 / 128 while the rectangular domain can continue to grow. With power-of-two quantization enabled,
+use a power-of-two side. `module.setSpatialGridOptions({ autoVolumeQuality: false })` freezes the
+current live tier; set `volumeQuality` explicitly to choose another fixed tier.
+
+Automatic sizing uses actual occupied particle support plus an empty guard brick layer, with no
+velocity/lifetime forecasting. Compact metadata is reused from the existing hash build; gas includes
+its occupied field support. Independent face growth restores the guard, while removal waits for
+`shrinkDelay`. Offset movement emerges from growing one face and later shrinking the opposite face.
+`grid.resolveOccupiedBounds(support)` resolves this layout for consumers following persistent fields.
+Explicit bounds remain fixed. Ballistic/Kill/Contain policies apply at physical caps.
+
+Fluid modules use an internal 0.75-second, per-face outward-travel guard: particle travel is capped
+by remaining lifetime, gas travel by current effective density decay. A compact median/maximum
+blend chooses at least one guard brick, with immediate growth and delayed shrink. Actual occupancy
+still handles arbitrary jumps. Support readback queues coverage using the last travel estimate before
+waiting for a fresh histogram. Guards use the **current** brick width; coverage never waits for quality.
+A separate request considers world travel once when selecting a future quality tier. The automatic
+consumer waits at least one stable second, applies pending coverage first, and delays quality shrink
+by `shrinkDelay` as well. `resolveDeferredQuality(now)` exposes this separate request to custom consumers.
+Quality transitions still remap/rebuild synchronously when consumed; deferred scheduling does not
+make that structural work asynchronous. No future module/force behavior is forecast.
+`grid.resolveOccupiedBounds(support, now, { travel: [minusX, plusX, minusY, plusY, minusZ, plusZ] })`
+also accepts explicit world-space travel for consumers; an array instead supplies explicit depths.
+
+Sparse fluid admission prioritizes physical state and immediate transport over source/stencil and
+optional halos. Empty domain guards do not require cell residency. Capacity preparation uses observed demand and
+headroom; compatible later requests can finish one tier and stage the next without restarting it.
+`system.prepare(renderer)` captures predictable gas shader variants against stable particle bindings
+without emitting or advancing time. Cold quality-tier transitions remain structural and may hitch.
+
+At unchanged cell width, fluid domain growth, shrink and whole-brick shifts update runtime addressing.
+They retain compatible resident fields, pressure warm starts and compiled kernels. Empty guard
+coverage does not allocate resident pages. Directory, resident-pool and export-texture capacity grow
+separately through staged allocation; changing volume quality still remaps incompatible state.
+Gas simulation coverage also proceeds while larger derived export textures prepare. Until the swap,
+the exported window is bounded by current texture capacity and follows occupied support; its bounds
+can temporarily cover less than the simulation rectangle. Resident simulation data is retained.
+`showGridHelper` displays every brick in the rectangular domain: orange contains physical gas/markers,
+green is empty. The cyan outline is the domain rectangle. Colors use the current simulation fields,
+not residency or request priority. Empty bricks can have no cell page; they still have a valid
+rectangular address and appear green. The helper adds a GPU occupancy reduction only while enabled,
+with no directory readback. Growing a face adds a rectangular layer of addresses, not individual
+irregular bricks. Cell-page allocation remains lazy and separate from domain dimensions.
+
+Gas requests a complete one-brick receiver ring around each physical brick before transport,
+in addition to the per-cell velocity/stencil requests. This runs once per logical brick, not once
+per cell, and cannot recursively seed further rings. It gives receiver cell storage a whole brick
+of lead rather than waiting until density is within a few cells of the page edge. Distant green
+bricks remain without cell pages. Residency limits can still deny requests; the helper's green
+color indicates zero physical occupancy, not a guarantee of allocated cell storage.
+
+Gas resident-pool capacity grows independently of both the logical rectangle and quality. Compatible
+capacity changes allocate zero-initialized backing buffers, copy retained prefixes/packed planes,
+and rebind existing storage nodes. Grid, pressure, transport, source and export program identities
+remain stable. Capacity, sentinel addresses, and packed-plane strides are runtime shader parameters;
+no capacity-dependent program compilation is required. Device storage-binding limits still cap a pool.
+Pressure reduction scratch reserves the supported count with runtime compact work; it does not
+reserve simulation cells for vacant domain bricks.
+
+Without an explicit `initialBrickCapacity`, `system.prepare(renderer)` sizes the initial gas pool from
+readable emitter geometry, birth position/scale envelopes and their immediate one-brick receiver ring,
+plus existing CPU particle support. Unique brick addresses are counted across sources, rounded to a
+geometric tier and limited by `maxBrickCapacity`/device limits. A single bootstrap slot exists before
+preparation. This is a conservative source-envelope estimate, not sampling of future random births;
+opaque GPU-only position/scale expressions cannot be predicted by that CPU census. Explicit initial
+reserves remain authoritative. Preparation does not emit particles or advance simulation time.
+Empty logical guard addresses do not add cell-storage demand to that initial census.
+
+A GPU `VolumeField` may provide `textureResolution` for backing capacity larger than its logical
+`resolution`. The logical data occupies the lower-origin region; the renderer handles texture-coordinate
+scaling independently from world bounds. CPU fields omit this member.
 
 ### Spatial Aggregation And Levels
 
@@ -2032,6 +2189,192 @@ Dynamic numbers, vectors, colors, ranges, sets, and callbacks are available to b
 components. Callback curves are sampled into interpolated uniform tables at
 `ParticleSystem.Settings.GPU_DYNAMIC_VALUE_RESOLUTION`; increase it when a high-frequency curve needs more
 fidelity. TSL nodes can be supplied directly where a dynamic value is evaluated by GPU code.
+
+## GPU Gas Modules
+
+`GasModule` is a `Module` subclass for gas cells, discovered through `system.getModules` by
+`GasSimulation` and `VolumeRenderer`. Add it to the system's normal module list. It does not execute
+per particle. Tags select overlapping consumers, untagged modules apply to all, lower priorities
+run first, and `enabled: false` disables both callbacks.
+
+```ts
+import { GasModule } from '@rzmps/rzmps';
+import { mix, smoothstep } from 'three/tsl';
+
+system.addModule(new GasModule({
+  modifyGPU(cell, context) {
+    context.turbulenceNoiseStrength.mulAssign(cell.temperature.clamp(0, 1));
+  },
+  modifyRenderGPU(cell, context) {
+    const hot = smoothstep(0.15, 0.8, cell.temperature);
+    const dense = smoothstep(0.2, 1.2, cell.density);
+    context.densityNoiseContrast.mulAssign(mix(1, mix(1.6, 0.75, dense), hot));
+  },
+}));
+```
+
+Callbacks build TSL expressions, rather than run JavaScript once per cell. Use `assign`, `addAssign`
+and `mulAssign` on their nodes. `cell.position` is in simulation space; density is concentration,
+temperature is specific heat, color is unpremultiplied RGB, and velocity is in simulation units per
+second. Simulation callbacks receive the existing turbulence, vorticity, buoyancy, dissipation and
+`scalarDiffusion` coefficients after the ordinary by-temperature/by-density controls. Coefficients
+are local expressions, not new transported fields. Rules inline at the existing solver sampling
+sites: velocity transport commits velocity, scalar transport commits density/temperature/color,
+and confinement reads its local strength. Keep callbacks deterministic shader operations; do not
+assume a once-per-frame JavaScript invocation or accumulate JavaScript side effects.
+
+Render callbacks receive local `density`, `color`, `opacity`, `emission`, `densityNoiseStrength`,
+`densityNoiseContrast` and `densityNoiseFrequency` before masking and lighting. Cell density/color
+alias their context counterparts. All render changes are transient, and no sparse field is allocated.
+Native GPU producers can supply `VolumeField.sampleVelocityGPU` to read their existing velocity;
+fields without this optional sampler return zero velocity. Velocity is sampled lazily only when a
+callback reads it. Existing scene-depth clipping, bounds and collisions remain authoritative.
+
+Change `module.modifyGasGPU` (the simulation callback passed as `modifyGPU` in the constructor),
+`module.modifyRenderGPU`, or the corresponding `module.options` callback to replace a rule.
+Callback replacement, ordering, enable/tag changes and `needsUpdate = true` invalidate the relevant
+graphs without rebuilding gas storage. `deps: () => [capturedValue]` also detects changed captured
+configuration; TSL uniforms can update without recompilation. Simulation-only changes leave the
+render graph intact, and render-only changes leave transport graphs intact. The initial gas callback
+implementation requires native WebGPU; it adds no CPU gas-cell processing or WebGL callback path.
+
+## Volume sampling
+
+VolumeRenderer reconstructs density and transported parameters with trilinear filtering at explicit
+LOD zero by default. `interpolation: 'Nearest'` deliberately selects nearest voxels; `'Cubic'` offers
+more expensive B-spline reconstruction. Simulation fields and resolution are independent of this choice.
+
+Full-strength jitter remains the default (`jitterStrength: 1`). Each camera ray fetches one phase from
+an embedded, periodic 32×32 blue-noise rank texture; its integration strata use an irrational rotation
+of that phase. This avoids piecewise-constant world-cell offsets appearing as large surface facets.
+The texture is one kilobyte, requires no asset load or runtime generation, and is released with its
+renderer. Jitter remains stable for a given pixel and seed, with no temporal history or frame seed.
+`jitterSeed` changes the phase, and zero strength still samples interval midpoints.
+
+This distributes finite-sampling error into fine grain rather than removing the intentional jitter
+tradeoff. It does not filter simulation fields or blur density before masking. Interval-length opacity
+integration, sparse skipping and the user-selected ray/sample budgets remain unchanged. Coarse
+occupancy and reconstruction metadata still use nearest reads intentionally; those control lookups
+are separate from density reconstruction.
+
+## Volumetric Lighting Grids
+
+`LightingGrid` is an opt-in, renderer-side directional lighting field. It is independent of simulation
+storage and resolution. Without it, VolumeRenderer retains its existing simple directional lighting.
+
+```ts
+import { VolumeRenderer } from '@rzmps/rzmps';
+
+const volume = new VolumeRenderer({ lightingGridOptions: {} });
+```
+
+A configured example keeps lighting probes much coarser than gas cells:
+
+```ts
+const volume = new VolumeRenderer({ lightingGridOptions: {
+  levels: 3,
+  directions: [6, 12, 24],
+  cellSize: 0.5,          // World-space probe spacing, independent of gas subdivisions.
+  levelScale: 2,
+  samplesPerInterval: 4,
+  environmentIntensity: 1,
+  scatteringIterations: 0,
+  includeSceneLights: true,
+} });
+```
+
+The default is three cascades, six finest Fibonacci-sphere directions (doubling per coarser cascade),
+and a finest probe spacing of the power-of-two enclosing side divided by eight. Explicit
+`cellSize` requests fixed world-space lighting detail. If a growing domain would exceed the
+2048-texel packed directional texture limit, probe spacing doubles until the layout fits instead
+of aborting the render loop. `statistics.probeSpacing` reports the effective spacing; the configured
+`cellSize` stays unchanged and is restored as the domain shrinks. This protects texture dimensions,
+not a total GPU-memory budget. `margin` accepts a number or Vector3, and
+`maxDistance` defaults to the power-of-two enclosing lighting-domain diagonal. Bounds remain rectangular,
+snapped to a world-anchored lattice so face growth does not slide existing probes. These small,
+coarse fields use dense directional textures rather than allocating gas cells or another sparse
+particle index. Rectangular bounds/vector/addressing conventions reuse the shared spatial utilities.
+
+Each probe/direction stores half-float RGB radiance and remaining transmission. Short, fine intervals
+merge with longer, coarser intervals as `Lnear + Tnear * Lfar`, `Tnear * Tfar`. Overlapping distance
+weights blend direct-light contributions across interval boundaries rather than switching shells abruptly.
+Hardware trilinear
+sampling interpolates probes; balanced angular interpolation preserves both constant fields and
+integrated radiance between Fibonacci direction sets. Direction counts control angular detail;
+`cellSize`, `levels`, `levelScale` and `samplesPerInterval` control spatial/interval approximation.
+
+Directional, point and spot lights are injected during grid updates. Point/spot lights with finite
+`distance` outside the domain are initially filtered. Once admitted, a light remains eligible throughout
+the volume until removed from the scene; its range controls smooth dilution rather than a hard cutoff.
+Scene membership is cached and invalidated on object
+add/remove; transforms, visibility, intensity, color, distance, decay and spot cones are tracked.
+Point attenuation uses Three's inverse-distance-power convention with a positive finite-range tail:
+`1 / (1 + (distanceToLight / light.distance)^4)^2`. Zero light distance means no range attenuation.
+The camera raymarch uses a pre-averaged one-fetch field for zero `anisotropy`. Averaging commutes
+with trilinear interpolation, so this preserves the directional integral. Nonzero HG `anisotropy`
+uses the complete directional set; neither path loops over scene lights per ray sample.
+Grid lighting replaces the simple directional/shadow path completely; render-module emission is
+added separately. Existing renderer controls and density remain unchanged.
+
+Far-field input priority is baked Three LightProbeGrid SH atlas, uniform LightProbe SH, supported
+`scene.environment` (or explicit `environment`), then constant `ambient` (linear 0.2 gray by default).
+LightProbeGrid's packed atlas is read directly; this class does not bake it. SH is evaluated as
+radiance, not the cosine-convolved irradiance used for surface shading. Raw cube and equirectangular
+textures are supported, including scene environment rotation/intensity; PMREM CubeUV textures
+currently use ambient fallback. `environmentIntensity` multiplies all far-field inputs. Set
+`includeSceneLights: false` when baked lighting already includes those static direct lights.
+
+VolumeRenderer supplies world-space bounds and an extinction sampler derived from its opacity
+mapping: `sigma = -log(1 - opacity)`, with `T = exp(-sigma * segmentLength)`. Coarse lighting uses
+unmasked density rather than re-running visual noise at every lighting sample. Changing density,
+volume transforms, opacity, lights or environment updates the lighting field; unchanged inputs do
+not dispatch. Grid updates run before the volume draw and work while the simulation is paused.
+All cascades currently refresh together on an input change, favoring current shadows over stale
+coarse illumination. `scatteringIterations` adds a small isotropic redistribution approximation;
+it is not a physically exact multiple-scattering solver and defaults to zero.
+
+The smoke/fire presets use fixed `cellSize: 0.25`, `directions: 12`, `samplesPerInterval: 8` and
+`maxDistance: 16` for stable, finer lighting. Automatic probe-spacing tiers can still change approximation
+when a domain crosses a power-of-two reference; explicit spacing and interval distance avoid that change.
+
+The demo prepares new GPU systems once. Replacing scene geometry retains the live particle root;
+it does not detach systems, clear their fields or rerun full preparation. Subsequent updates use the
+ordinary clock and bounded catch-up/substeps, including across loading gaps. Scene colliders and
+lighting are rediscovered by their existing update paths.
+
+Reduced-resolution volume reconstruction retains the closest depth-compatible contributing ray when
+bilateral weights underflow at narrow scene-depth gaps. Its metadata records the first nonzero volume
+contribution, rather than the proxy-box entry, to keep rear fog occluded by foreground geometry.
+
+For direct use, call `prepare(renderer, scene, bounds, source?)` to warm resources, or
+`update(renderer, scene, bounds, source?)` to refresh them. An optional source supplies an owner,
+world-space extinction callback, numeric/string `version`, and structural `shaderKey`. Increment
+version after density changes, and shaderKey after changing the callback's captured graph structure.
+Set `needsUpdate = true` after rebaking GPU-only probe textures whose Three texture version does not
+change. LightingGrid exposes its own benchmarks and lightweight `statistics` for probe count,
+directional entries, owned GPU texture/light-record memory and update count.
+
+VolumeRenderer accepts a partial `lightingGridOptions` object, creates its own internal grid and
+updates that instance when configuration changes. Omission disables lighting and releases its GPU
+resources; renderer destruction also disposes the managed grid. Sharing an options object does not
+share resources. This matches managed `spatialGridOptions`, `octreeOptions` and `cubemapOptions`.
+The smoke and fire demos enable this option by default. Discovery retains out-of-range lights so
+moving one into range updates the volume without reattaching it. Scene membership and HDRI changes
+refresh the grid during rendering, including while simulation is paused.
+
+Scene AmbientLight contributes unoccluded irradiance, matching Three.js's ambient-light convention.
+Environment textures are projected to low-frequency SH on the GPU and cached until they change.
+Equirectangular projection integrates every texel with its solid-angle weight, preventing small,
+bright HDR sources from disappearing between Fibonacci directions. Existing LightProbe/LightProbeGrid
+coefficients are consumed directly. These inputs feed the grid, not separate per-ray lighting loops.
+The exported LightingGrid class remains available for independent GPU consumers, which own its
+prepare/update/dispose lifecycle. It is not passed as a VolumeRenderer constructor argument.
+
+Native WebGPU is required for cascades. WebGL VolumeRenderer retains its simpler lighting path.
+This first implementation does not ray trace opaque geometry or use fluid collision cells for
+shadows; coarse interpolation can leak light across thin features. Low direction counts can smooth
+narrow beams and HG highlights. Increase lighting quality independently of fluid quality when those
+approximations matter. The feature is volumetric lighting, not a replacement for surface GI.
 
 ## Emitters and Spatial Effects
 
@@ -2822,15 +3165,19 @@ as ordinary particle updates. Killing is discrete rather than fractionally reviv
 
 ## Gas effects
 
-GasSimulation automatically collects GasAffector modifiers and retains FluidCollider boundary discovery.
-Other particle effects require explicit opt-in through `requireSpatialEffects`; ordinary source-particle
+GasSimulation retains FluidCollider boundary discovery. Modifier sampling is opt-in through
+`supportSpatialEffects`, `supportForceFields` or explicit `requireSpatialEffects`; ordinary source-particle
 effects are not automatically applied to the gas again. Constructor requirements merge at construction;
 subsequent direct assignment is authoritative. Replacing the list does not silently reinsert defaults.
 
-`supportForceFields` defaults to false and is a virtual view of whether the list contains the
-ParticleForceField constructor. Setting it adds/removes only that constructor, preserving other
-requirements. Exact force-field instances or a broad SpatialEffect requirement remain explicit opt-ins.
-Gas demos enable the shortcut. There is no separate gas-specific collection or sampling switch.
+Both convenience flags default to false. `supportSpatialEffects: true` adds the SpatialEffect constructor
+to the existing requirements, collecting all compatible modifiers, including force fields and GasAffector.
+With broad support disabled, `supportForceFields: true` adds only ParticleForceField. Both disabled means
+no automatic modifier sampling; collider boundaries are independent. Explicit custom requirements remain
+authoritative. Setting either flag only adds/removes its constructor, preserving other requirements.
+The effective `supportForceFields` getter remains true while broad discovery is enabled, even if its
+narrower flag is set false. Gas demos enable broad discovery. Discovery, filtering and delta sampling
+use the same path as explicit requirements; there is no second effect system or new field storage.
 
 Required ordinary effects sample active, non-solid cells. Their pseudoparticle has the cell center,
 velocity, specific color, density as alpha, density times cell volume as mass, and cell size as scale.

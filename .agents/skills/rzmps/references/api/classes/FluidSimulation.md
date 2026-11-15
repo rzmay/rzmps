@@ -91,18 +91,6 @@ automaticPadding: boolean;
 
 ***
 
-<a id="automaticpaddingdistance"></a>
-
-### automaticPaddingDistance
-
-```ts
-readonly automaticPaddingDistance: Vector3;
-```
-
-Predicted distance on each axis, applied to source bounds before retaining existing field support.
-
-***
-
 <a id="benchmarks"></a>
 
 ### benchmarks
@@ -123,16 +111,6 @@ readonly benchmarks: Benchmarks;
 
 ```ts
 bounds: Box3;
-```
-
-***
-
-<a id="boundspadding"></a>
-
-### boundsPadding
-
-```ts
-boundsPadding: number;
 ```
 
 ***
@@ -319,6 +297,16 @@ gpuExecutionContext: GPUEventExecutionContext;
 
 ***
 
+<a id="griddimensions"></a>
+
+### gridDimensions
+
+```ts
+readonly gridDimensions: Vector3;
+```
+
+***
+
 <a id="maxfluidsubsteps"></a>
 
 ### maxFluidSubsteps
@@ -350,6 +338,18 @@ modifyGPU: ModuleGPUUpdate;
 #### Inherited from
 
 [`Module`](Module.md).[`modifyGPU`](Module.md#modifygpu)
+
+***
+
+<a id="occupiedbounds"></a>
+
+### occupiedBounds
+
+```ts
+readonly occupiedBounds: Box3;
+```
+
+Last accepted particle/source plus persistent-field support.
 
 ***
 
@@ -704,6 +704,28 @@ get gpuParameterUploadCount(): number;
 #### Inherited from
 
 [`Module`](Module.md).[`gpuParameterUploadCount`](Module.md#gpuparameteruploadcount)
+
+***
+
+<a id="modifiesparticles"></a>
+
+### modifiesParticles
+
+#### Get Signature
+
+```ts
+get modifiesParticles(): boolean;
+```
+
+Whether this module participates in ordinary per-particle modification.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`Module`](Module.md).[`modifiesParticles`](Module.md#modifiesparticles)
 
 ***
 
@@ -1083,7 +1105,7 @@ Returns the managed CPU structure after prepare(), when enabled.
 ### getParticleSpatialGrid()
 
 ```ts
-getParticleSpatialGrid(particleSystem):
+getParticleSpatialGrid(system):
   | ParticleSpatialGrid<SpatialAggregateLayout>
   | undefined;
 ```
@@ -1092,7 +1114,7 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 #### Parameters
 
-##### particleSystem
+##### system
 
 [`ParticleSystem`](ParticleSystem.md)
 
@@ -1101,7 +1123,7 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
   \| [`ParticleSpatialGrid`](ParticleSpatialGrid.md)\<[`SpatialAggregateLayout`](../type-aliases/SpatialAggregateLayout.md)\>
   \| `undefined`
 
-#### Inherited from
+#### Overrides
 
 [`Module`](Module.md).[`getParticleSpatialGrid`](Module.md#getparticlespatialgrid)
 

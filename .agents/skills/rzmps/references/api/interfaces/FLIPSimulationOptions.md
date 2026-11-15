@@ -70,20 +70,6 @@ bounds: Box3;
 
 ***
 
-<a id="boundspadding"></a>
-
-### boundsPadding
-
-```ts
-boundsPadding: number;
-```
-
-#### Inherited from
-
-[`FluidSimulationOptions`](FluidSimulationOptions.md).[`boundsPadding`](FluidSimulationOptions.md#boundspadding)
-
-***
-
 <a id="boundspolicy"></a>
 
 ### boundsPolicy
@@ -97,7 +83,7 @@ boundsPolicy:
 ```
 
 Behavior at the finite spatialGridOptions.maxBounds cap, not intermediate adaptive edges. Defaults to Ballistic.
-Contain retains a reached cap instead of shrinking away closed field walls.
+Quality limits do not act as physical caps.
 
 #### Inherited from
 
@@ -413,6 +399,8 @@ Collect asynchronous pressure and divergence diagnostics through benchmarks. Def
 pressureIterations: number;
 ```
 
+Maximum pressure work: iterative sweeps or estimated fine-cell-equivalent multigrid work.
+
 #### Inherited from
 
 [`FluidSimulationOptions`](FluidSimulationOptions.md).[`pressureIterations`](FluidSimulationOptions.md#pressureiterations)
@@ -427,7 +415,7 @@ pressureIterations: number;
 optional pressureMaxIterations?: number;
 ```
 
-Maximum pressure sweeps. Omission follows pressureIterations.
+Maximum pressure-work budget. Omission follows pressureIterations.
 
 #### Inherited from
 
@@ -443,7 +431,7 @@ Maximum pressure sweeps. Omission follows pressureIterations.
 optional pressureMinIterations?: number;
 ```
 
-Minimum pressure sweeps. Omission follows pressureIterations for a fixed solve.
+Minimum pressure-work budget. Omission follows pressureIterations for a fixed solve.
 
 #### Inherited from
 
@@ -653,15 +641,3 @@ Enables a managed GPU ParticleSpatialGrid with default options.
 #### Inherited from
 
 [`ModuleOptions`](ModuleOptions.md).[`useSpatialGrid`](ModuleOptions.md#usespatialgrid)
-
-***
-
-<a id="velocitypaddinglookahead"></a>
-
-### velocityPaddingLookahead
-
-```ts
-velocityPaddingLookahead: number;
-```
-
-Seconds of current maximum particle velocity reserved around live particle bounds.

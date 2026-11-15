@@ -16,8 +16,9 @@ try {
   await openFixture(page, `http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${fixture}`, errors);
   const results = [];
   const firstDifference = (a, b) => a.findIndex((value, i) => !Number.isFinite(value) || Math.abs(value - b[i]) > 1e-5);
-  for (const warm of [false, true]) {
-    const [a, b] = await page.evaluate(warm => window.transition(warm), warm);
+  for (const removed of [false, true]) for (const rectangular of [false, true]) for (const warm of [false, true]) {
+    const [a, b] = await page.evaluate(({ warm, rectangular, removed }) => window.transition(warm, rectangular, removed),
+      { warm, rectangular, removed });
     assert(a.inputs.every((values, i) => firstDifference(values, b.inputs[i]) < 0), 'fine physical inputs must match');
     let mismatch = null;
     const stages = [];
@@ -28,16 +29,18 @@ try {
       stages.push({ stage: expected.stage, level: expected.level,
         max: Math.max(...expected.values.map(Math.abs)), sum: expected.values.reduce((x, y) => x + y, 0) });
       if (at >= 0) {
-        const channels = expected.values.length / expected.n ** 3, cell = Math.floor(at / channels), n = expected.n;
+        const channels = expected.values.length / expected.dimensions.reduce((a, b) => a * b, 1), cell = Math.floor(at / channels), n = expected.n;
         mismatch = { stage: expected.stage, level: expected.level,
-          coordinate: [cell % n, Math.floor(cell / n) % n, Math.floor(cell / (n * n))],
+          coordinate: [cell % n, Math.floor(cell / n) % expected.dimensions[1], Math.floor(cell / (n * expected.dimensions[1]))],
           component: at % channels, expected: expected.values[at], actual: actual.values[at] };
         break; // Downstream differences are consequences, not new diagnoses.
       }
     }
-    results.push({ warmStart: warm, mismatch, stages });
+    results.push({ change: removed ? 'remove face' : 'add face', rectangular, warmStart: warm, mismatch, stages });
   }
-  await fs.writeFile(path.join(output, 'result.json'), JSON.stringify({ results, errors }, null, 2));
+  const pressure = await page.evaluate(() => window.pressureComparison());
+  await fs.writeFile(path.join(output, 'result.json'), JSON.stringify({ results, pressure, errors }, null, 2));
+  console.log(JSON.stringify({ pressure }));
   console.log(JSON.stringify(results));
   assert.deepEqual(errors, []);
   assert(results.every(result => !result.mismatch), 'sparse topology transition diverges at the reported first stage');

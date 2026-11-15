@@ -79,12 +79,32 @@ autoExpand: boolean;
 
 ***
 
+<a id="automaticbounds"></a>
+
+### automaticBounds
+
+```ts
+readonly automaticBounds: boolean;
+```
+
+***
+
 <a id="autoshrink"></a>
 
 ### autoShrink
 
 ```ts
 autoShrink: boolean;
+```
+
+***
+
+<a id="autovolumequality"></a>
+
+### autoVolumeQuality
+
+```ts
+autoVolumeQuality: boolean = true;
 ```
 
 ***
@@ -100,6 +120,50 @@ readonly bounds: Box3;
 #### Overrides
 
 [`SpatialGrid`](SpatialGrid.md).[`bounds`](SpatialGrid.md#bounds)
+
+***
+
+<a id="brickdimensions"></a>
+
+### brickDimensions
+
+```ts
+readonly brickDimensions: Vector3;
+```
+
+Whole cubic brick counts along each domain axis.
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`brickDimensions`](SpatialGrid.md#brickdimensions)
+
+***
+
+<a id="bricksize"></a>
+
+### brickSize
+
+```ts
+brickSize: number = 0;
+```
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`brickSize`](SpatialGrid.md#bricksize)
+
+***
+
+<a id="cellsize"></a>
+
+### cellSize
+
+```ts
+cellSize: number = 0;
+```
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`cellSize`](SpatialGrid.md#cellsize)
 
 ***
 
@@ -123,6 +187,64 @@ cubicBounds: boolean;
 
 ***
 
+<a id="domaindiagnostics"></a>
+
+### domainDiagnostics
+
+```ts
+readonly domainDiagnostics: object;
+```
+
+#### growth
+
+```ts
+growth: number[];
+```
+
+#### hardCapBreaches
+
+```ts
+hardCapBreaches: number = 0;
+```
+
+#### qualityTierChanges
+
+```ts
+qualityTierChanges: number = 0;
+```
+
+#### shift
+
+```ts
+shift: number[];
+```
+
+#### shrink
+
+```ts
+shrink: number[];
+```
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`domainDiagnostics`](SpatialGrid.md#domaindiagnostics)
+
+***
+
+<a id="equivalentvolumeside"></a>
+
+### equivalentVolumeSide
+
+```ts
+equivalentVolumeSide: number = 0;
+```
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`equivalentVolumeSide`](SpatialGrid.md#equivalentvolumeside)
+
+***
+
 <a id="expansionhysteresis"></a>
 
 ### expansionHysteresis
@@ -133,12 +255,58 @@ expansionHysteresis: number;
 
 ***
 
+<a id="griddimensions"></a>
+
+### gridDimensions
+
+```ts
+readonly gridDimensions: Vector3;
+```
+
+Actual per-axis cell counts; cells remain cubic.
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`gridDimensions`](SpatialGrid.md#griddimensions)
+
+***
+
 <a id="maxquerysteps"></a>
 
 ### maxQuerySteps
 
 ```ts
 maxQuerySteps: number;
+```
+
+***
+
+<a id="maxvolumequality"></a>
+
+### maxVolumeQuality
+
+```ts
+maxVolumeQuality: number = Infinity;
+```
+
+***
+
+<a id="minbounds"></a>
+
+### minBounds
+
+```ts
+readonly minBounds: Vector3;
+```
+
+***
+
+<a id="minvolumequality"></a>
+
+### minVolumeQuality
+
+```ts
+minVolumeQuality: number = 2;
 ```
 
 ***
@@ -170,6 +338,32 @@ shrinkDelay: number;
 ```ts
 timeQuality: number;
 ```
+
+***
+
+<a id="volumequality"></a>
+
+### volumeQuality
+
+```ts
+volumeQuality: number = 2;
+```
+
+***
+
+<a id="volumequalitytier"></a>
+
+### volumeQualityTier
+
+```ts
+volumeQualityTier: number = 0;
+```
+
+Quality reference side controlling cell width; physical coverage remains rectangular.
+
+#### Inherited from
+
+[`SpatialGrid`](SpatialGrid.md).[`volumeQualityTier`](SpatialGrid.md#volumequalitytier)
 
 ## Accessors
 
@@ -292,14 +486,12 @@ readonly `number`[]
 #### Get Signature
 
 ```ts
-get maxBounds(): number;
+get maxBounds(): Vector3;
 ```
-
-Maximum grid side length. Changing the ceiling immediately normalizes the current CPU bounds.
 
 ##### Returns
 
-`number`
+`Vector3`
 
 #### Set Signature
 
@@ -311,7 +503,7 @@ set maxBounds(value): void;
 
 ###### value
 
-`number`
+`number` \| `Vector3`
 
 ##### Returns
 
@@ -636,6 +828,20 @@ getChildren(region): GPUSpatialRegionRange;
 #### Returns
 
 [`GPUSpatialRegionRange`](../interfaces/GPUSpatialRegionRange.md)
+
+***
+
+<a id="getdimensionsnode"></a>
+
+### getDimensionsNode()
+
+```ts
+getDimensionsNode(): Node<"vec3">;
+```
+
+#### Returns
+
+`Node`\<`"vec3"`\>
 
 ***
 
@@ -974,6 +1180,66 @@ Resolve the final normalized, capped domain for externally supplied support boun
 
 ***
 
+<a id="resolvedeferredquality"></a>
+
+### resolveDeferredQuality()
+
+```ts
+resolveDeferredQuality(now?, ready?): Box3 | undefined;
+```
+
+Consume a stable quality request separately, after urgent domain coverage has been applied.
+
+#### Parameters
+
+##### now?
+
+`number` = `...`
+
+##### ready?
+
+(`domain`) => `boolean`
+
+#### Returns
+
+`Box3` \| `undefined`
+
+***
+
+<a id="resolveoccupiedbounds"></a>
+
+### resolveOccupiedBounds()
+
+```ts
+resolveOccupiedBounds(
+   occupied,
+   now?,
+   guards?
+): Box3;
+```
+
+Restore empty guard bricks from actual support; removal waits independently on each face.
+
+#### Parameters
+
+##### occupied
+
+`Box3`
+
+##### now?
+
+`number` = `...`
+
+##### guards?
+
+[`SpatialGuardDepth`](../Supporting-Types/type-aliases/SpatialGuardDepth.md)
+
+#### Returns
+
+`Box3`
+
+***
+
 <a id="setbounds"></a>
 
 ### setBounds()
@@ -1094,7 +1360,7 @@ static locate(
 
 ##### cellsPerAxis
 
-`number`
+`number` \| `Vector3`
 
 #### Returns
 
@@ -1140,7 +1406,7 @@ static normalizeBounds(
 
 ##### maxBounds?
 
-`number` = `Infinity`
+`number` \| `Vector3` = `Infinity`
 
 #### Returns
 

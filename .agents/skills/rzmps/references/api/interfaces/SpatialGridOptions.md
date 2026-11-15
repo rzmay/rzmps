@@ -14,6 +14,18 @@
 
 ## Properties
 
+<a id="bounds"></a>
+
+### bounds?
+
+```ts
+optional bounds?: Box3;
+```
+
+Fixed physical coverage; disables automatic domain sizing and movement.
+
+***
+
 <a id="levels"></a>
 
 ### levels?
@@ -21,3 +33,51 @@
 ```ts
 optional levels?: SpatialLevelsInput;
 ```
+
+***
+
+<a id="maxbounds"></a>
+
+### maxBounds?
+
+```ts
+optional maxBounds?: number | Vector3;
+```
+
+Maximum physical size per axis, independent of quality. Defaults to Infinity.
+
+***
+
+<a id="maxvolumequality"></a>
+
+### maxVolumeQuality?
+
+```ts
+optional maxVolumeQuality?: number;
+```
+
+Maximum equivalent-volume quality side; caps coarsening, not physical coverage. Defaults to Infinity.
+
+***
+
+<a id="minbounds"></a>
+
+### minBounds?
+
+```ts
+optional minBounds?: number | Vector3;
+```
+
+Minimum physical size per axis. A number applies to all axes. Defaults to zero.
+
+***
+
+<a id="minvolumequality"></a>
+
+### minVolumeQuality?
+
+```ts
+optional minVolumeQuality?: number;
+```
+
+Minimum equivalent-volume quality side; smaller values permit finer cells. Defaults to two.

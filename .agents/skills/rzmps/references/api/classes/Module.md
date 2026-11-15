@@ -48,6 +48,7 @@ Per-particle modifier with priority phases, tag filtering, and a once-per-update
 - [`Collision`](Collision.md)
 - [`MaterialCopy`](MaterialCopy.md)
 - [`FluidSimulation`](FluidSimulation.md)
+- [`GasModule`](GasModule.md)
 
 ## Constructors
 
@@ -416,6 +417,24 @@ get gpuParameterUploadCount(): number;
 ##### Returns
 
 `number`
+
+***
+
+<a id="modifiesparticles"></a>
+
+### modifiesParticles
+
+#### Get Signature
+
+```ts
+get modifiesParticles(): boolean;
+```
+
+Whether this module participates in ordinary per-particle modification.
+
+##### Returns
+
+`boolean`
 
 ***
 

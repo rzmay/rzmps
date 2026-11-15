@@ -108,22 +108,6 @@ automaticPadding: boolean;
 
 ***
 
-<a id="automaticpaddingdistance"></a>
-
-### automaticPaddingDistance
-
-```ts
-readonly automaticPaddingDistance: Vector3;
-```
-
-Predicted distance on each axis, applied to source bounds before retaining existing field support.
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`automaticPaddingDistance`](FluidSimulation.md#automaticpaddingdistance)
-
-***
-
 <a id="benchmarks"></a>
 
 ### benchmarks
@@ -149,20 +133,6 @@ bounds: Box3;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`bounds`](FluidSimulation.md#bounds)
-
-***
-
-<a id="boundspadding"></a>
-
-### boundsPadding
-
-```ts
-boundsPadding: number;
-```
-
-#### Inherited from
-
-[`FluidSimulation`](FluidSimulation.md).[`boundsPadding`](FluidSimulation.md#boundspadding)
 
 ***
 
@@ -368,6 +338,20 @@ gpuExecutionContext: GPUEventExecutionContext;
 
 ***
 
+<a id="griddimensions"></a>
+
+### gridDimensions
+
+```ts
+readonly gridDimensions: Vector3;
+```
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`gridDimensions`](FluidSimulation.md#griddimensions)
+
+***
+
 <a id="maxfluidsubsteps"></a>
 
 ### maxFluidSubsteps
@@ -407,6 +391,22 @@ modifyGPU: ModuleGPUUpdate;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`modifyGPU`](FluidSimulation.md#modifygpu)
+
+***
+
+<a id="occupiedbounds"></a>
+
+### occupiedBounds
+
+```ts
+readonly occupiedBounds: Box3;
+```
+
+Last accepted particle/source plus persistent-field support.
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`occupiedBounds`](FluidSimulation.md#occupiedbounds)
 
 ***
 
@@ -712,16 +712,6 @@ readonly useSpatialGrid: boolean;
 
 ***
 
-<a id="velocitypaddinglookahead"></a>
-
-### velocityPaddingLookahead
-
-```ts
-velocityPaddingLookahead: number;
-```
-
-***
-
 <a id="capacity"></a>
 
 ### CAPACITY
@@ -853,6 +843,28 @@ get gpuParameterUploadCount(): number;
 #### Inherited from
 
 [`FluidSimulation`](FluidSimulation.md).[`gpuParameterUploadCount`](FluidSimulation.md#gpuparameteruploadcount)
+
+***
+
+<a id="modifiesparticles"></a>
+
+### modifiesParticles
+
+#### Get Signature
+
+```ts
+get modifiesParticles(): boolean;
+```
+
+Whether this module participates in ordinary per-particle modification.
+
+##### Returns
+
+`boolean`
+
+#### Inherited from
+
+[`FluidSimulation`](FluidSimulation.md).[`modifiesParticles`](FluidSimulation.md#modifiesparticles)
 
 ***
 
@@ -1296,7 +1308,7 @@ Returns the managed CPU structure after prepare(), when enabled.
 ### getParticleSpatialGrid()
 
 ```ts
-getParticleSpatialGrid(particleSystem):
+getParticleSpatialGrid(system):
   | ParticleSpatialGrid<SpatialAggregateLayout>
   | undefined;
 ```
@@ -1305,7 +1317,7 @@ Dependency hook used by function-defined and class-based GPU neighbor modules.
 
 #### Parameters
 
-##### particleSystem
+##### system
 
 [`ParticleSystem`](ParticleSystem.md)
 

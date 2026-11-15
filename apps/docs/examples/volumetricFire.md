@@ -38,9 +38,14 @@ Density dissipation stays at 0.2, temperature dissipation at four, buoyancy at e
 dissipation at 0.15. Only a modest temperature multiplier changes density dissipation: cool gas uses
 0.2 and fully hot gas 0.24. Cooling changes appearance quickly while smoke lasts slightly longer.
 Simulation temperature normalization is independent of the renderer's temperature range.
+A render-only GasModule multiplies the existing mask contrast by up to 1.6 in sparse hot tongues,
+reduces it toward 0.75 in dense hot cores, and approaches a neutral multiplier as gas cools.
+The original simulation and renderer values remain unchanged; the module allocates no gas field.
 Collision kills source particles at surfaces, and automatic fluid-collider collection blocks grid flow.
 
-The grid uses 3 brick subdivisions plus 4 cell subdivisions. Its short rolling prediction covers the
+The grid uses 3 brick subdivisions plus 3 cell subdivisions. `maxVolumeQuality: 8` caps cell width
+at 8 / 64 = 0.125 without changing the sixteen-unit physical bounds cap. Automatic quality has
+hysteresis in both directions and prepares replacements before adopting them. Its short rolling prediction covers the
 occupied gas as well as source particles. Automatic shrinking remains enabled with the configured delay.
 
 <ExampleCode region="modules" />
@@ -51,6 +56,11 @@ VolumeRenderer blends orange/yellow flames into gray smoke using physical temper
 stronger strength and contrast in hot regions; cool smoke uses a gentler, slightly finer mask.
 Two samples per voxel and 256 maximum ray steps control integration quality independently of opacity.
 Two particle lights use brightness four; these lights illuminate the surrounding scene.
+`lightingGridOptions` uses 0.25-unit probes, twelve finest directions, eight interval samples and a
+fixed sixteen-unit lighting distance. It supplies their light and the selected scene's lights/environment to
+the volume. The renderer owns its lighting grid and refreshes it as those inputs change.
+Both quality limits are eight, so the 3+3 grid starts and stays at a 0.125-unit cell width.
+This avoids oversampling a compact initial domain; physical bounds still grow and shrink independently.
 
 <ExampleCode region="renderers" />
 

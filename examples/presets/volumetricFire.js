@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Easing } from 'eaz';
+import { float, mix, smoothstep } from 'three/tsl';
 import warpNormal from 'examples/assets/images/warp_norm.jpg?url';
 import checkerboardScene from 'examples/scenes/checkerboard.js';
 import {
@@ -9,6 +10,7 @@ import {
   Collision,
   ForceOverLifetime,
   GasSimulation,
+  GasModule,
   ParticleSystem,
   ScaleOverLifetime,
   TransformByNoise,
@@ -23,7 +25,7 @@ import {
 export default async function createVolumetricFire() {
   // #region docs:modules:1
   const gas = new GasSimulation({
-    supportForceFields: true,
+    supportSpatialEffects: true,
     collisionOptions: { surfaceThickness: 0.02, bakedFieldResolution: 32 },
     pressureIterations: 16,
     externalForce: new THREE.Vector3(0, 0.05, 0),
@@ -44,18 +46,19 @@ export default async function createVolumetricFire() {
     // Slightly shorter-lived hot gas; retain the exported cool-smoke decay and flow settings.
     temperatureRange: [0, 1.2],
     densityDissipationByTemperature: [1.2, 1.5],
-    // Start compact and let automatic padding grow the domain up to the eight-unit cap.
-    bounds: new THREE.Box3(new THREE.Vector3(-2, -2, -2), new THREE.Vector3(2, 2, 2)),
-    boundsPadding: 0,
+    // Start compact; physical bounds and the cell-width cap remain independent.
     automaticPadding: true,
-    velocityPaddingLookahead: 0.5,
     turbulenceNoiseFrequency: 2.4,
     turbulenceNoiseSpeed: 0.95,
     turbulenceNoiseOctaves: 2,
     spatialGridOptions: {
       maxBounds: 16,
       brickSubdivisions: 3,
-      cellSubdivisions: 4,
+      cellSubdivisions: 3,
+      // Start at the authored world-space resolution instead of oversampling a tiny initial domain.
+      minVolumeQuality: 8,
+      // 8 / 2^(3 + 3) = 0.125: larger domains must not make the fire coarser.
+      maxVolumeQuality: 8,
       powerOfTwoBounds: true,
       autoExpand: false,
       shrinkDelay: 180,
@@ -88,6 +91,15 @@ export default async function createVolumetricFire() {
     // #region docs:modules:2
     modules: [
       gas,
+      // Keep the configured mask authoritative: preserve dense cores and sharpen sparse hot tongues.
+      new GasModule({
+        modifyRenderGPU(cell, context) {
+          const hot = smoothstep(0.15, 0.8, cell.temperature);
+          const dense = smoothstep(0.2, 1.2, cell.density);
+          const hotContrast = mix(float(1.6), float(0.75), dense);
+          context.densityNoiseContrast.mulAssign(mix(float(1), hotContrast, hot));
+        },
+      }),
       new Collision({ lifetimeLoss: 1 }),
       new ForceOverLifetime({
         force: new THREE.Vector3(0, 0.35, 0),
@@ -111,6 +123,7 @@ export default async function createVolumetricFire() {
     // #region docs:renderers:1
     renderers: [
       new VolumeRenderer({
+        lightingGridOptions: { cellSize: 0.25, directions: 12, samplesPerInterval: 8, maxDistance: 16 },
         // Heat-distortion sprites draw at order one and must sample the already rendered volume.
         renderOrder: 0,
         opacity: 0.75,

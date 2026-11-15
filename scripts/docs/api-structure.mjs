@@ -72,7 +72,7 @@ function classSection(name, source) {
   if (source?.startsWith('./utils/gpu/')) return 'GPU Infrastructure';
   if (name === 'MaterialCopyRegistry' || source?.startsWith('./rendering/compositing/')
     || source?.startsWith('./rendering/materials/')) return 'Helpers';
-  if (name === 'Benchmarks' || name === 'TextureAtlas') return 'Helpers';
+  if (name === 'Benchmarks' || name === 'TextureAtlas' || name === 'LightingGrid') return 'Helpers';
   if (
     name.endsWith('Helper') ||
     name === 'LiveCubemap' ||

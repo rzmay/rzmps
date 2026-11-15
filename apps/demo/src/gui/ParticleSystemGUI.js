@@ -6,7 +6,7 @@ import { GitFork, Package } from 'lucide-react';
 import * as THREE from 'three';
 
 import { createDefaultSceneBackground } from 'examples/utils/background.js';
-import { getSceneParticleRoot } from 'examples/utils/particleRoot.js';
+import { getSceneParticleRoot, retainSceneParticleRoot } from 'examples/utils/particleRoot.js';
 import { Collision, EndBehavior, MaxCulling, FluidSimulation } from '@rzmps/rzmps';
 
 import { EmitterGUI } from './particle-system-gui/EmitterGUI';
@@ -297,8 +297,9 @@ export class ParticleSystemGUI {
     if (!this.scene || !this.scenes[name]) return;
     const version = ++this.sceneLoadVersion;
     this.sceneLoading = true;
+    const releaseRoot = retainSceneParticleRoot(this.scene);
     try {
-      // Reparenting releases module resources, so finish any pending compilation first.
+      // Applications may finish their own pending work before replacing scene geometry.
       await this.beforeSceneChange?.();
       this.sceneCleanup?.();
       this.sceneCleanup = undefined;
@@ -323,11 +324,13 @@ export class ParticleSystemGUI {
       }
       this.sceneGUI = sceneLifecycle?.gui ?? sceneBuilder.gui;
       this.syncRendererBackground();
-      getSceneParticleRoot(this.scene).add(this.system);
+      const particleRoot = getSceneParticleRoot(this.scene);
+      if (this.system.parent !== particleRoot) particleRoot.add(this.system);
       this.configureSystemForScene(this.system);
       this.rebuild();
       this.emitCode();
     } finally {
+      releaseRoot();
       if (version === this.sceneLoadVersion) this.sceneLoading = false;
     }
   }

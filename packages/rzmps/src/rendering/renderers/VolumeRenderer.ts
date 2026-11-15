@@ -1,6 +1,9 @@
+import LightingGrid, { type LightingGridOptions } from '../lighting/LightingGrid';
+import GasModule, { type GPUGasCell, type GasRenderModuleContext } from '../../modules/GasModule';
 import * as THREE from 'three';
 import VolumeRenderTarget, { type VolumeResolutionOptions } from '../gpu/VolumeRenderTarget';
 import VolumeOccupancy from '../gpu/VolumeOccupancy';
+import OpaqueSceneDepth from '../gpu/OpaqueSceneDepth';
 import { MeshBasicNodeMaterial, WebGPURenderer, type Node, type UniformNode } from 'three/webgpu';
 import {
   Break,
@@ -17,7 +20,10 @@ import {
   cameraProjectionMatrix,
   cameraViewMatrix,
   float,
+  floatBitsToUint,
+  hash,
   int,
+  ivec2,
   floor,
   max,
   min,
@@ -35,9 +41,10 @@ import {
   vec3,
   vec2,
   vec4,
-  viewportDepthTexture,
   screenUV,
+  screenCoordinate,
   mrt,
+  struct,
 } from 'three/tsl';
 import Renderer, { CompensationMode, type RendererOptions } from '../../core/Renderer';
 import Particle from '../../core/Particle';
@@ -46,6 +53,7 @@ import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../..
 import type { VolumeFieldProvider } from '../volumeField.types';
 import type { VolumeField } from '../volumeField.types';
 import { volumeJitter } from '../shaders/volumeJitter';
+import createVolumeJitterTexture from '../shaders/createVolumeJitterTexture';
 import volumeVert from '../shaders/Volume.vert';
 import volumeFrag from '../shaders/Volume.frag';
 import buildVolumeBindings from '../shaders/buildVolumeBindings';
@@ -58,9 +66,18 @@ import type { ColorInput } from '../../values/valueInput.types';
 import type { ValueByParameter } from '../../values/valueByParameter.types';
 import { generateGPUParticleNoise4D } from '../../utils/noise.utils';
 
+const VolumeRayResult = struct({ color: 'vec4', firstDepth: 'float' });
+// Three's current struct declarations omit its proxy accessors.
+type VolumeRayValue = {
+  toVar(): VolumeRayValue;
+  get(name: 'color'): Node<'vec4'>;
+  get(name: 'firstDepth'): Node<'float'>;
+};
+
 interface FieldBinding {
   field: VolumeField;
   texture: THREE.Texture;
+  textureNode: ReturnType<typeof texture3D>;
   owned: boolean;
   version: number;
   resolution: THREE.Vector3;
@@ -68,6 +85,7 @@ interface FieldBinding {
   size: UniformNode<'vec3', THREE.Vector3>;
   occupancy?: VolumeOccupancy;
   resolutionNode: UniformNode<'vec3', THREE.Vector3>;
+  textureScale: UniformNode<'vec3', THREE.Vector3>;
 }
 
 /** Render-only transforms and weights; every child samples its parent source textures. */
@@ -85,6 +103,8 @@ interface VolumeLayer {
 }
 
 export interface VolumeRendererOptions extends RendererOptions {
+  /** Options that enable a managed world-space lighting grid. Omission disables it. WebGPU only. */
+  lightingGridOptions?: Partial<LightingGridOptions>;
   /** Renderer-only temperature color multiplier. Defaults to null (neutral white). */
   colorByTemperature?: ValueByParameter<ColorInput> | null;
   /** Renderer-only temperature opacity multiplier. Defaults to null (neutral one). */
@@ -178,9 +198,26 @@ export interface VolumeRendererOptions extends RendererOptions {
   sceneDepthClipping: boolean;
   /** View-space distance kept in front of opaque surfaces. Defaults to 0.001. */
   sceneDepthBias: number;
+  /** Enables soft intersections when softParticleDistance is positive. Defaults to true. WebGPU only. */
+  softParticles: boolean;
+  /** View-space intersection fade distance, matching SpriteRenderer; zero disables fading. Defaults to zero. */
+  softParticleDistance: number;
 }
 
 class VolumeRenderer extends Renderer {
+  lightingGridOptions?: Partial<LightingGridOptions>;
+  protected lightingGrid?: LightingGrid;
+  private attachedLightingGrid?: LightingGrid;
+  private sampledLightingGrid?: LightingGrid;
+  private sampledLightingVersion = -1;
+  private readonly lightingWorldToVolume = uniform(new THREE.Matrix4());
+  private readonly lightingBounds = new THREE.Box3();
+  private readonly lightingExtinction = (position: Node<'vec3'>): Node<'float'> => {
+    const local = this.lightingWorldToVolume.mul(vec4(position, 1)).xyz;
+    const sample = this.sampleVolume(local, this.gasModules.length > 0);
+    const opacity = this.renderOpacity(sample.density).mul(sample.opacity).clamp(0, 0.999999);
+    return float(1).sub(opacity).log().negate();
+  };
   colorByTemperature: ValueByParameter<ColorInput> | null = null;
   opacityByTemperature: ValueByParameter<number> | null = null;
   colorByDensity: ValueByParameter<ColorInput> | null = null;
@@ -255,12 +292,15 @@ class VolumeRenderer extends Renderer {
   transmittanceThreshold: number;
   sceneDepthClipping: boolean;
   sceneDepthBias: number;
+  softParticles: boolean;
+  softParticleDistance: number;
   private readonly gpuAdaptiveStepping = uniform(0);
   private readonly gpuAdaptiveStepThreshold = uniform(0.5);
   private readonly gpuAdaptiveStepFactor = uniform(4);
   private readonly gpuTransmittanceThreshold = uniform(0.01);
   private readonly gpuSceneDepthClipping = uniform(1);
   private readonly gpuSceneDepthBias = uniform(0.001);
+  private readonly gpuSoftParticleDistance = uniform(0);
   private readonly gpuNoiseStrength = uniform(0);
   private readonly gpuNoiseContrast = uniform(1);
   private readonly gpuNoiseFrequency = uniform(1);
@@ -272,6 +312,7 @@ class VolumeRenderer extends Renderer {
   private geometry = new THREE.BoxGeometry(1, 1, 1);
   private webglMaterial: THREE.ShaderMaterial;
   private webgpuMaterial: THREE.Material;
+  private readonly jitterTexture = createVolumeJitterTexture();
   private mesh: THREE.Mesh;
   private bounds = new THREE.Box3();
   private boundsCenter = new THREE.Vector3();
@@ -285,7 +326,8 @@ class VolumeRenderer extends Renderer {
   private readonly gpuBaseG = uniform(0.5);
   private readonly gpuBaseB = uniform(0.5);
   private preparingResources = false;
-  private readonly viewportDepth = viewportDepthTexture();
+  private readonly opaqueDepth = new OpaqueSceneDepth();
+  private readonly viewportDepth = this.opaqueDepth.node;
   private readonly gpuSteps = uniform(100, 'int');
   private gpuMaterialDepthTest = true;
   private readonly gpuBoundsMinimum = uniform(new THREE.Vector3());
@@ -302,6 +344,8 @@ class VolumeRenderer extends Renderer {
   private readonly lightPosition = new THREE.Vector3();
   private readonly lightTarget = new THREE.Vector3();
   private readonly gpuJitter = uniform(0);
+  private gasModules: GasModule[] = [];
+  private readonly gasElapsedTime = uniform(0);
   private materialSamplingKey = '';
   private readonly curveData = new Uint16Array(256 * 4);
   private readonly curveTexture = new THREE.DataTexture(this.curveData, 256, 1, THREE.RGBAFormat, THREE.HalfFloatType);
@@ -320,6 +364,8 @@ class VolumeRenderer extends Renderer {
 
   constructor(options: Partial<VolumeRendererOptions> = {}) {
     super(options);
+    this.lightingGridOptions = options.lightingGridOptions;
+    this.syncLightingGrid();
 
     for (const key of ['Temperature', 'Density', 'Speed', 'Vorticity'] as const) {
       this[`colorBy${key}`] = options[`colorBy${key}`] ?? null;
@@ -370,6 +416,8 @@ class VolumeRenderer extends Renderer {
     this.transmittanceThreshold = options.transmittanceThreshold ?? 0.01;
     this.sceneDepthClipping = options.sceneDepthClipping ?? true;
     this.sceneDepthBias = options.sceneDepthBias ?? 0.001;
+    this.softParticles = options.softParticles ?? true;
+    this.softParticleDistance = options.softParticleDistance ?? 0;
     this.curveTexture.minFilter = THREE.LinearFilter;
     this.curveTexture.magFilter = THREE.LinearFilter;
     this.curveTexture.generateMipmaps = false;
@@ -401,9 +449,11 @@ class VolumeRenderer extends Renderer {
   setup(system: ParticleSystem): void {
     this.mesh.onBeforeRender = (renderer, _scene, camera) => {
       if (this.preparingResources || _scene.overrideMaterial) return;
+      this.syncLightingGrid();
+      if (renderer instanceof WebGPURenderer) this.updateLighting(renderer, _scene);
       this.setActiveMaterial(renderer);
       this.updateMaterialSide(camera);
-      this.resolveLight(_scene);
+      if (!this.lightingGrid || !(renderer instanceof WebGPURenderer)) this.resolveLight(_scene);
       if (renderer instanceof WebGPURenderer && (this.dynamicResolution || this.downsample > 1)) {
         if (this.dynamicTarget.resolutionScale < 1) {
           this.lowResolutionMaterial ??= this.createWebGPUMaterial(true) as MeshBasicNodeMaterial;
@@ -411,11 +461,11 @@ class VolumeRenderer extends Renderer {
         }
         this.dynamicTarget.render(
           renderer,
-          _scene,
           camera,
           this.mesh,
           this.lowResolutionMaterial ?? (this.webgpuMaterial as MeshBasicNodeMaterial),
           typeof this.dynamicResolution === 'object' ? this.dynamicResolution : {},
+          this.viewportDepth.value as THREE.DepthTexture,
         );
       }
       this.webglMaterial.uniforms.worldToVolume.value.copy(this.mesh.matrixWorld).invert();
@@ -434,7 +484,10 @@ class VolumeRenderer extends Renderer {
     try {
       this._update([], system, 0);
       if (!this.mesh.visible) return;
-      this.resolveLight(scene);
+      if (this.lightingGrid) {
+        this.mesh.updateWorldMatrix(true, false);
+        this.updateLighting(renderer, scene);
+      } else this.resolveLight(scene);
       this.updateMaterialSide(camera);
       // Outside a draw Three reports zero samples when using its intermediate framebuffer.
       // Seed the viewport texture under the actual target's sample count before compilation;
@@ -464,7 +517,12 @@ class VolumeRenderer extends Renderer {
 
   protected _update(particles: Particle[], system: ParticleSystem, deltaTime = 0): void {
     void particles;
+    const captureDepth = !system.sceneRenderer || system.sceneRenderer instanceof WebGPURenderer;
+    this.opaqueDepth.attach(system.scene, this.depthTest && captureDepth);
+    this.syncLightingGrid();
     this.noiseTime += deltaTime * this.densityNoiseSpeed;
+    this.gasElapsedTime.value += deltaTime;
+    this.gasModules = GasModule.collect(system, this.tags, 'render');
     this.gpuNoiseTime.value = this.noiseTime;
     this.validateOptions();
     this.dynamicTarget.configure(this.downsample, !!this.dynamicResolution);
@@ -516,7 +574,10 @@ class VolumeRenderer extends Renderer {
     const nativeGPU = (activeRenderer?.backend as { isWebGPUBackend?: boolean } | undefined)?.isWebGPUBackend;
     if (this.emptySpaceSkipping && activeRenderer && nativeGPU) {
       for (const binding of new Set(next.map(layer => layer.density))) {
-        binding.occupancy ??= new VolumeOccupancy(binding.texture, binding.resolution.clone());
+        binding.occupancy ??= new VolumeOccupancy(binding.texture,
+          (binding.field.textureResolution ?? binding.resolution).clone());
+        binding.occupancy.updateSource(activeRenderer, binding.texture,
+          binding.field.textureResolution ?? binding.resolution);
         if (!this.preparingResources) binding.occupancy.update(activeRenderer, binding.field.version);
       }
     }
@@ -547,6 +608,7 @@ class VolumeRenderer extends Renderer {
       ...(['densityNoiseStrength', 'densityNoiseContrast', 'densityNoiseFrequency'] as const).map(name =>
         this[`${name}ByTemperature`] != null),
       this.evaluateDynamicGPU.version,
+      ...this.gasModules.map(module => module.graphKey('render')),
       ...this.layers.map(layer =>
         JSON.stringify([layer.density.field.parameterChannels, layer.density.field.parametersPremultiplied]),
       ),
@@ -596,6 +658,7 @@ class VolumeRenderer extends Renderer {
     this.mesh.renderOrder = this.renderOrder;
     this.webglMaterial.depthTest = this.depthTest;
     this.webgpuMaterial.depthTest = this.depthTest;
+    if (!this.layers.length) this.attachedLightingGrid?.release(this);
     this.setActiveMaterial(system.sceneRenderer);
   }
 
@@ -623,6 +686,7 @@ class VolumeRenderer extends Renderer {
     this.gpuTransmittanceThreshold.value = this.transmittanceThreshold;
     this.gpuSceneDepthClipping.value = this.sceneDepthClipping ? 1 : 0;
     this.gpuSceneDepthBias.value = this.sceneDepthBias;
+    this.gpuSoftParticleDistance.value = this.softParticles ? Math.max(0, this.softParticleDistance) : 0;
   }
 
   private layersSourceId(field: VolumeField): number {
@@ -632,6 +696,40 @@ class VolumeRenderer extends Renderer {
       this.fieldIds.set(field, id);
     }
     return id;
+  }
+
+  private syncLightingGrid(): void {
+    if (this.lightingGridOptions === undefined) {
+      this.lightingGrid?.release(this);
+      this.lightingGrid?.dispose();
+      this.lightingGrid = undefined;
+    } else if (this.lightingGrid) this.lightingGrid.setOptions(this.lightingGridOptions);
+    else this.lightingGrid = new LightingGrid(this.lightingGridOptions);
+  }
+
+  private updateLighting(renderer: WebGPURenderer, scene: THREE.Scene): void {
+    const grid = this.lightingGrid;
+    if (grid !== this.attachedLightingGrid) {
+      this.attachedLightingGrid?.release(this);
+      this.attachedLightingGrid = grid;
+    }
+    if (grid && this.layers.length) {
+      this.lightingWorldToVolume.value.copy(this.mesh.matrixWorld).invert();
+      this.lightingBounds.set(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5))
+        .applyMatrix4(this.mesh.matrixWorld);
+      const layers = this.layers.map(layer => [this.layersSourceId(layer.density.field),
+        layer.color ? this.layersSourceId(layer.color.field) : -1, layer.children.length].join(','));
+      const version = [this.opacity, this.threshold, this.range, this.minDensity, this.maxDensity, this.densityGain,
+        this.evaluateDynamicGPU.uploadCount, ...this.mesh.matrixWorld.elements,
+        ...this.layers.flatMap(layer => [layer.density.field.version, layer.color?.field.version,
+          ...layer.children.flatMap(child => [...child.offset.value.toArray(), child.scale.value, child.alpha.value])]),
+      ].join(':');
+      grid.update(renderer, scene, this.lightingBounds, { owner: this, extinctionGPU: this.lightingExtinction,
+        shaderKey: `${this.materialSamplingKey}|${layers.join(';')}`, version });
+    } else grid?.release(this);
+    if (grid !== this.sampledLightingGrid || (grid?.version ?? -1) !== this.sampledLightingVersion) {
+      this.updateMaterialTexture();
+    }
   }
 
   private resolveLight(scene: THREE.Scene): void {
@@ -659,6 +757,10 @@ class VolumeRenderer extends Renderer {
   }
 
   private validateOptions(): void {
+    if (!Number.isFinite(this.softParticleDistance) || this.softParticleDistance < 0) {
+      throw new RangeError('Volume softParticleDistance must be finite and nonnegative.');
+    }
+
     if (!Number.isFinite(this.downsample) || this.downsample < 1) {
       throw new RangeError('Volume downsample must be finite and at least one.');
     }
@@ -767,6 +869,10 @@ class VolumeRenderer extends Renderer {
   }
 
   destroy(): void {
+    this.attachedLightingGrid?.release(this);
+    this.attachedLightingGrid = undefined;
+    this.lightingGrid?.dispose();
+    this.lightingGrid = undefined;
     for (const binding of this.bindings.values()) {
       if (binding.owned) binding.texture.dispose();
       binding.occupancy?.dispose();
@@ -779,11 +885,15 @@ class VolumeRenderer extends Renderer {
     this.curveTexture.dispose();
     this.lowResolutionMaterial?.dispose();
     this.dynamicTarget.dispose();
+    this.opaqueDepth.dispose();
     this.appearanceTexture.dispose();
+    this.jitterTexture.dispose();
     this.mesh.removeFromParent();
   }
 
   clear(): void {
+    this.attachedLightingGrid?.release(this);
+    this.opaqueDepth.attach(undefined, false);
     this.mesh.visible = false;
   }
 
@@ -804,20 +914,25 @@ class VolumeRenderer extends Renderer {
     let binding = this.bindings.get(field);
     if (
       !binding ||
-      !binding.resolution.equals(field.resolution) ||
-      field.texture !== (binding.owned ? undefined : binding.texture)
+      (!field.texture && !binding.resolution.equals(field.resolution)) ||
+      binding.owned === !!field.texture ||
+      (!!field.texture && (field.texture.type !== binding.texture.type
+        || field.texture.format !== binding.texture.format))
     ) {
       if (binding?.owned) binding.texture.dispose();
       binding?.occupancy?.dispose();
+      const sourceTexture = field.texture ?? this.createTexture(field, channels);
       binding = {
         field,
-        texture: field.texture ?? this.createTexture(field, channels),
+        texture: sourceTexture,
+        textureNode: texture3D(sourceTexture),
         owned: !field.texture,
         version: field.version,
         resolution: field.resolution.clone(),
         minimum: uniform(field.bounds.min.clone()),
         size: uniform(field.bounds.getSize(new THREE.Vector3())),
         resolutionNode: uniform(field.resolution.clone()),
+        textureScale: uniform(new THREE.Vector3(1, 1, 1)),
       };
       this.bindings.set(field, binding);
     } else if (binding.owned && binding.version !== field.version) {
@@ -826,6 +941,10 @@ class VolumeRenderer extends Renderer {
       binding.texture.needsUpdate = true;
       binding.version = field.version;
     }
+    if (field.texture) binding.textureNode.value = binding.texture = field.texture;
+    binding.resolution.copy(field.resolution);
+    binding.resolutionNode.value.copy(field.resolution);
+    binding.textureScale.value.copy(field.resolution).divide(field.textureResolution ?? field.resolution);
     binding.minimum.value.copy(field.bounds.min);
     field.bounds.getSize(binding.size.value).clampScalar(Number.EPSILON, Infinity);
     return binding;
@@ -975,6 +1094,7 @@ class VolumeRenderer extends Renderer {
         steps: { value: this.steps },
         jitterStrength: { value: this.jitterStrength },
         jitterSeed: { value: this.jitterSeed },
+        jitterMap: { value: this.jitterTexture },
         anisotropy: { value: this.anisotropy },
         shadowQuality: { value: this.shadowQuality },
         lightDirection: this.gpuLightDirection,
@@ -1005,6 +1125,9 @@ class VolumeRenderer extends Renderer {
 
   private createWebGPUMaterial(reduced = false): THREE.Material {
     this.gpuMaterialDepthTest = this.depthTest;
+    const lightingGrid = this.lightingGrid;
+    this.sampledLightingGrid = lightingGrid;
+    this.sampledLightingVersion = lightingGrid?.version ?? -1;
     const material = new MeshBasicNodeMaterial({
       color: this.color,
       opacity: this.opacity,
@@ -1015,20 +1138,14 @@ class VolumeRenderer extends Renderer {
     });
 
     if (this.layers.length) {
-      // Test entry depth rather than the proxy box's back face, including camera-inside views.
+      // The main buffer may contain transparent depth by now. Opaque occlusion is tested along
+      // the ray below, so the proxy must pass that polluted hardware buffer without writing it.
       material.depthNode = Fn(() => {
-        const { origin, direction } = this.volumeRay();
-        const inverseDirection = vec3(1).div(direction);
-        const nearPlanes = min(
-          vec3(-0.5).sub(origin).mul(inverseDirection),
-          vec3(0.5).sub(origin).mul(inverseDirection),
-        );
-        const entry = origin.add(direction.mul(max(max(max(nearPlanes.x, nearPlanes.y), nearPlanes.z), 0)));
-        const view = cameraViewMatrix.mul(modelWorldMatrix.mul(vec4(entry, 1)));
-        const clip = cameraProjectionMatrix.mul(vec4(view.xy, min(view.z, cameraNear.negate()), 1));
+        const clip = cameraProjectionMatrix.mul(vec4(0, 0, cameraNear.negate(), 1));
         return clip.z.div(clip.w).clamp(0, 1);
       })();
       const raymarch = Fn(() => {
+        const firstOpacityDepth = float(0).toVar('volumeFirstOpacityDepth');
         const { origin, direction } = this.volumeRay();
         const inverseDirection = vec3(1).div(direction);
         const entry = vec3(-0.5).sub(origin).mul(inverseDirection);
@@ -1047,7 +1164,7 @@ class VolumeRenderer extends Renderer {
         If(start.greaterThanEqual(far), () => Discard());
         const metric = direction.mul(this.gpuBoundsSize).length().toVar('volumeMetric');
         const depth = reduced
-          ? texture(this.dynamicTarget.sceneDepth).sample(screenUV).level(float(0)).r
+          ? this.dynamicTarget.sceneDepth.sample(screenUV).level(float(0)).r
           : this.viewportDepth;
         const rawDepth = this.depthTest ? depth.toVar('volumeSceneDepth') : float(1);
         const orthographic = cameraProjectionMatrix.mul(vec4(0, 0, 0, 1)).w.equal(1);
@@ -1083,6 +1200,7 @@ class VolumeRenderer extends Renderer {
           .sub(g.mul(g))
           .div(pow(float(1).add(g.mul(g)).sub(g.mul(cosine).mul(2)), 1.5));
         const lightDirection = modelWorldMatrixInverse.mul(vec4(this.gpuLightDirection, 0)).xyz.normalize();
+        const sampleJitter = this.createRayJitter();
         const accumulated = vec4(0).toVar('volumeAccumulated');
         // Keep the quality budget uniform-backed: edits reuse the compiled raymarch pipeline.
         Loop({ start: 0, end: this.gpuSteps, type: 'int' }, ({ i }) => {
@@ -1113,52 +1231,76 @@ class VolumeRenderer extends Renderer {
           // One stable, decorrelated evaluation inside each complete integration stratum.
           const center = origin.add(direction.mul(distance.add(segment.mul(0.5))));
           const point = center.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
-          const sampleOffset = mix(float(0.5), volumeJitter(point, float(i), this.gpuJitterSeed), this.gpuJitter);
+          const sampleOffset = mix(float(0.5), sampleJitter(point, float(i)), this.gpuJitter);
           const position = origin.add(direction.mul(distance.add(segment.mul(sampleOffset))));
+          // Materialize outside optional depth branches so metadata always receives the sample depth.
+          const viewZ = viewOrigin.z.add(viewDirection.z.mul(distance.add(segment.mul(sampleOffset))))
+            .toVar('volumeSampleViewZ');
           if (this.depthTest) {
             If(this.gpuSceneDepthClipping.lessThan(1), () => {
-              const viewZ = viewOrigin.z.add(viewDirection.z.mul(distance.add(segment.mul(sampleOffset))));
               If(viewZ.lessThanEqual(sceneZ.add(this.gpuSceneDepthBias)), () => Break());
             });
           }
           const sample = this.sampleVolume(position);
-          const density = this.modulateDensity(position, sample.density, sample.temperature);
+          const density = this.modulateDensity(position, sample.density, sample.temperature, sample.noise);
+          const opacity = this.renderOpacity(density).mul(sample.opacity).clamp(0, 1).toVar('volumeSampleOpacity');
+
+          // Match sprite soft particles in view space, reusing the depth already fetched for clipping.
+          // Fade extinction before distance integration so changing ray steps does not change softness.
+          if (this.depthTest) {
+            If(this.gpuSoftParticleDistance.greaterThan(0), () => {
+              opacity.mulAssign(smoothstep(0, this.gpuSoftParticleDistance, viewZ.sub(sceneZ).abs()));
+            });
+          }
+
           const alpha = float(1).sub(
-            pow(float(1).sub(this.renderOpacity(density).mul(sample.opacity).clamp(0, 1)), metric.mul(segment)),
+            pow(float(1).sub(opacity), metric.mul(segment)),
           );
           const color = sample.color;
           const contribution = float(1).sub(accumulated.a).mul(alpha);
-          const transmission = this.shadowQuality > 0 ? this.lightTransmittance(position, lightDirection) : float(1);
-          const incident = vec3(0.2).add(this.gpuLightColor.mul(phase).mul(transmission).mul(0.8));
+          if (reduced) If(firstOpacityDepth.equal(0).and(contribution.greaterThan(0)), () => {
+            firstOpacityDepth.assign(viewZ);
+          });
+          const worldPosition = modelWorldMatrix.mul(vec4(position, 1)).xyz;
+          // Grid lighting fully replaces the simple directional/shadow path; emission remains independent.
+          const transmission = !lightingGrid && this.shadowQuality > 0
+            ? this.lightTransmittance(position, lightDirection) : float(1);
+          const incident = vec3(0).toVar();
+          if (lightingGrid) {
+            // Both default demos scatter isotropically. Average bins once per grid update,
+            // reducing their hot raymarch path to a single trilinear lighting fetch.
+            If(this.gpuAnisotropy.equal(0), () => {
+              incident.assign(lightingGrid.sampleIsotropicGPU(worldPosition));
+            }).Else(() => {
+              incident.assign(lightingGrid.sampleScatteringGPU(worldPosition, worldDirection, this.gpuAnisotropy));
+            });
+          } else incident.assign(vec3(0.2).add(this.gpuLightColor.mul(phase).mul(transmission).mul(0.8)));
           // Emitted radiance can be added here later, independently of extinction/scattering.
-          accumulated.rgb.addAssign(color.mul(incident).mul(contribution));
+          accumulated.rgb.addAssign(color.mul(incident).add(sample.emission ?? vec3(0)).mul(contribution));
           accumulated.a.addAssign(contribution);
           If(float(1).sub(accumulated.a).lessThanEqual(this.gpuTransmittanceThreshold), () => Break());
           distance.addAssign(segment);
         });
         If(accumulated.a.lessThanEqual(0), () => Discard());
         const color = vec4(accumulated.rgb.div(max(accumulated.a, 1e-6)), accumulated.a);
-        return color;
-      })();
+        return VolumeRayResult(color, firstOpacityDepth);
+      })() as unknown as VolumeRayValue;
+      const rayResult = raymarch.toVar();
       if (reduced) {
-        material.outputNode = raymarch;
+        material.outputNode = rayResult.get('color');
         material.mrtNode = mrt({
-          output: raymarch,
+          output: rayResult.get('color'),
           volumeMetadata: Fn(() => {
-            const { origin, direction } = this.volumeRay();
-            const planes = min(vec3(-0.5).sub(origin).div(direction), vec3(0.5).sub(origin).div(direction));
-            const entry = origin.add(direction.mul(max(max(max(planes.x, planes.y), planes.z), 0)));
-            const entryZ = cameraViewMatrix.mul(modelWorldMatrix.mul(vec4(entry, 1))).z;
-            const raw = texture(this.dynamicTarget.sceneDepth).sample(screenUV).level(float(0)).r;
+            const raw = this.dynamicTarget.sceneDepth.sample(screenUV).level(float(0)).r;
             const ortho = cameraProjectionMatrix.mul(vec4(0, 0, 0, 1)).w.equal(1);
             const sceneZ = ortho.select(
               orthographicDepthToViewZ(raw, cameraNear, cameraFar),
               perspectiveDepthToViewZ(raw, cameraNear, cameraFar),
             );
-            return vec4(sceneZ, entryZ, 0, 1);
+            return vec4(sceneZ, rayResult.get('firstDepth'), 0, 1);
           })(),
         });
-      } else material.fragmentNode = raymarch;
+      } else material.fragmentNode = rayResult.get('color');
     }
 
     return material;
@@ -1181,10 +1323,9 @@ class VolumeRenderer extends Renderer {
         const uv = source.sub(binding.minimum).div(binding.size);
         If(child.alpha.greaterThan(0), () => {
           If(uv.greaterThanEqual(0).all().and(uv.lessThanEqual(1).all()), () => {
-            const cell = floor(uv.mul(binding.resolutionNode).div(8)).clamp(vec3(0), vec3(occupancy.resolution).sub(1));
-            const flag = texture3D(occupancy.texture)
-              .sample(cell.add(0.5).div(vec3(occupancy.resolution)))
-              .level(float(0)).r;
+            const cell = floor(uv.mul(binding.resolutionNode).div(8))
+              .clamp(vec3(0), occupancy.getResolutionNode().sub(1));
+            const flag = occupancy.sample(cell.add(0.5).div(occupancy.getResolutionNode())).r;
             occupied.assign(occupied.or(flag.greaterThan(0)));
             const boundary = cell
               .add(delta.greaterThanEqual(0).select(vec3(1), vec3(0)))
@@ -1210,25 +1351,11 @@ class VolumeRenderer extends Renderer {
   }
 
   private modulateDensity(position: Node<'vec3'>, density: Node<'float'>,
-    temperature: Node<'float'>): Node<'float'> {
-    if (this.densityNoiseStrength <= 0) return density;
+    temperature: Node<'float'>, noise?: ReturnType<VolumeRenderer['noiseCoefficients']>): Node<'float'> {
+    if (this.densityNoiseStrength <= 0 && !noise) return density;
     const masked = density.toVar();
     If(density.greaterThan(0), () => {
-      // Reuse the physical temperature already gathered for appearance; no additional field reads.
-      const range = this.gpuAppearanceRanges[0];
-      const active = this.densityNoiseStrengthByTemperature != null || this.densityNoiseContrastByTemperature != null
-        || this.densityNoiseFrequencyByTemperature != null;
-      const t = active ? temperature.sub(range.x).div(range.y.sub(range.x)).clamp(0, 1).toVar() : float(0);
-      const coefficient = (
-        name: 'densityNoiseStrength' | 'densityNoiseContrast' | 'densityNoiseFrequency', base: Node<'float'>,
-      ) => {
-        const key = `${name}ByTemperature` as const;
-        return this[key] == null ? base : base.mul(this.evaluateDynamicGPU.parameterNumber(
-          key, () => this[key] ?? undefined, t, 1).max(0));
-      };
-      const strength = coefficient('densityNoiseStrength', this.gpuNoiseStrength);
-      const contrast = coefficient('densityNoiseContrast', this.gpuNoiseContrast);
-      const frequency = coefficient('densityNoiseFrequency', this.gpuNoiseFrequency);
+      const { strength, contrast, frequency } = noise ?? this.noiseCoefficients(temperature);
       const applyMask = () => {
         const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
         const noise = generateGPUParticleNoise4D(
@@ -1246,10 +1373,28 @@ class VolumeRenderer extends Renderer {
         masked.mulAssign(pow(noise.sub(0.5).mul(contrast).add(0.5).clamp(0, 1), strength));
       };
       // A zero local strength disables the mask, including zero noise samples (avoid pow(0, 0)).
-      if (this.densityNoiseStrengthByTemperature != null) If(strength.greaterThan(0), applyMask);
+      if (noise || this.densityNoiseStrengthByTemperature != null) If(strength.greaterThan(0), applyMask);
       else applyMask();
     });
     return masked;
+  }
+
+  private noiseCoefficients(temperature: Node<'float'>) {
+    const range = this.gpuAppearanceRanges[0];
+    const active = this.densityNoiseStrengthByTemperature != null || this.densityNoiseContrastByTemperature != null
+      || this.densityNoiseFrequencyByTemperature != null;
+    const t = active ? temperature.sub(range.x).div(range.y.sub(range.x)).clamp(0, 1).toVar() : float(0);
+    const coefficient = (
+      name: 'densityNoiseStrength' | 'densityNoiseContrast' | 'densityNoiseFrequency', base: Node<'float'>,
+    ) => {
+      const key = `${name}ByTemperature` as const;
+      return this[key] == null ? base : base.mul(this.evaluateDynamicGPU.parameterNumber(
+        key, () => this[key] ?? undefined, t, 1).max(0));
+    };
+    const strength = coefficient('densityNoiseStrength', this.gpuNoiseStrength);
+    const contrast = coefficient('densityNoiseContrast', this.gpuNoiseContrast);
+    const frequency = coefficient('densityNoiseFrequency', this.gpuNoiseFrequency);
+    return { strength, contrast, frequency };
   }
 
   private lightTransmittance(position: Node<'vec3'>, direction: Node<'vec3'>): Node<'float'> {
@@ -1268,7 +1413,7 @@ class VolumeRenderer extends Renderer {
       const segment = min(step, far.sub(distance));
       const point = position.add(direction.mul(distance.add(segment.mul(0.5))));
       const sample = this.sampleVolume(point, false);
-      const density = this.modulateDensity(point, sample.density, sample.temperature);
+      const density = this.modulateDensity(point, sample.density, sample.temperature, sample.noise);
       transmission.mulAssign(
         pow(float(1).sub(this.renderOpacity(density).mul(sample.opacity).clamp(0, 1)), segment.mul(metric)),
       );
@@ -1287,6 +1432,14 @@ class VolumeRenderer extends Renderer {
     return { origin, direction: positionGeometry.sub(origin).normalize() };
   }
 
+  private createRayJitter(): (point: Node<'vec3'>, index: Node<'float'>) => Node<'float'> {
+    // Fetch once per ray. Screen-space ranks remove the old piecewise-constant world-cell phase.
+    const pixel = ivec2(screenCoordinate.xy.mod(32));
+    const rotation = texture(this.jitterTexture).load(pixel).r.mul(255).add(0.5).div(256)
+      .add(hash(floatBitsToUint(this.gpuJitterSeed))).toVar('volumeRayJitterRotation');
+    return (_point, index) => volumeJitter(rotation, index);
+  }
+
   private sampleVolume(
     position: Node<'vec3'>,
     includeColor = true,
@@ -1295,6 +1448,8 @@ class VolumeRenderer extends Renderer {
     density: Node<'float'>;
     opacity: Node<'float'>;
     temperature: Node<'float'>;
+    emission?: Node<'vec3'>;
+    noise?: ReturnType<VolumeRenderer['noiseCoefficients']>;
   } {
     const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
     const result = vec4(0).toVar('volumeSample');
@@ -1354,8 +1509,53 @@ class VolumeRenderer extends Renderer {
           ),
         );
     }
-    return { color: result.rgb.div(max(result.a, 1e-6)).mul(multiplier.rgb),
-      density: result.a, opacity: multiplier.a, temperature: physical.x };
+    const color = result.rgb.div(max(result.a, 1e-6)).mul(multiplier.rgb);
+    if (!this.gasModules.length) {
+      return { color, density: result.a, opacity: multiplier.a, temperature: physical.x };
+    }
+
+    // The same cell view references only local ray-sample variables, never writable simulation storage.
+    let velocity: Node<'vec3'> | undefined;
+    const sampleVelocity = () => this.sampleGasVelocity(point);
+    const cell: GPUGasCell = {
+      position: point, density: result.a.toVar(), temperature: physical.x.toVar(), color: color.toVar(),
+      // Reading velocity is optional: fire's mask-only callback adds no sparse-storage bindings or reads.
+      get velocity() { return velocity ??= sampleVelocity().toVar(); },
+    };
+    const noise = this.noiseCoefficients(cell.temperature);
+    const context: GasRenderModuleContext = {
+      module: this.gasModules[0], elapsedTime: this.gasElapsedTime,
+      density: cell.density, color: cell.color, opacity: multiplier.a.toVar(), emission: vec3(0).toVar(),
+      densityNoiseStrength: noise.strength.toVar(), densityNoiseContrast: noise.contrast.toVar(),
+      densityNoiseFrequency: noise.frequency.toVar(),
+    };
+    for (const module of this.gasModules) module.modifyRenderGPU!(cell, { ...context, module });
+    return { color: cell.color, density: cell.density, temperature: cell.temperature,
+      opacity: context.opacity, emission: context.emission,
+      noise: { strength: context.densityNoiseStrength, contrast: context.densityNoiseContrast,
+        frequency: context.densityNoiseFrequency } };
+  }
+
+  /** Lazily read existing producer velocity only when a custom callback actually requests it. */
+  private sampleGasVelocity(point: Node<'vec3'>): Node<'vec3'> {
+    return Fn(() => {
+      const momentum = vec3(0).toVar();
+      const mass = float(0).toVar();
+      for (const layer of this.layers) {
+        if (!layer.density.field.sampleVelocityGPU) continue;
+        const center = layer.density.minimum.add(layer.density.size.mul(0.5));
+        for (const child of layer.children) {
+          const source = point.sub(center).sub(child.offset).div(child.scale).add(center);
+          const uv = source.sub(layer.density.minimum).div(layer.density.size);
+          If(uv.greaterThanEqual(0).all().and(uv.lessThanEqual(1).all()), () => {
+            const density = this.readVolume(layer.density, uv).r.max(0).mul(child.alpha);
+            mass.addAssign(density);
+            momentum.addAssign(layer.density.field.sampleVelocityGPU!(source).mul(density));
+          });
+        }
+      }
+      return momentum.div(mass.max(1e-6));
+    })();
   }
 
   private appearanceEnabled(): boolean[] {
@@ -1392,11 +1592,15 @@ class VolumeRenderer extends Renderer {
     // Rays terminate/skip independently. Implicit texture derivatives are undefined
     // in divergent fragment control flow; volumes have no mip chain, so always read LOD zero.
     const resolution = binding.resolutionNode;
+    const sampleAt = (position: Node<'vec3'>) => binding.textureNode.sample(
+      position.clamp(vec3(0.5).div(resolution), vec3(1).sub(vec3(0.5).div(resolution)))
+        .mul(binding.textureScale),
+    ).level(float(0));
     if (this.interpolation === VolumeInterpolation.Nearest) {
       const texel = floor(uv.mul(resolution)).clamp(vec3(0), resolution.sub(1));
-      return texture3D(binding.texture).sample(texel.add(0.5).div(resolution)).level(float(0));
+      return sampleAt(texel.add(0.5).div(resolution));
     }
-    if (this.interpolation !== VolumeInterpolation.Cubic) return texture3D(binding.texture).sample(uv).level(float(0));
+    if (this.interpolation !== VolumeInterpolation.Cubic) return sampleAt(uv);
     // Group cubic B-spline weights into eight hardware-linear texture reads.
     const p = uv.mul(resolution).sub(0.5);
     const f = p.sub(floor(p));
@@ -1409,9 +1613,7 @@ class VolumeRenderer extends Renderer {
     const a = floor(p).sub(0.5).add(w1.div(g0)).div(resolution);
     const b = floor(p).add(1.5).add(w3.div(g1)).div(resolution);
     const sample = (x: Node<'float'>, y: Node<'float'>, z: Node<'float'>) =>
-      texture3D(binding.texture)
-        .sample(vec3(x, y, z))
-        .level(float(0));
+      sampleAt(vec3(x, y, z));
     return mix(
       mix(
         mix(sample(a.x, a.y, a.z), sample(b.x, a.y, a.z), g1.x),
