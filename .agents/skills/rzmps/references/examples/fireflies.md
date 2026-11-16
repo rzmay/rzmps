@@ -159,7 +159,7 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
   const glow = new ParticleSystem({
     duration: 0.1,
     simulationSpace: 'source',
-    sourceLoss: 'kill',
+    sourceLossBehavior: 'kill',
     gravityModifier: 0,
     maxParticles: 128,
     emitters: new Emitter({

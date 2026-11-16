@@ -37,7 +37,7 @@ void tooMany;
 
 new ParticleSystem({ simulationSpace: 'transform', simulationSpaceTransform: new Object3D() });
 new ParticleSystem({ simulationSpace: 'transform', simulationSpaceTransform: new Matrix4() });
-new ParticleSystem({ simulationSpace: 'source', sourceLoss: 'kill' });
+new ParticleSystem({ simulationSpace: 'source', sourceLossBehavior: 'kill' });
 // @ts-expect-error Custom frames must be Object3D or world Matrix4 references.
 new ParticleSystem({ simulationSpace: 'transform', simulationSpaceTransform: new Vector3() });
 
@@ -52,3 +52,12 @@ parent.addSubSystem(new ParticleSystem({ renderers: [] }), { onEvent: {
     filtered: data => data[0].x.greaterThan(0),
   },
 } });
+
+// Source-loss policy follows the same enum-or-literal convention as simulation space.
+import { SourceLossBehavior } from '../../build/index.mjs';
+new ParticleSystem({ sourceLossBehavior: SourceLossBehavior.Kill });
+new ParticleSystem({ sourceLossBehavior: 'detach' });
+// @ts-expect-error The old ambiguous name has been replaced.
+new ParticleSystem({ sourceLoss: 'kill' });
+// @ts-expect-error Unknown source-loss action.
+new ParticleSystem({ sourceLossBehavior: 'freeze' });

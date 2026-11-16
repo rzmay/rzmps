@@ -17,6 +17,7 @@ uniform float metalness;
 uniform sampler2D metalnessMap;
 uniform bool hasMetalnessMap;
 
+uniform bool useTransmission;
 uniform float transmission;
 uniform sampler2D transmissionMap;
 uniform bool hasTransmissionMap;
@@ -331,7 +332,7 @@ void main()
     vec2 distortion =
         vec2(0.0);
 
-    if (transmissionValue > 0.0)
+    if (useTransmission && transmissionValue > 0.0)
     {
         vec3 distortionNormal;
         if (hasDistortionMap)
@@ -718,7 +719,7 @@ void main()
     #include <colorspace_fragment>
     finalColor = gl_FragColor.rgb;
 
-    if (transmissionValue > 0.0)
+    if (useTransmission && transmissionValue > 0.0)
     {
         vec2 screenUv =
             gl_FragCoord.xy
@@ -757,6 +758,8 @@ void main()
                 transmissionValue
             );
     }
+
+    if (!useTransmission) finalAlpha *= 1.0 - transmissionValue;
 
     gl_FragColor =
         vec4(

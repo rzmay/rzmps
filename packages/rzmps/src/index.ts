@@ -1,3 +1,4 @@
+export { SourceLossBehavior } from './enums/SourceLossBehavior';
 export { profileRenderer } from './rendering/benchmarkRenderer.utils';
 export type { BenchmarkRenderer } from './rendering/benchmarkRenderer.utils';
 export { default as Benchmarks } from './core/Benchmarks';

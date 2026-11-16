@@ -294,12 +294,15 @@ simulationSpeed: number;
 
 ***
 
-<a id="sourceloss"></a>
+<a id="sourcelossbehavior"></a>
 
-### sourceLoss
+### sourceLossBehavior
 
 ```ts
-sourceLoss: "kill" | "detach" = 'detach';
+sourceLossBehavior:
+  | "detach"
+  | "kill"
+  | SourceLossBehavior = SourceLossBehavior.Detach;
 ```
 
 Behavior when an attached source dies or its slot is reused. Defaults to detach.

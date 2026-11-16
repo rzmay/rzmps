@@ -1,3 +1,4 @@
+import { sceneColor, transmissionOutput, useSceneDepth } from './transmission.utils';
 import type Appearance from '../compositing/Appearance';
 import * as THREE from 'three';
 import { MeshStandardNodeMaterial } from 'three/webgpu';
@@ -14,7 +15,6 @@ import {
   float,
   Fn,
   mix,
-  output,
   perspectiveDepthToViewZ,
   positionView,
   sin,
@@ -24,8 +24,6 @@ import {
   uv,
   vec2,
   vec3,
-  vec4,
-  viewportSharedTexture,
   viewportUV,
 } from 'three/tsl';
 import type { LitSpriteOptions } from './litSprite';
@@ -106,8 +104,10 @@ const WebGPULitSprite = (
   }
 
   if (softParticleDistance && sceneDepthTexture) {
+    const depthNode = texture(sceneDepthTexture, viewportUV);
+    material.userData.sceneDepthNode = depthNode;
     const sceneViewZ = perspectiveDepthToViewZ(
-      texture(sceneDepthTexture, viewportUV).r,
+      depthNode.r,
       cameraNear,
       cameraFar,
     );
@@ -118,7 +118,8 @@ const WebGPULitSprite = (
       abs(particleViewZ.sub(sceneViewZ)),
     );
 
-    opacity = opacity.mul(fade);
+    // The supplied depth prepass belongs to the main camera, not the six reflection cameras.
+    opacity = opacity.mul(mix(float(1), fade, useSceneDepth));
   }
 
   const sphericalNormalsAmount = THREE.MathUtils.clamp(Number(sphericalNormals ?? 0), 0, 1);
@@ -193,7 +194,7 @@ const WebGPULitSprite = (
 
     const transmittedColor = Fn(() => {
       if (!finalDistortionMap || finalDistortionStrength === 0) {
-        return viewportSharedTexture().rgb;
+        return sceneColor();
       }
 
       const particleDistortionStrength = spriteData.w;
@@ -220,16 +221,11 @@ const WebGPULitSprite = (
         .toVar();
       const refractedUv = viewportUV.add(distortionUv).toVar();
 
-      return viewportSharedTexture(refractedUv).rgb;
+      return sceneColor(refractedUv);
     })();
 
 
-    const finalTransmisison = float(1.0).sub(finalAlpha.mul(float(1.0).sub(transmissionValue)));
-
-    material.outputNode = vec4(
-      mix(output.rgb, transmittedColor, finalTransmisison),
-      float(1.0),
-    );
+    material.outputNode = transmissionOutput(transmittedColor, transmissionValue, finalAlpha);
   }
 
   material.userData.frames = frames ?? 1;

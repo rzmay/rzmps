@@ -1,3 +1,4 @@
+import { composeEulerXYZGPU } from '../../simulation/gpu/transforms.utils';
 import { StorageBufferAttribute, type ComputeNode, type Node, type WebGPURenderer } from 'three/webgpu';
 import {
   Fn,
@@ -208,6 +209,12 @@ export default class GPURendererChildren {
             const radius = this.parameters.number(
               'children.radius', () => this.options.radius, parent.time, 0, childSeed,
             ).max(0);
+            if (options.rotation !== undefined) {
+              const rotation = this.parameters.vector(
+                'children.rotation', () => this.options.rotation, parent.time, undefined, childSeed.add(6),
+              );
+              child.rotation.assign(composeEulerXYZGPU(parent.rotation, rotation));
+            }
             const delta = offset(childSeed, radius);
             child.position.addAssign(delta);
             const d = radius.greaterThan(float(0)).select(delta.length().div(radius.max(1e-8)), float(0));

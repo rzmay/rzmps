@@ -226,3 +226,14 @@ Custom renderers implement `_update` for CPU input and `_updateGPU` for native G
 ## Migration
 
 Remove the former update-rate LOD settings from systems, emitters, modules, and renderers. Put distance/falloff/quality settings in `ParticleSystem.lod`. Replace renderer size compensation with `compensation: CompensationMode.Size`, or choose `Children` for density approximation. Emitter and renderer count selection are now coordinated by the simulated population; modules always update survivors at their normal frequency.
+
+### Child rotation
+
+`children.rotation` is a local XYZ Euler offset in radians, composed after the parent's orientation. It defaults to zero.
+A scalar applies to all three axes; vectors, dynamic functions, random ranges, and sets use the usual dynamic-value
+conventions. Random samples are stable per child identity, independently of radius, scale, and alpha. LOD-only copies
+inherit their parent's completed orientation without applying the artistic offset again.
+
+```ts
+new MeshRenderer({ children: { count: 3, rotation: [-0.25, 0.25] } });
+```

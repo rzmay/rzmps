@@ -45,7 +45,7 @@ export default function createSimulationSpaces() {
   for (const kind of ['native', 'registered', 'continuous', 'detached']) {
     const glow = new ParticleSystem({
       simulationSpace: 'source',
-      sourceLoss: kind === 'detached' ? 'detach' : 'kill',
+      sourceLossBehavior: kind === 'detached' ? 'detach' : 'kill',
       gravityModifier: 0,
       duration: 2,
       maxParticles: 16,
@@ -154,7 +154,8 @@ export default function createSimulationSpaces() {
     parent.advanceFrames(40, 1 / 60);
     if ((await read(audit)).length !== 2) throw new Error('Canceled source births emitted downstream spawn effects');
     for (const child of [children[0], children[2]]) {
-      if ((await read(child)).length) throw new Error(`${child.name} survived its source with sourceLoss: kill`);
+      if ((await read(child)).length)
+        throw new Error(`${child.name} survived its source with sourceLossBehavior: kill`);
     }
     const frozen = (await read(children[3])).filter(p => detachedIDs.has(p.id));
     if (frozen.length !== detached.length) throw new Error('Detach must retain existing particles');
@@ -169,7 +170,7 @@ export default function createSimulationSpaces() {
         throw new Error('Detached particles followed a reused source slot');
       }
     }
-    result.push({ sourceLoss: 'passed', recycledSource: 'passed' });
+    result.push({ sourceLossBehavior: 'passed', recycledSource: 'passed' });
     const before = transformed.getSimulationToWorldMatrix();
     anchor.position.x += 5;
     const after = transformed.getSimulationToWorldMatrix();

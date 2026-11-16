@@ -1,3 +1,4 @@
+import { SourceLossBehavior } from '../enums/SourceLossBehavior';
 import * as THREE from 'three';
 import { abs, bitcast, determinant, float, Fn, If, inverse, mat4, min, uint, uniform, vec4 } from 'three/tsl';
 import type { ComputeNode, Node, WebGPURenderer } from 'three/webgpu';
@@ -83,7 +84,7 @@ export default class SimulationFrames {
         binding.previous.copy(current);
       }
       if (!alive) {
-        if (this.system.sourceLoss === 'kill') particle.kill();
+        if (this.system.sourceLossBehavior === SourceLossBehavior.Kill) particle.kill();
         setParticleSourceBinding(particle);
       }
     }
@@ -319,7 +320,7 @@ export default class SimulationFrames {
     ];
     const key = `${context.buffers.version}:${context.buffers.capacity}:${frames.version}:${frames.capacity}:`
       + `${sources.map(source => `${source.kind}:${source.buffers?.version}:${source.buffers?.capacity}`)}:`
-      + `${context.eventWriter?.version}:${this.system.sourceLoss}:${this._sourceScaleInheritance()}`;
+      + `${context.eventWriter?.version}:${this.system.sourceLossBehavior}:${this._sourceScaleInheritance()}`;
     if (this._sourceFrameCompute?.key !== key) {
       this._sourceFrameCompute?.nodes.forEach(node => node.dispose());
       const nodes: ComputeNode[] = [];
@@ -342,7 +343,7 @@ export default class SimulationFrames {
             const sourceExists = generationMatches.and(alive);
             const pendingBirth = link.w.equal(uint(0)).toVar();
             const orphan = () => {
-              if (this.system.sourceLoss === 'kill') {
+              if (this.system.sourceLossBehavior === SourceLossBehavior.Kill) {
                 particle.kill();
               } else {
                 // Pending births cannot attach to an already-reused source slot.

@@ -40,7 +40,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsdown && tsc --emitDeclarationOnly",
-    "dev": "concurrently -k \"tsdown --watch\" \"tsc --emitDeclarationOnly --watch\"",
+    "dev": "concurrently -k \"tsdown --watch --no-clean\" \"tsc --emitDeclarationOnly --watch\"",
     "prepack": "npm run build"
   },
   "author": "Robert May",

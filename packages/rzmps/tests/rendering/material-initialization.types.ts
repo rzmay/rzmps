@@ -49,3 +49,9 @@ new DecalRenderer([new THREE.MeshStandardMaterial(), new THREE.MeshStandardMater
   new THREE.MeshStandardMaterial()], { materialIndex: 2 });
 
 new MeshRenderer({ textureCopyQuality: 0.5, atlasOptions: { maxTileSize: 2048, minCapacity: 4 } });
+
+new MeshRenderer({ children: { count: 3, rotation: 0.2 } });
+new MeshRenderer({ children: { rotation: new THREE.Vector3(0, 1, 0) } });
+new MeshRenderer({ children: { rotation: [-0.2, 0.2] } });
+new MeshRenderer({ children: { rotation: new Set([0.1, new THREE.Vector3(0, 0.2, 0)]) } });
+new MeshRenderer({ children: { rotation: time => new THREE.Vector3(time, 0, 0) } });

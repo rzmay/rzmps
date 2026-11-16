@@ -755,6 +755,8 @@ export default class DecalRenderer extends Renderer {
 
     // Match the contacted surface so decals receive the same scene shadows.
     mesh.receiveShadow = hit.object.receiveShadow;
+    // Composite surface decals before object-sorted transparent particle batches.
+    mesh.renderOrder = -1;
     mesh.userData[DECAL_RENDERER_USER_DATA_KEY] = true;
     mesh.userData[PARTICLE_RENDERER_OBJECT_KEY] = true;
 

@@ -12,6 +12,7 @@ import type { GPUEmissionSupportReport } from '../emission/gpu/Emission';
 import overrideEmitterOptions from '../emission/options.utils';
 import { EndBehavior } from '../enums/EndBehavior';
 import { MaxCulling } from '../enums/MaxCulling';
+import { SourceLossBehavior } from '../enums/SourceLossBehavior';
 import { SimulationSpace } from '../enums/SimulationSpace';
 import EventReceiver, { type EventScope, type SimulationEvent } from '../events/EventReceiver';
 import EventRuntime from '../events/EventRuntime';
@@ -138,7 +139,7 @@ export interface ParticleSystemOptions {
   /** Live world-space frame for Transform mode; a Matrix4 is caller-managed. Omission uses identity. */
   simulationSpaceTransform: THREE.Object3D | THREE.Matrix4 | null;
   /** Source mode behavior when an emitting source disappears. Defaults to detach at its last valid frame. */
-  sourceLoss: 'detach' | 'kill';
+  sourceLossBehavior: SourceLossBehavior | `${SourceLossBehavior}`;
   /** Requests GPU simulation when a WebGPURenderer and compatible components are available. */
   gpuProcessing: boolean;
   /** Enables periodic GPU allocation and dispatch diagnostics. */
@@ -638,7 +639,7 @@ class ParticleSystem extends THREE.Object3D {
     return buildGPUSystemSchedule(this);
   }
   /** Behavior when an attached source dies or its slot is reused. Defaults to detach. */
-  sourceLoss: 'detach' | 'kill' = 'detach';
+  sourceLossBehavior: SourceLossBehavior | `${SourceLossBehavior}` = SourceLossBehavior.Detach;
 
   get simulationSpace(): SimulationSpace {
     return this.frameRuntime.simulationSpace;
@@ -1003,7 +1004,7 @@ class ParticleSystem extends THREE.Object3D {
       (options.simulationSpace as SimulationSpace) ?? this.frameRuntime._simulationSpace;
     this.frameRuntime._simulationSpaceExplicit = options.simulationSpace !== undefined;
     this.frameRuntime._simulationSpaceTransform = options.simulationSpaceTransform ?? null;
-    this.sourceLoss = options.sourceLoss ?? 'detach';
+    this.sourceLossBehavior = options.sourceLossBehavior ?? SourceLossBehavior.Detach;
     this._worldRendererRoot.name = 'ParticleSystem World Renderers';
 
     this.lastFrame = Date.now();

@@ -93,7 +93,8 @@ const LitSprite = (
         envIntensity: { value: envIntensity },
         hasEnvMap: { value: Boolean(envMap) },
 
-        transmission: { value: transmission ?? (transmissionMap ? 1 : 0) },
+        useTransmission: { value: true },
+      transmission: { value: transmission ?? (transmissionMap ? 1 : 0) },
         transmissionMap: { value: transmissionMap ?? null },
         hasTransmissionMap: { value: Boolean(transmissionMap) },
         distortionMap: { value: distortionMap ?? normalMap ?? null },

@@ -236,6 +236,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [PressureSolver](api/enumerations/PressureSolver.md)
 - [Priority](api/Supporting-Types/enumerations/Priority.md)
 - [SimulationSpace](api/enumerations/SimulationSpace.md)
+- [SourceLossBehavior](api/enumerations/SourceLossBehavior.md)
 - [SpatialEffectUpdatePolicy](api/enumerations/SpatialEffectUpdatePolicy.md)
 - [SpatialLevels](api/enumerations/SpatialLevels.md)
 - [SpriteMaterialType](api/enumerations/SpriteMaterialType.md)

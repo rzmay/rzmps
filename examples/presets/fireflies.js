@@ -154,7 +154,7 @@ export default async function firefliesPreset() {
   const glow = new ParticleSystem({
     duration: 0.1,
     simulationSpace: 'source',
-    sourceLoss: 'kill',
+    sourceLossBehavior: 'kill',
     gravityModifier: 0,
     maxParticles: 128,
     // #region docs:emitters:2

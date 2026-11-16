@@ -42,6 +42,7 @@ const UnlitSprite = (
       alphaMap: { value: alphaMap ?? null },
       hasAlphaMap: { value: Boolean(alphaMap) },
 
+      useTransmission: { value: true },
       transmission: { value: transmission ?? (transmissionMap ? 1 : 0) },
       transmissionMap: { value: transmissionMap ?? null },
       hasTransmissionMap: { value: Boolean(transmissionMap) },

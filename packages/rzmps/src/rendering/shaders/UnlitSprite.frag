@@ -5,6 +5,7 @@ uniform vec2 gridSize;
 uniform float atlasInset;
 uniform int n_frames;
 
+uniform bool useTransmission;
 uniform float transmission;
 uniform sampler2D transmissionMap;
 uniform bool hasTransmissionMap;
@@ -272,7 +273,7 @@ void main()
     #include <colorspace_fragment>
     finalColor = gl_FragColor.rgb;
 
-    if (transmissionValue > 0.0)
+    if (useTransmission && transmissionValue > 0.0)
     {
         vec2 colorResolution =
             max(
@@ -318,6 +319,8 @@ void main()
                 transmissionValue
             );
     }
+
+    if (!useTransmission) finalAlpha *= 1.0 - transmissionValue;
 
     gl_FragColor =
         vec4(

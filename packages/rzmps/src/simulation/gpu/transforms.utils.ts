@@ -1,6 +1,6 @@
 import type { Matrix4 } from 'three';
 import type { Node } from 'three/webgpu';
-import { cos, sin, float, vec3, vec4 } from 'three/tsl';
+import { abs, asin, atan, cos, sin, float, rotate, vec3, vec4 } from 'three/tsl';
 
 /** Transforms a point using a shader matrix, including its translation. */
 export function transformPointGPU(point: Node<'vec3'>, matrix: Node<'mat4'>): Node<'vec3'> {
@@ -14,28 +14,21 @@ export function transformDirectionGPU(vector: Node<'vec3'>, matrix: Node<'mat4'>
 
 /** Applies XYZ Euler rotation to a shader vector. */
 export function rotateXYZ(position: Node<'vec3'>, rotation: Node<'vec3'>): Node<'vec3'> {
-  const cx = cos(rotation.x);
-  const sx = sin(rotation.x);
-  const cy = cos(rotation.y);
-  const sy = sin(rotation.y);
-  const cz = cos(rotation.z);
-  const sz = sin(rotation.z);
+  return rotate(position, rotation) as Node<'vec3'>;
+}
 
-  const xRotated = vec3(
-    position.x,
-    position.y.mul(cx).sub(position.z.mul(sx)),
-    position.y.mul(sx).add(position.z.mul(cx)),
-  );
-  const yRotated = vec3(
-    xRotated.x.mul(cy).add(xRotated.z.mul(sy)),
-    xRotated.y,
-    xRotated.z.mul(cy).sub(xRotated.x.mul(sy)),
-  );
+/** Compose local XYZ Euler offsets using the same rotation order and singularity handling as Three.js Euler. */
+export function composeEulerXYZGPU(parent: Node<'vec3'>, offset: Node<'vec3'>): Node<'vec3'> {
+  const basis = (axis: Node<'vec3'>) => rotate(rotate(axis, offset), parent);
+  const x = basis(vec3(1, 0, 0));
+  const y = basis(vec3(0, 1, 0));
+  const z = basis(vec3(0, 0, 1));
+  const regular = abs(z.x).lessThan(float(0.9999999));
 
   return vec3(
-    yRotated.x.mul(cz).sub(yRotated.y.mul(sz)),
-    yRotated.x.mul(sz).add(yRotated.y.mul(cz)),
-    yRotated.z,
+    regular.select(atan(z.y.negate(), z.z), atan(y.z, y.y)),
+    asin(z.x.clamp(-1, 1)),
+    regular.select(atan(y.x.negate(), x.x), float(0)),
   );
 }
 
