@@ -387,12 +387,15 @@ Nonnegative multiplier applied to simulation delta seconds.
 
 ***
 
-<a id="sourceloss"></a>
+<a id="sourcelossbehavior"></a>
 
-### sourceLoss
+### sourceLossBehavior
 
 ```ts
-sourceLoss: "kill" | "detach";
+sourceLossBehavior:
+  | "detach"
+  | "kill"
+  | SourceLossBehavior;
 ```
 
 Source mode behavior when an emitting source disappears. Defaults to detach at its last valid frame.

@@ -146,6 +146,9 @@ test('spawn occurs once; independent opacity survives particle death; owned reso
   assert.equal(renderer.count, 1);
   const decal = mark(floor);
   assert.notEqual(decal.material, material);
+  assert.equal(decal.renderOrder, -1);
+  assert.equal(decal.material.depthTest, true);
+  assert.equal(decal.material.depthWrite, false);
   assert.equal(decal.name, '');
   let geometryDisposals = 0, materialDisposals = 0;
   decal.geometry.addEventListener('dispose', () => geometryDisposals++);

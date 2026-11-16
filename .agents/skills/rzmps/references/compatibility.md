@@ -30,3 +30,35 @@ The default camera can clip broad or elevated effects. Override it with
 `--camera-position 8,15,32 --camera-target 0,12,0 --camera-fov 50` for fireworks.
 The coordinates and FOV are recorded in metadata so comparisons can reuse them.
 Captures also record each root system’s simulation speed and scaled elapsed step time.
+
+## Scoped rendering diagnostics
+
+After building the library, run the standalone diagnostic without regenerating docs or example previews:
+
+```bash
+node scripts/preview/rendering-diagnostics.mjs --backend webgl --check --output /tmp/rzmps-render-webgl
+node scripts/preview/rendering-diagnostics.mjs --backend webgpu --check --output /tmp/rzmps-render-webgpu
+```
+
+Add `--material lit` to exercise the lit-sprite variant.
+
+It captures LiveCubemap's -Z face and the normal camera for four states: distortion, unmodified scene color,
+a one-pixel scene-color offset, and ordinary particles. `report.json` records cameras, target/copy dimensions,
+texture identities, feedback checks, and UV normalization. `--check` also captures legacy/corrected decal ordering
+from three camera angles, checks occlusion behind an opaque surface, and reads GPU child-rotation results on WebGPU.
+Initialization, capture, shader errors, or failed controls fail the command explicitly.
+
+Sprite materials use a camera-dependent transmission uniform. During cubemap capture they retain their ordinary
+color and alpha instead of sampling scene color; they are not hidden. The same flag applies to lit/unlit materials
+and CPU/GPU particles. `excludeParticleRenderers` still explicitly hides all particle renderer objects when requested.
+The diagnostic expects every cube-face shader control to match ordinary transparent particles while main-camera
+controls differ; it also checks that captures issue no face-staging copies.
+
+The 2D face-staging workaround was removed: it adds six GPU copies per probe and makes shared viewport textures switch
+between capture and main-view targets. Native cube capture is retained. The shader flag selects ordinary alpha blending
+without modifying Three.js's viewport-texture update behavior. A stalled frame drops missed captures rather than
+replaying them above the configured frequency. Cubemaps still require six ordinary scene renders; `fps` and
+`resolutionScale` control that remaining cost.
+
+Probe cameras skip soft-particle fading against the main camera's depth prepass, matching the WebGL path. Ordinary
+depth testing remains active; main-camera soft intersections retain their existing behavior.

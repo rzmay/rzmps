@@ -206,6 +206,7 @@ Look up constructor options, dynamic values, enums, callbacks, and data contract
 - [MaxCulling](enumerations/MaxCulling.md)
 - [Priority](Supporting-Types/enumerations/Priority.md)
 - [SimulationSpace](enumerations/SimulationSpace.md)
+- [SourceLossBehavior](enumerations/SourceLossBehavior.md)
 - [SpatialEffectUpdatePolicy](enumerations/SpatialEffectUpdatePolicy.md)
 - [SpatialLevels](enumerations/SpatialLevels.md)
 - [SpriteMaterialType](enumerations/SpriteMaterialType.md)

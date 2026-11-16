@@ -29,7 +29,8 @@ export default class LiveCubemap extends THREE.Object3D {
   static isLiveCubemapCamera(camera?: THREE.Camera): boolean {
     return Boolean(
       camera?.userData?.[LIVE_CUBEMAP_CAMERA_KEY]
-      || camera?.parent?.userData?.[LIVE_CUBEMAP_CAMERA_KEY],
+      || camera?.parent?.userData?.[LIVE_CUBEMAP_CAMERA_KEY]
+      || camera?.parent instanceof THREE.CubeCamera,
     );
   }
 
@@ -68,10 +69,11 @@ export default class LiveCubemap extends THREE.Object3D {
       || !renderer
     ) return;
 
-    // manage FPS timing
+    // A probe needs the newest frame, not a backlog of missed six-face captures.
+    const interval = 1 / this.fps;
     this._updateAccumulator += deltaTime;
-    if (this._updateAccumulator < 1 / this.fps) return;
-    this._updateAccumulator -= (1 / this.fps);
+    if (this._updateAccumulator < interval) return;
+    this._updateAccumulator %= interval;
 
     const rendererResolution = new THREE.Vector2();
     renderer.getSize(rendererResolution);
@@ -140,6 +142,30 @@ export default class LiveCubemap extends THREE.Object3D {
     const hiddenParticleRenderers = this.excludeParticleRenderers
       ? this.hideParticleRenderers(scene)
       : [];
+    const previousTarget = renderer.getRenderTarget();
+    const previousFace = renderer.getActiveCubeFace();
+    const previousLevel = renderer.getActiveMipmapLevel();
+    const xrEnabled = renderer.xr.enabled;
+    const generateMipmaps = this._renderTarget.texture.generateMipmaps;
+
+    // Captures hide the owner, so updating shared shadow maps here would erase its main-view shadow.
+    const shadows: { shadow: THREE.LightShadow; autoUpdate: boolean; needsUpdate: boolean }[] = [];
+    scene.traverse(object => {
+      const shadow = (object as THREE.Light & { shadow?: THREE.LightShadow }).shadow;
+      if (!object.castShadow || !shadow) return;
+      shadows.push({ shadow, autoUpdate: shadow.autoUpdate, needsUpdate: shadow.needsUpdate });
+      shadow.autoUpdate = false;
+      shadow.needsUpdate = false;
+    });
+    const webglShadows = renderer instanceof THREE.WebGLRenderer ? renderer.shadowMap : undefined;
+    const shadowMapState = webglShadows && {
+      autoUpdate: webglShadows.autoUpdate,
+      needsUpdate: webglShadows.needsUpdate,
+    };
+    if (webglShadows) {
+      webglShadows.autoUpdate = false;
+      webglShadows.needsUpdate = false;
+    }
 
     try {
       this._cubeCamera.update(renderer, scene);
@@ -154,6 +180,16 @@ export default class LiveCubemap extends THREE.Object3D {
         this._filteredTarget.texture.pmremVersion = this._renderTarget.texture.pmremVersion;
       }
     } finally {
+      for (const { shadow, autoUpdate, needsUpdate } of shadows) {
+        shadow.autoUpdate = autoUpdate;
+        shadow.needsUpdate = needsUpdate;
+      }
+      if (webglShadows && shadowMapState) Object.assign(webglShadows, shadowMapState);
+      this._renderTarget.texture.generateMipmaps = generateMipmaps;
+      renderer.xr.enabled = xrEnabled;
+      if (renderer instanceof THREE.WebGLRenderer)
+        renderer.setRenderTarget(previousTarget as THREE.WebGLRenderTarget | null, previousFace, previousLevel);
+      else renderer.setRenderTarget(previousTarget, previousFace, previousLevel);
       this.restoreHiddenObjects(hiddenParent);
       this.restoreHiddenObjects(hiddenParticleRenderers);
 

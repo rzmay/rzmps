@@ -305,3 +305,49 @@ assert.equal(gpuSystem.spatialRuntime._gpuParticleSpacing.storage, sharedSpacing
 gpuSystem.clearParticles();
 assert.equal(gpuSystem.spatialRuntime._gpuParticleSpacing, undefined);
 console.log('Renderer children and unified population LOD tests passed.');
+
+// Child offsets are local Euler rotations composed with the inherited mesh orientation.
+{
+  const { MeshRenderer } = await import('../../build/index.mjs');
+  const parent = new Particle({ rotation: new THREE.Vector3(0.4, -0.5, 0.7), lifetime: 10 });
+  parent.id = 'rotated-parent';
+  parent.time = 0.3;
+  const inherited = new THREE.Quaternion().setFromEuler(new THREE.Euler().setFromVector3(parent.rotation));
+  const cases = [0, 0.25, new THREE.Vector3(-0.2, 0.6, 0.1), t => new THREE.Vector3(t, 0, -t)];
+  for (const rotation of cases) {
+    const renderer = new MeshRenderer({ maxParticles: 4, children: { count: 1, rotation } });
+    const owner = system({ renderers: [renderer] });
+    try {
+      renderer.update([parent], owner);
+      const offset = typeof rotation === 'function' ? rotation(parent.time)
+        : typeof rotation === 'number' ? new THREE.Vector3().setScalar(rotation) : rotation;
+      const orientation = inherited.clone().multiply(
+        new THREE.Quaternion().setFromEuler(new THREE.Euler().setFromVector3(offset)),
+      );
+      const actual = new THREE.Matrix4();
+      renderer.instances.getMatrixAt(1, actual);
+      const expected = new THREE.Matrix4().compose(parent.position, orientation, parent.scale);
+      assert.ok(actual.elements.every((value, i) => Math.abs(value - expected.elements[i]) < 1e-6));
+      assert.deepEqual(parent.rotation.toArray(), [0.4, -0.5, 0.7]);
+    } finally { owner.destroy(); }
+  }
+  for (const rotation of [[-0.4, 0.4], new Set([new THREE.Vector3(0.1, 0, 0), new THREE.Vector3(0, 0.2, 0)])]) {
+    const renderer = new Capture({ children: { count: 8, rotation } });
+    renderer.update([parent], s);
+    const rotations = renderer.output.slice(1).map(child => child.rotation.toArray());
+    parent.time = 0.8;
+    renderer.update([parent], s);
+    assert.deepEqual(renderer.output.slice(1).map(child => child.rotation.toArray()), rotations,
+      'randomized offsets remain stable for the same child identities');
+    assert.ok(new Set(rotations.map(JSON.stringify)).size > 1, 'children use independent random samples');
+  }
+}
+
+// LOD duplicates inherit an artistic child's completed offset rather than applying it twice.
+{
+  s.quality = 0.5;
+  const renderer = new Capture({ children: { count: 1, rotation: 0.3 }, compensation: CompensationMode.Children });
+  renderer.update([root], s);
+  for (const copy of renderer.output.slice(2)) assert.deepEqual(copy.rotation.toArray(), copy.parent.rotation.toArray());
+  s.quality = 1;
+}

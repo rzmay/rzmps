@@ -84,6 +84,18 @@ optional randomizeScale?: number;
 
 ***
 
+<a id="rotation"></a>
+
+### rotation?
+
+```ts
+optional rotation?: DynamicValue<Vector3Input>;
+```
+
+Local XYZ Euler offset in radians, composed after the inherited orientation. Defaults to zero.
+
+***
+
 <a id="scale"></a>
 
 ### scale?

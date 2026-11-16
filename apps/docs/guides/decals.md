@@ -288,3 +288,11 @@ by their projectile tag so a registered source birth does not replay those effec
 
 See [Emission Sources and Custom Events](./emission-sources-events.md) for handle APIs and deferred
 synchronization, and [Acid](../examples/acid.md) for the complete effect.
+
+### Transparent particle ordering
+
+Decals keep depth testing enabled and render at order `-1`, before the built-in transparent particle batches. This
+keeps foreground particles in front of surface decals as the camera moves; opaque surfaces still occlude particles
+behind them. Three.js sorts Points and instanced batches as objects, not individual particles. Interleaving particles
+with decals on transparent, non-depth-writing surfaces still requires a more general transparency solution. Custom
+render/group orders must preserve the surface-decal-before-particle ordering.

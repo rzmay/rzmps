@@ -213,7 +213,7 @@ so one shared subsystem can attach particles to many moving sources.
 ```js
 const pulses = new ParticleSystem({
   simulationSpace: 'source',
-  sourceLoss: 'kill',
+  sourceLossBehavior: 'kill',
   // emitters, modules, renderers...
 });
 fireflies.addSubSystem(pulses, {
@@ -228,7 +228,8 @@ inherited scale. `inheritScale: 0` keeps the attachment frame's scale at one. Th
 or storing source identity in application-owned particle attributes. Both registered sources and simulated particles
 work; native GPU sources use slot and generation handles without copying their transforms through the CPU.
 
-`sourceLoss` defaults to `'detach'`: an existing particle stops following the lost source and continues from its last
+`sourceLossBehavior` accepts `SourceLossBehavior.Detach` / `SourceLossBehavior.Kill` or the matching
+string values. It defaults to `'detach'`: an existing particle stops following the lost source and continues from its last
 resolved pose. Choose `'kill'` for effects that should disappear with their source, such as firefly pulses. Reusing a
 GPU
 slot never reattaches an old particle to its replacement. Delayed births from a lost source are canceled; a death event

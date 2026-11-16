@@ -1,3 +1,5 @@
+import type { Vector3Input } from '../values/valueInput.types';
+import evaluateDynamicVector3 from '../values/evaluateDynamicVector3';
 import type { MaterialCompositeCallback, MaterialCompositeGPUCallback } from '../rendering/compositing/composite.utils';
 import Appearance from '../rendering/compositing/Appearance';
 import type { TextureAtlasOptions } from '../rendering/TextureAtlas';
@@ -17,7 +19,7 @@ import acceptMultiple from '../utils/acceptMultiple';
 import tagsIntersect from './tags/tagsIntersect';
 import type { DynamicValue, DynamicUntimedValue } from '../values/dynamicValue.types';
 import type { ValueByParameter } from '../values/valueByParameter.types';
-import { MathUtils, Texture, Vector3, type Material } from 'three';
+import { Euler, Quaternion, MathUtils, Texture, Vector3, type Material } from 'three';
 import seedrandom from 'seedrandom';
 import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
 import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
@@ -38,6 +40,8 @@ export interface RendererChildrenOptions {
   /** Additional visual copies. Counts are floored and clamped to nonnegative integers. */
   count?: DynamicUntimedValue<number>;
   radius?: DynamicValue<number>;
+  /** Local XYZ Euler offset in radians, composed after the inherited orientation. Defaults to zero. */
+  rotation?: DynamicValue<Vector3Input>;
   /** Radial multiplier; numeric values are constant. */
   scale?: ValueByParameter<number>;
   /** Radial multiplier; numeric values are constant. */
@@ -231,6 +235,9 @@ export default abstract class Renderer extends EventReceiver {
   private _visibleInstanceCount = 0;
   /** Current renderer population, including generated children; GPU counts use available render-output state. */
   get visibleInstanceCount(): number { return this._visibleInstanceCount; }
+  private readonly childOrientation = new Quaternion();
+  private readonly childOffsetOrientation = new Quaternion();
+  private readonly childEuler = new Euler();
   private _usesGPUChildren = false;
   protected readonly evaluateDynamicGPU = new GPUDynamicParameterStore();
   /** @deprecated Use evaluateDynamicGPU; retained for existing component subclasses. */
@@ -436,6 +443,15 @@ export default abstract class Renderer extends EventReceiver {
 
     if (applyDistanceScaling) {
       const options = this.children;
+
+      if (options.rotation !== undefined) {
+        const offset = evaluateDynamicVector3(options.rotation, parent.time, `${child.id}:rotation`);
+        this.childOrientation.setFromEuler(this.childEuler.setFromVector3(parent.rotation));
+        this.childOffsetOrientation.setFromEuler(this.childEuler.setFromVector3(offset));
+        this.childOrientation.multiply(this.childOffsetOrientation);
+        child.rotation = new Vector3().setFromEuler(this.childEuler.setFromQuaternion(this.childOrientation));
+      }
+
       // Fixed draws keep scale and alpha independent of which options are enabled.
       const scaleVariation = random.quick() - 0.5;
       const alphaVariation = random.quick() - 0.5;

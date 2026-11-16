@@ -88,8 +88,8 @@ for (const custom of [false, true]) test(`Source follows TRS in delayed ${custom
   parent.destroy();
 });
 
-for (const sourceLoss of ['detach', 'kill']) test(`Source ${sourceLoss} handles source disposal and reuse`, () => {
-  const parent = root(), glow = child({ sourceLoss });
+for (const sourceLossBehavior of ['detach', 'kill']) test(`Source ${sourceLossBehavior} handles source disposal and reuse`, () => {
+  const parent = root(), glow = child({ sourceLossBehavior });
   parent.addSubSystem(glow, { emitOnSpawn: true, inheritLifetime: 0 });
   const source = parent.registerEmissionSource({ transform: pose(2) });
   step(parent);
@@ -97,7 +97,7 @@ for (const sourceLoss of ['detach', 'kill']) test(`Source ${sourceLoss} handles 
   source.dispose();
   parent.registerEmissionSource({ transform: pose(100) });
   step(parent);
-  if (sourceLoss === 'kill') assert.equal(particle.alive, false);
+  if (sourceLossBehavior === 'kill') assert.equal(particle.alive, false);
   else near(particle.position, new THREE.Vector3(3, 0, 0));
   parent.reset();
   assert.equal(glow.particles.length, 0);
@@ -106,7 +106,7 @@ for (const sourceLoss of ['detach', 'kill']) test(`Source ${sourceLoss} handles 
 });
 
 test('death-born Source particles retain the final snapshot without an attachment', () => {
-  const parent = root(), glow = child({ sourceLoss: 'kill' });
+  const parent = root(), glow = child({ sourceLossBehavior: 'kill' });
   parent.addSubSystem(glow, { emitOnDeath: true, inheritLifetime: 0 });
   const source = parent.registerEmissionSource({ transform: pose(5) });
   source.dispose(); step(parent);
@@ -179,7 +179,7 @@ test('CPU ownership grows with sources, including WebGL renderer contexts', () =
 
 
 test('mixed CPU followers invalidate a GPU source when its slot generation changes', async () => {
-  const parent = root(), glow = child({ sourceLoss: 'kill' });
+  const parent = root(), glow = child({ sourceLossBehavior: 'kill' });
   parent.addSubSystem(glow, { emitOnSpawn: true, inheritLifetime: 0 });
   const source = new Particle({ position: new THREE.Vector3(2, 0, 0), lifetime: 10 });
   source.id = 'gpu:0:1'; parent.addParticle(source); parent._notifySpawn(source); step(parent);

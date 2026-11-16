@@ -603,6 +603,14 @@ by their projectile tag so a registered source birth does not replay those effec
 See [Emission Sources and Custom Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) for handle APIs and deferred
 synchronization, and [Acid](https://rzmps.rzmay.com/docs/examples/acid.html) for the complete effect.
 
+### Transparent particle ordering
+
+Decals keep depth testing enabled and render at order `-1`, before the built-in transparent particle batches. This
+keeps foreground particles in front of surface decals as the camera moves; opaque surfaces still occlude particles
+behind them. Three.js sorts Points and instanced batches as objects, not individual particles. Interleaving particles
+with decals on transparent, non-depth-writing surfaces still requires a more general transparency solution. Custom
+render/group orders must preserve the surface-decal-before-particle ordering.
+
 
 ---
 
@@ -2589,6 +2597,17 @@ Custom renderers implement `_update` for CPU input and `_updateGPU` for native G
 
 Remove the former update-rate LOD settings from systems, emitters, modules, and renderers. Put distance/falloff/quality settings in `ParticleSystem.lod`. Replace renderer size compensation with `compensation: CompensationMode.Size`, or choose `Children` for density approximation. Emitter and renderer count selection are now coordinated by the simulated population; modules always update survivors at their normal frequency.
 
+### Child rotation
+
+`children.rotation` is a local XYZ Euler offset in radians, composed after the parent's orientation. It defaults to zero.
+A scalar applies to all three axes; vectors, dynamic functions, random ranges, and sets use the usual dynamic-value
+conventions. Random samples are stable per child identity, independently of radius, scale, and alpha. LOD-only copies
+inherit their parent's completed orientation without applying the artistic offset again.
+
+```ts
+new MeshRenderer({ children: { count: 3, rotation: [-0.25, 0.25] } });
+```
+
 
 ---
 
@@ -2836,7 +2855,7 @@ so one shared subsystem can attach particles to many moving sources.
 ```js
 const pulses = new ParticleSystem({
   simulationSpace: 'source',
-  sourceLoss: 'kill',
+  sourceLossBehavior: 'kill',
   // emitters, modules, renderers...
 });
 fireflies.addSubSystem(pulses, {
@@ -2851,7 +2870,8 @@ inherited scale. `inheritScale: 0` keeps the attachment frame's scale at one. Th
 or storing source identity in application-owned particle attributes. Both registered sources and simulated particles
 work; native GPU sources use slot and generation handles without copying their transforms through the CPU.
 
-`sourceLoss` defaults to `'detach'`: an existing particle stops following the lost source and continues from its last
+`sourceLossBehavior` accepts `SourceLossBehavior.Detach` / `SourceLossBehavior.Kill` or the matching
+string values. It defaults to `'detach'`: an existing particle stops following the lost source and continues from its last
 resolved pose. Choose `'kill'` for effects that should disappear with their source, such as firefly pulses. Reusing a
 GPU
 slot never reattaches an old particle to its replacement. Delayed births from a lost source are canceled; a death event
