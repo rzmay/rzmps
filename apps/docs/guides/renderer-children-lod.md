@@ -216,10 +216,12 @@ Remove the former update-rate LOD settings from systems, emitters, modules, and 
 ### Child rotation
 
 `children.rotation` is a local XYZ Euler offset in radians, composed after the parent's orientation. It defaults to zero.
-A scalar applies to all three axes; vectors, dynamic functions, random ranges, and sets use the usual dynamic-value
-conventions. Random samples are stable per child identity, independently of radius, scale, and alpha. LOD-only copies
-inherit their parent's completed orientation without applying the artistic offset again.
+Like `scale` and `alpha`, it accepts a `ValueByParameter`: a fixed scalar/vector, a range interpolated by radial distance,
+or a function of that parameter. Constants stay fixed. `randomizeRotation` perturbs the normalized radial parameter
+before `radialFalloff`, independently of `randomizeScale` and `randomizeAlpha`. Its default is zero; random draws remain
+stable per child identity. Rotation functions receive the radial parameter, not particle age. LOD-only copies inherit
+their parent's completed orientation without applying the artistic offset again.
 
 ```ts
-new MeshRenderer({ children: { count: 3, rotation: [-0.25, 0.25] } });
+new MeshRenderer({ children: { count: 3, radius: 1, rotation: [-0.25, 0.25], randomizeRotation: 0.2 } });
 ```

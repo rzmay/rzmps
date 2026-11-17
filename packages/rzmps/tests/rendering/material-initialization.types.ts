@@ -53,5 +53,6 @@ new MeshRenderer({ textureCopyQuality: 0.5, atlasOptions: { maxTileSize: 2048, m
 new MeshRenderer({ children: { count: 3, rotation: 0.2 } });
 new MeshRenderer({ children: { rotation: new THREE.Vector3(0, 1, 0) } });
 new MeshRenderer({ children: { rotation: [-0.2, 0.2] } });
+// @ts-expect-error Parameterized child rotation uses ranges/functions, not dynamic random sets.
 new MeshRenderer({ children: { rotation: new Set([0.1, new THREE.Vector3(0, 0.2, 0)]) } });
-new MeshRenderer({ children: { rotation: time => new THREE.Vector3(time, 0, 0) } });
+new MeshRenderer({ children: { rotation: parameter => new THREE.Vector3(parameter, 0, 0), randomizeRotation: 0.4 } });

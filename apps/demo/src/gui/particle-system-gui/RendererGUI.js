@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   AudioRenderer,
+  CompensationMode,
   DecalRenderer,
   SpriteRenderer,
   LightRenderer,
@@ -38,7 +39,7 @@ export class RendererGUI extends GUIEditorBase {
 
   buildRenderer(folder, renderer, system = this.system) {
     this.addTags(folder, renderer);
-    folder.add(renderer, 'compensation', ['none', 'size', 'children']).name('LOD Compensation');
+    folder.add(renderer, 'compensation', CompensationMode).name('LOD Compensation');
     const children = folder.addFolder('Renderer Children');
     renderer.children ??= {};
     const defaults = {
@@ -47,6 +48,7 @@ export class RendererGUI extends GUIEditorBase {
       rotation: new THREE.Vector3(),
       scale: 1,
       alpha: 1,
+      randomizeRotation: 0,
       randomizeScale: 0,
       randomizeAlpha: 0,
     };

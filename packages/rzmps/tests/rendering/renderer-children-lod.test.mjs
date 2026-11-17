@@ -319,7 +319,7 @@ console.log('Renderer children and unified population LOD tests passed.');
     const owner = system({ renderers: [renderer] });
     try {
       renderer.update([parent], owner);
-      const offset = typeof rotation === 'function' ? rotation(parent.time)
+      const offset = typeof rotation === 'function' ? rotation(0)
         : typeof rotation === 'number' ? new THREE.Vector3().setScalar(rotation) : rotation;
       const orientation = inherited.clone().multiply(
         new THREE.Quaternion().setFromEuler(new THREE.Euler().setFromVector3(offset)),
@@ -331,8 +331,8 @@ console.log('Renderer children and unified population LOD tests passed.');
       assert.deepEqual(parent.rotation.toArray(), [0.4, -0.5, 0.7]);
     } finally { owner.destroy(); }
   }
-  for (const rotation of [[-0.4, 0.4], new Set([new THREE.Vector3(0.1, 0, 0), new THREE.Vector3(0, 0.2, 0)])]) {
-    const renderer = new Capture({ children: { count: 8, rotation } });
+  for (const rotation of [[-0.4, 0.4], [new THREE.Vector3(0.1, 0, 0), new THREE.Vector3(0, 0.2, 0)]]) {
+    const renderer = new Capture({ children: { count: 8, radius: 2, rotation, randomizeRotation: 0.6 } });
     renderer.update([parent], s);
     const rotations = renderer.output.slice(1).map(child => child.rotation.toArray());
     parent.time = 0.8;
@@ -350,4 +350,36 @@ console.log('Renderer children and unified population LOD tests passed.');
   renderer.update([root], s);
   for (const copy of renderer.output.slice(2)) assert.deepEqual(copy.rotation.toArray(), copy.parent.rotation.toArray());
   s.quality = 1;
+}
+
+// Rotation uses the radial parameter/falloff, with independent, stable variation.
+{
+  const renderer = new Capture({ children: {
+    count: 20, radius: 2, rotation: t => new THREE.Vector3(t, 0, 0),
+    scale: [0.2, 1], alpha: [0.2, 1], randomizeScale: 0.6, randomizeAlpha: 0.8,
+    radialFalloff: t => t * t,
+  } });
+  const values = () => renderer.output.slice(1).map(child => ({
+    rotation: child.rotation.toArray(), position: child.position.toArray(),
+    scale: child.scale.toArray(), alpha: child.alpha,
+  }));
+  renderer.update([root], s);
+  for (const child of renderer.output.slice(1)) {
+    const d = child.position.distanceTo(root.position) / 2;
+    assert.ok(Math.abs(child.rotation.x - d * d) < 1e-12);
+  }
+  const radialValues = values();
+  renderer.children.randomizeRotation = 0.8;
+  renderer.update([root], s);
+  const randomized = values();
+  assert.notDeepEqual(randomized.map(child => child.rotation), radialValues.map(child => child.rotation));
+  const withoutRotation = rows => rows.map(({ rotation: _rotation, ...rest }) => rest);
+  assert.deepEqual(withoutRotation(randomized), withoutRotation(radialValues));
+  renderer.update([root], s);
+  assert.deepEqual(values(), randomized);
+  renderer.children.randomizeScale = 0;
+  renderer.children.randomizeAlpha = 0;
+  renderer.update([root], s);
+  assert.deepEqual(values().map(child => child.rotation), randomized.map(child => child.rotation));
+  assert.deepEqual(root.rotation.toArray(), [0, 0, 0]);
 }

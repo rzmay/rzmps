@@ -6,6 +6,8 @@ import {
   Collision,
   EmissionSource,
   EndBehavior,
+  SimulationSpace,
+  SourceLossBehavior,
   LightRenderer,
   MeshRenderer,
   Module,
@@ -26,7 +28,15 @@ export class ParticleSystemSerializer {
   }
 
   serializeParticleSystem() {
-    const imports = new Set(['EndBehavior', 'ParticleSystem', 'Emitter', 'EmissionShape', 'EmissionSource']);
+    const imports = new Set([
+      'EndBehavior',
+      'SimulationSpace',
+      'SourceLossBehavior',
+      'ParticleSystem',
+      'Emitter',
+      'EmissionShape',
+      'EmissionSource',
+    ]);
     this.collectImports(this.system, imports);
     this.usesEasing = false;
 
@@ -35,12 +45,12 @@ export class ParticleSystemSerializer {
     const systemLines = this.serializeParticleSystemTree(this.system, rootName, counter);
 
     const lines = [
-      'import * as THREE from \'three\';',
+      "import * as THREE from 'three';",
       `import { ${Array.from(imports).sort().join(', ')} } from '@rzmps/rzmps';`,
     ];
 
     if (this.usesEasing) {
-      lines.push('import { Easing } from \'eaz\';');
+      lines.push("import { Easing } from 'eaz';");
     }
 
     lines.push(...systemLines, '', `export default ${rootName};`, '');
@@ -82,13 +92,18 @@ export class ParticleSystemSerializer {
       `  gravity: ${this.serializeValue(system.gravity)},`,
       `  gravityModifier: ${this.serializeValue(system.gravityModifier)},`,
       `  inheritVelocity: ${this.serializeValue(system.inheritVelocity)},`,
-      `  simulationSpace: ${JSON.stringify(system.simulationSpace)},`,
+      `  simulationSpace: ${this.serializeEnum('SimulationSpace', SimulationSpace, system.simulationSpace, 'Local')},`,
+      `  sourceLossBehavior: ${this.serializeEnum(
+        'SourceLossBehavior',
+        SourceLossBehavior,
+        system.sourceLossBehavior,
+        'Detach',
+      )},`,
       `  simulationSpaceTransform: ${this.serializeValue(
         system.simulationSpaceTransform instanceof THREE.Object3D
           ? system.simulationSpaceTransform.matrixWorld
           : system.simulationSpaceTransform,
       )},`,
-      `  sourceLoss: ${JSON.stringify(system.sourceLoss)},`,
       `  useSpatialEffects: ${this.serializeValue(system.useSpatialEffects)},`,
       `  spatialEffectBoundsFiltering: ${this.serializeValue(system.spatialEffectBoundsFiltering)},`,
       `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
@@ -125,8 +140,13 @@ export class ParticleSystemSerializer {
     return lines;
   }
 
+  serializeEnum(name, choices, value, fallback) {
+    const key = Object.keys(choices).find(key => choices[key] === value) ?? fallback;
+    return `${name}.${key}`;
+  }
+
   serializeEndBehavior(value) {
-    return `EndBehavior.${EndBehavior[value] ?? 'None'}`;
+    return this.serializeEnum('EndBehavior', EndBehavior, value, 'None');
   }
 
   serializeSubSystemOptions(options) {
