@@ -7,6 +7,7 @@ import {
   FLIPSimulation,
   VolumeRenderer,
   SurfaceRenderer,
+  SurfaceAttachment,
   DecalRenderer,
   Boids,
   Collision,
@@ -39,6 +40,23 @@ export class ParticleSystemSerializer {
     this.usesEasing = false;
     this.tslImports = new Set();
 
+    // Keep shared sampling owners as references, never serialize their live storage graphs.
+    this.surfaceReferences = new Map();
+    const surfaces = [];
+    const collectSurfaces = system => {
+      for (const module of system.modules) {
+        if (!(module instanceof SurfaceAttachment) || !(module.surface instanceof SurfaceRenderer)
+          || this.surfaceReferences.has(module.surface)) continue;
+        const name = `liquidSurface${surfaces.length + 1}`;
+        this.surfaceReferences.set(module.surface, name);
+        surfaces.push(module.surface);
+        imports.add('SurfaceRenderer');
+      }
+      system.subSystems?.forEach((_options, child) => collectSurfaces(child));
+    };
+    collectSurfaces(this.system);
+    const surfaceLines = surfaces.map(surface =>
+      `const ${this.surfaceReferences.get(surface)} = ${this.serializeRenderer(surface, false)};`);
     const counter = { value: 0 };
     const rootName = 'particleSystem';
     const systemLines = this.serializeParticleSystemTree(this.system, rootName, counter);
@@ -54,7 +72,7 @@ export class ParticleSystemSerializer {
       lines.push("import { Easing } from 'eaz';");
     }
 
-    lines.push(...systemLines, '', `export default ${rootName};`, '');
+    lines.push(...surfaceLines, ...systemLines, '', `export default ${rootName};`, '');
     this.usesEasing = false;
     return lines.join('\n');
   }
@@ -236,6 +254,23 @@ export class ParticleSystemSerializer {
   }
 
   serializeModule(module) {
+    if (module instanceof SurfaceAttachment) {
+      const liquid = module.surface instanceof SurfaceRenderer;
+      const reference = this.surfaceReferences?.get(module.surface);
+      const surface = liquid ? this.rawCode(reference ?? 'surface') : module.surface instanceof THREE.Mesh
+        ? this.rawCode(this.serializeMesh(module.surface)) : undefined;
+      const samplerGPU = liquid && module.samplerGPU === module.surface.sampleSurfaceGPU
+        ? this.rawCode(`${reference ?? 'surface'}.sampleSurfaceGPU`) : module.samplerGPU;
+      const code = `new SurfaceAttachment(${this.serializeValue({
+        surface, sampler: module.sampler, samplerGPU,
+        offset: module.offset, adhesion: module.adhesion, tangentialDrag: module.tangentialDrag,
+        inheritSurfaceVelocity: module.inheritSurfaceVelocity, detachDistance: module.detachDistance,
+        killOnDetach: module.killOnDetach, priority: module.priority,
+        ...this.getLODOptions(module), tags: module.tags,
+      })})`;
+      return liquid && !reference
+        ? `(() => { const surface = ${this.serializeRenderer(module.surface)}; return ${code}; })()` : code;
+    }
     if (module instanceof GasModule) {
       return `new GasModule(${this.serializeValue({
         ...module.options, priority: module.priority, tags: module.tags, enabled: module.enabled,
@@ -413,7 +448,8 @@ export class ParticleSystemSerializer {
     return `new ${module.constructor.name}(${args})`;
   }
 
-  serializeRenderer(renderer) {
+  serializeRenderer(renderer, useReference = true) {
+    if (useReference && this.surfaceReferences?.has(renderer)) return this.surfaceReferences.get(renderer);
     if (renderer instanceof SurfaceRenderer) {
       const materialOptions = this.serializeMaterialOptions(renderer.material, true);
       const constructor = renderer.material instanceof SurfaceRenderer.LiquidMaterial
@@ -944,13 +980,16 @@ export class ParticleSystemSerializer {
     if (typeof value === 'string') return JSON.stringify(value);
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
     if (typeof value === 'function') return this.serializeFunction(value);
-    if (value instanceof THREE.Matrix4) return `new THREE.Matrix4().fromArray(${JSON.stringify(value.elements)})`;
-    if (value instanceof THREE.Vector3) return `new THREE.Vector3(${value.x}, ${value.y}, ${value.z})`;
-    if (value instanceof THREE.Box3)
+    if (value instanceof THREE.Matrix4 || value?.isMatrix4)
+      return `new THREE.Matrix4().fromArray(${JSON.stringify(value.elements)})`;
+    if (value instanceof THREE.Vector3 || value?.isVector3)
+      return `new THREE.Vector3(${value.x}, ${value.y}, ${value.z})`;
+    if (value instanceof THREE.Box3 || value?.isBox3)
       return `new THREE.Box3(${this.serializeValue(value.min, seen)}, ${this.serializeValue(value.max, seen)})`;
-    if (value instanceof THREE.Vector2) return `new THREE.Vector2(${value.x}, ${value.y})`;
-    if (value instanceof THREE.Color) return `new THREE.Color(${JSON.stringify(`#${value.getHexString()}`)})`;
-    if (value instanceof THREE.Euler)
+    if (value instanceof THREE.Vector2 || value?.isVector2) return `new THREE.Vector2(${value.x}, ${value.y})`;
+    if (value instanceof THREE.Color || value?.isColor)
+      return `new THREE.Color(${JSON.stringify(`#${value.getHexString()}`)})`;
+    if (value instanceof THREE.Euler || value?.isEuler)
       return `new THREE.Euler(${value.x}, ${value.y}, ${value.z}, ${JSON.stringify(value.order)})`;
     if (Array.isArray(value)) {
       return `[${value.map(item => this.serializeValue(item, seen)).join(', ')}]`;

@@ -92,7 +92,7 @@ export default async function createVolumetricSmoke() {
         densityNoiseContrast: 1,
         densityNoiseFrequency: 1,
         densityNoiseSpeed: 0.5,
-        densityNoiseStretch: 0.25,
+        densityNoiseStretch: 0.125,
         densityNoiseStretchBySpeed: [0, 1],
         // Masked thin structures need finer ray sampling than the standard one-sample tier.
         samplesPerVoxel: 2,

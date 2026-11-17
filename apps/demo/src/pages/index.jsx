@@ -228,7 +228,7 @@ function DemoPage() {
       if (fluids.length > 2) summaries[1] += ` · +${fluids.length - 2} simulations`;
       simulationStatsRef.current.textContent = summaries.join('\n');
       rendererStatsRef.current.textContent = (typeof stats === 'number' ? [] : stats.renderers ?? [])
-        .map(renderer => `${renderer.name}: ${renderer.count.toLocaleString()}`).join(' · ');
+        .map(renderer => `${renderer.name}: ${renderer.count.toLocaleString()}`).join('\n');
     }
   }, []);
 
