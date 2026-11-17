@@ -6,7 +6,7 @@ import SpatialEffect, {
 import * as THREE from 'three';
 import Priority from '../../enums/Priority';
 import { float, If } from 'three/tsl';
-import type { GPUSpatialEffectType } from './gpu/SpatialEffectRegistry';
+import type { GPUSpatialEffectType } from './gpu/GPUSpatialEffectRegistry';
 
 export type KillZoneOptions = SpatialEffectOptions;
 type BoxGeometryArgs = ConstructorParameters<typeof THREE.BoxGeometry>;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
   Fn, If, clamp, float, floor, instanceIndex, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4,
@@ -26,6 +27,12 @@ export interface FLIPSprayConditionOptions {
   neighborRadius?: number;
 }
 
+/** Activity and local-support gates for ordinary surface-attached foam subsystems. */
+export interface FLIPFoamConditionOptions extends FLIPSprayConditionOptions {
+  /** Minimum other live neighbors; excludes isolated airborne markers. Defaults to 3. */
+  minimumNeighbors?: number;
+}
+
 export interface FLIPSimulationOptions extends FluidSimulationOptions {
   picRatio: number;
   advectParticles: boolean;
@@ -43,6 +50,38 @@ interface FlipPool {
 }
 
 class FLIPSimulation extends FluidSimulation {
+  /** Selects active, partly supported liquid markers. Unlike spray, isolated markers are excluded.
+   * This is a local-support free-surface heuristic, not a persistent foam field or a whitewater solver. */
+  static FoamCondition(options: FLIPFoamConditionOptions = {}): SubSystemGPUCondition {
+    const minimumNeighbors = options.minimumNeighbors ?? 3;
+    const maximumNeighbors = options.maximumNeighbors ?? 22;
+    const neighborRadius = options.neighborRadius ?? 2;
+    if (!Number.isInteger(minimumNeighbors) || minimumNeighbors < 0
+      || !Number.isInteger(maximumNeighbors) || maximumNeighbors < minimumNeighbors) {
+      throw new RangeError('FoamCondition requires ordered, nonnegative integer neighbor limits.');
+    }
+    const activity = FLIPSimulation.SprayCondition({ ...options, minimumSpeed: options.minimumSpeed ?? 0.25,
+      minimumAge: options.minimumAge ?? 0.1, maximumNeighbors: null, neighborRadius });
+    const condition: SubSystemGPUCondition = (particle, dt, context) => {
+      const selected = activity(particle, dt, context).toVar();
+      const grid = context.spatialGrid;
+      if (!grid) throw new Error('FoamCondition requires its managed parent particle spatial grid.');
+      If(selected, () => {
+        const count = uint(0).toVar();
+        const radius = max(particle.scale.x.abs(), max(particle.scale.y.abs(), particle.scale.z.abs()))
+          .mul(neighborRadius).max(1e-5);
+        grid.forEachParticleInRadius(particle.position, radius, neighbor => {
+          If(neighbor.index.notEqual(particle.index).or(neighbor.generation.notEqual(particle.generation)),
+            () => count.addAssign(1));
+        });
+        selected.assign(count.greaterThanEqual(minimumNeighbors).and(count.lessThanEqual(maximumNeighbors)));
+      });
+      return selected;
+    };
+    condition.spatialGridOptions = { brickSubdivisions: 3, cellSubdivisions: 1, maxQuerySteps: 0, timeQuality: 1 };
+    return condition;
+  }
+
   /** Selects fast, sparsely surrounded source particles without sampling an Eulerian fluid field.
    * Inspired by energy/air-entrainment source controls, not a complete whitewater model.
    * Neighborhoods use current parent positions, even when testing a captured event.
@@ -134,6 +173,10 @@ class FLIPSimulation extends FluidSimulation {
     this.modifyGPU = () => {};
     this.collisionIterations = options.collisionIterations ?? 2;
     this.createWorkGrid();
+    for (const [name, get] of Object.entries({
+      residentCapacity: () => this.workGrid?.capacity ?? 0,
+      allocatedCells: () => this.workGrid?.cellCount ?? 0,
+    })) this.benchmarks.register(name, { type: BenchmarkMetricType.Gauge, unit: 'count', get });
   }
 
   get particleSeparation(): number {
@@ -239,6 +282,10 @@ class FLIPSimulation extends FluidSimulation {
     void renderer.getArrayBufferAsync(grid.diagnosticsAttribute).then(buffer => {
       if (grid !== this.workGrid) return;
       const values = new Uint32Array(buffer);
+      this.benchmarks.set('residentPages', values[0]);
+      this.benchmarks.set('deniedPages', values[1]);
+      this.benchmarks.set('requestedPages', values[2]);
+      this.benchmarks.set('activePages', values[5]);
       this.requiredBrickCapacity = this.capacityDemand(values[2], this.workPool?.metrics.preparationMs, grid.capacity);
     }).catch(() => {}).finally(() => { this.allocationReadPending = false; });
   }
@@ -360,7 +407,7 @@ class FLIPSimulation extends FluidSimulation {
     this.picRatioNode.value = THREE.MathUtils.clamp(this.picRatio, 0, 1);
     this.ensureGridResolution(renderer, grid);
     this.refreshBounds(grid, renderer);
-    this.computeMovingWalls(context, renderer, grid);
+    this.benchmarks.span('particleCollision', () => this.computeMovingWalls(context, renderer, grid));
     this.simulationStep++;
     this.ensureWorkPool(context, renderer, grid);
     this.workPool!.commit();
@@ -397,8 +444,10 @@ class FLIPSimulation extends FluidSimulation {
     // Clear old addresses before page reassignment, including retired bricks.
     renderer.compute(this.clearFieldsNode);
     this.pressureProjection?.clearPreviousFaces(renderer);
-    this.workGrid!.rebuild(context, renderer, undefined, undefined,
-      this.boundsMinNode, this.cellSizeNode, float(0), tagMask, undefined, 3, undefined, this.simulationStep);
+    this.benchmarks.span('brickActivation', () => this.workGrid!.rebuild(
+      context, renderer, undefined, undefined, this.boundsMinNode, this.cellSizeNode,
+      float(0), tagMask, undefined, 3, undefined, this.simulationStep,
+    ));
     this.pollWorkCapacity(renderer);
     // Stable resident addresses retain pressure; newly activated bricks must not
     // inherit the pressure of an earlier, retired liquid region.
@@ -490,7 +539,7 @@ class FLIPSimulation extends FluidSimulation {
       ));
     });
     this.forceNodeCompute = force;
-    renderer.compute(force);
+    this.benchmarks.span('gridForces', () => renderer.compute(force));
     this.solveProjection(renderer, this.velocityNext, this.velocityCurrent);
 
     const transfer = this.transferNode ?? Fn(() => {
@@ -600,7 +649,9 @@ class FLIPSimulation extends FluidSimulation {
       })().compute(context.buffers.count);
       this.separationApplyNode = apply;
       // Grid advection may have moved markers since the system built the hash.
-      if (this.advectParticlesEnabled) grid.rebuild(renderer, context.buffers, {});
+      if (this.advectParticlesEnabled) {
+        this.benchmarks.span('particleSpatialIndex', () => grid.rebuild(renderer, context.buffers, {}));
+      }
       this.benchmarks.span('separation', () => {
         renderer.compute(separation);
         renderer.compute(apply);
@@ -770,7 +821,7 @@ class FLIPSimulation extends FluidSimulation {
     this.movingWallsNode.count = context.buffers.count;
     renderer.compute(this.movingWallsNode);
     // P2G and separation must query the corrected positions, not the old hash.
-    grid.rebuild(renderer, context.buffers, {});
+    this.benchmarks.span('particleSpatialIndex', () => grid.rebuild(renderer, context.buffers, {}));
   }
 
   private getPressureProjection(): FluidPressureProjection {

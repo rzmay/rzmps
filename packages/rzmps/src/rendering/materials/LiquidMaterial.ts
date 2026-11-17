@@ -1,15 +1,16 @@
+import type { ColorRepresentation } from 'three';
 import { Color, MeshPhysicalMaterial, type MeshPhysicalMaterialParameters } from 'three';
 import { float, mix, mx_fractal_noise_float, positionLocal, positionView, smoothstep, time, vec3 } from 'three/tsl';
 import stretchAlongVelocity from '../shaders/stretchAlongVelocity';
 import type { ValueByParameter } from '../../values/valueByParameter.types';
-import type { ColorInput } from '../../values/valueInput.types';
-import { evaluateByParameterColorGPU, evaluateByParameterNumberGPU } from '../../values/evaluateByParameterGPU';
+
+import { evaluateByParameterColorGPU, evaluateByParameterNumberGPU } from '../../values/evaluateByParameterGPU.utils';
 import type { MaterialCompositeGPUCallback } from '../compositing/composite.utils';
 
 /** Appearance curves evaluated from combined normalized speed and curl, in the range zero to one. */
 export interface LiquidFlowOptions {
   /** Calm-to-active color gradient. Multiplies particle color, blending toward the gradient in active water. */
-  gradient: ValueByParameter<ColorInput>;
+  gradient: ValueByParameter<ColorRepresentation>;
   /** Physical surface roughness; defaults to 0.5. */
   roughness: ValueByParameter<number>;
   /** Bounded noise-gradient amplitude; defaults to 1. */

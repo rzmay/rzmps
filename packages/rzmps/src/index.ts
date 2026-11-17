@@ -2,7 +2,7 @@ export { SourceLossBehavior } from './enums/SourceLossBehavior';
 export { profileRenderer } from './rendering/benchmarkRenderer.utils';
 export type { BenchmarkRenderer } from './rendering/benchmarkRenderer.utils';
 export { default as Benchmarks } from './core/Benchmarks';
-export type { BenchmarkMetric, BenchmarkDomain, BenchmarkAggregation, BenchmarkCollectionOptions,
+export type { BenchmarkMetric, BenchmarkCollectionOptions,
   BenchmarkDistribution, BenchmarkReport, BenchmarkAssertion } from './core/Benchmarks';
 // ParticleSystem
 export { default as ParticleSystem } from './core/ParticleSystem';
@@ -40,17 +40,17 @@ export { GPUAllocationBufferState, GPUAllocationWriter } from './simulation/gpu/
 export type { GPUAllocationDiagnostics } from './simulation/gpu/AllocationBuffer';
 export { GPUEmitterInstanceBufferState } from './emission/gpu/EmitterInstanceBuffer';
 export type { GPUEmitterInstanceRecord } from './emission/gpu/EmitterInstanceBuffer';
-export { GPUEmissionRunBufferState } from './emission/gpu/Emission';
-export type { GPUEmissionRunNode } from './emission/gpu/Emission';
+export { GPUEmissionRunBufferState } from './emission/gpu/GPUEmissionRunBufferState';
+export type { GPUEmissionRunNode } from './emission/gpu/GPUEmissionRunBufferState';
 export { buildGPUSystemSchedule } from './simulation/gpu/buildGPUSystemSchedule';
 export type { GPUSystemSchedule, GPUSystemScheduleNode } from './simulation/gpu/buildGPUSystemSchedule';
-export { GPUSelectiveReadbackState } from './simulation/gpu/SelectiveReadback';
+export { GPUSelectiveReadbackState } from './simulation/gpu/GPUSelectiveReadbackState';
 export type {
   GPUParticleReadbackField,
   GPUSelectiveReadbackRequest,
   GPUSelectiveReadbackResult,
-} from './simulation/gpu/SelectiveReadback';
-export { GPUSpatialEffectRegistry, isBatchableEffect } from './spatial/effects/gpu/SpatialEffectRegistry';
+} from './simulation/gpu/GPUSelectiveReadbackState';
+export { GPUSpatialEffectRegistry, isBatchableEffect } from './spatial/effects/gpu/GPUSpatialEffectRegistry';
 export type {
   GPUSpatialBatchableEffect,
   GPUSpatialEffectRecord,
@@ -58,9 +58,9 @@ export type {
   GPUSpatialParameterAccessor,
   GPUSpatialParameterField,
   GPUSpatialParameterLayout,
-} from './spatial/effects/gpu/SpatialEffectRegistry';
-export { getGPUEmitterSupport, getGPUEmissionShapeSupport } from './emission/gpu/Emission';
-export type { GPUEmissionSupportLevel, GPUEmissionSupportReport } from './emission/gpu/Emission';
+} from './spatial/effects/gpu/GPUSpatialEffectRegistry';
+export { getGPUEmitterSupport, getGPUEmissionShapeSupport } from './emission/gpu/GPUEmissionRunBufferState';
+export type { GPUEmissionSupportReport } from './emission/gpu/GPUEmissionRunBufferState';
 export { default as LODHelper } from './core/LODHelper';
 export type { LODSettings, LODSettingsOptions } from './core/LODHelper';
 export { EndBehavior } from './enums/EndBehavior';
@@ -168,7 +168,7 @@ export type { BoidParticleAffectorOptions, BoidsOptions } from './modules/Boids'
 export { default as BoidAffector } from './spatial/effects/BoidAffector';
 export type { BoidAffectorOptions } from './spatial/effects/BoidAffector';
 export { default as BoidAffectorHelper } from './spatial/effects/BoidAffectorHelper';
-export { default as SpatialEffect, SpatialEffectUpdatePolicy } from './spatial/effects/SpatialEffect';
+export { default as SpatialEffect } from './spatial/effects/SpatialEffect';
 export type {
   SpatialEffectDeltas,
   SpatialEffectDeltasGPU,
@@ -201,7 +201,6 @@ export type { ICollisionBackend, CollisionHit, CollisionQuery } from './collisio
 export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBackend';
 export type { ThreeCollisionBackendOptions } from './collision/ThreeCollisionBackend';
 export { default as ThreeGPUCollisionBackend } from './collision/ThreeGPUCollisionBackend';
-export { CollisionGeometryUpdatePolicy } from './collision/ThreeGPUCollisionBackend';
 export type {
   ThreeGPUCollisionBackendOptions,
   ThreeGPUCollisionBackendStats,
@@ -217,7 +216,8 @@ export { default as maxDynamicVector } from './values/maxDynamicVector';
 export { default as minDynamicVector } from './values/minDynamicVector';
 export { default as maxDynamicColor } from './values/maxDynamicColor';
 export { default as minDynamicColor } from './values/minDynamicColor';
-export type { ColorInput, Vector3Input } from './values/valueInput.types';
+export type { ColorRepresentation } from 'three';
+export type { Vector3Input } from './values/valueInput.types';
 export type { DynamicValue, DynamicUntimedValue } from './values/dynamicValue.types';
 export type { ValueByParameter } from './values/valueByParameter.types';
 export { default as ParticleOctree } from './spatial/structures/ParticleOctree';
@@ -232,7 +232,6 @@ export type { GPUComputeRange } from './utils/gpu/computeDispatch.utils';
 export { SpatialLevels } from './enums/resolveSpatialLevels';
 export type { SpatialLevelsInput, SpatialGridOptions } from './enums/resolveSpatialLevels';
 export type {
-  SpatialBackend,
   SpatialAggregator,
   SpatialAggregateLayout,
   SpatialAggregateType,
@@ -266,7 +265,6 @@ export { default as selectByTags } from './core/tags/selectByTags';
 export { default as selectByTagsGPU } from './core/tags/selectByTagsGPU';
 export { default as EventReceiver } from './events/EventReceiver';
 export type {
-  EventOrigin,
   EventScope,
   SimulationEvent,
   EventExecutionContext,
@@ -274,7 +272,7 @@ export type {
   EventReceiverOptions,
 } from './events/EventReceiver';
 export type { ModuleExecutionContext, ModuleGPUExecutionContext } from './core/Module';
-export type { GPUEventBatch } from './events/gpu/EventBatch';
+export type { GPUEventBatch } from './events/gpu/SharedGPUEventBatch';
 
 export type {
   ParticleInitializationContext,
@@ -304,7 +302,11 @@ export type { GPUGasCell, GasGridQuery, GasModuleOptions, GasModuleContext, GasR
 export { default as GasSimulation } from './modules/GasSimulation';
 export type { GasSimulationOptions } from './modules/GasSimulation';
 export { default as FLIPSimulation } from './modules/FLIPSimulation';
-export type { FLIPSimulationOptions, FLIPSprayConditionOptions } from './modules/FLIPSimulation';
+export type { FLIPSimulationOptions, FLIPSprayConditionOptions, FLIPFoamConditionOptions } from './modules/FLIPSimulation';
+export { default as SurfaceAttachment } from './modules/SurfaceAttachment';
+export type { SurfaceAttachmentOptions } from './modules/SurfaceAttachment';
+export type { SurfaceSample, GPUSurfaceSample, SurfaceQuery, GPUSurfaceQuery }
+  from './spatial/surfaces/surfaceSample.types';
 export { default as SurfaceRenderer } from './rendering/renderers/SurfaceRenderer';
 export type { SurfaceRendererOptions } from './rendering/renderers/SurfaceRenderer';
 export { default as VolumeRenderer } from './rendering/renderers/VolumeRenderer';
@@ -330,3 +332,14 @@ export type { StagedGPUAllocationOptions } from './utils/gpu/StagedGPUAllocation
 
 export { default as LightingGrid } from './rendering/lighting/LightingGrid';
 export type { LightingGridOptions, LightingGridSource } from './rendering/lighting/LightingGrid';
+// Closed API choices use string-valued enums across CPU/GPU configurations.
+export { BenchmarkDomain } from './enums/BenchmarkDomain';
+export { BenchmarkAggregation } from './enums/BenchmarkAggregation';
+export { BenchmarkMetricType } from './enums/BenchmarkMetricType';
+export { BenchmarkScope } from './enums/BenchmarkScope';
+export { BenchmarkSampling } from './enums/BenchmarkSampling';
+export { BenchmarkStatistic } from './enums/BenchmarkStatistic';
+export { EventOrigin } from './enums/EventOrigin';
+export { SpatialBackend } from './enums/SpatialBackend';
+export { GPUEmissionSupportLevel } from './enums/GPUEmissionSupportLevel';
+export { GeometryUpdatePolicy } from './enums/GeometryUpdatePolicy';

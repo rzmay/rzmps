@@ -1,3 +1,5 @@
+import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
+import { GeometryUpdatePolicy } from '../enums/GeometryUpdatePolicy';
 import type { SpatialGridDomain } from '../spatial/structures/spatialGridDomain.utils';
 import * as THREE from 'three';
 import Benchmarks from '../core/Benchmarks';
@@ -13,7 +15,6 @@ import FluidGuardPrediction, {
   type FluidGuardFace, type FluidGuardSource,
 } from '../simulation/gpu/FluidGuardPrediction';
 import Module, { type ModuleExecutionContext, type ModuleOptions } from '../core/Module';
-import { SpatialEffectUpdatePolicy } from '../spatial/effects/SpatialEffect';
 import type ParticleSystem from '../core/ParticleSystem';
 import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 import ParticleSpatialGrid, {
@@ -22,7 +23,7 @@ import ParticleSpatialGrid, {
 } from '../spatial/structures/ParticleSpatialGrid';
 import FluidCollider from '../spatial/effects/FluidCollider';
 import ThreeGPUCollisionBackend, {
-  CollisionGeometryUpdatePolicy, type ThreeGPUCollisionBackendOptions,
+  type ThreeGPUCollisionBackendOptions,
 } from '../collision/ThreeGPUCollisionBackend';
 import { isIgnoredCollisionObject } from '../collision/isIgnoredCollisionObject';
 import { boundsVector, createSpatialDomain } from '../spatial/structures/spatialGridDomain.utils';
@@ -73,7 +74,7 @@ export interface FluidSimulationOptions extends Partial<ModuleOptions> {
   maxVelocity: number;
   /** Behavior at the finite spatialGridOptions.maxBounds cap, not intermediate adaptive edges. Defaults to Ballistic.
    * Quality limits do not act as physical caps. */
-  boundsPolicy: FluidBoundsPolicy | `${FluidBoundsPolicy}`;
+  boundsPolicy: FluidBoundsPolicy;
   /** Fluid-owned growth applied between updates. GPU hash auto-expansion is disabled. */
   automaticPadding: boolean;
   showGridHelper: boolean;
@@ -118,7 +119,7 @@ abstract class FluidSimulation extends Module {
   };
   externalForce: THREE.Vector3;
   maxVelocity: number;
-  boundsPolicy: FluidBoundsPolicy | `${FluidBoundsPolicy}`;
+  boundsPolicy: FluidBoundsPolicy;
   automaticPadding: boolean;
   showGridHelper: boolean;
   readonly autoBounds: boolean;
@@ -232,10 +233,11 @@ abstract class FluidSimulation extends Module {
     this.gridDimensions.copy(initialDomain.gridDimensions);
     this.dimensionsNode.value.copy(this.gridDimensions);
     for (const [name, axis] of [['width', 'x'], ['height', 'y'], ['depth', 'z']] as const) {
-      this.benchmarks.register(`grid/${name}`, { type: 'gauge', unit: 'count',
+      this.benchmarks.register(`grid/${name}`, { type: BenchmarkMetricType.Gauge, unit: 'count',
         get: () => this.gridDimensions[axis] });
     }
-    this.benchmarks.register('grid/cellSize', { type: 'gauge', unit: 'units', get: () => this.cellSize });
+    this.benchmarks.register('grid/cellSize', { type: BenchmarkMetricType.Gauge, unit: 'units',
+        get: () => this.cellSize });
     this.autoBounds = !options.bounds;
     this.collisionOptions = options.collisionOptions;
     this.resolution = resolution;
@@ -250,7 +252,7 @@ abstract class FluidSimulation extends Module {
     this.pressureDiagnostics = options.pressureDiagnostics ?? false;
     this.pressureWarmStart = options.pressureWarmStart ?? true;
     for (const key of Object.keys(this.pressureStats)) this.benchmarks.register(key, {
-      type: 'gauge', get: () => this.pressureStats[key as keyof FluidPressureDiagnostics],
+      type: BenchmarkMetricType.Gauge, get: () => this.pressureStats[key as keyof FluidPressureDiagnostics],
     });
     this.externalForce = options.externalForce?.clone() ?? new THREE.Vector3(0, -9.81, 0);
     this.maxVelocity = Math.max(0, options.maxVelocity ?? 20);
@@ -1065,13 +1067,13 @@ abstract class FluidSimulation extends Module {
     const cacheKey = colliders
       .map((collider) => `${collider.uuid}:${collider.version}`)
       .join('|');
-    const objects = (policies: SpatialEffectUpdatePolicy[]) => colliders
+    const objects = (policies: GeometryUpdatePolicy[]) => colliders
       .filter(collider => policies.includes(collider.updatePolicy))
       .map(collider => collider.getCollisionObject());
-    this.particleCollisionBackend.staticObjects = objects([SpatialEffectUpdatePolicy.Static]);
-    this.particleCollisionBackend.dynamicObjects = objects([SpatialEffectUpdatePolicy.TransformDynamic]);
+    this.particleCollisionBackend.staticObjects = objects([GeometryUpdatePolicy.Static]);
+    this.particleCollisionBackend.dynamicObjects = objects([GeometryUpdatePolicy.TransformDynamic]);
     this.particleCollisionBackend.geometryDynamicObjects = objects([
-      SpatialEffectUpdatePolicy.Auto, SpatialEffectUpdatePolicy.GeometryDynamic,
+      GeometryUpdatePolicy.Auto, GeometryUpdatePolicy.GeometryDynamic,
     ]);
     this.particleCollisionBackend.update(dt, system?.renderFrameToken);
     const nextState = this.particleCollisionBackend.hasGeometry;
@@ -1099,8 +1101,8 @@ abstract class FluidSimulation extends Module {
       throw new RangeError('Fluid collision bakedFieldResolution must be an integer of at least two.');
     }
 
-    const selected = new Map<THREE.Mesh, SpatialEffectUpdatePolicy>();
-    const addRoot = (root: THREE.Object3D, policy?: SpatialEffectUpdatePolicy) => {
+    const selected = new Map<THREE.Mesh, GeometryUpdatePolicy>();
+    const addRoot = (root: THREE.Object3D, policy?: GeometryUpdatePolicy) => {
       root.updateWorldMatrix(true, true);
       root.traverse(object => {
         if (!(object instanceof THREE.Mesh) || !object.geometry.getAttribute('position')) return;
@@ -1109,16 +1111,11 @@ abstract class FluidSimulation extends Module {
           if (ancestor instanceof FluidCollider || isIgnoredCollisionObject(ancestor)) return;
         }
         if (options?.objectFilter && !options.objectFilter(object)) return;
-        const defaultPolicy = {
-          [CollisionGeometryUpdatePolicy.Static]: SpatialEffectUpdatePolicy.Static,
-          [CollisionGeometryUpdatePolicy.TransformDynamic]: SpatialEffectUpdatePolicy.TransformDynamic,
-          [CollisionGeometryUpdatePolicy.GeometryDynamic]: SpatialEffectUpdatePolicy.GeometryDynamic,
-          [CollisionGeometryUpdatePolicy.Auto]: SpatialEffectUpdatePolicy.Auto,
-        }[options?.updatePolicy ?? CollisionGeometryUpdatePolicy.Auto];
+        const defaultPolicy = options?.updatePolicy ?? GeometryUpdatePolicy.Auto;
         const classification = policy ?? (options?.geometryDynamicObjectFilter?.(object)
-          ? SpatialEffectUpdatePolicy.GeometryDynamic : options?.dynamicObjectFilter?.(object)
-            ? SpatialEffectUpdatePolicy.TransformDynamic : options?.staticObjectFilter?.(object)
-              ? SpatialEffectUpdatePolicy.Static
+          ? GeometryUpdatePolicy.GeometryDynamic : options?.dynamicObjectFilter?.(object)
+            ? GeometryUpdatePolicy.TransformDynamic : options?.staticObjectFilter?.(object)
+              ? GeometryUpdatePolicy.Static
               : defaultPolicy);
         selected.set(object, classification);
       });
@@ -1128,9 +1125,9 @@ abstract class FluidSimulation extends Module {
       const explicit = options.staticObjects !== undefined || options.dynamicObjects !== undefined
         || options.geometryDynamicObjects !== undefined;
       if (explicit) {
-        options.staticObjects?.forEach(root => addRoot(root, SpatialEffectUpdatePolicy.Static));
-        options.dynamicObjects?.forEach(root => addRoot(root, SpatialEffectUpdatePolicy.TransformDynamic));
-        options.geometryDynamicObjects?.forEach(root => addRoot(root, SpatialEffectUpdatePolicy.GeometryDynamic));
+        options.staticObjects?.forEach(root => addRoot(root, GeometryUpdatePolicy.Static));
+        options.dynamicObjects?.forEach(root => addRoot(root, GeometryUpdatePolicy.TransformDynamic));
+        options.geometryDynamicObjects?.forEach(root => addRoot(root, GeometryUpdatePolicy.GeometryDynamic));
       } else if (options.world ?? system.scene) {
         addRoot((options.world ?? system.scene)!);
       }
@@ -1166,9 +1163,9 @@ abstract class FluidSimulation extends Module {
       }
       // Automatic wrappers track geometry revisions explicitly, so rigid/static fields can be cached.
       if (revision !== entry.revision) entry.lastMovedAt = this.collisionElapsed;
-      collider.updatePolicy = policy === SpatialEffectUpdatePolicy.Auto
+      collider.updatePolicy = policy === GeometryUpdatePolicy.Auto
         ? this.collisionElapsed - entry.lastMovedAt >= Math.max(0, options?.staticAfter ?? 2)
-          ? SpatialEffectUpdatePolicy.Static : SpatialEffectUpdatePolicy.TransformDynamic
+          ? GeometryUpdatePolicy.Static : GeometryUpdatePolicy.TransformDynamic
         : policy;
       collider.surfaceThickness = Math.max(0, options?.surfaceThickness ?? 0);
       collider.bakedFieldResolution = Math.max(2, Math.floor(options?.bakedFieldResolution ?? 16));
@@ -1240,8 +1237,8 @@ class CollectedFluidCollider extends FluidCollider {
   override testGPU(particle: GPUParticleLike): Node<'float'> { return this.bakedFieldGPU(particle); }
 
   override get canCacheGridOccupancy(): boolean {
-    return this.updatePolicy === SpatialEffectUpdatePolicy.Static
-      || this.updatePolicy === SpatialEffectUpdatePolicy.TransformDynamic;
+    return this.updatePolicy === GeometryUpdatePolicy.Static
+      || this.updatePolicy === GeometryUpdatePolicy.TransformDynamic;
   }
 }
 

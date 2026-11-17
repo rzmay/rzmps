@@ -41,7 +41,7 @@ export default class SpatialRuntime {
       bounds: bounds ? [bounds.min.toArray(), bounds.max.toArray()] : undefined,
       brickSubdivisions: gridOrOptions.brickSubdivisions ?? 3,
       cellSubdivisions: gridOrOptions.cellSubdivisions ?? 4,
-      levels: gridOrOptions.levels === undefined || gridOrOptions.levels === 'none' || gridOrOptions.levels === 'None'
+      levels: gridOrOptions.levels === undefined || gridOrOptions.levels === 'none'
         ? undefined : resolveSpatialLevels(gridOrOptions.levels, gridOrOptions.brickSubdivisions ?? 3,
           gridOrOptions.cellSubdivisions ?? 4),
       powerOfTwoBounds: gridOrOptions.powerOfTwoBounds ?? true,

@@ -4,6 +4,4 @@ enum EmissionSource {
     Vertices = 'vertices',
 }
 
-export type EmissionSourceValue = EmissionSource | `${EmissionSource}`;
-
 export { EmissionSource };

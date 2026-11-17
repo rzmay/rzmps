@@ -1,10 +1,10 @@
 import { defineConfig } from 'vitepress';
-import { renderSearchPage, exampleSearchPlugin } from '../../../scripts/docs/search.mjs';
-import { exampleSEO, documentationSEO, sitemapItems } from '../../../scripts/docs/seo.mjs';
-import { docsUrl } from '../../../scripts/docs/site.mjs';
+import { renderSearchPage, exampleSearchPlugin } from '../scripts/search.mjs';
+import { exampleSEO, documentationSEO, sitemapItems } from '../scripts/seo.mjs';
+import { docsUrl } from '../scripts/site.mjs';
 import path from 'node:path';
-import { discoverExamples, resolveExample, exampleSourcePath } from '../../../scripts/docs/examples.mjs';
-import { guideNavigation } from '../../../scripts/docs/navigation.mjs';
+import { discoverExamples, resolveExample, exampleSourcePath } from '../scripts/examples.mjs';
+import { guideNavigation } from '../scripts/navigation.mjs';
 import examples from './examples.generated.json';
 import apiSections from './api.generated.json';
 const guideSidebar = guideNavigation(path.resolve(import.meta.dirname,'../guides')).map(({text,items})=>({text,items}));

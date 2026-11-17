@@ -1,3 +1,4 @@
+import { BenchmarkMetricType } from '../../enums/BenchmarkMetricType';
 import * as THREE from 'three';
 import Renderer, { type RendererOptions } from '../../core/Renderer';
 import Particle from '../../core/Particle';
@@ -15,7 +16,7 @@ import acceptMultiple from '../../utils/acceptMultiple';
 import { CollisionHit } from '../../collision/collision.types';
 import type { SimulationEvent } from '../../events/EventReceiver';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
-import type { GPUParticleReadbackField } from '../../simulation/gpu/SelectiveReadback';
+import type { GPUParticleReadbackField } from '../../simulation/gpu/GPUSelectiveReadbackState';
 
 const AUDIO_LISTENER_KEY = '__rzmps_audioListener';
 
@@ -185,7 +186,7 @@ export default class AudioRenderer extends Renderer {
 
   constructor(options: Partial<AudioRendererOptions> = {}) {
     super(options);
-    this.benchmarks.register('playingClips', { type: 'gauge', unit: 'count', get: () => {
+    this.benchmarks.register('playingClips', { type: BenchmarkMetricType.Gauge, unit: 'count', get: () => {
       let count = 0;
       for (const entry of this._particleAudio.values()) if (entry.audio.isPlaying) count++;
       for (const audio of this._eventAudio) if (audio.isPlaying) count++;

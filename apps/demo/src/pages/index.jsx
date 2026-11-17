@@ -217,8 +217,14 @@ function DemoPage() {
 
       // One compact quality summary per simulation, capped at two lines for composed systems.
       const fluids = typeof stats === 'number' ? [] : stats.fluids ?? [];
-      const summaries = fluids.slice(0, 2).map(fluid =>
-        `${fluid.name}: ${fluid.dimensions} cells · ${fluid.cellSize} units/cell`);
+      const summaries = fluids.slice(0, 2).map(fluid => {
+        const timing = [fluid.pressureSubmissionMs != null ? `pressure ${fluid.pressureSubmissionMs.toFixed(1)}ms` : '',
+          fluid.surfaceSubmissionMs != null ? `surface ${fluid.surfaceSubmissionMs.toFixed(1)}ms` : '']
+          .filter(Boolean).join(' · ');
+        return `${fluid.name}: ${fluid.cellSize} units/cell`
+          + (fluid.residentPages != null ? ` · ${fluid.residentPages} bricks` : ` · ${fluid.dimensions} cells`)
+          + (timing ? ` · CPU submit: ${timing}` : '');
+      });
       if (fluids.length > 2) summaries[1] += ` · +${fluids.length - 2} simulations`;
       simulationStatsRef.current.textContent = summaries.join('\n');
       rendererStatsRef.current.textContent = (typeof stats === 'number' ? [] : stats.renderers ?? [])

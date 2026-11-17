@@ -16,7 +16,7 @@ Green acid pools emit rotating smoke and floating refractive bubbles. Select Che
 
 ## Particle System Configuration
 
-This factory reuses Splatter's droplet collisions, surface projection, lighting, textures, and disposal. The droplet
+This self-contained factory configures droplet collisions, surface projection, lighting, textures, and disposal. The droplet
 rate is 0.3 per second. Pools last eighteen seconds and have twice the previous width and height. The pool keeps its
 registered emission source after its original droplet dies. Each source disappears with its decal, while previously
 emitted smoke and splash particles finish their own lifetimes. Update only the root system.
@@ -58,7 +58,7 @@ alive.
 
 ## Renderers
 
-The reused DecalRenderer publishes acid-pool tags. Both children select that tag, excluding the airborne parent
+The DecalRenderer publishes acid-pool tags. Both children select that tag, excluding the airborne parent
 droplets. Smoke continuously follows each pool; bubbles subscribe to bubble events. Alpha inherits the fading decal
 opacity, so emissions soften near expiry. Full transform-scale inheritance spreads emission across each pool's
 footprint. The emitter shape defines local offsets, then the registered source transform places and scales them.

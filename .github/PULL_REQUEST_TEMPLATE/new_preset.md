@@ -42,4 +42,4 @@ Applies when adding or substantially changing particle examples.
 - [ ] The example guide was generated or updated.
 - [ ] System, emitter, module, and renderer choices and important values are explained.
 - [ ] Visual previews were inspected where applicable, with backend results reported.
-- [ ] `npm run docs:generate` and `npm run docs:check` pass; generated artifacts are included.
+- [ ] `npm run generate --workspace @rzmps/docs` and `npm run scripts check:docs` pass; published skill changes are included.

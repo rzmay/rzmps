@@ -1,45 +1,133 @@
-# Repository scripts
+# Repository automation
 
-- `benchmark/`: PR benchmark selection, execution, comparison and reporting.
+This private workspace owns shared automation, not test suites or benchmark workloads.
+Run a task from the repository root with `npm run scripts <task> -- <options>`.
+Common root entry points (`dev`, `build`, `test`, `lint`, `preview`, `benchmarks`) remain available.
+
+- `browser/` and `config/browser.json`: shared Puppeteer launch profiles for native and Linux CI execution.
+- `process/`: shared bounded cleanup and deadline helpers.
 - `dependencies/`: dependency analysis and PR warning comments.
-- `docs/`: documentation and published skill generation and validation.
-- `preview/`: canvas capture and its runtime validation helpers.
-- `site/`: development server, static assembly and serving.
-- `tests/`: script tests, mirroring those directories. Browser checks live here too.
+- `preview/`: capture, encoding, readback and diagnostics shared by the demo and documentation.
+- `site/`: combined development server, assembly, serving and deployment validation.
+- `discover.utils.mjs` and `selection.utils.mjs`: common file discovery and JSON regex selection.
+- `processes.mjs`: explicit build, check, deployment and PR preparation pipelines.
 
-A **fixture** is fixed test input or a prepared test scenario. It is not disposable
-output. `tests/benchmark/fixtures/benchmark-result.json` supplies known measurements
-for comparison, aggregation, validation and CLI lifecycle tests. The loader/runtime
-fixtures replace Chrome and the server during those tests, so they run quickly
-without a real benchmark. Keep these files tracked. They are not current performance
-reports and should not be refreshed by benchmark CI.
+Documentation-specific generation, templates, validation and media manifests belong to
+`apps/docs/scripts/`, invoked through `@rzmps/docs`. Test and benchmark runners and their
+configuration belong to the [tests](../tests/README.md) and [benchmarks](../benchmarks/README.md)
+workspaces. Add automation tests under the relevant directory in root `tests/`, mirroring
+this workspace's ownership; do not place executable tests in `scripts/`.
 
-`tests/preview/fixtures/` contains small particle scenes used to check event scopes,
-GPU events and simulation frames through the preview capture tool.
+## Named processes
 
-Actual benchmark output belongs in ignored `benchmark-results/` or `benchmark/` at
-the repository root. Generated previews also stay ignored. The one-off TextureAtlas
-benchmark has been removed; regular benchmark CI uses the tools in `scripts/benchmark/`.
+`npm run scripts pr:prepare` builds packages in dependency order once, runs the discovered
+unit and type tests, measures the reported browser benchmark set, updates README tables from
+that artifact, generates documentation and the published skill, checks generated docs and
+links, builds the demo and checks whitespace. Steps log their activity and stop on failure.
+It does not create commits or open an editor. Cross-branch ABBAAB comparisons run separately in CI.
 
-Run fast benchmark and dependency reporting tests with `npm run test:benchmarks`
-and `npm run test:dependencies`. Documentation tests live in `tests/docs/` and run
-through `npm run docs:check`. `npm run preview:smoke` runs the optional browser suite;
-`npm run site:browser-check` checks the assembled site.
+`build:site` builds packages, generates source documentation, validates it, builds the demo and
+assembles `dist/`. `deploy:site` additionally restores/generates preview media and validates assets
+and SEO. Neither ordinary development nor `build:site` captures media. Deployment needs FFmpeg,
+FFprobe and Puppeteer's pinned Chrome. `--skip-build` reuses existing package builds;
+`--check-generated` reuses documentation prepared by an earlier stage.
 
-Preview media is generated only by explicit `preview`, `docs:previews`, or deployment
-commands. `site:deploy` needs FFmpeg/FFprobe and the Chrome version shipped with the
-pinned Puppeteer dependency. Source checks and `site:build` do not need these tools.
-`npm run test:preview-media` runs focused metadata/encoding tests (tiny synthetic frames,
-with encoding tests skipped if FFmpeg is absent). The separate
-`node --test scripts/tests/preview/backend.test.mjs` checks real headless WebGPU
-texture readback and runs as a required deployment gate.
-Run `npm run lint` from the repository root to check library sources, the demo,
-examples, and scripts. The shared `.eslintrc.cjs` warns about lines over 120 characters;
-`scripts/.eslintrc.cjs` adds Node and browser-harness environments. Use
-`npm run lint:scripts` for scripts alone. CI rejects lint errors; warnings remain advisory. JavaScript and TypeScript use
-single quotes (double quotes are allowed to avoid escaping apostrophes), and JSX
-attributes use double quotes.
-Prettier uses the same 120-character target through `.prettierrc.json`.
+Use `check:source`, `check:dependencies`, `check:site`, `check:docs` or `check:agents` for focused
+checks. `check:docs:prepared` checks generated artifacts after a pipeline has already validated
+source. `build:packages`, `build:demo` and `build:docs` expose individual build stages.
 
-Fluid WebGPU regressions and diagnostic harnesses live in `tests/preview/fluids/`,
-with browser fixtures in its `fixtures/` directory.
+## Formatting and configuration
+
+Run `npm run lint` for maintained source, scripts, tests and benchmarks. Shared ESLint rules
+use single quotes (double quotes may avoid escaping), double quotes for JSX attributes, and
+warnings for lines over 120 characters. Prettier shares that 120-character target. Errors fail CI;
+line-length warnings are advisory. Workspace configs inherit these rules rather than duplicate them.
+
+`config/browser.json` owns launch flags, timeouts and preview cleanup defaults. Profiles retain
+purpose-specific settings, including Linux software rendering. Benchmark lifecycle deadlines and
+measurement settings live separately in `benchmarks/config/`; do not duplicate them in callers.
+
+## Headless WebGPU diagnostics
+
+`npm run scripts preview:linux -- --example fireflies` builds the preview entry and captures
+that example in the matching Puppeteer Docker image, using Linux/amd64, SwiftShader,
+two CPUs and 7 GB RAM. Docker must be running. On ARM hosts this uses x86 emulation;
+it is useful for reproducing Linux failures but is not identical to native Ubuntu CI.
+It does not generate documentation or install dependencies. Build the packages first.
+Use `--site /path/to/production/demo` to reuse a bundle. Standard capture options such
+as `--width`, `--height`, `--warmup`, `--backend` and `--output` override example metadata.
+Default output is ignored `tests/output/preview-linux/`.
+
+Captures record the browser version and flags, adapter/device features and limits,
+GPU errors and device loss, shader/pipeline timings, the last simulation/render phase,
+Chrome's stderr, and Linux cgroup memory/OOM counters. WGSL sources are saved in
+`shaders/`. GPU-info snapshots are bounded and may fail without blocking capture.
+
+Documentation captures preserve these files for every failed retry under
+`tests/output/preview-diagnostics/<example>/attempt-<n>/`. Override that root
+with `RZMPS_PREVIEW_DIAGNOSTICS_DIR`. CI uploads the directory even when generation
+fails. A missing image is still a failure; WebGPU never falls back to WebGL.
+
+WebGPU image capture reads an explicit render target rather than the headless canvas
+swap chain. Readback strips WebGPU's padded rows and uses an sRGB target. The separate
+`node --test tests/preview/readback.browser.test.mjs` preflight checks actual colors,
+orientation, and an unaligned width before CI attempts the example collection.
+`npm test -- --skip-build --set diagnostics` tests logging and row packing without a browser.
+
+Linux software captures disable Chrome's GPU watchdog because software shader work
+can exceed its hardware-oriented deadline. The capture retains its own 180-second
+timeout. This follows the mitigation in
+[Three.js PR #33650](https://github.com/mrdoob/three.js/pull/33650).
+[Chromium's SwiftShader documentation](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/gpu/swiftshader.md)
+and [Chrome's headless WebGPU guide](https://developer.chrome.com/blog/supercharge-web-ai-testing)
+explain the graphics backend configuration. Additional Vulkan flags alone are not
+proof of a working capture; use the pixel preflight and a complete example capture.
+
+### Investigation results
+
+Using Puppeteer 25.12.0 / Chrome 154.0.8037.57 in the cached Debian Linux/amd64
+container on an ARM Mac, the original fireflies capture reproduced the exact
+`A valid external Instance reference no longer exists` exception. Immediately
+before it, Chromium reported failure to create a `WebGPUSwapBufferProvider` shared
+image. Disabling the watchdog alone reproduced the same failure. Enabling Vulkan
+avoided that immediate exception but the particle capture subsequently timed out.
+
+Explicit render-target readback passed the Linux two-color pixel probe, including
+orientation and padded rows. The next full-scene attempt reached all 360 warmup
+steps but stalled while building the populated scene's materials. A standalone
+17-light PBR scene passed, so the apparent lighting stall was investigated with
+V8 CPU sampling rather than treated as a GPU rendering timeout.
+
+The profile recorded 40,487 samples (93.1% of total time) inside Maglev-compiled
+`NodeBuilder._toFloat`, called by shader constant generation. Disabling only Maglev
+with `--js-flags=--no-maglev` made the unchanged full fireflies capture complete in
+about 17 seconds. Two more fresh Linux/amd64 containers using the final code passed
+in about 18 seconds each, at 1920x1080 after 360 steps. Both recorded 96 GPU-simulated
+fireflies, attached glow pulses, active lights, and valid source attachments. The
+images were inspected. Native Mac WebGPU also passed. No preset or light renderer
+was removed or reduced in the final code.
+
+The workaround is limited to Linux CI automation browsers; baseline/TurboFan JIT,
+WebAssembly, and WebGPU remain enabled. Interactive rendering is unchanged. Both revisions in benchmark comparisons use the same
+automation browser profile. The pixel preflight additionally exercises the
+actual Three.js shader constant formatter repeatedly. Ubuntu runner and Puppeteer
+versions are pinned, and failure diagnostics remain uploaded for native CI results.
+
+Documentation media lives in `apps/docs/public/previews/` and is ignored by Git.
+`npm run generate:previews --workspace @rzmps/docs` generates the complete set; use
+`npm run generate:previews --workspace @rzmps/docs -- --example collisionSubEmitters` for one example (repeat
+`--example` to select several). Source/docs generation alone does not capture media.
+Manual CLI and smoke-test captures live under `tests/output/previews/`.
+
+Examples tagged `audio` capture the actual Three.js listener mix through an
+OfflineAudioContext. Its clock advances alongside simulation steps, and warmup is
+trimmed from the stereo PCM before FFmpeg encodes AAC (MP4) or Opus (WebM). Native
+video controls allow unmuting; autoplay always starts muted and respects reduced
+motion. PNG/contact-sheet captures retain their existing behavior.
+
+Shared documentation quality is configured in `apps/docs/scripts/preview-settings.mjs`:
+1920×1080 for both PNG posters and video frames, 30 fps, and CRF 18 video encoding.
+Each factory's `metadata.previewSettings.duration` sets its clip length. It normally
+matches the root ParticleSystem duration; Fireflies samples 10 seconds of its
+120-second ambient cycle, and Fireball captures two 1.25-second bursts. Individual
+presets can also override width, height, fps, format, or crf in `previewSettings`.

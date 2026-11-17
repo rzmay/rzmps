@@ -12,12 +12,12 @@ import SpatialEffect from '../spatial/effects/SpatialEffect';
 import SpatialEffectCollection, { type SpatialEffectRequirement } from '../spatial/effects/SpatialEffectCollection';
 export type { SpatialEffectConstructor, SpatialEffectRequirement } from '../spatial/effects/SpatialEffectCollection';
 import Priority from '../enums/Priority';
-import type { GPUEventBatch } from '../events/gpu/EventBatch';
+import type { GPUEventBatch } from '../events/gpu/SharedGPUEventBatch';
 import type {
   GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateContext,
 } from '../simulation/gpu/Particle';
 import type { Node } from 'three/webgpu';
-import { GPUDynamicParameterStore } from '../values/evaluateDynamicGPU';
+import { GPUDynamicParameterStore } from '../values/GPUDynamicParameterStore';
 import ParticleSpatialGrid, {
   type ParticleSpatialGridOptions, type ParticleSpatialGridRenderer,
 } from '../spatial/structures/ParticleSpatialGrid';
@@ -348,6 +348,11 @@ export default class Module extends EventReceiver {
     void _renderBuffers;
     void _renderer;
     void _grid;
+  }
+
+  /** Persistent CPU motion constraint after integration, with the same tag/condition selection as modify(). */
+  public finalize(_particle: Particle, _deltaTime: number, _context: ModuleExecutionContext): void {
+    void _particle; void _deltaTime; void _context;
   }
 
   /** Persistent GPU constraint after integration and transient commit, before death events and allocation accounting.

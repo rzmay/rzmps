@@ -42,7 +42,7 @@ type TSLMatrix4Node = {
   };
 };
 
-const WebGPULitSprite = (
+const webGPULitSprite = (
   pointTexture: THREE.Texture, options: Partial<WebGPULitSpriteOptions> = {},
 ) => {
   const {
@@ -224,7 +224,6 @@ const WebGPULitSprite = (
       return sceneColor(refractedUv);
     })();
 
-
     material.outputNode = transmissionOutput(transmittedColor, transmissionValue, finalAlpha);
   }
 
@@ -245,4 +244,4 @@ const WebGPULitSprite = (
   return material;
 };
 
-export default WebGPULitSprite;
+export default webGPULitSprite;

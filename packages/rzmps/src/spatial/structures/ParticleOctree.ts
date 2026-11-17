@@ -1,3 +1,4 @@
+import { SpatialBackend } from '../../enums/SpatialBackend';
 import * as THREE from 'three';
 import Particle from '../../core/Particle';
 import acceptMultiple from '../../utils/acceptMultiple';
@@ -42,7 +43,7 @@ export interface OctreeNode<TAggregate = unknown> {
   isEmpty: boolean;
 }
 
-export type OctreeAggregator<TAggregate> = SpatialAggregator<TAggregate, 'cpu'>;
+export type OctreeAggregator<TAggregate> = SpatialAggregator<TAggregate, SpatialBackend.CPU>;
 
 export interface ParticleOctreeQueryOptions {
   /** Particle index omitted from the query, normally the caller's own index. */

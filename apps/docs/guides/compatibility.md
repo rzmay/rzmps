@@ -7,7 +7,7 @@ Initialize a WebGPURenderer before rendering. See the demo's `createWebGPURender
 The preview harness uses the shared example factory, a perspective camera at `(8, 6, 12)` looking at `(0, 2, 0)`, pixel ratio 1, a dark background, and ambient/directional lighting. It waits for example assets, performs an initial render to establish renderer/camera context, and captures immediately after rendering. WebGL preserves its drawing buffer; WebGPU submits and waits for render work. PNG data comes from the canvas, without browser-window screenshots.
 
 ```bash
-npm run build:modules
+npm run build
 npm run preview -- --example fire --backend webgl --warmup 60
 npm run preview -- --example fire --backend webgpu --warmup 60
 ```

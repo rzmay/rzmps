@@ -460,12 +460,14 @@ apps/docs/.vitepress/.temp/
 
 # Isolated benchmark bundles and CI diagnostics
 /apps/demo/benchmark-dist/
-/benchmark-results/
 
 /apps/docs/guides/benchmarks.md
 
 # Disposable reports and documentation captures (the published skill stays tracked).
-/benchmark/
 /apps/docs/public/previews/
 
 /.dependency-report/
+
+# Workspace-owned test and benchmark artifacts
+/benchmarks/output/
+/tests/output/

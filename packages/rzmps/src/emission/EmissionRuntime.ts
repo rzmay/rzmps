@@ -1,3 +1,4 @@
+import { EventOrigin } from '../enums/EventOrigin';
 import * as THREE from 'three';
 import type { CollisionHit } from '../collision/collision.types';
 import type Particle from '../core/Particle';
@@ -111,7 +112,7 @@ export default class EmissionRuntime {
         emitter.beginExecution(
           this.system,
           this.execution.deltaTime(),
-          this.system.isSubSystem ? 'parent' : 'local',
+          this.system.isSubSystem ? EventOrigin.Parent : EventOrigin.Local,
           this.execution.eventNames(emitter),
           options.eventScope,
         );

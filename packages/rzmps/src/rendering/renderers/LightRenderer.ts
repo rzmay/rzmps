@@ -1,3 +1,5 @@
+import { BenchmarkMetricType } from '../../enums/BenchmarkMetricType';
+import type { ColorRepresentation } from 'three';
 import GlobalSettings from '../../core/GlobalSettings';
 import * as THREE from 'three';
 import Renderer, { type RendererOptions } from '../../core/Renderer';
@@ -6,10 +8,10 @@ import Particle from '../../core/Particle';
 import type { DynamicValue } from '../../values/dynamicValue.types';
 import evaluateDynamicNumber from '../../values/evaluateDynamicNumber';
 import evaluateDynamicColor from '../../values/evaluateDynamicColor';
-import type { ColorInput } from '../../values/valueInput.types';
+
 import maximumDynamicNumber from '../../values/maximumDynamicNumber';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
-import type { GPUParticleReadbackField } from '../../simulation/gpu/SelectiveReadback';
+import type { GPUParticleReadbackField } from '../../simulation/gpu/GPUSelectiveReadbackState';
 
 export interface LightRendererAllocationOptions {
     /** Shrink when required capacity stays below this fraction of the pool. Default 0.75; zero disables shrinking. */
@@ -24,7 +26,7 @@ export interface LightRendererOptions extends RendererOptions {
     /** Point-light intensity in candela, evaluated per particle. Defaults to one. */
     brightness: DynamicValue<number>;
     /** Light color before optional multiplication by particle color. Defaults to white. */
-    color: DynamicValue<ColorInput>;
+    color: DynamicValue<ColorRepresentation>;
     /** Light range before optional particle-size/range scaling; zero means unlimited. Defaults to zero. */
     distance: DynamicValue<number>;
     /** Falloff exponent. Defaults to two. */
@@ -47,7 +49,7 @@ class LightRenderer extends Renderer {
 
     rangeMultiplier: DynamicValue<number>;
 
-    color: DynamicValue<ColorInput>;
+    color: DynamicValue<ColorRepresentation>;
 
     distance: DynamicValue<number>;
 
@@ -74,9 +76,10 @@ class LightRenderer extends Renderer {
         count: options.count ?? 50,
       });
 
-      this.benchmarks.register('activeLights', { type: 'gauge', unit: 'count',
+      this.benchmarks.register('activeLights', { type: BenchmarkMetricType.Gauge, unit: 'count',
         get: () => this.lights.filter(light => light.visible && light.intensity > 0).length });
-      this.benchmarks.register('allocatedLights', { type: 'gauge', unit: 'count', get: () => this.lights.length });
+      this.benchmarks.register('allocatedLights', { type: BenchmarkMetricType.Gauge, unit: 'count',
+        get: () => this.lights.length });
       this.allocation = { shrinkThreshold: 0.75, shrinkDelay: 1, ...options.allocation };
       this.brightness = options.brightness ?? 1;
       this.rangeMultiplier = options.rangeMultiplier ?? 1;

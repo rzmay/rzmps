@@ -1,3 +1,4 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import {
   Emitter,
@@ -70,7 +71,7 @@ export default async function snowPreset() {
     // #region docs:renderers:1
     renderers: [
       new SpriteRenderer(Textures.Default, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
         children: { count: 5, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
         alphaMap: snowflakeAlpha,
         materialOptions: {

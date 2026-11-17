@@ -15,7 +15,7 @@ export interface UnlitSpriteOptions extends THREE.ShaderMaterialParameters {
   transmissionMap: THREE.Texture;
 }
 
-const UnlitSprite = (
+const unlitSprite = (
   texture: THREE.Texture, options: Partial<UnlitSpriteOptions> = {},
 ) => {
   const {
@@ -73,4 +73,4 @@ const UnlitSprite = (
   });
 };
 
-export default UnlitSprite;
+export default unlitSprite;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BoxGeometry, Mesh, MeshBasicMaterial, Scene, SphereGeometry } from 'three';
-import { FluidCollider, GasSimulation, ParticleSystem, SpatialEffectUpdatePolicy } from '../../build/index.mjs';
+import { FluidCollider, GasSimulation, ParticleSystem, GeometryUpdatePolicy } from '../../build/index.mjs';
 
 test('fluid discovery mirrors collision filters, follows meshes, and preserves source ownership', () => {
   const scene = new Scene();
@@ -24,7 +24,7 @@ test('fluid discovery mirrors collision filters, follows meshes, and preserves s
   assert.equal(gas.collectedColliders.size, 1);
   const wrapper = gas.collectedColliders.get(selected).collider;
   assert.equal(wrapper.geometry, geometry);
-  assert.equal(wrapper.updatePolicy, SpatialEffectUpdatePolicy.TransformDynamic);
+  assert.equal(wrapper.updatePolicy, GeometryUpdatePolicy.TransformDynamic);
   assert.equal(wrapper.canCacheGridOccupancy, true);
   assert.equal(wrapper.parent, null, 'automatic occupancy wrappers never alter the scene hierarchy');
   assert.equal(selected.parent, scene);
@@ -55,13 +55,13 @@ test('fluid discovery mirrors collision filters, follows meshes, and preserves s
   collect();
   assert.equal(gas.collectedColliders.size, 2, 'effect-owned and renderer-owned meshes are excluded');
   const automatic = gas.collectedColliders.get(selected).collider;
-  assert.equal(automatic.updatePolicy, SpatialEffectUpdatePolicy.TransformDynamic);
+  assert.equal(automatic.updatePolicy, GeometryUpdatePolicy.TransformDynamic);
   gas.collisionElapsed += 2.1;
   collect();
-  assert.equal(automatic.updatePolicy, SpatialEffectUpdatePolicy.Static);
+  assert.equal(automatic.updatePolicy, GeometryUpdatePolicy.Static);
   selected.position.x++;
   collect();
-  assert.equal(automatic.updatePolicy, SpatialEffectUpdatePolicy.TransformDynamic);
+  assert.equal(automatic.updatePolicy, GeometryUpdatePolicy.TransformDynamic);
   gas.collisionOptions = undefined;
   collect();
   assert.equal(gas.collectedColliders.size, 0, 'collection is opt-in');

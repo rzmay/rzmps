@@ -124,10 +124,13 @@ void main() {
     float a = 1.0 - pow(1.0 - sampleOpacity, length(rayDir * boundsSize) * segment);
     vec3 sampleColor = volume.rgb;
 
-    float transmission = shadowQuality > 0.0 ? lightTransmittance(p, shadowDirection) : 1.0;
-    vec3 incident = vec3(0.2) + lightColor * (0.8 * phase * transmission);
-    // Self-lighting changes shading only; extinction and alpha remain unchanged.
-    color.rgb += (1.0 - color.a) * a * mix(sampleColor * incident, sampleColor, emissive);
+    vec3 shaded = sampleColor;
+    if (emissive < 1.0) {
+      float transmission = shadowQuality > 0.0 ? lightTransmittance(p, shadowDirection) : 1.0;
+      vec3 incident = vec3(0.2) + lightColor * (0.8 * phase * transmission);
+      shaded = mix(sampleColor * incident, sampleColor, emissive);
+    }
+    color.rgb += (1.0 - color.a) * a * shaded;
     color.a += (1.0 - color.a) * a;
 
     if (1.0 - color.a <= transmittanceThreshold) break;

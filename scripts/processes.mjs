@@ -1,0 +1,97 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+
+const root = path.resolve(import.meta.dirname, '..');
+const [task, ...flags] = process.argv.slice(2);
+const skipBuild = flags.includes('--skip-build');
+const checkGenerated = flags.includes('--check-generated');
+async function run(command, args) {
+  console.log(`[${task}] ${command} ${args.join(' ')}`);
+  await new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd: root, stdio: 'inherit' });
+    child.once('error', reject);
+    child.once('exit', (code, signal) =>
+      code === 0 ? resolve() : reject(new Error(`${command} failed (${signal ?? code})`)),
+    );
+  });
+}
+const npm = (...args) => run('npm', args);
+const node = (...args) => run(process.execPath, args);
+async function buildPackages() {
+  const packages = fs
+    .readdirSync(path.join(root, 'packages'))
+    .map(folder => {
+      const file = path.join(root, 'packages', folder, 'package.json');
+      return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+    })
+    .filter(p => p?.scripts?.build);
+  const built = new Set();
+  while (built.size < packages.length) {
+    const next = packages.find(
+      p =>
+        !built.has(p.name) &&
+        Object.keys({ ...p.dependencies, ...p.devDependencies }).every(
+          name => !packages.some(candidate => candidate.name === name) || built.has(name),
+        ),
+    );
+    if (!next) throw new Error('Cyclic package build dependencies');
+    await npm('run', 'build', '--workspace', next.name);
+    built.add(next.name);
+  }
+}
+const tests = (set = 'default') => node('tests/run.mjs', '--skip-build', '--set', set);
+const docs = name => npm('run', name, '--workspace', '@rzmps/docs');
+async function checkDocs(prepared = false) {
+  await docs('build');
+  await tests(prepared ? 'generated' : 'docs');
+  await node('apps/docs/scripts/check-links.mjs');
+}
+if (task === 'build:packages') await buildPackages();
+else if (task === 'check:dependencies')
+  await npm(
+    'exec',
+    '--',
+    'depcruise',
+    '--config',
+    '.dependency-cruiser.cjs',
+    '--output-type',
+    'err-long',
+    'packages/rzmps/src',
+  );
+else if (task === 'check:docs' || task === 'check:docs:prepared') await checkDocs(task.endsWith(':prepared'));
+else if (task === 'check:site') await tests('site');
+else if (task === 'build:site' || task === 'deploy:site' || task === 'pr:prepare') {
+  if (!skipBuild) await buildPackages();
+  if (task === 'pr:prepare') {
+    await tests();
+    await node('benchmarks/run.mjs', '--set', 'reported', '--runtime', 'browser', '--skip-build');
+    await npm('run', 'update-report', '--workspace', '@rzmps/benchmarks');
+  }
+  if (!checkGenerated) await docs('generate');
+  if (task === 'deploy:site') {
+    await docs('restore:previews');
+    await docs('generate:previews');
+    await docs('check:assets');
+  }
+  await checkDocs(task === 'pr:prepare');
+  await npm('run', 'build', '--workspace', 'demo');
+  if (task === 'pr:prepare') {
+    await run('git', ['--no-pager', 'diff', '--check']);
+    await run('git', ['--no-pager', 'diff', '--cached', '--check']);
+  } else {
+    await node('scripts/site/assemble.mjs');
+    if (task === 'deploy:site') {
+      await node('apps/docs/scripts/validate-assets.mjs', 'dist/docs/previews');
+      await node('scripts/site/check-seo.mjs');
+    }
+  }
+} else if (task === 'dev') {
+  await docs('generate');
+  await buildPackages();
+  const watches = fs.readdirSync(path.join(root, 'packages')).flatMap(folder => {
+    const p = JSON.parse(fs.readFileSync(path.join(root, 'packages', folder, 'package.json'), 'utf8'));
+    return p.scripts?.dev ? [`npm run dev --workspace ${p.name}`] : [];
+  });
+  await npm('exec', '--', 'concurrently', '-k', ...watches, 'node scripts/site/dev.mjs');
+} else throw new Error(`Unknown process: ${task}`);

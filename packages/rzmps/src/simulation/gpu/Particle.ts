@@ -1,5 +1,6 @@
+import { BenchmarkMetricType } from '../../enums/BenchmarkMetricType';
 import Benchmarks from '../../core/Benchmarks';
-import type { GPUEventBatch } from '../../events/gpu/EventBatch';
+import type { GPUEventBatch } from '../../events/gpu/SharedGPUEventBatch';
 import type { GPUEventPayload } from '../../events/events.utils';
 import type { Tag } from '../../types/tag.types';
 import {
@@ -51,8 +52,6 @@ export type GPUParticleScalarField =
 
 type GPUParticleVectorNodes = Record<GPUParticleVectorField, Node<'vec3'>>;
 type GPUParticleScalarNodes = Record<GPUParticleScalarField, Node<'float'>>;
-
-
 
 export interface GPUParticleAttributes {
   floatData: StorageBufferAttribute;
@@ -526,7 +525,7 @@ export class GPUParticleRenderStorage {
     vectors.rotation.assign(particle.rotation);
     vectors.scale.assign(particle.scale);
     vectors.color.assign(particle.color);
-    vectors.velocity.assign(particle.velocity);
+    vectors.velocity.assign(particle.velocity.mul(particle.speed));
     scalars.contribution.assign(float(1));
     scalars.alpha.assign(particle.alpha);
     scalars.distortionStrength.assign(particle.distortionStrength);
@@ -566,7 +565,9 @@ export class GPUParticleBufferState {
     tagMaskForParticle?: (particle: Particle) => number,
     generationForParticle?: (particle: Particle, index: number) => number,
   ) {
-    this.benchmarks.register('uploadBytes', { type: 'counter', unit: 'bytes', get: () => this.uploadBytes });
+    this.benchmarks.register('uploadBytes', {
+      type: BenchmarkMetricType.Counter, unit: 'bytes', get: () => this.uploadBytes,
+    });
     this.capacity = capacity;
     this.floatData = new Float32Array(capacity * FLOAT_SLOT_COUNT * 4);
     this.uintData = new Uint32Array(capacity * UINT_SLOT_COUNT * 4);
@@ -953,7 +954,6 @@ export function destroyGPUStorageAttribute(
 ): void {
   destroyStorageAttribute(renderer, attribute);
 }
-
 
 /** @internal Reset schema-owned optional birth attributes when a storage slot is recycled. */
 export function resetInitializationAttributesGPU(particle: GPUParticleLike): void {

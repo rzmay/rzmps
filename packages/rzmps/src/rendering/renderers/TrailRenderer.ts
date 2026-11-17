@@ -1,4 +1,4 @@
-import type { ColorInput } from '../../values/valueInput.types';
+import type { ColorRepresentation } from 'three';
 import * as THREE from 'three';
 import seedrandom from 'seedrandom';
 import Renderer, { type RendererOptions } from '../../core/Renderer';
@@ -12,17 +12,17 @@ import { TrailTextureMode } from '../../enums/TrailTextureMode';
 import defaultTex from '../../assets/textures/default.png';
 import { WebGPURenderer } from 'three/webgpu';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
-import type { GPUParticleReadbackField } from '../../simulation/gpu/SelectiveReadback';
+import type { GPUParticleReadbackField } from '../../simulation/gpu/GPUSelectiveReadbackState';
 
 export const TRAIL_RENDERER_USER_DATA_KEY = '__rzmps_trailRenderer';
 
 export interface TrailRendererOptions extends RendererOptions {
   /** Particle mode keeps one history per particle; Ribbon mode connects particles into shared strands. */
-  mode: TrailMode | `${TrailMode}`;
+  mode: TrailMode;
   /** Trail texture or URL; defaults to the material map or the built-in sprite texture. */
   texture: string | THREE.Texture;
   /** Controls stretching versus tiling along the generated trail. */
-  textureMode: TrailTextureMode | `${TrailTextureMode}`;
+  textureMode: TrailTextureMode;
 
   /** Fraction of particles selected by stable particle ID; zero hides all trails. */
   ratio: number;
@@ -48,9 +48,9 @@ export interface TrailRendererOptions extends RendererOptions {
   /** Multiplies trail color by particle color. Defaults to true. */
   inheritParticleColor: boolean;
   /** Color multiplier based on source particle age. */
-  colorOverLifetime: DynamicValue<ColorInput>;
+  colorOverLifetime: DynamicValue<ColorRepresentation>;
   /** Color multiplier along normalized trail length. */
-  colorOverTrail: DynamicValue<ColorInput>;
+  colorOverTrail: DynamicValue<ColorRepresentation>;
 
   /** Custom material; omission creates a transparent double-sided MeshStandardMaterial with depth writing disabled. */
   material: THREE.Material;
@@ -97,7 +97,6 @@ class TrailRenderer extends Renderer {
 
   texture: THREE.Texture;
 
-
   lifetime: DynamicValue<number> = 1;
 
   minimumVertexDistance = 0.1;
@@ -116,12 +115,12 @@ class TrailRenderer extends Renderer {
 
   inheritParticleColor = true;
 
-  colorOverLifetime: DynamicValue<ColorInput> =
+  colorOverLifetime: DynamicValue<ColorRepresentation> =
     new THREE.Color(0xffffff);
 
   widthOverTrail: DynamicValue<number> = 1;
 
-  colorOverTrail: DynamicValue<ColorInput> =
+  colorOverTrail: DynamicValue<ColorRepresentation> =
     new THREE.Color(0xffffff);
 
   geometry: THREE.BufferGeometry;

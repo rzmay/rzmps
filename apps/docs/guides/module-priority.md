@@ -17,3 +17,8 @@ Prefer a built-in lifetime module before writing an equivalent callback: those m
 `prepare(context)` runs before the per-particle phase. Use it for shared calculations or spatial collection, and reuse
 scratch objects in the particle callback. Population LOD removes simulated particles before module work; surviving
 particles run every step.
+
+Persistent motion constraints can implement `Module.finalize` / `finalizeGPU` after integration. These hooks retain
+tag/condition selection and priority order, and run before death/allocation accounting and render-time transients.
+They are distinct from ordinary priority-1 transient visual modifiers. `SurfaceAttachment` uses this hook to preserve
+its position/velocity correction into the next step; see [surface attachment](./surface-attachment.md).

@@ -45,10 +45,10 @@ async function capture(options) {
   light.position.set(5, 10, 5);
   try {
     const fixtures = {
-      nativeEvents: () => import('../tests/preview/fixtures/nativeEvents.js'),
-      eventScopes: () => import('../tests/preview/fixtures/eventScopes.js'),
-      gpuKill: () => import('../tests/preview/fixtures/gpuKill.js'),
-      simulationSpaces: () => import('../tests/preview/fixtures/simulationSpaces.js'),
+      nativeEvents: () => import('../../tests/preview/fixtures/nativeEvents.js'),
+      eventScopes: () => import('../../tests/preview/fixtures/eventScopes.js'),
+      gpuKill: () => import('../../tests/preview/fixtures/gpuKill.js'),
+      simulationSpaces: () => import('../../tests/preview/fixtures/simulationSpaces.js'),
     };
     const example = Object.hasOwn(fixtures, options.example)
       ? { create: (await fixtures[options.example]()).default }

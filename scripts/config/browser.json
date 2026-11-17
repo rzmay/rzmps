@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "common": ["--disable-dev-shm-usage", "--enable-unsafe-webgpu"],
+  "ci": ["--no-sandbox", "--disable-setuid-sandbox"],
+  "environments": {
+    "native": ["--use-angle=default"],
+    "linuxCi": [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-unsafe-swiftshader",
+      "--use-webgpu-adapter=swiftshader",
+      "--use-gpu-in-tests",
+      "--disable-gpu-watchdog",
+      "--js-flags=--no-maglev"
+    ]
+  },
+  "profiles": {
+    "preview": {
+      "args": ["--autoplay-policy=no-user-gesture-required", "--enable-logging=stderr"],
+      "linuxCi": [],
+      "launch": {
+        "timeout": 30000,
+        "protocolTimeout": 240000
+      }
+    },
+    "benchmark": {
+      "args": ["--enable-precise-memory-info"],
+      "linuxCi": ["--enable-features=Vulkan", "--use-vulkan=swiftshader", "--disable-vulkan-surface"],
+      "launch": {
+        "timeout": 30000
+      }
+    },
+    "test": {
+      "args": ["--autoplay-policy=no-user-gesture-required"],
+      "linuxCi": [],
+      "launch": {
+        "timeout": 15000,
+        "protocolTimeout": 30000
+      }
+    },
+    "diagnostic": {
+      "args": ["--enable-logging=stderr"],
+      "linuxCi": [],
+      "launch": {
+        "timeout": 10000,
+        "protocolTimeout": 20000
+      }
+    }
+  },
+  "uncapped": ["--disable-frame-rate-limit", "--disable-gpu-vsync"],
+  "cleanup": {
+    "browserMs": 5000,
+    "serverMs": 5000
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "baseline-10k": "Baseline 10k simulation only",
+  "baseline-50k": "Baseline 50k simulation only",
+  "heavy-modules-10k": "Heavy modules 10k",
+  "spatial-kill-zones-10k": "Spatial kill zones 10k",
+  "spawn-churn": "Spawn churn 2k/sec simulation only",
+  "sprite-10k": "SpriteRenderer 10k rendered",
+  "mesh-rendered": "MeshRenderer 2k rendered (low-poly)",
+  "trail-2k": "TrailRenderer 2k rendered"
+}

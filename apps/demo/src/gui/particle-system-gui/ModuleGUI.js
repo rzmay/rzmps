@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
-import { GasModule, FluidSimulation, FluidBoundsPolicy, PressureSolver } from '@rzmps/rzmps';
+import { GasModule, FluidSimulation, FluidBoundsPolicy, PressureSolver, SurfaceAttachment } from '@rzmps/rzmps';
 
 export class ModuleGUI extends GUIEditorBase {
   buildModulesFolder(root, system = this.system) {
@@ -38,6 +38,9 @@ export class ModuleGUI extends GUIEditorBase {
     const candidate = module;
     if (candidate instanceof GasModule) {
       folder.add(candidate, 'enabled').name('Enabled').onChange(() => this.emitCode());
+    } else if (candidate instanceof SurfaceAttachment) {
+      for (const key of ['offset', 'adhesion', 'tangentialDrag', 'inheritSurfaceVelocity',
+        'detachDistance', 'killOnDetach']) this.addValue(folder, candidate, key, this.prettyName(key));
     } else if (candidate instanceof FluidSimulation) {
       const tuning = [
         'pressureIterations',

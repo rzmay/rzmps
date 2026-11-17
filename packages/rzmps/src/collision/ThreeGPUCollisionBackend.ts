@@ -1,10 +1,17 @@
+import createClosestSurfaceQuery from './createClosestSurfaceQuery';
+// @ts-expect-error incomplete upstream WebGPU declarations
+import { wgslTagFn } from 'three-mesh-bvh/src/webgpu/nodes/WGSLTagFnNode.js';
+import type { GPUSurfaceSample } from '../spatial/surfaces/surfaceSample.types';
+import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
+import { GeometryUpdatePolicy } from '../enums/GeometryUpdatePolicy';
+import type { ThreeCollisionBackendOptions } from './ThreeCollisionBackend';
 import Benchmarks from '../core/Benchmarks';
 import { MaterialCopyRegistry } from '../rendering/compositing/MaterialCopyRegistry';
 import getAttributeVersion from '../utils/getAttributeVersion';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { StorageBufferAttribute, type Node } from 'three/webgpu';
-import { If, storage, uniform } from 'three/tsl';
+import { If, storage, uniform, float, vec3 } from 'three/tsl';
 // Use the focused entry point so unrelated WebGPU helper exports cannot collide.
 // @ts-expect-error three-mesh-bvh does not publish declarations for deep imports.
 import { BVHComputeData } from 'three-mesh-bvh/src/webgpu/BVHComputeData.js';
@@ -14,35 +21,19 @@ import capsuleBVHCollisionNode, {
   CapsuleQuery,
 } from './capsuleBVHCollisionNode';
 
-export enum CollisionGeometryUpdatePolicy {
-  Static = 'static',
-  TransformDynamic = 'transform-dynamic',
-  GeometryDynamic = 'geometry-dynamic',
-  Auto = 'auto',
-}
+export { GeometryUpdatePolicy } from '../enums/GeometryUpdatePolicy';
 
 // This policy is GPU-specific: BLAS refits distinguish transform-only and vertex
 // changes. ThreeCollisionBackend rebuilds CPU octrees and has no equivalent refit.
 
-export interface ThreeGPUCollisionBackendOptions {
-  /** Scene subtree scanned when explicit object lists are not sufficient. */
-  world?: THREE.Object3D;
-  /** Mesh roots whose transforms and geometry are treated as immutable. */
-  staticObjects?: THREE.Object3D[];
-  /** Mesh roots whose world transforms may change without vertex deformation. */
-  dynamicObjects?: THREE.Object3D[];
+export interface ThreeGPUCollisionBackendOptions extends Pick<ThreeCollisionBackendOptions,
+  'world' | 'staticObjects' | 'dynamicObjects' | 'objectFilter' | 'staticObjectFilter' | 'dynamicObjectFilter'> {
   /** Mesh roots whose position attributes may change. */
   geometryDynamicObjects?: THREE.Object3D[];
-  /** Filters every candidate mesh before classification. */
-  objectFilter?: (object: THREE.Object3D) => boolean;
-  /** Selects static meshes discovered below world. */
-  staticObjectFilter?: (object: THREE.Object3D) => boolean;
-  /** Selects transform-dynamic meshes discovered below world. */
-  dynamicObjectFilter?: (object: THREE.Object3D) => boolean;
   /** Selects deforming meshes discovered below world. */
   geometryDynamicObjectFilter?: (object: THREE.Object3D) => boolean;
   /** Default classification for meshes not selected by a more specific list or filter. */
-  updatePolicy?: CollisionGeometryUpdatePolicy | `${CollisionGeometryUpdatePolicy}`;
+  updatePolicy?: GeometryUpdatePolicy;
   /** Retains rigid transform history for explicit queryMovingCapsule calls. Defaults to false. */
   sweptMotion?: boolean;
 }
@@ -62,7 +53,7 @@ export interface ThreeGPUCollisionBackendStats {
 // octree tracks whole-object membership instead, so sharing the record would conflate APIs.
 type TrackedMesh = {
   mesh: THREE.Mesh;
-  policy: CollisionGeometryUpdatePolicy;
+  policy: GeometryUpdatePolicy;
   matrixWorld: THREE.Matrix4;
   geometry: THREE.BufferGeometry;
   positionAttribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
@@ -124,7 +115,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
   dynamicObjectFilter?: (object: THREE.Object3D) => boolean;
   geometryDynamicObjectFilter?: (object: THREE.Object3D) => boolean;
-  updatePolicy: CollisionGeometryUpdatePolicy;
+  updatePolicy: GeometryUpdatePolicy;
   readonly sweptMotion: boolean;
 
   readonly stats: ThreeGPUCollisionBackendStats = {
@@ -146,6 +137,8 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   get resourceVersion(): number { return this._resourceVersion; }
 
   private capsuleQuery?: ReturnType<typeof capsuleBVHCollisionNode>;
+  private closestSurface?: ReturnType<typeof createClosestSurfaceQuery>;
+  private surfaceVelocity?: (point: Node, index: Node, dt: Node) => Node<'vec3'>;
   private initialized = false;
   private frameToken?: unknown;
   private frameObjects = '';
@@ -164,7 +157,8 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   /** Creates an uninitialized GPU backend; call update before constructing query nodes. */
   constructor(options: ThreeGPUCollisionBackendOptions = {}) {
     for (const name of Object.keys(this.stats) as (keyof ThreeGPUCollisionBackendStats)[])
-      this.benchmarks.register(name, { type: 'gauge', unit: name === 'uploadBytes' ? 'bytes' : 'count',
+      this.benchmarks.register(name, {
+        type: BenchmarkMetricType.Gauge, unit: name === 'uploadBytes' ? 'bytes' : 'count',
         get: () => this.stats[name] });
     this.world = options.world;
     this.staticObjects = options.staticObjects;
@@ -174,8 +168,8 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.staticObjectFilter = options.staticObjectFilter;
     this.dynamicObjectFilter = options.dynamicObjectFilter;
     this.geometryDynamicObjectFilter = options.geometryDynamicObjectFilter;
-    this.updatePolicy = (options.updatePolicy as CollisionGeometryUpdatePolicy)
-      ?? CollisionGeometryUpdatePolicy.Auto;
+    this.updatePolicy = (options.updatePolicy as GeometryUpdatePolicy)
+      ?? GeometryUpdatePolicy.Auto;
     this.sweptMotion = options.sweptMotion ?? false;
   }
 
@@ -234,8 +228,8 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
         topologyGeometries.add(entry.geometry);
       } else if (
         (this.invalidatedGeometry.has(uuid) || (
-          entry.policy === CollisionGeometryUpdatePolicy.GeometryDynamic
-          || entry.policy === CollisionGeometryUpdatePolicy.Auto
+          entry.policy === GeometryUpdatePolicy.GeometryDynamic
+          || entry.policy === GeometryUpdatePolicy.Auto
         ))
         && (
           entry.positionAttribute !== previous.positionAttribute
@@ -247,7 +241,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
       }
 
       if (
-        entry.policy !== CollisionGeometryUpdatePolicy.Static
+        entry.policy !== GeometryUpdatePolicy.Static
         && !entry.matrixWorld.equals(previous.matrixWorld)
       ) transformChanged = true;
     });
@@ -327,6 +321,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     const stride = this.data.structs.transform.getLength();
     const count = current.length / stride;
     if (this.motionAttribute?.count !== count * 9) {
+      this.surfaceVelocity = undefined;
       this.motionAttribute?.dispose();
       this.motionAttribute = new StorageBufferAttribute(new Float32Array(count * 36), 4);
       this.movingQuery = capsuleBVHCollisionNode(this.data as unknown as Parameters<
@@ -379,6 +374,41 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
       .toVar('rzmpsCapsuleQuery');
     return (this.capsuleQuery(query) as unknown as Node<'vec3'>)
       .toVar('rzmpsCapsuleHit');
+  }
+
+  /** Closest oriented surface and rigid transform velocity, reusing the collision TLAS/BLAS and history. */
+  sampleSurfaceGPU(position: Node<'vec3'>, deltaTime: Node<'float'>): GPUSurfaceSample {
+    if (!this.data || !this.motionAttribute) throw new Error('Prepare swept-motion geometry before surface sampling.');
+    const data = this.data as unknown as { storage: {
+      transforms: unknown;
+    } };
+    this.closestSurface ??= createClosestSurfaceQuery(this.data as unknown as Parameters<
+      typeof createClosestSurfaceQuery
+    >[0]);
+    const hit = (this.closestSurface(position) as unknown as Node<'vec3'>).toVar();
+    const found = hit.get('found') as Node<'bool'>;
+    const point = hit.get('closestPoint') as Node<'vec3'>;
+    const faceNormal = hit.get('faceNormal') as Node<'vec3'>;
+    const delta = position.sub(point), distance = delta.length();
+    const side = delta.dot(faceNormal).lessThan(0).select(float(-1), float(1));
+    const history = storage(this.motionAttribute, 'vec4', this.motionAttribute.count);
+    const transforms = data.storage.transforms;
+    const velocityName = `rzmpsSurfaceVelocity_${this.benchmarks.id}`;
+    const velocity = this.surfaceVelocity ??= wgslTagFn/* wgsl */`
+      fn ${velocityName}(point: vec3f, index: u32, dt: f32) -> vec3f {
+        if (dt <= 0.0) { return vec3f(0.0); }
+        let offset = index * 9u;
+        let previous = mat4x4f(${history}[offset], ${history}[offset + 1u],
+          ${history}[offset + 2u], ${history}[offset + 3u]);
+        let local = ${transforms}[index].inverseMatrixWorld * vec4f(point, 1.0);
+        return (point - (previous * local).xyz) / dt;
+      }
+    `;
+    const motion = vec3(0).toVar();
+    If(found, () => motion.assign(velocity(point, hit.get('objectIndex'), deltaTime)));
+    return { valid: found, distance: distance.mul(side),
+      normal: distance.greaterThan(1e-8).select(delta.mul(side).div(distance.max(1e-8)), faceNormal),
+      velocity: motion };
   }
 
   /** Supplies already-evaluated geometry without a GPU-to-CPU particle readback. */
@@ -466,7 +496,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
 
   private collectMeshes(): Map<string, TrackedMesh> {
     const result = new Map<string, TrackedMesh>();
-    const add = (mesh: THREE.Mesh, policy: CollisionGeometryUpdatePolicy) => {
+    const add = (mesh: THREE.Mesh, policy: GeometryUpdatePolicy) => {
       if (this.objectFilter && !this.objectFilter(mesh)) return;
       mesh.updateWorldMatrix(true, false);
       const geometry = mesh.geometry;
@@ -488,24 +518,24 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
         drawRangeCount: geometry.drawRange.count,
       });
     };
-    const addRoot = (root: THREE.Object3D, policy: CollisionGeometryUpdatePolicy) => {
+    const addRoot = (root: THREE.Object3D, policy: GeometryUpdatePolicy) => {
       root.updateWorldMatrix(true, true);
       root.traverse((object) => {
         if (object instanceof THREE.Mesh && !isIgnoredCollisionObject(object)) add(object, policy);
       });
     };
 
-    this.staticObjects?.forEach((root) => addRoot(root, CollisionGeometryUpdatePolicy.Static));
-    this.dynamicObjects?.forEach((root) => addRoot(root, CollisionGeometryUpdatePolicy.TransformDynamic));
-    this.geometryDynamicObjects?.forEach((root) => addRoot(root, CollisionGeometryUpdatePolicy.GeometryDynamic));
+    this.staticObjects?.forEach((root) => addRoot(root, GeometryUpdatePolicy.Static));
+    this.dynamicObjects?.forEach((root) => addRoot(root, GeometryUpdatePolicy.TransformDynamic));
+    this.geometryDynamicObjects?.forEach((root) => addRoot(root, GeometryUpdatePolicy.GeometryDynamic));
     if (this.world) {
       this.world.updateWorldMatrix(true, true);
       this.world.traverse((object) => {
         if (!(object instanceof THREE.Mesh) || isIgnoredCollisionObject(object)) return;
         let policy = this.updatePolicy;
-        if (this.geometryDynamicObjectFilter?.(object)) policy = CollisionGeometryUpdatePolicy.GeometryDynamic;
-        else if (this.dynamicObjectFilter?.(object)) policy = CollisionGeometryUpdatePolicy.TransformDynamic;
-        else if (this.staticObjectFilter?.(object)) policy = CollisionGeometryUpdatePolicy.Static;
+        if (this.geometryDynamicObjectFilter?.(object)) policy = GeometryUpdatePolicy.GeometryDynamic;
+        else if (this.dynamicObjectFilter?.(object)) policy = GeometryUpdatePolicy.TransformDynamic;
+        else if (this.staticObjectFilter?.(object)) policy = GeometryUpdatePolicy.Static;
         add(object, policy);
       });
     }
@@ -516,6 +546,8 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.data?.dispose();
     this.data = undefined;
     this.capsuleQuery = undefined;
+    this.closestSurface = undefined;
+    this.surfaceVelocity = undefined;
     this._resourceVersion++;
     this.motionAttribute?.dispose();
     this.motionAttribute = undefined;

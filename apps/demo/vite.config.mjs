@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { browserCatalogPlugin } from '../../benchmarks/lib/browser-catalog-plugin.mjs';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -22,14 +23,7 @@ const rzmpsPackageJson = JSON.parse(
 
 export default defineConfig({
   plugins: [
-    {
-      name: 'rzmps-watch-example-workspace',
-      configureServer(server) {
-        // Glob catalogs live outside the app root. Watch the directory so file additions/removals
-        // invalidate the catalog too, rather than only watching files already imported by Vite.
-        server.watcher.add(path.resolve(__dirname, '../../examples'));
-      },
-    },
+    browserCatalogPlugin(path.resolve(__dirname, '../..')),
     react({
       include: '**/*.{jsx,tsx}',
     }),

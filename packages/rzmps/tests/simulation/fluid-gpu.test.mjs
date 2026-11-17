@@ -17,7 +17,7 @@ import {
   ParticleSystem,
   VolumeRenderer,
   SurfaceRenderer,
-  SpatialEffectUpdatePolicy,
+  GeometryUpdatePolicy,
   VolumeInterpolation,
   VolumeDensityMapping,
 } from '../../build/index.mjs';
@@ -159,14 +159,14 @@ assert.equal(fluidCollider.particleCollision, true);
 assert.equal(fluidCollider.surfaceThickness, 0);
 assert.ok(fluidCollider.getCollisionObject() instanceof THREE.Mesh);
 const policyFlip = new FLIPSimulation();
-const policyColliders = Object.values(SpatialEffectUpdatePolicy).map(updatePolicy => (
+const policyColliders = Object.values(GeometryUpdatePolicy).map(updatePolicy => (
   FluidCollider.Box({ updatePolicy }, 1, 1, 1)
 ));
 policyFlip.spatialEffects = policyColliders;
 assert.deepEqual(policyColliders.map(collider => collider.canCacheGridOccupancy),
-  policyColliders.map(collider => [SpatialEffectUpdatePolicy.Static, SpatialEffectUpdatePolicy.TransformDynamic]
+  policyColliders.map(collider => [GeometryUpdatePolicy.Static, GeometryUpdatePolicy.TransformDynamic]
     .includes(collider.updatePolicy)));
-const customOccupancy = FluidCollider.Box({ updatePolicy: SpatialEffectUpdatePolicy.Static,
+const customOccupancy = FluidCollider.Box({ updatePolicy: GeometryUpdatePolicy.Static,
   testGPU: () => float(1) }, 1, 1, 1);
 assert.equal(customOccupancy.canCacheGridOccupancy, false);
 customOccupancy.geometry.dispose();
@@ -175,7 +175,7 @@ assert.equal(policyFlip.particleCollisionBackend.staticObjects.length, 1);
 assert.equal(policyFlip.particleCollisionBackend.dynamicObjects.length, 1);
 assert.equal(policyFlip.particleCollisionBackend.geometryDynamicObjects.length, 2);
 assert.deepEqual(policyFlip.particleCollisionBackend.dynamicObjects,
-  policyColliders.filter(c => c.updatePolicy === SpatialEffectUpdatePolicy.TransformDynamic)
+  policyColliders.filter(c => c.updatePolicy === GeometryUpdatePolicy.TransformDynamic)
     .map(c => c.getCollisionObject()));
 policyFlip.cleanup();
 policyColliders.forEach(collider => collider.geometry.dispose());

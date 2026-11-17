@@ -41,9 +41,9 @@ test('Transform accepts live Object3D and Matrix4 references, rebases state and 
   near(system.simulationToWorld(particle.position.clone()), new THREE.Vector3(11, 0, 0));
   anchor.position.x = 20;
   near(system.simulationToWorld(particle.position.clone()), new THREE.Vector3(21, 0, 0));
-  system.simulationSpace = 'world';
+  system.simulationSpace = SimulationSpace.World;
   near(particle.position, new THREE.Vector3(21, 0, 0));
-  system.simulationSpace = 'transform';
+  system.simulationSpace = SimulationSpace.Transform;
   near(particle.position, new THREE.Vector3(1, 0, 0));
   const matrix = pose(30);
   system.simulationSpaceTransform = matrix;
@@ -62,7 +62,7 @@ test('explicit child spaces survive parenting; unspecified Transform inherits it
   parent.addSubSystem(attached, {}); parent.addSubSystem(inherited, {}); parent.addSubSystem(independent, {});
   assert.equal(attached.simulationSpace, 'source');
   near(inherited.simulationToWorld(new THREE.Vector3()), new THREE.Vector3(7, 0, 0));
-  parent.simulationSpace = 'local';
+  parent.simulationSpace = SimulationSpace.Local;
   assert.equal(attached.simulationSpace, 'source');
   assert.equal(independent.simulationSpace, 'world');
   assert.equal(inherited.simulationSpace, 'local');
@@ -143,7 +143,7 @@ test('Source freezes singular frames, resumes on recovery, and clears ownership 
   near(particle.position, new THREE.Vector3(3, 0, 0));
   source.update({ transform: pose(4) }); step(parent);
   near(particle.position, new THREE.Vector3(5, 0, 0));
-  glow.simulationSpace = 'world';
+  glow.simulationSpace = SimulationSpace.World;
   source.update({ transform: pose(100) }); step(parent);
   near(particle.position, new THREE.Vector3(5, 0, 0));
   parent.destroy();
@@ -156,7 +156,7 @@ test('inherited Transform mode changes preserve child and nested world poses', (
   const inherited = root(), nested = root();
   parent.addSubSystem(inherited, {}); inherited.addSubSystem(nested, {});
   for (const system of [inherited, nested]) system.addParticle(new Particle({ position: new THREE.Vector3(1, 0, 0) }));
-  parent.simulationSpace = 'world';
+  parent.simulationSpace = SimulationSpace.World;
   for (const system of [inherited, nested]) {
     near(system.particles[0].position, new THREE.Vector3(8, 0, 0));
   }
@@ -201,7 +201,7 @@ test('World parents default children to World while explicit Local and Source ch
   assert.equal(inherited.simulationSpace, 'world');
   assert.equal(local.simulationSpace, 'local');
   assert.equal(attached.simulationSpace, 'source');
-  parent.simulationSpace = 'transform';
+  parent.simulationSpace = SimulationSpace.Transform;
   assert.equal(inherited.simulationSpace, 'transform');
   assert.equal(local.simulationSpace, 'local');
   assert.equal(attached.simulationSpace, 'source');

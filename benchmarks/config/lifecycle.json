@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "attempts": 2,
+  "sampleTimeoutMs": 300000,
+  "heartbeatMs": 10000,
+  "protocolGraceMs": 15000,
+  "navigationMs": 60000,
+  "drainMs": 3000,
+  "browserCloseMs": 5000,
+  "serverCloseMs": 5000,
+  "screenshotMs": 5000,
+  "failureProgressMs": 5000,
+  "profiles": {
+    "ci": {
+      "sampleTimeoutMs": 180000
+    }
+  }
+}

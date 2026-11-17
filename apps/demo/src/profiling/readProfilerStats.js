@@ -17,10 +17,19 @@ export function readProfilerStats(benchmarks) {
       const prefix = path.slice(0, -'grid/cellSize'.length);
       const component = prefix.match(/([^/]+)-\d+\/$/)?.[1] ?? 'Fluid';
       stats.fluids.push({ name: component.replace('Simulation', ''),
+        scope: prefix.slice(0, prefix.indexOf('modules/')),
         dimensions: ['width', 'height', 'depth'].map(axis => snapshot[`${prefix}grid/${axis}`]).join(' × '),
-        cellSize: Number(value.toPrecision(3)).toString() });
+        cellSize: Number(value.toPrecision(3)).toString(),
+        pressureSubmissionMs: snapshot[`${prefix}pressureSolve`] ?? null,
+        residentPages: snapshot[`${prefix}residentPages`] ?? snapshot[`${prefix}activeBricks`] ?? null });
     }
   }
+  // Surface work stays in the same fluid section; these are CPU submission spans, not GPU time.
+  const extraction = Object.entries(snapshot).filter(([path]) =>
+    /renderers\/SurfaceRenderer-\d+\/surfaceExtraction$/.test(path));
+  for (const fluid of stats.fluids) if (fluid.name === 'FLIP')
+    fluid.surfaceSubmissionMs = extraction.filter(([path]) => path.startsWith(`${fluid.scope}renderers/`))
+      .reduce((sum, [, value]) => sum + (value ?? 0), 0);
   stats.renderers = [...present].map(metric => ({ name: counts[metric][0], count: counts[metric][1] }));
   return stats;
 }

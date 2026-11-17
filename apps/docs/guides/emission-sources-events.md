@@ -106,14 +106,16 @@ source. GPU filtering checks producer identity and that producer's event-name ma
 alone do not identify events across systems.
 
 ```ts
+import { EventOrigin } from '@rzmps/rzmps';
+
 const emitter = new Emitter({
-  eventScope: ['local', 'parent'],
+  eventScope: [EventOrigin.Local, EventOrigin.Parent],
   emitOnDeath: true,
   bursts: { time: 0, count: 8 },
 });
 
 // An explicit relationship scope replaces the emitter's selection for this attachment.
-parent.addSubSystem(child, { eventScope: 'parent' });
+parent.addSubSystem(child, { eventScope: EventOrigin.Parent });
 ```
 
 Omitting the attachment override preserves an explicitly configured emitter scope, otherwise the subsystem default

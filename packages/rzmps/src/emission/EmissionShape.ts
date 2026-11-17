@@ -4,7 +4,7 @@ import { BufferAttribute } from 'three';
 import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.js';
 import { MeshBVH } from 'three-mesh-bvh';
 import { EmissionSource } from '../enums/EmissionSource';
-import { getGPUEmissionShapeSupport, type GPUEmissionSupportReport } from './gpu/Emission';
+import { getGPUEmissionShapeSupport, type GPUEmissionSupportReport } from './gpu/GPUEmissionRunBufferState';
 import isPointInMesh, {
   countDistinctRayHits,
 } from '../utils/isPointInMesh';
@@ -24,7 +24,7 @@ export interface EmissionShapeOptions {
     /** Source mesh geometry; should be nondegenerate and suitable for the chosen sampling rule. */
     geometry: THREE.BufferGeometry;
     /** Volume, surface, or vertex sampling. Defaults to EmissionSource.Volume. */
-    source: EmissionSource | `${EmissionSource}`;
+    source: EmissionSource;
     /** Number of shared CPU/GPU volume samples, or an automatically estimated count. Defaults to auto. */
     volumeSamples: VolumeSampleCount;
 }

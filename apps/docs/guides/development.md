@@ -14,20 +14,14 @@ Run the demo and documentation together, with package watchers:
 npm run dev
 ```
 
-The command generates the documentation sources and builds the packages, then serves
-the demo at `http://localhost:5173/`. Preview images are generated while the demo is
-available. Documentation starts at `http://localhost:5173/docs/` once previews finish.
-During preview generation, documentation requests return a temporary 503 response.
-
-Use `npm run docs:dev` for the same startup sequence without package watchers.
-`npm run docs:generate` still generates both documentation sources and previews;
-`npm run docs:generate -- --skip-previews` defers previews to `npm run docs:previews`.
-
-Preview images and their manifest in `apps/docs/public/previews/` are ignored build
-artifacts. Run `npm run docs:generate` to rebuild missing or stale images locally.
-CI and deployment install Chrome and generate documentation and captures before
-validating their source and image hashes. Current local captures are reused.
-The optional preview workflow exercises representative rendering on both backends.
+The command generates documentation sources and builds packages once, then runs package
+watchers and serves the demo at `http://localhost:5173/` with docs at `/docs/`. It does not
+capture preview media. `npm run generate --workspace @rzmps/docs` generates source docs;
+`npm run generate:previews --workspace @rzmps/docs` separately captures missing or stale media.
+Preview files under `apps/docs/public/previews/` are ignored and reused while their hashes match.
+Deployment installs Chrome and FFmpeg, generates captures and validates them. Source CI needs
+neither media nor a GPU. See the [automation workspace](https://github.com/rzmay/rzmps/blob/HEAD/scripts/README.md)
+for individual processes and Linux capture diagnostics.
 
 Build the core package:
 
@@ -44,7 +38,7 @@ npm run dev --workspace packages/rzmps
 Run the demo locally:
 
 ```bash
-npm start --workspace apps/demo
+npm run dev --workspace demo
 ```
 
 Build the demo:
@@ -64,46 +58,37 @@ npm run build --workspace @rzmps/ammo
 Build all publishable packages:
 
 ```bash
-npm run build:modules
+npm run build
 ```
 
-Run the core library regression tests:
+Run discovered workspace tests (or reuse a prior build):
 
 ```bash
 npm test
+npm test -- --skip-build
+npm test -- --skip-build --set benchmarks
 ```
 
-The test suite lives in `packages/rzmps/tests` and focuses on behavior that is
-easy to regress while optimizing internals: force application, priority phases,
-depth and size mapping, distortion controls, audio effect calculations,
-mutable-value isolation, and subsystem inheritance.
+Tests stay with their app/package under `tests/`; root checks cover shared automation and
+integration. The root runner gathers them automatically. Browser and generated-artifact suites
+are selected separately because they need Chrome or prepared output. See the
+[test workspace](https://github.com/rzmay/rzmps/blob/HEAD/tests/README.md) for suffixes and selection rules.
 
-Run the benchmark suite and print browser-rendered results to the terminal:
+Run the reported browser benchmarks, or inspect another set without measuring:
 
 ```bash
-npm run benchmark:run
+npm run benchmarks -- --set reported
+npm run benchmarks -- --set full --list
+npm run benchmarks -- --set pr --backend gpu --split --simulation-clock fixed
 ```
 
-Benchmark runs disable browser frame-rate limiting by default. Add `-- --vsync`
-to measure refresh-rate-bound behavior instead.
-
-Open a visible browser window while running the same benchmark:
+Benchmark runs disable browser frame-rate limiting by default; add `--vsync` to measure
+refresh-rate-bound behavior. Generated artifacts live in ignored `benchmarks/output/<set>/`.
+Update README tables from an already measured reported artifact:
 
 ```bash
-npm run benchmark:run -- --open
+npm run update-report --workspace @rzmps/benchmarks
 ```
 
-Serve the built benchmark page for visual/manual inspection:
-
-```bash
-npm run benchmark:serve --workspace demo
-```
-
-Then open `http://127.0.0.1:4173/?benchmark=1`.
-
-Update the benchmark report tables in the READMEs:
-
-```bash
-npm run benchmark:update-report
-```
-
+This consumer does not rerun benchmarks. The [benchmark workspace](https://github.com/rzmay/rzmps/blob/HEAD/benchmarks/README.md)
+documents definitions, feature/CPU/GPU categories, shared JSON settings and PR comparison orchestration.

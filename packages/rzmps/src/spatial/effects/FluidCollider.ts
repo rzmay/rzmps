@@ -1,9 +1,9 @@
+import { GeometryUpdatePolicy } from '../../enums/GeometryUpdatePolicy';
 import FluidColliderField from './gpu/FluidColliderField';
 import type { ParticleSpatialGridRenderer } from '../structures/ParticleSpatialGrid';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import SpatialEffect, {
-  SpatialEffectUpdatePolicy,
   type SpatialEffectModifier,
   type SpatialEffectOptions,
 } from './SpatialEffect';
@@ -35,8 +35,8 @@ export default class FluidCollider extends SpatialEffect {
   /** Whether unchanged geometry and transforms fully determine grid occupancy. @internal */
   get canCacheGridOccupancy(): boolean {
     return !this.customOccupancy && !this.conditionGPU
-      && (this.updatePolicy === SpatialEffectUpdatePolicy.Static
-        || this.updatePolicy === SpatialEffectUpdatePolicy.TransformDynamic);
+      && (this.updatePolicy === GeometryUpdatePolicy.Static
+        || this.updatePolicy === GeometryUpdatePolicy.TransformDynamic);
   }
 
   get surfaceThickness(): number { return this.feather; }

@@ -1,3 +1,4 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import {
   ColorOverLifetime,
@@ -79,7 +80,7 @@ export default async function lodStressTestPreset() {
     // #region docs:renderers:1
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
         softParticleDistance: 1,
         compensation: CompensationMode.Children,
       }),

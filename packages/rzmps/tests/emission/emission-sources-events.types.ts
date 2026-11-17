@@ -1,3 +1,4 @@
+import { SimulationSpace } from '../../build/index.mjs';
 import { Matrix4, Object3D, Vector3 } from 'three';
 import { vec4 } from 'three/tsl';
 import { ParticleSystem, Module, EmissionSource, EmissionShape } from '../../build/index.mjs';
@@ -35,13 +36,13 @@ void unchecked;
 const tooMany: GPUEventPayload = [vec4(1), vec4(2), vec4(3), vec4(4)];
 void tooMany;
 
-new ParticleSystem({ simulationSpace: 'transform', simulationSpaceTransform: new Object3D() });
-new ParticleSystem({ simulationSpace: 'transform', simulationSpaceTransform: new Matrix4() });
-new ParticleSystem({ simulationSpace: 'source', sourceLossBehavior: 'kill' });
+new ParticleSystem({ simulationSpace: SimulationSpace.Transform, simulationSpaceTransform: new Object3D() });
+new ParticleSystem({ simulationSpace: SimulationSpace.Transform, simulationSpaceTransform: new Matrix4() });
+new ParticleSystem({ simulationSpace: SimulationSpace.Source, sourceLossBehavior: SourceLossBehavior.Kill });
 // @ts-expect-error Custom frames must be Object3D or world Matrix4 references.
-new ParticleSystem({ simulationSpace: 'transform', simulationSpaceTransform: new Vector3() });
+new ParticleSystem({ simulationSpace: SimulationSpace.Transform, simulationSpaceTransform: new Vector3() });
 
-parent.simulationSpace = 'source';
+parent.simulationSpace = SimulationSpace.Source;
 parent.simulationSpaceTransform = new Object3D();
 
 parent.addSubSystem(new ParticleSystem({ renderers: [] }), { onEvent: {
@@ -56,7 +57,7 @@ parent.addSubSystem(new ParticleSystem({ renderers: [] }), { onEvent: {
 // Source-loss policy follows the same enum-or-literal convention as simulation space.
 import { SourceLossBehavior } from '../../build/index.mjs';
 new ParticleSystem({ sourceLossBehavior: SourceLossBehavior.Kill });
-new ParticleSystem({ sourceLossBehavior: 'detach' });
+new ParticleSystem({ sourceLossBehavior: SourceLossBehavior.Detach });
 // @ts-expect-error The old ambiguous name has been replaced.
 new ParticleSystem({ sourceLoss: 'kill' });
 // @ts-expect-error Unknown source-loss action.

@@ -93,20 +93,14 @@ jobs:
           git commit -m "chore: sync demo package versions for release"
           git push
 
-      - name: Install package dependencies
-        run: |
-          npm ci \
-            --include-workspace-root \
-            --workspace @rzmps/rzmps \
-            --workspace @rzmps/ammo \
-            --workspace @rzmps/jolt \
-            --workspace @rzmps/rapier
+      - name: Install workspace dependencies
+        run: npm ci
 
-      - name: Run core tests
-        run: npm test
+      - name: Build packages once
+        run: npm run build
 
-      - name: Build packages
-        run: npm run build:modules
+      - name: Run discovered unit and type tests
+        run: npm test -- --skip-build
 
       - name: Publish packages with bumped versions
         run: |

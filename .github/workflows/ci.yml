@@ -35,15 +35,9 @@ jobs:
       - name: Lint maintained source
         run: npm run lint
 
-      - name: Test preview diagnostics
-        run: npm run test:preview-diagnostics
-
-      - name: Check source import casing
-        run: npm run test:source
-
       - name: Report architecture warnings
         if: github.event_name != 'pull_request'
-        run: npm run check:dependencies
+        run: npm run scripts check:dependencies
 
       - name: Compare PR architecture warnings
         if: github.event_name == 'pull_request'
@@ -59,30 +53,21 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Test dependency reporting
-        run: npm run test:dependencies
+      - name: Build packages once
+        run: npm run build
 
-      - name: Validate preview and SEO unit tests
-        run: npm run test:preview-media
-
-      - name: Run core tests
-        run: npm test
-
-      - name: Validate benchmark reporting
-        run: npm run test:benchmarks
-
-      - name: Build packages
-        run: npm run build:modules
+      - name: Run discovered unit and type tests
+        run: npm test -- --skip-build
 
       - name: Validate documentation source
-        run: npm run docs:generate -- --check
+        run: npm run generate --workspace @rzmps/docs -- --check
 
       - name: Upload preview failure diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: preview-diagnostics
-          path: benchmark-results/preview-diagnostics
+          path: tests/output/preview-diagnostics
           if-no-files-found: ignore
           retention-days: 14
 
@@ -90,13 +75,10 @@ jobs:
         run: npm run build --workspace demo
 
       - name: Check generated documentation and build site
-        run: npm run docs:check
+        run: npm run scripts check:docs:prepared
 
       - name: Validate skill installs and npm package contents
-        run: npm run agents:check
-
-      - name: Validate combined deployment routing
-        run: npm run site:check
+        run: npm run check:agents --workspace @rzmps/docs
 
       - name: Assemble combined static site
         run: node scripts/site/assemble.mjs

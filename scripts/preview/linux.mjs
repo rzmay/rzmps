@@ -4,7 +4,7 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { previewBrowserArguments } from './browserSettings.mjs';
+import { browserArguments, browserLaunchOptions } from '../browser/launch.utils.mjs';
 import { attachBrowserDiagnostics } from './browserDiagnostics.mjs';
 
 async function runInLinux() {
@@ -35,8 +35,9 @@ async function runInLinux() {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   let browser, diagnostics, timeout;
   try {
-    const args = previewBrowserArguments({ platform: 'linux', ci: true });
+    const args = browserArguments({ platform: 'linux', ci: true });
     browser = await puppeteer.launch({
+      ...browserLaunchOptions('preview'),
       headless: true,
       args,
       defaultViewport: { width: options.width, height: options.height, deviceScaleFactor: 1 },
@@ -86,17 +87,17 @@ async function reproduce() {
   const siteIndex = argv.indexOf('--site');
   if (siteIndex >= 0) {
     if (!argv[siteIndex + 1]) throw new Error('--site requires a production bundle directory');
-    site = path.resolve(argv.splice(siteIndex, 2)[1]);
+    site = path.resolve(root, argv.splice(siteIndex, 2)[1]);
   }
   const { parseOptions } = await import('./capture.mjs');
-  const { discoverExamples } = await import('../docs/examples.mjs');
-  const { previewArguments } = await import('../docs/preview-settings.mjs');
+  const { discoverExamples } = await import('../../apps/docs/scripts/examples.mjs');
+  const { previewArguments } = await import('../../apps/docs/scripts/preview-settings.mjs');
   const exampleIndex = argv.indexOf('--example');
   const example = discoverExamples().find(
     entry => entry.id === (exampleIndex >= 0 ? argv[exampleIndex + 1] : 'fireflies'),
   );
   if (!example) throw new Error('Unknown example');
-  const defaults = parseOptions(previewArguments(example, path.join(root, 'benchmark-results/preview-linux')));
+  const defaults = parseOptions(previewArguments(example, path.join(root, 'tests/output/preview-linux')));
   // CLI options override metadata defaults; parseArgs rejects duplicate options, so merge option pairs first.
   const pairs = new Map(
     previewArguments(example, defaults.output).reduce((all, value, index, values) => {
@@ -141,7 +142,7 @@ async function reproduce() {
     '--mount',
     `type=bind,source=${site},target=/site,readonly`,
     '--mount',
-    `type=bind,source=${import.meta.dirname},target=/tools,readonly`,
+    `type=bind,source=${path.resolve(import.meta.dirname, '..')},target=/tools,readonly`,
     '--mount',
     `type=bind,source=${configuration},target=/options.json,readonly`,
     '--mount',
@@ -149,7 +150,7 @@ async function reproduce() {
     '--entrypoint',
     'node',
     image,
-    '/tools/linux.mjs',
+    '/tools/preview/linux.mjs',
     '--inside-container',
   ];
   console.log(`Reproducing on Linux/amd64 with ${image}. Docker/emulation differs from a native GitHub runner.`);

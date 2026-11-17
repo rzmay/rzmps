@@ -1,3 +1,4 @@
+import { SimulationSpace } from '../../build/index.mjs';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
@@ -1382,7 +1383,7 @@ const localSpatialSystem = new ParticleSystem({
   emitters: [],
   renderers: [],
   modules: [],
-  simulationSpace: 'local',
+  simulationSpace: SimulationSpace.Local,
 });
 localSpatialSystem.position.x = 2;
 const movingParent = new THREE.Group();

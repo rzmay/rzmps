@@ -1,21 +1,23 @@
+import type { BenchmarkStatistic } from '../enums/BenchmarkStatistic';
+import { BenchmarkSampling } from '../enums/BenchmarkSampling';
+import { BenchmarkScope } from '../enums/BenchmarkScope';
+import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
+import { BenchmarkAggregation } from '../enums/BenchmarkAggregation';
+import { BenchmarkDomain } from '../enums/BenchmarkDomain';
 /** Collection is opt-in. Providers expose current values without retaining history. */
 
-export type BenchmarkDomain = 'cpu' | 'gpu' | 'value';
-
-export type BenchmarkAggregation = 'none' | 'sum' | 'max' | 'last';
-
 export interface BenchmarkMetric {
-  type: 'span' | 'gauge' | 'counter' | 'derived';
+  type: BenchmarkMetricType;
   unit?: string;
   domain?: BenchmarkDomain;
   aggregation?: BenchmarkAggregation;
 
   /** Renderer-wide measurements include the whole scene, not just a particle system. */
-  scope?: 'component' | 'renderer';
+  scope?: BenchmarkScope;
   source?: string;
 
   /** Frame providers are automatic; manual metrics are sampled at an explicit boundary. */
-  sampling?: 'frame' | 'manual';
+  sampling?: BenchmarkSampling;
 
   /** Reset a counter after each frame; otherwise its value is cumulative. */
   perFrame?: boolean;
@@ -53,7 +55,7 @@ export interface BenchmarkReport {
 
 export interface BenchmarkAssertion {
   metric: string;
-  statistic: 'value' | 'mean' | 'min' | 'max' | 'p50' | 'p95' | 'p99' | 'sum' | 'variance' | 'count';
+  statistic: BenchmarkStatistic;
   min?: number;
   max?: number;
 }
@@ -107,10 +109,10 @@ export default class Benchmarks {
     const previous = this.metrics.get(name);
 
     this.metrics.set(name, {
-      domain: options.type === 'span' ? 'cpu' : 'value',
-      aggregation: 'none',
-      scope: 'component',
-      sampling: 'frame',
+      domain: options.type === 'span' ? BenchmarkDomain.CPU : BenchmarkDomain.Value,
+      aggregation: BenchmarkAggregation.None,
+      scope: BenchmarkScope.Component,
+      sampling: BenchmarkSampling.Frame,
       ...options,
       value: previous?.value ?? (options.type === 'counter' ? 0 : null),
     });
@@ -123,20 +125,20 @@ export default class Benchmarks {
   }
 
   set(name: string, value: number | null): void {
-    this.metric(name, 'gauge').value = this.number(value);
+    this.metric(name, BenchmarkMetricType.Gauge).value = this.number(value);
   }
 
   increment(name: string, amount = 1): void {
     if (!Number.isFinite(amount)) throw new RangeError('Benchmark increments must be finite');
 
-    const metric = this.metric(name, 'counter');
+    const metric = this.metric(name, BenchmarkMetricType.Counter);
 
     metric.value = (metric.value ?? 0) + amount;
   }
 
   derive(name: string, dependencies: readonly string[], calculate: (values: Record<string, number>) => number): this {
     return this.register(name, {
-      type: 'derived',
+      type: BenchmarkMetricType.Derived,
       get: () => {
         const values: Record<string, number> = {};
 
@@ -248,7 +250,10 @@ export default class Benchmarks {
       finished = true;
 
       if (this.root() === root && root.session === session && session.active)
-        this.record(name, root.now() - started, { type: 'span', unit: 'ms', domain: 'cpu', aggregation: 'none' });
+        this.record(name, root.now() - started, {
+          type: BenchmarkMetricType.Span, unit: 'ms', domain: BenchmarkDomain.CPU,
+          aggregation: BenchmarkAggregation.None,
+        });
     };
   }
 
@@ -278,7 +283,9 @@ export default class Benchmarks {
   record(name: string, value: number, options?: BenchmarkMetric): void {
     if (!this.enabled) return;
     if (!Number.isFinite(value)) throw new RangeError('Benchmark samples must be finite');
-    if (!this.metrics.has(name)) this.register(name, options ?? { type: 'span', unit: 'ms', domain: 'cpu' });
+    if (!this.metrics.has(name)) this.register(name, options ?? {
+      type: BenchmarkMetricType.Span, unit: 'ms', domain: BenchmarkDomain.CPU,
+    });
 
     const metric = this.metrics.get(name)!;
     metric.value = value;
@@ -340,10 +347,10 @@ export default class Benchmarks {
     for (const type of ['compute', 'render'] as const)
       if (!this.metrics.has(names[type]))
         this.register(names[type], {
-          type: 'span',
+          type: BenchmarkMetricType.Span,
           unit: 'ms',
-          domain: 'gpu',
-          scope: 'renderer',
+          domain: BenchmarkDomain.GPU,
+          scope: BenchmarkScope.Renderer,
           source: `renderer.resolveTimestampsAsync(${type})`,
         });
 
@@ -361,10 +368,10 @@ export default class Benchmarks {
 
     if (!this.metrics.has('renderer/timestampReadbackTime'))
       this.register('renderer/timestampReadbackTime', {
-        type: 'span',
+        type: BenchmarkMetricType.Span,
         unit: 'ms',
-        domain: 'cpu',
-        scope: 'renderer',
+        domain: BenchmarkDomain.CPU,
+        scope: BenchmarkScope.Renderer,
         source: 'performance.now around timestamp resolution (includes synchronization)',
       });
 

@@ -1,3 +1,4 @@
+import { GeometryUpdatePolicy } from '../../enums/GeometryUpdatePolicy';
 import Benchmarks from '../../core/Benchmarks';
 import getAttributeVersion from '../../utils/getAttributeVersion';
 import { transformPointGPU } from '../../simulation/gpu/transforms.utils';
@@ -23,7 +24,7 @@ import type {
   GPUSpatialEffectType,
   GPUSpatialParameterAccessor,
   GPUSpatialParameterField,
-} from './gpu/SpatialEffectRegistry';
+} from './gpu/GPUSpatialEffectRegistry';
 
 enum SpatialInfluenceShape {
   Box = 1,
@@ -67,12 +68,7 @@ export type SpatialEffectGPUTest = (
 
 export type SpatialEffectFeatherEasing = (feather: number) => number;
 
-export enum SpatialEffectUpdatePolicy {
-  Static = 'static',
-  TransformDynamic = 'transform-dynamic',
-  GeometryDynamic = 'geometry-dynamic',
-  Auto = 'auto',
-}
+export { GeometryUpdatePolicy } from '../../enums/GeometryUpdatePolicy';
 
 export type SpatialEffectTest = (particle: Particle, particleSystem: ParticleSystem, effect: SpatialEffect) => boolean;
 
@@ -108,7 +104,7 @@ export interface SpatialEffectOptions {
   /** Samples per axis for a custom geometry's baked GPU influence field. */
   bakedFieldResolution: number;
   /** Declares whether transforms, vertices, or neither can change after construction. */
-  updatePolicy: SpatialEffectUpdatePolicy;
+  updatePolicy: GeometryUpdatePolicy;
 }
 
 /** Supported continuous particle deltas plus a discrete kill result. CPU results are scratch-owned. */
@@ -289,7 +285,7 @@ class SpatialEffect extends THREE.Object3D {
   private geometryBoundsSize = new THREE.Vector3();
   private closestPointInfo?: HitPointInfo;
   bakedFieldResolution: number;
-  updatePolicy: SpatialEffectUpdatePolicy;
+  updatePolicy: GeometryUpdatePolicy;
   private _bakedFieldTexture?: THREE.Data3DTexture;
   private _bakedFieldGeometry?: THREE.BufferGeometry;
   private _bakedFieldGeometryKey = '';
@@ -374,7 +370,7 @@ class SpatialEffect extends THREE.Object3D {
     this.automaticFeather = resolvedOptions.automaticFeather !== false;
     this.modifyGPU = resolvedOptions.modifyGPU ?? SpatialEffect.GPU_UNSUPPORTED;
     this.bakedFieldResolution = Math.max(2, Math.floor(resolvedOptions.bakedFieldResolution ?? 16));
-    this.updatePolicy = resolvedOptions.updatePolicy ?? SpatialEffectUpdatePolicy.Auto;
+    this.updatePolicy = resolvedOptions.updatePolicy ?? GeometryUpdatePolicy.Auto;
     this._test = resolvedOptions.test;
     this.geometry = resolvedOptions.geometry;
     this._testGPU = resolvedOptions.testGPU ?? this.createAnalyticTestGPU() ?? undefined;
@@ -607,8 +603,8 @@ class SpatialEffect extends THREE.Object3D {
       this._bvhTopologyKey = topologyKey;
       this._bvhPositionVersion = positionVersion;
     } else if (
-      this.updatePolicy !== SpatialEffectUpdatePolicy.Static &&
-      this.updatePolicy !== SpatialEffectUpdatePolicy.TransformDynamic &&
+      this.updatePolicy !== GeometryUpdatePolicy.Static &&
+      this.updatePolicy !== GeometryUpdatePolicy.TransformDynamic &&
       this._bvhPositionVersion !== positionVersion
     ) {
       this._bvh.refit();

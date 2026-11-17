@@ -15,9 +15,10 @@ export function sparseCellIndex(coordinate: Node<'ivec3'>, pages: Directory, dim
     .add(c.y.mul(int(side.x))).add(c.z.mul(int(side.x.mul(side.y)))));
   const page = pages.element(flatten(brick, bricks));
   const local = coordinate.sub(brick.mul(int(brickSide)));
-  const address = page.greaterThan(0).select(page, uint(1)).sub(1).mul(uint(brickSide.mul(brickSide).mul(brickSide)))
+  const address = page.greaterThan(uint(0)).select(page, uint(1)).sub(1)
+    .mul(uint(brickSide.mul(brickSide).mul(brickSide)))
     .add(flatten(local, vec3(brickSide)));
-  return inside.and(page.greaterThan(0)).select(address, cellCount.sub(1)) as Node<'uint'>;
+  return inside.and(page.greaterThan(uint(0))).select(address, cellCount.sub(1)) as Node<'uint'>;
 }
 
 /** Render-only bindings to existing storage; no field allocation, migration or pressure-owner capture. */

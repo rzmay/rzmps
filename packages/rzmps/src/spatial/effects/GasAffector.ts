@@ -1,3 +1,4 @@
+import type { ColorRepresentation } from 'three';
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
 import { exp, float, max, mix, pow } from 'three/tsl';
@@ -5,8 +6,8 @@ import SpatialEffect, { type SpatialEffectOptions, type SpatialEffectModifier } 
 import type { GPUParticleUpdateContext } from '../../simulation/gpu/Particle';
 import type { DynamicValue } from '../../values/dynamicValue.types';
 import type { ValueByParameter } from '../../values/valueByParameter.types';
-import type { ColorInput, Vector3Input } from '../../values/valueInput.types';
-import { GPUDynamicParameterStore } from '../../values/evaluateDynamicGPU';
+import type { Vector3Input } from '../../values/valueInput.types';
+import { GPUDynamicParameterStore } from '../../values/GPUDynamicParameterStore';
 import Priority from '../../enums/Priority';
 
 /** Shader-local specific gas state. Heat and color are premultiplied again by the owning solver. */
@@ -35,7 +36,7 @@ export interface GasAffectorOptions extends Omit<SpatialEffectOptions, 'modifyGP
   /** Velocity damping rate per second. */
   drag?: ValueByParameter<number> | null;
   /** Target specific color, blended using colorRate. */
-  color?: ValueByParameter<ColorInput> | null;
+  color?: ValueByParameter<ColorRepresentation> | null;
   /** Exponential color response per second. Defaults to one. */
   colorRate?: number;
 }

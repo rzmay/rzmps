@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "profiles": {
+    "default": { "durationMs": 4000, "warmupMs": 1000, "width": 1280, "height": 720 },
+    "ci": { "durationMs": 1500, "warmupMs": 500, "width": 640, "height": 360 }
+  }
+}

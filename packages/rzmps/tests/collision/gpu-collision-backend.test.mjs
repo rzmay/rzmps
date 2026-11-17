@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {
   Collision,
-  CollisionGeometryUpdatePolicy,
+  GeometryUpdatePolicy,
   ThreeCollisionBackend,
   ThreeGPUCollisionBackend,
 } from '../../build/index.mjs';
@@ -16,7 +16,7 @@ scene.add(first, second);
 
 const backend = new ThreeGPUCollisionBackend({
   world: scene,
-  updatePolicy: CollisionGeometryUpdatePolicy.Auto,
+  updatePolicy: GeometryUpdatePolicy.Auto,
 });
 backend.update();
 assert.equal(backend.supportsGPU, true);

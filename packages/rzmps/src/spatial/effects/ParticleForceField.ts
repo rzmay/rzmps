@@ -4,7 +4,7 @@ import Particle from '../../core/Particle';
 import type ParticleSystem from '../../core/ParticleSystem';
 import type { DynamicValue } from '../../values/dynamicValue.types';
 import evaluateDynamicNumber from '../../values/evaluateDynamicNumber';
-import evaluateDynamicVector from '../../values/evaluateDynamicVector3';
+import evaluateDynamicVector from '../../values/evaluateDynamicVector';
 import getParticleWorldPosition from '../../simulation/getParticleWorldPosition';
 import type { StrictMultiple } from '../../types/multiple.types';
 import type { Tag } from '../../types/tag.types';
@@ -17,9 +17,9 @@ import { cross, float, vec3 } from 'three/tsl';
 import {
   evaluateDynamicNumberGPU,
   evaluateDynamicVectorGPU,
-} from '../../values/evaluateDynamicGPU';
+} from '../../values/GPUDynamicParameterStore';
 import type { GPUParticleLike } from '../../simulation/gpu/Particle';
-import type { GPUSpatialEffectType } from './gpu/SpatialEffectRegistry';
+import type { GPUSpatialEffectType } from './gpu/GPUSpatialEffectRegistry';
 
 export interface ForceFieldOptions extends SpatialEffectOptions {
     direction: DynamicValue<THREE.Vector3>;

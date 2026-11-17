@@ -1,9 +1,8 @@
+import { EventOrigin } from '../enums/EventOrigin';
 import Benchmarks from '../core/Benchmarks';
 import type ParticleSystem from '../core/ParticleSystem';
 import type { SubSystemSource } from '../emission/EmissionSource';
-import { emptyGPUEvents, type GPUEventBatch } from './gpu/EventBatch';
-
-export type EventOrigin = 'local' | 'parent' | 'child';
+import { emptyGPUEvents, type GPUEventBatch } from './gpu/SharedGPUEventBatch';
 
 /** Each selected origin is exclusive; arrays explicitly combine immediate origins. */
 export type EventScope = EventOrigin | readonly EventOrigin[];
@@ -58,7 +57,7 @@ export default class EventReceiver {
     parent?: ParticleSystem; children: ParticleSystem[];
   };
   private _eventResolvedScope?: EventScope;
-  private _eventDefaultScope: EventScope = 'local';
+  private _eventDefaultScope: EventScope = EventOrigin.Local;
   private _eventRevision = 0;
 
   // CPU events accumulate separately from the immutable batch currently being consumed.
@@ -109,15 +108,15 @@ export default class EventReceiver {
   /** @internal The system reconciles this before dispatch, including between execution boundaries. */
   synchronize(
     system: ParticleSystem,
-    defaultScope: EventScope = 'local',
+    defaultScope: EventScope = EventOrigin.Local,
     names = this.selectedEventNames,
     scope: EventScope = this.eventScope ?? defaultScope,
   ): void {
     const scopeKey = typeof scope === 'string' ? scope : scope.join('|');
     const cached = this._selectionCache;
     const includes = (origin: EventOrigin) => typeof scope === 'string' ? scope === origin : scope.includes(origin);
-    const children = includes('child') ? system.subSystems : undefined;
-    const parent = includes('parent') ? system.subSystemParent : undefined;
+    const children = includes(EventOrigin.Child) ? system.subSystems : undefined;
+    const parent = includes(EventOrigin.Parent) ? system.subSystemParent : undefined;
     if (cached?.system === system && cached.scope === scopeKey && cached.parent === parent
       && cached.names.length === names.length && cached.names.every((name, index) => name === names[index])
       && cached.children.length === (children?.size ?? 0)
@@ -156,9 +155,9 @@ export default class EventReceiver {
   ): ParticleSystem[] {
     const selected = new Set(typeof scope === 'string' ? [scope] : scope);
     const owners = new Set<ParticleSystem>();
-    if (selected.has('local')) owners.add(system);
-    if (selected.has('parent') && system.subSystemParent) owners.add(system.subSystemParent);
-    if (selected.has('child')) {
+    if (selected.has(EventOrigin.Local)) owners.add(system);
+    if (selected.has(EventOrigin.Parent) && system.subSystemParent) owners.add(system.subSystemParent);
+    if (selected.has(EventOrigin.Child)) {
       for (const child of system.subSystems.keys()) owners.add(child);
     }
 
@@ -171,7 +170,7 @@ export default class EventReceiver {
   begin(
     system: ParticleSystem,
     deltaTime: number,
-    defaultScope: EventScope = 'local',
+    defaultScope: EventScope = EventOrigin.Local,
     names = this.selectedEventNames,
     scope?: EventScope,
   ): EventExecutionContext {
@@ -185,7 +184,7 @@ export default class EventReceiver {
   beginExecution(
     system: ParticleSystem,
     deltaTime: number,
-    defaultScope: EventScope = 'local',
+    defaultScope: EventScope = EventOrigin.Local,
     names = this.selectedEventNames,
     scope?: EventScope,
   ): EventExecutionContext {

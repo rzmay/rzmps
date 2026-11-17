@@ -99,7 +99,7 @@ export interface SpriteRendererOptions extends RendererOptions {
   randomStartFrame: boolean;
   /** Opacity texture or URL, loaded during renderer setup. */
   alphaMap: string | THREE.Texture;
-  material: SpriteMaterialType | `${SpriteMaterialType}`;
+  material: SpriteMaterialType;
   /** Material settings; transmission and soft intersections may require scene captures. */
   materialOptions: Partial<LitSpriteOptions | UnlitSpriteOptions>;
   /** Allows sprite geometry to cast shadows when scene shadow rendering is enabled. */

@@ -1,3 +1,4 @@
+import type { ColorRepresentation } from 'three';
 import * as THREE from 'three';
 import { Storage3DTexture, type ComputeNode, type Node, type WebGPURenderer } from 'three/webgpu';
 import {
@@ -7,7 +8,7 @@ import {
 import Benchmarks from '../../core/Benchmarks';
 import SpatialGrid from '../../spatial/structures/SpatialGrid';
 import { boundsVector } from '../../spatial/structures/spatialGridDomain.utils';
-import type { ColorInput } from '../../values/valueInput.types';
+
 import { fibonacciDirections, directionTransfer, shRadianceGPU,
   SceneLightingCollection, lightVisible } from './lightingGrid.utils';
 import EnvironmentSH from './EnvironmentSH';
@@ -34,7 +35,7 @@ export interface LightingGridOptions {
   /** Explicit raw cubemap/equirectangular environment. Undefined uses scene.environment; null disables it. */
   environment?: THREE.Texture | null;
   /** Unoccluded ambient fallback when no ambient light, probe or environment is available. Defaults to linear 0.2. */
-  ambient?: ColorInput;
+  ambient?: ColorRepresentation;
   /** Disable dynamic injection when baked probes already contain those scene lights. Defaults to true. */
   includeSceneLights?: boolean;
 }

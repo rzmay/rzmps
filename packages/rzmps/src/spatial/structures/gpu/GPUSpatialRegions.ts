@@ -1,3 +1,4 @@
+import { SpatialBackend } from '../../../enums/SpatialBackend';
 import { StorageBufferAttribute, IndirectStorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
   Fn,
@@ -32,7 +33,7 @@ import {
   type GPUStorageBufferRenderer,
 } from '../../../utils/gpu/storage.utils';
 import { computeRange, writeComputeDispatch, type GPUComputeRange } from '../../../utils/gpu/computeDispatch.utils';
-import GPUExclusiveScan from '../../../utils/gpu/ExclusiveScan';
+import GPUExclusiveScan from '../../../utils/gpu/GPUExclusiveScan';
 import SpatialAggregateStorage from './SpatialAggregateStorage';
 import type {
   GPUSpatialRegion,
@@ -97,7 +98,7 @@ export default class GPUSpatialRegions<L extends SpatialAggregateLayout> {
     private readonly grid: ParticleSpatialGrid<L>,
     capacity: number,
     depths: readonly number[],
-    private readonly aggregator?: SpatialAggregator<L, 'gpu'>,
+    private readonly aggregator?: SpatialAggregator<L, SpatialBackend.GPU>,
     renderer?: GPUStorageBufferRenderer,
   ) {
     // Pack level directories and membership lists into one atomic storage binding.

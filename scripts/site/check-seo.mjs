@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { discoverExamples } from '../docs/examples.mjs';
-import { demoUrl, docsUrl } from '../docs/site.mjs';
-import { exampleSEO, pageSEO } from '../docs/seo.mjs';
+import { discoverExamples } from '../../apps/docs/scripts/examples.mjs';
+import { demoUrl, docsUrl } from '../../apps/docs/scripts/site.mjs';
+import { exampleSEO, pageSEO } from '../../apps/docs/scripts/seo.mjs';
 
 const decode = text =>
   text.replace(

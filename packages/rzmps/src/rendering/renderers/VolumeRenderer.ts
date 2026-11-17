@@ -1,3 +1,4 @@
+import type { ColorRepresentation } from 'three';
 import stretchAlongVelocity from '../shaders/stretchAlongVelocity';
 import LightingGrid, { type LightingGridOptions } from '../lighting/LightingGrid';
 import GasModule, { type GPUGasCell, type GasRenderModuleContext } from '../../modules/GasModule';
@@ -63,7 +64,7 @@ import evaluateByParameterColor from '../../values/evaluateByParameterColor';
 import evaluateByParameterNumber from '../../values/evaluateByParameterNumber';
 import { VolumeInterpolation } from '../../enums/VolumeInterpolation';
 import { VolumeDensityMapping } from '../../enums/VolumeDensityMapping';
-import type { ColorInput } from '../../values/valueInput.types';
+
 import type { ValueByParameter } from '../../values/valueByParameter.types';
 import { generateGPUParticleNoise4D } from '../../utils/noise.utils';
 
@@ -115,25 +116,25 @@ export interface VolumeRendererOptions extends RendererOptions {
   /** Optional speed multiplier for emissive. Null is neutral one. */
   emissiveBySpeed?: ValueByParameter<number> | null;
   /** Renderer-only temperature color multiplier. Defaults to null (neutral white). */
-  colorByTemperature?: ValueByParameter<ColorInput> | null;
+  colorByTemperature?: ValueByParameter<ColorRepresentation> | null;
   /** Renderer-only temperature opacity multiplier. Defaults to null (neutral one). */
   opacityByTemperature?: ValueByParameter<number> | null;
   /** Physical temperature interval normalized to [0, 1]. Defaults to [0, 1]. */
   temperatureRange?: [number, number];
   /** Renderer-only speed color multiplier. Defaults to null (neutral white). */
-  colorBySpeed?: ValueByParameter<ColorInput> | null;
+  colorBySpeed?: ValueByParameter<ColorRepresentation> | null;
   /** Renderer-only speed opacity multiplier. Defaults to null (neutral one). */
   opacityBySpeed?: ValueByParameter<number> | null;
   /** Physical speed interval normalized to [0, 1]. Defaults to [0, 1]. */
   speedRange?: [number, number];
   /** Renderer-only vorticity color multiplier. Defaults to null (neutral white). */
-  colorByVorticity?: ValueByParameter<ColorInput> | null;
+  colorByVorticity?: ValueByParameter<ColorRepresentation> | null;
   /** Renderer-only vorticity opacity multiplier. Defaults to null (neutral one). */
   opacityByVorticity?: ValueByParameter<number> | null;
   /** Physical vorticity interval normalized to [0, 1]. Defaults to [0, 1]. */
   vorticityRange?: [number, number];
   /** Density color multiplier, using minDensity/maxDensity. Defaults to null (neutral white). */
-  colorByDensity?: ValueByParameter<ColorInput> | null;
+  colorByDensity?: ValueByParameter<ColorRepresentation> | null;
   field?: VolumeField | (() => VolumeField | undefined);
   colorField?: VolumeField | (() => VolumeField | undefined);
   color: THREE.ColorRepresentation;
@@ -166,13 +167,13 @@ export interface VolumeRendererOptions extends RendererOptions {
   /** Boolean shorthand for enabling/disabling jitterStrength. */
   jitter: boolean;
   /** Voxel reconstruction, independent of simulation advection. Defaults to Linear. */
-  interpolation: VolumeInterpolation | `${VolumeInterpolation}`;
+  interpolation: VolumeInterpolation;
   /** Reciprocal samplesPerVoxel shorthand. Defaults to one (one sample per voxel). */
   stepSizeMultiplier: number;
   /** Render-only density multiplier. Defaults to one. */
   densityGain: number;
   /** Defaults to Smoothstep, which uses threshold/range. */
-  densityMapping: VolumeDensityMapping | `${VolumeDensityMapping}`;
+  densityMapping: VolumeDensityMapping;
   /** Density at or below this value renders transparent. Defaults to zero. */
   minDensity: number;
   /** Density at or above this value maps to full density. Defaults to one. */
@@ -243,12 +244,12 @@ class VolumeRenderer extends Renderer {
   private readonly emissiveTexture = new THREE.DataTexture(
     this.emissiveData, 256, 4, THREE.RGBAFormat, THREE.HalfFloatType,
   );
-  colorByTemperature: ValueByParameter<ColorInput> | null = null;
+  colorByTemperature: ValueByParameter<ColorRepresentation> | null = null;
   opacityByTemperature: ValueByParameter<number> | null = null;
-  colorByDensity: ValueByParameter<ColorInput> | null = null;
-  colorBySpeed: ValueByParameter<ColorInput> | null = null;
+  colorByDensity: ValueByParameter<ColorRepresentation> | null = null;
+  colorBySpeed: ValueByParameter<ColorRepresentation> | null = null;
   opacityBySpeed: ValueByParameter<number> | null = null;
-  colorByVorticity: ValueByParameter<ColorInput> | null = null;
+  colorByVorticity: ValueByParameter<ColorRepresentation> | null = null;
   opacityByVorticity: ValueByParameter<number> | null = null;
   temperatureRange: [number, number];
   speedRange: [number, number];
@@ -1343,22 +1344,23 @@ class VolumeRenderer extends Renderer {
           if (reduced) If(firstOpacityDepth.equal(0).and(contribution.greaterThan(0)), () => {
             firstOpacityDepth.assign(viewZ);
           });
-          const worldPosition = modelWorldMatrix.mul(vec4(position, 1)).xyz;
-          // Grid lighting fully replaces the simple directional/shadow path; emission remains independent.
-          const transmission = !lightingGrid && this.shadowQuality > 0
-            ? this.lightTransmittance(position, lightDirection) : float(1);
-          const incident = vec3(0).toVar();
-          if (lightingGrid) {
-            // Both default demos scatter isotropically. Average bins once per grid update,
-            // reducing their hot raymarch path to a single trilinear lighting fetch.
-            If(this.gpuAnisotropy.equal(0), () => {
-              incident.assign(lightingGrid.sampleIsotropicGPU(worldPosition));
-            }).Else(() => {
-              incident.assign(lightingGrid.sampleScatteringGPU(worldPosition, worldDirection, this.gpuAnisotropy));
-            });
-          } else incident.assign(vec3(0.2).add(this.gpuLightColor.mul(phase).mul(transmission).mul(0.8)));
-          // Self-lighting blends the transported color without changing extinction or grid radiance.
-          const shaded = mix(color.mul(incident), color, sample.emissive.clamp(0, 1));
+          // Fully self-lit samples need neither LightingGrid fetches nor shadow marches.
+          const emissive = sample.emissive.clamp(0, 1);
+          const shaded = color.toVar('volumeShadedColor');
+          If(emissive.lessThan(1), () => {
+            const worldPosition = modelWorldMatrix.mul(vec4(position, 1)).xyz;
+            const transmission = !lightingGrid && this.shadowQuality > 0
+              ? this.lightTransmittance(position, lightDirection) : float(1);
+            const incident = vec3(0).toVar();
+            if (lightingGrid) {
+              If(this.gpuAnisotropy.equal(0), () => {
+                incident.assign(lightingGrid.sampleIsotropicGPU(worldPosition));
+              }).Else(() => {
+                incident.assign(lightingGrid.sampleScatteringGPU(worldPosition, worldDirection, this.gpuAnisotropy));
+              });
+            } else incident.assign(vec3(0.2).add(this.gpuLightColor.mul(phase).mul(transmission).mul(0.8)));
+            shaded.assign(mix(color.mul(incident), color, emissive));
+          });
           accumulated.rgb.addAssign(shaded.add(sample.emission ?? vec3(0)).mul(contribution));
           accumulated.a.addAssign(contribution);
           If(float(1).sub(accumulated.a).lessThanEqual(this.gpuTransmittanceThreshold), () => Break());

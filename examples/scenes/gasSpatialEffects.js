@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { exp, float, mix, pow, uniform, vec3 } from 'three/tsl';
 import {
-  GasAffector, GasSimulation, Module, ParticleForceField, SpatialEffectHelper, SpatialEffectUpdatePolicy,
+  GasAffector, GasSimulation, Module, ParticleForceField, SpatialEffectHelper, GeometryUpdatePolicy,
 } from '@rzmps/rzmps';
 import suzanneModel from 'examples/assets/models/suzanne.glb?url';
 import { createSceneParticleRoot, disposeSceneParticleRoot } from '../utils/particleRoot.js';
@@ -61,7 +61,7 @@ export default async function gasSpatialEffectsScene(scene) {
     position: new THREE.Vector3(0, 2.2, 0),
     scale: new THREE.Vector3(1.2, 1.2, 1.2),
     feather: 0.4,
-    updatePolicy: SpatialEffectUpdatePolicy.TransformDynamic,
+    updatePolicy: GeometryUpdatePolicy.TransformDynamic,
     priority: Module.Priority.Transient,
   });
   tint.name = 'Moving Transient Suzanne Tint';

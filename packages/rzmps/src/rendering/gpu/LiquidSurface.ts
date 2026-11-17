@@ -1,3 +1,4 @@
+import { createLiquidSurfaceQuery, sampleSurfaceField } from './liquidSurfaceSampling.utils';
 import * as THREE from 'three';
 import { initializeStorageAttribute } from '../../utils/gpu/storage.utils';
 import type Benchmarks from '../../core/Benchmarks';
@@ -101,6 +102,16 @@ const corners = Array.from({ length: 8 }, (_, i) => [i & 1, (i >> 1) & 1, (i >> 
 
 /** GPU-only particle field reconstruction with replaceable surface extraction. @internal */
 export default class LiquidSurface {
+  private readonly surfaceQuery = createLiquidSurfaceQuery();
+  /** Local implicit-field query; bindSurfaceQuery supplies a world transform when owned by SurfaceRenderer. */
+  readonly sampleSurfaceGPU = this.surfaceQuery.sampleSurfaceGPU;
+
+  /** Bind stable query storage to the same final filtered field used by the extractor. @internal */
+  bindSurfaceQuery(query = this.surfaceQuery, transform = new THREE.Matrix4(), dt = 0): void {
+    query.update(this.grid, this.fieldAttribute, this.isoLevel.value, transform, dt);
+    query.setLattice(this.bounds, this.options.voxelSize);
+  }
+
   readonly geometry = new THREE.BufferGeometry();
   readonly grid: SparseVolumeGrid;
   readonly bounds: THREE.Box3;
@@ -167,7 +178,7 @@ export default class LiquidSurface {
     private readonly options: LiquidSurfaceOptions,
     private readonly renderer: ParticleSpatialGridRenderer,
     private readonly legacy = false,
-    extraction: SurfaceExtraction | `${SurfaceExtraction}` | SurfaceExtractor = SurfaceExtraction.SurfaceNets,
+    extraction: SurfaceExtraction | SurfaceExtractor = SurfaceExtraction.SurfaceNets,
   ) {
     // Align independent reconstruction coverage to a fixed voxel lattice.
     const minimum = options.bounds.min.clone().divideScalar(options.voxelSize).floor();
@@ -373,7 +384,7 @@ export default class LiquidSurface {
         );
         target.color.assign(source.color);
         target.alpha.assign(source.alpha.max(0));
-        target.velocity.assign(source.velocity);
+        target.velocity.assign('speed' in source ? source.velocity.mul(source.speed) : source.velocity);
         this.projection.storage.storeParticle(target);
       })().compute(buffers.count);
     }
@@ -487,6 +498,7 @@ export default class LiquidSurface {
       this.renderer.compute(this.shadingNode);
       this.renderer.compute(this.drawNode);
     });
+    this.bindSurfaceQuery();
   }
 
   private computeStage(name: string, callback: () => void): void {
@@ -598,26 +610,8 @@ export default class LiquidSurface {
       .sub(this.minimum)
       .div(this.cellSize)
       .clamp(0, this.grid.cellsPerAxis - 2);
-    const lower = ivec3(coordinate.floor());
-    const fraction = coordinate.sub(vec3(lower));
-    const color = vec4(0).toVar();
-    const gradient = vec3(0).toVar();
-    corners.forEach(corner => {
-      const f = corner.map((bit, axis) =>
-        bit
-          ? fraction[['x', 'y', 'z'][axis] as 'x' | 'y' | 'z']
-          : float(1).sub(fraction[['x', 'y', 'z'][axis] as 'x' | 'y' | 'z']),
-      );
-      const sample = this.field.element(this.grid.index(lower.add(ivec3(...corner))));
-      color.addAssign(sample.mul(f[0].mul(f[1]).mul(f[2])));
-      gradient.addAssign(
-        vec3(
-          f[1].mul(f[2]).mul(corner[0] ? -1 : 1),
-          f[0].mul(f[2]).mul(corner[1] ? -1 : 1),
-          f[0].mul(f[1]).mul(corner[2] ? -1 : 1),
-        ).mul(sample.w),
-      );
-    });
+    const sample = sampleSurfaceField(coordinate, c => this.field.element(this.grid.index(c)));
+    const color = sample.value, gradient = sample.outwardGradient;
     const flow = this.interpolate(this.flow, coordinate);
     const curl = this.interpolate(this.curl, coordinate);
     this.normals.element(index).assign(
@@ -637,6 +631,7 @@ export default class LiquidSurface {
   }
 
   clear(): void {
+    this.surfaceQuery.invalidate();
     this.renderer.compute(
       Fn(() => {
         storage(this.drawAttribute, 'uint', 5).element(0).assign(0);
@@ -687,6 +682,7 @@ export default class LiquidSurface {
   }
 
   dispose(): void {
+    this.surfaceQuery.dispose();
     [
       this.copyNode,
       this.fieldNode,

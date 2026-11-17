@@ -46,7 +46,7 @@ inclusion rule with a custom `test`; it returns a float influence rather than a 
 Custom geometry without `testGPU` uses a baked influence field.
 
 Spatial effects are scene objects. Their transforms can move while
-`updatePolicy: SpatialEffectUpdatePolicy.TransformDynamic` updates transform data without
+`updatePolicy: GeometryUpdatePolicy.TransformDynamic` updates transform data without
 rebuilding geometry acceleration. Use `GeometryDynamic` only when vertex data itself changes.
 Custom tests are not bounds-filtered because RZMPS cannot assume they depend on the effect's
 geometry.

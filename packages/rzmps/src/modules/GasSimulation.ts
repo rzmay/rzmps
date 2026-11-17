@@ -1,3 +1,4 @@
+import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import type { SpatialGridDomain } from '../spatial/structures/spatialGridDomain.utils';
 import GasModule, { type GPUGasCell, type GasGridQuery, type GasModuleContext } from './GasModule';
 import SpatialEffect from '../spatial/effects/SpatialEffect';
@@ -112,7 +113,7 @@ export interface GasSimulationOptions extends FluidSimulationOptions {
   /** Explicit initial reserve. Omission derives source/receiver demand during prepare(), rounded geometrically. */
   initialBrickCapacity: number;
   /** Recommended default is Auto. Supplying multigrid alone implies Multigrid. */
-  pressureSolver: PressureSolver | `${PressureSolver}`;
+  pressureSolver: PressureSolver;
   /** Optional cycle tuning; explicit pressureSolver always takes precedence. */
   multigrid?: MultigridOptions;
   /** Maximum resident bricks; omission uses maxActiveBricks. */
@@ -120,7 +121,7 @@ export interface GasSimulationOptions extends FluidSimulationOptions {
   /** Resident brick limit, also settable via maxBrickCapacity. Omission uses device and logical limits. */
   maxActiveBricks: number;
   /** Defaults to SemiLagrangian. MacCormack enables experimental bounded higher-order transport. */
-  advectionMethod: AdvectionMethod | `${AdvectionMethod}`;
+  advectionMethod: AdvectionMethod;
   /** Exponential density decay rate in inverse seconds. Zero preserves density. */
   densityDissipation: number;
   /** Density below this value is cleared along with its temperature and color. */
@@ -171,7 +172,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
   maxActiveBricks: number;
   initialBrickCapacity: number;
-  pressureSolver: PressureSolver | `${PressureSolver}`;
+  pressureSolver: PressureSolver;
   multigrid?: MultigridOptions;
   get maxBrickCapacity(): number { return this.maxActiveBricks; }
   set maxBrickCapacity(value: number) { this.maxActiveBricks = value; }
@@ -445,13 +446,16 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       throw new RangeError('Gas brick capacities must be positive integers with initial <= maximum.');
     }
     this.volumeGrid = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: this.bounds },
-      Math.min(this.initialBrickCapacity, this.gridDimensions.x * this.gridDimensions.y * this.gridDimensions.z
+      Math.min(this.initialBrickCapacity,
+        this.gridDimensions.x * this.gridDimensions.y * this.gridDimensions.z
         / (2 ** this.spatialGridOptions!.cellSubdivisions!) ** 3), this.gridDimensions);
-    this.benchmarks.register('allocatedBricks', { type: 'gauge', get: () => this.volumeGrid.capacity });
-    this.benchmarks.register('peakAllocatedBytes', { type: 'gauge', unit: 'bytes',
+    this.benchmarks.register('allocatedBricks', { type: BenchmarkMetricType.Gauge,
+      get: () => this.volumeGrid.capacity });
+    this.benchmarks.register('peakAllocatedBytes', { type: BenchmarkMetricType.Gauge, unit: 'bytes',
       get: () => this.peakAllocatedBytes = Math.max(this.peakAllocatedBytes, this.allocatedBytes) });
-    this.benchmarks.register('growthEvents', { type: 'counter', get: () => this.growthEvents });
-    this.benchmarks.register('allocatedBytes', { type: 'gauge', unit: 'bytes', get: () => this.allocatedBytes });
+    this.benchmarks.register('growthEvents', { type: BenchmarkMetricType.Counter, get: () => this.growthEvents });
+    this.benchmarks.register('allocatedBytes', { type: BenchmarkMetricType.Gauge, unit: 'bytes',
+        get: () => this.allocatedBytes });
     this.sparseStructureKey = [this.volumeGrid.brickSubdivisions,
       this.volumeGrid.cellSubdivisions].join('|');
     this.resizeGridFields(this.volumeGrid.cellCount);

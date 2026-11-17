@@ -1,3 +1,7 @@
+import { BenchmarkDomain } from '../enums/BenchmarkDomain';
+import { BenchmarkSampling } from '../enums/BenchmarkSampling';
+import { BenchmarkScope } from '../enums/BenchmarkScope';
+import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import type Benchmarks from '../core/Benchmarks';
 
 /** Shared public renderer.info fields, supported by Three.js's classic and common renderers. */
@@ -40,10 +44,10 @@ export function registerRendererBenchmarks(
 ): void {
   for (const [name, provider] of Object.entries(providers))
     benchmarks.register(`renderer/${name}`, {
-      type: name === 'dispatchCount' ? 'counter' : 'gauge',
+      type: name === 'dispatchCount' ? BenchmarkMetricType.Counter : BenchmarkMetricType.Gauge,
       unit: provider.unit,
-      scope: 'renderer',
-      sampling: 'manual',
+      scope: BenchmarkScope.Renderer,
+      sampling: BenchmarkSampling.Manual,
       source: provider.source,
       get: () => {
         const renderer = getRenderer();
@@ -51,18 +55,18 @@ export function registerRendererBenchmarks(
       },
     });
   benchmarks.register('renderer/drawCount', {
-    type: 'gauge',
+    type: BenchmarkMetricType.Gauge,
     unit: 'count',
-    scope: 'renderer',
-    sampling: 'manual',
+    scope: BenchmarkScope.Renderer,
+    sampling: BenchmarkSampling.Manual,
     source: 'renderer.info render draw-call delta across the profiled render callback',
   });
   for (const name of ['cpuRenderTime', 'frameTime', 'timestampReadbackTime'])
     benchmarks.register(`renderer/${name}`, {
-      type: 'span',
+      type: BenchmarkMetricType.Span,
       unit: 'ms',
-      domain: 'cpu',
-      scope: 'renderer',
+      domain: BenchmarkDomain.CPU,
+      scope: BenchmarkScope.Renderer,
       source:
         name === 'frameTime'
           ? 'application frame interval'
@@ -72,10 +76,10 @@ export function registerRendererBenchmarks(
     });
   for (const type of ['Compute', 'Render'])
     benchmarks.register(`renderer/gpu${type}Time`, {
-      type: 'span',
+      type: BenchmarkMetricType.Span,
       unit: 'ms',
-      domain: 'gpu',
-      scope: 'renderer',
+      domain: BenchmarkDomain.GPU,
+      scope: BenchmarkScope.Renderer,
       source: `renderer.resolveTimestampsAsync(${type.toLowerCase()})`,
     });
 }

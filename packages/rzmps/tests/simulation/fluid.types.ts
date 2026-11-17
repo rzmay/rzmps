@@ -1,15 +1,15 @@
 import {
   LightingGrid, GasModule, AdvectionMethod, FluidBoundsPolicy, FLIPSimulation, GasSimulation, DecalRenderer,
 } from '../../build/index.mjs';
-import { MeshBasicMaterial } from 'three';
+import { MeshBasicMaterial, Vector3 } from 'three';
 import { Module, ParticleSystem } from '../../build/index.mjs';
 import type { VolumeFieldProvider, VolumeField } from '../../build/index.mjs';
 import { VolumeRenderer, VolumeInterpolation, VolumeDensityMapping, SurfaceRenderer } from '../../build/index.mjs';
 
-new VolumeRenderer({ interpolation: VolumeInterpolation.Cubic, densityMapping: 'Curve', densityCurve: t => t * t });
+new VolumeRenderer({ interpolation: VolumeInterpolation.Cubic, densityMapping: VolumeDensityMapping.Curve, densityCurve: t => t * t });
 new VolumeRenderer({ softParticleDistance: 0.5 });
 new VolumeRenderer({ softParticles: false, softParticleDistance: 0.5 });
-new VolumeRenderer({ interpolation: 'Nearest', densityMapping: VolumeDensityMapping.Linear,
+new VolumeRenderer({ interpolation: VolumeInterpolation.Nearest, densityMapping: VolumeDensityMapping.Linear,
   minDensity: 0, maxDensity: 2, densityGain: 2, stepSizeMultiplier: 0.5 });
 new VolumeRenderer({
   // @ts-expect-error Unsupported reconstruction filter.
@@ -40,12 +40,12 @@ void volume;
 
 new GasSimulation({ advectionMethod: AdvectionMethod.MacCormack });
 new GasSimulation({ boundsPolicy: FluidBoundsPolicy.Contain });
-new FLIPSimulation({ boundsPolicy: 'Kill' });
+new FLIPSimulation({ boundsPolicy: FluidBoundsPolicy.Kill });
 new FLIPSimulation({
   // @ts-expect-error Unknown cap policies are not supported.
   boundsPolicy: 'Open',
 });
-new GasSimulation({ advectionMethod: 'SemiLagrangian' });
+new GasSimulation({ advectionMethod: AdvectionMethod.SemiLagrangian });
 new GasSimulation({
   // @ts-expect-error Only supported advection enum values and their strings are accepted.
   advectionMethod: 'unsupported',
@@ -79,7 +79,7 @@ const customExtractor: import('../../build/index.mjs').SurfaceExtractor = contex
 new SurfaceRenderer({ extraction: customExtractor });
 new SurfaceRenderer({ extraction: buildSurfaceNets });
 new SurfaceRenderer({ extraction: SurfaceExtraction.MarchingCubes });
-new SurfaceRenderer({ extraction: 'SurfaceNets' });
+new SurfaceRenderer({ extraction: SurfaceExtraction.SurfaceNets });
 new SurfaceRenderer({
   // @ts-expect-error Unsupported extraction names are rejected.
   extraction: 'Unknown',
@@ -119,7 +119,7 @@ new VolumeRenderer({ densityNoiseStrengthByTemperature: [0.25, 1.5],
   densityNoiseContrastByTemperature: [0.5, 1.25], densityNoiseFrequencyByTemperature: [1.25, 1] });
 
 new GasSimulation({ spatialGridOptions: { maxBounds: 16 } });
-new FLIPSimulation({ spatialGridOptions: { maxBounds: 8 }, boundsPolicy: 'Contain' });
+new FLIPSimulation({ spatialGridOptions: { maxBounds: 8 }, boundsPolicy: FluidBoundsPolicy.Contain });
 // @ts-expect-error The grid owns the cap; fluid modules do not accept a top-level maxBounds.
 new GasSimulation({ maxBounds: 16 });
 
@@ -127,7 +127,7 @@ new GasSimulation({ maxBounds: 16 });
 import { PressureSolver, type MultigridOptions } from '../../build/index.mjs';
 const multigridOptions: MultigridOptions = { preSmoothing: 2, postSmoothing: 4, bottomIterations: 12 };
 new GasSimulation({ pressureSolver: PressureSolver.Auto, multigrid: multigridOptions });
-new GasSimulation({ pressureSolver: 'Multigrid', pressureIterations: 16, pressureTolerance: 0.1 });
+new GasSimulation({ pressureSolver: PressureSolver.Multigrid, pressureIterations: 16, pressureTolerance: 0.1 });
 new GasSimulation({ multigrid: { preSmoothing: 1 } });
 new GasSimulation({ multigrid: {
   // @ts-expect-error Hierarchy depth is internal, not a pressure tuning option.
@@ -183,3 +183,12 @@ new GasModule({ modifyGPU(cell, context) {
   // @ts-expect-error Neighbor views cannot replace gas-state members.
   above.density = cell.density;
 } });
+
+// Bound renderer sampling methods are passed directly; CPU implicit surfaces use the same world-space contract.
+const { SurfaceAttachment } = await import('../../build/index.mjs');
+const sampledSurface = new SurfaceRenderer();
+new SurfaceAttachment({ surface: sampledSurface, samplerGPU: sampledSurface.sampleSurfaceGPU,
+  offset: 0.02, tangentialDrag: 2 });
+new SurfaceAttachment({ sampler: position => ({ distance: position.y, normal: new Vector3(0, 1, 0),
+  velocity: new Vector3(), valid: true }) });
+FLIPSimulation.FoamCondition({ minimumSpeed: 0.25, minimumNeighbors: 3, maximumNeighbors: 24 });

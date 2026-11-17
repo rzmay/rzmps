@@ -1,3 +1,5 @@
+import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
+import { EventOrigin } from '../enums/EventOrigin';
 import { registerRendererBenchmarks } from '../rendering/benchmarkRenderer.utils';
 import Benchmarks from './Benchmarks';
 import GlobalSettings from './GlobalSettings';
@@ -8,8 +10,8 @@ import type { CollisionHit } from '../collision/collision.types';
 import EmissionRuntime from '../emission/EmissionRuntime';
 import EmissionSource, { type EmissionSourceData, type SubSystemSource } from '../emission/EmissionSource';
 import Emitter, { type EmissionContext } from '../emission/Emitter';
-import type { GPUEmissionSupportReport } from '../emission/gpu/Emission';
-import overrideEmitterOptions from '../emission/options.utils';
+import type { GPUEmissionSupportReport } from '../emission/gpu/GPUEmissionRunBufferState';
+import overrideEmitterOptions from '../emission/overrideEmitterOptions';
 import { EndBehavior } from '../enums/EndBehavior';
 import { MaxCulling } from '../enums/MaxCulling';
 import { SourceLossBehavior } from '../enums/SourceLossBehavior';
@@ -17,7 +19,7 @@ import { SimulationSpace } from '../enums/SimulationSpace';
 import EventReceiver, { type EventScope, type SimulationEvent } from '../events/EventReceiver';
 import EventRuntime from '../events/EventRuntime';
 import { cpuEventHandler, eventNames, type EventSubscriptions } from '../events/events.utils';
-import { emptyGPUEvents, SharedGPUEventBatch, type GPUEventBatch } from '../events/gpu/EventBatch';
+import { emptyGPUEvents, SharedGPUEventBatch, type GPUEventBatch } from '../events/gpu/SharedGPUEventBatch';
 import { GPUEventBufferState } from '../events/gpu/EventBuffer';
 import { isWebGPURenderer } from '../utils/gpu/isWebGPURenderer';
 import type { PackedFloatStorage } from '../utils/gpu/storage.utils';
@@ -31,7 +33,8 @@ import {
   type GPUParticleBufferState,
   type GPUParticleLike,
 } from '../simulation/gpu/Particle';
-import { type GPUParticleReadbackField, type GPUSelectiveReadbackResult } from '../simulation/gpu/SelectiveReadback';
+import { type GPUParticleReadbackField, type GPUSelectiveReadbackResult }
+  from '../simulation/gpu/GPUSelectiveReadbackState';
 import { buildGPUSystemSchedule, type GPUSystemSchedule } from '../simulation/gpu/buildGPUSystemSchedule';
 import GPUSimulation from '../simulation/GPUSimulation';
 import SimulationFrames from '../simulation/SimulationFrames';
@@ -117,12 +120,12 @@ export interface ParticleSystemOptions {
   looping: boolean;
   /** Controls cleanup after a nonlooping system ends; existing particles may remain.
    * @defaultValue EndBehavior.None */
-  endBehavior: EndBehavior | `${EndBehavior}`;
+  endBehavior: EndBehavior;
   /** Maximum retained particles; excess particles are culled during simulation. */
   maxParticles: number;
   /** Chooses whether old or newly spawned particles are culled at capacity.
    * @defaultValue MaxCulling.New */
-  maxCullingMode: MaxCulling | `${MaxCulling}`;
+  maxCullingMode: MaxCulling;
   /** Camera-distance limit for normal updates; zero disables distance culling.
    * @defaultValue 0 */
   simulationDistance: number;
@@ -135,11 +138,11 @@ export interface ParticleSystemOptions {
   /** Multiplier for velocity inherited from movement of the emitter context. */
   inheritVelocity: number;
   /** World, Local, Transform or per-particle Source coordinates; changing modes preserves existing world poses. */
-  simulationSpace: SimulationSpace | `${SimulationSpace}`;
+  simulationSpace: SimulationSpace;
   /** Live world-space frame for Transform mode; a Matrix4 is caller-managed. Omission uses identity. */
   simulationSpaceTransform: THREE.Object3D | THREE.Matrix4 | null;
   /** Source mode behavior when an emitting source disappears. Defaults to detach at its last valid frame. */
-  sourceLossBehavior: SourceLossBehavior | `${SourceLossBehavior}`;
+  sourceLossBehavior: SourceLossBehavior;
   /** Requests GPU simulation when a WebGPURenderer and compatible components are available. */
   gpuProcessing: boolean;
   /** Enables periodic GPU allocation and dispatch diagnostics. */
@@ -639,12 +642,12 @@ class ParticleSystem extends THREE.Object3D {
     return buildGPUSystemSchedule(this);
   }
   /** Behavior when an attached source dies or its slot is reused. Defaults to detach. */
-  sourceLossBehavior: SourceLossBehavior | `${SourceLossBehavior}` = SourceLossBehavior.Detach;
+  sourceLossBehavior: SourceLossBehavior = SourceLossBehavior.Detach;
 
   get simulationSpace(): SimulationSpace {
     return this.frameRuntime.simulationSpace;
   }
-  set simulationSpace(value: SimulationSpace | `${SimulationSpace}`) {
+  set simulationSpace(value: SimulationSpace) {
     this.frameRuntime.simulationSpace = value;
   }
   get simulationSpaceTransform(): THREE.Object3D | THREE.Matrix4 | null {
@@ -819,7 +822,7 @@ class ParticleSystem extends THREE.Object3D {
             : system.modules.every(module => module.supportsGPU));
         component.synchronize(
           system,
-          emitter && system.isSubSystem ? 'parent' : 'local',
+          emitter && system.isSubSystem ? EventOrigin.Parent : EventOrigin.Local,
           names,
           emitter
             ? (system._subSystemParent?._subSystemOverrides.get(system)?.eventScope ?? component.eventScope)
@@ -1010,7 +1013,7 @@ class ParticleSystem extends THREE.Object3D {
     this.lastFrame = Date.now();
 
     const gauge = (name: string, get: () => number | null, unit = 'count') =>
-      this.benchmarks.register(name, { type: 'gauge', unit, get });
+      this.benchmarks.register(name, { type: BenchmarkMetricType.Gauge, unit, get });
     gauge('system/particleCount', () => this.liveParticleCount);
     gauge('system/capacity', () => this.isGPUProcessingActive ? this.gpuBufferStats.allocated : this.maxParticles);
     gauge('system/childrenCount', () =>
@@ -1023,8 +1026,8 @@ class ParticleSystem extends THREE.Object3D {
     gauge('system/usedSlots', () => this.isGPUProcessingActive ? this.gpuBufferStats.activeSlots : 0);
     this.benchmarks.derive('system/slotUtilization', ['system/usedSlots', 'system/allocatedSlots'],
       values => values['system/allocatedSlots'] > 0 ? values['system/usedSlots'] / values['system/allocatedSlots'] : 0);
-    this.benchmarks.register('system/spawnCount', { type: 'counter', unit: 'count', perFrame: true });
-    this.benchmarks.register('system/deathCount', { type: 'counter', unit: 'count', perFrame: true });
+    this.benchmarks.register('system/spawnCount', { type: BenchmarkMetricType.Counter, unit: 'count', perFrame: true });
+    this.benchmarks.register('system/deathCount', { type: BenchmarkMetricType.Counter, unit: 'count', perFrame: true });
     // The shared renderer describes the whole scene. Never attribute its totals to individual subsystems.
     registerRendererBenchmarks(this.benchmarks, () => this.isSubSystem ? undefined : this.sceneRenderer);
     this.benchmarks.attach('gpu', this.gpuSimulation.benchmarks);
@@ -1418,7 +1421,8 @@ class ParticleSystem extends THREE.Object3D {
     );
 
     // Update particles, caching permanent state before render-time transients.
-    this._updateParticles(transientBaseValues);
+    this._updateParticles(transientBaseValues, modules.filter(module => module.finalize !== Module.prototype.finalize)
+      .sort((a, b) => a.priority - b.priority));
     this._particlesIntegrated = true;
 
     if (!transientBaseValues) {
@@ -1614,7 +1618,7 @@ class ParticleSystem extends THREE.Object3D {
     return this._spatialEffectTravelBounds.intersectsBox(effectBounds);
   }
 
-  private _updateParticles(transientBaseValues?: ParticleCachedValues[]) {
+  private _updateParticles(transientBaseValues?: ParticleCachedValues[], finalizers: Module[] = []) {
     const particles = this.particles;
     const originalLength = particles.length;
     let writeIndex = 0;
@@ -1657,8 +1661,21 @@ class ParticleSystem extends THREE.Object3D {
         continue;
       }
 
-      if (transientBase && transientFrame) {
-        p.cacheValues(this._getAdvancedPermanentValues(p, transientBase, transientFrame, gravityScale, deltaTime));
+      const permanent = transientBase && transientFrame
+        ? this._getAdvancedPermanentValues(p, transientBase, transientFrame, gravityScale, deltaTime) : undefined;
+      const beforePosition = permanent && finalizers.length ? p.position.clone() : undefined;
+      const beforeVelocity = permanent && finalizers.length ? p.velocity.clone() : undefined;
+      for (const module of finalizers) {
+        if (!p.alive || module.tags && !tagsIntersect(module.tags, p.tags ?? [])) continue;
+        if (module.condition(p, deltaTime, module.executionContext!))
+          module.finalize(p, deltaTime, module.executionContext!);
+      }
+      if (!p.alive) { this._notifyParticleDeath(p); continue; }
+      if (permanent) {
+        // Preserve permanent constraint corrections without making visual transient offsets persistent.
+        if (beforePosition) permanent.position.add(p.position).sub(beforePosition);
+        if (beforeVelocity) permanent.velocity.add(p.velocity).sub(beforeVelocity);
+        p.cacheValues(permanent);
       }
 
       particles[writeIndex] = p;

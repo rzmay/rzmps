@@ -1,3 +1,4 @@
+import { createLiquidSurfaceQuery } from '../gpu/liquidSurfaceSampling.utils';
 import * as THREE from 'three';
 import StagedGPUAllocation from '../../utils/gpu/StagedGPUAllocation';
 import LiquidMaterial from '../materials/LiquidMaterial';
@@ -14,7 +15,7 @@ import { applySurfaceMaterial } from '../compositing/applySurfaceMaterial';
 
 export interface SurfaceRendererOptions extends RendererOptions {
   /** Mesh extractor; changing it rebuilds reconstruction resources. Defaults to SurfaceNets. */
-  extraction: SurfaceExtraction | `${SurfaceExtraction}` | SurfaceExtractor;
+  extraction: SurfaceExtraction | SurfaceExtractor;
   /** Cloned into a renderer-owned material. Defaults to LiquidMaterial. */
   material: THREE.Material;
   /** Reconstruction region in system coordinates. Defaults to [-4, 4] on each axis. */
@@ -99,6 +100,9 @@ export default class SurfaceRenderer extends Renderer {
   castShadow: boolean;
   receiveShadow: boolean;
   private surface?: LiquidSurface;
+  private readonly surfaceQuery = createLiquidSurfaceQuery();
+  /** World-space, near-surface GPU query. Safe before preparation, after clear, and across pool replacement. */
+  readonly sampleSurfaceGPU = this.surfaceQuery.sampleSurfaceGPU;
   private allocation?: StagedGPUAllocation<LiquidSurface>;
   private requiredTier = 0;
   private surfaceLimits = { bricks: 0, triangles: 0 };
@@ -110,7 +114,7 @@ export default class SurfaceRenderer extends Renderer {
   private resourceKey = '';
   // Retained only for controlled comparisons with the original radial field.
   private reconstructionVersion = 2;
-  extraction: SurfaceExtraction | `${SurfaceExtraction}` | SurfaceExtractor;
+  extraction: SurfaceExtraction | SurfaceExtractor;
   private materialCallback?: SurfaceRenderer['materialCompositeGPU'];
   private materialCallbackCPU?: SurfaceRenderer['materialComposite'];
   private materialStateKey = '';
@@ -278,6 +282,8 @@ export default class SurfaceRenderer extends Renderer {
       applySurfaceMaterial(this.material, this.particleColors, composite, this.materialComposite);
     }
     this.updateSurface(this.surface, buffers, system);
+    this.surface.bindSurfaceQuery(this.surfaceQuery, system.getSimulationToWorldMatrix(),
+      this.executionContext?.deltaTime ?? 0);
     if (!this.diagnosticsPending) {
       this.diagnosticsPending = true;
       const observed = this.surface;
@@ -299,6 +305,8 @@ export default class SurfaceRenderer extends Renderer {
           this.requiredTier = Math.min(this.maximumTier,
             Math.max(requestedBricks / this.initialBricks, predictedTriangles / this.initialTriangles));
           this.benchmarks.set('triangleCount', stats.triangles);
+          this.benchmarks.set('vertexCount', stats.vertices);
+          this.benchmarks.set('clippedParticles', stats.clippedParticles);
           this.benchmarks.set('activeBricks', stats.activeBricks);
           this.benchmarks.set('activeSurfaceCells', stats.vertices);
           this.benchmarks.set('overflowedBricks', stats.overflowedBricks);
@@ -436,6 +444,7 @@ export default class SurfaceRenderer extends Renderer {
   }
 
   clear(): void {
+    this.surfaceQuery.invalidate();
     this.mesh.visible = false;
     this.surface?.clear();
   }
@@ -446,6 +455,7 @@ export default class SurfaceRenderer extends Renderer {
   }
 
   destroy(): void {
+    this.surfaceQuery.dispose();
     super.reset();
     this.mesh.removeFromParent();
     if (this.allocation) this.allocation.dispose();

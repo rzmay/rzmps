@@ -15,23 +15,22 @@ jobs:
       - run: npm ci
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npx puppeteer browsers install chrome --install-deps
-      - run: node --test scripts/tests/preview/readback.test.mjs scripts/tests/preview/audio.test.mjs scripts/tests/site/search.test.mjs
-      - run: npm run build:modules
-      - run: npm run site:deploy
-      - run: npm run site:browser-check
-      - run: npm run preview:smoke
+      - run: npm run build
+      - run: node tests/run.mjs --skip-build --set deployment
+      - run: npm run scripts deploy:site -- --skip-build
+      - run: node tests/run.mjs --skip-build --set smoke
         env:
-          RZMPS_PREVIEW_OUTPUT: benchmark-results/previews/smoke
+          RZMPS_PREVIEW_OUTPUT: tests/output/previews/smoke
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: preview-diagnostics
-          path: benchmark-results/preview-diagnostics
+          path: tests/output/preview-diagnostics
           if-no-files-found: ignore
           retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: canvas-previews
-          path: benchmark-results/previews/smoke
+          path: tests/output/previews/smoke
           if-no-files-found: ignore

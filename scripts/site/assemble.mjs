@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { discoverExamples } from '../docs/examples.mjs';
-import { demoPageHTML } from '../docs/seo.mjs';
+import { discoverExamples } from '../../apps/docs/scripts/examples.mjs';
+import { demoPageHTML } from '../../apps/docs/scripts/seo.mjs';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(import.meta.dirname, '../..');
 export async function assembleSite({
