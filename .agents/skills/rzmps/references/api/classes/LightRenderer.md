@@ -112,6 +112,16 @@ children: RendererChildrenOptions;
 
 ***
 
+<a id="color"></a>
+
+### color
+
+```ts
+color: DynamicValue<ColorRepresentation>;
+```
+
+***
+
 <a id="compensation"></a>
 
 ### compensation
@@ -135,7 +145,17 @@ compensation:
 ### decay
 
 ```ts
-decay: number;
+decay: DynamicValue<number>;
+```
+
+***
+
+<a id="distance"></a>
+
+### distance
+
+```ts
+distance: DynamicValue<number>;
 ```
 
 ***
@@ -234,16 +254,6 @@ inheritParticleColor: boolean;
 
 ***
 
-<a id="lightoptions"></a>
-
-### lightOptions
-
-```ts
-lightOptions: PointLightOptions;
-```
-
-***
-
 <a id="lights"></a>
 
 ### lights
@@ -279,6 +289,16 @@ optional materialTarget?: MaterialTarget;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`materialTarget`](Renderer.md#materialtarget)
+
+***
+
+<a id="power"></a>
+
+### power?
+
+```ts
+optional power?: DynamicValue<number>;
+```
 
 ***
 

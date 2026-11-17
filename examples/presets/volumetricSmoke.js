@@ -60,8 +60,8 @@ export default async function createVolumetricSmoke() {
         spatialGridOptions: {
           brickSubdivisions: 3,
           cellSubdivisions: 3,
-      // 8 / 64 = 0.125 world units per cell, independently of the initially compact domain.
-      minVolumeQuality: 8,
+          // 8 / 64 = 0.125 world units per cell, independently of the initially compact domain.
+          minVolumeQuality: 8,
           powerOfTwoBounds: true,
           autoExpand: false,
           shrinkDelay: 180,
@@ -83,7 +83,7 @@ export default async function createVolumetricSmoke() {
     // #region docs:renderers:1
     renderers: [
       new VolumeRenderer({
-        lightingGridOptions: { cellSize: 0.25, directions: 12, samplesPerInterval: 8, maxDistance: 16 },
+        lightingGridOptions: { cellSize: 0.25, maxDistance: 16 },
         color: '#564d4d',
         opacity: 0.75,
         threshold: 0.025,
@@ -92,6 +92,8 @@ export default async function createVolumetricSmoke() {
         densityNoiseContrast: 1,
         densityNoiseFrequency: 1,
         densityNoiseSpeed: 0.5,
+        densityNoiseStretch: 0.25,
+        densityNoiseStretchBySpeed: [0, 1],
         // Masked thin structures need finer ray sampling than the standard one-sample tier.
         samplesPerVoxel: 2,
         steps: 256,

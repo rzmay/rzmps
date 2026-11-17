@@ -299,7 +299,7 @@ export type {
 export { default as FluidSimulation } from './modules/FluidSimulation';
 export type { FluidSimulationOptions, FluidCollisionOptions } from './modules/FluidSimulation';
 export { default as GasModule } from './modules/GasModule';
-export type { GPUGasCell, GasModuleOptions, GasModuleContext, GasRenderModuleContext,
+export type { GPUGasCell, GasGridQuery, GasModuleOptions, GasModuleContext, GasRenderModuleContext,
   GasModuleUpdate, GasRenderModuleUpdate } from './modules/GasModule';
 export { default as GasSimulation } from './modules/GasSimulation';
 export type { GasSimulationOptions } from './modules/GasSimulation';

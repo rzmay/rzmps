@@ -144,3 +144,51 @@ VolumeRenderer's nullable `densityNoiseStrengthByTemperature`, `densityNoiseCont
 `densityNoiseFrequencyByTemperature` multiply their corresponding density-mask settings using the
 renderer temperature range. They reuse the temperature already sampled for appearance,
 change rendering only, and require WebGPURenderer like the procedural density mask itself.
+
+## Volume self-lighting and scattering
+
+`VolumeRenderer.emissive` blends the externally lit transported gas color toward its original color:
+`mix(volumeColor * externalLighting, volumeColor, emissive)`. It defaults to zero, and the final factor
+is clamped to `[0, 1]`. It does **not** emit light into the scene or LightingGrid. Use LightRenderer or
+scene lights to illuminate nearby objects or other gas.
+
+```ts
+new VolumeRenderer({
+  emissive: 1,
+  emissiveByTemperature: heat => Math.min(1, heat * 2),
+  emissiveByDensity: [0, 1],
+  emissiveBySpeed: null,
+});
+```
+
+`emissive` is a plain scalar number. Its separate temperature/density/speed ValueByParameter modifiers
+use the same normalized ranges as the corresponding color/opacity controls. Their null defaults contribute one,
+so enabling `emissive: 1` lets the modifiers shape it. The factors multiply before the final clamp.
+As with other by-parameter controls, a numeric modifier scales its normalized parameter; `[1, 1]`
+is a constant-one modifier. GasModule's `modifyRenderGPU` receives a mutable `context.emissive` node:
+use `context.emissive.assign(...)` to override it procedurally. This never writes simulation storage.
+The Volumetric Fire preset uses temperature primarily, with density suppressing self-lighting in thin wisps.
+
+Anisotropy uses Henyey–Greenstein phase weighting at each ray sample: zero is isotropic, positive is
+forward scattering and negative is backward scattering. LightingGrid bins point toward the light;
+the camera ray points into the volume. Both are opposite their physical photon-travel/outgoing
+vectors, so their dot product gives the correct sign. Anisotropy does not change stored radiance,
+propagation, attenuation or emission. The zero case retains the pre-averaged isotropic sampling path.
+The opposite-view fixture checks `-0.8`, `0` and `0.8` against the
+[Blender convention](https://docs.blender.org/manual/en/2.81/render/materials/components/volume.html).
+This is a qualitative convention comparison, not a numerical Blender render match.
+
+### Flow-aligned density noise
+
+`VolumeRenderer.densityNoiseStretch` compresses the density-mask coordinates along local gas velocity,
+using the same projection as LiquidMaterial's velocity distortion. Zero (the default) preserves the
+unstretched mask and skips the additional velocity sampling. The effective stretch is the scalar base
+multiplied by nullable `densityNoiseStretchByTemperature`, `densityNoiseStretchByDensity`, and
+`densityNoiseStretchBySpeed` modifiers, then clamped to `[0, 0.95]`. Null modifiers contribute one;
+parameters use the same normalized ranges as appearance controls. Providers without velocity remain
+unstretched. Like the procedural density mask itself, stretching requires WebGPU.
+
+This is render-only flow alignment: it changes neither simulated density nor velocity. The existing
+4D noise animation still controls temporal evolution; no separate transported noise field is created.
+Fire uses little stretching at high temperatures to preserve flame flicker, with stronger flow-aligned
+detail in the cool smoke.

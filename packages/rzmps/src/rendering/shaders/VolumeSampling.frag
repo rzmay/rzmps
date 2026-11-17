@@ -56,6 +56,21 @@ vec4 volumeAppearance(vec4 physical) {
   #endif
   return multiplier;
 }
+uniform sampler2D emissiveMap;
+uniform float emissive;
+float volumeEmissive(vec4 physical) {
+  #if VOLUME_EMISSIVE
+  float temperature = clamp((physical.x - appearanceRange0.x) / (appearanceRange0.y - appearanceRange0.x), 0.0, 1.0);
+  float density = clamp((physical.y * densityGain - appearanceRange1.x) / (appearanceRange1.y - appearanceRange1.x), 0.0, 1.0);
+  float speed = clamp((physical.z - appearanceRange2.x) / (appearanceRange2.y - appearanceRange2.x), 0.0, 1.0);
+  float value = emissive * textureLod(emissiveMap, vec2((density * 255.0 + 0.5) / 256.0, 0.375), 0.0).r;
+  value *= textureLod(emissiveMap, vec2((temperature * 255.0 + 0.5) / 256.0, 0.125), 0.0).r;
+  value *= textureLod(emissiveMap, vec2((speed * 255.0 + 0.5) / 256.0, 0.625), 0.0).r;
+  return clamp(value, 0.0, 1.0);
+  #else
+  return 0.0;
+  #endif
+}
 float renderOpacity(float rawDensity) {
   float density = max(rawDensity * densityGain, 0.0);
   float normalizedDensity = clamp((density - densityRange.x) / (densityRange.y - densityRange.x), 0.0, 1.0);

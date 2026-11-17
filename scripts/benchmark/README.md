@@ -18,3 +18,27 @@ Renderer metrics have `scope: 'renderer'` and explicit sources. They include unr
 must not be summed across systems. Draw counts are deltas for the profiled render callback, accounting for classic
 WebGL's automatic reset; provider statistics are sampled after rendering. Explicit GPU timestamp resolution uses Three.js's
 public common-renderer API. Classic WebGLRenderer has no such public API; unavailable measurements remain `null`.
+
+## Gas workloads in the full suite
+
+The default/full selection includes eight GPU-only gas cases. `suite=gas` selects just these cases;
+short PR selection IDs remain unchanged. `apps/demo/src/benchmark/gasBenchmarks.js` owns the fixtures.
+Smoke, fire, a finer pressure workload and a lighting-heavy plume report steady-state measurements.
+Separate startup, quality-adoption, resident-capacity and ten-second sustained-smoke cases cover lifecycle work.
+Preparation and forced lifecycle operations occur before the ordinary steady measurement window.
+
+Each result's `gas` object distinguishes CPU submission, fenced wall intervals, compute-pipeline creation,
+and timestamped GPU execution. The workload includes cell width, subdivisions, physical bounds,
+resident/active pages and cells, solver, particle count, lighting probes/effective spacing/storage and
+render scale/viewport. Residual/divergence diagnostics are included when the solver provides them.
+
+`gpuPassTimer.js` captures actual native pass intervals. Each category is an interval union; rendering
+excludes compute overlap in the combined total. Stage categories can overlap each other and their
+independently measured medians must not be added. Scene rendering includes raymarch/reconstruction and
+other scene work; it is not an isolated raymarch-kernel measurement. Missing timestamp support produces
+null GPU metrics, never a CPU/fence substitute. No result requires a machine-specific FPS target.
+Storage bytes are owned-resource estimates, not total VRAM. Detailed pass logs stay in internal runners.
+
+For deeper investigation, `internal/smoke-lifecycle.mjs` retains streamed checkpoints, device-loss/error
+capture, heartbeat/render ages and tracked allocations. Set `SMOKE_STRESS=1` for scene changes and camera
+repositioning during the run. These long diagnostic logs are not added to ordinary benchmark output.

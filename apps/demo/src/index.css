@@ -238,6 +238,22 @@ code {
   white-space: pre-line;
 }
 
+.particle-count-monitor__gpu {
+  color: #ffc66d;
+}
+
+.particle-count-monitor__simulation {
+  color: #70d6ff;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.particle-count-monitor__renderers {
+  color: #d2a3ff;
+}
+
 .preset-attribution {
   position: absolute;
   left: 50%;

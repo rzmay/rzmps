@@ -82,6 +82,18 @@ emission: Node<"vec3">;
 
 ***
 
+<a id="emissive"></a>
+
+### emissive
+
+```ts
+emissive: Node<"float">;
+```
+
+Effective self-lit fraction in [0, 1]; clamped again after custom edits. Does not illuminate other samples.
+
+***
+
 <a id="module"></a>
 
 ### module

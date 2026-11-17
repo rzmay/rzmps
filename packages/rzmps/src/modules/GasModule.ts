@@ -12,8 +12,18 @@ export interface GPUGasCell {
   color: Node<'vec3'>;
 }
 
+/** Read-only logical-cell access to the input snapshot of the current solver stage. GPU only. */
+export interface GasGridQuery {
+  /** Missing/nonresident/out-of-range cells return zero state. Never writes neighbor storage. */
+  getCell(x: Node, y: Node, z: Node): Readonly<GPUGasCell>;
+}
+
 /** Local solver coefficients, initialized after the simulation's by-parameter controls. */
 export interface GasModuleContext {
+  /** Logical gas-cell coordinate, independent of resident page/texture packing. */
+  readonly index: Node<'ivec3'>;
+  /** All fused modules query the same input snapshot, even after earlier local edits. */
+  readonly grid: GasGridQuery;
   readonly module: GasModule;
   readonly deltaTime: Node<'float'>;
   readonly elapsedTime: Node<'float'>;
@@ -36,6 +46,8 @@ export interface GasRenderModuleContext {
   color: Node<'vec3'>;
   opacity: Node<'float'>;
   emission: Node<'vec3'>;
+  /** Effective self-lit fraction in [0, 1]; clamped again after custom edits. Does not illuminate other samples. */
+  emissive: Node<'float'>;
   densityNoiseStrength: Node<'float'>;
   densityNoiseContrast: Node<'float'>;
   densityNoiseFrequency: Node<'float'>;

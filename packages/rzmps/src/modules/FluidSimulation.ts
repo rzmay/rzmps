@@ -231,6 +231,11 @@ abstract class FluidSimulation extends Module {
     this.bounds = initialDomain.bounds.clone();
     this.gridDimensions.copy(initialDomain.gridDimensions);
     this.dimensionsNode.value.copy(this.gridDimensions);
+    for (const [name, axis] of [['width', 'x'], ['height', 'y'], ['depth', 'z']] as const) {
+      this.benchmarks.register(`grid/${name}`, { type: 'gauge', unit: 'count',
+        get: () => this.gridDimensions[axis] });
+    }
+    this.benchmarks.register('grid/cellSize', { type: 'gauge', unit: 'units', get: () => this.cellSize });
     this.autoBounds = !options.bounds;
     this.collisionOptions = options.collisionOptions;
     this.resolution = resolution;

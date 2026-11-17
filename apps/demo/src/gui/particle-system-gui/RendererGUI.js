@@ -138,8 +138,8 @@ export class RendererGUI extends GUIEditorBase {
     folder.add(renderer, 'shadowQuality', 0, 8, 0.25).name('Shadow Quality');
     if (renderer.lightingGridOptions) {
       const lighting = folder.addFolder('Lighting Grid'), grid = renderer.lightingGridOptions;
-      grid.levels ??= 3; grid.directions ??= 6; grid.samplesPerInterval ??= 4;
-      grid.scatteringIterations ??= 0; grid.environmentIntensity ??= 1; grid.includeSceneLights ??= true;
+      grid.levels ??= 2; grid.directions ??= 4; grid.samplesPerInterval ??= 4;
+      grid.scatteringIterations ??= 1; grid.environmentIntensity ??= 1; grid.includeSceneLights ??= true;
       lighting.add(grid, 'levels', 1, 6, 1).name('Cascades');
       if (typeof grid.directions === 'number') lighting.add(grid, 'directions', 2, 16, 1).name('Directions');
       lighting.add(grid, 'samplesPerInterval', 1, 16, 1).name('Samples / Interval');
@@ -162,8 +162,10 @@ export class RendererGUI extends GUIEditorBase {
     marching.add(renderer, 'softParticles').name('Soft Particles');
     marching.add(renderer, 'softParticleDistance', 0).name('Soft Particle Distance');
     folder.add(renderer, 'densityGain', 0, 10, 0.05).name('Density Gain');
+    folder.add(renderer, 'emissive', 0, 1, 0.01).name('Emissive');
     for (const parameter of ['Temperature', 'Density', 'Speed', 'Vorticity']) {
-      for (const kind of ['color', 'opacity']) {
+      for (const kind of ['color', 'opacity', 'emissive']) {
+        if (kind === 'emissive' && parameter === 'Vorticity') continue;
         if (parameter === 'Density' && kind === 'opacity') continue;
         const key = `${kind}By${parameter}`;
         this.addValue(folder, renderer, key, this.prettyName(key));
@@ -179,8 +181,10 @@ export class RendererGUI extends GUIEditorBase {
     noise.add(renderer, 'densityNoiseFrequency', 0, 20, 0.1).name('Frequency');
     noise.add(renderer, 'densityNoiseSpeed', -2, 2, 0.01).name('Animation Speed');
     noise.add(renderer, 'densityNoiseOctaves', 1, 4, 1).name('Octaves');
+    noise.add(renderer, 'densityNoiseStretch', 0, 0.95, 0.01).name('Velocity Stretch');
     for (const key of [
       'densityNoiseStrengthByTemperature', 'densityNoiseContrastByTemperature', 'densityNoiseFrequencyByTemperature',
+      'densityNoiseStretchByTemperature', 'densityNoiseStretchByDensity', 'densityNoiseStretchBySpeed',
     ]) {
       this.addValue(noise, renderer, key, this.prettyName(key));
     }
@@ -385,10 +389,12 @@ export class RendererGUI extends GUIEditorBase {
   }
 
   buildLightRenderer(folder, renderer) {
-    this.addDynamicValue(folder, renderer, 'brightness', 'Brightness');
+    if (renderer.power === undefined) this.addDynamicValue(folder, renderer, 'brightness', 'Brightness');
     this.addDynamicValue(folder, renderer, 'rangeMultiplier', 'Range Multiplier');
     folder.add(renderer, 'groupingRadius', -1).name('Grouping Radius');
-    folder.add(renderer, 'decay', 0).name('Decay');
+    this.addDynamicValue(folder, renderer, 'color', 'Color');
+    this.addDynamicValue(folder, renderer, 'distance', 'Distance');
+    this.addDynamicValue(folder, renderer, 'decay', 'Decay');
     folder.add(renderer, 'count').min(0).step(1).name('Max Lights');
     folder.add(renderer, 'ratio', 0, 1).name('Particle Ratio');
     const allocation = folder.addFolder('Light Allocation');
@@ -397,45 +403,14 @@ export class RendererGUI extends GUIEditorBase {
     folder.add(renderer, 'inheritParticleColor').name('Inherit Particle Color');
     folder.add(renderer, 'sizeAffectsRange').name('Size Affects Range');
     folder.add(renderer, 'alphaAffectsIntensity').name('Alpha Affects Intensity');
-    const lightOptions = folder.addFolder('Point Light');
-    lightOptions.open();
-    const lightState = {
-      color: `#${new THREE.Color(renderer.lightOptions.color ?? 0xffffff).getHexString()}`,
-      intensity: renderer.lightOptions.intensity ?? 1,
-      distance: renderer.lightOptions.distance ?? 0,
-      decay: renderer.lightOptions.decay ?? renderer.decay,
-      power: renderer.lightOptions.power ?? 0,
-    };
-    lightOptions
-      .addColor(lightState, 'color')
-      .name('Color')
-      .onChange(value => {
-        renderer.lightOptions.color = value;
-      });
-    lightOptions
-      .add(lightState, 'intensity', 0)
-      .name('Intensity')
-      .onChange(value => {
-        renderer.lightOptions.intensity = value;
-      });
-    lightOptions
-      .add(lightState, 'distance', 0)
-      .name('Distance')
-      .onChange(value => {
-        renderer.lightOptions.distance = value;
-      });
-    lightOptions
-      .add(lightState, 'decay', 0)
-      .name('Decay')
-      .onChange(value => {
-        renderer.lightOptions.decay = value;
-      });
-    lightOptions
-      .add(lightState, 'power', 0)
-      .name('Power')
-      .onChange(value => {
-        renderer.lightOptions.power = value;
-      });
+    // Power is an alternative unit for emission, not a second brightness multiplier.
+    const power = { enabled: renderer.power !== undefined };
+    folder.add(power, 'enabled').name('Use Power').onChange(enabled => {
+      if (enabled) renderer.power = 4 * Math.PI;
+      else renderer.power = undefined;
+      this.rebuild();
+    });
+    if (power.enabled) this.addDynamicValue(folder, renderer, 'power', 'Power');
   }
 
   buildMeshRenderer(folder, renderer) {

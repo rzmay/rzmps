@@ -13,9 +13,9 @@ import { fibonacciDirections, directionTransfer, shRadianceGPU,
 import EnvironmentSH from './EnvironmentSH';
 
 export interface LightingGridOptions {
-  /** Cascade count. Defaults to three. */
+  /** Cascade count. Defaults to two. */
   levels?: number;
-  /** Finest direction count (coarser counts double), or explicit counts for every level. Defaults to six. */
+  /** Finest direction count (coarser counts double), or explicit counts for every level. Defaults to four. */
   directions?: number | readonly number[];
   /** Requested finest probe spacing; enlarged only if packed textures exceed hardware dimensions. */
   cellSize?: number;
@@ -27,7 +27,7 @@ export interface LightingGridOptions {
   margin?: number | THREE.Vector3;
   /** Midpoint density samples per cascade interval. Defaults to four. */
   samplesPerInterval?: number;
-  /** Approximate extra isotropic scattering passes. Defaults to zero. */
+  /** Approximate extra isotropic scattering passes. Defaults to one. */
   scatteringIterations?: number;
   /** Multiply environment/probe radiance. Defaults to one. */
   environmentIntensity?: number;
@@ -68,6 +68,10 @@ interface Cascade {
   mergedRead: ReturnType<typeof texture3D>;
   localWrite: ReturnType<typeof storageTexture>;
   mergedWrite: ReturnType<typeof storageTexture>;
+  projected: Storage3DTexture;
+  projectedRead: ReturnType<typeof texture3D>;
+  projectedWrite: ReturnType<typeof storageTexture>;
+  projection?: ComputeNode;
   injection?: ComputeNode;
   merge?: ComputeNode;
 }
@@ -142,14 +146,14 @@ export default class LightingGrid {
 
   /** Replace configuration; the next update reconciles changed layout and lighting values. */
   setOptions(options: LightingGridOptions = {}): void {
-    this.levels = options.levels ?? 3;
-    this.directions = options.directions ?? 6;
+    this.levels = options.levels ?? 2;
+    this.directions = options.directions ?? 4;
     this.cellSize = options.cellSize;
     this.levelScale = options.levelScale ?? 2;
     this.maxDistance = options.maxDistance;
     this.margin = options.margin ?? 0;
     this.samplesPerInterval = options.samplesPerInterval ?? 4;
-    this.scatteringIterations = options.scatteringIterations ?? 0;
+    this.scatteringIterations = options.scatteringIterations ?? 1;
     this.environmentIntensity = options.environmentIntensity ?? 1;
     this.environment = options.environment;
     this.ambient = options.ambient === undefined ? new THREE.Color(0.2, 0.2, 0.2) : new THREE.Color(options.ambient);
@@ -220,6 +224,7 @@ export default class LightingGrid {
     for (let i = this.cascades.length - 1; i >= 0; i--) {
       const level = this.cascades[i];
       this.benchmarks.span('injection', () => renderer.compute(level.injection!));
+      if (level.projection) this.benchmarks.span('angularTransfer', () => renderer.compute(level.projection!));
       this.benchmarks.span('propagation', () => renderer.compute(level.merge!));
     }
     this.finalRead.value = this.cascades[0].merged;
@@ -227,6 +232,10 @@ export default class LightingGrid {
     this.updateIsotropic(renderer);
     const scratch = this.scatterTexture?.image as { width: number; height: number; depth: number } | undefined;
     this.statistics.memoryBytes = this.statistics.directionalEntries * 16 + this.statistics.probes * 8
+      + this.cascades.reduce((sum, level) => {
+        const image = level.projected.image as { width: number; height: number; depth: number };
+        return sum + image.width * image.height * image.depth * 8;
+      }, 0)
       + this.lightData.byteLength + (this.environmentProjection?.allocatedBytes ?? 0)
       + (scratch ? scratch.width * scratch.height * scratch.depth * 8 : 0);
     this.statistics.updates++;
@@ -253,14 +262,20 @@ export default class LightingGrid {
     })();
   }
 
-  /** Compute the probe neighborhood once; sample each angular bin once, independently of scene-light count. */
-  sampleScatteringGPU(position: Node<'vec3'>, viewDirection: Node<'vec3'>, anisotropy: Node<'float'>): Node<'vec3'> {
+  /** Phase-weight incoming bins at shading time only. cameraRayDirection points from camera into the volume.
+   * Bins are directions TO light, so positive HG g favors the continuation of photon travel.
+   */
+  sampleScatteringGPU(position: Node<'vec3'>, cameraRayDirection: Node<'vec3'>,
+    anisotropy: Node<'float'>): Node<'vec3'> {
     const level = this.cascades[0];
     return Fn(() => {
       const uv = this.probeUV(level, position).toVar();
       const result = vec3(0).toVar();
       level.directions.forEach((bin, index) => {
-        const cosine = viewDirection.dot(vec3(bin));
+        // Bins point toward incoming light sources. The ray points camera -> sample, so both
+        // directions must be negated to compare photon travel against sample -> camera.
+        const lightTravel = vec3(bin).negate(), outgoing = cameraRayDirection.negate();
+        const cosine = lightTravel.dot(outgoing);
         const phase = float(1).sub(anisotropy.mul(anisotropy))
           .div(pow(float(1).add(anisotropy.mul(anisotropy)).sub(anisotropy.mul(cosine).mul(2)), 1.5));
         result.addAssign(this.readBin(this.finalRead, level, uv, index).xyz.mul(phase));
@@ -293,7 +308,9 @@ export default class LightingGrid {
   dispose(): void {
     if (this.disposed) return;
     this.invalidatePrograms();
-    this.cascades.forEach(level => { level.local.dispose(); level.merged.dispose(); level.mean.dispose(); });
+    this.cascades.forEach(level => {
+      level.local.dispose(); level.merged.dispose(); level.mean.dispose(); level.projected.dispose();
+    });
     this.lightTexture.dispose(); this.scatterTexture?.dispose(); this.collection.dispose(); this.sources.clear();
     this.admittedLights.clear();
     this.environmentProjection?.dispose();
@@ -347,7 +364,9 @@ export default class LightingGrid {
     const structural = `${counts.join(',')}:${this.samplesPerInterval}`;
     if (structural !== this.layoutKey) {
       this.invalidatePrograms();
-      this.cascades.forEach(level => { level.local.dispose(); level.merged.dispose(); level.mean.dispose(); });
+      this.cascades.forEach(level => {
+        level.local.dispose(); level.merged.dispose(); level.mean.dispose(); level.projected.dispose();
+      });
       this.cascades = counts.map((count, i) => this.createCascade(dimensions[i], count));
       this.layoutKey = structural; this.version++; this.forceUpdate = true;
     }
@@ -359,10 +378,13 @@ export default class LightingGrid {
       if (!level.dimensions.equals(dimensions[i])) {
         level.dimensions.copy(dimensions[i]);
         level.dimensionsNode.value.copy(dimensions[i]);
-        const old = [level.local, level.merged, level.mean];
+        const old = [level.local, level.merged, level.mean, level.projected];
         level.local = this.createTexture(dimensions[i], level.directions.length);
         level.merged = this.createTexture(dimensions[i], level.directions.length);
         level.mean = this.createTexture(dimensions[i], 1);
+        level.projected = this.createTexture(dimensions[i].clone().divideScalar(this.levelScale).ceil(),
+          level.directions.length);
+        level.projectedRead.value = level.projectedWrite.value = level.projected;
         level.localRead.value = level.localWrite.value = level.local;
         level.mergedRead.value = level.mergedWrite.value = level.merged;
         level.meanRead.value = level.meanWrite.value = level.mean;
@@ -378,6 +400,8 @@ export default class LightingGrid {
       this.statistics.memoryBytes += probes * (level.directions.length * 2 + 1) * 8;
       if (level.injection) level.injection.count = probes * level.directions.length;
       if (level.merge) level.merge.count = probes * level.directions.length;
+      if (level.projection) level.projection.count = dimensions[i].clone().divideScalar(this.levelScale)
+        .ceil().toArray().reduce((a, b) => a * b, level.directions.length);
     });
   }
 
@@ -391,9 +415,11 @@ export default class LightingGrid {
   private createCascade(dimensions: THREE.Vector3, count: number): Cascade {
     const local = this.createTexture(dimensions, count), merged = this.createTexture(dimensions, count);
     const mean = this.createTexture(dimensions, 1);
+    const projected = this.createTexture(dimensions.clone().divideScalar(this.levelScale).ceil(), count);
     return { directions: fibonacciDirections(count), dimensions: dimensions.clone(),
       dimensionsNode: uniform(dimensions),
-      interval: uniform(new THREE.Vector2()), local, merged, mean,
+      interval: uniform(new THREE.Vector2()), local, merged, mean, projected,
+      projectedRead: texture3D(projected), projectedWrite: storageTexture(projected),
       meanRead: texture3D(mean), meanWrite: storageTexture(mean),
       localRead: texture3D(local), mergedRead: texture3D(merged),
       localWrite: storageTexture(local), mergedWrite: storageTexture(merged) };
@@ -496,6 +522,23 @@ export default class LightingGrid {
       const transfer = coarseLevel && !level.merge
         ? array(directionTransfer(level.directions, coarseLevel.directions).flat().map(value => float(value)))
         : undefined;
+      // Angular mixing is linear and commutes with trilinear interpolation. Evaluate it once
+      // at coarse probes, then use one spatial sample per fine bin instead of N coarse-bin samples.
+      if (coarseLevel && !level.projection) {
+        level.projection = Fn(() => {
+          const { coordinate, output, bin } = this.address({ ...level,
+            dimensionsNode: coarseLevel.dimensionsNode });
+          const far = vec4(0).toVar();
+          Loop(coarseLevel.directions.length, ({ i }) => {
+            const weight = transfer!.element(bin.mul(coarseLevel.directions.length).add(i));
+            const address = ivec3(coordinate.xy, coordinate.z.add(i.mul(int(coarseLevel.dimensionsNode.z))));
+            far.addAssign(coarseLevel.mergedRead.load(address).mul(weight));
+          });
+          textureStore(level.projectedWrite, output, far).toWriteOnly();
+        })().compute(coarseLevel.dimensions.x * coarseLevel.dimensions.y * coarseLevel.dimensions.z
+          * level.directions.length).setName(`rzmps.lighting.angularTransfer.${index}`);
+      }
+
       level.merge ??= Fn(() => {
         const { position, output, bin } = this.address(level);
         const local = level.localRead.load(output);
@@ -503,11 +546,8 @@ export default class LightingGrid {
         if (!last) {
           const coarse = this.cascades[index + 1];
           const uv = this.probeUV(coarse, position);
-          const far = vec4(0).toVar();
-          Loop(coarse.directions.length, ({ i }) => {
-            const weight = transfer!.element(bin.mul(coarse.directions.length).add(i));
-            far.addAssign(this.readBin(coarse.mergedRead, coarse, uv, i).mul(weight));
-          });
+          const far = level.projectedRead.sample(vec3(uv.xy,
+            uv.z.add(float(bin)).div(level.directions.length))).level(float(0));
           radiance.addAssign(local.w.mul(far.xyz));
           transmission.mulAssign(far.w);
         }
@@ -662,7 +702,8 @@ export default class LightingGrid {
   private invalidatePrograms(): void {
     this.isotropicNode?.dispose(); this.isotropicNode = undefined;
     this.cascades.forEach(level => {
-      level.injection?.dispose(); level.merge?.dispose(); level.injection = level.merge = undefined;
+      level.injection?.dispose(); level.merge?.dispose(); level.projection?.dispose();
+      level.injection = level.merge = level.projection = undefined;
     });
     this.scatterNode?.dispose(); this.scatterNode = undefined;
     this.scatterCopyNode?.dispose(); this.scatterCopyNode = undefined; this.forceUpdate = true;

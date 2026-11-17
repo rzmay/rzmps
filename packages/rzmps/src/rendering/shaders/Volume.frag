@@ -92,7 +92,7 @@ void main() {
   // Keep world-space spacing stable across integer sample-count boundaries.
   float worldStep = max(cellSize * stepSizeMultiplier, worldLength / min(512.0, floor(steps)));
   float stepSize = worldStep / length(rayDir * boundsSize);
-  // HG / (1 / 4π): unit brightness for isotropic scattering, directional response otherwise.
+  // HG / (1 / 4π). Camera ray and direction-to-light both oppose physical outgoing/photon travel.
   vec3 worldDirection = normalize((volumeToWorld * vec4(rayDir, 0.0)).xyz);
   float cosine = dot(worldDirection, lightDirection);
   float phase = (1.0 - anisotropy * anisotropy)
@@ -112,16 +112,22 @@ void main() {
     float offset = mix(0.5, fract(jitterRotation + float(i) * 0.61803398875), jitterStrength);
     vec3 p = vOrigin + rayDir * (distanceAlongRay + segment * offset);
 
-    float opacityMultiplier;
-    vec4 volume = sampleVolume(p, opacityMultiplier);
+    float opacityMultiplier, emissive;
+    vec4 volume = sampleVolume(p, opacityMultiplier, emissive);
     float d = volume.a;
-    float a = 1.0 - pow(1.0 - clamp(renderOpacity(d) * opacityMultiplier, 0.0, 1.0), length(rayDir * boundsSize) * segment);
+    float sampleOpacity = clamp(renderOpacity(d) * opacityMultiplier, 0.0, 1.0);
+    // Preserve the step lattice while avoiding lighting/shadow work in transparent strata.
+    if (sampleOpacity <= 0.0) {
+      distanceAlongRay += segment;
+      continue;
+    }
+    float a = 1.0 - pow(1.0 - sampleOpacity, length(rayDir * boundsSize) * segment);
     vec3 sampleColor = volume.rgb;
 
     float transmission = shadowQuality > 0.0 ? lightTransmittance(p, shadowDirection) : 1.0;
     vec3 incident = vec3(0.2) + lightColor * (0.8 * phase * transmission);
-    // Future emitted radiance belongs alongside this scattered radiance, not in opacity.
-    color.rgb += (1.0 - color.a) * a * sampleColor * incident;
+    // Self-lighting changes shading only; extinction and alpha remain unchanged.
+    color.rgb += (1.0 - color.a) * a * mix(sampleColor * incident, sampleColor, emissive);
     color.a += (1.0 - color.a) * a;
 
     if (1.0 - color.a <= transmittanceThreshold) break;

@@ -347,12 +347,52 @@ sites: velocity transport commits velocity, scalar transport commits density/tem
 and confinement reads its local strength. Keep callbacks deterministic shader operations; do not
 assume a once-per-frame JavaScript invocation or accumulate JavaScript side effects.
 
+### Neighborhood queries (GPU only)
+
+Simulation callbacks also receive `context.index`, the logical `ivec3` gas-cell coordinate (not a
+resident slot or texture coordinate), and `context.grid: GasGridQuery`. Use TSL arithmetic for offsets:
+
+```ts
+system.addModule(new GasModule({
+  modifyGPU(cell, context) {
+    const { x, y, z } = context.index;
+    const above = context.grid.getCell(x, y.add(1), z);
+    cell.temperature.addAssign(above.temperature.sub(cell.temperature).mul(context.deltaTime));
+  },
+}));
+```
+
+`getCell` returns a read-only cell view with position, density, specific temperature/color and velocity
+in the same units as the callback's cell. Nonresident, sparse and out-of-domain coordinates return
+zero density, temperature, velocity and color; position remains the requested logical cell's center.
+Queries do not clamp to the nearest edge cell. They reuse the existing sparse page directory and
+bind/read fields lazily. Repeated or distant queries can be expensive; no neighborhood cache is added.
+Assigning to a returned node changes only a shader-local expression, never neighboring field storage.
+
+Queries always read immutable **input snapshots**, independent of GPU invocation order. Each callback
+can commit changes only to its own current cell. Modules in one fused stage apply local modifications
+in priority order, but **all modules query the same pre-module snapshot**: later modules cannot query
+an earlier module's committed neighbor edits. No extra inter-module synchronization or dispatches
+are introduced. These are stage snapshots, not one snapshot for the entire frame: scalar rules query
+the transported scalar inputs and projected velocity; velocity transport queries its pre-transport
+inputs. Confinement writes its velocity buffer in place, so its module callbacks use the unchanged
+pre-force velocity for both local state and queries. They do not sample partially confined velocities.
+Neighborhood access is not exposed on transient render callbacks.
+
 Render callbacks receive local `density`, `color`, `opacity`, `emission`, `densityNoiseStrength`,
 `densityNoiseContrast` and `densityNoiseFrequency` before masking and lighting. Cell density/color
 alias their context counterparts. All render changes are transient, and no sparse field is allocated.
 Native GPU producers can supply `VolumeField.sampleVelocityGPU` to read their existing velocity;
 fields without this optional sampler return zero velocity. Velocity is sampled lazily only when a
-callback reads it. Existing scene-depth clipping, bounds and collisions remain authoritative.
+callback reads it. GasSimulation exports cell-centered velocity into a third RGBA16F texture alongside
+color and density/temperature/speed/vorticity. Render sampling uses hardware trilinear filtering, with
+no sparse-buffer or pressure-face reads in the raymarch. Existing export dispatches write the additional
+texture, including transient visual velocity changes. Speed remains cached in the parameter texture,
+so speed-only modifiers do not need the vector texture. Texture allocation, growth, clearing and reset
+follow the other derived volume fields; tier changes retain the render sampling graph.
+The solver still uses staggered-face velocities for its own transport/projection. Custom providers
+must likewise keep any captured velocity bindings current after storage/layout replacement.
+Existing scene-depth clipping, bounds and collisions remain authoritative.
 
 Change `module.modifyGasGPU` (the simulation callback passed as `modifyGPU` in the constructor),
 `module.modifyRenderGPU`, or the corresponding `module.options` callback to replace a rule.
@@ -396,13 +436,13 @@ A configured example keeps lighting probes much coarser than gas cells:
 
 ```ts
 const volume = new VolumeRenderer({ lightingGridOptions: {
-  levels: 3,
-  directions: [6, 12, 24],
+  levels: 2,             // Cascades.
+  directions: 4,         // Four finest directions, eight on the coarser cascade.
   cellSize: 0.5,          // World-space probe spacing, independent of gas subdivisions.
   levelScale: 2,
   samplesPerInterval: 4,
   environmentIntensity: 1,
-  scatteringIterations: 0,
+  scatteringIterations: 1,
   includeSceneLights: true,
 } });
 ```
@@ -422,7 +462,9 @@ particle index. Rectangular bounds/vector/addressing conventions reuse the share
 Each probe/direction stores half-float RGB radiance and remaining transmission. Short, fine intervals
 merge with longer, coarser intervals as `Lnear + Tnear * Lfar`, `Tnear * Tfar`. Overlapping distance
 weights blend direct-light contributions across interval boundaries rather than switching shells abruptly.
-Hardware trilinear
+Angular transfer is evaluated on coarse probes before spatial upsampling. This commutes with linear
+interpolation, preserves the direction weights, and avoids repeating every coarse-bin sample at every
+fine probe; an additional half-float intermediate introduces only rounding differences. Hardware trilinear
 sampling interpolates probes; balanced angular interpolation preserves both constant fields and
 integrated radiance between Fibonacci direction sets. Direction counts control angular detail;
 `cellSize`, `levels`, `levelScale` and `samplesPerInterval` control spatial/interval approximation.
@@ -455,10 +497,10 @@ volume transforms, opacity, lights or environment updates the lighting field; un
 not dispatch. Grid updates run before the volume draw and work while the simulation is paused.
 All cascades currently refresh together on an input change, favoring current shadows over stale
 coarse illumination. `scatteringIterations` adds a small isotropic redistribution approximation;
-it is not a physically exact multiple-scattering solver and defaults to zero.
+it is not a physically exact multiple-scattering solver and defaults to one iteration.
 
-The smoke/fire presets use fixed `cellSize: 0.25`, `directions: 12`, `samplesPerInterval: 8` and
-`maxDistance: 16` for stable, finer lighting. Automatic probe-spacing tiers can still change approximation
+The smoke/fire presets use fixed `cellSize: 0.25` and `maxDistance: 16`, inheriting the volume-oriented
+defaults: two cascades (`levels`), four finest directions, four interval samples and one scattering iteration. Automatic probe-spacing tiers can still change approximation
 when a domain crosses a power-of-two reference; explicit spacing and interval distance avoid that change.
 
 The demo prepares new GPU systems once. Replacing scene geometry retains the live particle root;
@@ -603,3 +645,15 @@ fixed timesteps, exercise resets and subsystem events, and inspect `gpuBufferSta
 profiling. GPU output is expected to be behaviorally equivalent, not bit-for-bit identical.
 
 See [renderer children and population LOD](./renderer-children-lod.md) for system quality, destructive culling, visual expansion, hierarchy access, and default GPU buffer limits.
+
+### Reading demo profiler metrics
+
+The demo formats `system.benchmarks.snapshot()`; no collection session or GPU readback is required.
+Root/subsystem `system/particleCount`, `system/childrenCount`, `system/allocatedSlots` and
+`system/usedSlots` supply the universal counters. Fluid module providers expose `grid/width`,
+`grid/height`, `grid/depth` and `grid/cellSize`. These are numeric public benchmark gauges.
+Renderer paths expose `activeLights` and `allocatedLights` (LightRenderer), `playingClips`
+(AudioRenderer, including event cues) and `activeDecals` (DecalRenderer). Unused pooled lights and
+stopped audio clips do not count as active. Decals count persistent live instances, including those
+whose source particles have died. The demo groups active counts by renderer type in a distinct section;
+sprites, meshes and trails retain the universal particle-count presentation.

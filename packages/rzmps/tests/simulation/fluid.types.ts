@@ -164,3 +164,22 @@ new LightingGrid({
   // @ts-expect-error Spatial bounds padding is a scalar or Vector3, not arbitrary text.
   margin: 'large',
 });
+
+new VolumeRenderer({ emissive: 1, emissiveByTemperature: [0, 1], emissiveByDensity: density => density,
+  emissiveBySpeed: null });
+new GasModule({ modifyRenderGPU(_cell, context) { context.emissive.assign(0.5); } });
+
+new VolumeRenderer({ densityNoiseStretch: 0.5, densityNoiseStretchByTemperature: [1, 0.1],
+  densityNoiseStretchByDensity: density => density, densityNoiseStretchBySpeed: null });
+// @ts-expect-error Emissive is a scalar base; use emissiveByDensity for a curve.
+new VolumeRenderer({ emissive: [0, 1] });
+// @ts-expect-error Emissive callbacks belong on a by-parameter modifier.
+new VolumeRenderer({ emissive: (density: number) => density });
+
+new GasModule({ modifyGPU(cell, context) {
+  const { x, y, z } = context.index;
+  const above = context.grid.getCell(x, y.add(1), z);
+  cell.temperature.addAssign(above.temperature.mul(context.deltaTime));
+  // @ts-expect-error Neighbor views cannot replace gas-state members.
+  above.density = cell.density;
+} });

@@ -333,6 +333,52 @@ densityNoiseStrengthByTemperature:
 
 ***
 
+<a id="densitynoisestretch"></a>
+
+### densityNoiseStretch
+
+```ts
+densityNoiseStretch: number;
+```
+
+***
+
+<a id="densitynoisestretchbydensity"></a>
+
+### densityNoiseStretchByDensity
+
+```ts
+densityNoiseStretchByDensity:
+  | ValueByParameter<number>
+  | null = null;
+```
+
+***
+
+<a id="densitynoisestretchbyspeed"></a>
+
+### densityNoiseStretchBySpeed
+
+```ts
+densityNoiseStretchBySpeed:
+  | ValueByParameter<number>
+  | null = null;
+```
+
+***
+
+<a id="densitynoisestretchbytemperature"></a>
+
+### densityNoiseStretchByTemperature
+
+```ts
+densityNoiseStretchByTemperature:
+  | ValueByParameter<number>
+  | null = null;
+```
+
+***
+
 <a id="depthtest"></a>
 
 ### depthTest
@@ -366,6 +412,52 @@ dynamicResolution:
 ```
 
 Adapt screen-space resolution to measured GPU time. Defaults to true; full resolution without timestamps.
+
+***
+
+<a id="emissive"></a>
+
+### emissive
+
+```ts
+emissive: number = 0;
+```
+
+***
+
+<a id="emissivebydensity"></a>
+
+### emissiveByDensity
+
+```ts
+emissiveByDensity:
+  | ValueByParameter<number>
+  | null = null;
+```
+
+***
+
+<a id="emissivebyspeed"></a>
+
+### emissiveBySpeed
+
+```ts
+emissiveBySpeed:
+  | ValueByParameter<number>
+  | null = null;
+```
+
+***
+
+<a id="emissivebytemperature"></a>
+
+### emissiveByTemperature
+
+```ts
+emissiveByTemperature:
+  | ValueByParameter<number>
+  | null = null;
+```
 
 ***
 

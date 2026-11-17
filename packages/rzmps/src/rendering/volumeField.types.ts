@@ -14,7 +14,9 @@ export interface VolumeField {
   parameterChannels?: Partial<Record<'temperature' | 'speed' | 'vorticity', 1 | 2 | 3>>;
   /** Divide interpolated parameter channels by interpolated density when true. */
   parametersPremultiplied?: boolean;
-  /** Optional native GPU velocity sampler, in the same simulation space as bounds; no derived field required. */
+  /** Optional native GPU velocity sampler, in the same simulation space as bounds; no derived field required.
+   * Captured storage/layout bindings must stay current when the producer resizes or replaces resources.
+   */
   sampleVelocityGPU?: (position: Node<'vec3'>) => Node<'vec3'>;
 }
 

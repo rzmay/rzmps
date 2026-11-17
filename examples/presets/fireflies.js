@@ -191,11 +191,8 @@ export default async function firefliesPreset() {
         // Light readback uses stored state; evaluate the same pulse curve explicitly for light intensity.
         alphaAffectsIntensity: false,
         brightness: t => 0.52 * Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5),
-        lightOptions: {
-          distance: 1.1,
-          intensity: 1,
-          decay: 2,
-        },
+        distance: 1.1,
+        decay: 2,
       }),
     ],
     // #endregion docs:renderers:2

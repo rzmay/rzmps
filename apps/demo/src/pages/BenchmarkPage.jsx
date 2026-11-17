@@ -1,3 +1,4 @@
+import { gasBenchmarkCases } from '../benchmark/gasBenchmarks.js';
 /* eslint-disable react/no-unknown-property */
 import PropTypes from 'prop-types';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -285,6 +286,7 @@ function summarize({
   rendererType,
   simulationNodeBuilds,
   benchmarkMode,
+  report: gasReport,
 }) {
   const report = benchmarks.report();
   const metric = name => report.metrics[`benchmark/${name}`];
@@ -333,6 +335,7 @@ function summarize({
     spatialGridDiagnostics: system.__gridDiagnostics,
     dynamicSpatialDiagnostics: system.__dynamicSpatialDiagnostics,
     emitterInstanceDiagnostics: system.__emitterInstanceDiagnostics,
+    gas: gasReport?.(),
   };
 }
 
@@ -405,6 +408,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
   }
 
   const allCases = useMemo(() => {
+    if (suite === 'gas') return pairBenchmarkCases(gasBenchmarkCases());
     if (suite === 'dynamic-spatial') {
       const movingEffectsCase = effectCount => {
         const geometry = new THREE.SphereGeometry(0.35, 6, 4);
@@ -1787,7 +1791,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
       ];
     }
 
-    return pairBenchmarkCases([
+    return [...pairBenchmarkCases([
       {
         id: 'baseline-10k',
         name: 'Baseline 10k simulation only',
@@ -2000,7 +2004,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
         particleCount: 2_000,
         create: () => ({ renderer: new TrailRenderer({ texture: createParticleTexture() }) }),
       },
-    ]);
+    ]), ...pairBenchmarkCases(gasBenchmarkCases())];
   }, [suite, ciProfile]);
   const cases = useMemo(() => {
     const selected = selectBenchmarkCases(allCases, benchmarkOptions.selection);
@@ -2017,6 +2021,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     if (active.current?.system) {
       // Case transitions are outside measurement; reclaim storage only after queued work completes.
       await gl.backend.device.queue.onSubmittedWorkDone();
+      await active.current.cleanup?.();
       active.current.system.destroy();
       active.current.sceneObjects?.forEach(object => object.removeFromParent());
       active.current = null;
@@ -2076,6 +2081,7 @@ function BenchmarkScene({ onComplete, onProgress }) {
     };
 
     scene.add(system);
+    await nextCase.prepare?.(system, gl, scene, camera);
     active.current = {
       ...nextCase,
       system,
@@ -2119,12 +2125,14 @@ function BenchmarkScene({ onComplete, onProgress }) {
         : (active.current.system.__rzmpsBenchmarkComputeDispatches ?? gl.__rzmpsBenchmarkComputeDispatches ?? 0);
     const simulationDispatchesBefore = active.current.system.__rzmpsBenchmarkSimulationDispatches ?? 0;
     const renderOutputDispatchesBefore = active.current.system.__rzmpsBenchmarkRenderOutputDispatches ?? 0;
-    active.current.beforeUpdate?.(active.current.system, frameStart - active.current.phaseStartedAt);
+    active.current.beforeUpdate?.(active.current.system, frameStart - active.current.phaseStartedAt,
+      active.current.phase);
     try {
       updateBenchmarkSystem(active.current.system, benchmarkOptions.simulationClock);
     } catch (error) {
       fail(error);
     }
+    active.current.afterUpdate?.();
     const simulationNode = active.current.system.gpuSimulation._gpuSimulationComputeCache?.node;
     if (simulationNode && !active.current.simulationNodes.has(simulationNode)) {
       active.current.simulationNodes.add(simulationNode);
@@ -2220,7 +2228,9 @@ function BenchmarkScene({ onComplete, onProgress }) {
 
   // R3F's default render follows the update callback; profiling preserves that ordering and timestep.
   useFrame((_state, delta) => {
-    profileRenderer(active.current?.benchmarks, gl, () => gl.render(scene, camera), delta * 1000);
+    const current = active.current;
+    profileRenderer(current?.benchmarks, gl, () => gl.render(scene, camera), delta * 1000);
+    current?.afterRender?.(current.system, gl);
   }, 1);
 
   return null;

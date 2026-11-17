@@ -5,18 +5,11 @@ import type ParticleSystem from '../../core/ParticleSystem';
 import Particle from '../../core/Particle';
 import type { DynamicValue } from '../../values/dynamicValue.types';
 import evaluateDynamicNumber from '../../values/evaluateDynamicNumber';
+import evaluateDynamicColor from '../../values/evaluateDynamicColor';
+import type { ColorInput } from '../../values/valueInput.types';
 import maximumDynamicNumber from '../../values/maximumDynamicNumber';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
 import type { GPUParticleReadbackField } from '../../simulation/gpu/SelectiveReadback';
-
-export interface PointLightOptions {
-    color?: THREE.Color | string | number;
-    intensity?: number;
-    distance?: number;
-    /** Light intensity falloff exponent; defaults to lightOptions.decay or 2. */
-    decay?: number;
-    power?: number;
-}
 
 export interface LightRendererAllocationOptions {
     /** Shrink when required capacity stays below this fraction of the pool. Default 0.75; zero disables shrinking. */
@@ -28,15 +21,22 @@ export interface LightRendererAllocationOptions {
 export interface LightRendererOptions extends RendererOptions {
     /** Predictive scene-light reservation and shrink hysteresis. */
     allocation: LightRendererAllocationOptions;
+    /** Point-light intensity in candela, evaluated per particle. Defaults to one. */
     brightness: DynamicValue<number>;
+    /** Light color before optional multiplication by particle color. Defaults to white. */
+    color: DynamicValue<ColorInput>;
+    /** Light range before optional particle-size/range scaling; zero means unlimited. Defaults to zero. */
+    distance: DynamicValue<number>;
+    /** Falloff exponent. Defaults to two. */
+    decay: DynamicValue<number>;
+    /** Optional luminous power in lumens, used instead of brightness when supplied. */
+    power?: DynamicValue<number>;
     rangeMultiplier: DynamicValue<number>;
-    decay: number;
     count: number;
     ratio: number;
     inheritParticleColor: boolean;
     sizeAffectsRange: boolean;
     alphaAffectsIntensity: boolean;
-    lightOptions: PointLightOptions;
 }
 
 /** Maps a capped selection of particles to scene lights; limit count to control illumination cost. */
@@ -47,15 +47,19 @@ class LightRenderer extends Renderer {
 
     rangeMultiplier: DynamicValue<number>;
 
-    decay: number;
+    color: DynamicValue<ColorInput>;
+
+    distance: DynamicValue<number>;
+
+    decay: DynamicValue<number>;
+
+    power?: DynamicValue<number>;
 
     inheritParticleColor: boolean;
 
     sizeAffectsRange: boolean;
 
     alphaAffectsIntensity: boolean;
-
-    lightOptions: PointLightOptions;
 
     private lightContainer: THREE.Object3D = new THREE.Object3D();
 
@@ -70,11 +74,16 @@ class LightRenderer extends Renderer {
         count: options.count ?? 50,
       });
 
+      this.benchmarks.register('activeLights', { type: 'gauge', unit: 'count',
+        get: () => this.lights.filter(light => light.visible && light.intensity > 0).length });
+      this.benchmarks.register('allocatedLights', { type: 'gauge', unit: 'count', get: () => this.lights.length });
       this.allocation = { shrinkThreshold: 0.75, shrinkDelay: 1, ...options.allocation };
       this.brightness = options.brightness ?? 1;
       this.rangeMultiplier = options.rangeMultiplier ?? 1;
-      this.lightOptions = options.lightOptions ?? {};
-      this.decay = options.decay ?? this.lightOptions.decay ?? 2;
+      this.color = options.color ?? 0xffffff;
+      this.distance = options.distance ?? 0;
+      this.power = options.power;
+      this.decay = options.decay ?? 2;
       this.ratio = Math.min(Math.max(options.ratio ?? 1, 0), 1);
       this.inheritParticleColor = options.inheritParticleColor ?? true;
       this.sizeAffectsRange = options.sizeAffectsRange ?? false;
@@ -118,9 +127,9 @@ class LightRenderer extends Renderer {
         light.visible = true;
         if (!particle) { light.intensity = 0; return; }
         light.position.copy(particle.position);
-        light.color.set(this.lightOptions.color ?? 0xffffff);
+        light.color.copy(evaluateDynamicColor(this.color, particle.time, particle.id));
         if (this.inheritParticleColor) light.color.multiply(particle.color);
-        light.decay = this.lightOptions.decay ?? this.decay;
+        light.decay = evaluateDynamicNumber(this.decay, particle.time, particle.id);
         light.distance = this._getDistance(particle);
         light.intensity = this._getIntensity(particle);
       });
@@ -162,21 +171,14 @@ class LightRenderer extends Renderer {
     }
 
     private _createLight(): THREE.PointLight {
-      const light = new THREE.PointLight(
-        this.lightOptions.color ?? 0xffffff,
-        0,
-        this.lightOptions.distance ?? 0,
-        this.decay,
-      );
-
-      if (this.lightOptions.power !== undefined) light.power = this.lightOptions.power;
-
-      return light;
+      // A reserved light has no source yet; all dynamic options are evaluated when assigned.
+      return new THREE.PointLight(0xffffff, 0, 0, 2);
     }
 
     private _getIntensity(particle: Particle): number {
-      let intensity = (this.lightOptions.intensity ?? 1)
-        * evaluateDynamicNumber(this.brightness, particle.time, particle.id);
+      let intensity = this.power === undefined
+        ? evaluateDynamicNumber(this.brightness, particle.time, particle.id)
+        : evaluateDynamicNumber(this.power, particle.time, particle.id) / (4 * Math.PI);
 
       if (this.alphaAffectsIntensity) {
         intensity *= particle.alpha;
@@ -186,7 +188,7 @@ class LightRenderer extends Renderer {
     }
 
     private _getDistance(particle: Particle): number {
-      const distance = this.lightOptions.distance ?? 0;
+      const distance = evaluateDynamicNumber(this.distance, particle.time, particle.id);
       if (distance === 0) return 0;
       let range = distance * evaluateDynamicNumber(this.rangeMultiplier, particle.time, particle.id);
       if (this.sizeAffectsRange) range *= (particle.scale.x + particle.scale.y + particle.scale.z) / 3;

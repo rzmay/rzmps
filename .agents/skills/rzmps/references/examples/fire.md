@@ -83,12 +83,9 @@ The 10-second loop schedules a continuous flame; individual flame particles last
         alphaAffectsIntensity: true,
         brightness: 1.8,
         rangeMultiplier: 3,
-        lightOptions: {
-          color: '#ffb570',
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
+        color: '#ffb570',
+        distance: 8,
+        decay: 2,
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
@@ -114,7 +111,7 @@ The 10-second loop schedules a continuous flame; individual flame particles last
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L159)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L156)
 
 ```js
   return new ParticleSystem({
@@ -203,7 +200,7 @@ Uniform scale values and color strings use the standard input shortcuts.
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L163)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L160)
 
 ```js
     emitters: [
@@ -262,7 +259,7 @@ Noise strength 2.1 and frequency 1.35 break up the regular rise. The additional 
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L179)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L176)
 
 ```js
     modules: [
@@ -313,12 +310,9 @@ The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one anim
         alphaAffectsIntensity: true,
         brightness: 1.8,
         rangeMultiplier: 3,
-        lightOptions: {
-          color: '#ffb570',
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
+        color: '#ffb570',
+        distance: 8,
+        decay: 2,
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
@@ -343,7 +337,7 @@ The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one anim
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L203)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L200)
 
 ```js
     renderers: [

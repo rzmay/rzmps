@@ -1004,7 +1004,9 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
   }
 
   private getBuildNodes(buffers: GPUParticleBufferState, range?: GPUComputeRange): ComputeNode[] {
-    const key = [this.version, this.autoExpand, this.autoShrink, this.powerOfTwoBounds,
+    // Bounds/quality generations only change uniforms. Storage replacement and structural edits
+    // already clear buildNodes/buildBufferVersion; do not rebuild five programs for a runtime tier edit.
+    const key = [this.automaticBounds, this.autoExpand, this.autoShrink, this.powerOfTwoBounds,
       this.cubicBounds, this.centeredAtOrigin, this.expansionHysteresis, this.shrinkDelay].join('|');
     if (this.buildKey === key && this.currentBuffers === buffers
       && this.buildBufferVersion === buffers.version && this.buildNodes

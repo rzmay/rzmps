@@ -454,6 +454,10 @@ export class ParticleSystemSerializer {
     if (renderer instanceof VolumeRenderer) {
       return `new VolumeRenderer(${this.serializeValue({
         lightingGridOptions: renderer.lightingGridOptions,
+        emissive: renderer.emissive,
+        emissiveByTemperature: renderer.emissiveByTemperature,
+        emissiveByDensity: renderer.emissiveByDensity,
+        emissiveBySpeed: renderer.emissiveBySpeed,
         colorByTemperature: renderer.colorByTemperature,
         opacityByTemperature: renderer.opacityByTemperature,
         colorByDensity: renderer.colorByDensity,
@@ -501,6 +505,10 @@ export class ParticleSystemSerializer {
         densityNoiseFrequency: renderer.densityNoiseFrequency,
         densityNoiseSpeed: renderer.densityNoiseSpeed,
         densityNoiseOctaves: renderer.densityNoiseOctaves,
+        densityNoiseStretch: renderer.densityNoiseStretch,
+        densityNoiseStretchByTemperature: renderer.densityNoiseStretchByTemperature,
+        densityNoiseStretchByDensity: renderer.densityNoiseStretchByDensity,
+        densityNoiseStretchBySpeed: renderer.densityNoiseStretchBySpeed,
         ...this.getLODOptions(renderer, true, true),
         tags: renderer.tags,
       })})`;
@@ -658,7 +666,9 @@ export class ParticleSystemSerializer {
         alphaAffectsIntensity: renderer.alphaAffectsIntensity,
         ...this.getLODOptions(renderer, true, true),
         tags: renderer.tags,
-        lightOptions: renderer.lightOptions,
+        color: renderer.color,
+        distance: renderer.distance,
+        power: renderer.power,
       })})`;
     }
     if (renderer instanceof MeshRenderer) {

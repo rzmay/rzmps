@@ -17,7 +17,7 @@ try {
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   const fixture = path.resolve(import.meta.dirname, 'fixtures/fluid.html');
   await openFixture(page, `http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${fixture}`
-    + '?example=volumetricSmoke&scene=gasFlow&prepareStartup&measureStartup', errors);
+    + '?example=volumetricSmoke&scene=movingColliders&prepareStartup&measureStartup', errors);
   const result = await page.evaluate(async () => {
     const { system, renderer, scene, camera } = window.debugFluid;
     const volume = system.renderers[0];

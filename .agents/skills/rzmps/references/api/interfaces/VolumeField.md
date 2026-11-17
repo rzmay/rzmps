@@ -83,6 +83,7 @@ optional sampleVelocityGPU?: (position) => Node<"vec3">;
 ```
 
 Optional native GPU velocity sampler, in the same simulation space as bounds; no derived field required.
+Captured storage/layout bindings must stay current when the producer resizes or replaces resources.
 
 #### Parameters
 

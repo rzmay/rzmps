@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
-import { Fn, storage, uniform, vec4 } from 'three/tsl';
+import { Fn, float, storage, uniform, vec4 } from 'three/tsl';
 import { LightProbeGrid } from 'three/addons/lighting/LightProbeGrid.js';
 import { LightingGrid, Module, ParticleSystem, VolumeRenderer } from '@rzmps/rzmps';
 import { passTimer } from './volume-quality.js';
@@ -239,4 +239,4 @@ window.measureLighting = async ({ levels, directions, count, cellSize = 0.25 }) 
 };
 window.ready = true;
 
-window.lightingFixture = { renderer, scene, camera, system, volume, source, bounds, position, sample, clearLights };
+window.lightingFixture = { renderer, scene, camera, system, volume, source, bounds, position, sample, clearLights, THREE, float };

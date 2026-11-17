@@ -75,7 +75,7 @@ Scale the root system normally to change its world-space size.
     ],
     renderers: [
       new VolumeRenderer({
-        lightingGridOptions: { cellSize: 0.25, directions: 12, samplesPerInterval: 8, maxDistance: 16 },
+        lightingGridOptions: { cellSize: 0.25, maxDistance: 16 },
         // Heat-distortion sprites draw at order one and must sample the already rendered volume.
         renderOrder: 0,
         opacity: 0.75,
@@ -93,24 +93,34 @@ Scale the root system normally to change its world-space size.
             : flame.lerp(core, THREE.MathUtils.smoothstep(heat, 0.35, 1));
         },
         opacityByTemperature: [0.25, 2],
+        // Keep cool smoke externally lit; hot, dense cores retain their transported fire color.
+        emissive: 1,
+        emissiveByTemperature: heat => THREE.MathUtils.smoothstep(heat, 0.08, 0.45),
+        emissiveByDensity: density => Math.min(1, density * 8),
         // Hot gas has distinct flame tongues; smoke uses a gentler, slightly finer mask.
         densityNoiseStrengthByTemperature: [0.25, 1.5],
         densityNoiseContrastByTemperature: [0.5, 1.25],
-        densityNoiseFrequencyByTemperature: [1.25, 1],
+        densityNoiseFrequencyByTemperature: [1.25, 2],
         densityNoiseStrength: 1,
         densityNoiseContrast: 2,
         densityNoiseFrequency: 1,
-        densityNoiseSpeed: 2,
+        densityNoiseSpeed: 4,
         densityNoiseOctaves: 1,
+        // Smoke follows the flow; hot flame tongues retain their rapid, mostly unstretched flicker.
+        densityNoiseStretch: 0.25,
+        densityNoiseStretchByTemperature: [1, 0.1],
+        densityNoiseStretchBySpeed: [0, 1],
       }),
       new LightRenderer({
         count: 2,
-        ratio: 0.01,
-        brightness: 4,
+        ratio: 0.1,
+        brightness: (time) => 4 * (1 - time) ** 2,
         rangeMultiplier: 4,
+        decay: 1,
         alphaAffectsIntensity: true,
         inheritParticleColor: false,
-        lightOptions: { color: '#ff842b', distance: 8 },
+        color: '#ff842b',
+        distance: 8,
       }),
     ],
   });
@@ -250,9 +260,14 @@ occupied gas as well as source particles. Automatic shrinking remains enabled wi
 VolumeRenderer blends orange/yellow flames into gray smoke using physical temperature. The mask has
 stronger strength and contrast in hot regions; cool smoke uses a gentler, slightly finer mask.
 Two samples per voxel and 256 maximum ray steps control integration quality independently of opacity.
-Two particle lights use brightness four; these lights illuminate the surrounding scene.
-`lightingGridOptions` uses 0.25-unit probes, twelve finest directions, eight interval samples and a
-fixed sixteen-unit lighting distance. It supplies their light and the selected scene's lights/environment to
+Hot, dense flame regions use `emissive: 1` shaped by temperature and density, retaining their transported
+fire color under colored scene lights. Cool smoke remains externally lit. This self-lighting blend does
+not illuminate objects or other volume samples; the particle lights provide that illumination.
+Two particle lights start at brightness four and fade with normalized particle lifetime. Their
+brightness follows `4 * (1 - time) ** 2`, with particle alpha applied as well, so aged flame sources
+stop lighting the scene at full strength. Each pooled light reevaluates its source parameters.
+`lightingGridOptions` uses 0.25-unit probes and a fixed sixteen-unit lighting distance, inheriting
+two cascades, four finest directions, four interval samples and one scattering iteration. It supplies their light and the selected scene's lights/environment to
 the volume. The renderer owns its lighting grid and refreshes it as those inputs change.
 Both quality limits are eight, so the 3+3 grid starts and stays at a 0.125-unit cell width.
 This avoids oversampling a compact initial domain; physical bounds still grow and shrink independently.
@@ -263,7 +278,7 @@ This avoids oversampling a compact initial domain; physical bounds still grow an
 ```js
     renderers: [
       new VolumeRenderer({
-        lightingGridOptions: { cellSize: 0.25, directions: 12, samplesPerInterval: 8, maxDistance: 16 },
+        lightingGridOptions: { cellSize: 0.25, maxDistance: 16 },
         // Heat-distortion sprites draw at order one and must sample the already rendered volume.
         renderOrder: 0,
         opacity: 0.75,
@@ -281,24 +296,34 @@ This avoids oversampling a compact initial domain; physical bounds still grow an
             : flame.lerp(core, THREE.MathUtils.smoothstep(heat, 0.35, 1));
         },
         opacityByTemperature: [0.25, 2],
+        // Keep cool smoke externally lit; hot, dense cores retain their transported fire color.
+        emissive: 1,
+        emissiveByTemperature: heat => THREE.MathUtils.smoothstep(heat, 0.08, 0.45),
+        emissiveByDensity: density => Math.min(1, density * 8),
         // Hot gas has distinct flame tongues; smoke uses a gentler, slightly finer mask.
         densityNoiseStrengthByTemperature: [0.25, 1.5],
         densityNoiseContrastByTemperature: [0.5, 1.25],
-        densityNoiseFrequencyByTemperature: [1.25, 1],
+        densityNoiseFrequencyByTemperature: [1.25, 2],
         densityNoiseStrength: 1,
         densityNoiseContrast: 2,
         densityNoiseFrequency: 1,
-        densityNoiseSpeed: 2,
+        densityNoiseSpeed: 4,
         densityNoiseOctaves: 1,
+        // Smoke follows the flow; hot flame tongues retain their rapid, mostly unstretched flicker.
+        densityNoiseStretch: 0.25,
+        densityNoiseStretchByTemperature: [1, 0.1],
+        densityNoiseStretchBySpeed: [0, 1],
       }),
       new LightRenderer({
         count: 2,
-        ratio: 0.01,
-        brightness: 4,
+        ratio: 0.1,
+        brightness: (time) => 4 * (1 - time) ** 2,
         rangeMultiplier: 4,
+        decay: 1,
         alphaAffectsIntensity: true,
         inheritParticleColor: false,
-        lightOptions: { color: '#ff842b', distance: 8 },
+        color: '#ff842b',
+        distance: 8,
       }),
     ],
 ```
@@ -314,7 +339,7 @@ subsystem timing and disposes the distortion texture when destroyed. Distortion 
 soft edges and disables the separate soft-particle depth prepass, avoiding an extra scene render each update.
 
 
-[Source: subsystems:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L169)
+[Source: subsystems:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L179)
 
 ```js
   // Keep the transmitting heat-distortion subsystem configuration beside its parent preset.
@@ -382,3 +407,5 @@ soft edges and disables the separate soft-particle depth prepass, avoiding an ex
   system.addEventListener('destroyed', () => distortionMap.dispose());
 ```
 
+
+Density noise follows local flow more strongly in cool smoke, while hot flame regions retain low stretch.

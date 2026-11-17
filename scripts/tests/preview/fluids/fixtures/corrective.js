@@ -591,7 +591,7 @@ window.testFractionalVisualCoverage = async () => {
 };
 
 window.debugBehavior = { renderer, scene, camera, THREE, StorageBufferAttribute, gas, system, GasModule,
-  tsl: { Fn, storage, vec3, vec4, float, uint } };
+  tsl: { Fn, storage, vec3, vec4, float, uint, instanceIndex, uniform } };
 
 window.testPriorityAdmission = async () => {
   const fluid = new GasSimulation({

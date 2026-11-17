@@ -24,6 +24,7 @@ for (const example of ['volumetricSmoke', 'volumetricFire']) {
           + `?example=${example}`, errors, { timeout: 25000 });
         const result = await page.evaluate(async () => {
           const { flip: gas, renderer, system, scene, camera } = window.debugFluid;
+          const volume = system.renderers.find(item => item.constructor.name === 'VolumeRenderer');
           const fence = () => renderer.backend.device.queue.onSubmittedWorkDone();
           await system.prepare(renderer);
           const samples = [];
@@ -31,7 +32,13 @@ for (const example of ['volumetricSmoke', 'volumetricFire']) {
           const create = device.createComputePipeline.bind(device);
           const createAsync = device.createComputePipelineAsync.bind(device);
           let pipelines = 0;
-          device.createComputePipeline = (...args) => { pipelines++; return create(...args); };
+          let stage = '', built = [];
+          const compute = renderer.compute;
+          renderer.compute = function (nodes, ...args) {
+            stage = (Array.isArray(nodes) ? nodes : [nodes]).map(node => node.name || String(node.id)).join(',');
+            return compute.call(this, nodes, ...args);
+          };
+          device.createComputePipeline = (...args) => { pipelines++; built.push(stage); return create(...args); };
           device.createComputePipelineAsync = (...args) => { pipelines++; return createAsync(...args); };
           let submissionMs = 0;
           const measureDensity = async () => {
@@ -72,6 +79,8 @@ for (const example of ['volumetricSmoke', 'volumetricFire']) {
             if (gas.qualityPreparation.error) throw gas.qualityPreparation.error;
             const preparationPipelines = pipelines;
             const before = await measureDensity();
+            const renderGraph = volume.webgpuMaterial;
+            const velocitySampler = gas.getVolumeField().sampleVelocityGPU;
             gas.spatialGrid.setOptions({ autoVolumeQuality: false,
               volumeQuality: cell * gas.spatialGrid.cellsPerAxis });
             // Source support grew while preparation ran. Match the current destination exactly,
@@ -83,13 +92,22 @@ for (const example of ['volumetricSmoke', 'volumetricFire']) {
               await renderer.renderAsync(scene, camera);
               await new Promise(resolve => setTimeout(resolve, 1));
             }
-            pipelines = 0;
+            const prepared = gas.qualityPreparation;
+            const programCount = prepared.programNodes?.length ?? 0;
+            pipelines = 0; built = [];
             await frame();
-            const firstSubmissionMs = submissionMs, firstFramePipelines = pipelines;
+            const firstSubmissionMs = submissionMs, firstFramePipelines = pipelines, pipelineStages = [...built];
             const immediate = await measureDensity();
             for (let i = 0; i < 5; i++) await frame();
             samples.push({ factor, frames, cell: gas.cellSize, ...await measureDensity(), before, immediate,
-              preparationPipelines, firstFramePipelines, firstSubmissionMs,
+              preparationPipelines, firstFramePipelines, firstSubmissionMs, programCount,
+              adopted: prepared.grid === gas.volumeGrid,
+              renderGraphRetained: volume.webgpuMaterial === renderGraph,
+              velocitySamplerRetained: gas.getVolumeField().sampleVelocityGPU === velocitySampler,
+              cacheAdopted: prepared.programs?.velocityNodes === gas.velocityNodes,
+              sourceCacheAdopted: prepared.programs?.sourceNodes === gas.sourceNodes,
+              visualCacheAdopted: prepared.programs?.visualSourceNode === gas.visualSourceNode,
+              pipelineStages,
               version: gas.getVolumeField().version });
           }
           // Resume ordinary adaptive growth after forced transfers, including asynchronous support reads.
@@ -99,6 +117,7 @@ for (const example of ['volumetricSmoke', 'volumetricFire']) {
             if (i % 30 === 29) samples.push({ sustained: i + 1, cell: gas.cellSize, ...await measureDensity() });
           }
           device.createComputePipeline = create; device.createComputePipelineAsync = createAsync;
+          renderer.compute = compute;
           return samples;
         });
         await fs.writeFile(`/tmp/quality-transition-live-${example}.json`, JSON.stringify({ result, errors }, null, 2));
@@ -108,6 +127,13 @@ for (const example of ['volumetricSmoke', 'volumetricFire']) {
         assert(transfers.every(sample => sample.frames > 0 && sample.immediate.mass > sample.before.mass * 0.5),
           'a tier change must not discard most of the live gas in one frame');
         assert.equal(result[0].cell / result[1].cell, 2);
+        assert(transfers.every(sample => sample.renderGraphRetained && sample.velocitySamplerRetained),
+          'quality changes must rebind render velocity without rebuilding or retaining retired pressure bindings');
+        assert(transfers.every(sample => sample.adopted && sample.cacheAdopted
+          && sample.sourceCacheAdopted && sample.visualCacheAdopted));
+        assert(transfers.every(sample => sample.pipelineStages.every(stage => !stage.includes('rzmps.grid.'))),
+          'runtime directory quality edits must retain spatial-index programs');
+        assert(transfers.every(sample => sample.firstFramePipelines < 25), 'adoption rebuilt the transport bundle');
       } finally { await browser?.close(); await site.close(); }
     });
 }

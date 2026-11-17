@@ -44,6 +44,17 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
               adaptiveStepThreshold: 0.1, adaptiveStepFactor: factor });
             variants.push({ steps, factor, red: await pixel() });
           }
+          // Transparent leading strata must advance in both stepping modes and still reach gas behind them.
+          Object.assign(volume, { steps: 160, adaptiveStepping: false, adaptiveStepFactor: 1 });
+          red.density.data.fill(0); red.density.version++;
+          const empty = await pixel();
+          red.density.data.fill(1, 0, red.density.data.length / 2); red.density.version++;
+          const afterVacuum = await pixel();
+          volume.adaptiveStepping = true;
+          const adaptiveAfterVacuum = await pixel();
+          const transparentSlabs = { empty, afterVacuum, adaptiveAfterVacuum };
+          red.density.data.fill(1); red.density.version++;
+
           const resolutions = [];
           for (const resolution of [8, 16, 32]) {
             red.density.resolution = new THREE.Vector3(resolution, resolution, resolution);
@@ -53,7 +64,7 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
             volume.adaptiveStepping = false;
             resolutions.push(await pixel());
           }
-          if (!renderer.isWebGPURenderer) return { variants, resolutions };
+          if (!renderer.isWebGPURenderer) return { variants, resolutions, transparentSlabs };
           Object.assign(volume, { steps: 160, adaptiveStepping: true, sceneDepthClipping: true, sceneDepthBias: 0 });
           const plane = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshBasicMaterial({ color: 0 }));
           scene.add(plane);
@@ -117,8 +128,8 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
           const oblique = await pixel();
           plane.position.z = 2;
           const obliqueHidden = await pixel();
-          return { variants, resolutions, depth, halfReference, fullReference, orthographicHalf, orthographicHidden,
-            inside, insideClipped, oblique, obliqueHidden, soft, softDisabled, softZero, softShort, softCoarse,
+          return { variants, resolutions, transparentSlabs, depth, halfReference, fullReference,
+            orthographicHalf, orthographicHidden, inside, insideClipped, oblique, obliqueHidden, soft, softDisabled, softZero, softShort, softCoarse,
             softUnoptimized, softReduced, softOrtho, softBackground, softForeground, softNoDepthTest,
             sourceUnchanged: red.density.data.every(value => value === 1),
             boundsUnchanged: red.density.bounds.min.z === -1 && red.density.bounds.max.z === 1 };
@@ -128,6 +139,10 @@ test('adaptive ray lengths preserve opacity and clip opaque depth with perspecti
           'constant-density opacity must be independent of field resolution');
         const reference = result.variants[0].red;
         assert.ok(reference > 50, 'uniform volume must be visible');
+        assert.equal(result.transparentSlabs.empty, 0);
+        assert(result.transparentSlabs.afterVacuum > 0);
+        assert(result.transparentSlabs.adaptiveAfterVacuum > 0);
+        assert(Math.abs(result.transparentSlabs.afterVacuum - result.transparentSlabs.adaptiveAfterVacuum) <= 3);
         for (const variant of result.variants) assert.ok(Math.abs(variant.red - reference) <= 2,
           `sample distance must not change uniform opacity: ${JSON.stringify(variant)}`);
         if (backend.startsWith('webgpu')) {

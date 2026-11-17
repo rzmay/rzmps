@@ -414,12 +414,13 @@ Exact isotropic integration, pre-averaged per probe instead of fetching every bi
 ```ts
 sampleScatteringGPU(
    position,
-   viewDirection,
+   cameraRayDirection,
    anisotropy
 ): Node<"vec3">;
 ```
 
-Compute the probe neighborhood once; sample each angular bin once, independently of scene-light count.
+Phase-weight incoming bins at shading time only. cameraRayDirection points from camera into the volume.
+Bins are directions TO light, so positive HG g favors the continuation of photon travel.
 
 #### Parameters
 
@@ -427,7 +428,7 @@ Compute the probe neighborhood once; sample each angular bin once, independently
 
 `Node`\<`"vec3"`\>
 
-##### viewDirection
+##### cameraRayDirection
 
 `Node`\<`"vec3"`\>
 

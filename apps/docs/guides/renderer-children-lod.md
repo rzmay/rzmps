@@ -237,3 +237,27 @@ inherit their parent's completed orientation without applying the artistic offse
 ```ts
 new MeshRenderer({ children: { count: 3, rotation: [-0.25, 0.25] } });
 ```
+
+## Dynamic point lights
+
+`LightRenderer` takes `brightness`, `color`, `distance`, `decay` and optional `power` directly.
+All support the normal `DynamicValue` system, evaluated using each source particle's normalized
+lifetime and deterministic ID seed. CPU light/readback renderers support ordinary dynamic values,
+rather than TSL-only expressions.
+
+```ts
+new LightRenderer({
+  brightness: time => 4 * (1 - time) ** 2,
+  color: time => time < 0.5 ? '#ffbb55' : '#ff5522',
+  distance: [6, 10],
+  decay: 2,
+});
+```
+
+`brightness` sets point-light intensity in candela and defaults to one. Optional `power` is an
+alternative in lumens: when provided it replaces brightness using Three.js's conversion
+`intensity = power / (4 * PI)`. The editor displays the active emission control only.
+`alphaAffectsIntensity` multiplies the resulting intensity by particle alpha.
+Distance defaults to zero (unlimited) and includes `rangeMultiplier` and optional particle-size scaling.
+Color defaults to white and can multiply particle color through `inheritParticleColor`; decay defaults to two.
+Unused pooled lights have zero intensity; reusing a slot reevaluates every option for the new source.

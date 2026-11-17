@@ -57,7 +57,6 @@
 - [ParticleNoiseValues](interfaces/ParticleNoiseValues-1.md)
 - [ParticleOptions](interfaces/ParticleOptions.md)
 - [ParticleSpatialGridRenderer](interfaces/ParticleSpatialGridRenderer.md)
-- [PointLightOptions](interfaces/PointLightOptions.md)
 - [RotationByDepthOptions](interfaces/RotationByDepthOptions.md)
 - [RotationBySizeOptions](interfaces/RotationBySizeOptions.md)
 - [RotationBySpeedOptions](interfaces/RotationBySpeedOptions.md)

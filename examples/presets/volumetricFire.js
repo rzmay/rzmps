@@ -123,7 +123,7 @@ export default async function createVolumetricFire() {
     // #region docs:renderers:1
     renderers: [
       new VolumeRenderer({
-        lightingGridOptions: { cellSize: 0.25, directions: 12, samplesPerInterval: 8, maxDistance: 16 },
+        lightingGridOptions: { cellSize: 0.25, maxDistance: 16 },
         // Heat-distortion sprites draw at order one and must sample the already rendered volume.
         renderOrder: 0,
         opacity: 0.75,
@@ -141,24 +141,34 @@ export default async function createVolumetricFire() {
             : flame.lerp(core, THREE.MathUtils.smoothstep(heat, 0.35, 1));
         },
         opacityByTemperature: [0.25, 2],
+        // Keep cool smoke externally lit; hot, dense cores retain their transported fire color.
+        emissive: 1,
+        emissiveByTemperature: heat => THREE.MathUtils.smoothstep(heat, 0.08, 0.45),
+        emissiveByDensity: density => Math.min(1, density * 8),
         // Hot gas has distinct flame tongues; smoke uses a gentler, slightly finer mask.
         densityNoiseStrengthByTemperature: [0.25, 1.5],
         densityNoiseContrastByTemperature: [0.5, 1.25],
-        densityNoiseFrequencyByTemperature: [1.25, 1],
+        densityNoiseFrequencyByTemperature: [1.25, 2],
         densityNoiseStrength: 1,
         densityNoiseContrast: 2,
         densityNoiseFrequency: 1,
-        densityNoiseSpeed: 2,
+        densityNoiseSpeed: 4,
         densityNoiseOctaves: 1,
+        // Smoke follows the flow; hot flame tongues retain their rapid, mostly unstretched flicker.
+        densityNoiseStretch: 0.25,
+        densityNoiseStretchByTemperature: [1, 0.1],
+        densityNoiseStretchBySpeed: [0, 1],
       }),
       new LightRenderer({
         count: 2,
-        ratio: 0.01,
-        brightness: 4,
+        ratio: 0.1,
+        brightness: (time) => 4 * (1 - time) ** 2,
         rangeMultiplier: 4,
+        decay: 1,
         alphaAffectsIntensity: true,
         inheritParticleColor: false,
-        lightOptions: { color: '#ff842b', distance: 8 },
+        color: '#ff842b',
+        distance: 8,
       }),
     ],
     // #endregion docs:renderers:1

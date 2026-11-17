@@ -227,11 +227,8 @@ export default async function fireworksPreset() {
         alphaAffectsIntensity: true,
         brightness: 50,
         rangeMultiplier: 5,
-        lightOptions: {
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
+        distance: 8,
+        decay: 2,
       }),
     ],
     // #endregion docs:renderers:3

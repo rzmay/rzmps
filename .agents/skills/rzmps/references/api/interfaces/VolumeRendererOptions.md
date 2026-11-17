@@ -351,6 +351,60 @@ Optional temperature multiplier of densityNoiseStrength, using temperatureRange.
 
 ***
 
+<a id="densitynoisestretch"></a>
+
+### densityNoiseStretch?
+
+```ts
+optional densityNoiseStretch?: number;
+```
+
+Flow-aligned noise-coordinate compression, clamped to [0, 0.95] like liquid distortion. Defaults to zero.
+
+***
+
+<a id="densitynoisestretchbydensity"></a>
+
+### densityNoiseStretchByDensity?
+
+```ts
+optional densityNoiseStretchByDensity?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Density multiplier for flow stretch. Null is neutral one.
+
+***
+
+<a id="densitynoisestretchbyspeed"></a>
+
+### densityNoiseStretchBySpeed?
+
+```ts
+optional densityNoiseStretchBySpeed?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Speed multiplier for flow stretch. Null is neutral one.
+
+***
+
+<a id="densitynoisestretchbytemperature"></a>
+
+### densityNoiseStretchByTemperature?
+
+```ts
+optional densityNoiseStretchByTemperature?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Temperature multiplier for flow stretch. Null is neutral one.
+
+***
+
 <a id="depthtest"></a>
 
 ### depthTest
@@ -382,6 +436,60 @@ dynamicResolution: boolean | VolumeResolutionOptions;
 ```
 
 Adapt screen-space resolution to measured GPU time. Defaults to true; full resolution without timestamps.
+
+***
+
+<a id="emissive"></a>
+
+### emissive?
+
+```ts
+optional emissive?: number;
+```
+
+Scalar self-lit fraction. Zero preserves external lighting (default).
+
+***
+
+<a id="emissivebydensity"></a>
+
+### emissiveByDensity?
+
+```ts
+optional emissiveByDensity?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Optional density multiplier for emissive, using minDensity/maxDensity. Null is neutral one.
+
+***
+
+<a id="emissivebyspeed"></a>
+
+### emissiveBySpeed?
+
+```ts
+optional emissiveBySpeed?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Optional speed multiplier for emissive. Null is neutral one.
+
+***
+
+<a id="emissivebytemperature"></a>
+
+### emissiveByTemperature?
+
+```ts
+optional emissiveByTemperature?:
+  | ValueByParameter<number>
+  | null;
+```
+
+Optional temperature multiplier for emissive. Null is neutral one.
 
 ***
 

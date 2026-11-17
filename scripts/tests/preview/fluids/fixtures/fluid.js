@@ -1,3 +1,4 @@
+export { textureStore } from 'three/tsl';
 import * as THREE from 'three';
 import { WebGPURenderer, StorageBufferAttribute, Node } from 'three/webgpu';
 import { Fn, If, float, instanceIndex, storage, uint, vec3, vec4, ivec4 } from 'three/tsl';
@@ -5,7 +6,7 @@ import { examples } from '../../../../../examples/index.js';
 import { experimentalExamples } from '../../../../../examples/experimental/index.js';
 import createScene from '../../../../../examples/scenes/fluidTeapot.js';
 import createCheckerboard from '../../../../../examples/scenes/checkerboard.js';
-import createGasFlow from '../../../../../examples/scenes/gasFlow.js';
+import createMovingColliders from '../../../../../examples/scenes/movingColliders.js';
 import { Benchmarks, FluidCollider, GasSimulation } from '@rzmps/rzmps';
 
 Node.captureStackTrace = new URLSearchParams(location.search).has('nodeTrace');
@@ -23,8 +24,8 @@ const camera = new THREE.PerspectiveCamera(45, 800 / 600, 0.01, 200);
 camera.position.set(5, 4, 6);
 camera.lookAt(0, 0.6, 0);
 const example = new URLSearchParams(location.search).get('example') ?? 'flipFluid';
-const gasScene = new URLSearchParams(location.search).get('scene') === 'gasFlow';
-const sceneFactory = example === 'flipFluid' ? createScene : gasScene ? createGasFlow : createCheckerboard;
+const gasScene = new URLSearchParams(location.search).get('scene') === 'movingColliders';
+const sceneFactory = example === 'flipFluid' ? createScene : gasScene ? createMovingColliders : createCheckerboard;
 const sceneStart = performance.now();
 const sceneLifecycle = await sceneFactory(scene);
 const sceneLoadMs = performance.now() - sceneStart;

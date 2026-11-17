@@ -184,11 +184,8 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
         alphaAffectsIntensity: true,
         brightness: 50,
         rangeMultiplier: 5,
-        lightOptions: {
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
+        distance: 8,
+        decay: 2,
       }),
     ],
   });
@@ -397,11 +394,8 @@ Rocket sprites are lit, with launch and death audio selected from two clips and 
         alphaAffectsIntensity: true,
         brightness: 50,
         rangeMultiplier: 5,
-        lightOptions: {
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
+        distance: 8,
+        decay: 2,
       }),
     ],
 ```

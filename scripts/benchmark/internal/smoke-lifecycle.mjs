@@ -28,7 +28,8 @@ try {
       .find(entry => entry.name.includes('/gui/ParticleSystemGUI'))?.name;
     if (!guiURL) throw new Error('Demo GUI module was not loaded');
     const { ParticleSystemGUI } = await import(guiURL);
-    const { passTimer } = await import(`/@fs${root}/scripts/tests/preview/fluids/fixtures/volume-quality.js`);
+    const { passTimer } = await import(`/@fs${root}/scripts/benchmark/gpuPassTimer.js`);
+    const { profileGasStages } = await import(`/@fs${root}/scripts/benchmark/gasStages.js`);
     const state = window.smokeLifecycle = { frames: [], timings: [], events: [], started: performance.now() };
     const heartbeat = () => { state.heartbeat = performance.now(); requestAnimationFrame(heartbeat); };
     requestAnimationFrame(heartbeat);
@@ -82,15 +83,11 @@ try {
         gas.cleanup = function (...args) { state.cleanupCalls++; return cleanup.apply(this, args); };
         if (!automaticQuality) gas.spatialGrid.autoVolumeQuality = false;
         state.timer = passTimer(renderer.backend.device, renderer.backend, () => state.stage ?? 'other');
-        const span = gas.benchmarks.span;
-        gas.benchmarks.span = function (label, callback) {
-          const previous = state.stage; state.stage = label;
-          try { return span.call(this, label, callback); } finally { state.stage = previous; }
-        };
+        profileGasStages(renderer, gas, volume, state);
         const render = renderer.render;
         renderer.render = function (...args) {
           state.renderDepth = (state.renderDepth ?? 0) + 1;
-          state.stage = 'lighting/render';
+          state.stage = args[0] === volume.dynamicTarget.scene ? 'volume/raymarch' : 'scene/render-reconstruction';
           let result;
           try { result = render.apply(this, args); } finally { state.renderDepth--; }
           if (!state.renderDepth) {
@@ -149,11 +146,23 @@ try {
     await fs.appendFile(`${output}l`, `${JSON.stringify(result)}\n`);
     return { ...result, ...history };
   };
-  let snapshot;
+  let snapshot, nextSwitch = 15000, switchIndex = 0;
   const deadline = Date.now() + (Number(process.env.SMOKE_SECONDS ?? 12) + 15) * 1000;
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 2000));
     snapshot = await save();
+    if (process.env.SMOKE_STRESS === '1' && snapshot.elapsed >= nextSwitch && snapshot.updateAge < 3000) {
+      const name = ['Moving Colliders', 'Color Lights', 'Checkerboard', 'Color Lights'][switchIndex++ % 4];
+      await page.evaluate(async name => {
+        const state = window.smokeLifecycle;
+        state.events.push({ event: 'stress-switch', name, t: performance.now() - state.started });
+        await state.gui.setScene(name);
+        const camera = state.system.sceneCamera;
+        camera.position.set(4 + Math.sin(state.started) * 2, 3, 5);
+        camera.lookAt(0, 1.5, 0);
+      }, name);
+      nextSwitch += 15000;
+    }
     if (snapshot.updateAge > 3000 || snapshot.renderAge > 3000
       || snapshot.events.some(event => event.event === 'device-lost')) break;
     if (snapshot.elapsed > Number(process.env.SMOKE_SECONDS ?? 12) * 1000) break;
@@ -177,7 +186,7 @@ try {
   }
   const result = await save();
   await fs.writeFile(output, JSON.stringify({ ...result, errors }, null, 2));
-  for (let second = 0; second < 34; second += 2) {
+  for (let second = 0; second < Number(process.env.SMOKE_SECONDS ?? 12); second += 2) {
     const rows = result.frames.filter(row => row.t >= second * 1000 && row.t < (second + 2) * 1000);
     if (!rows.length) continue;
     const median = key => rows.map(row => row[key]).sort((a, b) => a - b)[Math.floor(rows.length / 2)];

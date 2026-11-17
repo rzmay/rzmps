@@ -185,6 +185,12 @@ export default class AudioRenderer extends Renderer {
 
   constructor(options: Partial<AudioRendererOptions> = {}) {
     super(options);
+    this.benchmarks.register('playingClips', { type: 'gauge', unit: 'count', get: () => {
+      let count = 0;
+      for (const entry of this._particleAudio.values()) if (entry.audio.isPlaying) count++;
+      for (const audio of this._eventAudio) if (audio.isPlaying) count++;
+      return count;
+    } });
     this._parameterEventHandlers = options.onEvent ?? [];
     this.events = [...new Set([
       ...this.events, ...eventNames(this._parameterEventHandlers),

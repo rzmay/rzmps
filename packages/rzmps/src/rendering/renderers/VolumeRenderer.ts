@@ -1,3 +1,4 @@
+import stretchAlongVelocity from '../shaders/stretchAlongVelocity';
 import LightingGrid, { type LightingGridOptions } from '../lighting/LightingGrid';
 import GasModule, { type GPUGasCell, type GasRenderModuleContext } from '../../modules/GasModule';
 import * as THREE from 'three';
@@ -105,6 +106,14 @@ interface VolumeLayer {
 export interface VolumeRendererOptions extends RendererOptions {
   /** Options that enable a managed world-space lighting grid. Omission disables it. WebGPU only. */
   lightingGridOptions?: Partial<LightingGridOptions>;
+  /** Scalar self-lit fraction. Zero preserves external lighting (default). */
+  emissive?: number;
+  /** Optional temperature multiplier for emissive. Null is neutral one. */
+  emissiveByTemperature?: ValueByParameter<number> | null;
+  /** Optional density multiplier for emissive, using minDensity/maxDensity. Null is neutral one. */
+  emissiveByDensity?: ValueByParameter<number> | null;
+  /** Optional speed multiplier for emissive. Null is neutral one. */
+  emissiveBySpeed?: ValueByParameter<number> | null;
   /** Renderer-only temperature color multiplier. Defaults to null (neutral white). */
   colorByTemperature?: ValueByParameter<ColorInput> | null;
   /** Renderer-only temperature opacity multiplier. Defaults to null (neutral one). */
@@ -168,6 +177,14 @@ export interface VolumeRendererOptions extends RendererOptions {
   minDensity: number;
   /** Density at or above this value maps to full density. Defaults to one. */
   maxDensity: number;
+  /** Flow-aligned noise-coordinate compression, clamped to [0, 0.95] like liquid distortion. Defaults to zero. */
+  densityNoiseStretch?: number;
+  /** Temperature multiplier for flow stretch. Null is neutral one. */
+  densityNoiseStretchByTemperature?: ValueByParameter<number> | null;
+  /** Density multiplier for flow stretch. Null is neutral one. */
+  densityNoiseStretchByDensity?: ValueByParameter<number> | null;
+  /** Speed multiplier for flow stretch. Null is neutral one. */
+  densityNoiseStretchBySpeed?: ValueByParameter<number> | null;
   /** Opacity curve on normalized density. Uses the existing ValueByParameter convention. */
   densityCurve: ValueByParameter<number>;
   /** Optional temperature multiplier of densityNoiseStrength, using temperatureRange. Null is neutral. WebGPU only. */
@@ -218,6 +235,14 @@ class VolumeRenderer extends Renderer {
     const opacity = this.renderOpacity(sample.density).mul(sample.opacity).clamp(0, 0.999999);
     return float(1).sub(opacity).log().negate();
   };
+  emissive = 0;
+  emissiveByTemperature: ValueByParameter<number> | null = null;
+  emissiveByDensity: ValueByParameter<number> | null = null;
+  emissiveBySpeed: ValueByParameter<number> | null = null;
+  private readonly emissiveData = new Uint16Array(256 * 4 * 4);
+  private readonly emissiveTexture = new THREE.DataTexture(
+    this.emissiveData, 256, 4, THREE.RGBAFormat, THREE.HalfFloatType,
+  );
   colorByTemperature: ValueByParameter<ColorInput> | null = null;
   opacityByTemperature: ValueByParameter<number> | null = null;
   colorByDensity: ValueByParameter<ColorInput> | null = null;
@@ -278,6 +303,10 @@ class VolumeRenderer extends Renderer {
   minDensity: number;
   maxDensity: number;
   densityCurve: VolumeRendererOptions['densityCurve'];
+  densityNoiseStretch: number;
+  densityNoiseStretchByTemperature: ValueByParameter<number> | null = null;
+  densityNoiseStretchByDensity: ValueByParameter<number> | null = null;
+  densityNoiseStretchBySpeed: ValueByParameter<number> | null = null;
   densityNoiseStrengthByTemperature: ValueByParameter<number> | null = null;
   densityNoiseContrastByTemperature: ValueByParameter<number> | null = null;
   densityNoiseFrequencyByTemperature: ValueByParameter<number> | null = null;
@@ -302,6 +331,8 @@ class VolumeRenderer extends Renderer {
   private readonly gpuSceneDepthBias = uniform(0.001);
   private readonly gpuSoftParticleDistance = uniform(0);
   private readonly gpuNoiseStrength = uniform(0);
+  private readonly gpuNoiseStretch = uniform(0);
+  private readonly gpuEmissive = uniform(0);
   private readonly gpuNoiseContrast = uniform(1);
   private readonly gpuNoiseFrequency = uniform(1);
   private readonly gpuNoiseTime = uniform(0);
@@ -366,6 +397,14 @@ class VolumeRenderer extends Renderer {
     super(options);
     this.lightingGridOptions = options.lightingGridOptions;
     this.syncLightingGrid();
+    this.emissive = options.emissive ?? 0;
+    this.densityNoiseStretch = options.densityNoiseStretch ?? 0;
+    for (const parameter of ['Temperature', 'Density', 'Speed'] as const)
+      this[`densityNoiseStretchBy${parameter}`] = options[`densityNoiseStretchBy${parameter}`] ?? null;
+    for (const key of ['Temperature', 'Density', 'Speed'] as const)
+      this[`emissiveBy${key}`] = options[`emissiveBy${key}`] ?? null;
+    this.emissiveTexture.minFilter = this.emissiveTexture.magFilter = THREE.LinearFilter;
+    this.emissiveTexture.generateMipmaps = false;
 
     for (const key of ['Temperature', 'Density', 'Speed', 'Vorticity'] as const) {
       this[`colorBy${key}`] = options[`colorBy${key}`] ?? null;
@@ -604,13 +643,18 @@ class VolumeRenderer extends Renderer {
       this.shadowQuality > 0,
       this.emptySpaceSkipping,
       this.layers.every(layer => !!layer.density.occupancy),
-      ...this.appearanceEnabled(),
+      ...this.appearanceEnabled(), this.emissive !== 0, this.densityNoiseStretch > 0,
+      ...(['Temperature', 'Density', 'Speed'] as const).map(parameter =>
+        this[`densityNoiseStretchBy${parameter}`] != null),
+      ...['Temperature', 'Density', 'Speed'].map(parameter =>
+        this[`emissiveBy${parameter as 'Temperature' | 'Density' | 'Speed'}`] != null),
       ...(['densityNoiseStrength', 'densityNoiseContrast', 'densityNoiseFrequency'] as const).map(name =>
         this[`${name}ByTemperature`] != null),
       this.evaluateDynamicGPU.version,
       ...this.gasModules.map(module => module.graphKey('render')),
       ...this.layers.map(layer =>
-        JSON.stringify([layer.density.field.parameterChannels, layer.density.field.parametersPremultiplied]),
+        JSON.stringify([layer.density.field.parameterChannels, layer.density.field.parametersPremultiplied,
+          this.densityNoiseStretch > 0 && !!layer.density.field.sampleVelocityGPU]),
       ),
     ].join(':');
     if (
@@ -630,6 +674,7 @@ class VolumeRenderer extends Renderer {
     this.webglMaterial.uniforms.jitterStrength.value = this.jitterStrength;
     this.webglMaterial.uniforms.jitterSeed.value = this.jitterSeed;
     this.webglMaterial.uniforms.anisotropy.value = this.anisotropy;
+    this.webglMaterial.uniforms.emissive.value = this.emissive;
     this.webglMaterial.uniforms.shadowQuality.value = this.shadowQuality;
     this.webglMaterial.uniforms.cellSize.value = this.gpuCellSize.value;
     this.webglMaterial.uniforms.stepSizeMultiplier.value = this.stepSizeMultiplier;
@@ -666,6 +711,8 @@ class VolumeRenderer extends Renderer {
     this.gpuThreshold.value = this.threshold;
     this.gpuRange.value = this.range;
     this.gpuOpacity.value = this.opacity;
+    this.gpuEmissive.value = this.emissive;
+    this.gpuNoiseStretch.value = this.densityNoiseStretch;
     this.gpuBaseR.value = this.color.r;
     this.gpuBaseG.value = this.color.g;
     this.gpuBaseB.value = this.color.b;
@@ -785,6 +832,9 @@ class VolumeRenderer extends Renderer {
     ) {
       throw new RangeError('Volume adaptive thresholds must be in [0, 1), step factor >= 1, and depth bias >= 0.');
     }
+    if (!Number.isFinite(this.emissive)) throw new RangeError('Volume emissive must be a finite scalar.');
+    if (!Number.isFinite(this.densityNoiseStretch) || this.densityNoiseStretch < 0)
+      throw new RangeError('Volume densityNoiseStretch must be finite and nonnegative.');
     if (
       !Number.isFinite(this.densityNoiseStrength) ||
       this.densityNoiseStrength < 0 ||
@@ -840,6 +890,24 @@ class VolumeRenderer extends Renderer {
       }
     }
     if (changed) this.appearanceTexture.needsUpdate = true;
+    this.updateEmissiveCurves(neutral);
+  }
+
+  private updateEmissiveCurves(neutral: boolean): void {
+    let changed = false;
+    for (const [row, name] of ['Temperature', 'Density', 'Speed'].entries()) {
+      const value = neutral ? null : this[`emissiveBy${name as 'Temperature' | 'Density' | 'Speed'}`];
+      for (let i = 0; i < 256; i++) {
+        const factor = value == null ? 1 : evaluateByParameterNumber(value, i / 255);
+        if (!Number.isFinite(factor) || Math.abs(factor) > 65504)
+          throw new RangeError('Volume emissive values must be finite half-float values.');
+
+        const index = (row * 256 + i) * 4, half = THREE.DataUtils.toHalfFloat(factor);
+        changed ||= this.emissiveData[index] !== half;
+        this.emissiveData[index] = half;
+      }
+    }
+    if (changed) this.emissiveTexture.needsUpdate = true;
   }
 
   private updateDensityCurve(): void {
@@ -887,6 +955,7 @@ class VolumeRenderer extends Renderer {
     this.dynamicTarget.dispose();
     this.opaqueDepth.dispose();
     this.appearanceTexture.dispose();
+    this.emissiveTexture.dispose();
     this.jitterTexture.dispose();
     this.mesh.removeFromParent();
   }
@@ -998,6 +1067,7 @@ class VolumeRenderer extends Renderer {
         sources.map(layer => layer.density.field.parameterChannels ?? {}),
         this.appearanceEnabled(),
         sources.map(layer => !!layer.density.field.parametersPremultiplied),
+        this.emissive !== 0,
       ),
     );
     this.webglMaterial.needsUpdate = true;
@@ -1107,6 +1177,8 @@ class VolumeRenderer extends Renderer {
         densityRange: { value: new THREE.Vector2(this.minDensity, this.maxDensity) },
         densityCurve: { value: this.curveTexture },
         appearanceMap: { value: this.appearanceTexture },
+        emissiveMap: { value: this.emissiveTexture },
+        emissive: { value: this.emissive },
         ...Object.fromEntries(
           this.gpuAppearanceRanges.map((range, index) => [`appearanceRange${index}`, { value: range.value.clone() }]),
         ),
@@ -1192,7 +1264,8 @@ class VolumeRenderer extends Renderer {
         const baseStep = worldStep.div(metric).toVar('volumeBaseStep');
         const distance = start.toVar('volumeDistance');
         // Directional HG is constant along a camera ray. Scale its normalized phase by 4π
-        // so an isotropic unit light preserves the familiar unit brightness.
+        // so an isotropic unit light preserves the familiar unit brightness. Ray and source-to-light
+        // directions are both opposite the physical outgoing/photon-travel vectors, preserving their dot.
         const worldDirection = modelWorldMatrix.mul(vec4(direction, 0)).xyz.normalize();
         const cosine = worldDirection.dot(this.gpuLightDirection);
         const g = this.gpuAnisotropy;
@@ -1242,7 +1315,9 @@ class VolumeRenderer extends Renderer {
             });
           }
           const sample = this.sampleVolume(position);
-          const density = this.modulateDensity(position, sample.density, sample.temperature, sample.noise);
+          const density = this.modulateDensity(
+            position, sample.density, sample.temperature, sample.noise, () => sample.velocity,
+          );
           const opacity = this.renderOpacity(density).mul(sample.opacity).clamp(0, 1).toVar('volumeSampleOpacity');
 
           // Match sprite soft particles in view space, reusing the depth already fetched for clipping.
@@ -1252,6 +1327,13 @@ class VolumeRenderer extends Renderer {
               opacity.mulAssign(smoothstep(0, this.gpuSoftParticleDistance, viewZ.sub(sceneZ).abs()));
             });
           }
+
+          // A transparent stratum contributes no radiance. Advance before continuing so adaptive
+          // marching follows the identical lattice, without paying for lighting or shadow rays.
+          If(opacity.lessThanEqual(0), () => {
+            distance.addAssign(segment);
+            Continue();
+          });
 
           const alpha = float(1).sub(
             pow(float(1).sub(opacity), metric.mul(segment)),
@@ -1275,8 +1357,9 @@ class VolumeRenderer extends Renderer {
               incident.assign(lightingGrid.sampleScatteringGPU(worldPosition, worldDirection, this.gpuAnisotropy));
             });
           } else incident.assign(vec3(0.2).add(this.gpuLightColor.mul(phase).mul(transmission).mul(0.8)));
-          // Emitted radiance can be added here later, independently of extinction/scattering.
-          accumulated.rgb.addAssign(color.mul(incident).add(sample.emission ?? vec3(0)).mul(contribution));
+          // Self-lighting blends the transported color without changing extinction or grid radiance.
+          const shaded = mix(color.mul(incident), color, sample.emissive.clamp(0, 1));
+          accumulated.rgb.addAssign(shaded.add(sample.emission ?? vec3(0)).mul(contribution));
           accumulated.a.addAssign(contribution);
           If(float(1).sub(accumulated.a).lessThanEqual(this.gpuTransmittanceThreshold), () => Break());
           distance.addAssign(segment);
@@ -1305,6 +1388,7 @@ class VolumeRenderer extends Renderer {
 
     return material;
   }
+
 
   /** Distance to the nearest coarse boundary across all source/copy transforms, only when all are empty. */
   private emptyAdvance(position: Node<'vec3'>, direction: Node<'vec3'>): Node<'float'> {
@@ -1351,13 +1435,19 @@ class VolumeRenderer extends Renderer {
   }
 
   private modulateDensity(position: Node<'vec3'>, density: Node<'float'>,
-    temperature: Node<'float'>, noise?: ReturnType<VolumeRenderer['noiseCoefficients']>): Node<'float'> {
+    temperature: Node<'float'>, noise?: ReturnType<VolumeRenderer['noiseCoefficients']>,
+    velocity?: () => Node<'vec3'>): Node<'float'> {
     if (this.densityNoiseStrength <= 0 && !noise) return density;
     const masked = density.toVar();
     If(density.greaterThan(0), () => {
-      const { strength, contrast, frequency } = noise ?? this.noiseCoefficients(temperature);
+      const { strength, contrast, frequency, stretch } = noise ?? this.noiseCoefficients(temperature, density);
       const applyMask = () => {
-        const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
+        const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum).toVar();
+        if (this.densityNoiseStretch > 0 && velocity) {
+          // Zero local stretch avoids even the sparse velocity lookup. Keep the simulation origin
+          // as the anchor, so domain growth never slides the mask's coordinate lattice.
+          If(stretch.greaterThan(0), () => point.assign(stretchAlongVelocity(point, velocity(), stretch)));
+        }
         const noise = generateGPUParticleNoise4D(
           point.mul(frequency),
           {
@@ -1379,7 +1469,8 @@ class VolumeRenderer extends Renderer {
     return masked;
   }
 
-  private noiseCoefficients(temperature: Node<'float'>) {
+  private noiseCoefficients(temperature: Node<'float'>, density: Node<'float'> = float(0),
+    speed: Node<'float'> = float(0)) {
     const range = this.gpuAppearanceRanges[0];
     const active = this.densityNoiseStrengthByTemperature != null || this.densityNoiseContrastByTemperature != null
       || this.densityNoiseFrequencyByTemperature != null;
@@ -1394,7 +1485,18 @@ class VolumeRenderer extends Renderer {
     const strength = coefficient('densityNoiseStrength', this.gpuNoiseStrength);
     const contrast = coefficient('densityNoiseContrast', this.gpuNoiseContrast);
     const frequency = coefficient('densityNoiseFrequency', this.gpuNoiseFrequency);
-    return { strength, contrast, frequency };
+    let stretch: Node<'float'> = this.gpuNoiseStretch;
+    if (this.densityNoiseStretch > 0) {
+      for (const [index, name] of (['Temperature', 'Density', 'Speed'] as const).entries()) {
+        const value = [temperature, density.mul(this.gpuDensityGain), speed][index];
+        const limits = this.gpuAppearanceRanges[index];
+        const normalized = value.sub(limits.x).div(limits.y.sub(limits.x)).clamp(0, 1);
+        const key = `densityNoiseStretchBy${name}` as const;
+        if (this[key] != null) stretch = stretch.mul(this.evaluateDynamicGPU.parameterNumber(
+          key, () => this[key] ?? undefined, normalized, 1));
+      }
+    }
+    return { strength, contrast, frequency, stretch };
   }
 
   private lightTransmittance(position: Node<'vec3'>, direction: Node<'vec3'>): Node<'float'> {
@@ -1413,7 +1515,9 @@ class VolumeRenderer extends Renderer {
       const segment = min(step, far.sub(distance));
       const point = position.add(direction.mul(distance.add(segment.mul(0.5))));
       const sample = this.sampleVolume(point, false);
-      const density = this.modulateDensity(point, sample.density, sample.temperature, sample.noise);
+      const density = this.modulateDensity(
+        point, sample.density, sample.temperature, sample.noise, () => sample.velocity,
+      );
       transmission.mulAssign(
         pow(float(1).sub(this.renderOpacity(density).mul(sample.opacity).clamp(0, 1)), segment.mul(metric)),
       );
@@ -1448,6 +1552,8 @@ class VolumeRenderer extends Renderer {
     density: Node<'float'>;
     opacity: Node<'float'>;
     temperature: Node<'float'>;
+    velocity: Node<'vec3'>;
+    emissive: Node<'float'>;
     emission?: Node<'vec3'>;
     noise?: ReturnType<VolumeRenderer['noiseCoefficients']>;
   } {
@@ -1484,10 +1590,15 @@ class VolumeRenderer extends Renderer {
     const values = [physical.x, result.a.mul(this.gpuDensityGain), physical.y, physical.z];
     const multiplier = vec4(1).toVar('volumeAppearance');
     const names = ['Temperature', 'Density', 'Speed', 'Vorticity'] as const;
+    const emissive = (includeColor && this.emissive !== 0 ? this.gpuEmissive : float(0))
+      .toVar('volumeEmissive');
     for (let row = 0; row < names.length; row++) {
       const name = names[row],
         range = this.gpuAppearanceRanges[row];
       const t = values[row].sub(range.x).div(range.y.sub(range.x)).clamp(0, 1);
+      if (includeColor && name !== 'Vorticity' && this[`emissiveBy${name}`] != null)
+        emissive.mulAssign(this.evaluateDynamicGPU.parameterNumber(`emissiveBy${name}`,
+          () => this[`emissiveBy${name}`] ?? undefined, t, 1));
       // Reuse the same GPU parameter bindings as other renderers/materials. Null is neutral.
       if (includeColor && this[`colorBy${name}`] != null) {
         multiplier.rgb.mulAssign(
@@ -1509,35 +1620,51 @@ class VolumeRenderer extends Renderer {
           ),
         );
     }
+    // Modules see the configured effective factor; final shading clamps again after custom edits.
+    emissive.assign(emissive.clamp(0, 1));
     const color = result.rgb.div(max(result.a, 1e-6)).mul(multiplier.rgb);
+    let velocity: Node<'vec3'> | undefined;
+    const sampleVelocity = () => velocity ??= this.sampleGasVelocity(point, result.a).toVar();
     if (!this.gasModules.length) {
-      return { color, density: result.a, opacity: multiplier.a, temperature: physical.x };
+      const noise = this.densityNoiseStretch > 0 ? this.noiseCoefficients(physical.x, result.a, physical.y) : undefined;
+      return { color, density: result.a, opacity: multiplier.a, temperature: physical.x, emissive, noise,
+        get velocity() { return sampleVelocity(); } };
     }
 
-    // The same cell view references only local ray-sample variables, never writable simulation storage.
-    let velocity: Node<'vec3'> | undefined;
-    const sampleVelocity = () => this.sampleGasVelocity(point);
+    // The same cell view references only local variables, never writable simulation storage.
     const cell: GPUGasCell = {
       position: point, density: result.a.toVar(), temperature: physical.x.toVar(), color: color.toVar(),
       // Reading velocity is optional: fire's mask-only callback adds no sparse-storage bindings or reads.
-      get velocity() { return velocity ??= sampleVelocity().toVar(); },
+      get velocity() { return sampleVelocity(); },
     };
-    const noise = this.noiseCoefficients(cell.temperature);
+    const noise = this.noiseCoefficients(cell.temperature, cell.density, physical.y);
     const context: GasRenderModuleContext = {
       module: this.gasModules[0], elapsedTime: this.gasElapsedTime,
-      density: cell.density, color: cell.color, opacity: multiplier.a.toVar(), emission: vec3(0).toVar(),
+      density: cell.density, color: cell.color, opacity: multiplier.a.toVar(), emission: vec3(0).toVar(), emissive,
       densityNoiseStrength: noise.strength.toVar(), densityNoiseContrast: noise.contrast.toVar(),
       densityNoiseFrequency: noise.frequency.toVar(),
     };
     for (const module of this.gasModules) module.modifyRenderGPU!(cell, { ...context, module });
     return { color: cell.color, density: cell.density, temperature: cell.temperature,
-      opacity: context.opacity, emission: context.emission,
+      opacity: context.opacity, emission: context.emission, emissive: context.emissive,
+      get velocity() { return cell.velocity; },
       noise: { strength: context.densityNoiseStrength, contrast: context.densityNoiseContrast,
-        frequency: context.densityNoiseFrequency } };
+        frequency: context.densityNoiseFrequency, stretch: noise.stretch } };
   }
 
-  /** Lazily read existing producer velocity only when a custom callback actually requests it. */
-  private sampleGasVelocity(point: Node<'vec3'>): Node<'vec3'> {
+  /** Lazily read existing producer velocity, without gathering density twice for a single source. */
+  private sampleGasVelocity(point: Node<'vec3'>, density: Node<'float'>): Node<'vec3'> {
+    if (this.layers.length === 1 && this.layers[0].children.length === 1) {
+      const layer = this.layers[0], child = layer.children[0];
+      if (!layer.density.field.sampleVelocityGPU) return vec3(0);
+      const center = layer.density.minimum.add(layer.density.size.mul(0.5));
+      const source = point.sub(center).sub(child.offset).div(child.scale).add(center);
+      return Fn(() => {
+        const velocity = vec3(0).toVar();
+        If(density.greaterThan(0), () => velocity.assign(layer.density.field.sampleVelocityGPU!(source)));
+        return velocity;
+      })();
+    }
     return Fn(() => {
       const momentum = vec3(0).toVar();
       const mass = float(0).toVar();

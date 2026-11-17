@@ -60,6 +60,8 @@ Creation options shared by texture-choice, batched-mesh, and copied-material atl
 brightness: DynamicValue<number>;
 ```
 
+Point-light intensity in candela, evaluated per particle. Defaults to one.
+
 ***
 
 <a id="children"></a>
@@ -75,6 +77,18 @@ Artistic render-only copies, generated before LOD children.
 #### Inherited from
 
 [`RendererOptions`](../../interfaces/RendererOptions.md).[`children`](../../interfaces/RendererOptions.md#children)
+
+***
+
+<a id="color"></a>
+
+### color
+
+```ts
+color: DynamicValue<ColorRepresentation>;
+```
+
+Light color before optional multiplication by particle color. Defaults to white.
 
 ***
 
@@ -119,8 +133,22 @@ Desired representative cap. Negative or Infinity means unlimited. Defaults to -1
 ### decay
 
 ```ts
-decay: number;
+decay: DynamicValue<number>;
 ```
+
+Falloff exponent. Defaults to two.
+
+***
+
+<a id="distance"></a>
+
+### distance
+
+```ts
+distance: DynamicValue<number>;
+```
+
+Light range before optional particle-size/range scaling; zero means unlimited. Defaults to zero.
 
 ***
 
@@ -194,16 +222,6 @@ inheritParticleColor: boolean;
 
 ***
 
-<a id="lightoptions"></a>
-
-### lightOptions
-
-```ts
-lightOptions: PointLightOptions;
-```
-
-***
-
 <a id="materialcomposite"></a>
 
 ### materialComposite?
@@ -259,6 +277,18 @@ Optional surface whose appearance multiplies this renderer's configured appearan
 #### Inherited from
 
 [`RendererOptions`](../../interfaces/RendererOptions.md).[`materialTarget`](../../interfaces/RendererOptions.md#materialtarget)
+
+***
+
+<a id="power"></a>
+
+### power?
+
+```ts
+optional power?: DynamicValue<number>;
+```
+
+Optional luminous power in lumens, used instead of brightness when supplied.
 
 ***
 

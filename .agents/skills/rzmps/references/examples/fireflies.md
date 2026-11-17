@@ -191,11 +191,8 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
         // Light readback uses stored state; evaluate the same pulse curve explicitly for light intensity.
         alphaAffectsIntensity: false,
         brightness: t => 0.52 * Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5),
-        lightOptions: {
-          distance: 1.1,
-          intensity: 1,
-          decay: 2,
-        },
+        distance: 1.1,
+        decay: 2,
       }),
     ],
   });
@@ -430,11 +427,8 @@ event buffer. Disabling that renderer leaves the particle effect and event proce
         // Light readback uses stored state; evaluate the same pulse curve explicitly for light intensity.
         alphaAffectsIntensity: false,
         brightness: t => 0.52 * Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5),
-        lightOptions: {
-          distance: 1.1,
-          intensity: 1,
-          decay: 2,
-        },
+        distance: 1.1,
+        decay: 2,
       }),
     ],
 ```

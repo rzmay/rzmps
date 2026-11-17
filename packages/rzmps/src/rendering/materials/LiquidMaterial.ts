@@ -1,5 +1,6 @@
 import { Color, MeshPhysicalMaterial, type MeshPhysicalMaterialParameters } from 'three';
 import { float, mix, mx_fractal_noise_float, positionLocal, positionView, smoothstep, time, vec3 } from 'three/tsl';
+import stretchAlongVelocity from '../shaders/stretchAlongVelocity';
 import type { ValueByParameter } from '../../values/valueByParameter.types';
 import type { ColorInput } from '../../values/valueInput.types';
 import { evaluateByParameterColorGPU, evaluateByParameterNumberGPU } from '../../values/evaluateByParameterGPU';
@@ -90,10 +91,7 @@ export default class LiquidMaterial extends MeshPhysicalMaterial {
       const activity = float(1).sub(float(1).sub(moving).mul(float(1).sub(rotating)));
       const numeric = (value: ValueByParameter<number>) => evaluateByParameterNumberGPU(value, activity);
       const tint = evaluateByParameterColorGPU(flow.gradient, activity);
-      const direction = velocity.div(speed.max(0.01));
-      const alongFlow = direction.mul(positionLocal.dot(direction));
-      const point = positionLocal
-        .sub(alongFlow.mul(numeric(flow.distortion).clamp(0, 0.95)))
+      const point = stretchAlongVelocity(positionLocal, velocity, numeric(flow.distortion), speed)
         .mul(numeric(flow.noiseFrequency).max(0));
 
       // Blend bounded advection phases so restarting a phase does not jump the visible pattern.

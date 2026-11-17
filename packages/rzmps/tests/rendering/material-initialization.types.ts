@@ -1,3 +1,4 @@
+import { LightRenderer } from '../../build/index.mjs';
 import * as THREE from 'three';
 import { mix, vec2, normalize } from 'three/tsl';
 import { MaterialCopy, MaterialCopySource, Module, Particle, type ParticleInitializationContext,
@@ -55,3 +56,13 @@ new MeshRenderer({ children: { rotation: new THREE.Vector3(0, 1, 0) } });
 new MeshRenderer({ children: { rotation: [-0.2, 0.2] } });
 new MeshRenderer({ children: { rotation: new Set([0.1, new THREE.Vector3(0, 0.2, 0)]) } });
 new MeshRenderer({ children: { rotation: time => new THREE.Vector3(time, 0, 0) } });
+
+new LightRenderer({ brightness: time => 4 * (1 - time),
+  color: time => time < 0.5 ? '#ff7700' : new THREE.Color('red'),
+  distance: time => 10 * (1 - time), decay: new Set([1, 2]),
+  power: time => 4 * Math.PI * (1 - time),
+});
+// @ts-expect-error Intensity is named brightness on LightRenderer.
+new LightRenderer({ intensity: 2 });
+// @ts-expect-error Light options are top-level renderer options.
+new LightRenderer({ lightOptions: { distance: 5 } });

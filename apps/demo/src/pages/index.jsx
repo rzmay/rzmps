@@ -141,6 +141,9 @@ function DemoPage() {
   const demoRef = useRef(null);
   const [code, setCode] = useState('');
   const particleCountRef = useRef(null);
+  const gpuStatsRef = useRef(null);
+  const simulationStatsRef = useRef(null);
+  const rendererStatsRef = useRef(null);
   const [showCode, setShowCode] = useState(false);
   const [initialSelection] = useState(() =>
     resolveDemoSelection(new URL(window.location.href), examples, scenePresets),
@@ -203,30 +206,23 @@ function DemoPage() {
       const allocated = typeof stats === 'number' ? 0 : stats.allocated;
       const activeSlots = typeof stats === 'number' ? 0 : stats.activeSlots;
       const usage = allocated > 0 ? (count / allocated) * 100 : 0;
-      const lines = [`${count.toLocaleString()} particles`];
       const children = typeof stats === 'number' ? 0 : stats.children;
+      particleCountRef.current.textContent = children > 0
+        ? `${count.toLocaleString()} simulated (${(count + children).toLocaleString()} rendered)`
+        : `${count.toLocaleString()} particles`;
 
-      if (children > 0) {
-        lines[0] = `${count.toLocaleString()} simulated (${(count + children).toLocaleString()} rendered)`;
-      }
+      gpuStatsRef.current.textContent = allocated > 0
+        ? `${allocated.toLocaleString()} GPU slots · ${usage.toFixed(1)}% in use`
+        : activeSlots > 0 ? `${activeSlots.toLocaleString()} active GPU slots` : '';
 
-      if (allocated > 0) {
-        lines.push(`${allocated.toLocaleString()} GPU slots, ${usage.toFixed(1)}% live`);
-      } else if (activeSlots > 0) {
-        lines.push(`${activeSlots.toLocaleString()} active slots`);
-      }
-
-      if (typeof stats !== 'number') {
-        stats.fluidBounds?.forEach((fluid) => {
-          lines.push(`${fluid.name} particle bounds: ${fluid.particles}`);
-          lines.push(`${fluid.name} grid bounds: ${fluid.grid}`);
-          lines.push(`Occupied support: ${fluid.occupied}`);
-          lines.push(`Cells: ${fluid.dimensions}, cell size ${fluid.cellSize}`);
-          lines.push(`Physical cap requests: ${fluid.hardCapBreaches}`);
-        });
-      }
-
-      particleCountRef.current.textContent = lines.join('\n');
+      // One compact quality summary per simulation, capped at two lines for composed systems.
+      const fluids = typeof stats === 'number' ? [] : stats.fluids ?? [];
+      const summaries = fluids.slice(0, 2).map(fluid =>
+        `${fluid.name}: ${fluid.dimensions} cells · ${fluid.cellSize} units/cell`);
+      if (fluids.length > 2) summaries[1] += ` · +${fluids.length - 2} simulations`;
+      simulationStatsRef.current.textContent = summaries.join('\n');
+      rendererStatsRef.current.textContent = (typeof stats === 'number' ? [] : stats.renderers ?? [])
+        .map(renderer => `${renderer.name}: ${renderer.count.toLocaleString()}`).join(' · ');
     }
   }, []);
 
@@ -254,8 +250,11 @@ function DemoPage() {
           />
         </Canvas>
 
-        <div ref={particleCountRef} className="particle-count-monitor">
-          0 particles
+        <div className="particle-count-monitor">
+          <div ref={particleCountRef}>0 particles</div>
+          <div ref={gpuStatsRef} className="particle-count-monitor__gpu" />
+          <div ref={simulationStatsRef} className="particle-count-monitor__simulation" />
+          <div ref={rendererStatsRef} className="particle-count-monitor__renderers" />
         </div>
 
         <PresetAttribution metadata={metadata} />

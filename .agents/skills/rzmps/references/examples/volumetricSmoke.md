@@ -72,8 +72,8 @@ shrinking keep the domain aligned with source motion and existing smoke support.
         spatialGridOptions: {
           brickSubdivisions: 3,
           cellSubdivisions: 3,
-      // 8 / 64 = 0.125 world units per cell, independently of the initially compact domain.
-      minVolumeQuality: 8,
+          // 8 / 64 = 0.125 world units per cell, independently of the initially compact domain.
+          minVolumeQuality: 8,
           powerOfTwoBounds: true,
           autoExpand: false,
           shrinkDelay: 180,
@@ -93,7 +93,7 @@ shrinking keep the domain aligned with source motion and existing smoke support.
     ],
     renderers: [
       new VolumeRenderer({
-        lightingGridOptions: { cellSize: 0.25, directions: 12, samplesPerInterval: 8, maxDistance: 16 },
+        lightingGridOptions: { cellSize: 0.25, maxDistance: 16 },
         color: '#564d4d',
         opacity: 0.75,
         threshold: 0.025,
@@ -102,6 +102,8 @@ shrinking keep the domain aligned with source motion and existing smoke support.
         densityNoiseContrast: 1,
         densityNoiseFrequency: 1,
         densityNoiseSpeed: 0.5,
+        densityNoiseStretch: 0.25,
+        densityNoiseStretchBySpeed: [0, 1],
         // Masked thin structures need finer ray sampling than the standard one-sample tier.
         samplesPerVoxel: 2,
         steps: 256,
@@ -185,8 +187,8 @@ Source collision retains lifetime loss one and the grid discovers fluid collider
         spatialGridOptions: {
           brickSubdivisions: 3,
           cellSubdivisions: 3,
-      // 8 / 64 = 0.125 world units per cell, independently of the initially compact domain.
-      minVolumeQuality: 8,
+          // 8 / 64 = 0.125 world units per cell, independently of the initially compact domain.
+          minVolumeQuality: 8,
           powerOfTwoBounds: true,
           autoExpand: false,
           shrinkDelay: 180,
@@ -216,8 +218,8 @@ settings supply visual breakup independently of simulated turbulence. Two sample
 
 There is no temperature-driven tint or lifetime color gradient. Simulation lighting/shadows can vary
 brightness, while the transported smoke keeps its single slightly reddish gray hue.
-`lightingGridOptions` enables managed lighting with 0.25-unit probes, twelve finest directions,
-eight interval samples and a fixed sixteen-unit lighting distance. Moving scene lights,
+`lightingGridOptions` enables managed lighting with 0.25-unit probes and a fixed sixteen-unit distance.
+It inherits two cascades, four finest directions, four interval samples and one scattering iteration. Moving scene lights,
 new lights entering range and HDRI changes refresh lighting even when particle simulation is paused.
 
 
@@ -226,7 +228,7 @@ new lights entering range and HDRI changes refresh lighting even when particle s
 ```js
     renderers: [
       new VolumeRenderer({
-        lightingGridOptions: { cellSize: 0.25, directions: 12, samplesPerInterval: 8, maxDistance: 16 },
+        lightingGridOptions: { cellSize: 0.25, maxDistance: 16 },
         color: '#564d4d',
         opacity: 0.75,
         threshold: 0.025,
@@ -235,6 +237,8 @@ new lights entering range and HDRI changes refresh lighting even when particle s
         densityNoiseContrast: 1,
         densityNoiseFrequency: 1,
         densityNoiseSpeed: 0.5,
+        densityNoiseStretch: 0.25,
+        densityNoiseStretchBySpeed: [0, 1],
         // Masked thin structures need finer ray sampling than the standard one-sample tier.
         samplesPerVoxel: 2,
         steps: 256,
@@ -246,3 +250,5 @@ new lights entering range and HDRI changes refresh lighting even when particle s
 The demo uses three brick subdivisions and three cell subdivisions for its realtime performance budget.
 `minVolumeQuality: 8` starts it at a 0.125-unit cell width rather than oversampling its compact initial
 domain. Larger smoke support can still request a coarser automatic tier.
+
+Density noise stretches along local flow, tapering to an unstretched mask as the gas comes to rest.

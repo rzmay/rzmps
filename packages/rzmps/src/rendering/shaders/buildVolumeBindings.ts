@@ -11,6 +11,7 @@ export default function buildVolumeBindings(
   channels: Partial<Record<'temperature' | 'speed' | 'vorticity', 1 | 2 | 3>>[] = [],
   appearance: boolean[] = [],
   premultiplied: boolean[] = [],
+  emissive = false,
 ): string {
   const copies = children.flatMap((count, source) => Array<number>(count).fill(source));
   const centers = colors.map((_, index) =>
@@ -67,6 +68,7 @@ uniform float layerAlpha${i};`).join('\n');
   const defines = [
     `#define VOLUME_INTERPOLATION ${interpolationMode}`,
     `#define VOLUME_DENSITY_MAPPING ${mappingMode}`,
+    `#define VOLUME_EMISSIVE ${emissive ? 1 : 0}`,
     ...[0, 1, 2, 3].map(i => `#define VOLUME_APPEARANCE_${i} ${appearance[i] ? 1 : 0}`),
   ].join('\n');
   return `${defines}
@@ -80,7 +82,7 @@ vec4 samplePhysical(vec3 coord) {
   ${densitySamples}
   return vec4(total.x / max(total.a, 0.000001), total.a, total.yz / max(total.a, 0.000001));
 }
-vec4 sampleVolume(vec3 coord, out float opacityMultiplier) {
+vec4 sampleVolume(vec3 coord, out float opacityMultiplier, out float emissiveFactor) {
   vec3 point = (coord + 0.5) * boundsSize + boundsMinimum;
   vec4 total = vec4(0.0);
   vec3 parameters = vec3(0.0);
@@ -89,6 +91,7 @@ vec4 sampleVolume(vec3 coord, out float opacityMultiplier) {
   parameters /= max(total.a, 0.000001);
   vec4 multiplier = volumeAppearance(vec4(parameters.x, total.a, parameters.yz));
   opacityMultiplier = multiplier.a;
+  emissiveFactor = volumeEmissive(vec4(parameters.x, total.a, parameters.yz));
   return vec4(total.rgb / max(total.a, 0.000001) * multiplier.rgb, total.a);
 }
 `;

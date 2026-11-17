@@ -236,6 +236,7 @@ export default class DecalRenderer extends Renderer {
   private readbackDeltaTime = 0;
   constructor(public material: StrictMultiple<THREE.Material>, options: Partial<DecalRendererOptions> = {}) {
     super(options);
+    this.benchmarks.register('activeDecals', { type: 'gauge', unit: 'count', get: () => this.instances.length });
     this.materialIndex = options.materialIndex;
     this._parameterEventHandlers = options.onEvent ?? [];
     this.events = [...new Set([

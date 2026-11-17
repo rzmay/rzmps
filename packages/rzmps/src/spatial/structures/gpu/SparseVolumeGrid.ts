@@ -8,6 +8,7 @@ import {
   globalId, instanceIndex, int, ivec3, max, min, storage, uint, uniform, vec3, vec4, workgroupId,
 } from 'three/tsl';
 import SpatialGrid from '../SpatialGrid';
+import { sparseCellIndex } from './sparseVolumeSampling.utils';
 import type { ParticleSpatialGridOptions, ParticleSpatialGridRenderer } from '../ParticleSpatialGrid';
 import type { GPUParticleRenderBufferState, GPUParticleUpdateContext } from '../../../simulation/gpu/Particle';
 import { destroyGPUStorageAttribute } from '../../../simulation/gpu/Particle';
@@ -565,6 +566,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
         args.element(2).assign(1);
       }
     })().compute(1);
+    this.scheduleNode!.name = 'rzmps.volume.activeList';
     renderer.compute(this.scheduleNode);
   }
 
@@ -595,6 +597,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
         atomicLoad(this.requests.element(instanceIndex.add(uint(this.directoryLayout.x)))),
       );
     })().compute(this.sourceMaskWords);
+    this.copySourceMaskNode!.name = 'rzmps.volume.sourceMaskCopy';
     renderer.compute(this.copySourceMaskNode);
   }
 
@@ -609,6 +612,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
     this.resetSourceMaskNode ??= Fn(() => {
       atomicStore(this.requests.element(instanceIndex.add(uint(this.directoryLayout.x))), uint(0));
     })().compute(this.sourceMaskWords);
+    this.resetSourceMaskNode!.name = 'rzmps.volume.sourceMaskReset';
     renderer.compute(this.resetSourceMaskNode);
     const key = [context.buffers.version, renderBuffers.version, context.buffers.count, tagMask].join('|');
     if (key !== this.renderSourceKey) {
@@ -637,15 +641,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
   }
 
   index(coordinate: Node<'ivec3'>, pages = this.pages): Node<'uint'> {
-    const inside = vec3(coordinate).greaterThanEqual(0).all()
-      .and(vec3(coordinate).lessThan(this.getDimensionsNode()).all());
-    const brick = ivec3(clamp(floor(vec3(coordinate).div(this.brickSide)),
-      vec3(0), this.getBrickDimensionsNode().sub(1)));
-    const page = pages.element(this.flatten(brick, this.brickDimensions));
-    const local = coordinate.mod(this.brickSide);
-    const address = page.greaterThan(uint(0)).select(page, uint(1)).sub(1).mul(this.cellsPerBrick)
-      .add(this.flatten(local, this.brickSide));
-    return inside.and(page.greaterThan(uint(0))).select(address, this.getCellCountNode().sub(1)) as Node<'uint'>;
+    return sparseCellIndex(coordinate, pages, this.dimensionsNode, float(this.brickSide), this.getCellCountNode());
   }
 
   /** Keep resident slots at the same world-space brick on same-scale translation/extent changes. */
@@ -730,10 +726,12 @@ export default class SparseVolumeGrid extends SpatialGrid {
     this.resetNode ??= Fn(() => {
       atomicStore(this.requests.element(instanceIndex), uint(0));
     })().compute(this.requestsAttribute.count);
+    this.resetNode!.name = 'rzmps.volume.requestReset';
     renderer.compute(this.resetNode);
     this.snapshotNode ??= Fn(() => {
       this.previousPages.element(instanceIndex).assign(this.pages.element(instanceIndex));
     })().compute(this.directoryCapacity);
+    this.snapshotNode!.name = 'rzmps.volume.directorySnapshot';
     renderer.compute(this.snapshotNode);
     if (density && velocity) {
       const mark = this.markNodes.get(density) ?? this.compute(index => {
@@ -746,6 +744,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
           this.request(coordinate, travel.add(3), 2);
         });
       });
+      mark.name = 'rzmps.volume.occupiedSupport';
       this.markNodes.set(density, mark);
       if (previousBounds) {
         const source = previousGrid ?? this;
@@ -763,6 +762,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
           });
         });
         this.remapMarkNodes.set(density, remapMark);
+        remapMark.name = 'rzmps.volume.remapSupport';
         renderer.compute(remapMark);
       } else renderer.compute(mark);
     }
@@ -790,6 +790,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
       })().compute(context.buffers.count);
     }
     this.particleNode!.count = context.buffers.count;
+    this.particleNode!.name = 'rzmps.volume.sourceRequests';
     renderer.compute(this.particleNode!);
     if (density) this.requestReceiverHalo(renderer);
     this.admitRequests(renderer);
@@ -912,6 +913,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
     this.occupancyResetNode ??= Fn(() => {
       atomicStore(this.occupied.element(instanceIndex), uint(0));
     })().compute(this.capacity);
+    this.occupancyResetNode!.name = 'rzmps.volume.occupancyReset';
     renderer.compute(this.occupancyResetNode);
     let variants = this.occupancyNodes.get(field);
     if (!variants) { variants = new Map(); this.occupancyNodes.set(field, variants); }

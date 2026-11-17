@@ -27,7 +27,7 @@ try {
     gl.backend.device.lost.then(info => { throw new Error(`GPU device lost: ${info.message}`); });
   });
   await page.waitForFunction(() => window.switchFixture.system.modules[0].density.version > 100);
-  for (const name of ['Checkerboard', 'Gas Flow', 'Wind', 'Gas Spatial Effects', 'Checkerboard']) {
+  for (const name of ['Checkerboard', 'Moving Colliders', 'Wind', 'Gas Spatial Effects', 'Checkerboard']) {
     const before = await page.evaluate(name => {
       const select = [...document.querySelectorAll('select')]
         .find(element => [...element.options].some(option => option.text === 'Checkerboard'));

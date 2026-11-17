@@ -68,12 +68,9 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
         alphaAffectsIntensity: true,
         brightness: 5,
         rangeMultiplier: 3,
-        lightOptions: {
-          color: '#ffae97',
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
+        color: '#ffae97',
+        distance: 8,
+        decay: 2,
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
@@ -98,7 +95,7 @@ A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L138)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L135)
 
 ```js
   return new ParticleSystem({
@@ -189,7 +186,7 @@ The main emitter has no continuous rate: five particles burst at time zero from 
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L142)
+[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L139)
 
 ```js
     emitters: [
@@ -232,7 +229,7 @@ The main scale multiplier grows from 0.35 to 1.8, making the explosion expand ra
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L158)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L155)
 
 ```js
     modules: [
@@ -285,12 +282,9 @@ The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft in
         alphaAffectsIntensity: true,
         brightness: 5,
         rangeMultiplier: 3,
-        lightOptions: {
-          color: '#ffae97',
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
+        color: '#ffae97',
+        distance: 8,
+        decay: 2,
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
@@ -314,7 +308,7 @@ The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft in
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L184)
+[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L181)
 
 ```js
     renderers: [

@@ -82,12 +82,9 @@ export default async function fireballPreset() {
         alphaAffectsIntensity: true,
         brightness: 5,
         rangeMultiplier: 3,
-        lightOptions: {
-          color: '#ffae97',
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
+        color: '#ffae97',
+        distance: 8,
+        decay: 2,
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,

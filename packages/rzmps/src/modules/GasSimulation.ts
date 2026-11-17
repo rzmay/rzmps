@@ -1,5 +1,5 @@
 import type { SpatialGridDomain } from '../spatial/structures/spatialGridDomain.utils';
-import GasModule, { type GPUGasCell, type GasModuleContext } from './GasModule';
+import GasModule, { type GPUGasCell, type GasGridQuery, type GasModuleContext } from './GasModule';
 import SpatialEffect from '../spatial/effects/SpatialEffect';
 import GasAffector from '../spatial/effects/GasAffector';
 import FluidCollider from '../spatial/effects/FluidCollider';
@@ -19,7 +19,7 @@ import {
 } from 'three/webgpu';
 import {
   Fn, If, Loop, atomicMax, atomicMin, atomicStore, clamp, float, floatBitsToUint, instanceIndex, int, ivec3,
-  max, min, mix, pow, storage, storageTexture, textureStore, uint, uniform, vec3, vec4,
+  max, min, mix, pow, storage, storageTexture, texture3D, textureStore, uint, uniform, vec3, vec4,
 } from 'three/tsl';
 import type {
   GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateContext,
@@ -57,6 +57,7 @@ interface GasTexturePool {
   dimensions: THREE.Vector3;
   density: Storage3DTexture;
   color: Storage3DTexture;
+  velocity: Storage3DTexture;
 }
 
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
@@ -196,6 +197,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   readonly domainChanges = { logical: 0, capacity: 0, quality: 0 };
   private densityTextureNode!: ReturnType<typeof storageTexture>;
   private colorTextureNode!: ReturnType<typeof storageTexture>;
+  private velocityTextureNode!: ReturnType<typeof storageTexture>;
+  private velocityTextureSampler?: ReturnType<typeof texture3D>;
+  private readonly exportTextureDimensions = uniform(new THREE.Vector3());
   private textureAllocation?: StagedGPUAllocation<GasTexturePool>;
   private readonly requestedTextureDimensions = new THREE.Vector3();
   private sparseStructureKey = '';
@@ -245,6 +249,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private maxima!: AtomicUintStorage;
   private densityTexture!: Storage3DTexture;
   private colorTexture!: Storage3DTexture;
+  private velocityTexture!: Storage3DTexture;
   private gpuCacheKey = '';
   private velocityNodes = new WeakMap<object, ComputeNode>();
   private velocitySourceNode?: ComputeNode;
@@ -459,7 +464,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       textureResolution: this.textureDimensions,
       channels: 4,
       parameterChannels: { temperature: 1, speed: 2, vorticity: 3 },
-      sampleVelocityGPU: position => this.sampleVelocity(position),
+      // Render sampling must not capture pressure faces/directories retired on a quality change.
+      sampleVelocityGPU: position => this.sampleRenderVelocity(position),
       parametersPremultiplied: true,
       version: 0,
     };
@@ -480,6 +486,25 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     return this.density;
   }
 
+  /** One hardware-filtered render lookup, independent of sparse/pressure resource lifetimes. */
+  private sampleRenderVelocity(position: Node<'vec3'>): Node<'vec3'> {
+    this.velocityTextureSampler ??= texture3D(this.velocityTexture);
+    const sampler = this.velocityTextureSampler;
+    return Fn(() => {
+      const coordinate = position.sub(this.boundsMinNode).div(this.cellSizeNode).sub(this.exportOffset).sub(0.5);
+      // Match sparse reconstruction's zero-valued outside corners, including half-cell boundary blends.
+      const coverage = min(coordinate.add(1), this.exportDimensions.sub(coordinate)).clamp(0, 1);
+      const weight = coverage.x.mul(coverage.y).mul(coverage.z).toVar();
+      const value = vec3(0).toVar();
+      If(weight.greaterThan(0), () => {
+        const uv = coordinate.clamp(vec3(0), this.exportDimensions.sub(1)).add(0.5)
+          .div(this.exportTextureDimensions);
+        value.assign(sampler.sample(uv).level(float(0)).xyz.mul(weight));
+      });
+      return value;
+    })();
+  }
+
   /** Color field corresponding to getVolumeField. */
   public getVolumeColorField(): VolumeField {
     return this.colorField;
@@ -489,6 +514,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     system: import('../core/ParticleSystem').default,
     renderer: ParticleSpatialGridRenderer,
   ): Promise<void> {
+    // Structural edits made before prepare must reach storage before reserving resident capacity.
+    const particleGrid = this.getParticleSpatialGrid(system)!;
+    this.ensureGridResolution(renderer, particleGrid);
     await this.prepareInitialCapacity(system, renderer);
     this.volumeGrid.reductionCellCount = this.maximumResidentCapacity(renderer) * this.volumeGrid.cellsPerBrick + 1;
     await super.prepareResources(system, renderer);
@@ -498,6 +526,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     const textures = renderer as ParticleSpatialGridRenderer & { initTexture?: (texture: THREE.Texture) => void };
     textures.initTexture?.(this.densityTexture);
     textures.initTexture?.(this.colorTexture);
+    textures.initTexture?.(this.velocityTexture);
     await this.getPressureProjection().prepare(
       renderer, this.velocityNext, this.velocityCurrent, this.pressureIterations,
     );
@@ -578,7 +607,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
   /** Capture predictable ping-pong/source/export variants against persistent particle bindings. */
   private async prepareTransport(system: import('../core/ParticleSystem').default,
-    renderer: ParticleSpatialGridRenderer): Promise<void> {
+    renderer: ParticleSpatialGridRenderer, staged = false,
+    compile?: (nodes: ComputeNode[]) => Promise<void>): Promise<void> {
     const native = renderer as WebGPURenderer;
     const context = system.gpuSimulation.prepareContext(native);
     const grid = this.getParticleSpatialGrid(system)!;
@@ -590,13 +620,13 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     const collect = () => {
       renderer.compute = value => { nodes.push(...(Array.isArray(value) ? value : [value])); };
       try {
-        grid.rebuild(renderer, context.buffers);
+        if (!staged) grid.rebuild(renderer, context.buffers);
         this.volumeGrid.updateDispatch(renderer);
         this.volumeGrid.rebuild(context, renderer, this.densityCurrent, this.velocityCurrent,
           this.boundsMinNode, this.cellSizeNode, this.densityCutoffNode, system.getGPUFilterTagMask(this.tags));
         this.clearNewBricks(renderer);
         if (this.advectionMethod === AdvectionMethod.MacCormack) this.ensureAdvectionFields();
-        this.syncSimulationUniforms();
+        if (!staged) this.syncSimulationUniforms();
         this.preparingPool = true;
         this.getPressureProjection().forPreparation(() => {
           for (let phase = 0; phase < 2; phase++) this.computeTransport(context, renderer, grid);
@@ -618,7 +648,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     };
     this.volumeGrid.capturePreparation(collect);
     await this.benchmarks.spanAsync('transportPipelinePreparation',
-      () => native.compileComputeAsync([...new Set(nodes)]));
+      () => compile ? compile([...new Set(nodes)]) : native.compileComputeAsync([...new Set(nodes)]));
   }
 
   /** Internal debug-grid access, not part of the public module contract. @internal */
@@ -683,7 +713,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     }
     if (!this.pendingPreviousBounds) this.clearNewBricks(renderer);
     this.remapFields(renderer);
-    this.computeSolidField(context, renderer);
+    this.benchmarks.span('boundary', () => this.computeSolidField(context, renderer));
     this.getPressureProjection().initialize(renderer, this.velocityCurrent);
     this.computeTransport(context, renderer, grid);
     if (this.showGridHelper) this.volumeGrid.updateVisualization(renderer, this.densityCurrent, this.densityCutoffNode);
@@ -718,7 +748,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
     const sourceGrid = this.getSourceGrid(context, renderer, grid);
 
-    const cacheKey = [grid.resourceVersion, context.buffers.version, tagMask,
+    // The particle directory generation changes with bounds/quality, but these graphs use the
+    // source index's persistent storage nodes and runtime dimensions. Only particle bindings specialize them.
+    const cacheKey = [context.buffers.version, tagMask,
       this.buoyancy, this.weight, this.velocitySourceStrength, this.sourceStrength,
       this.sourceTemperature, Boolean(this.temperatureOverLifetime), this.turbulenceNoiseStrength,
       this.turbulenceNoiseFrequency,
@@ -745,7 +777,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       const center = this.cellCenter(coordinate);
       let previous = this.advectField(this.velocityCurrent, this.velocityAdvected, center, dt, index).xyz;
       const density = velocityDensity.element(index);
-      const modules = this.evaluateGasModules(density, this.colorCurrent.element(index), previous, center, context);
+      const modules = this.evaluateGasModules(density, this.colorCurrent.element(index), previous, center, context,
+        density, this.createGasGridQuery(velocityDensity, this.colorCurrent, this.velocityCurrent), coordinate);
       if (modules) previous = modules.cell.velocity;
       const temperature = modules?.cell.temperature ?? density.y.div(max(density.x, float(1e-6)));
       const state = this.behaviorState(density, [
@@ -860,7 +893,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         const modules = this.evaluateGasModules(previousDensity, previousColor,
           this.velocityCurrent.element(index).xyz, center, context,
           mix(previousDensity, this.neighborAverage(inputDensity, coordinate),
-            clamp(this.scalarDiffusionNode.mul(dt), 0, 1)));
+            clamp(this.scalarDiffusionNode.mul(dt), 0, 1)),
+          this.createGasGridQuery(inputDensity, inputColor, this.velocityCurrent), coordinate);
         if (modules) {
           previousDensity = vec4(modules.cell.density, modules.cell.temperature.mul(modules.cell.density), 0, 0);
           previousColor = vec4(modules.cell.color.mul(modules.cell.density), 0);
@@ -975,23 +1009,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     const outputDensity = this.densityCurrent;
     const outputColor = this.colorCurrent;
     this.clearOutputTextures(renderer);
-    const output = this.outputNodes.get(outputDensity) ?? this.computeCells(index => {
-      const coordinate = this.cellCoordinate(index);
-      const density = outputDensity.element(index).x;
-      const normalized = this.outputColor(
-        outputColor.element(index).xyz,
-        density,
-      );
-      const exportCoordinate = coordinate.sub(ivec3(this.exportOffset));
-      If(vec3(exportCoordinate).greaterThanEqual(0).all()
-        .and(vec3(exportCoordinate).lessThan(this.exportDimensions).all()), () => {
-        textureStore(this.densityTextureNode, vec3(exportCoordinate),
-          this.outputParameters(index, density, outputDensity.element(index).y)).toWriteOnly();
-        textureStore(
-          this.colorTextureNode, vec3(exportCoordinate), vec4(normalized, density.greaterThan(0).select(1, 0)),
-        ).toWriteOnly();
-      });
-    });
+    const output = this.outputNodes.get(outputDensity) ?? this.createOutputNode(outputDensity, outputColor);
     this.outputNodes.set(outputDensity, output);
     this.benchmarks.span('volumeFieldUpdate', () => renderer.compute(output));
     this.volumeGrid.recordPhase(renderer, 'export');
@@ -1013,7 +1031,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
     this.volumeGrid.updateRenderSourceMask(context, renderBuffers, renderer,
       this.boundsMinNode, this.cellSizeNode, tagMask);
-    const cacheKey = [grid.resourceVersion, context.buffers.version, renderBuffers.version,
+    const cacheKey = [context.buffers.version, renderBuffers.version,
       tagMask, this.sourceStrength, this.sourceTemperature, Boolean(this.temperatureOverLifetime),
     ].join('|');
     if (cacheKey !== this.visualCacheKey) {
@@ -1047,6 +1065,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       });
     });
     this.visualSourceNode = sourceNode;
+    sourceNode.name = 'rzmps.gas.visualSources';
     renderer.compute(sourceNode);
 
     if (this.transientEffects.length) {
@@ -1065,36 +1084,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
     const density = this.densityCurrent;
     const color = this.colorCurrent;
-    const output = this.visualOutputNodes.get(density) ?? this.computeCells(index => {
-      const coordinate = this.cellCoordinate(index);
-      const fluidCell = this.isSolid(index).not();
-      const totalDensity = fluidCell.select(
-        this.transientEffects.length ? this.visualDensity.element(index).x
-          : density.element(index).x.add(this.visualDensity.element(index).x),
-        float(0),
-      );
-      const totalColor = fluidCell.select(
-        this.transientEffects.length ? this.visualColor.element(index).xyz
-          : vec3(color.element(index).xyz).add(this.visualColor.element(index).xyz),
-        vec3(0),
-      );
-      const totalTemperature = fluidCell.select(
-        this.transientEffects.length ? this.visualDensity.element(index).y
-          : density.element(index).y.add(this.visualDensity.element(index).y),
-        float(0),
-      );
-      const exportCoordinate = coordinate.sub(ivec3(this.exportOffset));
-      If(vec3(exportCoordinate).greaterThanEqual(0).all()
-        .and(vec3(exportCoordinate).lessThan(this.exportDimensions).all()), () => {
-        textureStore(this.densityTextureNode, vec3(exportCoordinate),
-          this.outputParameters(index, totalDensity, totalTemperature, this.transientEffects.length
-            ? vec3(this.visualDensity.element(index).zw, this.visualColor.element(index).w) : undefined)).toWriteOnly();
-        textureStore(this.colorTextureNode, vec3(exportCoordinate), vec4(
-          this.outputColor(totalColor, totalDensity),
-          totalDensity.greaterThan(0).select(1, 0),
-        )).toWriteOnly();
-      });
-    });
+    const output = this.visualOutputNodes.get(density) ?? this.createVisualOutputNode(density, color);
     this.visualOutputNodes.set(density, output);
     this.benchmarks.span('volumeFieldUpdate', () => renderer.compute(output));
     this.volumeGrid.recordPhase(renderer, 'render');
@@ -1117,6 +1107,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
   protected override onGridResolutionChanged(): void {
     this.occupiedGasBounds.makeEmpty();
+    this.pressureProjection?.dispose();
+    this.pressureProjection = undefined;
     this.cancelQualityPreparation();
     this.poolAllocation?.cancelPending(); this.poolAllocation = undefined;
     this.volumeGrid?.dispose();
@@ -1171,7 +1163,41 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     stage?: string;
     blockedUntil?: number;
     remaps?: WeakMap<object, ComputeNode>; copyVelocity?: ComputeNode; nodes?: ComputeNode[];
+    programs?: GasSimulation; programNodes?: ComputeNode[];
   };
+
+  private qualityProgramNodes: ComputeNode[] = [];
+
+  /** An isolated graph owner captures the final directory and persistent field bindings, never live caches. */
+  private async prepareQualityPrograms(candidate: NonNullable<GasSimulation['qualityPreparation']>,
+    renderer: ParticleSpatialGridRenderer): Promise<void> {
+    if (!this.poolContext) return;
+    // Copy own state rather than inheriting mutable state from the live module. Physical storage nodes
+    // are intentionally shared: they are the final bindings and survive the quality transfer.
+    const programs = Object.assign(Object.create(GasSimulation.prototype), this) as GasSimulation;
+    Object.assign(programs, { volumeGrid: candidate.grid, pressureProjection: candidate.pressure,
+      gridDimensions: candidate.grid!.gridDimensions.clone(), cellSize: candidate.grid!.cellSize,
+      maximaMinimum: this.maximaMinimum.clone(), preparingPool: true,
+      density: { ...this.density }, colorField: { ...this.colorField },
+      // Programs must not retain a chain of previous program owners or staged resource payloads.
+      qualityProgramNodes: [], qualityPreparation: undefined, poolAllocation: undefined,
+      textureAllocation: undefined, boundaryReduction: undefined, guardPrediction: undefined,
+      clearNewNodes: [], clearTexturesNode: undefined });
+    programs.resetGasNodes();
+    candidate.programs = programs;
+    await programs.prepareTransport(this.poolContext.system, renderer, true, async nodes => {
+      candidate.programNodes = nodes;
+      await prepareComputePrograms(renderer, nodes, () => this.qualityPreparation === candidate);
+    });
+  }
+
+  private adoptQualityPrograms(programs: GasSimulation): void {
+    const keys = ['gpuCacheKey', 'effectNodes', 'visualStateNodes', 'velocityNodes', 'velocitySourceNode',
+      'sourceNodes', 'scalarModuleNodes', 'scalarSourceNodes', 'solidClearNodes', 'outputNodes', 'visualCacheKey',
+      'visualSourceNode', 'visualOutputNodes', 'maximaNodes', 'maximaResetNode', 'curlNode', 'confinementNodes',
+      'advectionNodes', 'clearNewNodes', 'clearTexturesNode'] as const;
+    Object.assign(this, Object.fromEntries(keys.map(key => [key, programs[key]])));
+  }
 
   /** Prepare only the expensive pressure/directory replacement; no live fields or uniforms are advanced. */
   protected override prepareQualityChange(domain: SpatialGridDomain, renderer: ParticleSpatialGridRenderer): boolean {
@@ -1205,6 +1231,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     if (pending) {
       if (!pending.ready) return false;
       pending.pressure?.dispose(); pending.grid?.dispose(renderer); pending.nodes?.forEach(node => node.dispose());
+      pending.programNodes?.forEach(node => node.dispose());
     }
     const candidate = { key, ready: false } as NonNullable<GasSimulation['qualityPreparation']>;
     this.qualityPreparation = candidate;
@@ -1265,6 +1292,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       candidate.stage = 'remaps';
       await compiler.compileComputeAsync([forward, backward, copyVelocity]);
       if (this.qualityPreparation !== candidate) return;
+      candidate.stage = 'transport';
+      await this.prepareQualityPrograms(candidate, renderer);
+      if (this.qualityPreparation !== candidate) return;
       candidate.ready = true;
       candidate.stage = 'ready';
       this.benchmarks.set('qualityPreparationMs', performance.now() - started);
@@ -1277,6 +1307,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       if (this.qualityPreparation !== candidate) {
         candidate.pressure?.dispose(); candidate.grid?.dispose(renderer);
         candidate.nodes?.forEach(node => node.dispose());
+        candidate.programNodes?.forEach(node => node.dispose());
       }
     });
     return false;
@@ -1302,11 +1333,14 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       await new Promise(resolve => setTimeout(resolve, 0));
       if (this.qualityPreparation !== candidate) return;
       await prepareComputePrograms(renderer, candidate.nodes, () => this.qualityPreparation === candidate);
+      candidate.programNodes?.forEach(node => node.dispose());
+      await this.prepareQualityPrograms(candidate, renderer);
       candidate.ready = true;
     }).catch(error => { candidate.error = error; candidate.ready = true; }).finally(() => {
       if (this.qualityPreparation !== candidate) {
         candidate.pressure?.dispose(); candidate.grid?.dispose(renderer);
         candidate.nodes?.forEach(node => node.dispose());
+        candidate.programNodes?.forEach(node => node.dispose());
       }
     });
   }
@@ -1338,6 +1372,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       const retired = [...grid.adoptCapacity(backing), ...pressure.adoptCapacityStorage(storage)];
       retired.forEach(attribute => { destroyGPUStorageAttribute(renderer, attribute); attribute.dispose(); });
       backing.dispatchAttributes.forEach(attribute => attribute.dispose());
+      candidate.programNodes?.forEach(node => node.dispose());
+      await this.prepareQualityPrograms(candidate, renderer);
       candidate.ready = true;
     }).catch(error => {
       candidate.error = error; candidate.ready = true;
@@ -1346,6 +1382,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       if (this.qualityPreparation !== candidate) {
         candidate.pressure?.dispose(); candidate.grid?.dispose(renderer);
         candidate.nodes?.forEach(node => node.dispose());
+        candidate.programNodes?.forEach(node => node.dispose());
       }
     });
   }
@@ -1354,6 +1391,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     const preparation = this.qualityPreparation; this.qualityPreparation = undefined;
     if (preparation?.ready) {
       preparation.pressure?.dispose(); preparation.grid?.dispose(); preparation.nodes?.forEach(node => node.dispose());
+      preparation.programNodes?.forEach(node => node.dispose());
     }
   }
 
@@ -1400,8 +1438,12 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.cellSize = grid.cellSize; this.cellSizeNode.value = this.cellSize;
     const prepared = this.qualityPreparation;
     if (prepared?.ready && prepared.grid && Math.abs(prepared.grid.cellSize - this.cellSize) < 1e-9
-      && prepared.grid.gridDimensions.equals(this.gridDimensions) && prepared.grid.capacity === old.capacity) {
-      prepared.grid.updateLayout(renderer, this.bounds, this.gridDimensions);
+      && prepared.grid.capacity === old.capacity
+      && prepared.grid.ensureDirectory(renderer, this.gridDimensions)) {
+      // Live coverage can grow while shaders compile. Rectangle dimensions are runtime metadata;
+      // a never-dispatched candidate has no occupied directory to reindex or specialize again.
+      prepared.grid.setLayoutMetadata(this.bounds, this.gridDimensions);
+      prepared.pressure!.updateTopology();
       this.volumeGrid = prepared.grid; this.pressureProjection = prepared.pressure;
       this.qualityPreparation = undefined;
     } else {
@@ -1419,6 +1461,12 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     }
     this.clearNewNodes = [];
     this.clearTexturesNode = undefined;
+    if (prepared?.programs && this.pressureProjection === prepared.pressure) {
+      const retiredPrograms = this.qualityProgramNodes;
+      this.adoptQualityPrograms(prepared.programs);
+      this.qualityProgramNodes = prepared.programNodes ?? [];
+      this.retireGridResources(renderer, () => retiredPrograms.forEach(node => node.dispose()));
+    }
     // Export textures are derived render resources, not quality-specialized storage. Retain their
     // backing and let updateExportLayout stage any necessary growth while simulation continues.
     this.density.resolution.copy(this.gridDimensions); this.colorField.resolution.copy(this.gridDimensions);
@@ -1441,7 +1489,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private get allocatedBytes(): number {
     return this.fieldAttributes.reduce((sum, attribute) => sum + attribute.array.byteLength, 0)
       + this.volumeGrid.allocatedBytes + (this.pressureProjection?.allocatedBytes ?? 0)
-      + 2 * this.textureDimensions.x * this.textureDimensions.y * this.textureDimensions.z * 4 * 2;
+      + 3 * this.textureDimensions.x * this.textureDimensions.y * this.textureDimensions.z * 4 * 2;
   }
 
   private get fieldAttributes(): StorageBufferAttribute[] {
@@ -1470,7 +1518,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       count: this.cellCount, retired: [], adopted: true }, this.volumeGrid.capacity, {
       maximumCapacity: maximum,
       create: capacity => {
-        const volume = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: this.bounds },
+        const volume = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: this.bounds,
+          brickSubdivisions: this.volumeGrid.brickSubdivisions,
+          cellSubdivisions: this.volumeGrid.cellSubdivisions },
           capacity, this.gridDimensions, this.volumeGrid.directoryCapacity);
         const count = volume.cellCount;
         const attributes = this.fieldAttributes.map(attribute => {
@@ -1681,6 +1731,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
   public override cleanup(): void {
     this.cancelQualityPreparation();
+    this.qualityProgramNodes.forEach(node => node.dispose()); this.qualityProgramNodes = [];
     this.poolAllocation?.cancelPending(); this.poolAllocation = undefined;
     super.cleanup();
     this.sourceGrid?.dispose();
@@ -1760,13 +1811,71 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.clearNewNodes.forEach(node => renderer.compute(node));
   }
 
+  /** All derived fields share coordinates, clearing and resource adoption. */
+  private writeVolumeTextures(coordinate: Node<'ivec3'>, parameters: Node<'vec4'>,
+    color: Node<'vec4'>, velocity: Node<'vec3'>): void {
+    textureStore(this.densityTextureNode, coordinate, parameters).toWriteOnly();
+    textureStore(this.colorTextureNode, coordinate, color).toWriteOnly();
+    textureStore(this.velocityTextureNode, coordinate, vec4(velocity, 0)).toWriteOnly();
+  }
+
+  private createOutputNode(outputDensity: Vec4Storage, outputColor: Vec4Storage): ComputeNode {
+    return this.computeCells(index => {
+      const coordinate = this.cellCoordinate(index);
+      const density = outputDensity.element(index).x;
+      const normalized = this.outputColor(
+        outputColor.element(index).xyz,
+        density,
+      );
+      const exportCoordinate = coordinate.sub(ivec3(this.exportOffset));
+      If(vec3(exportCoordinate).greaterThanEqual(0).all()
+        .and(vec3(exportCoordinate).lessThan(this.exportDimensions).all()), () => {
+        const velocity = this.velocityCurrent.element(index).xyz.toVar();
+        this.writeVolumeTextures(exportCoordinate,
+          this.outputParameters(index, density, outputDensity.element(index).y, velocity),
+          vec4(normalized, density.greaterThan(0).select(1, 0)), velocity);
+      });
+    });
+  }
+
+  private createVisualOutputNode(density: Vec4Storage, color: Vec4Storage): ComputeNode {
+    return this.computeCells(index => {
+      const coordinate = this.cellCoordinate(index);
+      const fluidCell = this.isSolid(index).not();
+      const totalDensity = fluidCell.select(
+        this.transientEffects.length ? this.visualDensity.element(index).x
+          : density.element(index).x.add(this.visualDensity.element(index).x),
+        float(0),
+      );
+      const totalColor = fluidCell.select(
+        this.transientEffects.length ? this.visualColor.element(index).xyz
+          : vec3(color.element(index).xyz).add(this.visualColor.element(index).xyz),
+        vec3(0),
+      );
+      const totalTemperature = fluidCell.select(
+        this.transientEffects.length ? this.visualDensity.element(index).y
+          : density.element(index).y.add(this.visualDensity.element(index).y),
+        float(0),
+      );
+      const exportCoordinate = coordinate.sub(ivec3(this.exportOffset));
+      If(vec3(exportCoordinate).greaterThanEqual(0).all()
+        .and(vec3(exportCoordinate).lessThan(this.exportDimensions).all()), () => {
+        const velocity = fluidCell.select(this.transientEffects.length
+          ? vec3(this.visualDensity.element(index).zw, this.visualColor.element(index).w)
+          : this.velocityCurrent.element(index).xyz, vec3(0)).toVar();
+        this.writeVolumeTextures(exportCoordinate,
+          this.outputParameters(index, totalDensity, totalTemperature, velocity),
+          vec4(this.outputColor(totalColor, totalDensity), totalDensity.greaterThan(0).select(1, 0)), velocity);
+      });
+    });
+  }
+
   private clearOutputTextures(renderer: ParticleSpatialGridRenderer): void {
     this.clearTexturesNode ??= Fn(() => {
       const size = this.exportDimensions;
       const coordinate = ivec3(int(instanceIndex.mod(uint(size.x))),
         int(instanceIndex.div(uint(size.x)).mod(uint(size.y))), int(instanceIndex.div(uint(size.x.mul(size.y)))));
-      textureStore(this.densityTextureNode, coordinate, vec4(0)).toWriteOnly();
-      textureStore(this.colorTextureNode, coordinate, vec4(0)).toWriteOnly();
+      this.writeVolumeTextures(coordinate, vec4(0), vec4(0), vec3(0));
     })().compute(1);
     const size = this.exportDimensions.value;
     this.clearTexturesNode.count = size.x * size.y * size.z;
@@ -1794,6 +1903,10 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.maxima = storage(this.maximaAttribute, 'uint', 12).toAtomic() as AtomicUintStorage;
     this.densityTexture = this.makeTexture();
     this.colorTexture = this.makeTexture();
+    this.velocityTexture = this.makeTexture();
+    this.exportTextureDimensions.value.copy(this.textureDimensions);
+    if (this.velocityTextureSampler) this.velocityTextureSampler.value = this.velocityTexture;
+    this.velocityTextureNode = storageTexture(this.velocityTexture);
     this.densityTextureNode = storageTexture(this.densityTexture);
     this.colorTextureNode = storageTexture(this.colorTexture);
   }
@@ -1804,6 +1917,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.pressureProjection = undefined;
     this.densityTexture?.dispose();
     this.colorTexture?.dispose();
+    this.velocityTexture?.dispose();
     [
       this.densityAttributeA,
       this.densityAttributeB,
@@ -1914,6 +2028,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       queue: { onSubmittedWorkDone(): Promise<void> } } }).device;
     this.textureAllocation ??= new StagedGPUAllocation<GasTexturePool>({
       dimensions: this.textureDimensions.clone(), density: this.densityTexture, color: this.colorTexture,
+      velocity: this.velocityTexture,
     }, 1, {
       maximumCapacity: 2 ** 30,
       create: () => {
@@ -1924,13 +2039,18 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         if (Math.max(...next.toArray()) > device.limits.maxTextureDimension3D) {
           throw new RangeError('Gas texture capacity exceeds maxTextureDimension3D.');
         }
-        return { dimensions: next, density: this.createTexture(next), color: this.createTexture(next) };
+        this.peakAllocatedBytes = Math.max(this.peakAllocatedBytes,
+          this.allocatedBytes + next.x * next.y * next.z * 3 * 4 * 2);
+        return { dimensions: next, density: this.createTexture(next), color: this.createTexture(next),
+          velocity: this.createTexture(next) };
       },
       prepare: async next => {
         const textures = renderer as ParticleSpatialGridRenderer & { initTexture(texture: THREE.Texture): void };
         textures.initTexture(next.density);
         await new Promise(resolve => setTimeout(resolve, 0));
         textures.initTexture(next.color);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        textures.initTexture(next.velocity);
       },
       // Export textures are derived fields. Re-exporting uses the authoritative resident values after swap.
       migrate: () => {},
@@ -1939,9 +2059,12 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         this.densityTexture = next.density; this.colorTexture = next.color;
         this.densityTextureNode.value = next.density; this.colorTextureNode.value = next.color;
         this.density.texture = next.density; this.colorField.texture = next.color;
+        this.velocityTexture = next.velocity; this.velocityTextureNode.value = next.velocity;
+        if (this.velocityTextureSampler) this.velocityTextureSampler.value = next.velocity;
+        this.exportTextureDimensions.value.copy(next.dimensions);
         this.domainChanges.capacity++;
       },
-      dispose: previous => { previous.density.dispose(); previous.color.dispose(); },
+      dispose: previous => { previous.density.dispose(); previous.color.dispose(); previous.velocity.dispose(); },
       fence: () => device.queue.onSubmittedWorkDone(),
     });
     this.textureAllocation.request(this.textureAllocation.capacity);
@@ -2006,10 +2129,41 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     return value;
   }
 
+  /** Bind only immutable stage inputs. Lazy reads add no bindings when the query is unused. */
+  private createGasGridQuery(density: Vec4Storage, color: Vec4Storage, velocity: Vec4Storage): GasGridQuery {
+    const grid = this.volumeGrid;
+    return {
+      getCell: (x, y, z) => {
+        const coordinate = ivec3(int(x as Node<'int'>), int(y as Node<'int'>), int(z as Node<'int'>));
+        const address = grid.index(coordinate).toVar();
+        const resident = address.lessThan(grid.getCellCountNode().sub(1));
+        // Do not trust the sentinel's contents: absent cells always have canonical zero state.
+        const read = (field: Vec4Storage) => Fn(() => {
+          const value = vec4(0).toVar();
+          If(resident, () => value.assign(field.element(address)));
+          return value;
+        })().toVar();
+        let scalar: Node<'vec4'> | undefined;
+        let rgb: Node<'vec3'> | undefined;
+        let flow: Node<'vec3'> | undefined;
+        const state = () => scalar ??= read(density);
+        return {
+          position: this.cellCenter(coordinate),
+          get density() { return state().x; },
+          get temperature() { return state().y.div(state().x.max(1e-6)); },
+          get color() { return rgb ??= read(color).xyz.div(state().x.max(1e-6)); },
+          get velocity() { return flow ??= read(velocity).xyz; },
+        };
+      },
+    };
+  }
+
   /** Inline rules at the existing coefficient sites; no coefficient fields or additional dispatches. */
   private evaluateGasModules(
     field: Node<'vec4'>, color: Node<'vec4'>, velocity: Node<'vec3'>,
     position: Node<'vec3'>, context: GPUParticleUpdateContext, coefficientField = field,
+    grid = this.createGasGridQuery(this.densityCurrent, this.colorCurrent, this.velocityCurrent),
+    coordinate: Node<'ivec3'> = ivec3(position.sub(this.boundsMinNode).div(this.cellSizeNode).floor()),
   ): { cell: GPUGasCell; coefficients: GasModuleContext } | undefined {
     if (!this.gasModules.length) return undefined;
     const mass = field.x.max(1e-6);
@@ -2019,6 +2173,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     };
     const state = this.behaviorState(coefficientField, behaviorCoefficients);
     const coefficients: GasModuleContext = {
+      index: coordinate, grid,
       module: this.gasModules[0], deltaTime: context.deltaTimeNode, elapsedTime: context.elapsedTimeNode,
       buoyancy: float(this.buoyancy).toVar(), scalarDiffusion: this.scalarDiffusionNode.toVar(),
       turbulenceNoiseStrength: this.effectiveBehavior('turbulenceNoiseStrength',
@@ -2081,7 +2236,10 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       // Fedkiw et al.: epsilon * h * (normalized grad |curl u|) cross curl u.
       const state = this.behaviorState(densityField.element(index), ['vorticityStrength']);
       const modules = this.evaluateGasModules(densityField.element(index), this.colorCurrent.element(index),
-        this.velocityNext.element(index).xyz, this.cellCenter(coordinate), context);
+        // Confinement writes velocityNext in place. Module inputs instead use the unchanged
+        // pre-force velocity snapshot, for both the current cell and all neighbor queries.
+        this.velocityCurrent.element(index).xyz, this.cellCenter(coordinate), context, densityField.element(index),
+        this.createGasGridQuery(densityField, this.colorCurrent, this.velocityCurrent), coordinate);
       const strength = modules?.coefficients.vorticityStrength
         ?? this.effectiveBehavior('vorticityStrength', this.vorticityNode, state);
       const force = normal.cross(this.curl.element(index).xyz)
@@ -2255,6 +2413,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       atomicStore(this.maxima.element(instanceIndex), minimum.select(uint(0xffffffff), uint(0)));
     })().compute(12);
     this.maximaResetNode = reset;
+    reset.name = 'rzmps.gas.supportReduction.reset';
     renderer.compute(reset);
 
     const reduce = this.maximaNodes.get(density) ?? this.computeCells(index => {
@@ -2276,6 +2435,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       });
     });
     this.maximaNodes.set(density, reduce);
+    reduce.name = 'rzmps.gas.supportReduction';
     renderer.compute(reduce);
   }
 

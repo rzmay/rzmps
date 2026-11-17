@@ -64,7 +64,10 @@ assert.deepEqual(submissions.splice(0), firstGraphs, 'particle-count edits shoul
 assert.equal(firstGraphs[1].count, 3);
 graphGrid.setOptions({ timeQuality: 0.5 });
 graphGrid.rebuild(fakeRenderer, fakeBuffers, {});
-assert.notEqual(submissions.splice(0)[0], firstGraphs[0], 'captured bounds options invalidate build graphs');
+assert.equal(submissions.splice(0)[0], firstGraphs[0], 'CPU update cadence does not specialize build graphs');
+graphGrid.setOptions({ autoVolumeQuality: false, volumeQuality: 8 });
+graphGrid.rebuild(fakeRenderer, fakeBuffers, {});
+assert.equal(submissions.splice(0)[0], firstGraphs[0], 'runtime quality reuses indexing programs');
 graphGrid.cellSubdivisions = 2;
 graphGrid.rebuild(fakeRenderer, fakeBuffers, {});
 assert.notEqual(submissions.splice(0)[0], firstGraphs[0], 'structural edits invalidate build graphs');

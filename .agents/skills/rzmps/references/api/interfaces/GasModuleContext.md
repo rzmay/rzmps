@@ -62,6 +62,30 @@ readonly elapsedTime: Node<"float">;
 
 ***
 
+<a id="grid"></a>
+
+### grid
+
+```ts
+readonly grid: GasGridQuery;
+```
+
+All fused modules query the same input snapshot, even after earlier local edits.
+
+***
+
+<a id="index"></a>
+
+### index
+
+```ts
+readonly index: Node<"ivec3">;
+```
+
+Logical gas-cell coordinate, independent of resident page/texture packing.
+
+***
+
 <a id="module"></a>
 
 ### module

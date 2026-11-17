@@ -20,7 +20,7 @@ try {
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     const fixture = path.resolve(import.meta.dirname, 'fixtures/fluid.html');
     await openFixture(page, `http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${fixture}` +
-      `?example=${example}&demoLiquid=true&measureStartup&prepareStartup&scene=gasFlow`
+      `?example=${example}&demoLiquid=true&measureStartup&prepareStartup&scene=movingColliders`
       + (process.env.RENDER_DURING_PREPARATION ? '&renderDuringPreparation' : ''), errors);
     const result = await page.evaluate(async () => {
       const { system, renderer, scene, camera } = window.debugFluid;

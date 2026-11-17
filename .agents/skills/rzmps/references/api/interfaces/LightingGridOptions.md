@@ -42,7 +42,7 @@ Requested finest probe spacing; enlarged only if packed textures exceed hardware
 optional directions?: number | readonly number[];
 ```
 
-Finest direction count (coarser counts double), or explicit counts for every level. Defaults to six.
+Finest direction count (coarser counts double), or explicit counts for every level. Defaults to four.
 
 ***
 
@@ -90,7 +90,7 @@ Disable dynamic injection when baked probes already contain those scene lights. 
 optional levels?: number;
 ```
 
-Cascade count. Defaults to three.
+Cascade count. Defaults to two.
 
 ***
 
@@ -150,4 +150,4 @@ Midpoint density samples per cascade interval. Defaults to four.
 optional scatteringIterations?: number;
 ```
 
-Approximate extra isotropic scattering passes. Defaults to zero.
+Approximate extra isotropic scattering passes. Defaults to one.

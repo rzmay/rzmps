@@ -98,12 +98,9 @@ export default async function firePreset() {
         alphaAffectsIntensity: true,
         brightness: 1.8,
         rangeMultiplier: 3,
-        lightOptions: {
-          color: '#ffb570',
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
+        color: '#ffb570',
+        distance: 8,
+        decay: 2,
       }),
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
