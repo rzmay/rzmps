@@ -41,7 +41,15 @@ export class RendererGUI extends GUIEditorBase {
     folder.add(renderer, 'compensation', ['none', 'size', 'children']).name('LOD Compensation');
     const children = folder.addFolder('Renderer Children');
     renderer.children ??= {};
-    const defaults = { count: 0, radius: 0, scale: 1, alpha: 1, randomizeScale: 0, randomizeAlpha: 0 };
+    const defaults = {
+      count: 0,
+      radius: 0,
+      rotation: new THREE.Vector3(),
+      scale: 1,
+      alpha: 1,
+      randomizeScale: 0,
+      randomizeAlpha: 0,
+    };
     for (const [key, value] of Object.entries(defaults)) renderer.children[key] ??= value;
     this.addObject(children, renderer.children);
 
