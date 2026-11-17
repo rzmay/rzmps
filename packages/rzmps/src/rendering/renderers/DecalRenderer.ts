@@ -1,3 +1,4 @@
+import type { ColorRepresentation } from 'three';
 import type EmissionSource from '../../emission/EmissionSource';
 import type { SubSystemSource } from '../../emission/EmissionSource';
 import { eventNames, parameterEventHandler, subscribeParameterEvent, transformEventParameters,
@@ -11,16 +12,16 @@ import Particle from '../../core/Particle';
 import type ParticleSystem from '../../core/ParticleSystem';
 import type { SimulationEvent } from '../../events/EventReceiver';
 import type { DynamicValue } from '../../values/dynamicValue.types';
-import type { ColorInput, Vector3Input } from '../../values/valueInput.types';
+import type { Vector3Input } from '../../values/valueInput.types';
 import type { CollisionHit } from '../../collision/collision.types';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
-import type { GPUParticleReadbackField } from '../../simulation/gpu/SelectiveReadback';
+import type { GPUParticleReadbackField } from '../../simulation/gpu/GPUSelectiveReadbackState';
 import Collision from '../../modules/Collision';
 import ThreeCollisionBackend from '../../collision/ThreeCollisionBackend';
 import { isIgnoredCollisionObject } from '../../collision/isIgnoredCollisionObject';
 import evaluateDynamicNumber from '../../values/evaluateDynamicNumber';
 import evaluateDynamicColor from '../../values/evaluateDynamicColor';
-import evaluateDynamicVector3 from '../../values/evaluateDynamicVector3';
+import evaluateDynamicVector3 from '../../values/evaluateDynamicVector';
 import tagsIntersect from '../../core/tags/tagsIntersect';
 import acceptMultiple from '../../utils/acceptMultiple';
 import type { StrictMultiple } from '../../types/multiple.types';
@@ -66,7 +67,7 @@ export interface DecalRendererOptions extends Partial<RendererOptions> {
   /** Additional projector roll in radians, sampled independently for each mark. Default 0. */
   rotation: DynamicValue<number>;
   /** Tint multiplied with material color at creation. Default white. */
-  color: DynamicValue<ColorInput>;
+  color: DynamicValue<ColorRepresentation>;
   /** Seconds, sampled at creation; nonpositive/nonfinite values produce no decal. Default 8. */
   lifetime: DynamicValue<number>;
   /** Evaluated at normalized decal age, independently of source lifetime. Default 1. */
@@ -202,7 +203,7 @@ export default class DecalRenderer extends Renderer {
   offset = 0.001;
   size: DynamicValue<Vector3Input> = 1;
   rotation: DynamicValue<number> = 0;
-  color: DynamicValue<ColorInput> = new THREE.Color(0xffffff);
+  color: DynamicValue<ColorRepresentation> = new THREE.Color(0xffffff);
   lifetime: DynamicValue<number> = 8;
   opacity: DynamicValue<number> = 1;
   inheritColor = 1;

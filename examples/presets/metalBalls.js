@@ -1,3 +1,4 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import collisionTestScene from 'examples/scenes/collisionTest.js';
 import * as THREE from 'three';
 import {
@@ -61,7 +62,7 @@ export default async function metalBallsPreset() {
     // #region docs:renderers:1
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
         materialOptions: {
           roughness: 0.2,
           metalness: 0.6,

@@ -1,3 +1,4 @@
+import { SimulationSpace } from '../../build/index.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
@@ -651,7 +652,7 @@ test('Intersect sweeps only traveled distance, marks every entry/exit, and leave
 test('Intersect follows actual world-space motion in local simulation and respects selection caps', () => {
   const { renderer, system, scene } = fixture({ direction: DecalRenderer.Intersect(), onSpawn: false, continuousRate: 60,
     hitSelection: DecalRenderer.All, maxHits: 1, size: 0.2, inheritScale: 0 });
-  system.simulationSpace = 'local';
+  system.simulationSpace = SimulationSpace.Local;
   system.rotation.z = Math.PI / 2;
   scene.updateMatrixWorld(true);
   const p = source();

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { browserCatalogPlugin } from '../../benchmarks/lib/browser-catalog-plugin.mjs';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -22,6 +23,7 @@ const rzmpsPackageJson = JSON.parse(
 
 export default defineConfig({
   plugins: [
+    browserCatalogPlugin(path.resolve(__dirname, '../..')),
     react({
       include: '**/*.{jsx,tsx}',
     }),

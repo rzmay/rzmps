@@ -1,5 +1,6 @@
+import { cleanupSteps, closeBrowser, withDeadline } from '../process/lifecycle.utils.mjs';
 import fs from 'node:fs/promises';
-import { previewBrowserArguments } from './browserSettings.mjs';
+import { browserCleanup, browserArguments, browserLaunchOptions } from '../browser/launch.utils.mjs';
 import { attachBrowserDiagnostics } from './browserDiagnostics.mjs';
 import { encodeVideo, containers } from './media.mjs';
 import { rmSync } from 'node:fs';
@@ -71,7 +72,11 @@ export function parseOptions(args) {
     cameraPosition: vector('camera-position', [8, 6, 12]),
     cameraTarget: vector('camera-target', [0, 2, 0]),
     cameraFov: Number(values['camera-fov'] ?? 50),
-    output: path.resolve(values.output ?? `benchmark-results/previews/${values.example ?? 'fire'}`),
+    output: path.resolve(
+      import.meta.dirname,
+      '../..',
+      values.output ?? `tests/output/previews/${values.example ?? 'fire'}`,
+    ),
   };
   if (options.format !== 'png' && !containers[options.format]) throw new Error('--format must be png, mp4 or webm');
   const video = options.format !== 'png';
@@ -133,7 +138,7 @@ export async function capturePreview(options) {
     if (/^frame-\d+\.png$|^(contact-sheet|poster)\.png$|^preview\.(mp4|webm)$|^audio\.wav$/.test(file))
       await fs.unlink(path.join(options.output, file));
   }
-  let server, browser, browserDiagnostics;
+  let server, browser, browserDiagnostics, primaryError;
   const metadata = {
     ...options,
     status: 'initializing',
@@ -170,8 +175,9 @@ export async function capturePreview(options) {
     viteConfig = await demoBuild;
     server = await preview({ ...viteConfig, preview: { host: '127.0.0.1', port: 0 } });
     const address = server.httpServer.address();
-    const args = previewBrowserArguments();
+    const args = browserArguments();
     browser = await puppeteer.launch({
+      ...browserLaunchOptions('preview'),
       headless: true,
       args,
       defaultViewport: { width: options.width, height: options.height, deviceScaleFactor: 1 },
@@ -264,6 +270,7 @@ export async function capturePreview(options) {
     console.log(`Captured ${options.frames} ${options.backend} frames in ${options.output}`);
     return metadata;
   } catch (error) {
+    primaryError = error;
     metadata.status = 'failed';
     diagnostics.errors.push(error.stack ?? error.message);
     console.error(
@@ -272,19 +279,27 @@ export async function capturePreview(options) {
     console.error(browserDiagnostics?.state.chromium.slice(-12000) ?? 'No Chromium stderr was captured.');
     throw error;
   } finally {
-    try {
-      if (browserDiagnostics) {
-        metadata.browserDiagnostics = browserDiagnostics.state;
-        await browserDiagnostics.save();
-      }
-      await fs.writeFile(path.join(options.output, 'metadata.json'), JSON.stringify(metadata, null, 2) + '\n');
-    } finally {
-      try {
-        await browser?.close();
-      } finally {
-        await server?.close();
-      }
-    }
+    await cleanupSteps(
+      [
+        {
+          name: 'Saving preview diagnostics',
+          run: async () => {
+            if (browserDiagnostics) {
+              metadata.browserDiagnostics = browserDiagnostics.state;
+              await browserDiagnostics.save();
+            }
+            await fs.writeFile(path.join(options.output, 'metadata.json'), JSON.stringify(metadata, null, 2) + '\n');
+          },
+        },
+        { name: 'Closing preview browser', run: () => closeBrowser(browser, browserCleanup.browserMs) },
+        {
+          name: 'Closing preview server',
+          run: () => withDeadline(() => server?.close(), browserCleanup.serverMs, 'Closing preview server'),
+        },
+      ],
+      primaryError,
+      (name, error) => console.error(`${name}: ${error.message}`),
+    );
   }
 }
 

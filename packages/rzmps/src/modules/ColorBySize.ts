@@ -1,4 +1,4 @@
-import type { ColorInput } from '../values/valueInput.types';
+import type { ColorRepresentation } from 'three';
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../core/Module';
 import Particle from '../core/Particle';
@@ -10,7 +10,7 @@ import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 export type SizeRange = [number, number] | { min: number; max: number };
 
 export interface ColorBySizeOptions extends Partial<ModuleOptions> {
-    color: ValueByParameter<ColorInput>;
+    color: ValueByParameter<ColorRepresentation>;
     alpha: ValueByParameter<number>;
     /** Particle-size interval mapped to zero through one; values outside it are clamped. */
     sizeRange: SizeRange;

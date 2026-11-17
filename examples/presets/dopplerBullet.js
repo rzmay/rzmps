@@ -1,3 +1,4 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import {
   AudioRenderer,
@@ -31,7 +32,7 @@ import { Easing } from 'eaz';
 import holeAlbedo from 'examples/assets/images/bullet-hole/bullet-hole_albedo.png?url';
 import holeNormal from 'examples/assets/images/bullet-hole/bullet-hole_normal.png?url';
 import holeRoughness from 'examples/assets/images/bullet-hole/bullet-hole_roughness.png?url';
-import cornellBoxScene from '../scenes/cornellBox';
+import cornellBoxScene from 'examples/scenes/cornellBox.js';
 
 export default async function dopplerBulletPreset() {
   const textureLoader = new THREE.TextureLoader();
@@ -303,7 +304,7 @@ function createSmokeWake() {
     // #region docs:renderers:2
     renderers: [
       new SpriteRenderer(Textures.Default, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
         alphaMap: smokeAlpha,
         softParticleDistance: 1.2,
         materialOptions: {
@@ -527,7 +528,7 @@ function createImpactDust() {
     // #endregion docs:modules:5
     // #region docs:renderers:6
     renderers: new SpriteRenderer(Textures.Default, {
-      material: 'lit',
+      material: SpriteMaterialType.Lit,
       alphaMap: smokeAlpha,
       // A broad depth fade erased these small puffs while they were still close to the impact surface.
       softParticleDistance: 0.025,

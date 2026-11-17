@@ -18,8 +18,8 @@ on:
       selection:
         description: Benchmark coverage
         type: choice
-        options: [full, pr]
-        default: full
+        options: [reported, pr]
+        default: reported
       simulation_clock:
         description: Wall clock includes catch-up; fixed compares equal simulation intervals
         type: choice
@@ -47,13 +47,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      RZMPS_BENCHMARK_DURATION_MS: 1500
-      RZMPS_BENCHMARK_WARMUP_MS: 500
       RZMPS_BENCHMARK_PROFILE: ci
-      RZMPS_BENCHMARK_WIDTH: 640
-      RZMPS_BENCHMARK_HEIGHT: 360
-      RZMPS_BENCHMARK_TIMEOUT_MS: 180000
-      BENCHMARK_SELECTION: ${{ github.event_name == 'workflow_dispatch' && inputs.selection || (contains(github.event.pull_request.labels.*.name, 'benchmark:full') && 'full' || 'pr') }}
+      BENCHMARK_SELECTION: ${{ github.event_name == 'workflow_dispatch' && inputs.selection || (contains(github.event.pull_request.labels.*.name, 'benchmark:full') && 'reported' || 'pr') }}
       BENCHMARK_CLOCK: ${{ github.event_name == 'workflow_dispatch' && inputs.simulation_clock || 'fixed' }}
 
     steps:
@@ -83,7 +78,7 @@ jobs:
             head/package-lock.json
 
       - name: Create results directory
-        run: mkdir -p "$GITHUB_WORKSPACE/benchmark-results"
+        run: mkdir -p "$GITHUB_WORKSPACE/benchmarks/output"
 
       - name: Install base dependencies
         working-directory: base
@@ -103,8 +98,8 @@ jobs:
       - name: Build each revision's benchmark suite
         working-directory: head
         run: |
-          node apps/demo/scripts/build-benchmark.mjs --library-root "$GITHUB_WORKSPACE/base" --out-dir "$GITHUB_WORKSPACE/benchmark-results/base-site"
-          node apps/demo/scripts/build-benchmark.mjs --library-root "$GITHUB_WORKSPACE/head" --out-dir "$GITHUB_WORKSPACE/benchmark-results/head-site"
+          node benchmarks/build.mjs --library-root "$GITHUB_WORKSPACE/base" --out-dir "$GITHUB_WORKSPACE/benchmarks/output/base-site"
+          node benchmarks/build.mjs --library-root "$GITHUB_WORKSPACE/head" --out-dir "$GITHUB_WORKSPACE/benchmarks/output/head-site"
 
       - name: Write comparison identity
         working-directory: head
@@ -119,7 +114,7 @@ jobs:
           import { execFileSync } from 'node:child_process';
           const checkout = process.env.GITHUB_WORKSPACE;
           const sha = revision => execFileSync('git', ['-C', path.join(checkout, revision), 'rev-parse', 'HEAD'], {encoding:'utf8'}).trim();
-          fs.writeFileSync(path.join(checkout, 'benchmark-results/metadata.json'), JSON.stringify({
+          fs.writeFileSync(path.join(checkout, 'benchmarks/output/metadata.json'), JSON.stringify({
             pr: process.env.PR_NUMBER ? Number(process.env.PR_NUMBER) : null,
             runId: Number(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
             baseSha: sha('base'), headSha: sha('head'), baseRef: process.env.BASE_REF, headRef: process.env.HEAD_REF,
@@ -128,37 +123,37 @@ jobs:
 
       - name: Measure AB and compare 1 sample(s) per revision
         working-directory: head
-        run: node scripts/benchmark/run-pr-benchmarks.mjs --stage 1 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
+        run: node benchmarks/lib/run-pr-benchmarks.mjs --stage 1 --directory "$GITHUB_WORKSPACE/benchmarks/output" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
 
       - name: Publish preliminary checkpoint
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-stage-${{ github.run_attempt }}-1
-          path: benchmark-results/stage-1/
+          path: benchmarks/output/stage-1/
           compression-level: 1
           retention-days: 30
 
       - name: Measure BA and compare 2 sample(s) per revision
         working-directory: head
-        run: node scripts/benchmark/run-pr-benchmarks.mjs --stage 2 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
+        run: node benchmarks/lib/run-pr-benchmarks.mjs --stage 2 --directory "$GITHUB_WORKSPACE/benchmarks/output" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
 
       - name: Publish intermediate checkpoint
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-stage-${{ github.run_attempt }}-2
-          path: benchmark-results/stage-2/
+          path: benchmarks/output/stage-2/
           compression-level: 1
           retention-days: 30
 
       - name: Measure AB and compare 3 sample(s) per revision
         working-directory: head
-        run: node scripts/benchmark/run-pr-benchmarks.mjs --stage 3 --directory "$GITHUB_WORKSPACE/benchmark-results" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
+        run: node benchmarks/lib/run-pr-benchmarks.mjs --stage 3 --directory "$GITHUB_WORKSPACE/benchmarks/output" --selection "$BENCHMARK_SELECTION" --simulation-clock "$BENCHMARK_CLOCK"
 
       - name: Publish final checkpoint
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-stage-${{ github.run_attempt }}-3
-          path: benchmark-results/stage-3/
+          path: benchmarks/output/stage-3/
           compression-level: 1
           retention-days: 30
 
@@ -166,11 +161,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
+          name: benchmarks/output
           overwrite: true
           path: |
-            benchmark-results/*.md
-            benchmark-results/*.json
-            benchmark-results/*.png
+            benchmarks/output/*.md
+            benchmarks/output/*.json
+            benchmarks/output/*.png
           if-no-files-found: warn
           retention-days: 30

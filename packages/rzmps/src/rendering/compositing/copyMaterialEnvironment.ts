@@ -1,11 +1,8 @@
 import type * as THREE from 'three';
 
 /** Environment textures stay borrowed, including live render-target textures. */
-export interface MaterialEnvironment {
-  envMap?: THREE.Texture | null;
-  envMapIntensity?: number;
-  envMapRotation?: THREE.Euler;
-}
+export type MaterialEnvironment = Partial<Pick<THREE.MeshStandardMaterial,
+  'envMap' | 'envMapIntensity' | 'envMapRotation'>>;
 
 /** Copies supported reflection inputs without changing the destination material class. */
 export function copyMaterialEnvironment(destination: THREE.Material, source?: MaterialEnvironment): void {

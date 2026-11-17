@@ -1,3 +1,4 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import {
@@ -63,7 +64,7 @@ export default async function suzannePreset() {
     // #region docs:renderers:1
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
       }),
     ],
     // #endregion docs:renderers:1

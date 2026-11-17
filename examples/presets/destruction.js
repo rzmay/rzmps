@@ -44,7 +44,7 @@ import destruction2 from 'examples/assets/models/Destruction_2.glb?url';
 import destruction3 from 'examples/assets/models/Destruction_3.glb?url';
 import destruction4 from 'examples/assets/models/Destruction_4.glb?url';
 import destruction5 from 'examples/assets/models/Destruction_5.glb?url';
-import cornellBoxScene from '../scenes/cornellBox';
+import cornellBoxScene from 'examples/scenes/cornellBox.js';
 
 async function loadFragments() {
   const loader = new GLTFLoader();

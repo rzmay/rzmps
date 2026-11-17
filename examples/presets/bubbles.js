@@ -1,3 +1,4 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import {
   AudioRenderer,
@@ -18,7 +19,7 @@ import bubblePop1Url from 'examples/assets/audio/bubble_pop_1.mp3?url';
 import bubblePop2Url from 'examples/assets/audio/bubble_pop_2.mp3?url';
 
 import { Easing } from 'eaz';
-import cornellBoxScene from '../scenes/cornellBox';
+import cornellBoxScene from 'examples/scenes/cornellBox.js';
 
 const withAudioSource = (buffer, url) => {
   Object.defineProperty(buffer, '__rzmpsAudioBufferSource', {
@@ -70,7 +71,7 @@ export default async function bubblesPreset() {
 
           mass: 0.25,
 
-          color: ['#bdefff', '#d8c8ff', '#bfffe4'],
+          color: ['#bdefff', '#d8c8ff'],
         },
       }),
     ],
@@ -104,7 +105,7 @@ export default async function bubblesPreset() {
     // #region docs:renderers:1
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
 
         materialOptions: {
           roughness: 0.15,

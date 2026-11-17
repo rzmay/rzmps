@@ -1,3 +1,4 @@
+import { SimulationSpace } from '../../build/index.mjs';
 import assert from 'node:assert/strict';
 import { Vector3, Color } from 'three';
 import { Renderer, Particle, ParticleSystem, LightRenderer, Emitter, CompensationMode, createGPUParticleBufferState, createGPUParticleRenderBufferState } from '../../build/index.mjs';
@@ -5,7 +6,7 @@ class Capture extends Renderer {
   setup() {} clear() {} destroy() { this.reset(); }
   _update(particles) { this.output = particles; }
 }
-const system = new ParticleSystem({ gpuProcessing: false, emitters: [], modules: [], renderers: [], simulationSpace: 'world' });
+const system = new ParticleSystem({ gpuProcessing: false, emitters: [], modules: [], renderers: [], simulationSpace: SimulationSpace.World });
 function particle(x, y = 0, z = 0, id = `${x}:${y}:${z}`) {
   const p = new Particle({ position: new Vector3(x, y, z), color: new Color(0.2, 0.4, 0.6), mass: 2, alpha: 0.5 });
   p.id = id; return p;

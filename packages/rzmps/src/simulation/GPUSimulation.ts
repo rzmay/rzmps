@@ -1,3 +1,4 @@
+import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import Benchmarks from '../core/Benchmarks';
 import GlobalSettings from '../core/GlobalSettings';
 import * as THREE from 'three';
@@ -30,14 +31,14 @@ import type ParticleSystem from '../core/ParticleSystem';
 import type { SubSystemOptions } from '../core/ParticleSystem';
 import { type SubSystemSource } from '../emission/EmissionSource';
 import Emitter from '../emission/Emitter';
-import { GPUEmissionRunBufferState } from '../emission/gpu/Emission';
+import { GPUEmissionRunBufferState } from '../emission/gpu/GPUEmissionRunBufferState';
 import { GPUEmitterInstanceBufferState } from '../emission/gpu/EmitterInstanceBuffer';
-import overrideEmitterOptions, { subscribes } from '../emission/options.utils';
+import overrideEmitterOptions, { subscribes } from '../emission/overrideEmitterOptions';
 import { MaxCulling } from '../enums/MaxCulling';
 import { SimulationSpace } from '../enums/SimulationSpace';
 import EventReceiver from '../events/EventReceiver';
 import { cpuEventHandler, eventNames, type GPUEmissionContext } from '../events/events.utils';
-import { SharedGPUEventBatch } from '../events/gpu/EventBatch';
+import { SharedGPUEventBatch } from '../events/gpu/SharedGPUEventBatch';
 import type { GPUEventReadbackBatch } from '../events/gpu/EventBuffer';
 import { GPUEventBufferState, GPUEventType } from '../events/gpu/EventBuffer';
 import type { GPUComputeCache, GPUComputeListCache, GPUUniformNode } from '../utils/gpu/computeCache.types';
@@ -59,19 +60,19 @@ import {
   type GPUParticleReadbackField,
   type GPUSelectiveReadbackRequest,
   type GPUSelectiveReadbackResult,
-} from '../simulation/gpu/SelectiveReadback';
+} from './gpu/GPUSelectiveReadbackState';
 import { rotateFromYGPU } from './gpu/transforms.utils';
 import { matrixColumnGPU, particleFrameGPU } from './simulationFrame.utils';
 import {
   GPUSpatialEffectRegistry,
   isBatchableEffect,
   type GPUSpatialEffectRecord,
-} from '../spatial/effects/gpu/SpatialEffectRegistry';
+} from '../spatial/effects/gpu/GPUSpatialEffectRegistry';
 import ParticleSpatialGrid from '../spatial/structures/ParticleSpatialGrid';
 import SpatialEffect from '../spatial/effects/SpatialEffect';
 import type { Tag } from '../types/tag.types';
 import type { DynamicValue } from '../values/dynamicValue.types';
-import { GPUDynamicParameterStore } from '../values/evaluateDynamicGPU';
+import { GPUDynamicParameterStore } from '../values/GPUDynamicParameterStore';
 interface GPUSubSystemFrameInput {
   parent: ParticleSystem;
   options: SubSystemOptions;
@@ -114,7 +115,7 @@ export default class GPUSimulation {
     readonly execution: GPUSimulationExecution,
   ) {
     const gauge = (name: string, get: () => number | null, unit = 'count') =>
-      this.benchmarks.register(name, { type: 'gauge', unit, get });
+      this.benchmarks.register(name, { type: BenchmarkMetricType.Gauge, unit, get });
     gauge('allocatedSlots', () => this._gpuBuffers?.capacity ?? 0);
     gauge('usedSlots', () => this.system.gpuBufferStats.activeSlots);
     this.benchmarks.derive('slotUtilization', ['usedSlots', 'allocatedSlots'],
@@ -132,7 +133,7 @@ export default class GPUSimulation {
     gauge('pipelineBuilds', () => this._gpuPipelineBuildCount);
     gauge('resourceBuilds', () => this._gpuResourceBuildCount);
     gauge('parameterUploads', () => this.system.gpuConfigurationStats.parameterUploads);
-    this.benchmarks.register('dispatchCount', { type: 'counter', unit: 'count', perFrame: true,
+    this.benchmarks.register('dispatchCount', { type: BenchmarkMetricType.Counter, unit: 'count', perFrame: true,
       source: 'renderer.info.compute.calls delta during this simulation submission' });
   }
   _gpuLODCull?: { buffers: GPUParticleBufferState; count: number; version: number; node: ComputeNode };

@@ -1,3 +1,4 @@
+import { EventOrigin } from '../../build/index.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Emitter, EventReceiver, Module, Particle, ParticleSystem } from '../../build/index.mjs';
@@ -46,7 +47,7 @@ for (const name of ['spawn', 'death', 'collision', 'pulse']) {
 test('parent scope on a root has no producers; module defaults remain local', () => {
   const local = new Module(() => {}, { events: ['pulse'] });
   const root = system({ modules: [local] });
-  const parent = new EventReceiver({ events: ['pulse'], eventScope: 'parent' });
+  const parent = new EventReceiver({ events: ['pulse'], eventScope: EventOrigin.Parent });
   try {
     parent.begin(root, 0);
     root.emitEvent('pulse');
@@ -77,12 +78,12 @@ for (const tags of [undefined, ['inherited']]) {
 }
 
 test('relationship scope overrides replace emitter scope and do not leak through detach or reparent', () => {
-  const emitter = new Emitter({ events: ['pulse'], eventScope: 'local', emitContinuous: false });
+  const emitter = new Emitter({ events: ['pulse'], eventScope: EventOrigin.Local, emitContinuous: false });
   const child = system({ emitters: [emitter] });
   const first = system();
   const second = system();
   try {
-    first.addSubSystem(child, { eventScope: 'parent' });
+    first.addSubSystem(child, { eventScope: EventOrigin.Parent });
     first.emitEvent('pulse', 'parent');
     child.emitEvent('pulse', 'local');
     child.emissionRuntime._updateEmitterInstances();

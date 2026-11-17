@@ -1,3 +1,5 @@
+import { BenchmarkStatistic } from '../../build/index';
+import { BenchmarkMetricType } from '../../build/index';
 import { Benchmarks, Module, ParticleSystem, profileRenderer } from '../../build/index';
 import type { WebGLRenderer } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
@@ -13,10 +15,10 @@ system.benchmarks.resolveGPU(renderer);
 profileRenderer(system.benchmarks, renderer, () => renderer.info.render.calls);
 const value: number = b.span('work', () => 42);
 b.derive('ratio', ['used', 'total'], ({ used, total }) => total ? used / total : 0);
-b.register('bytes', { type: 'gauge', unit: 'bytes', get: () => value });
-b.assert([{ metric: 'bytes', statistic: 'p95', max: 50 }]);
+b.register('bytes', { type: BenchmarkMetricType.Gauge, unit: 'bytes', get: () => value });
+b.assert([{ metric: 'bytes', statistic: BenchmarkStatistic.P95, max: 50 }]);
 new Module((_p, dt, { module }) => module.benchmarks.set('step', dt));
 // @ts-expect-error Unknown aggregation mode.
-b.register('invalid', { type: 'span', aggregation: 'average' });
+b.register('invalid', { type: BenchmarkMetricType.Span, aggregation: 'average' });
 // @ts-expect-error Unknown statistic.
 b.assert([{ metric: 'bytes', statistic: 'median' }]);

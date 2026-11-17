@@ -1,3 +1,4 @@
+import { EmissionSource } from '../../build/index.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
@@ -8,7 +9,7 @@ import { ParticleSystem, Particle, Emitter, EmissionShape, RegisteredEmissionSou
 
 const root = () => new ParticleSystem({ emitters: [], renderers: [], gravityModifier: 0 });
 function pointShape() {
-  const shape = new EmissionShape({ source: 'vertices', geometry: new THREE.PlaneGeometry(1, 1) });
+  const shape = new EmissionShape({ source: EmissionSource.Vertices, geometry: new THREE.PlaneGeometry(1, 1) });
   shape.getPoint = () => ({ position: new THREE.Vector3(), normal: new THREE.Vector3(0, 1, 0) });
   return shape;
 }
@@ -356,7 +357,7 @@ test('normal root updates refresh owned subsystem cubemaps once; offline steps d
 
 test('emitter shape offsets are sampled before source translation, rotation and scale', () => {
   const system = root();
-  const shape = EmissionShape.Box({ source: 'vertices' }, 2, 2, 2);
+  const shape = EmissionShape.Box({ source: EmissionSource.Vertices }, 2, 2, 2);
   shape.scale.set(0.5, 0.1, 0.5);
   const child = effect({ source: shape });
   system.addSubSystem(child, { emitOnSpawn: true, inheritScale: 1 });

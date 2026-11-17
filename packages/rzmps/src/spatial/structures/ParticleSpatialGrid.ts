@@ -1,3 +1,4 @@
+import { SpatialBackend } from '../../enums/SpatialBackend';
 import * as THREE from 'three';
 import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
@@ -152,14 +153,14 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
 
   /** Creates a sparse grid whose storage grows with particle capacity, not world volume. */
   constructor(options: Partial<ParticleSpatialGridOptions> = {},
-    private readonly aggregator?: SpatialAggregator<L, 'gpu'>) {
+    private readonly aggregator?: SpatialAggregator<L, SpatialBackend.GPU>) {
     this.brickSubdivisions = ParticleSpatialGrid.clampDepth(options.brickSubdivisions ?? 3);
     this.cellSubdivisions = ParticleSpatialGrid.clampDepth(options.cellSubdivisions ?? 4);
     this.maxDepth = this.brickSubdivisions + this.cellSubdivisions;
     this.cellsPerAxis = 2 ** this.maxDepth;
     this.levels = Object.freeze(resolveSpatialLevels(options.levels, this.brickSubdivisions, this.cellSubdivisions));
     this.maintainRegions = aggregator !== undefined || (options.levels !== undefined
-      && options.levels !== SpatialLevels.None && options.levels !== 'None');
+      && options.levels !== SpatialLevels.None);
     this.powerOfTwoBounds = options.powerOfTwoBounds ?? true;
     this.bounds = ParticleSpatialGrid.normalizeBounds(
       options.bounds ?? DEFAULT_BOUNDS,

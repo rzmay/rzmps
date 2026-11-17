@@ -1,9 +1,9 @@
+import type { SpatialBackend } from '../enums/SpatialBackend';
 import type { Node } from 'three/webgpu';
 import type Particle from '../core/Particle';
 import type { OctreeNode } from '../spatial/structures/ParticleOctree';
 import type { GPUParticleLike } from '../simulation/gpu/Particle';
 
-export type SpatialBackend = 'cpu' | 'gpu';
 export type SpatialAggregateType = 'float' | 'uint' | 'int' | 'vec2' | 'vec3' | 'vec4';
 /** GPU channels are explicitly named fixed-layout scalar/vector fields, not arbitrary CPU objects. */
 export type SpatialAggregateLayout = Record<string, SpatialAggregateType>;
@@ -22,7 +22,7 @@ export interface GPUSpatialRegion {
  * CPU contributions retain the existing octree node argument and constructor-style `new` member.
  * GPU T describes the storage layout; new/combine/finalize construct TSL channel expressions.
  */
-export type SpatialAggregator<T, B extends SpatialBackend = 'cpu'> = B extends 'gpu' ? {
+export type SpatialAggregator<T, B extends SpatialBackend = SpatialBackend.CPU> = B extends SpatialBackend.GPU ? {
   layout: T & SpatialAggregateLayout;
   'new'(particle?: GPUParticleLike, particleIndex?: Node<'uint'>, region?: GPUSpatialRegion): SpatialAggregateNodes<T>;
   combine(a: SpatialAggregateNodes<T>, b: SpatialAggregateNodes<T>): SpatialAggregateNodes<T>;

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../core/Module';
 import Particle from '../core/Particle';
 import type { DynamicValue } from '../values/dynamicValue.types';
-import evaluateDynamicVector from '../values/evaluateDynamicVector3';
+import evaluateDynamicVector from '../values/evaluateDynamicVector';
 
 export interface ScaleOverLifetimeOptions extends Partial<ModuleOptions> {
     scale: DynamicValue<Vector3Input>;

@@ -180,7 +180,7 @@ const decals = new DecalRenderer(material, {
 });
 ```
 
-`color` accepts `ColorInput` values (Three.js colors, CSS strings, or numeric hex values). `size` accepts
+`color` accepts `ColorRepresentation` values (Three.js colors, CSS strings, or numeric hex values). `size` accepts
 `Vector3Input`: a number for uniform width/height or a vector for separate X/Y dimensions; Z is ignored because `depth`
 controls clipping. Both support callbacks, ranges, and sets without modifying caller-owned values.
 

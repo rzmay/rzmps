@@ -1,3 +1,6 @@
+import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
+import { GeometryUpdatePolicy } from '../enums/GeometryUpdatePolicy';
+import type { ThreeCollisionBackendOptions } from './ThreeCollisionBackend';
 import Benchmarks from '../core/Benchmarks';
 import { MaterialCopyRegistry } from '../rendering/compositing/MaterialCopyRegistry';
 import getAttributeVersion from '../utils/getAttributeVersion';
@@ -13,35 +16,19 @@ import capsuleBVHCollisionNode, {
   CapsuleQuery,
 } from './capsuleBVHCollisionNode';
 
-export enum CollisionGeometryUpdatePolicy {
-  Static = 'static',
-  TransformDynamic = 'transform-dynamic',
-  GeometryDynamic = 'geometry-dynamic',
-  Auto = 'auto',
-}
+export { GeometryUpdatePolicy } from '../enums/GeometryUpdatePolicy';
 
 // This policy is GPU-specific: BLAS refits distinguish transform-only and vertex
 // changes. ThreeCollisionBackend rebuilds CPU octrees and has no equivalent refit.
 
-export interface ThreeGPUCollisionBackendOptions {
-  /** Scene subtree scanned when explicit object lists are not sufficient. */
-  world?: THREE.Object3D;
-  /** Mesh roots whose transforms and geometry are treated as immutable. */
-  staticObjects?: THREE.Object3D[];
-  /** Mesh roots whose world transforms may change without vertex deformation. */
-  dynamicObjects?: THREE.Object3D[];
+export interface ThreeGPUCollisionBackendOptions extends Pick<ThreeCollisionBackendOptions,
+  'world' | 'staticObjects' | 'dynamicObjects' | 'objectFilter' | 'staticObjectFilter' | 'dynamicObjectFilter'> {
   /** Mesh roots whose position attributes may change. */
   geometryDynamicObjects?: THREE.Object3D[];
-  /** Filters every candidate mesh before classification. */
-  objectFilter?: (object: THREE.Object3D) => boolean;
-  /** Selects static meshes discovered below world. */
-  staticObjectFilter?: (object: THREE.Object3D) => boolean;
-  /** Selects transform-dynamic meshes discovered below world. */
-  dynamicObjectFilter?: (object: THREE.Object3D) => boolean;
   /** Selects deforming meshes discovered below world. */
   geometryDynamicObjectFilter?: (object: THREE.Object3D) => boolean;
   /** Default classification for meshes not selected by a more specific list or filter. */
-  updatePolicy?: CollisionGeometryUpdatePolicy | `${CollisionGeometryUpdatePolicy}`;
+  updatePolicy?: GeometryUpdatePolicy;
 }
 
 /** Runtime observability for rebuild cost, uploads, and update-policy tuning. */
@@ -59,7 +46,7 @@ export interface ThreeGPUCollisionBackendStats {
 // octree tracks whole-object membership instead, so sharing the record would conflate APIs.
 type TrackedMesh = {
   mesh: THREE.Mesh;
-  policy: CollisionGeometryUpdatePolicy;
+  policy: GeometryUpdatePolicy;
   matrixWorld: THREE.Matrix4;
   geometry: THREE.BufferGeometry;
   positionAttribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
@@ -120,7 +107,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   staticObjectFilter?: (object: THREE.Object3D) => boolean;
   dynamicObjectFilter?: (object: THREE.Object3D) => boolean;
   geometryDynamicObjectFilter?: (object: THREE.Object3D) => boolean;
-  updatePolicy: CollisionGeometryUpdatePolicy;
+  updatePolicy: GeometryUpdatePolicy;
 
   readonly stats: ThreeGPUCollisionBackendStats = {
     objects: 0,
@@ -146,7 +133,8 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
   /** Creates an uninitialized GPU backend; call update before constructing query nodes. */
   constructor(options: ThreeGPUCollisionBackendOptions = {}) {
     for (const name of Object.keys(this.stats) as (keyof ThreeGPUCollisionBackendStats)[])
-      this.benchmarks.register(name, { type: 'gauge', unit: name === 'uploadBytes' ? 'bytes' : 'count',
+      this.benchmarks.register(name, {
+        type: BenchmarkMetricType.Gauge, unit: name === 'uploadBytes' ? 'bytes' : 'count',
         get: () => this.stats[name] });
     this.world = options.world;
     this.staticObjects = options.staticObjects;
@@ -156,8 +144,8 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
     this.staticObjectFilter = options.staticObjectFilter;
     this.dynamicObjectFilter = options.dynamicObjectFilter;
     this.geometryDynamicObjectFilter = options.geometryDynamicObjectFilter;
-    this.updatePolicy = (options.updatePolicy as CollisionGeometryUpdatePolicy)
-      ?? CollisionGeometryUpdatePolicy.Auto;
+    this.updatePolicy = (options.updatePolicy as GeometryUpdatePolicy)
+      ?? GeometryUpdatePolicy.Auto;
   }
 
   // ICollisionBackend's CPU query is synchronous, while this backend only exposes
@@ -207,8 +195,8 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
         topologyGeometries.add(entry.geometry);
       } else if (
         (this.invalidatedGeometry.has(uuid) || (
-          entry.policy === CollisionGeometryUpdatePolicy.GeometryDynamic
-          || entry.policy === CollisionGeometryUpdatePolicy.Auto
+          entry.policy === GeometryUpdatePolicy.GeometryDynamic
+          || entry.policy === GeometryUpdatePolicy.Auto
         ))
         && (
           entry.positionAttribute !== previous.positionAttribute
@@ -220,7 +208,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
       }
 
       if (
-        entry.policy !== CollisionGeometryUpdatePolicy.Static
+        entry.policy !== GeometryUpdatePolicy.Static
         && !entry.matrixWorld.equals(previous.matrixWorld)
       ) transformChanged = true;
     });
@@ -357,7 +345,7 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
 
   private collectMeshes(): Map<string, TrackedMesh> {
     const result = new Map<string, TrackedMesh>();
-    const add = (mesh: THREE.Mesh, policy: CollisionGeometryUpdatePolicy) => {
+    const add = (mesh: THREE.Mesh, policy: GeometryUpdatePolicy) => {
       if (this.objectFilter && !this.objectFilter(mesh)) return;
       mesh.updateWorldMatrix(true, false);
       const geometry = mesh.geometry;
@@ -379,24 +367,24 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
         drawRangeCount: geometry.drawRange.count,
       });
     };
-    const addRoot = (root: THREE.Object3D, policy: CollisionGeometryUpdatePolicy) => {
+    const addRoot = (root: THREE.Object3D, policy: GeometryUpdatePolicy) => {
       root.updateWorldMatrix(true, true);
       root.traverse((object) => {
         if (object instanceof THREE.Mesh && !isIgnoredCollisionObject(object)) add(object, policy);
       });
     };
 
-    this.staticObjects?.forEach((root) => addRoot(root, CollisionGeometryUpdatePolicy.Static));
-    this.dynamicObjects?.forEach((root) => addRoot(root, CollisionGeometryUpdatePolicy.TransformDynamic));
-    this.geometryDynamicObjects?.forEach((root) => addRoot(root, CollisionGeometryUpdatePolicy.GeometryDynamic));
+    this.staticObjects?.forEach((root) => addRoot(root, GeometryUpdatePolicy.Static));
+    this.dynamicObjects?.forEach((root) => addRoot(root, GeometryUpdatePolicy.TransformDynamic));
+    this.geometryDynamicObjects?.forEach((root) => addRoot(root, GeometryUpdatePolicy.GeometryDynamic));
     if (this.world) {
       this.world.updateWorldMatrix(true, true);
       this.world.traverse((object) => {
         if (!(object instanceof THREE.Mesh) || isIgnoredCollisionObject(object)) return;
         let policy = this.updatePolicy;
-        if (this.geometryDynamicObjectFilter?.(object)) policy = CollisionGeometryUpdatePolicy.GeometryDynamic;
-        else if (this.dynamicObjectFilter?.(object)) policy = CollisionGeometryUpdatePolicy.TransformDynamic;
-        else if (this.staticObjectFilter?.(object)) policy = CollisionGeometryUpdatePolicy.Static;
+        if (this.geometryDynamicObjectFilter?.(object)) policy = GeometryUpdatePolicy.GeometryDynamic;
+        else if (this.dynamicObjectFilter?.(object)) policy = GeometryUpdatePolicy.TransformDynamic;
+        else if (this.staticObjectFilter?.(object)) policy = GeometryUpdatePolicy.Static;
         add(object, policy);
       });
     }

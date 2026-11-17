@@ -4,7 +4,7 @@ import type { ModuleOptions } from '../core/Module';
 import Particle from '../core/Particle';
 import type { DynamicValue } from '../values/dynamicValue.types';
 import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
-import evaluateDynamicVector from '../values/evaluateDynamicVector3';
+import evaluateDynamicVector from '../values/evaluateDynamicVector';
 import { generateGPUParticleNoise4D, generateParticleNoise4D } from '../utils/noise.utils';
 import NoiseModule, { NoiseOptions } from './NoiseModule';
 import type { GPUParticleLike } from '../simulation/gpu/Particle';

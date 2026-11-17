@@ -1,3 +1,4 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import {
   AudioRenderer,
@@ -86,7 +87,7 @@ export default async function fireworksPreset() {
         loop: false,
       }),
       new SpriteRenderer(fireworkSprite, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
         materialOptions: {
           normalLighting: 1.0,
           sphericalNormals: 1.0,
@@ -149,7 +150,7 @@ export default async function fireworksPreset() {
     // #region docs:renderers:2
     renderers: [
       new SpriteRenderer(Textures.Default, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
         alphaMap: smokeAlpha,
         softParticleDistance: 1,
         materialOptions: {
@@ -199,7 +200,7 @@ export default async function fireworksPreset() {
       new SpriteRenderer(sparklesSprite, {
         children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
         compensation: CompensationMode.Children,
-        material: 'unlit',
+        material: SpriteMaterialType.Unlit,
         gridSize: { x: 5, y: 2 },
         fps: 10,
         randomStartFrame: true,

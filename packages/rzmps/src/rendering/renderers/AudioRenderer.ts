@@ -15,7 +15,7 @@ import acceptMultiple from '../../utils/acceptMultiple';
 import { CollisionHit } from '../../collision/collision.types';
 import type { SimulationEvent } from '../../events/EventReceiver';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
-import type { GPUParticleReadbackField } from '../../simulation/gpu/SelectiveReadback';
+import type { GPUParticleReadbackField } from '../../simulation/gpu/GPUSelectiveReadbackState';
 
 const AUDIO_LISTENER_KEY = '__rzmps_audioListener';
 

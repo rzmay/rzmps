@@ -64,8 +64,8 @@ reference for tools that need a complete documentation snapshot. It is a conveni
 not a requirement for skill discovery, installation, or automatic agent access. Prefer the
 index and relevant pages when the full bundle is unnecessary.
 
-`npm run docs:generate` refreshes agent references, documentation discovery files, npm `AGENTS.md`,
-and README guidance blocks. `npm run agents:check` validates frontmatter and reference links,
+`npm run generate --workspace @rzmps/docs` refreshes agent references, documentation discovery files, npm `AGENTS.md`,
+and README guidance blocks. `npm run check:agents --workspace @rzmps/docs` validates frontmatter and reference links,
 discovers and installs the checkout skill in a temporary project, and audits `npm pack --dry-run`.
 It leaves consumer projects and the user's agent configuration untouched.
 
@@ -75,7 +75,7 @@ pages come from the guides, examples, and API declarations. Website indexes and 
 are ignored build artifacts, regenerated for local builds and deployment. CI checks that the
 committed skill matches its canonical sources; it does not automatically commit changes.
 
-Run `npm run agents:check -- --github` to test the exact public shorthand discovery command.
+Run `npm run check:agents --workspace @rzmps/docs -- --github` to test the exact public shorthand discovery command.
 CI checks GitHub commit URLs after pushes and the shorthand after publishing to the default
 branch; pull requests validate their checkout without assuming the proposed skill is already public.
 
@@ -96,7 +96,7 @@ Inspect the installed package version and public exports before using a feature.
 
 Read [getting started](first-particle-system.md) for scene ownership and updates, [concepts](concepts.md) for lifecycle, priority, tags, spatial collections, and subsystem composition, and [GPU processing](gpu-processing.md) before implementing TSL callbacks, readback, collision, or spatial-grid behavior. Search the [generated API](../api/index.md) for signatures.
 
-Reuse a canonical factory from `examples/presets/`; inspect [example explanations](../examples/index.md) for its configuration rationale. Preserve the default factory and `factory.metadata` contracts. Add balanced documentation source regions and update the authored Markdown explanation, then run `npm run docs:generate` and `npm run docs:check`.
+Reuse a canonical factory from `examples/presets/`; inspect [example explanations](../examples/index.md) for its configuration rationale. Preserve the default factory and `factory.metadata` contracts. Add balanced documentation source regions and update the authored Markdown explanation, then run `npm run generate --workspace @rzmps/docs` and `npm run scripts check:docs`.
 
 Check the selected renderer and custom material compatibility using [compatibility](compatibility.md). Build packages, run `npm run preview -- --example <id> --backend webgl`, and inspect the contact sheet and metadata. Repeat with webgpu when relevant; report unavailable backends explicitly. Adjust warmup, interval, or scene to capture the actual event. Technical success alone does not establish visual quality.
 

@@ -1,3 +1,5 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import { TagSelectionMethod } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import {
   Emitter,
@@ -33,7 +35,7 @@ export default async function cubesAndSpheresPreset() {
         rate: 12,
         radialSpeed: 1,
         tags: ['spheres', 'cubes'],
-        tagSelection: 'distribute',
+        tagSelection: TagSelectionMethod.Distribute,
         initialValues: {
           lifetime: [6, 12],
           speed: 1,
@@ -72,7 +74,7 @@ export default async function cubesAndSpheresPreset() {
     // #region docs:renderers:1
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
         tags: 'spheres',
         materialOptions: {
           roughness: 0.5,

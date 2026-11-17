@@ -211,8 +211,10 @@ pose is converted into the selected simulation frame at birth. A source is a per
 so one shared subsystem can attach particles to many moving sources.
 
 ```js
+import { SimulationSpace } from '@rzmps/rzmps';
+
 const pulses = new ParticleSystem({
-  simulationSpace: 'source',
+  simulationSpace: SimulationSpace.Source,
   sourceLossBehavior: 'kill',
   // emitters, modules, renderers...
 });
@@ -228,11 +230,10 @@ inherited scale. `inheritScale: 0` keeps the attachment frame's scale at one. Th
 or storing source identity in application-owned particle attributes. Both registered sources and simulated particles
 work; native GPU sources use slot and generation handles without copying their transforms through the CPU.
 
-`sourceLossBehavior` accepts `SourceLossBehavior.Detach` / `SourceLossBehavior.Kill` or the matching
-string values. It defaults to `'detach'`: an existing particle stops following the lost source and continues from its last
-resolved pose. Choose `'kill'` for effects that should disappear with their source, such as firefly pulses. Reusing a
-GPU
-slot never reattaches an old particle to its replacement. Delayed births from a lost source are canceled; a death event
+`sourceLossBehavior` uses `SourceLossBehavior.Detach` or `SourceLossBehavior.Kill`. It defaults to
+`SourceLossBehavior.Detach`: an existing particle stops following the lost source and continues from its last
+resolved pose. Choose `SourceLossBehavior.Kill` for effects that should disappear with their source, such as firefly
+pulses. Reusing a GPU slot never reattaches an old particle to its replacement. Delayed births from a lost source are canceled; a death event
 instead emits from its final snapshot and creates unattached particles. Singular reference matrices retain the last
 usable frame for existing attachments. Use nonzero scales for emission.
 

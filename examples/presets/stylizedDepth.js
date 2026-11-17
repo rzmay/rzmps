@@ -1,3 +1,4 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import {
   ColorByDepth,
@@ -76,7 +77,7 @@ export default async function stylizedDepthPreset() {
     // #region docs:renderers:1
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'unlit',
+        material: SpriteMaterialType.Unlit,
         sizeAttenuation: false,
       }),
     ],

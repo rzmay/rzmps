@@ -7,15 +7,12 @@ import type { DynamicValue } from '../../values/dynamicValue.types';
 import evaluateDynamicNumber from '../../values/evaluateDynamicNumber';
 import maximumDynamicNumber from '../../values/maximumDynamicNumber';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
-import type { GPUParticleReadbackField } from '../../simulation/gpu/SelectiveReadback';
+import type { GPUParticleReadbackField } from '../../simulation/gpu/GPUSelectiveReadbackState';
 
-export interface PointLightOptions {
-    color?: THREE.Color | string | number;
-    intensity?: number;
-    distance?: number;
+export interface PointLightOptions extends Partial<Pick<THREE.PointLight, 'intensity' | 'distance' | 'power'>> {
+    color?: THREE.ColorRepresentation;
     /** Light intensity falloff exponent; defaults to lightOptions.decay or 2. */
     decay?: number;
-    power?: number;
 }
 
 export interface LightRendererAllocationOptions {

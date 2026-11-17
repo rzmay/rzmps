@@ -1,12 +1,12 @@
 import { Color } from 'three';
 import type { DynamicValue } from './dynamicValue.types';
-import type { ColorInput } from './valueInput.types';
+import type { ColorRepresentation } from 'three';
 import acceptColor from './acceptColor';
 import sampleDynamicValue from './sampleDynamicValue';
 
 /** Sampled component-wise maximum in working color space; unreadable values return black. Inputs are not mutated. */
-export default function maxDynamicColor(value: DynamicValue<ColorInput> = 0, resolution = 16): Color {
-  return sampleDynamicValue<Color, ColorInput>(value,
+export default function maxDynamicColor(value: DynamicValue<ColorRepresentation> = 0, resolution = 16): Color {
+  return sampleDynamicValue<Color, ColorRepresentation>(value,
     (a, b) => new Color(Math.max(a.r, b.r), Math.max(a.g, b.g), Math.max(a.b, b.b)),
     resolution, leaf => {
       if (typeof leaf !== 'string' && typeof leaf !== 'number' && !(leaf instanceof Color)) return undefined;

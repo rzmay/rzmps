@@ -40,7 +40,7 @@ type TSLMatrix4Node = {
   };
 };
 
-const WebGPUUnlitSprite = (
+const webGPUUnlitSprite = (
   pointTexture: THREE.Texture, options: Partial<WebGPUUnlitSpriteOptions> = {},
 ) => {
   const {
@@ -176,4 +176,4 @@ const WebGPUUnlitSprite = (
   return material;
 };
 
-export default WebGPUUnlitSprite;
+export default webGPUUnlitSprite;

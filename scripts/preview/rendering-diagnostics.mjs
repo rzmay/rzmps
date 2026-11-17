@@ -4,7 +4,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { build, preview } from 'vite';
 import puppeteer from 'puppeteer';
-import { previewBrowserArguments } from './browserSettings.mjs';
+import { browserLaunchOptions } from '../browser/launch.utils.mjs';
 
 // Serialize this function into a disposable browser entry: one retained diagnostic script.
 async function browserDiagnostic() {
@@ -103,7 +103,9 @@ async function browserDiagnostic() {
     }
     if (backend === 'webgpu' && mode === 'fallback') {
       sprites.webgpuMaterial.outputNode = transmissionOutput(
-        sceneColor(), float(0.6), sprites.webgpuMaterial.opacityNode,
+        sceneColor(),
+        float(0.6),
+        sprites.webgpuMaterial.opacityNode,
       );
       sprites.webgpuMaterial.needsUpdate = true;
     }
@@ -203,9 +205,10 @@ async function browserDiagnostic() {
       orientationMatches = imageChecks[0] === imageChecks[1];
     }
     // Compare all native cube faces against independent 2D renders with exactly the same cameras.
-    const reference = backend === 'webgpu'
-      ? new THREE.RenderTarget(cube.width, cube.height, { type: cube.texture.type })
-      : new THREE.WebGLRenderTarget(cube.width, cube.height, { type: cube.texture.type });
+    const reference =
+      backend === 'webgpu'
+        ? new THREE.RenderTarget(cube.width, cube.height, { type: cube.texture.type })
+        : new THREE.WebGLRenderTarget(cube.width, cube.height, { type: cube.texture.type });
     const faceReferences = [];
     for (let i = 0; i < 6; i++) {
       await image(cube, cube.width, cube.height, i);
@@ -271,8 +274,10 @@ async function browserDiagnostic() {
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
-    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.7, 24, 16),
-      new THREE.MeshStandardMaterial({ color: 'gray' }));
+    const sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(0.7, 24, 16),
+      new THREE.MeshStandardMaterial({ color: 'gray' }),
+    );
     sphere.position.set(0, 1, 0);
     sphere.castShadow = true;
     scene.add(sphere);
@@ -283,7 +288,8 @@ async function browserDiagnostic() {
     camera.lookAt(0, 0.5, 0);
     const output = backend === 'webgpu' ? new THREE.RenderTarget(128, 128) : new THREE.WebGLRenderTarget(128, 128);
     const render = renderer.render.bind(renderer);
-    let capturing = false, captureShadowPasses = 0;
+    let capturing = false,
+      captureShadowPasses = 0;
     renderer.render = (s, c) => {
       if (capturing && c === light.shadow.camera) captureShadowPasses++;
       return render(s, c);
@@ -292,8 +298,10 @@ async function browserDiagnostic() {
       renderer.setRenderTarget(output);
       renderer.render(scene, camera);
       renderer.setRenderTarget(null);
-      const pixels = backend === 'webgpu'
-        ? await renderer.readRenderTargetPixelsAsync(output, 0, 0, 128, 128) : new Uint8Array(128 * 128 * 4);
+      const pixels =
+        backend === 'webgpu'
+          ? await renderer.readRenderTargetPixelsAsync(output, 0, 0, 128, 128)
+          : new Uint8Array(128 * 128 * 4);
       if (backend === 'webgl') renderer.readRenderTargetPixels(output, 0, 0, 128, 128, pixels);
       return pixels.reduce((hash, value) => Math.imul(hash ^ value, 16777619) >>> 0, 2166136261);
     }
@@ -312,7 +320,10 @@ async function browserDiagnostic() {
     output.dispose();
     renderer.dispose();
     return {
-      checksums, captureShadowPasses, autoUpdate: light.shadow.autoUpdate, needsUpdate: light.shadow.needsUpdate,
+      checksums,
+      captureShadowPasses,
+      autoUpdate: light.shadow.autoUpdate,
+      needsUpdate: light.shadow.needsUpdate,
     };
   };
   window.checkSoftDepth = async () => {
@@ -333,8 +344,12 @@ async function browserDiagnostic() {
       const sprite = new SpriteRenderer(map, { billboard: false, softParticleDistance: 0.5 });
       const system = new ParticleSystem({ emitters: [], modules: [], renderers: [sprite], gpuProcessing: false });
       scene.add(system);
-      const particle = new Particle({ position: new THREE.Vector3(0, 0, -2), scale: new THREE.Vector3(2, 2, 2),
-        color: new THREE.Color('red'), lifetime: 10 });
+      const particle = new Particle({
+        position: new THREE.Vector3(0, 0, -2),
+        scale: new THREE.Vector3(2, 2, 2),
+        color: new THREE.Color('red'),
+        lifetime: 10,
+      });
       renderer.render(scene, camera);
       sprite.update([particle], system, 0);
       const data = scene.userData.__rzmps_webgpuSceneDepthData.get(renderer);
@@ -351,14 +366,23 @@ async function browserDiagnostic() {
       renderer.render(fixture.scene, camera);
       renderer.setRenderTarget(null);
       const pixel = await renderer.readRenderTargetPixelsAsync(
-        output, Math.floor(size.x / 2), Math.floor(size.y / 2), 1, 1,
+        output,
+        Math.floor(size.x / 2),
+        Math.floor(size.y / 2),
+        1,
+        1,
       );
       output.dispose();
       const depth = fixture.data.target.depthTexture;
-      samples.push({ stage, pixel: [...pixel], ownsDepth: depth.renderTarget === fixture.data.target,
+      samples.push({
+        stage,
+        pixel: [...pixel],
+        ownsDepth: depth.renderTarget === fixture.data.target,
         samplerMatches: fixture.sprite.webgpuMaterial.userData.sceneDepthNode.value === depth,
         targetSize: [fixture.data.target.width, fixture.data.target.height],
-        textureSize: [depth.image.width, depth.image.height], texture: depth.uuid });
+        textureSize: [depth.image.width, depth.image.height],
+        texture: depth.uuid,
+      });
     }
     const first = create();
     await sample(first, 'initial');
@@ -377,11 +401,21 @@ async function browserDiagnostic() {
       first.data.target.dispose();
       await sample(first, 'disposed-and-reacquired');
       const clear = renderer.clear;
-      renderer.clear = () => { throw new Error('interrupted depth prepass'); };
-      try { first.sprite.update([first.particle], first.system, 0); } catch { /* exercise recovery */ }
-      finally { renderer.clear = clear; }
+      renderer.clear = () => {
+        throw new Error('interrupted depth prepass');
+      };
+      try {
+        first.sprite.update([first.particle], first.system, 0);
+      } catch {
+        /* exercise recovery */
+      } finally {
+        renderer.clear = clear;
+      }
       await sample(first, 'after-interrupted-prepass');
-      for (const fixture of fixtures) { fixture.system.destroy(); fixture.data.target.dispose(); }
+      for (const fixture of fixtures) {
+        fixture.system.destroy();
+        fixture.data.target.dispose();
+      }
       map.dispose();
       renderer.dispose();
       return samples;
@@ -556,7 +590,7 @@ const { values } = parseArgs({
   options: {
     backend: { type: 'string', default: 'webgl' },
     material: { type: 'string', default: 'unlit' },
-    output: { type: 'string', default: 'benchmark-results/rendering-diagnostics' },
+    output: { type: 'string', default: 'tests/output/rendering-diagnostics' },
     check: { type: 'boolean', default: false },
     'soft-depth': { type: 'boolean', default: false },
     shadow: { type: 'boolean', default: false },
@@ -565,7 +599,7 @@ const { values } = parseArgs({
 if (!['lit', 'unlit'].includes(values.material)) throw new Error('Use --material lit or unlit');
 if (!['webgl', 'webgpu'].includes(values.backend)) throw new Error('Use --backend webgl or webgpu');
 const root = path.resolve(import.meta.dirname, '../..'),
-  output = path.resolve(values.output);
+  output = path.resolve(root, values.output);
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'rzmps-rendering-diagnostic-'));
 let browser, server;
 const report = { backend: values.backend, material: values.material, results: [], browserErrors: [] };
@@ -600,10 +634,8 @@ try {
   });
   server = await preview({ root: temporary, configFile: false, preview: { host: '127.0.0.1', port: 0 } });
   browser = await puppeteer.launch({
+    ...browserLaunchOptions('diagnostic'),
     headless: true,
-    args: previewBrowserArguments(),
-    timeout: 10000,
-    protocolTimeout: 20000,
     defaultViewport: { width: 256, height: 192 },
   });
   const page = await browser.newPage();
@@ -617,8 +649,12 @@ try {
     await page.waitForFunction(() => typeof window.checkCubemapShadow === 'function', { timeout: 10000 });
     report.shadow = await page.evaluate(backend => window.checkCubemapShadow(backend), values.backend);
     console.log(JSON.stringify(report.shadow, null, 2));
-    if (values.check && (report.shadow.checksums.some(hash => hash !== report.shadow.checksums[0])
-      || report.shadow.captureShadowPasses !== 0)) throw new Error('Live cubemap capture changed the main-view shadow');
+    if (
+      values.check &&
+      (report.shadow.checksums.some(hash => hash !== report.shadow.checksums[0]) ||
+        report.shadow.captureShadowPasses !== 0)
+    )
+      throw new Error('Live cubemap capture changed the main-view shadow');
   }
   if (values['soft-depth']) {
     await page.goto(`http://127.0.0.1:${address.port}`);
@@ -635,8 +671,11 @@ try {
     await otherTab.close();
     if (values.check) {
       for (const sample of report.softDepth) {
-        if (!sample.ownsDepth || !sample.samplerMatches
-          || sample.targetSize.some((size, i) => size !== sample.textureSize[i]))
+        if (
+          !sample.ownsDepth ||
+          !sample.samplerMatches ||
+          sample.targetSize.some((size, i) => size !== sample.textureSize[i])
+        )
           throw new Error(`${sample.stage}: stale depth texture ownership, dimensions or sampler binding`);
         const red = sample.pixel[0];
         if (sample.stage === 'moved-away' ? red < 240 : red > 5)
@@ -646,8 +685,8 @@ try {
     }
     console.log(JSON.stringify(report.softDepth, null, 2));
   }
-  const modes = values['soft-depth'] || values.shadow
-    ? [] : ['normal', 'sample', 'pixel', 'plain', 'fallback', 'alphaReference'];
+  const modes =
+    values['soft-depth'] || values.shadow ? [] : ['normal', 'sample', 'pixel', 'plain', 'fallback', 'alphaReference'];
   for (const mode of modes) {
     await page.goto(`http://127.0.0.1:${address.port}`);
     await page.waitForFunction(() => typeof window.runDiagnostic === 'function', { timeout: 10000 });

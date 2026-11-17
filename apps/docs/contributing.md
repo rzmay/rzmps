@@ -1,21 +1,21 @@
 # Contributing
 
-Install workspace dependencies with `npm install`, then build packages with `npm run build:modules`. Run `npm test` for the library regression suite and `npm run build --workspace demo` for the interactive application.
+Install workspace dependencies with `npm install`, then build packages with `npm run build`. Run `npm test` for the discovered workspace regression suite and `npm run build --workspace demo` for the interactive application.
 
 ## Preparing a pull request
 
 From the repository root, run:
 
 ```bash
-npm run pr:prepare
+npm run scripts pr:prepare
 ```
 
 Install Puppeteer's browser once with `npx puppeteer browsers install chrome`. The
 command follows the PR checklist and stops at the first failure:
 
-1. Run core regression and TypeScript tests.
-2. Build all publishable packages.
-3. Run `benchmark:update-report` to measure and regenerate the root and package
+1. Build all publishable packages once in dependency order.
+2. Run discovered regression and TypeScript tests.
+3. Measure the reported benchmark set, then consume its artifact to update the root and package
    README benchmark tables.
 4. Generate documentation, API references, the skill from
    the updated source and benchmark reports, then run documentation/link checks.
@@ -30,7 +30,7 @@ Cross-branch PR benchmarks remain exclusively in the existing GitHub runner
 workflow, where both revisions are measured on the same runner. Routine PR comparisons run
 16 selected CPU/GPU cases (including TrailRenderer) and update one comment after each
 ABBAAB pair. Add the `benchmark:full` label or use manual workflow dispatch for all
-33 cases. PR comparisons use a fixed simulation interval; manual wall-clock runs
+33 reported cases. PR comparisons use a fixed simulation interval; manual wall-clock runs
 remain available for catch-up investigations. This local command
 does not export PR comparison results, modify that workflow, merge, commit, push,
 or open a PR. Full benchmark/report generation can take several minutes. The report
@@ -43,9 +43,15 @@ opening an interactive pager.
 
 Keep the implementation in `examples/presets/<id>.js` (TypeScript is also supported by the generator). Export its existing async default factory and attach a literal `factory.metadata` object containing id, title, author, description and tags. Keep configuration inside the factory; the registry discovers files automatically. Preserve factory author information and return a normal ParticleSystem so the demo GUI and serializer continue to work.
 
+Particle presets must be self-contained: do not import another preset or shared example setup/configuration helpers.
+Keep material/texture setup, local helpers and subsystem construction visible in the preset's source regions. Normal
+library/dependency imports and media are allowed. Imported scene factories are allowed only in metadata for preview
+selection; scenes and UI infrastructure may share helpers. See the [examples contribution rules](https://github.com/rzmay/rzmps/blob/HEAD/examples/README.md)
+and the root [filename and API conventions](https://github.com/rzmay/rzmps/blob/HEAD/CONTRIBUTING.md#filenames-and-api-conventions).
+
 Mark actual source using balanced `// #region docs:system`, `docs:emitters`, `docs:modules`, and `docs:renderers` comments, closing each with the matching `// #endregion docs:...`. Named suffixes select individual systems or setup blocks. Nested regions are supported; interleaved closures are errors. Repeated region names concatenate their source blocks. If an optional module list is absent, mark a relevant system declaration and explain its absence.
 
-Run `npm run docs:generate`. It discovers the example, updates the registry and indexes, and creates a missing Markdown guide in `apps/docs/examples`. It preserves every existing guide. Replace the four TODO explanations with the purpose of each component and the observable consequences of important values: rate, lifetime, speed, capacity, curves, material, blending, and renderer costs. Keep the four required sections in order. Update the explanations whenever the configuration changes.
+Run `npm run generate --workspace @rzmps/docs`. It discovers the example, updates the registry and indexes, and creates a missing Markdown guide in `apps/docs/examples`. It preserves every existing guide. Replace the four TODO explanations with the purpose of each component and the observable consequences of important values: rate, lifetime, speed, capacity, curves, material, blending, and renderer costs. Keep the four required sections in order. Update the explanations whenever the configuration changes.
 
 Use `<ExampleCode region="system" />` and the equivalent emitter/module/renderer references. Code is extracted from the canonical source during the site build. Never paste a second implementation into the guide. A named reference such as `modules:rocket` selects only that region; the base name selects all its named regions.
 
@@ -54,14 +60,14 @@ Use `<ExampleCode region="system" />` and the equivalent emitter/module/renderer
 Write conceptual guides in `apps/docs/guides`. Write concise TSDoc on public source declarations describing defaults, lifecycle, mutation, side effects, units, constraints, and performance. Use `@remarks`, `@defaultValue`, `@example`, and `@see` where useful. Avoid repeating the TypeScript signature in prose. Keep tutorials in Markdown.
 
 Use a properly capitalized H1 as each article's title. Add new guides to the appropriate reading
-order in `scripts/docs/navigation.mjs`: Getting Started, Core Concepts, Feature Guides, or
+order in `apps/docs/scripts/navigation.mjs`: Getting Started, Core Concepts, Feature Guides, or
 Project Guides. The sidebar and guide overview read titles directly from the articles;
 generation rejects guides missing from this structure. The API overview and sidebar are generated
-from actual TypeDoc pages and public export sources by `scripts/docs/api-structure.mjs`. Keep
+from actual TypeDoc pages and public export sources by `apps/docs/scripts/api-structure.mjs`. Keep
 core classes first and place new API classes in a suitable feature group. Supporting signature
 types belong under Types, while Modules contains actual particle modifiers.
 
-`npm run docs:generate` regenerates TypeDoc Markdown, registry/index data, the complete agent skill,
+`npm run generate --workspace @rzmps/docs` regenerates TypeDoc Markdown, registry/index data, the complete agent skill,
 and `llms.txt`/`llms-full.txt`. Edit canonical guides, source comments, and templates; never edit
 their generated outputs. The skill's metadata and workflow come from the marked regions in
 [AI Coding Assistants](guides/ai-coding-assistants.md#canonical-skill-definition).
@@ -74,18 +80,18 @@ their generated outputs. The skill's metadata and workflow come from the marked 
 | `apps/docs/api/`, guide/example index pages, navigation JSON | Generated and ignored | Source declarations, guides, and examples |
 | `apps/docs/public/llms.txt` and `llms-full.txt` | Generated and ignored | Canonical docs and skill installation guidance |
 | `examples/index.js` and `examples/scenes/index.js` | Authored automatic discovery | `factory.metadata` on each factory |
-| `packages/rzmps/AGENTS.md` | Generated, committed for GitHub discovery, and included in npm | `scripts/docs/templates/npm-agents.md` |
+| `packages/rzmps/AGENTS.md` | Generated, committed for GitHub discovery, and included in npm | `apps/docs/scripts/templates/npm-agents.md` |
 
 Commit updated `.agents` files, README guidance, alongside their
 source changes. Other artifacts are rebuilt before documentation/demo builds; package builds
 also regenerate npm `AGENTS.md`. No consumer installation hook runs any of this generation.
 TypeDoc validates comment syntax and links; generation fails on warnings.
 
-Run `npm run docs:check` to validate source regions, metadata, complete explanations, local links,
+Run `npm run scripts check:docs` to validate source regions, metadata, complete explanations, local links,
 generated artifact consistency, and the VitePress build. Check mode rebuilds ignored artifacts
 and verifies committed skill/README outputs without rewriting them; stale committed outputs
-fail CI and require `npm run docs:generate`. Use `npm run docs:dev` to read the site locally.
-Static output is `apps/docs/.vitepress/dist`; `npm run site:build` combines it with the demo in
+fail CI and require `npm run generate --workspace @rzmps/docs`. Use `npm run dev` to read the site locally.
+Static output is `apps/docs/.vitepress/dist`; `npm run scripts build:site` combines it with the demo in
 root `dist`, with documentation under `/docs/`.
 
 ## Visual inspection
@@ -98,7 +104,7 @@ npm run preview -- --example collision --scene 'Collision (builtin/Octree)' --ba
 
 The preview builds and serves the production demo from an isolated temporary directory with Puppeteer, reusing the benchmark infrastructure and Vite configuration. Concurrent preview processes keep separate build assets. Build packages first. If Puppeteer's browser is missing, install it with `npx puppeteer browsers install chrome`. It captures PNGs directly from the rendering canvas, labels a contact sheet with fixed simulation times, and writes diagnostics to metadata.json even on runtime failure. Backend unavailability is a failure and never triggers a silent fallback.
 
-Inspect the contact sheet after changing effect configuration. Try longer warmup for delayed emission and shorter intervals for flashes. For elevated fireworks, use `--camera-position 8,15,32 --camera-target 0,12,0`; camera settings and `--camera-fov` are recorded in metadata. A neutral scene is the default; select a demo scene to validate geometry-dependent effects. Preview output is ignored by git. `npm run preview:smoke` exercises representative sprite and mesh examples on both backends without pixel-perfect snapshots; it is an optional CI workflow because renderer availability and costs vary.
+Inspect the contact sheet after changing effect configuration. Try longer warmup for delayed emission and shorter intervals for flashes. For elevated fireworks, use `--camera-position 8,15,32 --camera-target 0,12,0`; camera settings and `--camera-fov` are recorded in metadata. A neutral scene is the default; select a demo scene to validate geometry-dependent effects. Preview output is ignored by git. `npm test -- --skip-build --set smoke` exercises representative sprite and mesh examples on both backends without pixel-perfect snapshots; it is an optional CI workflow because renderer availability and costs vary.
 
 ## Review
 
@@ -112,9 +118,9 @@ username or an object with `name` and optional `url`). `<ExampleAttribution />` 
 source at build time; changing the author updates the site and generated agent Markdown.
 Use `<ExamplePreview />` for the generated video and poster without copying its URL into authored prose.
 
-After adding or changing an example, run `npm run docs:generate` to update documentation
+After adding or changing an example, run `npm run generate --workspace @rzmps/docs` to update documentation
 source and the published skill. This never launches a browser or generates media.
-Ordinary `site:build`, `docs:check`, and local development also avoid media generation.
+Ordinary `npm run scripts build:site`, `npm run scripts check:docs`, and local development also avoid media generation.
 
 For an explicit local video capture, install FFmpeg/FFprobe and Puppeteer's browser,
 then run `npm run preview -- --example fire --format mp4 --duration 4 --fps 30`.
@@ -122,7 +128,7 @@ Use `--format webm`, `--crf`, `--width`, and `--height` to configure encoding. P
 contact sheets remain the default for the preview command. Video frames are written
 incrementally to disk and deleted after successful encoding; a PNG poster is retained.
 
-Deployment runs `npm run site:deploy`: validate source, restore the optional cache,
+Deployment runs `npm run scripts deploy:site`: validate source, restore the optional cache,
 generate stale/missing videos and posters, validate decoded media, build and assemble,
 and validate the published copies. GitHub Actions caches the ignored preview directory;
 Render can restore hash-checked assets from the previous public deployment. The manifest
@@ -133,17 +139,17 @@ Set per-example overrides on `metadata.previewSettings` in the example itself. U
 camelCase fields such as `warmup`, `cameraPosition: [8, 6, 12]` and `cameraTarget`.
 For a preferred scene, import its factory and set `scene: checkerboardScene`; do not
 store its display name. Omitted fields use shared defaults from
-`scripts/docs/preview-settings.mjs`, including the neutral scene and WebGL backend.
+`apps/docs/scripts/preview-settings.mjs`, including the neutral scene and WebGL backend.
 An explicit `preview --scene` selection overrides the example's preferred scene.
 `docs:assets:check` rejects missing, modified, stale, blank, or undecodable media.
-Source CI uses `docs:generate -- --check` without Chrome, FFmpeg, or preview assets.
+Source CI uses `npm run generate --workspace @rzmps/docs -- --check` without Chrome, FFmpeg, or preview assets.
 Documentation players load near the viewport, pause offscreen, and show a poster until
 explicit playback when reduced motion is enabled. Category and tags are visible and
 indexed by VitePress local search; the demo sidebar filters the same metadata.
 
 The canonical agent installation guide is [AI Coding Assistants](guides/ai-coding-assistants.md).
 It supplies generated README guidance blocks. The full skill stays in `.agents/skills/rzmps`;
-only the short template-derived `AGENTS.md` is included in npm. Run `npm run agents:check`
+only the short template-derived `AGENTS.md` is included in npm. Run `npm run check:agents --workspace @rzmps/docs`
 to validate format, reference links, temporary skill installs, and package contents.
 
 ## Architecture and ownership
@@ -175,10 +181,10 @@ invalidation, synchronization and disposal with the resource or cache owner.
 
 Tests live centrally in `packages/rzmps/tests/`, mirroring feature directories.
 Put cross-feature lifecycle tests in `tests/integration/`; maintained browser checks and their fixtures live
-in `scripts/tests/preview/`. All repository script tests mirror their owning script
-directory under `scripts/tests/`. Update test runners when moving tests.
+in `tests/preview/`. All repository script tests mirror their owning script
+directory under `tests/`. Update test runners when moving tests.
 
-Run `npm run check:dependencies` from the repository root to inspect architectural
+Run `npm run scripts check:dependencies` from the repository root to inspect architectural
 warnings, including import paths and rule names. The Test and build CI job compares
 PR and base revisions using the same current rules. It uploads complete JSON results
 and a trusted reporting workflow updates one PR comment with new, resolved and
@@ -186,7 +192,7 @@ existing warnings after CI completes. Full details remain in the Actions logs an
 `dependency-report-<attempt>` artifact. The commenting workflow must first be merged
 into the default branch to run. All architecture rules have warning severity;
 configuration, parsing and execution failures still fail the analysis step.
-Run `npm run test:dependencies` to test comparison and comment reporting. Inspect whether a warning exposes misplaced
+Run `npm test -- --skip-build --set dependencies` to test comparison and comment reporting. Inspect whether a warning exposes misplaced
 ownership before adding an exception. For an intentional dependency, document the
 reason beside the import or narrow the relevant rule in `.dependency-cruiser.cjs`;
 avoid blanket exclusions or suppressing the command's exit status.
@@ -202,7 +208,7 @@ configuration still belongs on the system or its owning component.
 
 The root `benchmark/` directory is ignored scratch output, created only when needed.
 Benchmark implementation lives in `scripts/` and `apps/demo/`; deterministic test data
-lives in `scripts/tests/benchmark/fixtures/`. Fixtures are tracked test inputs, not
+lives in `tests/benchmarks/fixtures/`. Fixtures are tracked test inputs, not
 generated benchmark reports. See `scripts/README.md` for script ownership. Generated docs, builds and preview images are ignored.
 The published `.agents/skills/rzmps` distribution remains tracked for GitHub installs.
 
@@ -221,3 +227,13 @@ These initialize the preset with its imported `previewSettings.scene` and prefer
 backend. Explicit `?scene=` and `?renderer=` selections take precedence. The lil-gui
 preset and scene controls remain available, and legacy `?preset=` links still work.
 Each interactive route points its canonical URL at the corresponding documentation page.
+
+## Test and benchmark ownership
+
+Place tests and benchmark definitions in their owning workspace's `tests/` and `benchmarks/`
+directories. Root runners discover them by filename and select sets with JSON regex rules.
+See the [test workspace](https://github.com/rzmay/rzmps/blob/HEAD/tests/README.md),
+[benchmark workspace](https://github.com/rzmay/rzmps/blob/HEAD/benchmarks/README.md) and
+[automation workspace](https://github.com/rzmay/rzmps/blob/HEAD/scripts/README.md) for commands,
+configuration, suffixes and output formats. Documentation processes belong to `apps/docs/scripts/`.
+Keep setup guidance in workspace READMEs rather than duplicating it in nested directories.

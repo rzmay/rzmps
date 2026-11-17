@@ -221,7 +221,7 @@ the demo can pick up local library rebuilds during development.
 The demo imports `@rzmps/rzmps`, `@rzmps/rapier`, `@rzmps/jolt`, and
 `@rzmps/ammo` as npm packages. Local development from the repo root uses npm
 workspaces, so those packages resolve to sibling package folders. Build from the
-repository root with `npm run site:build` to bundle the workspace packages and documentation.
+repository root with `npm run scripts build:site` to bundle the workspace packages and documentation.
 
 The publishable packages each have a `prepack` script, so `npm pack` and
 `npm publish` build their `build/**/*` output automatically. The demo itself is
@@ -255,10 +255,10 @@ Useful places to start:
 ## Adding Presets
 
 Add a particle factory in the `examples/presets/` directory with exported metadata and
-documentation source regions. Run `npm run docs:generate` from the repository root
+documentation source regions. Run `npm run generate --workspace @rzmps/docs` from the repository root
 to discover it and create its Markdown guide. Complete the configuration explanations
-and run `npm run docs:check`. The registry discovers preset files automatically.
-Attach author metadata with `createMyPreset.metadata = { id: 'myPreset', title: 'My Preset', author: 'github-user', description: '...', tags: ['example'], category: 'effects' }`.
+and run `npm run scripts check:docs`. The registry discovers preset files automatically.
+Attach author metadata with `myPreset.metadata = { id: 'myPreset', title: 'My Preset', author: 'github-user', description: '...', tags: ['example'] }`.
 
 Add a scene preset by creating a loader in `../../examples/scenes`, then
 attaching its id, title and author in `factory.metadata`; the index discovers it automatically.
@@ -266,7 +266,7 @@ attaching its id, title and author in `factory.metadata`; the index discovers it
 Scene loaders can return a cleanup function:
 
 ```js
-export default function createScene(scene) {
+export default function myScene(scene) {
   // Add lights, meshes, physics worlds, helpers, etc.
 
   return () => {
@@ -274,7 +274,7 @@ export default function createScene(scene) {
   };
 }
 
-createScene.metadata = { id: 'myScene', title: 'My Scene', author: 'github-user' };
+myScene.metadata = { id: 'myScene', title: 'My Scene', author: 'github-user' };
 ```
 
 ## License
@@ -296,6 +296,6 @@ contains canvas PNGs, a contact sheet, and diagnostic metadata. `--scene` select
 
 ## Previewing with documentation
 
-Run `npm run site:build` from the repository root to produce one `dist` containing
-the demo at `/` and VitePress at `/docs/`. `npm run site:preview` serves both on port
+Run `npm run scripts build:site` from the repository root to produce one `dist` containing
+the demo at `/` and VitePress at `/docs/`. `npm run scripts serve:site` serves both on port
 4173 and accepts `/docs` and `/docs/`.

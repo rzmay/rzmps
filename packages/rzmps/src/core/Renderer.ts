@@ -1,5 +1,6 @@
+import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import type { Vector3Input } from '../values/valueInput.types';
-import evaluateDynamicVector3 from '../values/evaluateDynamicVector3';
+import evaluateDynamicVector3 from '../values/evaluateDynamicVector';
 import type { MaterialCompositeCallback, MaterialCompositeGPUCallback } from '../rendering/compositing/composite.utils';
 import Appearance from '../rendering/compositing/Appearance';
 import type { TextureAtlasOptions } from '../rendering/TextureAtlas';
@@ -11,7 +12,7 @@ import {
 import EventReceiver, { type EventReceiverOptions } from '../events/EventReceiver';
 import Particle from './Particle';
 import groupRendererParticles, { rendererGroupCount } from '../rendering/groupRendererParticles';
-import GPURendererGrouping from '../rendering/gpu/RendererGrouping';
+import GPURendererGrouping from '../rendering/gpu/GPURendererGrouping';
 import ParticleSystem from './ParticleSystem';
 import type { StrictMultiple } from '../types/multiple.types';
 import type { Tag } from '../types/tag.types';
@@ -23,12 +24,12 @@ import { Euler, Quaternion, MathUtils, Texture, Vector3, type Material } from 't
 import seedrandom from 'seedrandom';
 import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
 import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
-import GPURendererChildren from '../rendering/gpu/RendererChildren';
+import GPURendererChildren from '../rendering/gpu/GPURendererChildren';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../simulation/gpu/Particle';
 import type { Node } from 'three/webgpu';
 import { bitAnd, float, uint, uniform } from 'three/tsl';
-import { GPUDynamicParameterStore } from '../values/evaluateDynamicGPU';
-import type { GPUParticleReadbackField } from '../simulation/gpu/SelectiveReadback';
+import { GPUDynamicParameterStore } from '../values/GPUDynamicParameterStore';
+import type { GPUParticleReadbackField } from '../simulation/gpu/GPUSelectiveReadbackState';
 
 export enum CompensationMode {
   None = 'none',
@@ -72,7 +73,7 @@ export interface RendererOptions extends EventReceiverOptions {
   /** Artistic render-only copies, generated before LOD children. */
   children: RendererChildrenOptions;
   /** Visual approximation for population removed by system LOD. Defaults to none. */
-  compensation: CompensationMode | `${CompensationMode}`;
+  compensation: CompensationMode;
 }
 
 /** Base renderer that filters particles and applies renderer LOD before delegating to a backend-compatible view. */
@@ -223,7 +224,7 @@ export default abstract class Renderer extends EventReceiver {
   }
   private _gpuGrouping?: GPURendererGrouping;
   children: RendererChildrenOptions;
-  compensation: CompensationMode | `${CompensationMode}`;
+  compensation: CompensationMode;
   private readonly _gpuQuality = uniform(1, 'float');
   private readonly _gpuChildren = new GPURendererChildren();
   private _gpuReadbackPending = false;
@@ -270,8 +271,10 @@ export default abstract class Renderer extends EventReceiver {
   constructor(options: Partial<RendererOptions> = {}) {
     super(options);
     this.benchmarks.register('visibleInstances',
-      { type: 'gauge', unit: 'count', get: () => this.visibleInstanceCount });
-    this.benchmarks.register('childrenCount', { type: 'gauge', unit: 'count', get: () => this.renderedChildCount });
+      { type: BenchmarkMetricType.Gauge, unit: 'count', get: () => this.visibleInstanceCount });
+    this.benchmarks.register('childrenCount', {
+      type: BenchmarkMetricType.Gauge, unit: 'count', get: () => this.renderedChildCount,
+    });
     this._materialComposite = options.materialComposite;
     this._materialCompositeGPU = options.materialCompositeGPU;
     this._groupCount = options.count ?? -1;

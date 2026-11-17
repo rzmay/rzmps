@@ -1,3 +1,5 @@
+import { BenchmarkStatistic } from '../../build/index.mjs';
+import { BenchmarkMetricType } from '../../build/index.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -30,7 +32,7 @@ function clock() {
 test('disabled collection avoids clocks and retains live providers, results and exceptions', () => {
   const { b, reads } = clock();
   let allocated = 10;
-  b.register('allocated', { type: 'gauge', unit: 'bytes', get: () => allocated });
+  b.register('allocated', { type: BenchmarkMetricType.Gauge, unit: 'bytes', get: () => allocated });
   b.set('used', 2);
   b.derive('ratio', ['used', 'allocated'], ({ used, allocated }) => used / allocated);
   assert.equal(
@@ -91,9 +93,9 @@ test('warmup, bounded retention, distributions, idempotent endings and stopped c
 test('frame aggregation is explicit; per-frame and cumulative counters differ', () => {
   const { b } = clock();
   for (const aggregation of ['sum', 'max', 'last', 'none'])
-    b.register(aggregation, { type: 'span', unit: 'ms', aggregation });
-  b.register('births', { type: 'counter', perFrame: true });
-  b.register('total', { type: 'counter' });
+    b.register(aggregation, { type: BenchmarkMetricType.Span, unit: 'ms', aggregation });
+  b.register('births', { type: BenchmarkMetricType.Counter, perFrame: true });
+  b.register('total', { type: BenchmarkMetricType.Counter });
   b.derive('twiceBirths', ['births'], ({ births }) => births * 2);
   b.start();
   b.increment('births', 3);
@@ -152,10 +154,10 @@ test('derived metrics and arbitrary correctness assertions handle missing values
   b.derive('unavailable', ['missing'], () => 9);
   assert.equal(b.snapshot().unavailable, null);
   b.start();
-  b.record('residual', 0.02, { type: 'gauge' });
-  b.assert([{ metric: 'residual', statistic: 'max', max: 0.03 }]);
-  assert.throws(() => b.assert([{ metric: 'residual', statistic: 'max', max: 0.01 }]), /assertion/);
-  assert.throws(() => b.assert([{ metric: 'missing', statistic: 'mean', max: 1 }]), /assertion/);
+  b.record('residual', 0.02, { type: BenchmarkMetricType.Gauge });
+  b.assert([{ metric: 'residual', statistic: BenchmarkStatistic.Max, max: 0.03 }]);
+  assert.throws(() => b.assert([{ metric: 'residual', statistic: BenchmarkStatistic.Max, max: 0.01 }]), /assertion/);
+  assert.throws(() => b.assert([{ metric: 'missing', statistic: BenchmarkStatistic.Mean, max: 1 }]), /assertion/);
   b.derive('a', ['b'], ({ b }) => b);
   b.derive('b', ['a'], ({ a }) => a);
   assert.throws(() => b.snapshot(), /Cyclic/);

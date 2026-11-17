@@ -1,3 +1,5 @@
+import { SimulationSpace } from '../../build/index.mjs';
+import { EventOrigin } from '../../build/index.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
@@ -128,13 +130,13 @@ test('audio custom events and lifecycle aliases both receive registered sources'
 
 test('renderer parameter subscriptions honor parent scope and transform source positions without mutation', () => {
   const clip = {};
-  const audio = new AudioRenderer({ sound: clip, eventScope: 'parent', onSpawn: false,
+  const audio = new AudioRenderer({ sound: clip, eventScope: EventOrigin.Parent, onSpawn: false,
     onEvent: { ping: (_data, source, parameters) => {
       assert.equal(source.position.x, 1);
       return { position: parameters.position.clone(), volume: 0.5 };
     } } });
-  const parent = new ParticleSystem({ emitters: [], renderers: [], simulationSpace: 'local' });
-  const child = new ParticleSystem({ emitters: [], renderers: audio, simulationSpace: 'local' });
+  const parent = new ParticleSystem({ emitters: [], renderers: [], simulationSpace: SimulationSpace.Local });
+  const child = new ParticleSystem({ emitters: [], renderers: audio, simulationSpace: SimulationSpace.Local });
   parent.addSubSystem(child);
   parent.position.x = 10;
   child.position.x = 2;

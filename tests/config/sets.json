@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "concurrency": 1,
+  "sets": {
+    "default": {
+      "include": [
+        {
+          "path": "*"
+        }
+      ],
+      "exclude": [
+        {
+          "path": "\\.(browser|manual|generated)\\.test\\.mjs$"
+        }
+      ]
+    },
+    "unit": {
+      "extends": [
+        "default"
+      ],
+      "include": [
+        {
+          "path": "\\.test\\.mjs$"
+        }
+      ]
+    },
+    "types": {
+      "include": [
+        {
+          "path": "\\.types\\.ts$"
+        }
+      ]
+    },
+    "browser": {
+      "include": [
+        {
+          "path": "\\.browser\\.test\\.mjs$"
+        }
+      ]
+    },
+    "generated": {
+      "include": [
+        {
+          "path": "\\.generated\\.test\\.mjs$"
+        }
+      ]
+    },
+    "full": {
+      "include": [
+        {
+          "path": "*"
+        }
+      ],
+      "exclude": [
+        {
+          "path": "\\.manual\\.test\\.mjs$"
+        }
+      ]
+    },
+    "manual": {
+      "include": [
+        {
+          "path": "\\.manual\\.test\\.mjs$"
+        }
+      ]
+    },
+    "benchmarks": {
+      "include": [
+        {
+          "path": "^tests/benchmarks/"
+        }
+      ]
+    },
+    "dependencies": {
+      "include": [
+        {
+          "path": "^tests/dependencies/"
+        }
+      ]
+    },
+    "source": {
+      "include": [
+        {
+          "path": "^tests/source/"
+        }
+      ]
+    },
+    "docs": {
+      "include": [
+        {
+          "path": "^apps/docs/tests/"
+        }
+      ],
+      "exclude": [
+        {
+          "path": "\\.browser\\.test\\.mjs$"
+        }
+      ]
+    },
+    "site": {
+      "include": [
+        {
+          "path": "^tests/site/"
+        }
+      ],
+      "exclude": [
+        {
+          "path": "\\.browser\\.test\\.mjs$"
+        }
+      ]
+    },
+    "media": {
+      "include": [
+        {
+          "path": "(media|seo)\\.test\\.mjs$"
+        }
+      ]
+    },
+    "diagnostics": {
+      "include": [
+        {
+          "path": "^tests/preview/diagnostics\\.test\\.mjs$"
+        }
+      ]
+    },
+    "deployment": {
+      "extends": [
+        "browser"
+      ],
+      "exclude": [
+        {
+          "path": "\\.smoke\\.browser\\.test\\.mjs$"
+        }
+      ]
+    },
+    "smoke": {
+      "include": [
+        {
+          "path": "\\.smoke\\.browser\\.test\\.mjs$"
+        }
+      ]
+    }
+  }
+}

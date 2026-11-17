@@ -13,7 +13,7 @@ export enum SpatialLevels {
   All = '*',
 }
 
-export type SpatialLevelsInput = readonly number[] | SpatialLevels | `${SpatialLevels}` | keyof typeof SpatialLevels;
+export type SpatialLevelsInput = readonly number[] | SpatialLevels;
 
 export interface SpatialGridOptions {
   levels?: SpatialLevelsInput;
@@ -32,9 +32,7 @@ export function resolveSpatialLevels(input: SpatialLevelsInput | undefined, bric
       depths.add(depth);
     });
   } else {
-    const preset = input === undefined ? SpatialLevels.None
-      : Object.prototype.hasOwnProperty.call(SpatialLevels, String(input))
-        ? SpatialLevels[input as keyof typeof SpatialLevels] : input;
+    const preset = input ?? SpatialLevels.None;
     let start = 0;
     let end = -1;
 

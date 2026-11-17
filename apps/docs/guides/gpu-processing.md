@@ -205,7 +205,7 @@ need to request a higher device limit.
 `Collision` selects `ThreeCollisionBackend` for CPU processing and `ThreeGPUCollisionBackend` for
 GPU processing when no backend is supplied. An explicit CPU-only backend makes the module GPU
 incompatible. GPU collision does not support applying impulses back to scene bodies. Classify GPU
-geometry with `CollisionGeometryUpdatePolicy`: static geometry is built once, transform-dynamic
+geometry with `GeometryUpdatePolicy`: static geometry is built once, transform-dynamic
 geometry updates transforms, and geometry-dynamic meshes refit or rebuild changed acceleration
 data.
 

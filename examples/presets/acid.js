@@ -1,7 +1,9 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import checkerboardScene from 'examples/scenes/checkerboard.js';
 import * as THREE from 'three';
 import {
   ColorOverLifetime,
+  Collision,
   DecalRenderer,
   DistortionBySize,
   Emitter,
@@ -14,28 +16,86 @@ import {
   Textures,
   TransformByNoise,
 } from '@rzmps/rzmps';
-import splatterPreset from 'examples/presets/splatter.js';
+import splatterTexture from 'examples/assets/images/splat2.png?url';
+import splatterNormal from 'examples/assets/images/splat2_norm.jpg?url';
 import smokeAlpha from 'examples/assets/images/smoke_alpha.jpg?url';
 import simpleNorm from 'examples/assets/images/simple_norm.png?url';
 
 export default async function acidPreset() {
+  // #region docs:renderers:materials
   const textureLoader = new THREE.TextureLoader();
+  const paintMap = textureLoader.load(splatterTexture);
+  paintMap.colorSpace = THREE.SRGBColorSpace;
+  const normalMap = textureLoader.load(splatterNormal);
+  const paint = new THREE.MeshStandardMaterial({
+    map: paintMap,
+    normalMap,
+    normalScale: new THREE.Vector2(2, 2),
+    color: '#ffffff',
+    roughness: 0.25,
+    metalness: 0,
+  });
   const transmissionMap = textureLoader.load(Textures.Simple);
   const distortionMap = textureLoader.load(simpleNorm);
+  // #endregion docs:renderers:materials
 
   // #region docs:system:1
-  // Reuse Splatter's collision scene conventions and owned texture/material lifecycle.
-  const acid = await splatterPreset();
+  const acid = new ParticleSystem({
+    duration: 8,
+    looping: true,
+    prewarm: true,
+    gravityModifier: 1,
+    // #region docs:emitters:pool
+    emitters: [
+      new Emitter({
+        source: EmissionShape.Sphere(0.12),
+        rate: 0.3,
+        radialSpeed: 3,
+        initialValues: {
+          position: new THREE.Vector3(0, 3.5, 0),
+          velocity: new THREE.Vector3(0, 1.5, 0),
+          lifetime: 8,
+          scale: new THREE.Vector3(0.2, 0.2, 0.2),
+          color: '#7ee927',
+          rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
+        },
+      }),
+    ],
+    // #endregion docs:emitters:pool
+    // #region docs:modules:pool
+    modules: [new Collision({ lifetimeLoss: 1 })],
+    // #endregion docs:modules:pool
+    // #region docs:renderers:pool
+    renderers: [
+      new SpriteRenderer(Textures.Circle, {
+        material: SpriteMaterialType.Lit,
+        materialOptions: {
+          roughness: 0.95,
+          metalness: 0,
+          sphericalNormals: 1,
+          normalLighting: 1,
+        },
+      }),
+      new DecalRenderer(paint, {
+        onSpawn: false,
+        onCollision: true,
+        // Backends without mesh identity search opposite the collision normal, including on walls.
+        maxDistance: 1,
+        depth: 0.08,
+        size: 15,
+        inheritColor: 1,
+        inheritScale: 1,
+        inheritAlpha: 1,
+        lifetime: 18,
+        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.55, 1),
+        maxDecals: 64,
+        emissionTags: ['acid-pool'],
+      }),
+    ],
+    // #endregion docs:renderers:pool
+  });
   acid.name = 'Acid';
-  acid.prewarm = true;
-  acid.emitters[0].rate = 0.3;
-  acid.emitters[0].initialValues.color = new THREE.Color('#7ee927');
   const decals = acid.renderers.find(renderer => renderer instanceof DecalRenderer);
-  decals.emissionTags = ['acid-pool'];
-  decals.lifetime = 18;
-  decals.maxDecals = 64;
-  decals.opacity = t => 1 - THREE.MathUtils.smoothstep(t, 0.55, 1);
-  decals.size = 15;
 
   // #region docs:emitters:1
   // Shape points become offsets within each pool's emission frame, including its scale.
@@ -86,7 +146,7 @@ export default async function acidPreset() {
         lifetime: [4, 7],
         scale: [0.12, 0.26],
         mass: 0.25,
-        color: ['#ccffd0', '#e0ffb8', '#bfffe4'],
+        color: ['#ccffd0', '#e0ffb8'],
         velocity: new THREE.Vector3(0, 0.35, 0),
       },
     }),
@@ -102,7 +162,7 @@ export default async function acidPreset() {
       new ColorOverLifetime({ alpha: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1) }),
     ],
     renderers: new SpriteRenderer(Textures.Circle, {
-      material: 'lit',
+      material: SpriteMaterialType.Lit,
       materialOptions: {
         roughness: 0.15,
         metalness: 0.5,
@@ -175,6 +235,9 @@ export default async function acidPreset() {
   // #endregion docs:renderers:1
   // #endregion docs:system:1
   acid.addEventListener('destroyed', () => {
+    paint.dispose();
+    paintMap.dispose();
+    normalMap.dispose();
     transmissionMap.dispose();
     distortionMap.dispose();
   });
@@ -187,7 +250,7 @@ acidPreset.metadata = {
   description: 'Green acid pools emit rotating smoke and floating refractive bubbles. Select Checkerboard for a floor.',
   tags: ['acid', 'decals', 'sources', 'events', 'smoke'],
   previewSettings: {
-    // Matches the root Splatter system inherited by this preset.
+    // Matches the root particle-system duration.
     duration: 8,
     scene: checkerboardScene,
     warmup: 900,

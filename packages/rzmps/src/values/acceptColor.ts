@@ -1,6 +1,6 @@
 import { Color } from 'three';
-import type { ColorInput } from './valueInput.types';
+import type { ColorRepresentation } from 'three';
 
-export default function acceptColor(value: ColorInput): Color {
+export default function acceptColor(value: ColorRepresentation): Color {
   return value instanceof Color ? value : new Color(value);
 }

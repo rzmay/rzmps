@@ -35,7 +35,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Add preset author metadata
-        run: npm run presets:add-author -- --base "origin/${{ github.event.pull_request.base.ref }}" --github-user "${{ github.event.pull_request.user.login }}"
+        run: npm run scripts presets:add-author -- --base "origin/${{ github.event.pull_request.base.ref }}" --github-user "${{ github.event.pull_request.user.login }}"
 
       - name: Commit generated updates
         run: |

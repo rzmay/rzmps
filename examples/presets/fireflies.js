@@ -1,3 +1,5 @@
+import { SourceLossBehavior } from '@rzmps/rzmps';
+import { SimulationSpace } from '@rzmps/rzmps';
 import checkerboardScene from 'examples/scenes/checkerboard.js';
 import * as THREE from 'three';
 import { If, float, vec3, vec4 } from 'three/tsl';
@@ -153,8 +155,8 @@ export default async function firefliesPreset() {
   const pulse = t => Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5);
   const glow = new ParticleSystem({
     duration: 0.1,
-    simulationSpace: 'source',
-    sourceLossBehavior: 'kill',
+    simulationSpace: SimulationSpace.Source,
+    sourceLossBehavior: SourceLossBehavior.Kill,
     gravityModifier: 0,
     maxParticles: 128,
     // #region docs:emitters:2

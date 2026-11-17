@@ -1,3 +1,4 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import checkerboardScene from 'examples/scenes/checkerboard.js';
 import * as THREE from 'three';
 import {
@@ -60,7 +61,7 @@ export default async function splatterPreset() {
     // #region docs:renderers:1
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
         materialOptions: {
           roughness: 0.95,
           metalness: 0,
@@ -95,7 +96,7 @@ export default async function splatterPreset() {
   return system;
 }
 
-/** @type {import('./types').ExampleMetadata} */
+/** @type {import('../types').ExampleMetadata} */
 splatterPreset.metadata = {
   author: 'rzmay',
   id: 'splatter',

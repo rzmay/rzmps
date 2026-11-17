@@ -8,8 +8,8 @@ import EmissionSource, { type SubSystemSource } from '../emission/EmissionSource
 import { SimulationSpace } from '../enums/SimulationSpace';
 import { isWebGPURenderer } from '../utils/gpu/isWebGPURenderer';
 import type { GPUParticleUpdateContext } from './gpu/Particle';
-import type { GPUSelectiveReadbackRequest, GPUSelectiveReadbackResult } from './gpu/SelectiveReadback';
-import GPUSourceFrameBuffer from './gpu/SourceFrameBuffer';
+import type { GPUSelectiveReadbackRequest, GPUSelectiveReadbackResult } from './gpu/GPUSelectiveReadbackState';
+import GPUSourceFrameBuffer from './gpu/GPUSourceFrameBuffer';
 import { matrixColumnGPU, particleFrameGPU, transformParticleFrameGPU } from './simulationFrame.utils';
 export interface SimulationFrameExecution {
   worldToSimulation(): Node<'mat4'>;
@@ -209,7 +209,7 @@ export default class SimulationFrames {
 
   get simulationSpace(): SimulationSpace { return this._simulationSpace; }
 
-  set simulationSpace(value: SimulationSpace | `${SimulationSpace}`) {
+  set simulationSpace(value: SimulationSpace) {
     this._setSimulationSpace(value as SimulationSpace, true);
   }
 

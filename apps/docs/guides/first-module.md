@@ -179,10 +179,12 @@ Modules expose `benchmarks` for custom CPU spans, gauges (`set`), counters (`inc
 (`register`), and derived metrics (`derive`). Collection is disabled by default; current-value providers remain readable.
 
 ```ts
+import { BenchmarkMetricType } from '@rzmps/rzmps';
+
 const module = new Module((particle, deltaTime, { module }) => {
   module.benchmarks.span('customWork', () => applyCustomForce(particle, deltaTime));
 });
-module.benchmarks.register('residual', { type: 'gauge', get: () => solver.residual });
+module.benchmarks.register('residual', { type: BenchmarkMetricType.Gauge, get: () => solver.residual });
 
 // After adding the module, collect while running your normal update/render loop:
 system.benchmarks.start({ warmupMs: 500, maxSamples: 4096 });
@@ -211,3 +213,7 @@ Unsupported timings, including classic `WebGLRenderer` GPU timing, are `null`. C
 waits remain separate from GPU execution. Ordinary collection requests no timestamp readbacks. GPU allocation metrics
 cover main particle buffers; upload bytes count queued CPU uploads. Spawn/death counts cover observed events, with
 latest native allocation diagnostics exposed separately as `gpu/nativeSpawnCount` and `gpu/nativeDeathCount`.
+
+Benchmark options use exported enum members, such as `BenchmarkMetricType.Gauge`, `BenchmarkDomain.CPU`,
+`BenchmarkAggregation.Sum`, `BenchmarkScope.Component`, `BenchmarkSampling.Frame` and `BenchmarkStatistic.P95`.
+The enum values retain their existing serialized strings.

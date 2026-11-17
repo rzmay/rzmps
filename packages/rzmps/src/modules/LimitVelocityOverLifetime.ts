@@ -6,7 +6,7 @@ import type { DynamicValue } from '../values/dynamicValue.types';
 import type { Node } from 'three/webgpu';
 import { abs, float, max, sign, vec3 } from 'three/tsl';
 import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
-import evaluateDynamicVector from '../values/evaluateDynamicVector3';
+import evaluateDynamicVector from '../values/evaluateDynamicVector';
 
 export interface LimitVelocityOverLifetimeOptions extends Partial<ModuleOptions> {
     /** Absolute per-axis velocity limits, sampled by normalized particle age. */

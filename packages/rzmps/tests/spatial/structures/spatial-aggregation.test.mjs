@@ -4,10 +4,10 @@ import { Particle, ParticleOctree, ParticleSpatialGrid, SpatialLevels } from '..
 import { ParticleSystem } from '../../../build/index.mjs';
 
 const levels = value => new ParticleSpatialGrid({ brickSubdivisions: 2, cellSubdivisions: 3, levels: value }).levels;
-for (const value of [undefined, SpatialLevels.None, 'none', 'None']) assert.deepEqual(levels(value), [5]);
-for (const value of [SpatialLevels.Bricks, 'bricks', 'Bricks']) assert.deepEqual(levels(value), [0, 1, 2, 5]);
-for (const value of [SpatialLevels.Cells, 'cells', 'Cells']) assert.deepEqual(levels(value), [2, 3, 4, 5]);
-for (const value of [SpatialLevels.All, '*', 'All']) assert.deepEqual(levels(value), [0, 1, 2, 3, 4, 5]);
+for (const value of [undefined, SpatialLevels.None]) assert.deepEqual(levels(value), [5]);
+for (const value of [SpatialLevels.Bricks]) assert.deepEqual(levels(value), [0, 1, 2, 5]);
+for (const value of [SpatialLevels.Cells]) assert.deepEqual(levels(value), [2, 3, 4, 5]);
+for (const value of [SpatialLevels.All]) assert.deepEqual(levels(value), [0, 1, 2, 3, 4, 5]);
 const requested = Object.freeze([4, 0, 4]);
 assert.deepEqual(levels(requested), [0, 4, 5]);
 assert.deepEqual(requested, [4, 0, 4]);
@@ -47,9 +47,9 @@ assert.equal(mutating.root.aggregate.sum, 6);
 assert.equal(mutating.root.aggregate.vector.x, 4, 'Mutating finalization cannot normalize raw vector state');
 const system = new ParticleSystem({ emitters: [], renderers: [], modules: [] });
 const ordinary = system.acquireParticleSpatialGrid();
-const hierarchy = system.acquireParticleSpatialGrid({ levels: 'All' });
+const hierarchy = system.acquireParticleSpatialGrid({ levels: SpatialLevels.All });
 assert.notEqual(ordinary, hierarchy, 'Managed grids include maintained levels in their compatibility key');
-assert.equal(hierarchy, system.acquireParticleSpatialGrid({ levels: '*' }));
-assert.equal(ordinary, system.acquireParticleSpatialGrid({ levels: 'None' }));
+assert.equal(hierarchy, system.acquireParticleSpatialGrid({ levels: SpatialLevels.All }));
+assert.equal(ordinary, system.acquireParticleSpatialGrid({ levels: SpatialLevels.None }));
 system.destroy();
 console.log('Spatial levels, CPU aggregation compatibility and finalization passed.');

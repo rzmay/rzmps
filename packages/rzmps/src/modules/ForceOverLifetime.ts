@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../core/Module';
 import Particle from '../core/Particle';
 import type { DynamicValue } from '../values/dynamicValue.types';
-import evaluateDynamicVector from '../values/evaluateDynamicVector3';
+import evaluateDynamicVector from '../values/evaluateDynamicVector';
 
 export interface ForceOverLifetimeOptions extends Partial<ModuleOptions> {
   /** Force sampled by normalized age; velocity change is force times delta seconds divided by mass. */

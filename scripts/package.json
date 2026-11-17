@@ -1,0 +1,28 @@
+{
+  "name": "@rzmps/scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:packages": "node processes.mjs build:packages",
+    "build:demo": "npm run build --workspace demo",
+    "build:docs": "npm run build --workspace @rzmps/docs",
+    "build:site": "node processes.mjs build:site",
+    "check:docs": "node processes.mjs check:docs",
+    "check:site": "node processes.mjs check:site",
+    "check:source": "node ../tests/run.mjs --skip-build --set source",
+    "check:dependencies": "node processes.mjs check:dependencies",
+    "check:agents": "npm run check:agents --workspace @rzmps/docs",
+    "deploy:site": "node processes.mjs deploy:site",
+    "dev": "node processes.mjs dev",
+    "preview": "node preview/capture.mjs",
+    "preview:linux": "node preview/linux.mjs",
+    "serve:site": "node site/serve.mjs",
+    "presets:add-author": "node add-preset-author.mjs",
+    "pr:prepare": "node processes.mjs pr:prepare",
+    "lint": "eslint ../packages/*/src --ext .ts && eslint ../apps/demo/src ../examples --ext .js,.jsx,.cjs && eslint . ../tests ../benchmarks ../apps/*/tests ../apps/docs/scripts ../apps/demo/benchmarks ../packages/rzmps/benchmarks --ext .js,.mjs,.cjs",
+    "check:docs:prepared": "node processes.mjs check:docs:prepared"
+  },
+  "devDependencies": {
+    "concurrently": "^6.5.1"
+  }
+}

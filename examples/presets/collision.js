@@ -1,3 +1,4 @@
+import { SpriteMaterialType } from '@rzmps/rzmps';
 import collisionTestScene from 'examples/scenes/collisionTest.js';
 import * as THREE from 'three';
 import { Collision, Emitter, EmissionShape, ParticleSystem, SpriteRenderer, Textures } from '@rzmps/rzmps';
@@ -37,7 +38,7 @@ export default async function collisionPreset() {
     // #region docs:renderers:1
     renderers: [
       new SpriteRenderer(Textures.Circle, {
-        material: 'lit',
+        material: SpriteMaterialType.Lit,
 
         materialOptions: {
           roughness: 0.5,

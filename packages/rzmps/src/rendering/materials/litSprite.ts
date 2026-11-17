@@ -16,7 +16,7 @@ export interface LitSpriteOptions extends UnlitSpriteOptions, THREE.ShaderMateri
   envIntensity: number;
 }
 
-const LitSprite = (
+const litSprite = (
   texture: THREE.Texture, options: Partial<LitSpriteOptions> = {},
 ) => {
   const {
@@ -126,4 +126,4 @@ const LitSprite = (
   });
 };
 
-export default LitSprite;
+export default litSprite;

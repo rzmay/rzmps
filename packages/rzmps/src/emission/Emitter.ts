@@ -13,8 +13,8 @@ import * as THREE from 'three';
 import { StorageBufferAttribute, type Node } from 'three/webgpu';
 import EmissionShape from './EmissionShape';
 import Particle, { type ParticleInitializationContext, type GPUParticleInitializationContext } from '../core/Particle';
-import type { InitialParticleValues } from './initialParticleValues.types';
-import evaluateDynamicVector from '../values/evaluateDynamicVector3';
+import type { InitialParticleValues } from './InitialParticleValues';
+import evaluateDynamicVector from '../values/evaluateDynamicVector';
 import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
 import maxDynamicNumber from '../values/maxDynamicNumber';
 import evaluateDynamicColor from '../values/evaluateDynamicColor';
@@ -25,7 +25,7 @@ import type { Multiple, StrictMultiple } from '../types/multiple.types';
 import type { Tag } from '../types/tag.types';
 import { TagSelectionMethod } from '../enums/TagSelectionMethod';
 import { EmissionSource } from '../enums/EmissionSource';
-import { getGPUEmitterSupport, type GPUEmissionSupportReport } from './gpu/Emission';
+import { getGPUEmitterSupport, type GPUEmissionSupportReport } from './gpu/GPUEmissionRunBufferState';
 import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 import type { GPUEmitterInstanceRuntime } from './gpu/EmitterInstanceBuffer';
 import {
@@ -53,7 +53,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
-import { GPUDynamicParameterStore } from '../values/evaluateDynamicGPU';
+import { GPUDynamicParameterStore } from '../values/GPUDynamicParameterStore';
 import type { PackedFloatStorage, PackedUintStorage } from '../utils/gpu/storage.utils';
 
 export type SpawnBurst = {
@@ -94,7 +94,7 @@ export interface EmitterOptions extends EventReceiverOptions, Partial<Omit<SubSy
   /** Tags assigned at birth, selected using tagSelection. */
   tags: StrictMultiple<Tag>;
   /** Assigns all tags, distributes them, or samples them according to the selected mode. */
-  tagSelection: TagSelectionMethod | `${TagSelectionMethod}`;
+  tagSelection: TagSelectionMethod;
 }
 
 export interface EmissionContext extends Omit<ParticleInitializationContext, 'system'> {

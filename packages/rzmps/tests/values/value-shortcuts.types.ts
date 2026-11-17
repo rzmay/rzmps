@@ -84,8 +84,36 @@ const moduleWithContext = new Module(() => {});
 // @ts-expect-error prepare receives an execution context, not a system and delta arguments.
 moduleWithContext.prepare(new ParticleSystem(), 0.1);
 
-new Module(() => {}, { eventScope: ['local', 'parent', 'child'] as const });
-new Emitter({ eventScope: 'parent' });
-new ParticleSystem().addSubSystem(new ParticleSystem(), { eventScope: ['local', 'parent'] });
+new Module(() => {}, { eventScope: [EventOrigin.Local, EventOrigin.Parent, EventOrigin.Child] as const });
+new Emitter({ eventScope: EventOrigin.Parent });
+new ParticleSystem().addSubSystem(new ParticleSystem(), { eventScope: [EventOrigin.Local, EventOrigin.Parent] });
 // @ts-expect-error Cumulative scope aliases are replaced by explicit origin arrays.
 new Module(() => {}, { eventScope: 'both' });
+
+// Color representations and closed enum options are checked as public API contracts.
+import type { ColorRepresentation as ThreeColorRepresentation } from 'three';
+import type { ColorRepresentation } from '../../build/index.mjs';
+import {
+  BenchmarkMetricType, BenchmarkDomain, BenchmarkAggregation, BenchmarkScope, BenchmarkSampling,
+  BenchmarkStatistic, GeometryUpdatePolicy, EventOrigin, SpatialBackend, GPUEmissionSupportLevel,
+  Benchmarks, MaterialCopy, MaterialCopySource,
+} from '../../build/index.mjs';
+export type CanonicalColor = Expect<Equal<ColorRepresentation, ThreeColorRepresentation>>;
+const metrics = new Benchmarks();
+metrics.register('enum-input', { type: BenchmarkMetricType.Gauge, domain: BenchmarkDomain.Value,
+  aggregation: BenchmarkAggregation.Sum, scope: BenchmarkScope.Component, sampling: BenchmarkSampling.Manual });
+metrics.assert([{ metric: 'enum-input', statistic: BenchmarkStatistic.P95, max: 10 }]);
+new Module(() => {}, { eventScope: [EventOrigin.Parent, EventOrigin.Local] });
+new MaterialCopy({ source: MaterialCopySource.Collision });
+export const cpu: import('../../build/index.mjs').SpatialBackend = SpatialBackend.CPU;
+export const support: import('../../build/index.mjs').GPUEmissionSupportLevel = GPUEmissionSupportLevel.Native;
+export const policy = GeometryUpdatePolicy.Auto;
+new Emitter({ initialValues: { color: () => new Set<ColorRepresentation>(['red', 0xff0000, new Color('blue')]) } });
+new Emitter({ initialValues: {
+  // @ts-expect-error RGB tuples are not scalar Three.js color inputs; a two-value dynamic array is a range.
+  color: [1, 0, 0],
+} });
+metrics.register('invalid', {
+  // @ts-expect-error Closed options use enum members rather than raw strings.
+  type: 'gauge',
+});

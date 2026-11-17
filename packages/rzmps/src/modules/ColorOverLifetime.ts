@@ -1,15 +1,12 @@
-import type { ColorInput } from '../values/valueInput.types';
 import * as THREE from 'three';
 import Module, { type ModuleOptions } from '../core/Module';
 import Particle from '../core/Particle';
-import type { DynamicValue } from '../values/dynamicValue.types';
+import type { InitialParticleValues } from '../emission/InitialParticleValues';
 import evaluateDynamicColor from '../values/evaluateDynamicColor';
 import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
 
-export interface ColorOverLifetimeOptions extends Partial<ModuleOptions> {
-    color?: DynamicValue<ColorInput>;
-    alpha?: DynamicValue<number>;
-}
+export interface ColorOverLifetimeOptions extends Partial<ModuleOptions>,
+  Partial<Pick<InitialParticleValues, 'color' | 'alpha'>> {}
 
 /**
  * Multiplies color and alpha by normalized-age values in the transient render phase; original particle color is

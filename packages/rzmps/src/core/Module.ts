@@ -10,10 +10,10 @@ import acceptMultiple from '../utils/acceptMultiple';
 import tagsIntersect from './tags/tagsIntersect';
 import SpatialEffect from '../spatial/effects/SpatialEffect';
 import Priority from '../enums/Priority';
-import type { GPUEventBatch } from '../events/gpu/EventBatch';
+import type { GPUEventBatch } from '../events/gpu/SharedGPUEventBatch';
 import type { GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 import type { Node } from 'three/webgpu';
-import { GPUDynamicParameterStore } from '../values/evaluateDynamicGPU';
+import { GPUDynamicParameterStore } from '../values/GPUDynamicParameterStore';
 import ParticleSpatialGrid, { type ParticleSpatialGridOptions } from '../spatial/structures/ParticleSpatialGrid';
 import ParticleOctree, {
   type OctreeAggregator,

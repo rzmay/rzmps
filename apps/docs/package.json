@@ -2,10 +2,15 @@
   "name": "@rzmps/docs",
   "private": true,
   "scripts": {
-    "predev": "node ../../scripts/docs/generate.mjs --check",
+    "generate": "node scripts/generate.mjs",
+    "check": "node ../../scripts/processes.mjs check:docs",
     "dev": "vitepress dev . --port 5174 --strictPort",
-    "prebuild": "node ../../scripts/docs/generate.mjs --check",
     "build": "vitepress build .",
-    "preview": "vitepress preview ."
+    "preview": "vitepress preview .",
+    "test": "node ../../tests/run.mjs --workspace apps/docs",
+    "generate:previews": "node scripts/generate-previews.mjs",
+    "restore:previews": "node scripts/restore-previews.mjs",
+    "check:assets": "node scripts/validate-assets.mjs",
+    "check:agents": "node scripts/package-agents.mjs && node scripts/check-agents.mjs"
   }
 }

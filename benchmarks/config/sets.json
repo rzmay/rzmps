@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "sets": {
+    "full": { "include": [{ "path": "*" }] },
+    "reported": { "include": [{ "path": "^apps/demo/benchmarks/standard\\.benchmark\\.js$" }] },
+    "pr": {
+      "extends": ["reported"],
+      "exclude": [
+        {
+          "name": "^(Fused modules|Typical VFX|Heavy modules 10k noise|Custom volume|Surface spawn|Renderer tag|Population LOD|SpriteRenderer (5k|50k))"
+        }
+      ]
+    },
+    "cpu": { "include": [{ "backend": "^cpu$" }] },
+    "gpu": { "include": [{ "backend": "^gpu$" }] },
+    "rendering": { "include": [{ "feature": "^rendering/" }] },
+    "simulation": { "include": [{ "feature": "^simulation" }] },
+    "spatial": { "include": [{ "feature": "^spatial" }] },
+    "emission": { "include": [{ "feature": "^emission" }] },
+    "modules": { "include": [{ "feature": "^modules" }] },
+    "collision": { "include": [{ "feature": "^collision" }] },
+    "events": { "include": [{ "feature": "^(events|lifecycle)" }] },
+    "runtime": { "include": [{ "feature": "^runtime" }] }
+  }
+}
