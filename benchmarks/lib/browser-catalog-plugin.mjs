@@ -11,9 +11,9 @@ export function browserCatalogPlugin(root) {
     resolveId(id) {
       if (id === moduleId) return resolvedId;
     },
-    load(id) {
+    async load(id) {
       if (id !== resolvedId) return;
-      const entries = discoverBenchmarks(root).filter(entry => entry.runtime === 'browser');
+      const entries = (await discoverBenchmarks(root)).filter(entry => entry.runtime === 'browser');
       for (const entry of entries) this.addWatchFile(entry.absolute);
       return (
         entries

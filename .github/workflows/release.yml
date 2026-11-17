@@ -43,13 +43,13 @@ jobs:
           const demoPackagePath = path.join('apps', 'demo', 'package.json');
           const demoPackage = JSON.parse(fs.readFileSync(demoPackagePath, 'utf8'));
 
+          const { execFileSync } = require('child_process');
+          // This stage precedes npm ci, so use npm's CLI rather than a local dependency.
+          const workspaces = JSON.parse(execFileSync('npm',
+            ['pkg', 'get', 'name', 'version', 'private', '--workspaces', '--json'], { encoding: 'utf8' }));
           const packageVersions = new Map();
 
-          for (const entry of fs.readdirSync('packages')) {
-            const packagePath = path.join('packages', entry, 'package.json');
-            if (!fs.existsSync(packagePath)) continue;
-
-            const manifest = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+          for (const manifest of Object.values(workspaces)) {
             if (manifest.private || !manifest.name?.startsWith('@rzmps/')) continue;
 
             packageVersions.set(manifest.name, manifest.version);
@@ -106,22 +106,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          mapfile -t packages < <(node <<'NODE'
-          const fs = require('fs');
-          const path = require('path');
+          mapfile -t packages < <(node --input-type=module <<'NODE'
+          import { discoverWorkspaces } from './scripts/workspaces.utils.mjs';
 
-          const packagePaths = fs
-            .readdirSync('packages')
-            .map((entry) => path.join('packages', entry, 'package.json'))
-            .filter((packagePath) => fs.existsSync(packagePath));
-
-          const packages = packagePaths
-            .map((packagePath) => ({
-              packagePath,
-              directory: path.dirname(packagePath),
-              manifest: JSON.parse(fs.readFileSync(packagePath, 'utf8')),
-            }))
-            .filter(({ manifest }) => !manifest.private)
+          const packages = (await discoverWorkspaces(process.cwd()))
+            .filter(manifest => manifest.location.startsWith('packages/') && !manifest.private)
+            .map(manifest => ({ directory: manifest.location, manifest }))
             .sort((a, b) => {
               if (a.manifest.name === '@rzmps/rzmps') return -1;
               if (b.manifest.name === '@rzmps/rzmps') return 1;

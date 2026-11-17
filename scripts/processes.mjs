@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+import { discoverWorkspaces } from './workspaces.utils.mjs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
@@ -19,13 +19,7 @@ async function run(command, args) {
 const npm = (...args) => run('npm', args);
 const node = (...args) => run(process.execPath, args);
 async function buildPackages() {
-  const packages = fs
-    .readdirSync(path.join(root, 'packages'))
-    .map(folder => {
-      const file = path.join(root, 'packages', folder, 'package.json');
-      return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
-    })
-    .filter(p => p?.scripts?.build);
+  const packages = (await discoverWorkspaces(root)).filter(p => p.location.startsWith('packages/') && p.scripts?.build);
   const built = new Set();
   while (built.size < packages.length) {
     const next = packages.find(
@@ -89,9 +83,8 @@ else if (task === 'build:site' || task === 'deploy:site' || task === 'pr:prepare
 } else if (task === 'dev') {
   await docs('generate');
   await buildPackages();
-  const watches = fs.readdirSync(path.join(root, 'packages')).flatMap(folder => {
-    const p = JSON.parse(fs.readFileSync(path.join(root, 'packages', folder, 'package.json'), 'utf8'));
-    return p.scripts?.dev ? [`npm run dev --workspace ${p.name}`] : [];
-  });
+  const watches = (await discoverWorkspaces(root))
+    .filter(p => p.location.startsWith('packages/') && p.scripts?.dev)
+    .map(p => `npm run dev --workspace ${JSON.stringify(p.name)}`);
   await npm('exec', '--', 'concurrently', '-k', ...watches, 'node scripts/site/dev.mjs');
 } else throw new Error(`Unknown process: ${task}`);

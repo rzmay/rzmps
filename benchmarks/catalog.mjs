@@ -3,9 +3,9 @@ import ts from 'typescript';
 import { discoverFiles } from '../scripts/discover.utils.mjs';
 
 /** Read only literal metadata while discovering; listing a benchmark must never execute its workloads. */
-export function discoverBenchmarks(root) {
+export async function discoverBenchmarks(root) {
   const ids = new Set();
-  return discoverFiles(root, 'benchmarks', /\.benchmark\.(js|mjs)$/).map(file => {
+  return (await discoverFiles(root, 'benchmarks', /\.benchmark\.(js|mjs)$/)).map(file => {
     const ast = ts.createSourceFile(
       file.absolute,
       fs.readFileSync(file.absolute, 'utf8'),

@@ -9,6 +9,7 @@ Common root entry points (`dev`, `build`, `test`, `lint`, `preview`, `benchmarks
 - `dependencies/`: dependency analysis and PR warning comments.
 - `preview/`: capture, encoding, readback and diagnostics shared by the demo and documentation.
 - `site/`: combined development server, assembly, serving and deployment validation.
+- `workspaces.utils.mjs`: npm workspace resolution shared by build, dev, tests and benchmarks.
 - `discover.utils.mjs` and `selection.utils.mjs`: common file discovery and JSON regex selection.
 - `processes.mjs`: explicit build, check, deployment and PR preparation pipelines.
 
@@ -17,6 +18,15 @@ Documentation-specific generation, templates, validation and media manifests bel
 configuration belong to the [tests](../tests/README.md) and [benchmarks](../benchmarks/README.md)
 workspaces. Add automation tests under the relevant directory in root `tests/`, mirroring
 this workspace's ownership; do not place executable tests in `scripts/`.
+
+Workspace enumeration uses npm's `@npmcli/map-workspaces` resolver against root `package.json`.
+Only declared directories containing a package manifest qualify; dependencies, unrelated files
+and folders without manifests do not. Package builds and watchers select the resolved `packages/`
+workspaces. Test/benchmark collection then walks only each owner's named `tests/` or `benchmarks/`
+subtree, skipping hidden folders, symlinks, fixtures, config, dependencies and generated
+`output/`, `build/`, `dist/` and `coverage/`. It never scans the whole repository for test files.
+Keep workspace patterns narrow; a manifest-bearing directory explicitly matched by a pattern is
+an intended workspace under npm's rules.
 
 ## Named processes
 

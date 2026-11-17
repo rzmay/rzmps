@@ -1,7 +1,7 @@
 # Benchmark workspace
 
 This private workspace gathers benchmark definitions from root `benchmarks/` and each
-app/package workspace's `benchmarks/` directory. Workloads stay with the feature they measure:
+declared npm workspace's `benchmarks/` directory. Workloads stay with the feature they measure:
 browser particle scenarios are in `apps/demo/benchmarks/`, Node microbenchmarks in
 `packages/rzmps/benchmarks/`. Root `lib/` owns selection, comparison, reporting and PR orchestration;
 `build.mjs` and `browser.mjs` own the browser harness. Shared process/browser helpers live in `scripts/`.
