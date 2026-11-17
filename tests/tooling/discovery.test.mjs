@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { discoverWorkspaces } from '../../scripts/workspaces.utils.mjs';
 import { discoverFiles } from '../../scripts/discover.utils.mjs';
 import { selectEntries } from '../../scripts/selection.utils.mjs';
 import { discoverBenchmarks } from '../../benchmarks/catalog.mjs';
@@ -16,12 +17,14 @@ function fixture(t) {
     fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     fs.writeFileSync(path.join(root, file), content);
   };
-  write('apps/demo/package.json', '{}');
-  write('packages/library/package.json', '{}');
+  write('package.json', JSON.stringify({ private: true, workspaces: ['packages/*', 'apps/*', 'examples'] }));
+  write('apps/demo/package.json', JSON.stringify({ name: 'demo' }));
+  write('packages/library/package.json', JSON.stringify({ name: 'library', scripts: { dev: 'watch' } }));
+  write('examples/package.json', JSON.stringify({ name: 'examples' }));
   return { root, write };
 }
 
-test('discovery gathers workspace-owned tests and skips fixtures, outputs and dependencies', t => {
+test('discovery gathers workspace-owned tests and skips fixtures, outputs and dependencies', async t => {
   const { root, write } = fixture(t);
   for (const file of [
     'tests/tooling/a.test.mjs',
@@ -31,12 +34,18 @@ test('discovery gathers workspace-owned tests and skips fixtures, outputs and de
     'tests/fixtures/fake.test.mjs',
     'tests/output/fake.test.mjs',
     'tests/node_modules/fake.test.mjs',
+    'tests/build/fake.test.mjs',
+    'tests/dist/fake.test.mjs',
+    'tests/coverage/fake.test.mjs',
+    'tests/.cache/fake.test.mjs',
     'scripts/tests/obsolete.test.mjs',
+    'unlisted/tests/unlisted.test.mjs',
   ])
     write(file);
+  fs.symlinkSync(path.join(root, 'unlisted/tests'), path.join(root, 'tests/linked-tests'), 'dir');
   assert.deepEqual(
-    discoverFiles(root, 'tests', /\.test\.mjs$/).map(entry => entry.workspace),
-    ['.', 'examples', 'apps/demo', 'packages/library'],
+    (await discoverFiles(root, 'tests', /\.test\.mjs$/)).map(entry => entry.workspace),
+    ['.', 'packages/library', 'apps/demo', 'examples'],
   );
 });
 
@@ -61,7 +70,7 @@ test('sets inherit parent restrictions, union parents, and apply regex exclusion
   assert.throws(() => selectEntries(entries, config, 'missing'), /Unknown/);
 });
 
-test('benchmark catalog reads descriptors without executing workload modules', t => {
+test('benchmark catalog reads descriptors without executing workload modules', async t => {
   const { root, write } = fixture(t);
   write(
     'apps/demo/benchmarks/sample.benchmark.js',
@@ -71,11 +80,11 @@ test('benchmark catalog reads descriptors without executing workload modules', t
       backends: ['cpu', 'gpu'], createCases() { throw new Error('Do not execute'); } };
   `,
   );
-  const [entry] = discoverBenchmarks(root);
+  const [entry] = await discoverBenchmarks(root);
   assert.equal(entry.id, 'sample');
   assert.deepEqual(entry.backends, ['cpu', 'gpu']);
   write('packages/library/benchmarks/bad.benchmark.mjs', 'export default {};');
-  assert.throws(() => discoverBenchmarks(root), /required literal metadata/);
+  await assert.rejects(() => discoverBenchmarks(root), /required literal metadata/);
 });
 
 test('browser profiles retain Linux software rendering and explicit pacing without affecting native flags', () => {
@@ -102,4 +111,34 @@ test('workspace preview commands keep generated output under the repository outp
     { cwd: path.join(root, 'scripts'), encoding: 'utf8' },
   ).trim();
   assert.equal(output, path.join(root, 'tests/output/previews/fire'));
+});
+
+test('workspace resolution ignores stray files, missing manifests, undeclared packages and dependencies', async t => {
+  const { root, write } = fixture(t);
+  write('packages/.DS_Store', 'metadata');
+  write('packages/notes.txt', 'notes');
+  write('packages/no-manifest/README.md', 'Not a workspace');
+  write('packages/node_modules/fake/package.json', '{"name":"dependency"}');
+  write('unlisted/package.json', '{"name":"unlisted"}');
+  write('tools/custom/package.json', '{"name":"custom"}');
+  write(
+    'package.json',
+    JSON.stringify({
+      private: true,
+      workspaces: ['packages/**', 'apps/*', 'examples', 'tools/custom'],
+    }),
+  );
+  const workspaces = await discoverWorkspaces(root);
+  assert.deepEqual(
+    workspaces.map(workspace => workspace.name),
+    ['library', 'demo', 'examples', 'custom'],
+  );
+  assert.equal(workspaces[0].scripts.dev, 'watch');
+  write('tools/custom/tests/custom.test.mjs');
+  write('packages/library/tests', 'A file, not a test directory');
+  const files = await discoverFiles(root, 'tests', /\.test\.mjs$/);
+  assert.deepEqual(
+    files.map(file => file.path),
+    ['tools/custom/tests/custom.test.mjs'],
+  );
 });

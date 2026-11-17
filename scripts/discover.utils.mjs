@@ -1,26 +1,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { discoverWorkspaces } from './workspaces.utils.mjs';
 
 /** Discover only declared workspace test/benchmark roots; never walk dependencies or generated output. */
-export function discoverFiles(root, directory, pattern) {
+export async function discoverFiles(root, directory, pattern) {
   const result = [];
-  const owners = [
-    '',
-    'examples',
-    ...['apps', 'packages'].flatMap(parent =>
-      fs
-        .readdirSync(path.join(root, parent))
-        .filter(name => fs.existsSync(path.join(root, parent, name, 'package.json')))
-        .map(name => `${parent}/${name}`),
-    ),
-  ];
+  const owners = ['', ...(await discoverWorkspaces(root)).map(workspace => workspace.location)];
   function walk(folder, owner) {
-    if (!fs.existsSync(folder)) return;
+    if (!fs.lstatSync(folder, { throwIfNoEntry: false })?.isDirectory()) return;
     for (const entry of fs.readdirSync(folder, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (['node_modules', 'output', 'config', 'fixtures'].includes(entry.name)) continue;
+      if (
+        entry.name.startsWith('.') ||
+        ['node_modules', 'output', 'config', 'fixtures', 'build', 'dist', 'coverage'].includes(entry.name)
+      )
+        continue;
       const file = path.join(folder, entry.name);
       if (entry.isDirectory()) walk(file, owner);
-      else if (pattern.test(entry.name)) {
+      else if (entry.isFile() && pattern.test(entry.name)) {
         const relative = path.relative(root, file).replaceAll(path.sep, '/');
         result.push({ path: relative, name: entry.name, workspace: owner || '.', absolute: file });
       }

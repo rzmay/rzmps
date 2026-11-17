@@ -1,7 +1,7 @@
 # Test workspace
 
-This private workspace gathers and runs tests from root `tests/`, `apps/*/tests/`,
-`packages/*/tests/` and `examples/tests/`. Place tests with their owning app/package;
+This private workspace gathers and runs tests from root `tests/` and each declared npm
+workspace's `tests/` directory (including apps, packages and examples). Place tests with their owning app/package;
 root tests cover repository automation and integration. Mirror feature directories where useful.
 Tests for shared scripts live here under the matching responsibility (`dependencies/`, `preview/`,
 `site/`, `benchmarks/`, `tooling/`). Documentation tests belong to `apps/docs/tests/`.
@@ -26,8 +26,9 @@ Type tests use the project's TypeScript compiler with strict checking.
 Name normal Node tests `*.test.mjs`, type contracts `*.types.ts`, real-browser checks
 `*.browser.test.mjs`, generated-artifact checks `*.generated.test.mjs`, and expensive/manual
 investigations `*.manual.test.mjs`. Browser/manual/generated suffixes precede `.test.mjs`.
-Helpers and fixtures do not use test suffixes. Discovery skips `fixtures/`, `config/`, `output/`
-and `node_modules/`. A fixture is fixed test input or a prepared scenario; keep it tracked.
+Helpers and fixtures do not use test suffixes. Discovery skips `fixtures/`, `config/`, `output/`,
+`build/`, `dist/`, `coverage/`, hidden directories and `node_modules/`; it does not follow symlinks.
+A fixture is fixed test input or a prepared scenario; keep it tracked.
 
 `config/sets.json` defines sets using the same regex rules as benchmarks: fields are ANDed,
 rules are ORed, exclusions remove matches, and `extends` unions selected parent sets.

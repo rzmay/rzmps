@@ -32,7 +32,7 @@ const { values } = parseArgs({
 const filters = Object.fromEntries(
   ['name', 'path', 'feature', 'backend', 'runtime'].filter(key => values[key]).map(key => [key, values[key]]),
 );
-const all = discoverBenchmarks(root);
+const all = await discoverBenchmarks(root);
 const nodeCases = selectEntries(
   all.filter(entry => entry.runtime === 'node'),
   configuration,

@@ -19,12 +19,15 @@ const { values } = parseArgs({
     concurrency: { type: 'string', default: String(config.concurrency) },
   },
 });
-const files = selectEntries(discoverFiles(root, 'tests', /(?:\.test\.mjs|\.types\.ts)$/), config, values.set).filter(
-  entry =>
-    matchesRule(
-      entry,
-      Object.fromEntries(['name', 'path', 'workspace'].filter(key => values[key]).map(key => [key, values[key]])),
-    ),
+const files = selectEntries(
+  await discoverFiles(root, 'tests', /(?:\.test\.mjs|\.types\.ts)$/),
+  config,
+  values.set,
+).filter(entry =>
+  matchesRule(
+    entry,
+    Object.fromEntries(['name', 'path', 'workspace'].filter(key => values[key]).map(key => [key, values[key]])),
+  ),
 );
 if (!files.length) throw new Error(`No tests match set ${values.set}`);
 if (values.list) {

@@ -1,5 +1,6 @@
 module.exports = {
   root: true,
+  ignorePatterns: ['**/node_modules/**'],
   extends: ['eslint:recommended'],
   env: { es2022: true },
   parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
