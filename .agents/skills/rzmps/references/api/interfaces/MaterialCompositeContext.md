@@ -54,6 +54,18 @@ sourceUV: string;
 
 ***
 
+<a id="surfacedeformation"></a>
+
+### surfaceDeformation?
+
+```ts
+optional surfaceDeformation?: string;
+```
+
+Frobenius norm of the local symmetric velocity gradient, in inverse seconds.
+
+***
+
 <a id="surfacespeed"></a>
 
 ### surfaceSpeed?

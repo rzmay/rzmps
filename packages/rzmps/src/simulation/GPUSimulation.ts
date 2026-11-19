@@ -1,5 +1,6 @@
 import { modifyWithFeatherGPU, snapshotParticleGPU } from '../spatial/effects/spatialEffectSampling.utils';
 import GPUSubSystemPredicates from '../emission/gpu/GPUSubSystemPredicates';
+import prepareComputePrograms from '../utils/gpu/prepareComputePrograms';
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import Benchmarks from '../core/Benchmarks';
 import GlobalSettings from '../core/GlobalSettings';
@@ -162,9 +163,73 @@ export default class GPUSimulation {
       worldToSimulationNode: this._gpuWorldToSimulationNode };
   }
 
+  /** Compile stable particle/emission phases without executing a simulation step. @internal */
+  async preparePrograms(renderer: WebGPURenderer, modules: Module[], effects: SpatialEffect[],
+    input?: GPUSubSystemFrameInput): Promise<void> {
+    // Establish particle capacity before capturing allocation writers in cached phase graphs.
+    // Otherwise cold preparation binds a one-slot temporary counter buffer that runtime replaces.
+    const preparedContext = this.prepareContext(renderer);
+    const allocation = this._acquireGPUAllocationBuffer(renderer);
+    const eventBuffer = this._hasGPUEventConsumers()
+      ? this.execution.sharedEvents() ? this.execution.journal(renderer) : this._acquireGPUEventBuffer(renderer)
+      : undefined;
+    eventBuffer?.initialize(renderer);
+    const eventWriter = eventBuffer?.createWriter(this.system.id);
+    const context: GPUParticleUpdateContext = {
+      ...preparedContext, skippedTimeNode: this._gpuSkippedTimeNode,
+      emitterPositionNode: this._gpuEmitterPositionNode, allocationWriter: allocation.createWriter(), eventWriter,
+      collisionEventWriter: eventWriter
+        ? this._acquireGPUCollisionEventBuffer(renderer).createWriter(this.system.eventRuntime._gpuEventFrameNode)
+        : undefined,
+    };
+
+    // Match the ordinary modifier registry and signatures, without prepare/update callbacks.
+    const spatial = effects.filter(effect => effect.supportsGPU);
+    spatial.forEach(effect => effect.syncGPUTransform(this.system));
+    const tagMask = (effect: SpatialEffect) => this._getGPUTagMask(effect.tags) ?? 0;
+    if (!this._gpuSpatialRegistry?.update(spatial, this.system, tagMask)) {
+      this._gpuSpatialRegistry?.dispose(renderer);
+      this._gpuResourceBuildCount++;
+      this._gpuSpatialRegistry = GPUSpatialEffectRegistry.build(spatial, this.system, tagMask);
+    }
+    modules.forEach(module => module.beginGPUExecution(this.system));
+    const modifiers = [...modules.filter(module => module.modifiesParticles), ...spatial];
+    const permanent = modifiers.filter(module => module.priority < 0).sort((a, b) => a.priority - b.priority);
+    const transient = modifiers.filter(module => module.priority >= 0 && module.priority < 1)
+      .sort((a, b) => a.priority - b.priority);
+    const render = modifiers.filter(module => module.priority >= 1).sort((a, b) => a.priority - b.priority);
+    this._gpuSpatialRegistry.configureSegments([permanent, transient, render]);
+
+    // Reuse real phase builders and caches. Capturing only synchronous submission avoids running
+    // allocation, eligibility, emission, collisions or integration, even for populated warm starts.
+    const nodes: ComputeNode[] = [], compute = renderer.compute;
+    renderer.compute = value => { nodes.push(...(Array.isArray(value) ? value : [value])); return undefined; };
+    try {
+      this._computeGPUAllocationSnapshot(context);
+      if (input) {
+        if (input.options.emitContinuous) this._computeGPUContinuousSubSystemEmissionPhase(context, input);
+        if (input.options.emitOnDeath || input.options.emitOnSpawn || input.options.emitOnCollision
+          || eventNames(input.options.onEvent).length) this._computeGPUEventSubSystemEmissionPhase(context, input);
+      } else this._computeGPUEmissionPhase(context);
+      this._computeGPUSpawnEventPhase(context);
+      const fused = this._computeGPUCollisionAndModifierPhases(context, permanent, true);
+      nodes.push(this._getGPUSimulationComputeNode(context, fused, transient,
+        modules.filter(module => module.finalizeGPU !== Module.prototype.finalizeGPU)
+          .sort((a, b) => a.priority - b.priority)));
+      if (transient.length || render.length) {
+        nodes.push(this._getGPURenderOutputComputeNode(context.buffers, this.prepareRenderBuffers(renderer),
+          [...transient, ...render], context));
+      }
+    } finally { renderer.compute = compute; }
+    await prepareComputePrograms(renderer, [...new Set(nodes)]);
+  }
+
   /** @internal Shares the same render storage that the first ordinary update will fill. */
   prepareRenderBuffers(renderer: WebGPURenderer): GPUParticleRenderBufferState {
-    this._gpuRenderOutputBuffers ??= createGPUParticleRenderBufferState(this._getInitialGPUBufferCapacity());
+    if (!this._gpuRenderOutputBuffers) {
+      this._gpuResourceBuildCount++;
+      this._gpuRenderOutputBuffers = createGPUParticleRenderBufferState(this._getInitialGPUBufferCapacity());
+    }
     this._gpuRenderOutputBuffers.ensureCount(this._gpuBuffers?.count ?? 0);
     this._gpuRenderOutputBuffers.initialize(renderer);
     return this._gpuRenderOutputBuffers;
@@ -1679,6 +1744,7 @@ export default class GPUSimulation {
   _computeGPUCollisionAndModifierPhases(
     context: GPUParticleUpdateContext,
     modifiers: Array<Module | SpatialEffect>,
+    preparing = false,
   ): Array<Module | SpatialEffect> {
     const renderer = this.system.sceneRenderer;
     if (!isWebGPURenderer(renderer)) return modifiers;
@@ -1703,7 +1769,7 @@ export default class GPUSimulation {
         builtGrids.add(grid);
       }
 
-      if (modifier instanceof Module) {
+      if (modifier instanceof Module && !preparing) {
         const moduleContext = { ...context, module: modifier, spatialGrid: grid,
           spatialEffects: modifier.spatialEffects, events: modifier.gpuExecutionContext.events };
         modifier.benchmarks.span('compute', () => modifier.computeGPU(moduleContext, renderer, grid));

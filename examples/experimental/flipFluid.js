@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import { If, uniform, vec4 } from 'three/tsl';
 import {
   ColorOverLifetime,
   Collision,
+  DistortionBySize,
   Emitter,
   EmissionShape,
   FLIPSimulation,
@@ -9,11 +11,13 @@ import {
   ParticleSystem,
   ScaleOverLifetime,
   SpriteRenderer,
+  SpriteMaterialType,
   SurfaceRenderer,
-  SurfaceAttachment,
   Textures,
+  SurfaceAttachment,
 } from '@rzmps/rzmps';
 import sprayAlpha from '../assets/images/spray_alpha.png?url';
+import bubbleNormal from '../assets/images/simple_norm.png?url';
 
 export default async function createFlipFluid() {
   // #region docs:modules:1
@@ -21,12 +25,13 @@ export default async function createFlipFluid() {
     // Use the same membership settings accepted by Three's collision backends.
     collisionOptions: {
       surfaceThickness: 0.02,
-      bakedFieldResolution: 48,
+      // Preserve the narrow open lip after conservative occupancy reconstruction.
+      bakedFieldResolution: 96,
     },
     boundsPolicy: FluidBoundsPolicy.Kill,
     automaticPadding: true,
     spatialGridOptions: {
-      maxBounds: 16,
+      maxBounds: 10,
       brickSubdivisions: 3,
       cellSubdivisions: 4,
       powerOfTwoBounds: true,
@@ -65,7 +70,8 @@ export default async function createFlipFluid() {
         distortion: [0, 0.65],
         advection: [0.6, 0.6],
         velocityRange: [0.2, 3],
-        vorticityRange: [0.5, 8],
+        deformationRange: [0.5, 6],
+        vorticityRange: [4, 20],
       },
       transmission: 0.9, thickness: 0.3, ior: 1.333,
       attenuationColor: new THREE.Color('#b7e4ee'), attenuationDistance: 3,
@@ -86,7 +92,7 @@ export default async function createFlipFluid() {
         rate: 450,
         radialSpeed: 0.04,
         initialValues: {
-          lifetime: 60,
+          lifetime: 30,
           mass: 1,
           speed: 1,
           scale: new THREE.Vector3(0.085, 0.085, 0.085),
@@ -120,13 +126,13 @@ export default async function createFlipFluid() {
     // #region docs:emitters:2
     emitters: [new Emitter({
       source: EmissionShape.Sphere(0.015, 8, 4),
-      rate: 24,
+      rate: 50,
       radialSpeed: [0.1, 0.4],
       initialValues: {
         lifetime: [0.5, 1],
-        scale: [0.35, 0.6],
+        scale: [0.15, 0.75],
         color: new THREE.Color('white'),
-        alpha: 0.12,
+        alpha: [0.08, 0.15],
         rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
         angularVelocity: [new THREE.Vector3(0, 0, -0.5), new THREE.Vector3(0, 0, 0.5)],
       },
@@ -144,20 +150,17 @@ export default async function createFlipFluid() {
     renderers: [new SpriteRenderer(Textures.Default, {
       alphaMap: sprayAlpha,
       softParticleDistance: 0.2,
-      materialOptions: { depthWrite: false, blending: THREE.AdditiveBlending },
+      materialOptions: {
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      },
     })],
     // #endregion docs:renderers:2
   });
   // #endregion docs:system:2
   spray.name = 'Liquid Spray';
-  const sprayCondition = FLIPSimulation.SprayCondition({
-    minimumSpeed: 0.8,
-    minimumAge: 0.05,
-    maximumNeighbors: 14,
-    neighborRadius: 1.5,
-  });
+
   // Reuse the fine liquid index instead of constructing a much coarser second neighborhood grid.
-  sprayCondition.spatialGridOptions = { ...flip.spatialGridOptions };
   system.addSubSystem(spray, {
     emitContinuous: true,
     ratio: 0.4,
@@ -166,40 +169,100 @@ export default async function createFlipFluid() {
     inheritLifetime: 0,
     inheritAlpha: 0,
     inheritColor: 0,
-    shouldEmitGPU: sprayCondition,
+    shouldEmitGPU: FLIPSimulation.SprayCondition({
+      minimumSpeed: 0.8,
+      minimumAge: 0.05,
+      maximumNeighbors: 50,
+      neighborRadius: 1.5,
+      spatialGridOptions: {
+        ...flip.spatialGridOptions
+      }
+    }),
   });
 
-  // Foam is a normal secondary system; only its motion module depends on liquid sampling.
-  const foamTexture = createFoamTexture();
+  // Borrow bubble shading while retaining the liquid's surface attachment and emission rules.
+  const foamTransmission = new THREE.TextureLoader().load(Textures.Simple);
+  const foamDistortion = new THREE.TextureLoader().load(bubbleNormal);
   const foam = new ParticleSystem({
     maxParticles: 6000, duration: 0, looping: true,
     gravityModifier: 0,
     emitters: [new Emitter({
-      source: EmissionShape.Sphere(0.015, 8, 4), rate: 12,
+      source: EmissionShape.Sphere(0.015, 8, 4), rate: 20,
       initialValues: {
-        lifetime: [1.5, 3], scale: [0.06, 0.12], alpha: 0.22,
-        color: new THREE.Color('#eef8f5'),
-        rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
-        angularVelocity: [new THREE.Vector3(0, 0, -0.25), new THREE.Vector3(0, 0, 0.25)],
+        lifetime: [2.5, 5],
+        scale: [0.02, 0.08],
+        color: new THREE.Color('#ffffff'),
       },
     })],
     modules: [
-      new SurfaceAttachment({ surface: liquidSurface, samplerGPU: liquidSurface.sampleSurfaceGPU,
+      new SurfaceAttachment({
+        surface: liquidSurface, samplerGPU: liquidSurface.sampleSurfaceGPU,
         offset: 0.018, adhesion: 90, tangentialDrag: 2.5, inheritSurfaceVelocity: 1,
-        detachDistance: 0.18, killOnDetach: true }),
+        detachDistance: 0.18, killOnDetach: true
+      }),
       new ColorOverLifetime({ alpha: t => Math.min(1, t / 0.15) * (1 - t) }),
       new ScaleOverLifetime({ scale: t => 1 + 0.25 * t }),
+      new DistortionBySize({ sizeRange: [0, 1], distortionStrength: [0, 1] }),
     ],
-    renderers: [new SpriteRenderer(foamTexture, { softParticles: true, softParticleDistance: 0.08,
-      materialOptions: { depthWrite: false, blending: THREE.NormalBlending } })],
+    renderers: [new SpriteRenderer(Textures.Circle, {
+      material: SpriteMaterialType.Lit,
+      softParticles: true, softParticleDistance: 0.02,
+      children: {
+        count: [0, 5],
+        radius: 0.04,
+        scale: [0.85, 0.55],
+        alpha: [0.8, 0.55]
+      },
+      materialOptions: {
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        roughness: 0.1,
+        metalness: 0.5,
+        sphericalNormals: 1,
+        normalLighting: 1,
+        transmissionMap: foamTransmission,
+        transmission: 0.5,
+        distortionMap: foamDistortion,
+        distortionStrength: -0.1,
+      },
+    })],
   });
   foam.name = 'Liquid Foam';
-  const foamCondition = FLIPSimulation.FoamCondition({ minimumSpeed: 0.25,
-    minimumNeighbors: 3, maximumNeighbors: 24, neighborRadius: 2 });
-  foamCondition.spatialGridOptions = { ...flip.spatialGridOptions };
-  system.addSubSystem(foam, { emitContinuous: true, ratio: 0.3, inheritVelocity: 1,
-    inheritScale: 0, inheritLifetime: 0, inheritAlpha: 0, inheritColor: 0, shouldEmitGPU: foamCondition });
-  foam.addEventListener('destroyed', () => foamTexture.dispose());
+  foam.addEventListener('destroyed', () => {
+    foamTransmission.dispose();
+    foamDistortion.dispose();
+  });
+  const foamCondition = FLIPSimulation.FoamCondition({
+    minimumDeformity: 0.5,
+    samplerGPU: liquidSurface.sampleSurfaceGPU,
+    minimumNeighbors: 3,
+    maximumNeighbors: 24,
+    neighborRadius: 2
+  });
+  // The parent simulates in local space; surface queries return world-space outward normals.
+  const foamToWorld = uniform(system.matrixWorld);
+  const upwardFoamCondition = (particle, dt, context) => {
+    const selected = foamCondition(particle, dt, context).toVar();
+
+    If(selected, () => {
+      const position = foamToWorld.mul(vec4(particle.position, 1)).xyz;
+      const surface = liquidSurface.sampleSurfaceGPU(position);
+      selected.assign(surface.valid.and(surface.normal.y.greaterThanEqual(0)));
+    });
+
+    return selected;
+  };
+  upwardFoamCondition.spatialGridOptions = { ...flip.spatialGridOptions };
+  system.addSubSystem(foam, {
+    emitContinuous: true,
+    ratio: 0.3,
+    inheritVelocity: 1,
+    inheritScale: 0,
+    inheritLifetime: 0,
+    inheritAlpha: 0,
+    inheritColor: 0,
+    shouldEmitGPU: upwardFoamCondition
+  });
 
   system.name = 'FLIP Fluid';
   system.position.set(0, 0, 0);
@@ -220,24 +283,3 @@ export const metadata = {
 createFlipFluid.description = metadata.description;
 
 createFlipFluid.metadata = { ...metadata, author: 'rzmay' };
-
-/** Small irregular translucent bubble patch; deterministic and independent of image loading. */
-function createFoamTexture() {
-  const size = 64, data = new Uint8Array(size * size * 4);
-  const bubbles = [[-0.3, 0, 0.37], [0.2, 0.25, 0.3], [0.32, -0.25, 0.33], [-0.1, -0.4, 0.2]];
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const u = (x + 0.5) / size * 2 - 1, v = (y + 0.5) / size * 2 - 1;
-    let alpha = 0;
-    for (const [cx, cy, radius] of bubbles) {
-      const distance = Math.hypot(u - cx, v - cy) / radius;
-      const ring = Math.exp(-(((distance - 0.78) / 0.22) ** 2));
-      const center = Math.max(0, 1 - distance) * 0.25;
-      alpha = Math.max(alpha, ring * 0.65 + center);
-    }
-    data.set([255, 255, 255, Math.round(Math.min(1, alpha) * 255)], (x + y * size) * 4);
-  }
-  const texture = new THREE.DataTexture(data, size, size);
-  texture.minFilter = texture.magFilter = THREE.LinearFilter;
-  texture.needsUpdate = true;
-  return texture;
-}

@@ -46,9 +46,10 @@ export default async function createVolumetricSmoke() {
         weight: 0.08,
         sourceTemperature: 1,
         temperatureOverLifetime: time => 1 - time,
-        sourceStrength: 30,
-        velocitySourceStrength: 2.2,
-        scalarDiffusion: 0.8,
+        // World-space source/diffusion units, calibrated at the original 0.125-unit cell width.
+        sourceStrength: 0.06135923151542564,
+        velocitySourceStrength: 0.004499676977797881,
+        scalarDiffusion: 0.0020833333333333333,
         turbulenceNoiseStrength: 3,
         vorticityStrength: 10,
 

@@ -9,6 +9,7 @@ export const liquidStageNames = [
 
 export function liquidStage(name, surface = false) {
   if (surface) {
+    if (name === 'particleSpatialIndex') return 'particle spatial index';
     if (name === 'surfaceExtraction') return 'surface extraction';
     if (['meshUpdate', 'surfaceVorticity', 'surfaceSmoothing'].includes(name))
       return 'surface attribute reconstruction';
@@ -24,7 +25,10 @@ export function liquidStage(name, surface = false) {
 export function profileLiquidStages(system, renderer, state) {
   const { flip, surface } = system.__liquidFixture;
   const restorations = [profileFluidStages(renderer,
-    [[flip, name => `liquid/${liquidStage(name)}`], [surface, name => `liquid/${liquidStage(name, true)}`]], state)];
+    [[flip, name => `liquid/${liquidStage(name)}`], [surface, name => {
+      const detail = state.detailedSurface ? `/${name}` : '';
+      return `liquid/${liquidStage(name, true)}${detail}`;
+    }]], state)];
   restorations.push(profileMethod(system.gpuSimulation, '_computeGPUSimulationPhase', state,
     'liquid/particle collision'));
   const index = flip.getParticleSpatialGrid(system);

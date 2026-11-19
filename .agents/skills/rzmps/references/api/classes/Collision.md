@@ -1357,26 +1357,26 @@ Prepares shared work once per system update; the base implementation collects ma
 ### prepareResources()
 
 ```ts
-prepareResources(_system, _renderer): Promise<void>;
+prepareResources(system, renderer): Promise<void>;
 ```
 
-Optional non-advancing resource preparation. Does not run ordinary prepare/update callbacks.
+Prepare an already configured GPU backend without advancing its previous-pose history.
 
 #### Parameters
 
-##### \_system
+##### system
 
 [`ParticleSystem`](ParticleSystem.md)
 
-##### \_renderer
+##### renderer
 
-[`ParticleSpatialGridRenderer`](../Supporting-Types/interfaces/ParticleSpatialGridRenderer.md)
+`WebGPURenderer`
 
 #### Returns
 
 `Promise`\<`void`\>
 
-#### Inherited from
+#### Overrides
 
 [`Module`](Module.md).[`prepareResources`](Module.md#prepareresources)
 

@@ -720,7 +720,7 @@ class SpatialEffect extends THREE.Object3D {
     return transformPointGPU(this.getGPUParticleWorldPosition(particle), this._gpuWorldToLocalNode);
   }
 
-  private ensureBakedField(): void {
+  protected ensureBakedField(): void {
     if (!this.geometry && this.feather <= 0) {
       this._bakedFieldTexture = undefined;
       return;

@@ -1,6 +1,8 @@
+import liquidVelocityActivity from './liquidVelocityActivity';
 import { createLiquidSurfaceQuery, sampleSurfaceField } from './liquidSurfaceSampling.utils';
 import * as THREE from 'three';
 import { initializeStorageAttribute } from '../../utils/gpu/storage.utils';
+import prepareComputePrograms from '../../utils/gpu/prepareComputePrograms';
 import type Benchmarks from '../../core/Benchmarks';
 import { IndirectStorageBufferAttribute, StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
@@ -63,6 +65,9 @@ export interface SurfaceExtractionContext {
   minimum: Node<'vec3'>;
   cellSize: Node<'float'>;
   maximumTriangles: number;
+  /** Optional compact cell-to-vertex address map; zero denotes no generated output. */
+  vertexMap?: SurfaceIntegerStorage;
+  maximumVertices?: number;
 }
 
 /**
@@ -70,7 +75,9 @@ export interface SurfaceExtractionContext {
  * Increment counters[0] for requested triangles and counters[1] for generated vertices;
  * write only within maximumTriangles. Positions use xyz plus w=1 for valid vertices.
  * Triangle layout uses three consecutive vertices per triangle. Cell layout uses one
- * vertex per sparse cell. LiquidSurface owns shading, draw arguments and pass disposal.
+ * vertex per sparse cell. Compact layout uses vertexMap[cell] = outputVertex + 1 and
+ * maximumVertices; zero map entries denote absent vertices. Smoothing scratch is temporary
+ * and may alias filtering scratch after extraction begins. LiquidSurface owns shading and disposal.
  */
 export interface SurfaceExtractor {
   (context: SurfaceExtractionContext): {
@@ -78,16 +85,19 @@ export interface SurfaceExtractor {
     smoothingNodes?: ComputeNode[];
     triangleMultiple?: number;
   };
-  /** Defaults to triangle soup; set to cells for one vertex per sparse field cell. */
-  vertexLayout?: 'cells' | 'triangles';
+  /** Triangle soup by default; cells preserves sparse addresses, compact supplies a cell-to-output map. */
+  vertexLayout?: 'cells' | 'triangles' | 'compact';
 }
 
 interface LiquidSurfaceOptions extends SurfaceKernelOptions {
+  kernelOptimization?: { sharedMoments?: boolean; convergedEigen?: boolean;
+    neighborVisits?: (index: Node<'uint'>, count: Node<'float'>) => void };
   fieldSmoothingIterations: number;
   fieldSmoothing: number;
   fieldClosing: number;
   flowSmoothing: number;
   velocityDetailRange: [number, number];
+  deformationDetailRange?: [number, number];
   vorticityDetailRange: [number, number];
   benchmarks?: Benchmarks;
   bounds: THREE.Box3;
@@ -131,7 +141,7 @@ export default class LiquidSurface {
   private readonly filterStrength = uniform(0.15);
   private readonly closingStrength = uniform(0);
   private readonly flowSmoothing = uniform(0.75);
-  private readonly velocityRange = uniform(new THREE.Vector2(0.5, 3));
+  private readonly deformationRange = uniform(new THREE.Vector2(0.5, 6));
   private readonly vorticityRange = uniform(new THREE.Vector2(1, 8));
   private readonly filterNodes: ComputeNode[] = [];
   private readonly curlNode: ComputeNode;
@@ -167,6 +177,9 @@ export default class LiquidSurface {
   private readonly resetNode: ComputeNode;
   private readonly extractionNodes: ComputeNode[];
   private readonly cellVertices: boolean;
+  readonly outputVertexCapacity: number;
+  get triangleCapacity(): number { return this.options.maxTriangles; }
+  private readonly vertexMapAttribute?: StorageBufferAttribute;
   private readonly triangleMultiple: number;
   private readonly drawNode: ComputeNode;
   private readonly smoothNodes: ComputeNode[];
@@ -198,6 +211,14 @@ export default class LiquidSurface {
       ...options.spatialGridOptions,
       timeQuality: 1,
     });
+    // Tiny hash cells make each support query enumerate thousands of empty buckets during spreading.
+    // This is only an acceleration index: exact distance tests and the reconstruction lattice stay unchanged.
+    if (this.queryGrid.autoVolumeQuality && this.queryGrid.maxQuerySteps === 0) {
+      const support = options.voxelSize * options.influenceRadius;
+      this.queryGrid.minVolumeQuality = Math.min(this.queryGrid.maxVolumeQuality,
+        Math.max(this.queryGrid.minVolumeQuality, support * this.queryGrid.cellsPerAxis));
+      this.queryGrid.setBounds(this.queryGrid.bounds.clone());
+    }
     const extractor =
       typeof extraction === 'function'
         ? extraction
@@ -205,19 +226,26 @@ export default class LiquidSurface {
           ? buildMarchingCubes
           : buildSurfaceNets;
     this.cellVertices = extractor.vertexLayout === 'cells';
-    const vertexCount = this.cellVertices ? this.grid.cellCount : options.maxTriangles * 3;
+    const compact = extractor.vertexLayout === 'compact';
+    const vertexCount = this.cellVertices ? this.grid.cellCount
+      : compact ? Math.min(this.grid.cellCount, options.maxTriangles * 3) : options.maxTriangles * 3;
+    this.outputVertexCapacity = vertexCount;
+    if (compact) this.vertexMapAttribute = new StorageBufferAttribute(new Uint32Array(this.grid.cellCount), 1);
 
     const attribute = (count = vertexCount) => new StorageBufferAttribute(new Float32Array(count * 4), 4);
     // One binding contains scalar/color, weighted velocity/support, and reconstructed curl.
     this.fieldAttribute = attribute(this.grid.cellCount * 3);
-    this.fieldScratchAttribute = attribute(this.grid.cellCount * 3);
+    // Filtering needs scalar/color and momentum only; curl stays in the primary field.
+    this.fieldScratchAttribute = attribute(this.grid.cellCount * 2);
     this.flowAttribute = attribute();
     this.vorticityAttribute = attribute();
     this.kernels = new SurfaceParticleKernels(options.voxelSize);
     this.positionAttribute = attribute();
     this.normalAttribute = attribute();
     this.colorAttribute = attribute();
-    this.smoothingAttribute = attribute();
+    // Filtering is finished before topology smoothing; reuse its dead scratch prefix when it fits.
+    this.smoothingAttribute = vertexCount <= this.fieldScratchAttribute.count
+      ? this.fieldScratchAttribute : attribute();
     this.topologyAttribute = new StorageBufferAttribute(new Uint32Array(this.grid.cellCount * 2), 1);
     this.indexAttribute = new StorageBufferAttribute(new Uint32Array(options.maxTriangles * 3), 1);
     const vector = (value: StorageBufferAttribute) => storage(value, 'vec4', value.count) as Vec4Storage;
@@ -257,6 +285,8 @@ export default class LiquidSurface {
       counters: this.counters,
       iso: this.isoLevel,
       maximumTriangles: options.maxTriangles,
+      maximumVertices: vertexCount,
+      vertexMap: this.vertexMapAttribute && storage(this.vertexMapAttribute, 'uint', this.grid.cellCount).toAtomic(),
       minimum: this.minimum,
       cellSize: this.cellSize,
     });
@@ -275,7 +305,7 @@ export default class LiquidSurface {
       ? Fn(() => {
           If(
             instanceIndex
-              .lessThan(atomicLoad(this.counters.element(0)).mul(3))
+              .lessThan(compact ? atomicLoad(this.counters.element(1)) : atomicLoad(this.counters.element(0)).mul(3))
               .and(instanceIndex.lessThan(vertexCount)),
             () => this.rebuildShading(instanceIndex),
           );
@@ -295,17 +325,26 @@ export default class LiquidSurface {
   async prepare(update: () => void): Promise<void> {
     for (const attribute of [this.fieldAttribute, this.fieldScratchAttribute, this.positionAttribute,
       this.normalAttribute, this.colorAttribute, this.flowAttribute, this.vorticityAttribute,
-      this.smoothingAttribute, this.topologyAttribute, this.indexAttribute]) {
-      initializeStorageAttribute(this.renderer, attribute);
+      this.smoothingAttribute, this.topologyAttribute, this.indexAttribute,
+      ...(this.vertexMapAttribute ? [this.vertexMapAttribute] : [])]) {
+      // These replacement fields are freshly allocated zeros; WebGPU already guarantees that state.
+      // Uploading hundreds of megabytes of zeros competes with the live scene for queue bandwidth.
+      initializeStorageAttribute(this.renderer, attribute, false);
       await new Promise(resolve => setTimeout(resolve, 0));
     }
     const nodes: ComputeNode[] = [], compute = this.renderer.compute;
     this.renderer.compute = node => { nodes.push(...(Array.isArray(node) ? node : [node])); };
     try { update(); } finally { this.renderer.compute = compute; }
-    const compiler = this.renderer as ParticleSpatialGridRenderer & {
-      compileComputeAsync(nodes: ComputeNode[]): Promise<void>;
-    };
-    await compiler.compileComputeAsync([...new Set(nodes)]);
+    // Prepared surfaces are not live owners yet; name their programs before asynchronous build tracing.
+    for (const [key, value] of Object.entries(this)) {
+      const programs = Array.isArray(value) ? value : [value];
+      programs.forEach((program, index) => {
+        const node = program as ComputeNode | undefined;
+        if (node?.isComputeNode && !node.name) node.setName(`rzmps.surface.${key}.${index}`);
+      });
+    }
+    // Match fluid-pool staging: avoid one synchronous graph-compilation burst for the complete surface.
+    await prepareComputePrograms(this.renderer, [...new Set(nodes)]);
   }
 
   update(
@@ -323,7 +362,7 @@ export default class LiquidSurface {
     this.filterStrength.value = this.options.fieldSmoothing;
     this.closingStrength.value = this.options.fieldClosing;
     this.flowSmoothing.value = this.options.flowSmoothing;
-    this.velocityRange.value.fromArray(this.options.velocityDetailRange);
+    this.deformationRange.value.fromArray(this.options.deformationDetailRange ?? [0.5, 6]);
     this.vorticityRange.value.fromArray(this.options.vorticityDetailRange);
     this.isoLevel.value = isoLevel;
     this.quality.value = quality;
@@ -390,7 +429,7 @@ export default class LiquidSurface {
     }
     this.copyNode!.count = buffers.count;
     this.renderer.compute(this.copyNode!);
-    this.queryGrid.rebuild(this.renderer, this.projection, {});
+    this.computeStage('particleSpatialIndex', () => this.queryGrid.rebuild(this.renderer, this.projection, {}));
     const kernelKey = `${this.queryGrid.resourceVersion}:${this.options.anisotropy > 0}`;
     if (kernelKey !== this.kernelKey) {
       this.kernelNode?.dispose();
@@ -401,6 +440,7 @@ export default class LiquidSurface {
         this.queryGrid,
         storage(this.kernelAttribute, 'vec4', this.projection.capacity * 3),
         this.options.anisotropy > 0,
+        this.options.kernelOptimization,
       );
       this.kernelKey = kernelKey;
       this.queryVersion = -1;
@@ -455,7 +495,7 @@ export default class LiquidSurface {
           color.addAssign(particle.color.mul(weight));
           velocity.addAssign(particle.velocity.mul(weight));
           support.addAssign(this.kernels.bulk(b.w).mul(weight));
-        });
+        }, { pruneBounds: this.options.kernelOptimization?.sharedMoments !== false });
         this.field.element(index).assign(vec4(color, total));
         this.flow.element(index).assign(vec4(velocity, support));
       });
@@ -537,23 +577,27 @@ export default class LiquidSurface {
 
   private reconstructCurl(index: Node<'uint'>): void {
     const coordinate = this.grid.coordinate(index);
+    const density = this.field.element(index).w.toVar();
+    const center = this.flow.element(index).xyz.div(density.max(1e-8)).toVar();
     const sample = (x: number, y: number, z: number) => {
-      const address = this.grid.index(coordinate.add(ivec3(x, y, z)));
-      const center = this.flow.element(index).xyz.div(this.field.element(index).w.max(1e-8));
-      return this.field
-        .element(address)
-        .w.greaterThan(1e-8)
-        .select(this.flow.element(address).xyz.div(this.field.element(address).w.max(1e-8)), center);
+      const address = this.grid.index(coordinate.add(ivec3(x, y, z))).toVar();
+      const weight = this.field.element(address).w.toVar();
+      // Very weak support must not abruptly promote a normalized noisy velocity to full influence.
+      // This compact confidence ramp is complete at 5% of the visible isosurface density.
+      const confidence = smoothstep(float(0), this.isoLevel.mul(0.05).max(1e-8), weight);
+      const velocity = this.flow.element(address).xyz.div(weight.max(1e-8));
+      return mix(center, velocity, confidence).toVar();
     };
-    const dx = sample(1, 0, 0).sub(sample(-1, 0, 0));
-    const dy = sample(0, 1, 0).sub(sample(0, -1, 0));
-    const dz = sample(0, 0, 1).sub(sample(0, 0, -1));
-    this.curl.element(index).assign(
-      this.field
-        .element(index)
-        .w.greaterThan(1e-8)
-        .select(vec4(vec3(dy.z.sub(dz.y), dz.x.sub(dx.z), dx.y.sub(dy.x)).div(this.cellSize.mul(2)), 0), vec4(0)),
-    );
+
+    // One six-neighbor stencil supplies both curl and symmetric deformation. Missing support
+    // extends the center velocity, so an empty boundary never creates false translation activity.
+    const spacing = this.cellSize.mul(2);
+    const dx = sample(1, 0, 0).sub(sample(-1, 0, 0)).div(spacing).toVar();
+    const dy = sample(0, 1, 0).sub(sample(0, -1, 0)).div(spacing).toVar();
+    const dz = sample(0, 0, 1).sub(sample(0, 0, -1)).div(spacing).toVar();
+    const { vorticity, deformation } = liquidVelocityActivity(dx, dy, dz);
+    const confidence = smoothstep(float(0), this.isoLevel.mul(0.05).max(1e-8), density);
+    this.curl.element(index).assign(vec4(vorticity, deformation).mul(confidence));
   }
 
   private buildFilter(source: Vec4Storage, target: Vec4Storage, mode: string): ComputeNode {
@@ -586,9 +630,8 @@ export default class LiquidSurface {
         target.element(index).assign(vec4(basis.xyz, basis.w).mul(scalar.div(basis.w.max(1e-8))));
         targetFlow.element(index).assign(basisFlow.mul(scalar.div(basis.w.max(1e-8))));
       } else {
-        const speed = originalFlow.xyz.div(original.w.max(1e-8)).length();
         const activity = max(
-          smoothstep(this.velocityRange.x, this.velocityRange.y, speed),
+          smoothstep(this.deformationRange.x, this.deformationRange.y, this.curl.element(index).w),
           smoothstep(this.vorticityRange.x, this.vorticityRange.y, this.curl.element(index).xyz.length()),
         );
         const bulk = originalFlow.w.div(original.w.max(1e-8)).clamp(0, 1);
@@ -627,16 +670,15 @@ export default class LiquidSurface {
     this.vertexFlow
       .element(index)
       .assign(vec4(flow.xyz.div(color.w.max(1e-8)), flow.w.div(color.w.max(1e-8)).clamp(0, 1)));
-    this.vertexCurl.element(index).assign(vec4(curl.xyz, curl.xyz.length()));
+    this.vertexCurl.element(index).assign(curl);
   }
 
   clear(): void {
     this.surfaceQuery.invalidate();
-    this.renderer.compute(
-      Fn(() => {
-        storage(this.drawAttribute, 'uint', 5).element(0).assign(0);
-      })().compute(1),
-    );
+    // The owner hides the mesh immediately. Empty the next draw upload without creating a
+    // compute pass/bind group after particle/index resources may already have been released.
+    (this.drawAttribute.array as Uint32Array)[0] = 0;
+    this.drawAttribute.needsUpdate = true;
   }
 
   async readDiagnostics(): Promise<{
@@ -660,7 +702,7 @@ export default class LiquidSurface {
       activeBricks: bricks[0],
       overflowedBricks: bricks[1],
       bounds: this.bounds.clone(),
-      allocatedBytes: [
+      allocatedBytes: [...new Set([
         this.fieldAttribute,
         this.fieldScratchAttribute,
         this.positionAttribute,
@@ -671,13 +713,14 @@ export default class LiquidSurface {
         this.smoothingAttribute,
         this.topologyAttribute,
         this.indexAttribute,
+        this.vertexMapAttribute,
         this.kernelAttribute,
         this.countersAttribute,
         this.drawAttribute,
         this.projection.attributes.floatData,
         this.projection.attributes.uintData,
         ...Object.values(this.queryGrid).filter(value => value instanceof StorageBufferAttribute),
-      ].reduce((sum, attribute) => sum + (attribute?.array.byteLength ?? 0), this.grid.allocatedBytes),
+      ])].reduce((sum, attribute) => sum + (attribute?.array.byteLength ?? 0), this.grid.allocatedBytes),
     };
   }
 
@@ -696,12 +739,13 @@ export default class LiquidSurface {
       this.shadingNode,
     ].forEach(node => node?.dispose());
     this.geometry.dispose();
-    for (const attribute of [
+    for (const attribute of new Set([
       this.fieldAttribute,
       this.positionAttribute,
       this.normalAttribute,
       this.colorAttribute,
       this.indexAttribute,
+      ...(this.vertexMapAttribute ? [this.vertexMapAttribute] : []),
       this.countersAttribute,
       this.drawAttribute,
       this.smoothingAttribute,
@@ -710,7 +754,7 @@ export default class LiquidSurface {
       this.fieldScratchAttribute,
       this.flowAttribute,
       this.vorticityAttribute,
-    ]) {
+    ])) {
       if (!attribute) continue;
       destroyGPUStorageAttribute(this.renderer, attribute);
       attribute.dispose();

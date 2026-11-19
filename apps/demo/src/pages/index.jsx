@@ -141,6 +141,7 @@ function DemoPage() {
   const demoRef = useRef(null);
   const [code, setCode] = useState('');
   const particleCountRef = useRef(null);
+  const systemCountsRef = useRef(null);
   const gpuStatsRef = useRef(null);
   const simulationStatsRef = useRef(null);
   const rendererStatsRef = useRef(null);
@@ -211,6 +212,12 @@ function DemoPage() {
         ? `${count.toLocaleString()} simulated (${(count + children).toLocaleString()} rendered)`
         : `${count.toLocaleString()} particles`;
 
+      const systems = typeof stats === 'number' ? [] : stats.systems ?? [];
+      systemCountsRef.current.textContent = systems.map(system =>
+        `${system.name}: ${system.particles.toLocaleString()} particles`
+        + (system.children > 0 ? ` (${(system.particles + system.children).toLocaleString()} rendered)` : ''))
+        .join('\n');
+
       gpuStatsRef.current.textContent = allocated > 0
         ? `${allocated.toLocaleString()} GPU slots · ${usage.toFixed(1)}% in use`
         : activeSlots > 0 ? `${activeSlots.toLocaleString()} active GPU slots` : '';
@@ -258,6 +265,7 @@ function DemoPage() {
 
         <div className="particle-count-monitor">
           <div ref={particleCountRef}>0 particles</div>
+          <div ref={systemCountsRef} />
           <div ref={gpuStatsRef} className="particle-count-monitor__gpu" />
           <div ref={simulationStatsRef} className="particle-count-monitor__simulation" />
           <div ref={rendererStatsRef} className="particle-count-monitor__renderers" />

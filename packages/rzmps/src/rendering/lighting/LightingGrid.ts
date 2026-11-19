@@ -681,7 +681,10 @@ export default class LightingGrid {
       const { output: coordinate, position } = this.address(level);
       const uv = this.probeUV(level, position);
       const mean = vec3(0).toVar();
-      for (let bin = 0; bin < count; bin++) mean.addAssign(this.readBin(input, level, uv, bin).xyz.div(count));
+      // Ambient is already unoccluded irradiance in every bin; do not scatter it onto itself.
+      for (let bin = 0; bin < count; bin++) {
+        mean.addAssign(this.readBin(input, level, uv, bin).xyz.sub(this.ambientNode).max(0).div(count));
+      }
       const base = input.load(coordinate);
       const local = level.localRead.load(coordinate);
       textureStore(output, coordinate, vec4(base.xyz.add(mean.mul(float(1).sub(local.w)).mul(0.2)), base.w))

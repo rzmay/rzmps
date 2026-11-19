@@ -23,10 +23,12 @@ export default class StagedGPUAllocation<T> {
   private latestDemand = 0;
   private targetCapacity = 0;
   private supersedingCapacity = 0;
+  private retiredResources = 0;
   /** Internal state for frame-level capacity diagnostics. */
   get status() {
     const state = this.preparing ? (this.targetCapacity ? 'preparing' : 'retiring') : this.pending ? 'ready' : 'idle';
-    return { state, pendingCapacity: this.targetCapacity, requestedDemand: this.latestDemand };
+    return { state, pendingCapacity: this.targetCapacity, requestedDemand: this.latestDemand,
+      retiredResources: this.retiredResources };
   }
   get maximumCapacity(): number { return this.options.maximumCapacity; }
   readonly metrics = { requests: 0, preparationMs: 0, allocationMs: 0,
@@ -132,12 +134,13 @@ export default class StagedGPUAllocation<T> {
   }
 
   private async release(resources: T): Promise<void> {
+    this.retiredResources++;
     try {
       await this.options.fence();
     } catch {
       /* Device loss still requires CPU/resource cleanup. */
     } finally {
-      this.options.dispose(resources);
+      try { this.options.dispose(resources); } finally { this.retiredResources--; }
     }
   }
 

@@ -168,6 +168,12 @@ pendingCapacity: number;
 requestedDemand: number;
 ```
 
+###### retiredResources
+
+```ts
+retiredResources: number;
+```
+
 ###### state
 
 ```ts

@@ -78,6 +78,7 @@ export function applySurfaceMaterial(
         surfaceSupport: velocity.w,
         surfaceVorticity: vorticity.xyz,
         surfaceVorticityMagnitude: vorticity.xyz.length(),
+        surfaceDeformation: vorticity.w,
       }),
     };
     // Composite color already includes particle color, so do not multiply it again in Three's vertex-color stage.
@@ -126,6 +127,7 @@ export function applySurfaceMaterial(
         surfaceSupport: 'vSurfaceVelocity.w',
         surfaceVorticity: 'vSurfaceVorticity.xyz',
         surfaceVorticityMagnitude: 'length(vSurfaceVorticity.xyz)',
+        surfaceDeformation: 'vSurfaceVorticity.w',
       });
       const varyings = 'varying vec4 vSurfaceVelocity;\nvarying vec4 vSurfaceVorticity;\n';
       shader.vertexShader =

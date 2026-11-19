@@ -9,7 +9,7 @@ import { transformDirectionGPU, transformPointGPU } from '../../simulation/gpu/t
 /** One trilinear stencil provides both scalar/color interpolation and its analytic outward gradient. */
 export function sampleSurfaceField(coordinate: Node<'vec3'>,
   value: (coordinate: Node<'ivec3'>) => Node<'vec4'>, withGradient = true) {
-  const lower = ivec3(floor(coordinate)), fraction = coordinate.sub(vec3(lower));
+  const lower = ivec3(floor(coordinate)).toVar(), fraction = coordinate.sub(vec3(lower)).toVar();
   const result = vec4(0).toVar(), gradient = vec3(0).toVar();
   for (let corner = 0; corner < 8; corner++) {
     const bits = [corner & 1, (corner >> 1) & 1, (corner >> 2) & 1];
@@ -17,7 +17,8 @@ export function sampleSurfaceField(coordinate: Node<'vec3'>,
       const t = fraction[['x', 'y', 'z'][axis] as 'x' | 'y' | 'z'];
       return bit ? t : float(1).sub(t);
     });
-    const sample = value(lower.add(ivec3(...bits)));
+    // Sparse addressing is shared by every weight/gradient term, not expanded for each use.
+    const sample = value(lower.add(ivec3(...bits))).toVar();
     result.addAssign(sample.mul(weights[0].mul(weights[1]).mul(weights[2])));
     // Scalar is high inside liquid, so the outward normal is -grad(F).
     if (withGradient) gradient.addAssign(vec3(weights[1].mul(weights[2]).mul(bits[0] ? -1 : 1),
@@ -39,24 +40,27 @@ export function createLiquidSurfaceQuery() {
   const enabled = uniform(0), toWorld = uniform(new THREE.Matrix4()), toLocal = uniform(new THREE.Matrix4());
   const previousWorld = uniform(new THREE.Matrix4()), dt = uniform(0);
   let initialized = false;
-  const index = (coordinate: Node<'ivec3'>) => sparseCellIndex(coordinate, pages, dimensions, side, cells);
+  const index = (coordinate: Node<'ivec3'>) => sparseCellIndex(coordinate, pages, dimensions, side, cells).toVar();
   const scalar = (coordinate: Node<'ivec3'>) => field.element(index(coordinate));
 
   const sampleSurfaceGPU: GPUSurfaceQuery = position => {
-    const local = transformPointGPU(position, toLocal);
-    const coordinate = local.sub(minimum).div(cellSize);
+    const local = transformPointGPU(position, toLocal).toVar();
+    const coordinate = local.sub(minimum).div(cellSize).toVar();
     const sample = sampleSurfaceField(coordinate, scalar);
-    const gradient = sample.outwardGradient.div(cellSize);
-    const magnitude = gradient.length();
-    const localNormal = gradient.div(magnitude.max(1e-8));
-    const localDistance = iso.sub(sample.value.w).div(magnitude.max(1e-8));
-    const surfacePosition = local.sub(localNormal.mul(localDistance));
+    const gradient = sample.outwardGradient.div(cellSize).toVar();
+    const magnitude = gradient.length().toVar();
+    const localNormal = gradient.div(magnitude.max(1e-8)).toVar();
+    const localDistance = iso.sub(sample.value.w).div(magnitude.max(1e-8)).toVar();
+    const surfacePosition = local.sub(localNormal.mul(localDistance)).toVar();
     const atSurface = surfacePosition.sub(minimum).div(cellSize);
     const flow = sampleSurfaceField(atSurface, c => {
       const address = index(c);
       return vec4(field.element(address.add(cells)).xyz, field.element(address).w);
     }, false).value;
     const density = flow.w;
+    // The same reconstructed strain field drives liquid shading and foam-source selection.
+    const deformation = sampleSurfaceField(atSurface,
+      c => field.element(index(c).add(cells.mul(2))), false).value.w;
     const physicalVelocity = flow.xyz.div(density.max(1e-8));
     const worldPoint = transformPointGPU(surfacePosition, toWorld);
     const normalMatrix = toLocal.transpose();
@@ -65,7 +69,7 @@ export function createLiquidSurfaceQuery() {
       .select(transformedNormal.div(transformedNormal.length().max(1e-8)), vec3(0, 1, 0));
     const worldDistance = position.sub(worldPoint).dot(worldNormal);
     const motion = worldPoint.sub(transformPointGPU(surfacePosition, previousWorld)).div(dt.max(1e-8));
-    return { distance: worldDistance, normal: worldNormal,
+    return { distance: worldDistance, normal: worldNormal, deformation,
       velocity: transformDirectionGPU(physicalVelocity, toWorld).add(dt.greaterThan(0).select(motion, vec3(0))),
       valid: enabled.greaterThan(0).and(coordinate.greaterThanEqual(0).all())
         .and(coordinate.lessThan(dimensions.sub(1)).all()).and(magnitude.greaterThan(1e-6))

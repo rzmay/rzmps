@@ -149,6 +149,7 @@ maxBounds: number | Vector3;
 ```
 
 Maximum physical extent per axis; a number applies to every axis. Defaults to Infinity.
+Adaptive growth rejects excess bricks rather than moving an opposite retained face.
 
 #### Overrides
 

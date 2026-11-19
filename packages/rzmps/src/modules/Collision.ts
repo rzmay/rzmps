@@ -1,6 +1,6 @@
 import { transformPointGPU, transformDirectionGPU } from '../simulation/gpu/transforms.utils';
 import * as THREE from 'three';
-import type { Node } from 'three/webgpu';
+import type { Node, WebGPURenderer } from 'three/webgpu';
 import { abs, float, If, max, sqrt, vec4, uniform } from 'three/tsl';
 
 import Module, { type ModuleExecutionContext, type ModuleOptions } from '../core/Module';
@@ -173,6 +173,30 @@ class Collision extends Module {
       this.gpuBackendVersion = this._backend.resourceVersion;
       this.needsUpdate = true;
     }
+  }
+
+  /** Prepare an already configured GPU backend without advancing its previous-pose history. */
+  public override async prepareResources(system: ParticleSystem, renderer: WebGPURenderer): Promise<void> {
+    if (!this._explicitBackend && system.scene && !(this._backend instanceof ThreeGPUCollisionBackend)) {
+      if (this._ownsBackend) this._backend?.destroy?.();
+      this._backend = new ThreeGPUCollisionBackend({ world: system.scene });
+      this._ownsBackend = true;
+    }
+    if (!(this._backend instanceof ThreeGPUCollisionBackend)) return;
+    this._backend.materialRegistry = system.materialCopyRegistry;
+    if (!this._backend.hasGeometry) this._backend.update(0, system.renderFrameToken);
+    if (!this._backend.hasGeometry) return;
+    this._simulationToWorld.value.copy(system.getSimulationToWorldMatrix());
+    this._worldToSimulation.value.copy(this._simulationToWorld.value).invert();
+    this._system = system;
+    this._backend.materialRegistry = system.materialCopyRegistry;
+    if (this.gpuBackendIdentity !== this._backend || this.gpuBackendVersion !== this._backend.resourceVersion) {
+      this.gpuBackendIdentity = this._backend;
+      this.gpuBackendVersion = this._backend.resourceVersion;
+      this.needsUpdate = true;
+    }
+    const context = system.gpuSimulation.prepareContext(renderer);
+    await renderer.compileComputeAsync([system.gpuSimulation._getGPUCollisionNode(context, this)]);
   }
 
   public hasGPUCollisionBackend(): boolean {

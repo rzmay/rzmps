@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import SparseVolumeGrid from '../../../../../packages/rzmps/src/spatial/structures/gpu/SparseVolumeGrid.ts';
 import VolumeOccupancy from '../../../../../packages/rzmps/src/rendering/gpu/VolumeOccupancy.ts';
 import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
 import { Fn, atomicStore, float, instanceIndex, storage, uint, uniform, vec3, vec4, textureStore } from 'three/tsl';
@@ -54,6 +55,39 @@ window.testPreparation = async () => {
   return { constructionMs, prepareMs, firstRenderAfterPrepareMs, before,
     after: { time: system._elapsedTime, particles: system.liveParticleCount } };
 };
+window.testPressureScratchLease = async () => {
+  system.advanceFrames(1, 1 / 60);
+  await renderer.backend.device.queue.onSubmittedWorkDone();
+  const active = gas.getPressureProjection();
+  const candidate = gas.createPressureProjection();
+  const shared = ['attribute', 'stencilIndicesAttribute', 'stencilWeightsAttribute']
+    .every(key => active[key] === candidate[key]);
+  await candidate.prepare(renderer, gas.velocityNext, gas.velocityCurrent, gas.pressureIterations);
+  const compactGrid = new SparseVolumeGrid({ ...gas.spatialGridOptions, bounds: gas.bounds },
+    Math.max(1, gas.volumeGrid.capacity / 2), gas.gridDimensions.clone());
+  const compact = gas.createPressureProjection(compactGrid);
+  const borrowedLarge = compact.attribute === active.attribute;
+  await compact.prepare(renderer, gas.velocityNext, gas.velocityCurrent, gas.pressureIterations);
+  compact.compactScratch(renderer);
+  await compact.prepare(renderer, gas.velocityNext, gas.velocityCurrent, gas.pressureIterations);
+  const compacted = borrowedLarge && compact.attribute !== active.attribute
+    && compact.attribute.count === compactGrid.capacity * (compactGrid.brickSide + 1) ** 3 + 1;
+  compact.dispose(); compactGrid.dispose(renderer);
+  await renderer.backend.device.queue.onSubmittedWorkDone();
+  const attribute = active.attribute, native = renderer.backend.get(attribute).buffer;
+  const destroy = native.destroy;
+  let destructions = 0;
+  native.destroy = function (...args) { destructions++; return destroy.apply(this, args); };
+  try {
+    await gas.growBrickPool(renderer, gas.volumeGrid.capacity * 2);
+    await renderer.backend.device.queue.onSubmittedWorkDone();
+    const retainedDuringCompilationOwnership = destructions === 0;
+    // Releasing the active generation's old capacity must not invalidate a candidate's bindings.
+    await renderer.getArrayBufferAsync(attribute);
+    candidate.dispose(); candidate.dispose();
+    return { shared, compacted, retainedDuringCompilationOwnership, destructions };
+  } finally { native.destroy = destroy; }
+};
 window.testGrowth = async (required = 64) => {
   const firstUpdateStart = performance.now();
   system.advanceFrames(1, 1 / 60);
@@ -78,7 +112,6 @@ window.testGrowth = async (required = 64) => {
     gas.visualColor.element(index).assign(vec4(0.2, 0.3, 0.4, 0));
   });
   const seedExtra = gas.computeCells(index => {
-    gas.pressureNext.element(index).assign(5);
     gas.velocityNext.element(index).assign(vec4(-2, -1, 0.5, 0));
     gas.divergence.element(index).assign(0.25);
     gas.solid.element(index).assign(0.25);
@@ -99,7 +132,7 @@ window.testGrowth = async (required = 64) => {
   })().compute(1));
   const snapshotExtra = async () => ({
     color: await read(gas.colorCurrent.value), velocityNext: await read(gas.velocityNextAttribute),
-    pressureNext: await read(gas.pressureNextAttribute), divergence: await read(gas.divergenceAttribute),
+    divergence: await read(gas.divergenceAttribute),
     solid: await read(gas.solidAttribute),
     faceOpenness: (await read(gas.boundaryAttribute)).slice(0, gas.cellCount * 4),
     visualDensity: (await read(gas.visualAttribute)).slice(0, gas.cellCount * 4), curl: await read(gas.curlAttribute),
@@ -273,12 +306,12 @@ window.testGrowth = async (required = 64) => {
   return { growthMetrics, cachedWriteExact, followupPipelines, newSentinelsZero,
     capacity, next: gas.volumeGrid.capacity, firstUpdateCpuMs, firstUpdateFencedMs,
     mismatchedFields: Object.keys(before).filter(key => {
-      const channels = ['pressure', 'pressureNext', 'divergence', 'solid'].includes(key) ? 1 : 4;
+      const channels = ['pressure', 'divergence', 'solid'].includes(key) ? 1 : 4;
       const limit = key === 'pressureFaces' ? before[key].length - 4 : count * channels;
       return before[key].slice(0, limit).some((value, index) => value !== after[key][index]);
     }),
     retained: Object.keys(before).every(key => {
-    const channels = ['pressure', 'pressureNext', 'divergence', 'solid'].includes(key) ? 1 : 4;
+    const channels = ['pressure', 'divergence', 'solid'].includes(key) ? 1 : 4;
     const limit = key === 'pressureFaces' ? before[key].length - 4 : count * channels;
     return before[key].slice(0, limit).every((value, index) => value === after[key][index]);
   }) };
@@ -378,6 +411,9 @@ window.testTransfer = async (picRatio, resize = false) => {
     spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 2 },
     externalForce: new THREE.Vector3(), pressureIterations: 0, particleSeparation: 0, picRatio, spatialEffects: [],
   });
+  // Isolate world-space transfer from marker-packing relaxation, which changes with cell width.
+  // Hydrostatic and density-correction fixtures exercise the physical compression term separately.
+  if (resize) flip.targetDivergence = () => float(0);
   const liquid = new ParticleSystem({ gpuProcessing: true, maxParticles: 64, gravity: new THREE.Vector3(),
     emitters: new Emitter({ rate: 0, bursts: [{ time: 0, count: 64 }], initialValues: {
       lifetime: 100, mass: 1, speed: 1, scale: new THREE.Vector3(0.2, 0.2, 0.2), velocity: new THREE.Vector3(),

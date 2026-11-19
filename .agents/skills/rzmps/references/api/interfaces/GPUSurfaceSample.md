@@ -12,6 +12,18 @@ GPU equivalent of SurfaceSample. All vectors and distances are physical world-sp
 
 ## Properties
 
+<a id="deformation"></a>
+
+### deformation?
+
+```ts
+optional deformation?: Node<"float">;
+```
+
+Symmetric velocity strain magnitude in inverse seconds, when supplied by a liquid surface.
+
+***
+
 <a id="distance"></a>
 
 ### distance

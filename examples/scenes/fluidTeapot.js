@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import { Easing } from 'eaz';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
-import teapotModel from '../assets/models/utah_teapot_quad.obj?url';
+import teapotModel from '../assets/models/utah_teapot_quad_wide_spout.obj?url';
 import studioEnvironment from '../assets/images/ferndale_studio_11_1k.hdr?url';
 import {
   createSceneParticleRoot,
@@ -50,18 +51,13 @@ export default async function createFluidTeapot(scene) {
   teapot.position.y -= pivotHeight;
   vessel.add(teapot);
 
-  const localBounds = modelBounds.clone().translate(new THREE.Vector3(0, -pivotHeight, 0));
-  const corners = Array.from({ length: 8 }, (_, i) => new THREE.Vector3(
-    i & 1 ? localBounds.max.x : localBounds.min.x,
-    i & 2 ? localBounds.max.y : localBounds.min.y,
-    i & 4 ? localBounds.max.z : localBounds.min.z,
-  ));
-  const tipping = { tip: 0, automaticTipping: true, maximumTip: 45, period: 10, tipSpeed: 30 };
+  const support = getTippingSupport(teapot, vessel);
+  const tipping = { tip: 0, automaticTipping: true, maximumTip: 45, period: 20, tipSpeed: 30 };
   let appliedTip = 0;
   let elapsed = 0;
   const applyTip = () => {
     vessel.rotation.z = -THREE.MathUtils.degToRad(appliedTip);
-    const lowest = Math.min(...corners.map(point => point.x * Math.sin(vessel.rotation.z)
+    const lowest = Math.min(...support.map(point => point.x * Math.sin(vessel.rotation.z)
       + point.y * Math.cos(vessel.rotation.z)));
     // Lift the vessel as it rotates so neither its body nor its spout enters the floor.
     vessel.position.y = Math.max(pivotHeight, -0.43 - lowest);
@@ -107,10 +103,11 @@ export default async function createFluidTeapot(scene) {
       if (tipping.automaticTipping) {
         elapsed += dt;
         const phase = (elapsed % tipping.period) / tipping.period;
-        const smooth = value => THREE.MathUtils.smoothstep(value, 0, 1);
-        const amount = phase < 0.45 ? 0 : phase < 0.6 ? smooth((phase - 0.45) / 0.15)
-          : phase < 0.7 ? 1 : phase < 0.85 ? 1 - smooth((phase - 0.7) / 0.15) : 0;
-        tipping.tip = amount * tipping.maximumTip;
+        // Linear rise, hold and return; apply easing only once below.
+        const amount = THREE.MathUtils.clamp(
+          Math.min((phase - 0.45) / 0.15, (0.85 - phase) / 0.15), 0, 1,
+        );
+        tipping.tip = Easing.cubic.inOut(amount) * tipping.maximumTip;
       }
       const change = THREE.MathUtils.clamp(tipping.tip - appliedTip, -tipping.tipSpeed * dt, tipping.tipSpeed * dt);
       if (Math.abs(change) < 1e-9) return;
@@ -131,6 +128,35 @@ export default async function createFluidTeapot(scene) {
     },
     cleanup,
   };
+}
+
+/** Exact floor support under Z rotation, reduced once to a small 2D convex hull. */
+function getTippingSupport(model, pivot) {
+  pivot.updateWorldMatrix(true, true);
+  const inverse = pivot.matrixWorld.clone().invert(), points = [];
+  const point = new THREE.Vector3();
+
+  model.traverse(object => {
+    if (!object.isMesh) return;
+    const matrix = inverse.clone().multiply(object.matrixWorld), position = object.geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) {
+      point.fromBufferAttribute(position, i).applyMatrix4(matrix);
+      points.push(new THREE.Vector2(point.x, point.y));
+    }
+  });
+
+  // A bounding box includes empty space below the spout and exaggerates the required lift.
+  points.sort((a, b) => a.x - b.x || a.y - b.y);
+  const turn = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const chains = [points, [...points].reverse()].map(ordered => {
+    const chain = [];
+    for (const point of ordered) {
+      while (chain.length >= 2 && turn(chain.at(-2), chain.at(-1), point) <= 0) chain.pop();
+      chain.push(point);
+    }
+    return chain.slice(0, -1);
+  });
+  return chains.flat();
 }
 
 createFluidTeapot.author = 'rzmay';

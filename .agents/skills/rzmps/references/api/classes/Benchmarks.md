@@ -28,6 +28,10 @@ new Benchmarks(options?): Benchmarks;
 
 () => `void`
 
+###### name?
+
+() => `string`
+
 ###### now?
 
 () => `number`
@@ -145,6 +149,23 @@ No clock reads or sample allocations while disabled. Exceptions still finish a s
 #### Returns
 
 (() => `void`) \| `undefined`
+
+***
+
+<a id="componentnames"></a>
+
+### componentNames()
+
+```ts
+componentNames(): Record<string, string>;
+```
+
+Current named component paths, matching snapshot prefixes without a trailing slash.
+Names are presentation metadata; changing them does not change metric identity or collected history.
+
+#### Returns
+
+`Record`\<`string`, `string`\>
 
 ***
 

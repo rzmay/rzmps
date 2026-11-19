@@ -1,3 +1,5 @@
+import { maximumFluidResidentCapacity } from '../simulation/gpu/fluidCapacity.utils';
+import { releaseSharedStorage } from '../utils/gpu/sharedStorage.utils';
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import type { SpatialGridDomain } from '../spatial/structures/spatialGridDomain.utils';
 import GasModule, { type GPUGasCell, type GasGridQuery, type GasModuleContext } from './GasModule';
@@ -25,7 +27,6 @@ import {
 import type {
   GPUParticleLike, GPUParticleRenderBufferState, GPUParticleUpdateContext,
 } from '../simulation/gpu/Particle';
-import { destroyGPUStorageAttribute } from '../simulation/gpu/Particle';
 import prepareComputePrograms from '../utils/gpu/prepareComputePrograms';
 import { readFluidBrickStates } from '../simulation/gpu/readFluidBrickStates';
 import { GUARD_PREDICTION_HORIZON, type FluidGuardSource } from '../simulation/gpu/FluidGuardPrediction';
@@ -44,6 +45,7 @@ import { PressureSolver } from '../enums/PressureSolver';
 import { pressureAutoPolicy, pressureHierarchy, selectPressureSolver } from '../simulation/gpu/pressureSolver.utils';
 import type { MultigridOptions } from '../simulation/multigrid.types';
 import { AdvectionMethod } from '../enums/AdvectionMethod';
+import { gasSourceQueryRadius, gasSourceWeight } from '../simulation/gpu/gasSource.utils';
 
 interface GasPool {
   attributes: StorageBufferAttribute[];
@@ -134,11 +136,13 @@ export interface GasSimulationOptions extends FluidSimulationOptions {
   velocityDissipation: number;
   buoyancy: number;
   weight: number;
+  /** Emitted mass per second, multiplied by particle mass and alpha; independent of cell size. */
   sourceStrength: number;
+  /** Velocity relaxation per unit deposited mass concentration; independent of source discretization. */
   velocitySourceStrength: number;
   sourceTemperature: number;
   temperatureOverLifetime: DynamicValue<number>;
-  /** Optional six-neighbor scalar mixing rate in inverse seconds. */
+  /** Scalar diffusivity in world units squared per second. Zero disables diffusion. */
   scalarDiffusion: number;
   /** Curl-confinement strength; restores small-scale rotation lost to advection. */
   vorticityStrength: number;
@@ -219,10 +223,13 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   velocityDissipation: number;
   buoyancy: number;
   weight: number;
+  /** Emitted mass per second, multiplied by particle mass and alpha; independent of cell size. */
   sourceStrength: number;
+  /** Velocity relaxation per unit deposited mass concentration; independent of source discretization. */
   velocitySourceStrength: number;
   sourceTemperature: number;
   temperatureOverLifetime: DynamicValue<number>;
+  /** Scalar diffusivity in world units squared per second. Zero disables diffusion. */
   scalarDiffusion: number;
   vorticityStrength: number;
   turbulenceNoiseStrength: number;
@@ -704,7 +711,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
           released: diagnostics.releasedBricks, activeDispatch: diagnostics.activeDispatchEntries,
           priorityDemand: diagnostics.priorityDemand });
         this.requiredBrickCapacity = this.capacityDemand(diagnostics.requestedBricks,
-          this.poolAllocation?.metrics.preparationMs, volumeGrid.capacity);
+          this.poolAllocation?.metrics.preparationMs, volumeGrid.capacity, 1 / 30);
         this.benchmarks.set('activeBricks', diagnostics.activeBricks);
         if (diagnostics.overflowedBricks > 0 && this.volumeGrid.capacity >= this.maxActiveBricks
           && !this.sparseOverflowReported) {
@@ -759,7 +766,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       this.sourceTemperature, Boolean(this.temperatureOverLifetime), this.turbulenceNoiseStrength,
       this.turbulenceNoiseFrequency,
       this.turbulenceNoiseSpeed, this.turbulenceNoiseOctaves, this.advectionMethod,
-      this.behaviorKey, this.gasModulesKey].join('|');
+      this.behaviorKey, this.gasModulesKey, this.scalarDiffusion > 0].join('|');
     if (cacheKey !== this.gpuCacheKey) {
       this.gpuCacheKey = cacheKey;
       this.velocityNodes = new WeakMap();
@@ -836,10 +843,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         const center = this.cellCenter(coordinate);
         const momentum = vec3(0).toVar('gasSourceMomentum');
         const sourceMass = float(0).toVar('gasSourceMass');
-        const radius = max(this.cellSizeNode.mul(1.5), sourceGrid.getMaxParticleRadiusNode());
-        sourceGrid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
-          const particleRadius = this.splatRadius(particle.scale);
-          const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(particleRadius)));
+        const radius = gasSourceQueryRadius(sourceGrid.getMaxParticleRadiusNode(), this.cellSizeNode);
+        sourceGrid.forEachParticleInRadius(center, radius, (particle) => {
+          const weight = gasSourceWeight(center, particle.position, particle.scale, this.cellSizeNode);
           const mass = max(particle.mass, float(0)).mul(particle.alpha).mul(weight)
             .mul(this.sourceStep(particle, dt));
           sourceMass.addAssign(mass);
@@ -866,13 +872,15 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       this.predictAdvection(densityCurrent, this.densityAdvected, context, renderer);
       this.predictAdvection(colorCurrent, this.colorAdvected, context, renderer);
     }
+    const separateScalarRules = this.gasModules.length > 0 || this.scalarDiffusion > 0;
+
     // Custom rules may read velocity/color and parameter LUTs together; reuse the existing split-output
     // path to keep both advection methods within WebGPU's eight-storage-buffer limit.
     const targets = this.advectionMethod === AdvectionMethod.MacCormack || this.gasModules.length
       ? [false, true] : [null];
 
-    // MacCormack's correction already occupies the binding budget. When rules are present,
-    // finish advection first, then use the existing ping-pong pair for local rules/diffusion/decay.
+    // Finish advection before diffusion so every stencil reads the same transported snapshot.
+    // Reuse the ping-pong pair; MacCormack and custom rules retain their split-output binding budget.
     const buildScalars = (inputDensity: Vec4Storage, inputColor: Vec4Storage,
       outputDensity: Vec4Storage, outputColor: Vec4Storage, transport: boolean) =>
       targets.map(writeColor => this.computeCells(index => {
@@ -888,7 +896,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
             center.sub(this.sampleVelocity(center).mul(dt)),
           );
         }
-        if (transport && this.gasModules.length) {
+        if (transport && separateScalarRules) {
           if (writeColor !== false) outputColor.element(index).assign(previousColor);
           if (writeColor !== true) outputDensity.element(index).assign(previousDensity);
           return;
@@ -897,13 +905,13 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         const modules = this.evaluateGasModules(previousDensity, previousColor,
           this.velocityCurrent.element(index).xyz, center, context,
           mix(previousDensity, this.neighborAverage(inputDensity, coordinate),
-            clamp(this.scalarDiffusionNode.mul(dt), 0, 1)),
+            this.diffusionFraction(this.scalarDiffusionNode, dt)),
           this.createGasGridQuery(inputDensity, inputColor, this.velocityCurrent), coordinate);
         if (modules) {
           previousDensity = vec4(modules.cell.density, modules.cell.temperature.mul(modules.cell.density), 0, 0);
           previousColor = vec4(modules.cell.color.mul(modules.cell.density), 0);
         }
-        const diffusion = clamp((modules?.coefficients.scalarDiffusion ?? this.scalarDiffusionNode).mul(dt), 0, 1);
+        const diffusion = this.diffusionFraction(modules?.coefficients.scalarDiffusion ?? this.scalarDiffusionNode, dt);
         const mixedDensity = mix(previousDensity, this.neighborAverage(inputDensity, coordinate), diffusion);
         const mixedColor = mix(previousColor, this.neighborAverage(inputColor, coordinate), diffusion);
         const gridCoordinate = vec3(coordinate);
@@ -955,7 +963,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.sourceNodes.set(densityCurrent, sources);
     this.benchmarks.span('scalarAdvectionDiffusionDecay', () => sources.forEach(node => renderer.compute(node)));
 
-    if (this.gasModules.length) {
+    if (separateScalarRules) {
       const rules = this.scalarModuleNodes.get(densityCurrent)
         ?? buildScalars(densityNext, colorNext, densityCurrent, colorCurrent, false);
       this.scalarModuleNodes.set(densityCurrent, rules);
@@ -973,10 +981,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         const sourceDensity = float(0).toVar('gasSourceDensity');
         const sourceTemperature = float(0).toVar('gasSourceTemperature');
         const sourceColor = vec3(0).toVar('gasSourceColor');
-        const radius = max(this.cellSizeNode.mul(1.5), sourceGrid.getMaxParticleRadiusNode());
-        sourceGrid.forEachParticleInRadius(center, radius, (particle, distanceSq) => {
-          const particleRadius = this.splatRadius(particle.scale);
-          const weight = max(float(0), float(1).sub(distanceSq.sqrt().div(particleRadius)));
+        const radius = gasSourceQueryRadius(sourceGrid.getMaxParticleRadiusNode(), this.cellSizeNode);
+        sourceGrid.forEachParticleInRadius(center, radius, (particle) => {
+          const weight = gasSourceWeight(center, particle.position, particle.scale, this.cellSizeNode);
           const contribution = max(particle.mass, float(0)).mul(particle.alpha)
             .mul(weight).mul(this.sourceStrength).mul(this.sourceStep(particle, dt));
           sourceDensity.addAssign(contribution);
@@ -1052,12 +1059,11 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         const total = float(0).toVar('visualGasDensity');
         const temperature = float(0).toVar('visualGasTemperature');
         const color = vec3(0).toVar('visualGasColor');
-        const radius = max(this.cellSizeNode.mul(1.5), sourceGrid.getMaxParticleRadiusNode());
+        const radius = gasSourceQueryRadius(sourceGrid.getMaxParticleRadiusNode(), this.cellSizeNode);
         sourceGrid.forEachParticleInRadius(center, radius, (particle) => {
           const vectors = renderBuffers.storage.createVectorNodes(particle.index);
           const scalars = renderBuffers.storage.createScalarNodes(particle.index);
-          const particleRadius = this.splatRadius(vectors.scale);
-          const weight = max(float(0), float(1).sub(vectors.position.distance(center).div(particleRadius)));
+          const weight = gasSourceWeight(center, vectors.position, vectors.scale, this.cellSizeNode);
           const contribution = max(particle.mass, float(0)).mul(scalars.alpha)
             .mul(weight).mul(this.sourceStrength).mul(context.deltaTimeNode);
           total.addAssign(contribution);
@@ -1121,7 +1127,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       brickSubdivisions: this.spatialGrid!.brickSubdivisions,
       cellSubdivisions: this.spatialGrid!.cellSubdivisions,
       bounds: this.bounds,
-    }, Math.min(this.initialBrickCapacity, this.maxActiveBricks), this.gridDimensions);
+    }, Math.min(this.initialBrickCapacity, this.maxActiveBricks,
+      this.gridDimensions.x * this.gridDimensions.y * this.gridDimensions.z
+      / (2 ** this.spatialGridOptions!.cellSubdivisions!) ** 3), this.gridDimensions);
     this.resizeGridFields(this.volumeGrid.cellCount);
     this.clearNewNodes = [];
     this.clearTexturesNode = undefined;
@@ -1241,7 +1249,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.qualityPreparation = candidate;
     const started = performance.now();
     // Yield before allocation, then compile a small batch per turn so animation can continue.
-    candidate.completion = new Promise(resolve => setTimeout(resolve, 0)).then(async () => {
+    const capacityPreparation = this.poolAllocation?.whenPrepared();
+    candidate.completion = Promise.resolve(capacityPreparation).then(() =>
+      new Promise(resolve => setTimeout(resolve, 0))).then(async () => {
       if (this.qualityPreparation !== candidate) return;
       if (domain.cellSize < this.cellSize) {
         // Finer cells can require eight times as many pages. Reserve from actual live support
@@ -1369,12 +1379,12 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       if (this.qualityPreparation !== candidate) {
         backing.dispose(renderer);
         storage.attributes.forEach(attribute => {
-          destroyGPUStorageAttribute(renderer, attribute); attribute.dispose();
+          releaseSharedStorage(attribute, renderer);
         });
         return;
       }
       const retired = [...grid.adoptCapacity(backing), ...pressure.adoptCapacityStorage(storage)];
-      retired.forEach(attribute => { destroyGPUStorageAttribute(renderer, attribute); attribute.dispose(); });
+      retired.forEach(attribute => { releaseSharedStorage(attribute, renderer); });
       backing.dispatchAttributes.forEach(attribute => attribute.dispose());
       candidate.programNodes?.forEach(node => node.dispose());
       await this.prepareQualityPrograms(candidate, renderer);
@@ -1457,6 +1467,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       this.volumeGrid = this.benchmarks.span('qualityDirectoryAllocation', () => (
         new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: this.bounds }, old.capacity, this.gridDimensions)
       ));
+      this.pressureProjection = this.createPressureProjection(this.volumeGrid, this.cellSizeNode,
+        this.gridDimensions, pressure);
     }
     this.resetGasNodes();
     this.resetGridNodes();
@@ -1477,7 +1489,11 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.pendingPreviousGrid = old; this.pendingPreviousBounds = old.bounds.clone();
     this.pendingPreviousPreparation = prepared?.completion;
     this.previousMinimum.value.copy(old.bounds.min); this.previousCellSize.value = old.cellSize;
-    this.retireGridResources(renderer, () => pressure?.dispose(), prepared?.completion);
+    const adoptedPressure = this.pressureProjection;
+    this.retireGridResources(renderer, () => {
+      pressure?.dispose();
+      if (this.pressureProjection === adoptedPressure) adoptedPressure?.compactScratch(renderer);
+    }, prepared?.completion);
     this.density.version++; this.colorField.version++;
   }
 
@@ -1498,7 +1514,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
   private get fieldAttributes(): StorageBufferAttribute[] {
     return [this.velocityCurrentAttribute, this.velocityNextAttribute, this.pressureCurrentAttribute,
-      this.pressureNextAttribute, this.divergenceAttribute, this.solidAttribute, this.boundaryAttribute,
+      this.divergenceAttribute, this.solidAttribute, this.boundaryAttribute,
       this.densityAttributeA, this.densityAttributeB, this.colorAttributeA, this.colorAttributeB,
       this.visualAttribute, this.maximaAttribute, this.curlAttribute, ...this.advectionAttributes];
   }
@@ -1512,7 +1528,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       this.poolAllocation?.cancelPending();
       this.poolConfiguration = configuration;
     }
-    if (this.poolAllocation) return;
+    if (this.poolAllocation && this.poolAllocation.maximumCapacity === this.maximumResidentCapacity(renderer)) return;
+    this.poolAllocation?.cancelPending();
     const backend = renderer.backend as { device: { limits: { maxStorageBufferBindingSize: number };
       queue: { onSubmittedWorkDone(): Promise<void> } } };
     const maximum = this.maximumResidentCapacity(renderer);
@@ -1586,7 +1603,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         const previous = this.fieldAttributes;
         const replacements = new Map(previous.map((attribute, index) => [attribute, pool.attributes[index]]));
         // Every graph retains these storage nodes. Rebinding updates Three's bind groups, not its programs.
-        for (const node of [this.velocityCurrent, this.velocityNext, this.pressureCurrent, this.pressureNext,
+        for (const node of [this.velocityCurrent, this.velocityNext, this.pressureCurrent,
           this.divergence, this.solid, this.faceOpenness, this.densityCurrent, this.densityNext,
           this.colorCurrent, this.colorNext, this.visualDensity, this.curl,
           this.velocityAdvected, this.densityAdvected, this.colorAdvected]) {
@@ -1595,7 +1612,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
           if (binding && replacement) binding.value = replacement;
         }
         const names = ['velocityCurrentAttribute', 'velocityNextAttribute', 'pressureCurrentAttribute',
-          'pressureNextAttribute', 'divergenceAttribute', 'solidAttribute', 'boundaryAttribute',
+          'divergenceAttribute', 'solidAttribute', 'boundaryAttribute',
           'densityAttributeA', 'densityAttributeB', 'colorAttributeA', 'colorAttributeB',
           'visualAttribute', 'maximaAttribute', 'curlAttribute'] as const;
         names.forEach((key, index) => { this[key] = pool.attributes[index]; });
@@ -1615,12 +1632,12 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       dispose: pool => {
         const live = new Set(this.fieldAttributes);
         [...new Set([...pool.attributes, ...pool.retired])].forEach(attribute => {
-          if (!live.has(attribute)) { destroyGPUStorageAttribute(renderer, attribute); attribute.dispose(); }
+          if (!live.has(attribute)) { releaseSharedStorage(attribute, renderer); }
         });
         if (pool.grid && !pool.adopted) {
           pool.grid.dispose(renderer);
           pool.pressure?.attributes.forEach(attribute => {
-            destroyGPUStorageAttribute(renderer, attribute); attribute.dispose();
+            releaseSharedStorage(attribute, renderer);
           });
         }
       },
@@ -1631,8 +1648,16 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private maximumResidentCapacity(renderer: ParticleSpatialGridRenderer): number {
     const device = (renderer.backend as { device: { limits: { maxStorageBufferBindingSize: number } } }).device;
     const bytesPerBrick = Math.max(this.volumeGrid.cellsPerBrick * 32, (this.volumeGrid.brickSide + 1) ** 3 * 16);
-    const maximum = Math.min(this.maxActiveBricks,
+    const nativeMaximum = Math.min(this.maxActiveBricks,
       Math.floor((device.limits.maxStorageBufferBindingSize - 32) / bytesPerBrick));
+    // Finite domains cannot populate more positions than their world-space brick lattice permits.
+    // Existing backing is retained; this is a growth ceiling, not a utilization-driven shrink.
+    if (nativeMaximum < this.volumeGrid.capacity) {
+      throw new Error('Initial gas pool exceeds this device storage limit.');
+    }
+    const maximum = Math.max(this.volumeGrid.capacity,
+      maximumFluidResidentCapacity(this.autoBounds ? this.boundsLimit : this.bounds.getSize(new THREE.Vector3()),
+        this.volumeGrid.brickSize, nativeMaximum));
     if (maximum < this.volumeGrid.capacity) throw new Error('Initial gas pool exceeds this device storage limit.');
     return maximum;
   }
@@ -1643,9 +1668,12 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       throw new Error('Prepare an initial gas update before pool growth.');
     }
     this.ensurePoolAllocation(renderer, this.poolContext, this.poolParticleGrid);
-    this.poolAllocation!.request(required);
-    await this.poolAllocation!.whenPrepared();
-    this.poolAllocation!.commit();
+    const target = Math.min(required, this.poolAllocation!.maximumCapacity);
+    do {
+      this.poolAllocation!.request(target);
+      await this.poolAllocation!.whenPrepared();
+      this.poolAllocation!.commit();
+    } while (this.volumeGrid.capacity < target);
   }
 
   private remapFields(renderer: ParticleSpatialGridRenderer): void {
@@ -1799,7 +1827,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     if (!this.clearNewNodes.length) {
       const vectors = [this.velocityCurrent, this.velocityNext, this.densityCurrent, this.densityNext,
         this.colorCurrent, this.colorNext, this.curl, this.visualDensity, this.visualColor];
-      const scalars = [this.pressureCurrent, this.pressureNext, this.divergence, this.solid];
+      const scalars = [this.pressureCurrent, this.divergence, this.solid];
       const clears = [
         ...vectors.map(field => (index: Node<'uint'>) => { field.element(index).assign(vec4(0)); }),
         ...scalars.map(field => (index: Node<'uint'>) => { field.element(index).assign(0); }),
@@ -1956,7 +1984,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   }
 
   private createPressureProjection(grid = this.volumeGrid, spacing: Node<'float'> = this.cellSizeNode,
-    dimensions = this.gridDimensions): FluidPressureProjection {
+    dimensions = this.gridDimensions, scratch = this.pressureProjection): FluidPressureProjection {
     const projection: FluidPressureProjection = this.benchmarks.span('pressureResourceCreation',
       () => new FluidPressureProjection(
         dimensions, spacing, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
@@ -1971,7 +1999,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
           autoMultigrid: this.pressureSolver === PressureSolver.Auto,
           multigridOptions: { preSmooth: this.multigrid?.preSmoothing ?? 2,
             postSmooth: this.multigrid?.postSmoothing ?? 4, coarseIterations: this.multigrid?.bottomIterations ?? 12 },
-          topologyVersion: this.pressureTopologyVersion }),
+          topologyVersion: this.pressureTopologyVersion }), scratch,
     ));
     return projection;
   }
@@ -2348,10 +2376,20 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     return [vec4(state.x, weighted.x, 0, 0), vec4(weighted.yzw, 0)];
   }
 
-  private splatRadius(scale: Node<'vec3'>): Node<'float'> {
-    const minimum = this.cellSizeNode;
-    const particleRadius = max(scale.x.abs(), max(scale.y.abs(), scale.z.abs())).mul(0.5);
-    return max(particleRadius, minimum) as Node<'float'>;
+  /** Diffuse the completed transport snapshot, with a positive explicit six-face stencil. */
+  private diffusionFraction(diffusivity: Node<'float'>, dt: Node<'float'>): Node<'float'> {
+    return clamp(max(diffusivity, 0).mul(dt).mul(6).div(this.cellSizeNode.mul(this.cellSizeNode)), 0, 1);
+  }
+
+  public override getSimulationTimestep(requestedDt: number): number {
+    const transportDt = super.getSimulationTimestep(requestedDt);
+    if (!(this.scalarDiffusion > 0)) return transportDt;
+    if (!Number.isFinite(this.scalarDiffusion)) throw new RangeError('Scalar diffusivity must be finite.');
+
+    // Diffusion stability applies even when velocity-based adaptive stepping is disabled.
+    // Include a newly requested finer grid before its field storage is adopted.
+    const width = Math.min(this.cellSize, this.spatialGrid?.cellSize ?? this.cellSize);
+    return Math.min(transportDt, width * width / (6 * this.scalarDiffusion));
   }
 
   private sourceStep(particle: GPUParticleLike, dt: Node<'float'>): Node<'float'> {

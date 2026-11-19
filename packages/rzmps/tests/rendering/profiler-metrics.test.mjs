@@ -29,7 +29,8 @@ test('public benchmark snapshots provide simulation and per-renderer profiler da
 });
 
 test('profiler aggregates subsystem snapshots without querying component internals', () => {
-  const stats = readProfilerStats({ snapshot: () => ({
+  const stats = readProfilerStats({ componentNames: () => ({ '': 'Liquid', 'systems/ParticleSystem-2': 'Foam' }),
+    snapshot: () => ({
     'system/particleCount': 3, 'system/childrenCount': 2, 'system/allocatedSlots': 16,
     'systems/ParticleSystem-2/system/particleCount': 4,
     'systems/ParticleSystem-2/system/childrenCount': 1,
@@ -39,6 +40,29 @@ test('profiler aggregates subsystem snapshots without querying component interna
     'modules/GasSimulation-5/grid/depth': 16, 'modules/GasSimulation-5/grid/cellSize': 0.125,
   }) });
   assert.equal(stats.particles, 7); assert.equal(stats.children, 3); assert.equal(stats.allocated, 16);
+  assert.deepEqual(stats.systems, [{ name: 'Liquid', particles: 3, children: 2 },
+    { name: 'Foam', particles: 4, children: 1 }]);
   assert.deepEqual(stats.renderers, [{ name: 'Lights', count: 3 }]);
-  assert.deepEqual(stats.fluids, [{ name: 'Gas', dimensions: '16 × 32 × 16', cellSize: '0.125' }]);
+  assert.deepEqual(stats.fluids, [{ name: 'Gas', scope: '', dimensions: '16 × 32 × 16', cellSize: '0.125',
+    pressureSubmissionMs: null, residentPages: null }]);
+});
+
+test('named system metadata follows renames and preserves independent subsystem counts', () => {
+  const parent = new ParticleSystem({ emitters: [], renderers: [], gpuProcessing: false });
+  const child = new ParticleSystem({ emitters: [], renderers: [], gpuProcessing: false });
+  parent.name = 'Liquid'; child.name = 'Foam';
+  parent.addSubSystem(child, { shouldEmit: false });
+  parent.addParticle(new Particle());
+  child.addParticle(new Particle()); child.addParticle(new Particle());
+  const before = parent.benchmarks.snapshot();
+  assert.deepEqual(readProfilerStats(parent.benchmarks).systems,
+    [{ name: 'Liquid', particles: 1, children: 0 }, { name: 'Foam', particles: 2, children: 0 }]);
+  child.name = 'Surface bubbles';
+  assert.equal(readProfilerStats(parent.benchmarks).systems[1].name, 'Surface bubbles');
+  assert.deepEqual(parent.benchmarks.snapshot(), before, 'names do not change numeric metric paths');
+  child.name = '';
+  const stats = readProfilerStats(parent.benchmarks);
+  assert.equal(stats.systems.length, 1);
+  assert.equal(stats.particles, 3, 'unnamed systems still contribute to the total');
+  parent.destroy();
 });

@@ -37,6 +37,7 @@ import {
   modelWorldMatrixInverse,
   positionGeometry,
   smoothstep,
+  step,
   texture3D,
   texture,
   uniform,
@@ -93,6 +94,10 @@ interface FieldBinding {
 /** Render-only transforms and weights; every child samples its parent source textures. */
 interface VolumeChild {
   offset: UniformNode<'vec3', THREE.Vector3>;
+  rotation: UniformNode<'mat3', THREE.Matrix3>;
+  inverseRotation: UniformNode<'mat3', THREE.Matrix3>;
+  pivot: UniformNode<'vec3', THREE.Vector3>;
+  rotated: boolean;
   scale: UniformNode<'float', number>;
   alpha: UniformNode<'float', number>;
 }
@@ -383,6 +388,7 @@ class VolumeRenderer extends Renderer {
   private readonly curveTexture = new THREE.DataTexture(this.curveData, 256, 1, THREE.RGBAFormat, THREE.HalfFloatType);
   private volumeChildCount = 0;
   private readonly fieldIds = new WeakMap<VolumeField, number>();
+  private readonly fieldPivots = new WeakMap<VolumeField, THREE.Vector3>();
   private nextFieldId = 0;
 
   protected override get usesParticleChildren(): boolean {
@@ -577,7 +583,7 @@ class VolumeRenderer extends Renderer {
       if (colorField) active.add(colorField);
       const density = this.bindField(field, field.channels ?? 1);
       const color = colorField ? this.bindField(colorField, colorField.channels ?? 4) : undefined;
-      const copies = [{ offset: new THREE.Vector3(), scale: 1, alpha: 1 }];
+      const copies = [{ offset: new THREE.Vector3(), rotation: new THREE.Vector3(), scale: 1, alpha: 1 }];
       if (this.generateChildren) copies.push(...volumeChildren(this.children, `volume:${this.layersSourceId(field)}`));
       const artistic = copies.length;
       if (this.generateChildren && this.compensation === CompensationMode.Children && system.quality < 1) {
@@ -587,20 +593,36 @@ class VolumeRenderer extends Renderer {
           const parent = copies[i];
           const children = volumeChildren({ count: [additional, additional + 1], radius: cell }, `volume:lod:${i}`);
           for (const child of children) {
-            copies.push({ offset: child.offset.add(parent.offset), scale: parent.scale, alpha: parent.alpha });
+            copies.push({ offset: child.offset.add(parent.offset), rotation: parent.rotation.clone(),
+              scale: parent.scale, alpha: parent.alpha });
           }
         }
       }
       this.volumeChildCount += copies.length - 1;
+      let pivot = this.fieldPivots.get(field);
+      if (!pivot) {
+        pivot = field.bounds.getCenter(new THREE.Vector3());
+        this.fieldPivots.set(field, pivot);
+      }
       const old = previous[next.length];
       const retained = old?.density === density && old.color === color ? old.children : [];
       const children = copies.map((copy, index) => {
         const child = retained[index] ?? {
           offset: uniform(new THREE.Vector3()),
+          rotation: uniform(new THREE.Matrix3()),
+          inverseRotation: uniform(new THREE.Matrix3()),
+          // Allocation bounds can move while the gas stays still. Keep the rotation origin stable.
+          pivot: uniform(pivot.clone()),
+          rotated: false,
           scale: uniform(1),
           alpha: uniform(1),
         };
         child.offset.value.copy(copy.offset);
+        child.rotated = copy.rotation.lengthSq() > 0;
+        child.rotation.value.setFromMatrix4(new THREE.Matrix4().makeRotationFromEuler(
+          new THREE.Euler().setFromVector3(copy.rotation),
+        ));
+        child.inverseRotation.value.copy(child.rotation.value).transpose();
         child.scale.value =
           copy.scale * (this.compensation === CompensationMode.Size ? 1 / Math.sqrt(system.quality) : 1);
         child.alpha.value = copy.alpha;
@@ -652,6 +674,7 @@ class VolumeRenderer extends Renderer {
       ...(['densityNoiseStrength', 'densityNoiseContrast', 'densityNoiseFrequency'] as const).map(name =>
         this[`${name}ByTemperature`] != null),
       this.evaluateDynamicGPU.version,
+      ...this.layers.flatMap(layer => layer.children.map(child => child.rotated)),
       ...this.gasModules.map(module => module.graphKey('render')),
       ...this.layers.map(layer =>
         JSON.stringify([layer.density.field.parameterChannels, layer.density.field.parametersPremultiplied,
@@ -770,7 +793,8 @@ class VolumeRenderer extends Renderer {
       const version = [this.opacity, this.threshold, this.range, this.minDensity, this.maxDensity, this.densityGain,
         this.evaluateDynamicGPU.uploadCount, ...this.mesh.matrixWorld.elements,
         ...this.layers.flatMap(layer => [layer.density.field.version, layer.color?.field.version,
-          ...layer.children.flatMap(child => [...child.offset.value.toArray(), child.scale.value, child.alpha.value])]),
+          ...layer.children.flatMap(child => [...child.offset.value.toArray(), ...child.rotation.value.elements,
+            child.scale.value, child.alpha.value])]),
       ].join(':');
       grid.update(renderer, scene, this.lightingBounds, { owner: this, extinctionGPU: this.lightingExtinction,
         shaderKey: `${this.materialSamplingKey}|${layers.join(';')}`, version });
@@ -1055,6 +1079,8 @@ class VolumeRenderer extends Renderer {
     });
     children.forEach((layer, index) => {
       uniforms[`layerOffset${index}`] = { value: layer.offset.value };
+      uniforms[`layerInverseRotation${index}`] = { value: layer.inverseRotation.value };
+      uniforms[`layerPivot${index}`] = { value: layer.pivot.value };
       uniforms[`layerScale${index}`] = layer.scale;
       uniforms[`layerAlpha${index}`] = layer.alpha;
     });
@@ -1069,6 +1095,7 @@ class VolumeRenderer extends Renderer {
         this.appearanceEnabled(),
         sources.map(layer => !!layer.density.field.parametersPremultiplied),
         this.emissive !== 0,
+        sources.flatMap(layer => layer.children.map(child => child.rotated)),
       ),
     );
     this.webglMaterial.needsUpdate = true;
@@ -1092,8 +1119,16 @@ class VolumeRenderer extends Renderer {
       field.bounds.getSize(size);
 
       for (const child of layer.children) {
-        childCenter.copy(center).add(child.offset.value);
+        childCenter.copy(center);
+        if (child.rotated) childCenter.sub(child.pivot.value).applyMatrix3(child.rotation.value).add(child.pivot.value);
+        childCenter.add(child.offset.value);
         halfSize.copy(size).multiplyScalar(child.scale.value * 0.5);
+        if (child.rotated) {
+          const e = child.rotation.value.elements, { x, y, z } = halfSize;
+          halfSize.set(Math.abs(e[0]) * x + Math.abs(e[3]) * y + Math.abs(e[6]) * z,
+            Math.abs(e[1]) * x + Math.abs(e[4]) * y + Math.abs(e[7]) * z,
+            Math.abs(e[2]) * x + Math.abs(e[5]) * y + Math.abs(e[8]) * z);
+        }
         this.bounds.expandByPoint(corner.copy(childCenter).sub(halfSize));
         this.bounds.expandByPoint(corner.copy(childCenter).add(halfSize));
         const cell = corner.copy(size).multiplyScalar(child.scale.value).divide(field.resolution);
@@ -1403,9 +1438,12 @@ class VolumeRenderer extends Renderer {
         occupancy = binding.occupancy!;
       const center = binding.minimum.add(binding.size.mul(0.5));
       for (const child of layer.children) {
-        const source = point.sub(center).sub(child.offset).div(child.scale).add(center);
-        const delta = travel.div(child.scale);
-        const inverse = delta.greaterThanEqual(0).select(vec3(1), vec3(-1)).div(delta.abs().max(1e-12));
+        const source = this.childSourcePoint(point, center, child);
+        // Materialize before branching so TSL cannot cache this matrix product in just one branch.
+        const delta = this.inverseChildVector(travel, child).div(child.scale).toVar();
+        // TSL vector select reduces its condition; preserve the sign independently on each axis.
+        const positive = step(vec3(0), delta);
+        const inverse = positive.mul(2).sub(1).div(delta.abs().max(1e-12));
         const uv = source.sub(binding.minimum).div(binding.size);
         If(child.alpha.greaterThan(0), () => {
           If(uv.greaterThanEqual(0).all().and(uv.lessThanEqual(1).all()), () => {
@@ -1414,7 +1452,7 @@ class VolumeRenderer extends Renderer {
             const flag = occupancy.sample(cell.add(0.5).div(occupancy.getResolutionNode())).r;
             occupied.assign(occupied.or(flag.greaterThan(0)));
             const boundary = cell
-              .add(delta.greaterThanEqual(0).select(vec3(1), vec3(0)))
+              .add(positive)
               .mul(8)
               .div(binding.resolutionNode)
               .mul(binding.size)
@@ -1566,7 +1604,7 @@ class VolumeRenderer extends Renderer {
     for (const layer of this.layers) {
       const center = layer.density.minimum.add(layer.density.size.mul(0.5));
       for (const child of layer.children) {
-        const sourcePoint = point.sub(center).sub(child.offset).div(child.scale).add(center);
+        const sourcePoint = this.childSourcePoint(point, center, child);
         const uv = sourcePoint.sub(layer.density.minimum).div(layer.density.size);
         If(uv.greaterThanEqual(0).all().and(uv.lessThanEqual(1).all()), () => {
           const field = this.readVolume(layer.density, uv).toVar();
@@ -1654,16 +1692,34 @@ class VolumeRenderer extends Renderer {
         frequency: context.densityNoiseFrequency, stretch: noise.stretch } };
   }
 
+  /** Inverse copy rotation maps query points and traversal directions back to source space. */
+  private inverseChildVector(vector: Node<'vec3'>, child: VolumeChild): Node<'vec3'> {
+    return child.rotated ? child.inverseRotation.mul(vector) : vector;
+  }
+
+  private childSourcePoint(point: Node<'vec3'>, center: Node<'vec3'>, child: VolumeChild): Node<'vec3'> {
+    const unrotated = child.rotated
+      ? child.inverseRotation.mul(point.sub(child.offset).sub(child.pivot)).add(child.pivot)
+      : point.sub(child.offset);
+    return unrotated.sub(center).div(child.scale).add(center);
+  }
+
+  private childVelocity(vector: Node<'vec3'>, child: VolumeChild): Node<'vec3'> {
+    return child.rotated ? child.rotation.mul(vector) : vector;
+  }
+
   /** Lazily read existing producer velocity, without gathering density twice for a single source. */
   private sampleGasVelocity(point: Node<'vec3'>, density: Node<'float'>): Node<'vec3'> {
     if (this.layers.length === 1 && this.layers[0].children.length === 1) {
       const layer = this.layers[0], child = layer.children[0];
       if (!layer.density.field.sampleVelocityGPU) return vec3(0);
       const center = layer.density.minimum.add(layer.density.size.mul(0.5));
-      const source = point.sub(center).sub(child.offset).div(child.scale).add(center);
+      const source = this.childSourcePoint(point, center, child);
       return Fn(() => {
         const velocity = vec3(0).toVar();
-        If(density.greaterThan(0), () => velocity.assign(layer.density.field.sampleVelocityGPU!(source)));
+        If(density.greaterThan(0), () => {
+          velocity.assign(this.childVelocity(layer.density.field.sampleVelocityGPU!(source), child));
+        });
         return velocity;
       })();
     }
@@ -1674,12 +1730,12 @@ class VolumeRenderer extends Renderer {
         if (!layer.density.field.sampleVelocityGPU) continue;
         const center = layer.density.minimum.add(layer.density.size.mul(0.5));
         for (const child of layer.children) {
-          const source = point.sub(center).sub(child.offset).div(child.scale).add(center);
+          const source = this.childSourcePoint(point, center, child);
           const uv = source.sub(layer.density.minimum).div(layer.density.size);
           If(uv.greaterThanEqual(0).all().and(uv.lessThanEqual(1).all()), () => {
             const density = this.readVolume(layer.density, uv).r.max(0).mul(child.alpha);
             mass.addAssign(density);
-            momentum.addAssign(layer.density.field.sampleVelocityGPU!(source).mul(density));
+            momentum.addAssign(this.childVelocity(layer.density.field.sampleVelocityGPU!(source), child).mul(density));
           });
         }
       }

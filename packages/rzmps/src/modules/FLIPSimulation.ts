@@ -2,18 +2,26 @@ import * as THREE from 'three';
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
-  Fn, If, clamp, float, floor, instanceIndex, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4,
+  Fn, If, Loop, clamp, float, floor, instanceIndex, ivec3, max, min, mix, storage, uint, uniform, vec3, vec4,
 } from 'three/tsl';
 import type { GPUParticleBufferState, GPUParticleLike, GPUParticleUpdateContext } from '../simulation/gpu/Particle';
 import ParticleSpatialGrid, { type ParticleSpatialGridRenderer } from '../spatial/structures/ParticleSpatialGrid';
 import StagedGPUAllocation from '../utils/gpu/StagedGPUAllocation';
+import prepareComputePrograms from '../utils/gpu/prepareComputePrograms';
+import type { SpatialGridDomain } from '../spatial/structures/spatialGridDomain.utils';
 import { copyStorageAttributes, initializeStorageAttribute } from '../utils/gpu/storage.utils';
 import FluidReduction from '../simulation/gpu/FluidReduction';
 import Collision from './Collision';
-import FluidPressureProjection from '../simulation/gpu/FluidPressureProjection';
+import FluidPressureProjection, { type FluidPressureCapacityStorage } from '../simulation/gpu/FluidPressureProjection';
+import { releaseSharedStorage } from '../utils/gpu/sharedStorage.utils';
+import { initialFluidQuality } from '../simulation/gpu/fluidStartup.utils';
 import SparseVolumeGrid from '../spatial/structures/gpu/SparseVolumeGrid';
 import FluidSimulation, { type FluidSimulationOptions } from './FluidSimulation';
 import type { SubSystemGPUCondition } from '../core/ParticleSystem';
+import type { GPUSurfaceQuery } from '../spatial/surfaces/surfaceSample.types';
+import {
+  maximumFluidResidentCapacity, refinementResidentCapacity, coarsenedResidentCapacity,
+} from '../simulation/gpu/fluidCapacity.utils';
 
 /** Lightweight spray-source gates; child emission rate, ratio and lifetime stay on the subsystem. */
 export interface FLIPSprayConditionOptions {
@@ -29,8 +37,14 @@ export interface FLIPSprayConditionOptions {
 
 /** Activity and local-support gates for ordinary surface-attached foam subsystems. */
 export interface FLIPFoamConditionOptions extends FLIPSprayConditionOptions {
+  /** Optional additional speed gate in simulation units/second. Defaults to 0; deformation is independent of speed. */
+  minimumSpeed?: number;
   /** Minimum other live neighbors; excludes isolated airborne markers. Defaults to 3. */
   minimumNeighbors?: number;
+  /** Minimum reconstructed symmetric strain in inverse seconds. Defaults to 0.5 with samplerGPU, otherwise 0. */
+  minimumDeformity?: number;
+  /** World-space surface query supplying deformation, shared with liquid surface shading. */
+  samplerGPU?: GPUSurfaceQuery;
 }
 
 export interface FLIPSimulationOptions extends FluidSimulationOptions {
@@ -49,6 +63,15 @@ interface FlipPool {
   projection?: FluidPressureProjection;
 }
 
+interface FlipCapacityPool {
+  attributes: StorageBufferAttribute[];
+  count: number;
+  grid?: SparseVolumeGrid;
+  pressure?: FluidPressureCapacityStorage;
+  retired: StorageBufferAttribute[];
+  adopted?: boolean;
+}
+
 class FLIPSimulation extends FluidSimulation {
   /** Selects active, partly supported liquid markers. Unlike spray, isolated markers are excluded.
    * This is a local-support free-surface heuristic, not a persistent foam field or a whitewater solver. */
@@ -56,14 +79,31 @@ class FLIPSimulation extends FluidSimulation {
     const minimumNeighbors = options.minimumNeighbors ?? 3;
     const maximumNeighbors = options.maximumNeighbors ?? 22;
     const neighborRadius = options.neighborRadius ?? 2;
+    const minimumDeformity = options.minimumDeformity ?? (options.samplerGPU ? 0.5 : 0);
+
+    if (!Number.isFinite(minimumDeformity) || minimumDeformity < 0
+      || minimumDeformity > 0 && !options.samplerGPU) {
+      throw new RangeError('FoamCondition requires nonnegative minimumDeformity and a samplerGPU for deformation.');
+    }
     if (!Number.isInteger(minimumNeighbors) || minimumNeighbors < 0
       || !Number.isInteger(maximumNeighbors) || maximumNeighbors < minimumNeighbors) {
       throw new RangeError('FoamCondition requires ordered, nonnegative integer neighbor limits.');
     }
-    const activity = FLIPSimulation.SprayCondition({ ...options, minimumSpeed: options.minimumSpeed ?? 0.25,
+    const activity = FLIPSimulation.SprayCondition({ ...options, minimumSpeed: options.minimumSpeed ?? 0,
       minimumAge: options.minimumAge ?? 0.1, maximumNeighbors: null, neighborRadius });
     const condition: SubSystemGPUCondition = (particle, dt, context) => {
       const selected = activity(particle, dt, context).toVar();
+      if (minimumDeformity > 0 && options.samplerGPU) {
+        const toWorld = uniform(context.system.getSimulationToWorldMatrix())
+          .onFrameUpdate(() => context.system.getSimulationToWorldMatrix());
+
+        If(selected, () => {
+          const sample = options.samplerGPU!(toWorld.mul(vec4(particle.position, 1)).xyz);
+          if (!sample.deformation) throw new Error('FoamCondition samplerGPU must supply surface deformation.');
+          selected.assign(sample.valid.and(sample.deformation.greaterThanEqual(minimumDeformity)));
+        });
+      }
+
       const grid = context.spatialGrid;
       if (!grid) throw new Error('FoamCondition requires its managed parent particle spatial grid.');
       If(selected, () => {
@@ -150,13 +190,15 @@ class FLIPSimulation extends FluidSimulation {
   private pressureProjection?: FluidPressureProjection;
   private readonly picRatioNode = uniform(0);
   private workGrid?: SparseVolumeGrid;
-  private workPool?: StagedGPUAllocation<FlipPool>;
+  private workPool?: StagedGPUAllocation<FlipCapacityPool>;
   private requiredBrickCapacity = 0;
   private allocationReadPending = false;
   private allocationFrame = 0;
   private simulationStep = 0;
+  private initialQualitySelected = false;
   private clearFieldsNode?: ComputeNode;
   private resetFields = true;
+  private resetNodes?: { velocity: StorageBufferAttribute; pressure: StorageBufferAttribute; nodes: ComputeNode[] };
   private movingWallsNode?: ComputeNode;
   private movingWallsKey = '';
 
@@ -242,8 +284,170 @@ class FLIPSimulation extends FluidSimulation {
     this.initializeTransferFields();
   }
 
+  private pressureScratchSource?: FluidPressureProjection;
+
+  private liveContext?: GPUParticleUpdateContext;
+  private qualityPreparation?: {
+    key: string; ready: boolean; buffers: GPUParticleBufferState; pool?: FlipPool; completion?: Promise<void>;
+    phase?: string;
+  };
+  private qualityPreparationError?: string;
+
+  /** Compile replacement transfer/pressure programs before allowing an automatic tier switch. */
+  protected override prepareQualityChange(domain: SpatialGridDomain, renderer: ParticleSpatialGridRenderer): boolean {
+    const context = this.liveContext, grid = this.spatialGrid;
+    if (!context || !grid) return false;
+    const key = [domain.cellSize, context.buffers.version, this.pressureIterations,
+      this.collisionIterations, grid.resourceVersion, ...this.boundsLimit.toArray()].join(':');
+    const pending = this.qualityPreparation;
+    if (pending?.key === key && pending.buffers === context.buffers) {
+      if (!pending.ready || !pending.pool) return false;
+      if (!pending.pool.grid.ensureDirectory(renderer, domain.gridDimensions)) return false;
+      pending.pool.grid.setLayoutMetadata(domain.bounds, domain.gridDimensions);
+      pending.pool.context.gridDimensions.copy(domain.gridDimensions);
+      return true;
+    }
+    this.cancelQualityPreparation();
+    const candidate: NonNullable<FLIPSimulation['qualityPreparation']> = {
+      key, ready: false, buffers: context.buffers,
+    };
+    this.qualityPreparation = candidate;
+    const started = performance.now();
+    this.benchmarks.set('qualityPreparationStartedAt', started);
+    this.benchmarks.set('qualityPreparationReadyAt', null);
+    this.benchmarks.set('qualityPreparationMs', null);
+    // Capacity admission keeps priority. Wait for its compiler/adoption instead of canceling needed growth.
+    const capacityPool = this.workPool;
+    candidate.completion = Promise.resolve(capacityPool?.whenPrepared()).then(async () => {
+      while (capacityPool === this.workPool && this.qualityPreparation === candidate
+        && ['preparing', 'ready'].includes(capacityPool?.status.state ?? '')) {
+        await capacityPool?.whenPrepared();
+        await new Promise(resolve => setTimeout(resolve, 4));
+      }
+      if (this.qualityPreparation !== candidate) return;
+      candidate.phase = 'allocation';
+      const side = 2 ** this.spatialGridOptions!.cellSubdivisions!;
+      const nativeMaximum = Math.floor(((renderer.backend as { device: {
+        limits: { maxStorageBufferBindingSize: number };
+      } }).device.limits.maxStorageBufferBindingSize - 32) / (side ** 3 * 32));
+      const maximum = maximumFluidResidentCapacity(this.boundsLimit, domain.cellSize * side, nativeMaximum);
+      let capacity = Math.min(this.workGrid!.capacity, maximum);
+      if (domain.cellSize > this.workGrid!.cellSize) {
+        const source = this.workGrid!, directory = source.directoryCapacity, reserved = source.capacity;
+        const dimensions = source.gridDimensions.clone().divideScalar(source.brickSide);
+        const minimum = source.bounds.min.clone(), brick = source.brickSize;
+        const pages = new Uint32Array(await renderer.getArrayBufferAsync(source.pagesAttribute));
+        if (this.qualityPreparation !== candidate) return;
+        if (source !== this.workGrid || source.capacity !== reserved) {
+          this.qualityPreparation = undefined;
+          return;
+        }
+        capacity = coarsenedResidentCapacity(pages.subarray(directory, directory + reserved), dimensions,
+          minimum, brick, domain.gridDimensions.clone().divideScalar(side),
+          domain.bounds.min, domain.cellSize * side, maximum);
+      }
+      if (domain.cellSize < this.workGrid!.cellSize) {
+        candidate.phase = 'refinement demand';
+        const diagnostics = new Uint32Array(await renderer.getArrayBufferAsync(this.workGrid!.diagnosticsAttribute));
+        if (this.qualityPreparation !== candidate) return;
+        capacity = refinementResidentCapacity(this.workGrid!.capacity, diagnostics[0],
+          this.workGrid!.cellSize / domain.cellSize,
+          domain.gridDimensions.x * domain.gridDimensions.y * domain.gridDimensions.z / side ** 3, maximum);
+      }
+      const volume = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: domain.bounds },
+        capacity, domain.gridDimensions);
+      volume.reductionCellCount = nativeMaximum * volume.cellsPerBrick + 1;
+      const target = this.forkGridResources(volume.cellCount);
+      Object.defineProperty(target, 'gridDimensions', { value: domain.gridDimensions.clone() });
+      target.workGrid = volume; target.workPool = undefined; target.qualityPreparation = undefined;
+      target.velocityBeforeAttribute = undefined; target.velocityBefore = undefined;
+      target.initializeTransferFields();
+      target.pressureProjection = undefined; target.pressureScratchSource = this.pressureProjection;
+      target.clearFieldsNode = undefined;
+      target.clearNewPressureNode = undefined; target.resetFields = false; target.resetNodes = undefined;
+      target.gatherNode = undefined; target.forceNodeCompute = undefined; target.transferNode = undefined;
+      target.separationNode = undefined; target.separationApplyNode = undefined; target.gatherCacheKey = '';
+      target.pollWorkCapacity = () => {}; target.measureTransfer = () => {};
+      candidate.pool = { context: target, grid: volume, attributes: target.fieldAttributes };
+      candidate.phase = 'storage';
+      for (const attribute of candidate.pool.attributes) {
+        if (this.qualityPreparation !== candidate) return;
+        initializeStorageAttribute(renderer, attribute, false);
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      const nodes: ComputeNode[] = [], compute = renderer.compute;
+      candidate.phase = 'graphs';
+      renderer.compute = value => nodes.push(...(Array.isArray(value) ? value : [value]));
+      try {
+        target.getPressureProjection().forPreparation(() => target.computeTransfer(context, renderer, grid));
+        target.appendBoundaryPrograms(nodes);
+      } finally { renderer.compute = compute; }
+      candidate.pool.projection = target.pressureProjection;
+      candidate.phase = 'compilation';
+      await prepareComputePrograms(renderer, nodes, () => this.qualityPreparation === candidate, this.benchmarks);
+      if (this.qualityPreparation !== candidate) return;
+      // forPreparation suppresses live reductions. Compile those pressure variants explicitly
+      // as well, so the first adopted solve cannot create its diagnostic/velocity pipelines.
+      candidate.phase = 'pressure compilation';
+      await target.getPressureProjection().prepare(renderer, target.velocityNext, target.velocityCurrent,
+        target.pressureIterations, target.velocityBefore, this.benchmarks);
+      if (this.qualityPreparation !== candidate) return;
+      candidate.ready = true;
+      candidate.phase = 'ready';
+      this.benchmarks.set('qualityPreparationReadyAt', performance.now());
+      this.benchmarks.set('qualityPreparationMs', performance.now() - started);
+    }).catch(cause => {
+      this.qualityPreparationError = cause instanceof Error ? cause.message : String(cause);
+      this.benchmarks.increment('qualityPreparationFailures');
+      // Keep the live tier usable if background preparation fails; explicit edits still use the cold path.
+      if (this.qualityPreparation === candidate) this.qualityPreparation = undefined;
+    }).finally(() => {
+      if (this.qualityPreparation !== candidate && candidate.pool) this.disposePreparedQuality(candidate.pool);
+    });
+    return false;
+  }
+
+  private disposePreparedQuality(pool: FlipPool): void {
+    pool.attributes.forEach(attribute => attribute.dispose());
+    pool.projection?.dispose(); pool.grid.dispose();
+  }
+
+  private cancelQualityPreparation(): void {
+    const candidate = this.qualityPreparation;
+    this.qualityPreparation = undefined;
+    if (candidate?.ready && candidate.pool) {
+      this.disposePreparedQuality(candidate.pool);
+    }
+  }
+
   protected override ensureGridResolution(renderer: ParticleSpatialGridRenderer, grid: ParticleSpatialGrid): void {
     const old = this.workGrid;
+    const prepared = this.qualityPreparation;
+    if (old && prepared?.ready && prepared.pool
+      && Math.abs(prepared.pool.grid.cellSize - grid.cellSize) < 1e-9) {
+      const pool = prepared.pool, attributes = this.fieldAttributes, projection = this.pressureProjection;
+      this.qualityPreparation = undefined;
+      const previousPreparation = this.workPool?.whenPrepared();
+      this.workPool?.cancelPending(); this.workPool = undefined;
+      this.adoptGridResources(pool.context);
+      for (const key of ['workGrid', 'velocityBeforeAttribute', 'velocityBefore', 'pressureProjection',
+        'clearFieldsNode', 'clearNewPressureNode', 'gatherNode', 'forceNodeCompute', 'transferNode',
+        'separationNode', 'separationApplyNode', 'gatherCacheKey', 'gatherBuffers', 'gatherGrid'] as const) {
+        (this as unknown as Record<string, unknown>)[key] = pool.context[key];
+      }
+      this.gridDimensions.copy(grid.gridDimensions); this.dimensionsNode.value.copy(this.gridDimensions);
+      this.resolution = grid.cellsPerAxis; this.cellSize = grid.cellSize; this.cellSizeNode.value = grid.cellSize;
+      this.pressureProjection?.updateTopology();
+      // Fresh uploaded storage is already zero; avoid compiling an extra cold-clear program on adoption.
+      this.resetFields = false;
+      const device = (renderer.backend as { device: { queue: { onSubmittedWorkDone(): Promise<void> } } }).device;
+      // An older capacity compiler may still reference the retired bindings, even after the GPU fence.
+      void Promise.allSettled([previousPreparation, device.queue.onSubmittedWorkDone()]).then(() => {
+        attributes.forEach(attribute => attribute.dispose()); projection?.dispose(); old.dispose(renderer);
+        if (this.pressureProjection === pool.projection) pool.projection?.compactScratch(renderer);
+      });
+      return;
+    }
     if (!old || old.maxDepth !== grid.maxDepth || old.brickSubdivisions !== grid.brickSubdivisions
       || Math.abs(old.cellSize - grid.cellSize) > 1e-9) {
       this.onGridResolutionChanged();
@@ -253,13 +457,17 @@ class FLIPSimulation extends FluidSimulation {
       this.createWorkGrid();
       return;
     }
+    const dimensionsChanged = !old.gridDimensions.equals(grid.gridDimensions);
     if (!old.updateLayout(renderer, this.bounds, grid.gridDimensions)) {
       const requested = this.bounds.clone();
       this.bounds.copy(old.bounds); this.boundsMinNode.value.copy(old.bounds.min);
-      grid.setBounds(old.bounds); this.pendingBounds = { grid, bounds: requested };
+      // Directory staging may defer coverage, but must not reinterpret old coverage as a quality request.
+      // Doing so can adopt an unprepared coarser lattice and synchronously rebuild all pressure/transfer programs.
+      grid.setBounds(grid.resolveBounds(old.bounds)); this.pendingBounds = { grid, bounds: requested };
       return;
     }
     this.gridDimensions.copy(grid.gridDimensions); this.dimensionsNode.value.copy(this.gridDimensions);
+    if (dimensionsChanged) this.pressureProjection?.updateTopology();
   }
 
   protected override cellIndex(coordinate: Node<'ivec3'>): Node<'uint'> {
@@ -272,7 +480,7 @@ class FLIPSimulation extends FluidSimulation {
 
   private get fieldAttributes(): StorageBufferAttribute[] {
     return [this.velocityCurrentAttribute, this.velocityNextAttribute, this.pressureCurrentAttribute,
-      this.pressureNextAttribute, this.divergenceAttribute, this.solidAttribute, this.boundaryAttribute];
+      this.divergenceAttribute, this.solidAttribute, this.boundaryAttribute];
   }
 
   private pollWorkCapacity(renderer: ParticleSpatialGridRenderer): void {
@@ -290,77 +498,99 @@ class FLIPSimulation extends FluidSimulation {
     }).catch(() => {}).finally(() => { this.allocationReadPending = false; });
   }
 
-  private ensureWorkPool(context: GPUParticleUpdateContext, renderer: ParticleSpatialGridRenderer,
-    grid: ParticleSpatialGrid): void {
-    if (this.workPool) return;
+  private ensureWorkPool(renderer: ParticleSpatialGridRenderer): void {
     const device = (renderer.backend as { device: { limits: { maxStorageBufferBindingSize: number };
       queue: { onSubmittedWorkDone(): Promise<void> } } }).device;
-    const maximum = Math.floor((device.limits.maxStorageBufferBindingSize - 32) / (this.workGrid!.cellsPerBrick * 32));
-    this.workPool = new StagedGPUAllocation<FlipPool>({ context: this, grid: this.workGrid!,
-      attributes: this.fieldAttributes, projection: this.getPressureProjection() }, this.workGrid!.capacity, {
-      maximumCapacity: Math.max(this.workGrid!.capacity, maximum),
+    const nativeMaximum = Math.floor((device.limits.maxStorageBufferBindingSize - 32)
+      / (this.workGrid!.cellsPerBrick * 32));
+    const maximum = Math.max(this.workGrid!.capacity,
+      maximumFluidResidentCapacity(this.boundsLimit, this.workGrid!.brickSize, nativeMaximum));
+    // Reserve reduction hierarchy structure once. Live dispatch sizes remain compact runtime counts.
+    this.workGrid!.reductionCellCount = nativeMaximum * this.workGrid!.cellsPerBrick + 1;
+    if (this.workPool?.maximumCapacity === maximum) return;
+    this.workPool?.cancelPending();
+    const pressure = this.getPressureProjection();
+    this.workPool = new StagedGPUAllocation<FlipCapacityPool>({ attributes: this.fieldAttributes,
+      count: this.cellCount, retired: [], adopted: true }, this.workGrid!.capacity, {
+      maximumCapacity: maximum,
       create: capacity => {
         const volume = new SparseVolumeGrid({ ...this.spatialGridOptions, bounds: this.bounds },
           capacity, this.gridDimensions, this.workGrid!.directoryCapacity);
-        const target = this.forkGridResources(volume.cellCount);
-        target.workGrid = volume; target.workPool = undefined;
-        target.velocityBeforeAttribute = undefined; target.velocityBefore = undefined;
-        target.initializeTransferFields();
-        target.pressureProjection = undefined; target.clearFieldsNode = undefined;
-        target.clearNewPressureNode = undefined; target.resetFields = false;
-        target.gatherNode = undefined; target.forceNodeCompute = undefined; target.transferNode = undefined;
-        target.separationNode = undefined; target.separationApplyNode = undefined; target.gatherCacheKey = '';
-        target.pollWorkCapacity = () => {};
-        return { context: target, grid: volume, attributes: target.fieldAttributes };
+        const count = volume.cellCount;
+        const attributes = this.fieldAttributes.map(attribute => new StorageBufferAttribute(
+          new Float32Array(count * (attribute.count / this.cellCount) * attribute.itemSize), attribute.itemSize,
+        ));
+        return { grid: volume, attributes, count, pressure: pressure.createCapacityStorage(capacity), retired: [] };
       },
       prepare: async pool => {
-        for (const attribute of pool.attributes) {
-          initializeStorageAttribute(renderer, attribute);
-          await new Promise(resolve => setTimeout(resolve, 0));
+        // Allocate backing in short slices; no live nodes, bindings, graphs or programs are changed here.
+        const started = performance.now();
+        let slice = started;
+        for (const attribute of [...pool.attributes, ...pool.grid!.capacityAttributes, ...pool.pressure!.attributes]) {
+          initializeStorageAttribute(renderer, attribute, false);
+          if (performance.now() - slice >= 2) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+            slice = performance.now();
+          }
         }
-        const nodes: ComputeNode[] = [], original = renderer.compute;
-        renderer.compute = value => nodes.push(...(Array.isArray(value) ? value : [value]));
-        try {
-          pool.context.getPressureProjection().forPreparation(() => (
-            pool.context.computeTransfer(context, renderer, grid)
-          ));
-        } finally { renderer.compute = original; }
-        await (renderer as ParticleSpatialGridRenderer & {
-          compileComputeAsync(nodes: ComputeNode[]): Promise<void>;
-        }).compileComputeAsync(nodes);
-        pool.projection = pool.context.getPressureProjection();
+        this.benchmarks.set('capacityStoragePreparationMs', performance.now() - started);
+        this.benchmarks.set('capacityGraphConstructionMs', 0);
+        this.benchmarks.set('capacityCompilationMs', 0);
       },
-      canCommit: (_old, next) => next.grid.ensureDirectory(
-        renderer, this.gridDimensions, this.workGrid!.directoryCapacity,
-      ),
+      canCommit: (_old, next) => {
+        if (!pressure.canAdoptCapacityStorage(next.pressure!)) {
+          this.requiredBrickCapacity = Math.max(this.requiredBrickCapacity, next.grid!.capacity);
+          this.workPool!.cancelPending();
+          return false;
+        }
+        return next.grid!.ensureDirectory(renderer, this.gridDimensions, this.workGrid!.directoryCapacity);
+      },
       migrate: (old, next) => {
-        old.attributes = this.fieldAttributes; old.projection = this.pressureProjection;
-        next.grid.setLayoutMetadata(this.bounds, this.gridDimensions);
-        this.workGrid!.migrateTo(renderer, next.grid);
+        old.attributes = this.fieldAttributes;
+        old.count = this.cellCount;
         const count = this.cellCount - 1;
-        copyStorageAttributes(renderer, old.attributes.flatMap((attribute, i) => {
-          const target = next.attributes[i];
+        copyStorageAttributes(renderer, old.attributes.flatMap((attribute, index) => {
+          const target = next.attributes[index];
           if (attribute === this.velocityCurrentAttribute || attribute === this.boundaryAttribute) return [
             { source: attribute, target, byteLength: count * 16 },
             { source: attribute, target, sourceOffset: this.cellCount * 16,
-              targetOffset: next.context.cellCount * 16, byteLength: count * 16 },
+              targetOffset: next.count * 16, byteLength: count * 16 },
           ];
           return [{ source: attribute, target, byteLength: count * attribute.itemSize * 4 }];
         }));
-        this.pressureProjection?.migrateTo(renderer, next.projection!);
-        next.projection!.retainPressure();
+        this.workGrid!.migrateCapacity(renderer, next.grid!);
+        pressure.migrateCapacityStorage(renderer, next.pressure!);
       },
       swap: next => {
-        this.adoptGridResources(next.context);
-        for (const key of ['workGrid', 'velocityBeforeAttribute', 'velocityBefore', 'pressureProjection',
-          'clearFieldsNode', 'clearNewPressureNode', 'gatherNode', 'forceNodeCompute', 'transferNode',
-          'separationNode', 'separationApplyNode', 'gatherCacheKey', 'gatherBuffers', 'gatherGrid'] as const) {
-          (this as unknown as Record<string, unknown>)[key] = next.context[key];
+        const previous = this.fieldAttributes;
+        const replacements = new Map(previous.map((attribute, index) => [attribute, next.attributes[index]]));
+        for (const node of [this.velocityCurrent, this.velocityNext, this.pressureCurrent,
+          this.divergence, this.solid, this.faceOpenness]) {
+          const binding = node as unknown as { value: StorageBufferAttribute };
+          const attribute = replacements.get(binding.value);
+          if (attribute) binding.value = attribute;
         }
+        const names = ['velocityCurrentAttribute', 'velocityNextAttribute', 'pressureCurrentAttribute',
+          'divergenceAttribute', 'solidAttribute', 'boundaryAttribute'] as const;
+        names.forEach((key, index) => { this[key] = next.attributes[index]; });
+        this.velocityBeforeAttribute = this.velocityCurrentAttribute;
+        this.cellCount = next.count;
+        this.fieldStrideNode.value = next.count;
+        // Nodes, uniforms, indirect dispatch, boundary history and pressure warm start retain identity.
+        const old = this.workPool!.current;
+        old.retired.push(...this.workGrid!.adoptCapacity(next.grid!), ...pressure.adoptCapacityStorage(next.pressure!));
+        next.grid!.dispatchAttributes.forEach(attribute => attribute.dispose());
+        next.adopted = true;
       },
       dispose: pool => {
-        pool.attributes.forEach(attribute => attribute.dispose());
-        pool.projection?.dispose(); pool.grid.dispose(renderer);
+        const live = new Set(this.fieldAttributes);
+        for (const attribute of new Set([...pool.attributes, ...pool.retired])) {
+          if (!live.has(attribute)) releaseSharedStorage(attribute, renderer);
+        }
+        if (pool.grid && !pool.adopted) {
+          pool.grid.dispose(renderer);
+          pool.pressure?.attributes.forEach(attribute => releaseSharedStorage(attribute, renderer));
+        }
       },
       fence: () => device.queue.onSubmittedWorkDone(),
     });
@@ -374,24 +604,100 @@ class FLIPSimulation extends FluidSimulation {
       this.velocityCurrent = packed;
       this.velocityBeforeAttribute = this.velocityCurrentAttribute;
       this.velocityBefore = { element: index => packed.element(
-        typeof index === 'number' ? index + this.cellCount : uint(index as Node<'uint'>).add(this.cellCount),
+        typeof index === 'number' ? this.fieldStrideNode.add(index)
+          : uint(index as Node<'uint'>).add(this.fieldStrideNode),
       ) };
     }
+  }
+
+  /** Predict startup coverage only; observed occupancy still controls all later tier requests. */
+  protected selectInitialQuality(system: import('../core/ParticleSystem').default,
+    renderer: ParticleSpatialGridRenderer): void {
+    if (this.initialQualitySelected) return;
+    this.initialQualitySelected = true;
+    const grid = this.getParticleSpatialGrid(system)!;
+    if (!this.autoBounds || !grid.autoVolumeQuality || system.liveParticleCount > 0) return;
+    const limit = this.boundsLimit.toArray();
+    let extent = limit.every(Number.isFinite) ? Math.max(...limit) : 0;
+    if (!extent) {
+      // Closed-volume colliders provide coverage evidence; ignore thin floors and walls.
+      this.collectColliders(system);
+      const toLocal = system.getSimulationToWorldMatrix().clone().invert();
+      const support = new THREE.Box3();
+      for (const collider of this.fluidColliders) {
+        const geometry = collider.geometry;
+        if (!geometry) continue;
+        geometry.computeBoundingBox();
+        if (!geometry.boundingBox) continue;
+        collider.updateWorldMatrix(true, false);
+        const box = geometry.boundingBox.clone().applyMatrix4(collider.matrixWorld).applyMatrix4(toLocal);
+        const size = box.getSize(new THREE.Vector3()).toArray();
+        if (Math.min(...size) > Math.max(...size) * 0.25) support.union(box);
+      }
+      for (const emitter of system.emitters) {
+        emitter.source.geometry.computeBoundingBox();
+        emitter.source.updateWorldMatrix(true, false);
+        if (emitter.source.geometry.boundingBox) support.union(emitter.source.geometry.boundingBox.clone()
+          .applyMatrix4(emitter.source.matrixWorld).applyMatrix4(toLocal));
+      }
+      if (!support.isEmpty()) extent = Math.max(...support.getSize(new THREE.Vector3()).toArray());
+    }
+    const previous = grid.volumeQualityTier;
+    const quality = initialFluidQuality(extent, grid.minVolumeQuality, grid.maxVolumeQuality);
+    grid.initializeVolumeQuality(quality);
+    this.bounds.copy(grid.bounds); this.boundsMinNode.value.copy(this.bounds.min);
+    this.ensureGridResolution(renderer, grid);
+    this.benchmarks.set('initialQualityReference', grid.volumeQualityTier);
+    this.benchmarks.set('initialQualityPreviousReference', previous);
+    this.benchmarks.set('initialQualityPredictedExtent', extent);
+    this.benchmarks.set('initialQualityCellWidth', grid.cellSize);
   }
 
   public override async prepareResources(
     system: import('../core/ParticleSystem').default,
     renderer: ParticleSpatialGridRenderer,
   ): Promise<void> {
+    this.selectInitialQuality(system, renderer);
     this.createWorkGrid();
+    this.ensureWorkPool(renderer);
     this.workGrid!.updateDispatch(renderer);
     await this.workGrid!.prepareLayout(renderer);
     this.initializeTransferFields();
     await super.prepareResources(system, renderer);
+    // Dependents are visited before their owner during system preparation. The shared collider
+    // backend only becomes ready in the owner, so prepare its collision variants now.
+    for (const collision of this.boundaryCollisions) {
+      await collision.prepareResources(system, renderer as import('three/webgpu').WebGPURenderer);
+    }
     await this.getPressureProjection().prepare(
-      renderer, this.velocityNext, this.velocityCurrent, this.pressureIterations, this.velocityBefore,
+      renderer, this.velocityNext, this.velocityCurrent, this.pressureIterations, this.velocityBefore, this.benchmarks,
     );
     await this.prepareGuardResources(system, renderer);
+
+    // Capture the populated transfer path against persistent particle/index bindings. Compilation
+    // must not emit particles, retire pages, reset pressure, or advance collider history.
+    const context = system.gpuSimulation.prepareContext(renderer as import('three/webgpu').WebGPURenderer);
+    const grid = this.getParticleSpatialGrid(system)!;
+    grid.initialize(renderer, context.buffers);
+    const nodes: ComputeNode[] = [], compute = renderer.compute;
+    const reset = this.resetFields;
+    const poll = this.pollWorkCapacity, measure = this.measureTransfer;
+    this.pollWorkCapacity = () => {};
+    this.measureTransfer = () => {};
+    renderer.compute = value => nodes.push(...(Array.isArray(value) ? value : [value]));
+    try {
+      super.computeGPU(context, renderer, grid);
+      this.getPressureProjection().forPreparation(() => this.computeTransfer(context, renderer, grid));
+      this.appendBoundaryPrograms(nodes);
+      measure.call(this, context, renderer, false, true);
+      measure.call(this, context, renderer, true, true);
+    } finally {
+      renderer.compute = compute;
+      this.resetFields = reset;
+      this.pollWorkCapacity = poll;
+      this.measureTransfer = measure;
+    }
+    await prepareComputePrograms(renderer, [...new Set(nodes)], () => true, this.benchmarks);
   }
 
   /** Internal debug-grid access, not part of the public module contract. @internal */
@@ -403,13 +709,14 @@ class FLIPSimulation extends FluidSimulation {
     grid?: ParticleSpatialGrid,
   ): void {
     if (!grid) throw new Error('FLIPSimulation requires a GPU spatial grid.');
+    this.liveContext = context;
     super.computeGPU(context, renderer, grid);
     this.picRatioNode.value = THREE.MathUtils.clamp(this.picRatio, 0, 1);
     this.ensureGridResolution(renderer, grid);
     this.refreshBounds(grid, renderer);
     this.benchmarks.span('particleCollision', () => this.computeMovingWalls(context, renderer, grid));
     this.simulationStep++;
-    this.ensureWorkPool(context, renderer, grid);
+    this.ensureWorkPool(renderer);
     this.workPool!.commit();
     if (this.requiredBrickCapacity > 0) {
       this.workPool!.request(Math.min(this.requiredBrickCapacity, this.workPool!.maximumCapacity));
@@ -434,10 +741,15 @@ class FLIPSimulation extends FluidSimulation {
     if (this.resetFields) {
       // Ordinary updates also support a cold grid without an explicit system.prepare() call.
       this.workGrid!.updateDispatch(renderer);
-      renderer.compute(Fn(() => clearFields(instanceIndex))().compute(this.cellCount));
-      renderer.compute(Fn(() => {
-        this.pressureCurrent.element(instanceIndex).assign(0);
-      })().compute(this.cellCount));
+      if (this.resetNodes?.velocity !== this.velocityCurrentAttribute
+        || this.resetNodes.pressure !== this.pressureCurrentAttribute) {
+        this.resetNodes?.nodes.forEach(node => node.dispose());
+        this.resetNodes = { velocity: this.velocityCurrentAttribute, pressure: this.pressureCurrentAttribute, nodes: [
+          Fn(() => clearFields(instanceIndex))().compute(this.cellCount),
+          Fn(() => { this.pressureCurrent.element(instanceIndex).assign(0); })().compute(this.cellCount),
+        ] };
+      }
+      renderer.compute(this.resetNodes.nodes);
       this.resetFields = false;
     }
     this.clearFieldsNode ??= this.computeCells(clearFields);
@@ -520,6 +832,7 @@ class FLIPSimulation extends FluidSimulation {
         ),
       );
     });
+    gather.setName('rzmps.flip.particleToGrid');
     this.gatherNode = gather;
     this.benchmarks.span('particleToGrid', () => renderer.compute(gather));
 
@@ -550,6 +863,7 @@ class FLIPSimulation extends FluidSimulation {
       ));
       context.buffers.storage.storeParticle(particle);
     })().compute(context.buffers.count);
+    transfer.setName('rzmps.flip.gridToParticle');
     this.transferNode = transfer;
     this.benchmarks.span('gridToParticle', () => renderer.compute(transfer));
     this.measureTransfer(context, renderer, true);
@@ -612,6 +926,7 @@ class FLIPSimulation extends FluidSimulation {
         });
         this.separationPositions!.element(instanceIndex).assign(vec4(separatedPosition, 0));
       })().compute(context.buffers.count);
+      separation.setName('rzmps.flip.separation');
       this.separationNode = separation;
       // Commit after every neighbor query has finished reading the original positions.
       const apply = this.separationApplyNode ?? Fn(() => {
@@ -647,6 +962,7 @@ class FLIPSimulation extends FluidSimulation {
           context.buffers.storage.storeParticle(particle);
         });
       })().compute(context.buffers.count);
+      apply.setName('rzmps.flip.separationCollision');
       this.separationApplyNode = apply;
       // Grid advection may have moved markers since the system built the hash.
       if (this.advectParticlesEnabled) {
@@ -661,8 +977,8 @@ class FLIPSimulation extends FluidSimulation {
 
   protected override onBoundsChanged(previous: THREE.Box3): void {
     void previous;
-    // Retained resident slots still describe the same world cells; only connectivity changed.
-    this.pressureProjection?.updateTopology();
+    // A changed outer pressure boundary invalidates the previous pressure gauge.
+    this.pressureProjection?.invalidate();
   }
 
   protected override onBoundaryChanged(): void {
@@ -671,6 +987,7 @@ class FLIPSimulation extends FluidSimulation {
   }
 
   protected override onParticleStateReset(): void {
+    this.cancelQualityPreparation();
     this.resetFields = true;
     this.pressureProjection?.invalidate();
   }
@@ -679,8 +996,9 @@ class FLIPSimulation extends FluidSimulation {
     context: GPUParticleUpdateContext,
     renderer: ParticleSpatialGridRenderer,
     after: boolean,
+    preparing = false,
   ): void {
-    if (!this.benchmarks.enabled || this.transferReadPending) return;
+    if (!this.benchmarks.enabled || (!preparing && this.transferReadPending)) return;
     if (this.transferReductionCapacity !== context.buffers.count) {
       this.transferReduction?.dispose();
       this.transferReductionCapacity = context.buffers.count;
@@ -699,7 +1017,8 @@ class FLIPSimulation extends FluidSimulation {
         : particle.tagMask.bitAnd(uint(tagMask)).notEqual(0));
     }, false);
     const key = after ? 'kineticEnergyAfterTransfer' : 'kineticEnergyBeforeTransfer';
-    const read = renderer.getArrayBufferAsync(this.transferReduction!.attribute).then(buffer => {
+    const read = preparing ? undefined : renderer.getArrayBufferAsync(this.transferReduction!.attribute)
+      .then(buffer => {
       const values = new Float32Array(buffer);
       const count = values[8];
       this.benchmarks.set(key, values[4] * count);
@@ -718,12 +1037,14 @@ class FLIPSimulation extends FluidSimulation {
       return particle.alive.notEqual(0).and(tagMask === undefined ? uint(1).equal(1)
         : particle.tagMask.bitAnd(uint(tagMask)).notEqual(0));
     }, false);
-    const varianceRead = renderer.getArrayBufferAsync(this.transferReduction!.attribute).then(buffer => {
+    const varianceRead = preparing ? undefined : renderer.getArrayBufferAsync(this.transferReduction!.attribute)
+      .then(buffer => {
       const values = new Float32Array(buffer);
       const variance = Math.max(0, values[4] - values[5] ** 2 - values[6] ** 2 - values[7] ** 2);
       const name = after ? 'velocityVarianceAfterTransfer' : 'velocityVarianceBeforeTransfer';
       this.benchmarks.set(name, variance);
     });
+    if (preparing) return;
     if (after) this.transferReadPending = true;
     void Promise.all([read, varianceRead]).catch(() => {}).finally(() => {
       if (after) this.transferReadPending = false;
@@ -828,8 +1149,9 @@ class FLIPSimulation extends FluidSimulation {
     this.pressureProjection ??= new FluidPressureProjection(
       this.gridDimensions, this.cellSizeNode, this.maxVelocityNode, this.solid, this.pressureCurrent, this.divergence,
       this.closedMinNode, this.closedMaxNode, this.workGrid, this.velocityNext, index => this.targetDivergence(index),
-      undefined, this.faceOpenness, this.solidVelocity, () => this.pressureControls,
+      undefined, this.faceOpenness, this.solidVelocity, () => this.pressureControls, this.pressureScratchSource,
     );
+    this.pressureScratchSource = undefined;
     return this.pressureProjection;
   }
 
@@ -851,6 +1173,7 @@ class FLIPSimulation extends FluidSimulation {
   }
 
   public override cleanup(): void {
+    this.cancelQualityPreparation(); this.liveContext = undefined;
     this.transferReduction?.dispose();
     this.transferReduction = undefined;
     this.transferReductionCapacity = 0;
@@ -891,23 +1214,22 @@ class FLIPSimulation extends FluidSimulation {
     const base = floor(gridPosition);
     const ratio = clamp(gridPosition.sub(base), vec3(0), vec3(1));
     const result = vec4(0).toVar();
-    for (let z = 0; z <= 1; z += 1) {
-      for (let y = 0; y <= 1; y += 1) {
-        for (let x = 0; x <= 1; x += 1) {
-          const index = this.cellIndex(ivec3(clamp(
-            base.add(vec3(x, y, z)), vec3(0), this.dimensionsNode.sub(1),
-          )));
-          // FLIP deltas require identical donors before and after projection.
-          // Density in the before field is not an interpolation weight.
-          const valid = this.velocityBefore!.element(index).w.greaterThan(0)
-            .and(this.velocityCurrent.element(index).w.greaterThan(0));
-          const weight = (x ? ratio.x : float(1).sub(ratio.x))
-            .mul(y ? ratio.y : float(1).sub(ratio.y))
-            .mul(z ? ratio.z : float(1).sub(ratio.z));
-          result.addAssign(valid.select(vec4(field.element(index).xyz, 1).mul(weight), vec4(0)));
-        }
-      }
-    }
+    // Retain x-fastest donor order and interpolation while avoiding a large unrolled TSL graph.
+    Loop(8, ({ i }) => {
+      const delta = ivec3(i.mod(2), i.div(2).mod(2), i.div(4));
+      const index = this.cellIndex(ivec3(clamp(
+        base.add(vec3(delta)), vec3(0), this.dimensionsNode.sub(1),
+      )));
+      // FLIP deltas require identical donors before and after projection.
+      // Density in the before field is not an interpolation weight.
+      const valid = this.velocityBefore!.element(index).w.greaterThan(0)
+        .and(this.velocityCurrent.element(index).w.greaterThan(0));
+      const weights = vec3(delta.x.equal(0).select(float(1).sub(ratio.x), ratio.x),
+        delta.y.equal(0).select(float(1).sub(ratio.y), ratio.y),
+        delta.z.equal(0).select(float(1).sub(ratio.z), ratio.z));
+      const weight = weights.x.mul(weights.y).mul(weights.z);
+      result.addAssign(valid.select(vec4(field.element(index).xyz, 1).mul(weight), vec4(0)));
+    });
     return result;
   }
 

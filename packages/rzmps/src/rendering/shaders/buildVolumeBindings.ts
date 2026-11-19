@@ -12,6 +12,7 @@ export default function buildVolumeBindings(
   appearance: boolean[] = [],
   premultiplied: boolean[] = [],
   emissive = false,
+  rotated: boolean[] = [],
 ): string {
   const copies = children.flatMap((count, source) => Array<number>(count).fill(source));
   const centers = colors.map((_, index) =>
@@ -30,11 +31,17 @@ uniform vec3 layer${name}Resolution${index};`).join('\n');
   }).join('\n');
   const transforms = copies.map((_, i) => `
 uniform vec3 layerOffset${i};
+uniform mat3 layerInverseRotation${i};
+uniform vec3 layerPivot${i};
 uniform float layerScale${i};
 uniform float layerAlpha${i};`).join('\n');
+  const sourceOffset = (index: number, i: number) => rotated[i]
+    ? `(layerInverseRotation${i} * (point - layerPivot${i} - layerOffset${i})
+      + layerPivot${i} - center${index})`
+    : `(point - center${index} - layerOffset${i})`;
   const samples = copies.map((index, i) => `
   {
-    vec3 sourcePoint = (point - center${index} - layerOffset${i}) / layerScale${i} + center${index};
+    vec3 sourcePoint = (${sourceOffset(index, i)}) / layerScale${i} + center${index};
     vec3 uv = (sourcePoint - layerDensityMin${index}) / layerDensitySize${index};
     if (insideField(uv)) {
       vec4 field = readVolume(layerDensityMap${index}, uv, layerDensityResolution${index});
@@ -53,7 +60,7 @@ uniform float layerAlpha${i};`).join('\n');
   }`).join('\n');
   const densitySamples = copies.map((index, i) => `
   {
-    vec3 uv = ((point - center${index} - layerOffset${i}) / layerScale${i} + center${index}
+    vec3 uv = ((${sourceOffset(index, i)}) / layerScale${i} + center${index}
       - layerDensityMin${index}) / layerDensitySize${index};
     if (insideField(uv)) {
       vec4 field = readVolume(layerDensityMap${index}, uv, layerDensityResolution${index});

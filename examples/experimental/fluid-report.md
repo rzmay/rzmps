@@ -1,519 +1,1234 @@
-# Gas completion milestone: validation and remaining issues
+# Liquid simulation: runtime reliability and retained correctness
 
-Gas simulation is now covered by the normal full benchmark suite. This report focuses on lifecycle
-stalls, sustained costs and the separately reported persistent viewport freeze. It replaces the
-historical investigation log. All timings below are local native Chromium/WebGPU observations,
-not guaranteed FPS or total VRAM measurements.
+The current focus is liquid motion correctness, remaining preparation spikes, and gas quality-dependent growth.
+The newest measured status is below. Earlier startup and numerical results are retained afterwards as reference evidence;
+they do not establish the new frame-pacing acceptance target.
 
-## Current performance picture (2026-11-16)
+## Second-tip stability, rare spikes, and gas quality scaling — latest investigation
 
-The latest controlled A/B includes velocity export and render work, with a filtered velocity texture
-replacing the earlier sparse-buffer render sampler. Earlier camera-position measurements are retained
-below with their original settings. Earlier simulation-stage,
-lighting and stress captures remain below with their original scope; they were not rerun for this report
-update and must not be treated as a fresh additive frame breakdown. Source inspection confirms the current
-paths and identifies the following workload-dependent costs:
+### Liquid: the second-tip burst came from the scene's floor-clearance trajectory
 
-| Area | Current work / evidence | Remaining opportunity or limitation |
+The reported burst reproduces at fixed 1/60-second updates and stable cell width **0.125** throughout
+the second tip. Around 30.27–30.52 s, roughly **430–451 particles** rise faster than two world units/s;
+maximum upward speed reaches **2.98**, while pressure residual stays below **0.27** in that interval.
+There is no coincident quality change or non-finite state. Removing swept-wall correction only for
+the second tip still produces **370** fast-rising particles, so that correction is not the main cause.
+
+The scene prevented floor intersections using the corners of the teapot's entire bounding box.
+This includes a fictitious bottom corner under the elevated spout. Keeping that empty corner above
+the floor raises the pivot from **0.520 to 2.135** world units at 45°, unnecessarily hoisting the
+container and its full liquid load. Correct floor support needs a pivot height of only about **1.15**.
+The grid responds to the imposed wall motion; the bad trajectory becomes especially obvious when
+the vessel is nearly full on its second cycle.
+
+**Corrected:** cache the actual mesh's projected XY convex hull once, and evaluate its support under
+Z rotation. This preserves the existing angular easing, angular speed limit, period, angle and floor
+clearance, without scanning thousands of vertices each frame. Neither solver strength nor fluid
+velocity was reduced. The isolated second-tip support correction reduces the fast-upward count
+from **451 to one**; the actual preset with the correction active for both tips also peaks at **one**,
+with maximum upward speed **2.03**. Remaining small waves/splashes are not clamped away.
+
+The tipping/pouring browser regression passes, including collider alignment, spout flow, spray,
+finite particles, angular speed limits, fixed emitter position and **precise mesh minimum Y = -0.43**.
+The floor test now uses precise vertex bounds: a transformed bounding box cannot validate the very
+empty-corner problem being corrected. The internal second-tip gate checks the fraction of fast-rising
+markers; `FLIP_TIP_ASSERT=1` enables it for future diagnostic runs. No physics/quality API changed.
+
+Artifacts: `/tmp/teapot-tip-before.json`, `/tmp/teapot-tip-no-sweep.json`,
+`/tmp/teapot-tip-mesh-floor.json`, `/tmp/teapot-tip-after.json`, `/tmp/teapot-floor-regression.log`.
+These are controlled fixed-timestep comparisons, not bit-identical particle trajectories.
+
+### Rare spikes: staged surface-kernel compilation, then catch-up work
+
+All eight GPU spikes in the preceding accepted RAF capture executed **two substeps**. Seven have
+nearby graph setup/generation work; one has no individually measured build slice above 8 ms in the
+searched window and is not attributed conclusively. Pressure is about **1.3–3.7 ms per substep**;
+the expensive frame is multiple ordinary updates, not a 20-ms intrinsic pressure solve.
+
+Previously anonymous 30-ms programs are now identified. Prepared reconstructions are not live
+renderer owners yet, so reflection over the current surface missed them. Their programs are named
+before compilation. The bounded two-second reproduction identifies **`rzmps.surface.kernelNode.0`**
+setup at **32.0–32.7 ms**: the particle-support/covariance/anisotropy kernel built for a staged liquid
+surface. Its cache depends on the reconstruction query-grid resource version and anisotropy mode.
+Preparing replacement reconstructions can therefore rebuild this graph even while the live fluid
+quality is stable. Smaller pressure build/project slices of about 15–19 ms also delay updates.
+
+This explains the recurring scheduling/catch-up spikes; it is separate from the scene-motion burst.
+No memory/device failure or persistent viewport freeze was observed in these captures. The appropriate
+next performance correction is to reuse the surface support-kernel program across compatible query-grid
+backing changes, or make that graph construction smaller. Reducing particles, quality, pressure sweeps
+or catch-up limits would conceal rather than correct this preparation dependency.
+
+The corrected scene's final 45-second RAF run: GPU median/p95/p99 **10.06/13.82/15.32 ms**,
+CPU submission p95/p99 **3.8/4.9 ms**, RAF p99 **16.8 ms**. Fourteen of 2,678 GPU frames exceed
+16.67 ms (maximum **23.16 ms**); maximum substeps **three**, skipped time **zero**, long tasks ≥50 ms
+**zero**, GPU/browser errors **zero**. The occasional three-step case means the earlier claim that
+all three-step bursts were gone was specific to that earlier capture, not a general guarantee.
+The revised physical trajectory retains a different liquid workload, so this is not a matched
+throughput comparison against the old scene. Artifacts: `/tmp/teapot-floor-raf`,
+`/tmp/teapot-spike-named`, `/tmp/teapot-spike-owner`, `/tmp/teapot-spike-origins`.
+
+### Gas: confirmed source/deposition and diffusion scaling, not a mass-amplifying remap
+
+Before the correction, the actual **Volumetric Smoke + Wind** scene reproduced runaway growth with existing settings.
+The diagnostic now selects the real wind scene instead of silently using the checkerboard fixture.
+The wind's direction is (36,12,0), drag 0.6; smoke retains sourceStrength 30, scalarDiffusion 0.8,
+densityDissipation 0.6 and 3+3 subdivisions. The following measurements describe the pre-fix solver and preset units. Corrected results follow below.
+
+Two actual tier transfers preserve the integrated field mass:
+
+| Simulation time | Cell width | Mass immediately before → immediately after remap |
 | --- | --- | --- |
-| Screen-filling raymarch | More occupied-gas samples per screen pixel; measured camera sweep below. | Fixed downsampling or a tighter render-time target; reconstruction trades fine screen detail for fewer rays. |
-| Velocity-stretched mask | One hardware-filtered velocity texture lookup at each enabled mask point; export is measured too. | Implemented below: lower repeated ray cost, additional dense export/clear bandwidth and texture memory. |
-| Procedural density mask | 4D procedural noise per nonempty masked stratum; octaves multiply that work. | No new isolated octave/noise benchmark in this pass; temperature modifiers do not add another noise evaluation. |
-| Lighting while raymarching | Isotropic LightingGrid uses one filtered radiance fetch; nonzero anisotropy weights directional bins. | Exactly zero-opacity samples now skip lighting/shadows. Fully emissive samples now bypass external-light fetches and shadow marches in both rendering backends. No performance gain is claimed without a controlled shading A/B. |
-| Simulation pressure / transport | Work grows with processed pages/cells, solver sweeps and advection method. | Earlier small-N stage table is diagnostic only. Compare multigrid at equal residual/divergence before promoting it for another workload. |
-| Derived volume export | Density/color textures are cleared over the full valid export rectangle, then resident cells are exported. Curl export also samples neighboring velocities. | Sparse simulation storage does not make dense export/occupancy work sparse. Remeasure clear, export and renderer occupancy separately before changing their layout. |
-| LightingGrid updates | Probe coverage, direction count, interval samples and propagation determine update work. | Controlled factoring comparison and evolving-scene timings below measure different workloads. |
-| Sources and custom rules | Source gathering follows particles/support; custom GasModule neighborhood queries add sparse reads at existing callback sites. | Fused scalar targets and multiple coefficient sites can repeat custom code. The query accessor itself adds no reads when unused. |
-| CPU appearance synchronization | Function-valued parameter tables can be resampled on the CPU during synchronization, even when GPU bindings persist. | A source-inspected candidate, not a demonstrated dominant cost; distinguish it from per-ray GPU vector fetches. |
-| Transitions / preparation | Tier adoption, resource allocation, compilation and first-use collider baking can hitch independently of steady FPS. | The retired-pressure-buffer render freeze is fixed; the older long-run freeze report remains a separate unproven failure. |
+| 2.567 s | 0.125 → 0.5 | 9.30653756 → 9.30653744 |
+| 5.900 s | 0.5 → 1 | 372.48548177 → 372.48548227 |
 
-The simulation's ordinary fixed-budget Auto pressure path still selects iterative for low sweep budgets;
-multigrid crossover requires sufficient workload, useful levels and tolerance-driven solving. Sparse
-admission/domain work remains separately measured and is not implicated by the render-only A/B.
+After the first transfer, continued emission increases mass to **110.74** by 3.017 s and **260.95**
+by 4.017 s. At 7.017 s it is **2096.23**. The logical domain reaches approximately **88×72×80**
+world units by 14 s; that is allocated coverage, not a claim that every cell is dense. Thus the growth
+is not merely a volume-render opacity illusion, nor an instantaneous multiplication in the remap.
 
-## Lighting defaults follow-up (not benchmarked)
+Independent GPU fixtures remove wind, buoyancy, vorticity, turbulence, fade and motion:
 
-LightingGrid now defaults to `levels: 2` (cascades), `directions: 4`, `samplesPerInterval: 4`, and
-`scatteringIterations: 1`. Demo/GUI overrides follow these values; smoke/fire retain only their explicit
-0.25-unit probe spacing and sixteen-unit lighting distance. The measurements elsewhere in this report
-predate this default change and are not measurements of the new defaults. No benchmarks were run for it.
-
-Code-based expectation: directions is the strongest first tuning lever. Probe/bin injection and merge
-scale with direction count; per-light directional normalization and scattering's mean-over-bins loop
-also introduce direction-count-squared work. Changing the demos from twelve to four finest directions
-reduces those respective portions by about 3x and 9x, not the entire lighting or frame time. With a scalar
-direction count, coarse counts double, so the new two cascades use four/eight directions.
-
-Interval samples scale the extinction integration part of injection roughly linearly (eight to four
-halves those samples), while light evaluation and merge remain. Each scattering iteration adds a finest
-cascade scattering pass and a copy-back pass; one iteration costs more than the old zero default. Turning
-it back to zero is a separate useful quality/performance experiment. Removing a cascade usually saves
-less than the same fraction of total work because coarse cascades have many fewer spatial probes;
-alignment, thin dimensions and far-field injection can change that estimate. Default isotropic volume
-shading still samples the pre-averaged lighting once per contributing ray sample; reducing directions
-primarily reduces grid update/storage work, with an additional per-ray benefit for nonzero anisotropy.
-These are scaling estimates from the loops, not timing claims or a guaranteed ranking on every scene.
-
-## Filtered velocity export: implemented and measured
-
-GasSimulation now maintains three RGBA16F derived textures: color/coverage; density, temperature,
-cached speed and vorticity; and signed XYZ velocity (A reserved). Speed-only controls retain their
-existing lookup and semantics. `VolumeField.sampleVelocityGPU` is unchanged, but uses a stable sampled
-texture node instead of sparse or pressure buffers. Solver transport and GasModule simulation queries
-still use their original simulation fields.
-
-Simulation export and late visual export share a three-target writer. It reuses the center velocity
-already read for the speed channel; transient visual velocity is exported without changing persistent
-solver velocity. Clearing includes velocity, so released/nonresident bricks do not leave stale flow.
-The third texture follows the same preparation, staged capacity swap, retirement and reset as the other
-two. Memory/peak allocation estimates count it. There is no extra export dispatch; the cost is another
-texture write/clear and allocation. Texture-boundary weighting preserves zero-valued outside corners,
-and valid-region/backing-size uniforms keep sampling aligned during delayed texture growth.
-
-### Matched export + render A/B
-
-Internal runner: `node apps/demo/benchmarks/fluids/diagnostics/volume-velocity.mjs <output>`.
-The default isolates the volume path by hiding secondary-system draw objects; scene geometry and
-lighting remain. `--full-scene` retains secondary draws, including fire's heat-distortion sprites.
-Each preset advances 60 fixed 1/60 updates, then remains frozen. Both modes use identical particles,
-fields, bounds, pressure state, camera, mask settings (stretch 0.25), 800x600 drawing buffer and full
-render scale. The reference uses the previous sparse cell-centered sampler and two-target export;
-the replacement uses the velocity texture and three-target export. Both perform one dense clear,
-one simulation export and one late visual export per measured sample, then draw. Source gathering and
-the solver are excluded, not assumed to become faster. Results are 24 samples after 20 warmup draws
-per mode/view, with fresh per-pass timestamp descriptors from the existing `passTimer` helper.
-Each sample had three export compute passes and three render passes in the isolated capture.
-
-Median milliseconds below are independently measured stage medians and paired total medians;
-**do not add the stage medians** to reconstruct the total. The total is the union of that sample's
-actual pass intervals. These short local observations are not sustained-FPS guarantees.
-
-| Case | Export: buffer → texture | Render: buffer → texture | Paired total: buffer → texture |
+| Fixed-state experiment | h = 0.125 | h = 0.25 | Coarse/fine ratio |
 | --- | ---: | ---: | ---: |
-| Fire / outside | 0.805 → 0.112 | 2.092 → 1.135 | 2.959 → 1.711 |
-| Fire / inside | 0.591 → 0.821 | 5.391 → 4.440 | 7.895 → 5.203 |
-| Smoke / outside | 0.077 → 0.076 | 2.404 → 1.758 | 2.506 → 1.835 |
-| Smoke / inside | 0.080 → 0.088 | 4.513 → 3.076 | 4.592 → 3.177 |
+| Mass injected by the same centered particle in 1/60 s | 0.00003488922 | 0.00027911379 | **8.0000×** |
+| Scalar-diffusion world cell-center variance growth in 1 s, rate 0.8 | 0.01249135 | 0.04944650 | **3.9585×** |
 
-Smoke's paired total fell about 27% outside and 31% inside; its export stayed near 0.08 ms while
-rendering became cheaper. Fire's isolated paired medians also fell, but its export intervals were
-more variable; the apparently cheaper outside export is not evidence that writing three textures
-is inherently faster than writing two. A supplementary full-scene fire capture was bimodal (roughly
-2–10 ms paired samples outside), with a worse outside paired median despite cheaper render-only
-median. That capture does **not** establish a general full-fire-demo FPS win. Keep refraction/copy
-cost and scheduling variation separate from the isolated velocity result rather than concealing it.
+The source fixture fixes mass, alpha, physical particle scale and source position. The seeded Gaussian
+fixture initializes residency and fully open boundary state explicitly so uninitialized collider state
+cannot be mistaken for field loss. Its mass is retained to about 0.0002% at the fine tier and 0.022%
+at the coarse tier; small absorbing-edge loss explains part of the departure from exactly 4×.
+A source-free 2× quality update retains mass within **0.00254%**, with essentially unchanged centroid.
 
-Captured logical grids were 32x56x40 for fire and 48x56x48 for smoke, with 0.125-unit cells. Backing
-textures were 32x72x48 and 48x72x48, so the added velocity allocation was 0.84375 MiB and 1.265625 MiB.
-Total derived-texture storage rises from 16 to 24 bytes per backing texel (+50%); the simulation's
-resident field storage is unchanged. Larger domains can make this cost substantial: one additional
-128³ velocity texture is 16 MiB, and 256³ is 128 MiB, excluding driver overhead and staged overlap.
+**Cause 1: source radius is clamped to cell width without volume normalization.**
+`splatRadius = max(particleRadius, h)`, while contribution is the cone weight × mass × alpha ×
+sourceStrength × dt. For small particles, doubling h leaves the deposited cell density approximately
+unchanged while each cell represents eight times the volume. The source consequently emits eight
+times the world-space mass. The actual first wind-scene transition is 4× in h, so this can increase
+source production by about **64×**; the next 2× transition adds another **8×**. Source temperature-mass
+and accumulated color use the same contribution and inherit its scaling.
 
-PNG comparisons of the same outside/inside views had mean absolute RGBA differences of 0.00012–0.00515
-on the 0–255 channel scale; captures were inspected. Signed velocity and filtering are now half precision
-in the render export; the solver remains Float32. Matching linear test fields interpolate exactly.
-The deterministic GPU lifecycle fixture additionally verifies cross-brick/missing/outside samples,
-transient-only velocity, retained sampler bindings after directory/texture replacement, disposed old
-textures, released-cell clearing and clear/reset. Smoke/fire staged coarsening/refinement still pass.
+**Cause 2: scalar diffusion is currently a cell-neighbor mixing rate.** Its coefficient is
+`clamp(scalarDiffusion * dt, 0, 1)` against the six-neighbor average. The world-space variance increment
+is approximately `scalarDiffusion * dt * h²`; doubling h therefore quadruples physical spreading.
+The API currently documents a rate in inverse seconds, not a world-space diffusivity. These coupled
+source/spread changes enlarge support, request coarser quality, then enlarge it again.
 
-Rejected measurements: Three's aggregate timestamp descriptor aliasing made the initial multi-dispatch
-aggregate capture unsuitable for this comparison. GPU-canvas readback after presentation, and then
-compositing decoded transparent PNGs without clearing the 2D comparison canvas, also produced spurious
-image errors. The runner now copies PNGs before query readback and decodes onto a cleared canvas;
-reported differences were checked against the saved PNGs. No simulation fix was inferred from those
-measurement artifacts.
+**Do not fix this by multiplying the stored density after coarsening.** Density is a concentration;
+physical mass is `sum(density * h³)`. Averaging eight fine concentrations into a coarse cell is correct,
+and the measured remaps already preserve that quantity. Advection's normal resolution-dependent
+numerical smoothing and the existing `vorticityStrength * h` confinement may also affect appearance,
+but neither is needed to reproduce the two demonstrated errors.
 
-Raw isolated data/images: `/tmp/rzmps-velocity-texture-isolated-ab/`; supplementary full-scene data:
-`/tmp/rzmps-velocity-texture-final-ab/`. The internal runner preserves both modes for future repeats.
+### Gas corrective pass — completed and regression-tested
 
-## Camera-inside volume cost
+**Source normalization:** the physical radius is half the largest absolute particle scale (a tiny
+numerical floor handles point-sized sources). A separable tent is integrated analytically over each
+voxel; its three integrated axis weights are multiplied and divided by `h³`. These fractions partition
+unity across grid phases, including when a particle is smaller than one voxel. Each particle emits
+`mass * alpha * sourceStrength * dt` physical mass. Scalar, temperature-mass, color, velocity relaxation
+and transient render-source gathers share the same kernel and conservative query extent. Particle
+size controls support rather than total mass. No normalization pass or additional buffer is required.
+Blocked/out-of-domain deposits are still discarded, not redistributed around colliders.
 
-A frozen 800x600 camera sweep (90 simulation updates before capture, 12 warmed GPU render samples per
-view, cell size 0.125, 256 maximum steps and two samples/voxel) found the increase starts *before*
-entering the box. Smoke medians: distant 4.64 ms, near outside 12.13 ms, near inside 14.27 ms, center
-9.02 ms. Fire: about 3.49, 9.87, 12.01 and 8.67 ms. Proxy coverage was already 90.5% in the distant view
-and 100% in the closer views: the main change is how many rays encounter occupied/dense gas rather
-than skip empty bricks or stop against the floor. No extra inside-only pass was found; switching
-proxy face culling alone does not explain the sustained drop. Simulation was not advanced between views.
+**Physical diffusion:** `scalarDiffusion` now means **world units²/second**. Its six-neighbor mixing
+fraction is `6D*dt/h²`, clamped for positivity. Base diffusivity also requests `dt <= h²/(6D)`, even with
+velocity adaptive stepping off. Very high diffusivity remains subject to the ordinary substep/time
+budgets. Custom GasModule increases must respect this bound; shader-local coefficients cannot
+request CPU-side substeps. Diffusion reads a completed advection snapshot instead of mixing an
+advected center with unadvected neighbors. This uses the existing ping-pong fields with an additional
+rules/stencil dispatch, without allocating new field storage. Coefficient toggles rebuild the appropriate
+transport path. Existing concentration-preserving quality migration is unchanged.
 
-Existing `downsample: 2` reduced the centered inside-view render time to about 4.03 ms for smoke and
-2.97 ms for fire. It launches roughly one quarter as many rays and reconstructs against scene depth;
-this is the immediate tuning option, with some screen-detail loss. Dynamic resolution's default
-16.7 ms target is a render budget, not a total simulation-plus-render frame budget, so it need not
-reduce resolution when total FPS drops below 60. A tighter target can be selected independently.
+Smoke/fire coefficients are converted at the original **h=0.125** reference: legacy neighbor mixing
+rate becomes `D=rate*h²/6`; source/velocity strengths are calibrated with the reference cone volume
+`π*h³/3`. This preserves reference-scale tuning approximately, not pixel-identical source footprints;
+the normalized footprint is separable rather than radial. No subdivision, wind, maximum bounds,
+pressure iteration or time-budget setting was reduced to conceal the growth.
 
-Both raymarch backends now advance past exactly zero-opacity samples before evaluating lighting or
-secondary shadow rays. This removes wasted shading in vacuum/masked holes without changing the
-sample lattice, density, jitter or opacity integration. A transparent-leading-slab regression verifies
-that fixed and adaptive marching still reach later gas and agree, alongside existing inside-camera,
-scene-depth and reduced-resolution tests. This small correction does not remove the expected cost
-of a screen-filling volume; no new sustained-FPS claim is made from the frozen-view experiment.
+| Corrected GPU check | Result |
+| --- | --- |
+| Same particle, h=0.125 and 0.25, sourceStrength=1, dt=1/60 | Mass 0.0166666694 and 0.0166666722; coarse/fine **1.00000017** |
+| Off-center sources, h=0.0625/0.125/0.25/0.5, scale=0/0.1/0.9 | Mass **0.0133333343–0.0133333346**, expected 0.0133333333 |
+| Same sources, specific temperature=3, RGB=(0.2,0.4,0.8) | Heat **0.040000003**, color mass **(0.002666667,0.005333334,0.010666667)** |
+| Continuing source through h=0.125→0.25→0.125 | Mass **0.016666668→0.033333334→0.050000002** |
+| Gaussian diffusion at D=0.00208333, one second, h=0.125/0.25 | Variance growth **0.01249135/0.01233264**, ratio **0.98729**; ideal 6Dt=0.0125 |
+| High D=0.1, h=0.0625, velocity CFL disabled | **45 substeps** for 15 frames; requested/executed **0.25/0.25 s**, skipped **0** |
+| Same high-D fixture | Variance growth **0.14992686**, ideal **0.15**; mass retained **99.9981%** |
+| Source-free quality transfer | Mass retained **99.99746%**; unchanged migration implementation |
 
-## Earlier render-velocity tier-change regression (fixed)
+The coarse diffusion fixture's absorbing edge explains its small variance/mass deficit; this is not
+bit-identical discretization. Semi-Lagrangian numerical diffusion, cell-center moment quantization
+and the existing cell-width-scaled vorticity confinement can still affect appearance across quality.
+These were not rewritten as part of this bounded correction.
 
-Reproduced with `quality-transition-live.test.mjs`: smoke failed during a forced tier change with
-`createBindGroup ... GPUBufferBinding ... buffer ... Required member is undefined`. The volume's
-velocity callback compiled the pressure solver's staggered-face sampler into the fragment shader.
-It retained that solver's face buffers/directory after quality adoption retired them; ordinary volume
-texture/version updates did not rebuild those captured bindings. This is a confirmed tier-transition
-failure, separate from previously unreproduced long-run viewport freezes.
+**Actual smoke-on-wind:** the corrected 15-second run has mass **3.26** at 3.017 s and **1.67** at
+7.017 s (previously 110.74 and 2096.23). At 14.017 s it is **1.67**, with logical bounds **36×24×16**
+(previously about 88×72×80). Wind remains (36,12,0), drag 0.6 and emission 100/s. All three observed
+coarsening/refinement remaps preserve mass to better than **1e-7 relative**. The loop restarts emitter
+time after ten seconds; transition timestamps in raw traces use loop-relative system time. This
+confirms removal of the demonstrated source/spread feedback, not universal invariance of plume shape
+or a new steady-state FPS claim. The diagnostic is fixed-step, with fenced GPU work and periodic renders.
 
-The first correction sampled the already-present cell-centered velocity buffer; the texture path above
-now supersedes it. Two read-only binding
-views (velocity and page directory) plus runtime layout uniforms survive directory/capacity/brick-size
-changes. No new backing storage, velocity copy or compute dispatch is added. Brick-interior samples
-need one page lookup and eight vector reads, versus three staggered interpolations (24 face samples,
-with sparse face-owner lookups) per ray point. Single-source volumes reuse their gathered density
-instead of fetching it again just to weight velocity. Pressure/transport retain their staggered sampler.
-Prepared program clones do not share or retarget the live render-sampler views during background work.
+`gas-quality-physics.browser.test.mjs` promotes the bounded physical fixture to a normal GPU
+regression. The internal runner retains detailed moments; `GAS_QUALITY_ASSERT=1` enforces all seven
+gates. Source-mask tests separately cover both advection methods, transient attributes and source
+death; GasModule tests cover fused snapshot semantics. Shared metric tests verify physical-volume
+weighting and nonresident exclusion. No browser/GPU errors occurred in the corrected physical or
+wind runs. Artifacts: `/tmp/gas-quality-physics-corrected.json`, `/tmp/gas-quality-wind-corrected.json`;
+pre-fix references: `/tmp/gas-quality-final-diagnostic.json`, `/tmp/gas-quality-wind-before.json`.
 
-Targeted tests cover linear interpolation inside/across bricks, sparse/outside zeros, a retained compiled
-sampler after disposing the original directory and replacing brick size/capacity, and smoke/fire
-coarsening/refinement with the same volume material and sampler callback. The replacement-sampler test
-requires zero new compute pipelines after rebind; real plume tests continue for 180 further frames.
+## Preparation graph correction — completion follow-up
 
-A controlled frozen-state A/B on checkerboard at 800x600, one-second-old plumes, stretch 0.25,
-12 warmed render timestamp samples per mode (medians, milliseconds; includes all render passes):
+The startup-tier/storage-only growth changes below are retained. This follow-up targets the remaining
+compiler stalls rather than changing quality, pressure work or time budgets.
 
-| Preset | Stretch disabled | Old pressure-face sampler | Rebound cell-centered sampler |
-| --- | ---: | ---: | ---: |
-| Fire | 1.851 | 2.732 | 2.575 |
-| Smoke | 3.424 | 5.623 | 5.074 |
+### Corrections and measured graph-build CPU
 
-The measured render reduction is about 6%/10%; the incremental stretch overhead falls about 18%/25%.
-These are short fixed-state GPU timings, not sustained-FPS guarantees. They include masking, lighting,
-compositing and any change in ray termination from the reconstructed flow; they are not isolated
-memory-fetch timers or a separate benchmark of temperature curves. Remaining cost includes eight
-buffer reads for trilinear velocity per sampled mask point; existing grid storage is not automatically
-a hardware-filtered texture. That earlier correction did not introduce an additional texture export; the current path does, as measured above.
-The first direct-buffer draft was slower; explicit coordinate/address temporaries, avoiding dynamic
-integer modulo, and the one-page interior path were necessary. Settings and simulation state remained
-fixed within each A/B. Snapshots/images and raw timings are in the internal velocity-sampler diagnostic.
+G2P repeatedly expanded eight trilinear donors for each staggered component and each before/after
+field. Pressure topology similarly expanded six neighbor classifiers, and divergence repeated the
+three directional flux expressions. These are now small fixed-count **GPU loops**, retaining the
+same donors, coefficients, sparse addressing, wet/dry normalization, precision and pass boundaries.
+Stencil traversal remains axis-major, negative then positive. Divergence accumulates positive flux
+then subtracts negative flux in the original axis order. Pressure sweeps remain fixed at 28 in the demo.
 
-## Why temperature modifiers are still cheaper than velocity stretching
+Synchronous setup/analyze/generate CPU is now traced through Three's builder diagnostic hook. This
+excludes asynchronous yields and driver waits, restores all wrapped methods after build completion,
+and preserves existing diagnostic callbacks. Named families and build-stage totals also appear in the
+public benchmark counters. Deep per-build records are saved separately as `graph-builds.json`.
+Compilation concurrency remains bounded at four; compiler cancellation and queued-GPU ownership
+rules are unchanged. No additional per-frame GPU pass or neighborhood data structure was introduced.
 
-The density lookup already returns density plus density-premultiplied temperature, speed and vorticity.
-After normalization, temperature modifiers reuse those values. Scalar/range modifiers need uniform
-arithmetic, and function curves read two uniform-table entries and interpolate. Noise strength,
-contrast and frequency modifiers do not request another spatial neighborhood or evaluate another
-noise field. CPU synchronization can still resample function tables; this is distinct from ray cost.
-
-Velocity direction cannot be recovered from speed magnitude. The **previous** render path fetched eight
-Float32 velocity entries from sparse storage, resolved page addresses and performed software trilinear
-interpolation. The **current** path instead adds one filtered RGBA16F 3D texture instruction, then
-normalizes/projects the result to stretch the same procedural noise coordinates. Hardware still reads
-neighboring texels internally; velocity is not free, but its addressing/filtering is handled by texture
-hardware rather than shader-managed sparse reconstruction. Temperature adds no new spatial lookup at all.
-Single-source volumes also reuse their gathered density; multiple fields/children can add weight reads.
-A zero local mask stretch skips its velocity lookup, unless another render callback explicitly reads it.
-
-All four parameter channels are retained, so speed-only modifiers do not fetch velocity and preserve
-interpolated speed magnitude. `length(interpolatedVelocity)` would differ: opposite neighboring vectors
-can cancel although their speeds are nonzero. The new texture does not silently change that behavior.
-The full vector cannot fit into the already occupied parameter channels. WebGPU has no native signed
-RGB16F storage texture, so the portable layout uses three RGBA16F textures rather than two RGB16F
-textures plus color. See [WebGPU format capabilities](https://www.w3.org/TR/webgpu/#texture-format-caps).
-The third texture is allocated/exported even when a given renderer does not use stretching; optional
-on-demand export is a future optimization, not part of this pass.
-
-Verified implementation references:
-[export and sampling](../../packages/rzmps/src/modules/GasSimulation.ts),
-[volume sampling and modifiers](../../packages/rzmps/src/rendering/renderers/VolumeRenderer.ts),
-[previous buffer reference](../../packages/rzmps/src/spatial/structures/gpu/sparseVolumeSampling.utils.ts),
-[uniform parameter curves](../../packages/rzmps/src/values/GPUDynamicParameterStore.ts).
-
-## Quality-transition adoption
-
-The prepared destination was being discarded when the live plume changed rectangle dimensions during
-compilation. Dimensions are runtime metadata; the prepared directory can cover the latest rectangle
-without constructing another transport bundle. Adoption now updates that metadata when directory
-capacity is compatible and retains the prepared pressure/directory objects.
-
-Transport preparation owns an isolated snapshot of graph state against the final destination directory
-and persistent field/storage nodes. It does not inherit live caches or rebuild the live particle index.
-Both scalar ping-pong identities, velocity transport, source gathering, export and transient visual
-refresh are collected and compiled before readiness. The adopted owner/programs remain referenced by
-the live caches; they are not discarded prototype resources. Replaced programs retire behind the existing
-queue/completion fences, and cancellation disposes candidate-owned programs.
-
-Particle-directory generations caused unnecessary invalidation in two places. Gas graphs now key on
-particle binding generation rather than bounds generations. ParticleSpatialGrid build programs retain
-identity across runtime quality edits; actual storage replacement and structural edits still invalidate
-their programs. Source-index bounds/quality update existing runtime bindings. This is a cache correction,
-not a sparse allocator/domain redesign.
-
-Forced transition submission dropped from approximately **289–320 ms / 64–66 new compute pipelines** to
-approximately **12 ms / 15 pipelines** before the final particle-index cache correction. The remaining
-15 were traced to ten particle/source indexing programs, remap support, two boundary programs and two
-guard prediction programs. The final regression separately asserts transport/source/visual cache
-retention and absence of directory-build pipeline creation at adoption. Final smoke coarsening/refinement submission measured **6.9 / 6.3 ms** and fire **7.8 / 7.0 ms**,
-with **five** new pipelines per transition: remap support, two boundary programs and two guard programs.
-There were **zero** new transport/source/export or particle-directory build programs. The normal suite's
-quality lifecycle measured 5.4 ms submission and the same five pipelines. Boundary/guard work is now
-distinguished from transport/source/export work; this is not a claim that adoption is free.
-
-Structural grid edits before prepare are also synchronized before resident reservation. Otherwise a
-pressure projection created for old brick dimensions could be paired with new capacity storage.
-
-## Sustained work: separate measurements
-
-The shared timestamp instrumentation now labels:
-
-- Occupied support marking and occupied support/maxima reduction.
-- Guard maximum/histogram processing and the receiver ring.
-- Source/request generation, counting and reset.
-- Active-list compaction, ordered admission/release, source masks and directory/layout work.
-- Lighting injection, coarse angular transfer, propagation and isotropic/scattering work.
-- Renderer occupancy compute, scene raymarch/raster work and reduced-resolution reconstruction scopes.
-
-Compute stage results use interval unions. They can still overlap **between** categories, so stage
-medians must not be added. Scene raster work includes other scene objects. Full-resolution raymarch
-and scene draws sharing a pass cannot be isolated by pass timestamps; reduced-resolution nested
-raymarch passes are labelled separately from the outer scene/reconstruction pass. There is no separate
-LightingGrid occupancy/topology GPU kernel: layout work is CPU metadata/resource work; optical-depth
-sampling is part of injection. Those are reported as such rather than inventing GPU categories.
-
-The final stress capture's post-30-second median labelled GPU times were:
-
-| Scope | GPU time |
-| --- | ---: |
-| Lighting injection | 2.46 ms |
-| Lighting propagation | 0.66 ms |
-| Coarse angular transfer | 0.47 ms |
-| Occupied support marking | 0.78 ms |
-| Occupied support/maxima reduction | 0.028 ms |
-| Guard support | 0.10 ms |
-| Active-list compaction | 0.30 ms |
-| Ordered admission/release | 0.16 ms |
-
-These are independently sampled medians over a changing scene mix, not one additive frame breakdown.
-There is no evidence here justifying a broader admission/allocator rewrite.
-
-## Bounded lighting optimization
-
-The measured propagation cost repeated an angular sum over every coarse direction at every fine probe.
-Angular transfer is linear and commutes with trilinear spatial interpolation. The implementation now
-projects coarse directional radiance once at coarse probes, then samples the projected field once for
-each fine probe/bin. Requested probe spacing, direction counts, intervals and update cadence stay intact.
-Topology, program and texture-node identities remain stable when only light values change.
-
-A controlled moving-light test compares the factored implementation against an unfactored reference
-using identical 8-unit bounds, 0.25-unit probes, 12/24/48 directions and eight interval samples.
-Median measured lighting GPU time was **5.55 ms → 3.21 ms**; maximum sampled radiance difference was
-**0.00195**, consistent with the extra half-float rounding. The reference is maintained in the test fixture.
-This is not a promise of the same speedup on every GPU/scene.
-
-Projection intermediates are included in lighting storage estimates. Packed-layout overflow still
-coarsens effective spacing instead of throwing; requested spacing returns as domains shrink.
-No speculative memory cap or quality reduction was added. Dense valid layouts can still use substantial
-memory; an actual allocation/device failure is required before selecting a new memory policy.
-
-## Other long-run viewport freeze: earlier capture did not reproduce it
-
-The earlier aggressive reproduction used Volumetric Smoke / Color Lights at a 1000×750 viewport, DPR 2,
-automatic quality, adaptive resolution, camera repositioning and repeated scene switches through
-Moving Colliders, Color Lights and Checkerboard.
-
-- Runtime: **120.35 seconds**, **5,500 successful renders**, **eight scene switches**.
-- Cell widths: 0.125 and 0.25. Adaptive render scales: 1.0, 0.9, 0.8, 0.7, 0.6 and 0.5.
-- No browser exception, uncaptured WebGPU error, device-loss event or persistent viewport freeze.
-- Final heartbeat/render/update ages: 6.5 / 10.1 / 82.6 ms; the viewport remained responsive.
-- Median frame intervals by successive 30-second windows: 16.7 / 17.7 / 17.3 / 19.5 ms.
-- Reduced-resolution target count stayed at **two or fewer**; peak target attachments ~69.6 MB.
-- Tracked live allocation delta ended near 794 MB and peaked near 853 MB. Lighting storage peaked
-  near 187 MB. These estimates exclude pre-instrumentation allocations, canvas and driver overhead;
-  they are **not total VRAM** and do not establish OOM.
-
-That earlier long-run freeze remains **unreproduced**, with diagnostics preserved for future captures.
-The subsequently reproduced tier-change render-velocity binding failure is described separately above;
-this older stress result does not establish that later regressions were absent or fixed.
-Do not conflate it with the following recoverable stalls:
-
-- Scene switches generated 64–86 ms long tasks in several cases.
-- Entering Moving Colliders generated approximately 178 ms and 227 ms long tasks, consistent with
-  first-use collider/scene resource work. These are scene-switch costs, not evidence of a device freeze.
-- Startup recorded a 60 ms long task in this post-start instrumentation window; full preparation
-  timings are measured separately by the lifecycle benchmark.
-
-Raw stress data: `/tmp/gas-milestone-stress.json` and streamed `.jsonl` checkpoints. The internal runner
-records an independent RAF heartbeat, last successful render/update ages, quality stage, exceptions,
-device errors/loss, live/peak allocation deltas and created/destroyed resources. It serializes only new
-samples, avoiding the artificial periodic stalls caused by the earlier full-history checkpoint code.
-
-## Normal benchmark coverage
-
-The default/full benchmark selection now includes eight stable GPU-only cases. `suite=gas` runs only
-these cases; the short PR selection remains unchanged:
-
-1. Volumetric Smoke steady state.
-2. Volumetric Fire steady state.
-3. Finer, pressure-heavy gas with pressure diagnostics enabled.
-4. Lighting-heavy plume with increased physical probe coverage.
-5. Preparation/startup lifecycle.
-6. Prepared quality-transition lifecycle.
-7. Exact 128→256 resident-capacity lifecycle.
-8. Ten-second sustained smoke measurement.
-
-Steady measurements begin after warmup. Lifecycle preparation/adoption/growth is measured separately
-before the ordinary frame window. Results include CPU submission, GPU execution, fenced wall intervals,
-pipeline creation and workload context: subdivisions/cell width, bounds, active/resident pages/cells,
-particle count, solver diagnostics, lighting levels/probes/effective spacing/storage and render scale.
-Packed-plane and pressure storage retention is checked across capacity growth; migration/rebind phases
-come from the staged allocator. The validated 128→256 case retained the fields exactly, created zero
-pipelines, and measured ~11.1 ms fenced wall time, with ~1.1 ms allocation and ~0.1 ms swap CPU time.
-Sub-millisecond migration submission and storage preparation rounded to zero in that capture; GPU/queue
-execution is not inferred from that timer resolution. The focused fixtures retain stronger deterministic field-transfer tests.
-
-No benchmark asserts machine-specific FPS. Unavailable timestamp data remains null rather than using
-CPU wait as GPU execution. Detailed per-pass and long-run logs remain internal instead of appearing in
-ordinary PR output. See `benchmarks/README.md` for measurement conventions.
-
-## Demo and light API completion
-
-LightRenderer directly accepts dynamic brightness, color, distance, decay and optional power.
-Values use particle normalized lifetime and ID seed. Power is an alternative to brightness using
-Three.js's `power / (4 * PI)` conversion; optional particle alpha is applied afterwards.
-Reused light slots reevaluate every option; inactive slots emit nothing. The GUI and exported presets
-use the flat renderer API and display either brightness or power as the emission control.
-
-Volumetric Fire uses `brightness: time => 4 * (1 - time) ** 2`; the remainder of its simulation is unchanged.
-The exported source retains that function. Gas Flow is replaced by Moving Colliders: a sphere, rotating
-box, sweeping cylinder, polyhedron and floor. The four moving shapes follow different three-dimensional
-paths with translation and rotation, through ordinary automatically discovered scene meshes.
-
-Smoke and fire tests found the same five meshes in fluid and ordinary collision discovery. All four
-moving transforms matched their collected collider transforms, fields stayed finite and rigid motion
-created **zero new compute pipelines** after warmup. Captured smoke/fire images were inspected; the
-visible plume/flame interacts with the moving objects without obvious page gaps. Transform/membership
-checks supplement these finite captures; they do not exhaustively prove all future collision behavior.
-
-## Remaining maintenance scope
-
-Recoverable first-use scene/collider-baking stalls remain measured follow-up work. The older long-run
-freeze is unreproduced, not declared fixed; the later tier-change render binding regression is fixed. Gas-specific lifecycle regressions now have normal benchmarks
-and focused tests. FLIP's long-run particle-count slowdown is outside this gas milestone.
-
-## Remaining rendering diagnostics
-
-The initial standalone preview capture reported render-pass-already-ended errors. The direct preset
-and corrected tier-transition fixtures pass, but that separate preview-path limitation was not rerun
-for this documentation update. The current 12-sample stretch A/B above supersedes the initial
-four-sample draft; the draft's timings should not be used as the current baseline.
-
-The anisotropy audit found the existing sign already correct. Direction names/comments now explicitly
-identify bins as directions toward light and camera rays as directions into the volume. Both are
-negated for the physical HG dot product. Opposite camera views at g=-0.8, 0, +0.8 match
-[Blender's documented convention](https://docs.blender.org/manual/en/2.81/render/materials/components/volume.html):
-negative favors the light-facing view, positive favors the opposite view, zero is isotropic. Changing g
-and camera side triggered zero LightingGrid updates in the static fixture. No propagation/attenuation
-change was needed. This compares conventions; Blender itself was not rendered locally.
-
-The phase fixture isolates lighting with depth clipping and empty-space skipping disabled because it
-contains no occluders. An initial opposite-view capture showed off-center speckles with those paths
-active; the phase direction was unchanged. The existing depth/upsampling regression still passes, but
-that observation is not declared fixed. If it recurs in normal scenes, capture a full-frame depth/skipping
-A/B separately rather than attributing it to HG or changing jitter/resolution to hide it.
-
-### Earlier individually timestamped stages (not a current baseline)
-
-This earlier, pre-sampler-correction full-suite smoke/fire capture used fixed 1/60 updates, 3+3 subdivisions, 0.125-unit cells,
-16 iterative pressure sweeps, full render scale and the harness's 800×150 drawing buffer. Smoke ended
-at 205 active/resident pages (104,960 cells), 67 particles and 32,704 lighting probes (~7.95 MB).
-Fire ended at 149 pages (76,288 cells), 45 particles and 21,024 probes (~5.11 MB). Probe spacing was
-0.25 in both. These are **two timestamped samples each** over evolving states, not a controlled
-before/after comparison or a reliable long-run distribution. Keep the stronger controlled lighting
-comparison above separate. Independently measured medians and overlapping scopes must not be summed.
-
-| Stage, GPU interval ms | Smoke | Fire |
+| G2P build component | Expanded donors | Compact donors |
 | --- | ---: | ---: |
-| Particle source spatial index | 0.070 | 2.100 |
-| Boundary cells | 0.146 | 0.187 |
-| Velocity advection / forces | 0.270 | 4.454 |
-| Velocity source injection | 0.062 | 1.890 |
-| Curl | 0.035 | 3.058 |
-| Vorticity confinement | 0.027 | 2.311 |
-| Pressure topology | 0.328 | 1.981 |
-| Pressure sweeps | 1.826 | 10.736 |
-| Scalar transport / diffusion / decay | 0.116 | 3.359 |
-| Scalar source injection | 0.796 | 2.479 |
-| Solid scalar constraints | 0.070 | 0.016 |
-| Volume field export | 2.942 | 1.054 |
-| Occupied support marking | 0.064 | 0.263 |
-| Support/maxima reduction | 0.104 | 2.461 |
-| Guard support | 1.903 | 0.027 |
-| Admission/release | 0.153 | 0.030 |
-| Active-list compaction | 0.106 | 0.149 |
-| Lighting injection | 3.144 | 0.125 |
-| Lighting angular transfer | 5.009 | 0.132 |
-| Lighting propagation | 1.834 | 7.174 |
-| Renderer occupancy | 0.906 | 1.557 |
+| Setup, ms | 150.2–153.1 | 18.4–20.4 |
+| Shader generation, ms | 94.8–97.0 | 11.3–11.5 |
+| Analyze, ms | about 23 | about 3 |
+| Eight-second fixed replay GPU median / p95 / p99, ms | 6.051 / 6.509 / 6.654 | 5.853 / 6.282 / 6.370 |
 
-The union totals were 24.04 / 44.34 ms compute and 3.10 / 10.12 ms exclusive render for smoke/fire,
-with CPU submission medians 1.6 / 2.6 ms. Even-sample upper medians of separate categories need not
-add to total medians. Small-N variation is substantial; these measurements identify follow-up scopes,
-not proof of a new performance regression or a reason to change admission. Pressure/transport, source
-masks, export/occupancy and lighting remain possible workload-dependent costs. A same-state, adequately
-sampled comparison is required before choosing an optimization. Raw capture:
-`/tmp/volume-appearance-stages.json`.
+That first controlled comparison identified the remaining stencil setup at 50–57 ms and divergence
+setup at 26–30 ms. The final version compacts those graphs too. No interpolation quality was reduced.
+Artifacts for the isolated donor correction: `/tmp/flip-build-before` and `/tmp/flip-build-after`.
 
-### Reported acceleration after a quality decrease: open
+### Fine-tier pressure comparison and baseline binding limit
 
-The reported faster cell-crossing/runaway growth after coarsening has not been reproduced by the fixed-tier
-stage benchmarks. No speculative solver correction was made. Current tracing identifies these candidates:
+The nine-storage-binding failure is corrected. Multigrid residual construction now reuses the
+already-classified pressure-stencil active flag rather than binding marker density and boundary
+classification again. The coarse adapter uses that same active flag and physical face openness.
+Coarse geometry must retain openness even at dry neighboring cells, whose inactive pressure rows
+have zero cached coefficients. This avoids a redundant binding and prevents a dry row from being
+mistaken for a closed physical face. The diagnostic reports **zero programs exceeding eight storage
+bindings** without requesting higher device limits.
 
-1. **Time budget versus wall time.** FluidSimulation computes `safeDt = cfl * h / measuredSpeed`
-   (falling back to the configured maximum speed). ParticleSystem bounds catch-up by
-   `maxFluidSubsteps * step`. When a lagging fine tier exhausts that budget, some time is skipped;
-   doubling h can double the permitted physical catch-up. That can look like acceleration relative to
-   wall time even if velocity units are correct. At cfl=2, speed=20 and four steps, h=0.125 permits
-   ~0.05 s catch-up versus ~0.10 s at h=0.25 for a sufficiently large requested interval. This is
-   conditional on hitting the cap, not proof that normal 60 Hz updates accelerate. The current fixed
-   fixtures measured speed about 2.75–3.02 at h=0.125, where the 1/60 interval is below the CFL limit;
-   these captures therefore do not demonstrate catch-up clipping.
-2. **Source support changes.** Gas source radius has a minimum of one cell width. Coarsening expands
-   that minimum in world units; the sampled source kernel may then inject over a larger physical volume.
-   Measure integrated source density/heat and support at fixed particle state before deciding whether
-   normalization or a different sub-cell source model is appropriate.
-3. **Resolution-dependent confinement and convergence.** Vorticity confinement intentionally includes
-   the Fedkiw cell-width factor; derivatives and fixed pressure-sweep budgets also change discretization
-   error with h. They can alter motion without an explicit world-velocity scale error.
+On a frozen real teapot state, cell width 0.03125 and 256 slots, each row restores identical input
+pressure before seven timestamped solves. Compilation is excluded. Cold and warm starts are separate.
 
-Existing transfer tests preserve conservative scalars and MAC face averages. Pressure starts are cleared
-for a replacement projection, so stale ordinal pressure alone is not established as the cause.
-Backtracing uses `worldPosition - worldVelocity * dt` before converting to cell coordinates. Next isolate
-a source-free translation pulse across one 2× coarsening and compare world-space displacement per summed
-executed solver time, wall time, incoming/outgoing momentum, integrated mass/heat and post-projection
-divergence. Then repeat with sources/forces enabled individually. Record requested/executed/skipped time
-and asynchronous maximum-speed observations alongside the quality event to distinguish these candidates.
+| Pressure method / work budget | Warm GPU median, ms | Warm residual | Cold GPU median, ms | Cold residual |
+| --- | ---: | ---: | ---: | ---: |
+| Iterative / 28 | 2.532 | 0.00002289 | 2.527 | 0.02361 |
+| Multigrid / 28 | 5.853 | 0.0001431 | 5.841 | 2.031 |
+| Multigrid / 56 | 10.321 | 0.00003815 | 10.358 | 0.4615 |
+
+**No multigrid promotion is justified by this liquid workload.** It fails the equal-residual target
+while costing more; reporting fewer fine sweeps as a speedup would be misleading. Warm pressure is
+retained across compatible growth. The configured tolerance is still zero, so there is no existing
+positive target authorizing fewer production sweeps. All variants have zero non-finite samples.
+Warm maximum projected physical divergence remains approximately 3 because this fixture includes
+nonzero marker-density restoration. The cold 56-budget MG case reaches 3.416; this is additional
+reason not to use it as the liquid default. Fine pressure remains an independently measured future
+target; cross-stage particle/cell-address reuse should precede ordinary arithmetic micro-optimization.
+Raw matched-state results: `/tmp/flip-pressure-compatible/pressure.json`.
+
+### Correctness coverage
+
+All five focused browser suites pass: exact same-tier capacity migration, moving static/translating/
+rotating/accelerating walls, hydrostatic/outlet pressure, source-free 2× coarsening/refinement, and gas
+pressure/boundary/resource lifecycle. The baseline-storage fixture additionally checks analytical
+constant and linear face fields, before/after velocity, brick seams, and wet/dry donor normalization,
+then executes FLIP multigrid under the default eight-binding limit. No tolerance was relaxed.
+Unit coverage verifies synchronous-build accounting, no nested double counting, diagnostic-hook
+restoration, compiler cancellation, storage lifetime, capacity limits and startup policy.
+
+### Final fixed replay and real-RAF acceptance
+
+The final fixed replay runs 2,700 updates at 1/60 second through 45 simulated seconds. Foam, spray,
+automatic tipping, rendering resolution and all quality/time controls remain enabled and unchanged.
+The real-RAF run follows separately with no per-frame fence. These are the same preset/event controls,
+not bit-identical trajectories: asynchronous tier adoption and timestep scheduling differ. The isolated
+sampling tests above establish numerical correctness independently of the performance comparison.
+
+| Measurement | Prior 45 s RAF checkpoint | Final fixed replay | Final 45 s RAF |
+| --- | ---: | ---: | ---: |
+| GPU median / p95 / p99, ms | 9.314 / 14.840 / 56.379 | 9.247 / 13.560 / 14.246 | 9.630 / 13.611 / 14.564 |
+| CPU submission median / p95 / p99, ms | 3.2 / 3.9 / 10.6 | 2.9 / 3.6 / 4.1 | 3.0 / 3.5 / 4.4 |
+| GPU frames >16.67 ms | 78 / 2358 | 0 / 2700 | 8 / 2687 |
+| GPU maximum, ms | 152.134 | 15.433 | 26.007 |
+| RAF p95 / p99, ms | 16.8 / 133.3 | not RAF | 16.7 / 16.8 |
+| RAF maximum, ms | 283.3 | not RAF | 33.4 |
+| Updates executing multiple substeps | 85 | 0 | 22 |
+| Maximum substeps per update | 4 | 1 | 2 |
+| Skipped simulation time, seconds | 1.726 | 0 | 0 |
+| Recorded long tasks ≥50 ms | 27 | 0 | 0 |
+
+The fixed replay's fenced loop intervals are 15.7 ms p95 / 34.4 ms p99, with a maximum 89.2 ms;
+these include background preparation and queue waits, and must not be reported as RAF intervals.
+Final real-RAF pressure median / p95 / p99 is **1.655 / 2.274 / 2.767 ms**. Typical pressure cost is
+within budget without changing its 28 sweeps. The final trace measures stencil setup **10.6–12.6 ms**
+and generation **3.2–3.4 ms**, down from 50–57 ms setup. Divergence setup is **11.6–12.6 ms**,
+down from 26–30 ms. Remaining occasional unnamed setup slices reach about 29–32 ms; G2P setup can
+still reach 21–23 ms. These can miss a refresh, but do not produce the former multi-frame blocking
+and 3–4-substep feedback loop in the measured interval.
+
+Compiler preparation begins inside the existing one-second quality hysteresis window. The final
+RAF's initially requested finer candidate prepared in **875.9 ms** and was not adopted after the
+observed workload changed. The later coarser candidate prepared in **890.9 ms**, then adopted
+**100.1 ms** after readiness at 13.662 s. This is readiness plus unchanged policy timing, not another
+compiler hitch. Exactly one tier was adopted, 0.0625 → 0.125; adaptation remains free to change later.
+Started/ready timestamps and durations are exposed separately; a new request clears stale readiness
+metrics so timestamps from different candidates cannot be paired accidentally.
+
+Both final runs report zero denied pages, non-finite samples, clipped surface particles, triangle
+or brick overflow, browser errors and GPU errors. Final real-RAF context: **10,497 liquid markers**,
+241 spray markers, 255 foam markers / 543 foam children; peak reported simulation residency 62 pages
+of 4096 cells, capacity up to 128, 32,512 reconstructed triangles. Reconstruction remains at its
+configured quality. Its 763 surface bricks are a separate grid from the simulation pressure pool.
+Maximum post-projection divergence at the final evolving checkpoint is 3.027 (the density-relaxation
+target is nonzero), mean 0.392 and residual 0.07537. These are not substituted for the source-free,
+hydrostatic and moving-wall regression tolerances.
+
+The idle RAF baseline is 16.7 ms median/p95/p99. Chrome's 0.1 ms timestamp quantization means the
+literal `>16.67` RAF counter includes ordinary 16.7 ms refreshes. The unmodified counters remain
+available; actual delayed-frame context is **14 RAF intervals >20 ms**, five >33.33 ms and a 33.4 ms
+maximum. No universal every-frame 60-FPS guarantee is claimed. The milestone's measured goal—remove
+avoidable startup/capacity compilation and substantially reduce compiler-induced catch-up/tail
+latency without discarding time or reducing quality—is met on this representative workload.
+
+A first final RAF attempt completed stepping/teardown but timed out returning its monolithic deep
+DevTools result; it is excluded from acceptance statistics. The browser remained responsive and its
+simulation clock reached 45.007 s. Per-frame compiler records previously duplicated all cumulative
+family counters (the fixed replay alone produced 82 MB of frame JSON). The runner now returns compact
+metadata, transfers frames in batches of 120, and keeps full build stages in their separate file.
+Per-frame records still preserve active compiler families, current capacity/quality preparation,
+requested/executed/skipped time and per-substep GPU costs. Chunked final export completed normally.
+This was a diagnostic finalization issue, not evidence of a viewport/device freeze.
+
+Artifacts: `/tmp/flip-final-replay`, `/tmp/flip-final-raf-chunked`,
+`/tmp/flip-final-correctness.log` and `/tmp/flip-final-baseline-storage.log`.
+The five GPU suites, ten focused units, package/declaration build, TypeScript and focused lint pass.
+No general sparse-domain/admission algorithm was redesigned. Future work should address the remaining
+occasional setup slices or reuse particle/cell addressing across P2G, separation and surface support
+only if another measured workload requires more throughput. Multigrid remains unpromoted until a
+liquid workload demonstrates equal-accuracy benefit.
+
+## Startup tier and storage-only capacity — preceding measurements
+
+At this preceding checkpoint, startup and compatible resident growth were corrected. The full
+frame-pacing milestone was **not yet closed**: quality-specific graph compilation and later spill/catch-up tails remain. No pressure sweep,
+catch-up/substep limit, particle lifetime, reconstruction resolution or adaptive quality limit was reduced.
+
+### Initial tier and deterministic startup replay
+
+Preparation now selects a normal adaptive tier before particles are populated. Finite configured
+maximum extent is the first coverage estimate; otherwise emitter support and non-thin collider extent
+provide evidence. Unknown support keeps the configured minimum. The estimate uses one geometric tier
+finer than predicted coverage, clamped to the existing min/max policy. It only seeds the empty grid;
+subsequent refinement/coarsening, hysteresis and automatic bounds remain enabled as configured.
+For the teapot's maximum extent 10, reference side 8 gives initial cell width 0.0625 rather than
+0.015625. Subdivisions remain 3+4. Static-quality and already-populated systems are not reseeded.
+
+Two fixed 480-frame, 1/60-second replays use the current full teapot, foam and automatic tipping.
+GPU columns are timestamp interval unions; CPU is submission time. Fenced loop intervals are **not RAF**.
+
+| First eight simulated seconds | Finest-first | Predicted startup |
+| --- | ---: | ---: |
+| GPU median / p95 / p99, ms | 6.073 / 16.077 / 38.778 | 6.131 / 6.720 / 6.939 |
+| Pressure median / p95 / p99, ms | 1.705 / 4.893 / 16.178 | 1.548 / 1.946 / 2.083 |
+| CPU median / p95 / p99, ms | 2.8 / 6.6 / 8.6 | 2.9 / 3.7 / 4.9 |
+| Fenced loop interval p95 / p99, ms | 49.9 / 155.9 | 14.9 / 84.5 |
+| GPU frames >16.67 ms | 23 / 480 | 0 / 480 |
+| Initial → final cell width | 0.015625 → 0.0625 | 0.0625 → 0.0625 |
+| Adopted quality changes | 1, frame 59 | 0; final startup tier present immediately |
+| Peak reported resident pages / resident backing capacity | 165 / 512 | 55 / 128 |
+| Peak resident cells, pages × 4096 | 675,840 | 225,280 |
+| Final cumulative pipeline creations | 313 | 273 |
+| Maximum executed substeps per update | 3 | 1 |
+
+The before replay adopted its eventual tier after 2.671 seconds of measured wall time (approximately
+one simulated second). These are deterministic timesteps/events, not bit-identical particle trajectories:
+changing initial quality intentionally changes early numerical evolution. Resident telemetry is asynchronous;
+the maximum of each counter is reported independently. Final mean projected divergence is 0.2984 before
+and 0.2891 after, maximum approximately 3 in both (the marker-density correction target), with zero
+non-finite samples. Both surfaces report zero clipped particles and zero triangle/brick overflow.
+The three-step finest-start workload also includes cell-width/CFL demand; it must not all be attributed
+to compiler-induced catch-up. Internal artifacts: `/tmp/flip-startup-before` and `/tmp/flip-startup-after`.
+
+### Program-invariant resident growth
+
+FLIP now follows the existing storage-only sparse/pressure capacity path: allocate backing in short
+slices, copy retained state, retarget storage nodes/uniforms, then adopt behind the staged fences.
+The live grid, projection, transfer programs and pressure warm start keep identity. Candidates never
+retarget live storage during preparation, and old resources remain owned through queued use.
+
+- **Runtime state:** resident capacity, directory/backing dimensions, buffer identity, physical field
+  extent, packed second-plane offset, face/stencil capacity and dispatch sizes. The packed FLIP
+  before-velocity plane now uses the runtime field-stride uniform, including in already-compiled shaders.
+- **Structural state:** brick/cell layout and interpolation algorithm, particle-buffer schema,
+  collider representation, solver algorithm and reduction hierarchy depth. Reduction hierarchy shape
+  is reserved once for the device-reachable capacity; its actual processing remains compact/indirect.
+  Quality replacement still creates distinct graphs; it is not claimed to be storage-only.
+
+Forced **128 → 256** resident growth: **zero new pipelines**, identical program/grid/projection objects,
+exact retained pressure, velocity, before-velocity and boundary planes, and zero new tails/sentinels.
+An old compiled accessor correctly reads the relocated before-velocity plane after adoption.
+Preparation wall time is **3.2 ms**, allocation **0.4 ms**, storage preparation **0.1 ms**, graph construction
+and compilation **0 ms**, migration submission **0.3 ms**, binding/swap **0.2 ms**, adoption CPU **0.5 ms**,
+and the measured adoption/fence envelope **12.5 ms**. Components are overlapping instrument scopes,
+not additive. The historical liquid capacity lifecycle took roughly four seconds; its different
+512→1023 workload is context, not a matched speedup ratio. New exact fixture:
+`apps/demo/tests/fluids/flip-capacity.browser.test.mjs`; raw log `/tmp/flip-capacity-test-3.log`. The final rerun independently confirms zero pipelines and exact
+fields, with preparation **1.0 ms**, adoption CPU **0.5 ms** and fenced envelope **13.7 ms**
+(`/tmp/flip-capacity-final.log`); these small allocations vary with driver/cache state.
+
+### Full real-RAF reliability and remaining build stalls
+
+The final 45-second full teapot run includes foam, steady accumulation, tipping, spills and three quality
+adoptions. No per-frame fence is inserted. Resolution is 800×600. GPU/browser errors: zero.
+
+| Full interactive workload | Previous retained run | Current run |
+| --- | ---: | ---: |
+| GPU median / p95 / p99, ms | 8.66 / 55.10 / 79.75 | 9.31 / 14.84 / 56.38 |
+| CPU median / p95 / p99, ms | 3.3 / 7.6 / 32.4 | 3.2 / 3.9 / 10.6 |
+| RAF p95 / p99, ms | 66.7 / 133.3 | 16.8 / 133.3 |
+
+The earlier run is retained contextual evidence, not an alternating paired statistical comparison.
+Current GPU frames above 16.67 ms: 78/2358; four-step updates remain, with 85 updates executing more
+than one substep. Single-substep GPU median/p95/p99 is **9.27/13.73/15.67 ms**. Pressure per substep
+is **1.58/2.53/8.73 ms**. Existing catch-up limits skip 1.726 seconds in this run; no new policy discards
+time, but this is a remaining correctness/reliability limitation, not a successful no-skip result.
+
+Compilation remains bounded to four in-flight programs and yields between programs; boundary program
+preparation now uses the same scheduler rather than a bulk build. Public benchmark counters expose
+active families, submission CPU and total compile wall time. Three's asynchronous graph build means
+submission CPU is **not graph-build CPU**. Compile wall also includes yields/driver waits and must not
+be presented as pure CPU. Real long tasks of roughly 51–173 ms still recur while preparing quality
+programs; one submission reaches 199 ms during late spill. G2P compilation spans 717–1188 ms wall;
+late pressure preparation spans 887–1094 ms. These are overlapping tasks and cannot be summed.
+The late preparation overlaps four-step updates and GPU frames around 150 ms. It does not establish
+that all that GPU cost is compiler work: evolving topology and sustained solver demand also contribute.
+
+**Former corrective target (addressed above):** isolate setup/analyze/generate CPU within G2P and pressure programs,
+then factor genuinely reusable interpolation/program units. Three already yields between build stages;
+a single expensive stage can still monopolize JS. Also distinguish first-use rebuild on adopted storage
+from queue/backpressure when late spill grows capacity. Do not increase compiler concurrency, lower
+pressure accuracy, suppress time, or tune ordinary ~1 ms stages to conceal this tail.
+Internal artifacts: `/tmp/flip-pacing-after/{summary,frames,spikes,resources}.json`.
+
+### Validation and remaining acceptance
+
+The forced growth fixture, source-free 2× coarsening/refinement time/mass/momentum invariant,
+same-tier exact migration, hydrostatic/outlet projection and static/translating/rotating/accelerating
+wall fixtures pass without relaxed tolerances. The quality invariant timed out in a concurrent browser
+run, then passed alone; GPU reliability checks must run sequentially. Startup policy, capacity bounds,
+resource lifetime and compiler cancellation/bounded-concurrency units pass. Build, TypeScript and
+focused lint checks pass. Generated API references were refreshed; documentation build, all 35
+documentation tests and 201,110 local link/anchor checks pass.
+
+The teapot still uses tolerance 0 and fixed 28 pressure sweeps: there is no existing positive convergence
+target authorizing an early exit. Warm pressure survives compatible growth; newly activated pages alone
+are reset, while a changed physical boundary still invalidates the old gauge. Pressure dispatch follows
+the compact resident topology, with per-cell wet-marker checks; admitted receiver pages can still incur
+lane/stencil overhead. Narrowing this further requires a correctness-tested pressure-specific active set.
+Multigrid should only replace iterative after matched frozen-input residual/divergence results justify it.
+The opt-in `LIQUID_PRESSURE=1` diagnostic uses a fixed **0.03125** cell width, 256 resident-slot
+capacity and 120 fixed warmup frames, then restores the same input pressure before each of seven
+measured solves. Iterative 28 sweeps: retained-pressure **2.614 ms** GPU median, residual **0.00003183**;
+cold **2.786 ms**, residual **0.051734**. Both have zero non-finite samples and maximum physical divergence
+approximately 3, reflecting the nonzero density-restoration target rather than a zero-divergence fixture.
+Mean projected divergence is 1.939 in this particular frozen plume. There is no positive configured
+residual target permitting fewer sweeps; warm-start preservation demonstrably matters.
+
+The nine-binding multigrid failure at this checkpoint is resolved by the completion follow-up above.
+Results: `/tmp/flip-pressure-after/pressure.json`. A final eight-second fixed startup replay explicitly
+retains requested/denied admission counters: **zero denied pages in all 480 updates**, maximum observed
+requested demand 52 pages, zero GPU/browser errors. These are asynchronous diagnostics, not a GPU assertion
+after each individual substep. Artifacts: `/tmp/flip-startup-admission`.
+**At that checkpoint:** large quality graph-build stalls and late catch-up tails were still open;
+the current completion measurements above supersede this status.
+
+## GPU memory optimization — preceding pass
+
+The three prior correctness gates are closed at their original tolerances. Shared scratch leases,
+compact Surface Nets output, independent reconstruction/output reservations, finite gas pool ceilings,
+and latency-aware storage-only growth are implemented. Velocity/color/parameter exports remain automatic;
+lighting settings, simulation precision and configured reconstruction quality are unchanged.
+
+**Acceptance is not an unconditional 60-FPS or deterministic tail-latency success.** The memory changes
+are measurable and focused correctness checks pass, but real RAF spikes remain. The measurements below
+separate controlled storage comparisons from evolving, adaptive interactive runs.
+
+### Correctness closure and ownership
+
+- Ambient scattering no longer adds already-unoccluded ambient irradiance back onto itself. The
+  dense-medium ambient energy assertion and the remaining directional/probe/environment tests pass.
+- Source-mask tests now put nonzero momentum on a splat that actually intersects cell centers, and
+  read the active velocity node rather than assuming a particular backing attribute. Masked and
+  exhaustive gathers agree for both advection methods with a nonzero velocity signal.
+- The bounds-transfer test isolates translation from cell-width-dependent marker-density relaxation.
+  Changing the outer pressure boundary invalidates its old pressure gauge. The original 2% speed
+  threshold passes; the separate physical density/hydrostatic and 2× quality-transition tests remain.
+- A prepared solver borrows compatible face/before-face/stencil backing; pressure, convergence,
+  diagnostic reductions and multigrid correction state stay generation-specific. Compilation never
+  executes the candidate. Real old/new invocations execute in queue order. Reference-counted leases
+  outlive both submitted commands and compiler ownership; native storage dies only at the last release.
+- An oversized donor can serve a smaller candidate during compilation. After adoption and retirement
+  of the old generation, scratch is compacted once to the target layout. Rebinding keeps compute
+  templates; topology/faces are reconstructed before use. A second queue fence protects the adopted
+  generation's final uses of the borrowed backing. This is transition-specific workspace sizing,
+  not a utilization-driven shrink loop. Disposed donors are never reused.
+- The GPU lease fixture verifies shared identity, compilation with oversized backing, tight replacement
+  and exact final-owner destruction after capacity migration. Explicit `growBrickPool` now awaits
+  the requested tier even if an intermediate preparation was already in flight.
+
+The 11-fixture focused set passes across the final run plus targeted reruns: hydrostatic/outlet,
+comoving walls, source gathers, lighting, 2× liquid/gas migration, same-tier exact migration,
+anisotropic reconstruction, both surface extractors, attachment and teapot/spout/spray. One same-tier
+browser target closed during the combined run; its bounded rerun passed. No tolerance was relaxed.
+Compacted output IDs are compared by world-space dual cell; they are intentionally not stable GPU
+addresses. Additional capacity, native accounting, category-history and staged-fence unit tests pass.
+
+### Pressure and preparation changes
+
+Quality preparation waits for needed capacity preparation/adoption rather than canceling admission.
+A quality candidate cannot block resident growth. Coarsened FLIP reservations count current resident
+world support plus a complete one-brick receiver ring in the target lattice, rounded to a normal
+geometric tier and clipped only by physical/native ceilings. That small metadata readback happens
+in background preparation; the admission/guard kernels are unchanged. Refinement retains its
+conservative nested support reservation and rejects unrepresentable demand.
+
+Gas's growth ceiling is the geometric tier covering finite admissible positions:
+`product(floor(maxBoundsAxis / worldBrickSize))`, bounded by device/user limits. Fixed domains use
+their actual extent. Existing backing is not aggressively shrunk; unbounded domains keep dynamic
+growth. Storage-only gas growth uses a two-frame minimum forecast lead plus measured preparation
+time, instead of the old 0.75-second compiler allowance. The current FLIP capacity path is storage-only too;
+its conservative forecasting lead is retained pending separate tuning.
+The previous preview implementation briefly blocked admission; those results were rejected and are
+not evidence of an accepted saving.
+
+### Surface-buffer audit
+
+All numbers are full-precision element widths. Capacities below describe the **new** owner; actual
+peak generated vertices/triangles and capacities are emitted in the memory trace and pool summaries.
+
+| Buffer | Stride / capacity | Producer → consumer | Lifetime and reuse |
+| --- | --- | --- | --- |
+| Primary packed field | 48 bytes / reserved cell | reconstruction/filter → extraction, shading, attachment | Persistent final field; includes support, color, momentum and curl |
+| Filter scratch | 32 bytes / reserved cell | field filter → next filter | Dead after filtering; reused by topology smoothing when it fits |
+| Positions | 16 bytes / output vertex | extraction/smoothing → shading, mesh | Persistent current mesh; compact IDs |
+| Normals | 16 bytes / output vertex | attribute reconstruction → material | Persistent current mesh |
+| Colors | 16 bytes / output vertex | attribute reconstruction → material | Persistent current mesh |
+| Velocity | 16 bytes / output vertex | attribute reconstruction → flow shading | Persistent current mesh |
+| Curl/deformation | 16 bytes / output vertex | attribute reconstruction → activity shading | Persistent current mesh |
+| Smoothing intermediate | 16 bytes / output vertex | paired Laplacian passes | Aliases dead filter scratch; separate backing only if it cannot fit |
+| Topology masks | 8 bytes / reserved cell | extraction → adjacency smoothing | Rebuilt every extraction |
+| Cell-to-output map | 4 bytes / reserved cell | vertex compaction → stitching/smoothing | Rebuilt every extraction; zero means absent |
+| Triangle indices | 12 bytes / reserved triangle | stitching → indirect indexed draw | Grows independently from field pages |
+
+Field pages and output topology have separate high-water marks and geometric staged growth with
+headroom. A wider reconstruction footprint therefore does not multiply every output buffer. The
+standard 2048-page case formerly allocated six 16.78-MB output/intermediate buffers; a 98,304-vertex
+output uses five 1.57-MB final buffers and a 4.19-MB map, with smoothing sharing filter scratch.
+The representative adaptive run retained a higher output high-water mark, recorded below; its sampled
+peak useful output was 28,398 vertices and 56,944 triangles. The conservative vertex/triangle ratio
+and partial-field coverage forecast still leave room for further output-reservation improvements. Neither
+resolution, anisotropy, interpolation nor lighting precision was reduced. Custom triangle/cell
+extractors retain their layouts; compact extractors opt into the documented map contract.
+
+### Controlled storage comparisons
+
+Run the same fixture with `MEMORY_REPLAY=1 MEMORY_CONTROLLED=1 MEMORY_SECONDS=10`; add
+`MEMORY_REFERENCE=1` for the reference. The script fixes CPU identity seed 137, 600 simulation
+steps at 1/60 s, recorded teapot/domain events, cell width, resident preparation and viewport.
+Volumes use fixed full render resolution rather than an FPS-dependent adaptive scale. The reference
+uses independent pressure scratch and worst-case per-cell surface output reservations, including
+a 524,288-triangle reserve. It is a controlled variant of the current implementation, **not an old
+checkout or a byte-exact replay of every simulated field**. Parallel floating-point accumulation still
+permits small state differences; do not interpret small timing differences as causal speedups.
+
+Timed stepping precedes separate capacity/coarsen/refine lifecycle stress. All bytes below are decimal
+MB of requested native storage, not driver residency/RSS. GPU figures are interval unions per frame;
+CPU submission and RAF intervals are separate. Diagnostic staging allocations are included in counts.
+
+| Reference → optimized | Liquid | Smoke | Fire |
+| --- | ---: | ---: | ---: |
+| Steady total MB | 522.75 → 503.75 | 131.69 → 131.69 | 287.07 → 287.07 |
+| Total peak MB | 1288.23 → 1269.22 | 171.21 → 132.01 | 582.78 → 562.89 |
+| Steady pressure scratch MB | 189.55 → 189.55 | 19.60 → 19.60 | 39.21 → 39.21 |
+| Independent pressure scratch peak MB | 568.27 → 568.27 | 58.81 → 19.64 | 235.24 → 117.62 |
+| GPU union median ms | 9.13 → 9.09 | 17.43 → 6.77 | 28.22 → 7.12 |
+| GPU union p95 ms | 13.45 → 13.67 | 25.26 → 7.43 | 36.59 → 7.64 |
+| GPU union p99 ms | 14.16 → 14.36 | 27.31 → 7.71 | 40.15 → 7.86 |
+| CPU submission median ms | 3.40 → 3.30 | 2.00 → 2.00 | 3.20 → 3.20 |
+| CPU submission p95 ms | 4.00 → 4.00 | 2.50 → 2.40 | 3.90 → 3.70 |
+| CPU submission p99 ms | 4.70 → 4.60 | 3.20 → 2.80 | 4.50 → 4.30 |
+| RAF interval p95 ms | 16.80 → 16.80 | 33.40 → 16.80 | 33.40 → 16.70 |
+| RAF interval p99 ms | 16.80 → 16.80 | 33.40 → 16.80 | 50.00 → 16.80 |
+| Teardown remainder MB | 47.04 → 47.04 | 9.14 → 9.14 | 24.92 → 24.92 |
+| Native allocation / destruction count, reference | 5,196 / 4,652 | 1,439 / 1,114 | 2,501 / 2,038 |
+| Native allocation / destruction count, optimized | 5,423 / 4,879 | 2,856 / 2,531 | 5,482 / 5,019 |
+
+Smoke pressure scratch peak falls about 58.81 → 19.64 MB at the same capacity. Fire falls
+235.24 → 117.62 MB. Liquid's forced 512→1023 resident replacement still needs a larger workspace
+than its live solver can supply; that controlled peak remains 568.27 MB. Its controlled output
+reservation falls 53.37 → 34.37 MB. Larger live liquid savings appear during real coarsening below.
+
+Checkpoint wall intervals, reference → optimized (not CPU-only or GPU-only timings): liquid resident
+512→1023 preparation 4116 → 3955 ms, prepared→adopted checkpoint 0.5 → 0.8 ms, and fenced refinement
+1092 → 1168 ms. Fire capacity preparation is 9.8 → 12.7 ms and the adoption checkpoint 0.4 → 0.6 ms;
+fenced refinement is 813 → 556 ms. Smoke's fenced refinement is 688 → 550 ms. These include queue
+completion and lifecycle bookkeeping; they do not establish an equivalent improvement in a single
+adoption frame. Compatible gas capacity growth still reports zero new compute programs in the
+correctness fixture. Liquid's capacity compiler was removed by the current milestone above; these timings are historical.
+
+The fire reference has an unexplained ~28-ms median/36.59-ms p95 versus ~7.12/7.64 ms optimized.
+That is too large to credit to these storage changes: the fixed-tier steady solver math is identical,
+and both report identical steady requested bytes. Treat it as an unresolved timing discrepancy, not
+an established fourfold speedup. The controlled liquid GPU p99 moves 14.16 → 14.36 ms, too small
+for a single pair to establish a regression. Strict no-tail-regression acceptance therefore remains
+open; this pass supplies repeatable controls rather than claiming that noisy timing proves it.
+
+**flipFluid:** current 885.92 MB, retired 383.30 MB at total peak. resident pages 12/512 (2.3%); surface pages
+260/512 (50.8%). Prepared/retired sampled peaks 764.41 / 383.04 MB.
+
+**volumetricSmoke:** current 132.01 MB at total peak. resident pages 226/512 (44.1%); lighting probes
+294,912/294,912 (100.0%). Prepared/retired sampled peaks 0.00 / 0.00 MB.
+
+**volumetricFire:** current 562.89 MB at total peak. resident pages 220/1,024 (21.5%); lighting probes
+294,912/294,912 (100.0%). Prepared/retired sampled peaks 0.00 / 0.00 MB.
+
+States distinguish current, prepared, retired-awaiting-fence and canceled compiler-owned storage in
+new traces; shared allocations are charged once, preferring their live owner over canceled borrowers.
+A zero sampled prepared/retired maximum does not mean no brief overlap: sampling is 10 Hz. The
+exact total-peak allocation set and independent category peaks are retained. Category maxima now
+replay annotation history rather than retroactively applying a resource's final owner to its lifetime.
+
+### Current adaptive liquid and normal gas reservations
+
+The latest 45-second adaptive teapot memory run records **313.32 MB steady,
+1343.52 MB peak**, versus the previous attribution pass's 383.06 / 1669.11 MB.
+Steady pressure scratch is 47.39 MB; at the exact
+global peak it is 568.27 MB versus 757.82 MB previously.
+Peak state is current 552.17 MB, retired 791.36 MB.
+Teardown returns to 47.05 MB, with no device/page errors. These are
+independent evolving runs; they support the footprint accounting but are not matched physics/FPS A/Bs.
+
+- resident pages: 35/128 useful (27.3%), 96.12 MB.
+- surface pages: 851/2,048 useful (41.6%), 131.57 MB; 10,640 generated / 393,216 reserved vertices, 21,104 /
+131,072 triangles.
+
+The earlier fixed-step live-domain gas comparison (adaptive renderer, not the matched comparison)
+records smoke 231.60 → 163.99 MB and fire 190.38 → 122.58 MB after moving from 1024 to 512 reserved
+pages. Their final resident counts were 224/512 and 249/512 with zero denied pages at the endpoint.
+Do not infer zero denied pages throughout startup from that endpoint alone. These normal reservation
+results justify the shorter storage-only forecast; they are not a matched raymarch performance claim.
+
+### Remaining frame pacing and necessary memory
+
+A separate 45-second real-RAF teapot run retains foam, spray and automatic tipping. GPU
+median/p95/p99 are 8.66/55.10/79.75 ms; CPU
+3.30/7.60/32.40 ms; RAF p95/p99
+66.70/133.30 ms. Peak/native end memory is
+1364.49/312.80 MB and teardown
+46.53 MB. No device errors or non-finite pressure samples were
+reported. The strict 60-FPS reliability gate is still open.
+
+The remaining dominant peak is a real large-capacity migration plus compiler/fence retention, not
+unexplained permanent storage. Different-capacity backing cannot always be borrowed, particularly
+when the replacement is larger than the active arena. Persistent pressure/transport fields and
+queued old bindings must coexist until migration finishes. Avoid another full scratch generation
+before addressing that dependency; stable/chunked workspace backing would be a larger future change.
+
+Other next work: correlate those remaining compiler/queue episodes with substep bursts; tighten
+surface high-water predictions without allocation churn; resolve the controlled fire timing outlier
+with alternating replay order and GPU-stage traces before making performance claims. Dense render
+exports, velocity and LightingGrid probes remain intentional feature cost. No opt-in export mechanism,
+lighting reduction, lower precision, arbitrary memory cap or aggressive shrinking was introduced.
+
+Detailed traces remain under `/tmp/fluid-memory-*`, outside ordinary PR output. Public `Benchmarks`
+remains the source of compact memory/capacity counters. TypeScript, targeted lint, documentation
+reference generation and the focused tests are checked separately from these timing experiments.
+
+## Previous shared memory attribution pass
+
+The native audit now shares one semantic adapter for liquid and gas. Values below are **requested
+GPU allocation bytes**, expressed in decimal MB, not driver residency or process RSS. Installation
+occurs after renderer initialization, before fluid preparation. Construction can therefore read zero
+without implying that the renderer has no allocations. The renderer/device stay alive during teardown.
+
+Run `node apps/demo/benchmarks/fluids/diagnostics/fluid-memory.mjs /tmp/fluid-memory`.
+`MEMORY_PRESETS`, `MEMORY_SECONDS` (45 by default), and `MEMORY_TRANSITIONS=0` select focused runs.
+Ordinary RAF timing precedes separate forced capacity/coarsen/refine stress; no per-frame fence is added.
+Full allocation identities, annotations, time series and lifecycle traces stay in the selected temporary
+output directory. The root public `Benchmarks` tree exposes a `memory` collector with category bytes,
+prepared/retired bytes and per-pool capacity, useful elements, utilization and bytes per element while
+this diagnostic is attached. The UI does not own another set of measurements.
+
+The generic tracker uses weak resource/CPU-attribute identity associations. It records native create,
+destroy, pipeline and fence events, owner/purpose/generation, independent category maxima, and the exact
+allocation set at the global total peak. Packed scalar/color/curl storage is divided into non-overlapping
+segments; aliases are counted once. Snapshot category totals equal the physical requested-byte total.
+First ownership discovery is backdated to creation; later lifecycle changes retain their own timestamps.
+
+### Measured footprint and frame pacing
+
+Same current teapot, smoke and fire presets, native Chromium/WebGPU, 800 × 600, 45 seconds each.
+These are live, evolving workloads, not deterministic identical-density A/B states. Random emission,
+catch-up and different quality-adoption times affect the surface/volume visible at the endpoint.
+The fire reference was captured **after** removing the unused pressure buffer, so its before/after
+pair is a control and does not measure that saving. Do not attribute its export-size change to an optimization.
+
+| Metric | Liquid | Smoke | Fire |
+| --- | ---: | ---: | ---: |
+| Timed endpoint live MB, before → after | 695.40 → 383.06 | 387.96 → 391.02 | 199.23 → 190.38 |
+| Settled after background retirement MB | 383.06 | 391.02 | not separately sampled |
+| Whole-run peak MB, before → after | 1739.94 → 1669.11 | 1012.68 → 1021.71 | 497.03 → 488.18 |
+| Endpoint attributed bytes | 98.97% | 99.92% | 99.37% |
+| Post-teardown MB, before → after | 47.05 → 47.05 | 8.31 → 8.31 | 24.09 → 24.09 |
+| GPU union median ms, before → after | 9.78 → 9.89 | 7.69 → 7.87 | 5.44 → 5.59 |
+| GPU union p95 ms, before → after | 15.32 → 28.27 | 8.64 → 29.23 | 6.28 → 6.23 |
+| GPU union p99 ms, before → after | 76.46 → 79.88 | 9.11 → 32.82 | 7.20 → 7.79 |
+| CPU submission median ms, before → after | 3.30 → 3.20 | 1.70 → 1.90 | 2.80 → 2.60 |
+| CPU submission p95 ms, before → after | 5.10 → 8.30 | 2.20 → 2.40 | 3.50 → 3.30 |
+| CPU submission p99 ms, before → after | 32.70 → 37.00 | 3.80 → 4.00 | 4.60 → 4.40 |
+| RAF interval median ms, before → after | 16.70 → 16.70 | 16.70 → 16.70 | 16.70 → 16.70 |
+| RAF interval p95 ms, before → after | 16.80 → 50.00 | 16.80 → 33.30 | 16.70 → 16.70 |
+| RAF interval p99 ms, before → after | 83.40 → 133.20 | 16.80 → 33.40 | 16.80 → 16.80 |
+
+A lower memory footprint is not a frame-pacing success claim. In the first post-change run, smoke GPU
+median increased from 7.69 to 11.04 ms: scene rendering increased from 5.04 to 6.96 ms and unclassified
+GPU work from 1.79 to 2.73 ms, whereas pressure sweeps moved from 0.69 to 0.80 ms. Its endpoint domain
+also changed from 80×64×80 to 72³ cells. Liquid still has preparation/catch-up outliers. Keep these
+non-matching workload observations visible; they do not establish that removing an unused allocation
+made pressure or raymarching slower. Nor do they demonstrate elimination of recurring spikes.
+
+### Live and simultaneous-peak categories
+
+Each entry is endpoint / **at the single global total peak**, in MB. Independent category maxima are
+also emitted in `summary.json`; they occur at different times and must not be added together.
+
+| Category | Liquid | Smoke | Fire |
+| --- | ---: | ---: | ---: |
+| Pressure solver scratch | 47.39 / 757.82 | 78.41 / 470.48 | 39.21 / 235.24 |
+| Pressure fields | 2.10 / 33.54 | 4.19 / 8.39 | 2.10 / 4.19 |
+| Velocity/grid fields | 25.17 / 402.46 | 33.55 / 67.11 | 16.78 / 33.55 |
+| Collider/baked occupancy | 34.59 / 317.56 | 38.03 / 75.78 | 19.16 / 38.03 |
+| Density/heat/color | 0.00 / 0.00 | 67.11 / 134.22 | 33.55 / 67.11 |
+| Surface attributes/draw | 100.66 / 25.17 | 0.00 / 0.00 | 0.00 / 0.00 |
+| Surface support + color/momentum | 33.55 / 8.39 | 0.00 / 0.00 | 0.00 / 0.00 |
+| Anisotropy/filter scratch | 51.12 / 13.37 | 0.00 / 0.00 | 0.00 / 0.00 |
+| Surface topology/directories | 15.97 / 4.88 | 0.00 / 0.00 | 0.00 / 0.00 |
+| Source/event/transient | 4.54 / 4.54 | 33.60 / 67.15 | 16.89 / 33.67 |
+| Transport/solver scratch | 2.36 / 33.80 | 20.97 / 41.94 | 10.49 / 20.97 |
+| Derived density/color textures | 0.00 / 0.00 | 25.69 / 25.69 | 10.62 / 10.62 |
+| Derived velocity textures | 0.00 / 0.00 | 12.84 / 12.84 | 5.31 / 5.31 |
+| Lighting radiance/transmittance | 0.00 / 0.00 | 42.13 / 67.41 | 4.49 / 5.24 |
+| Lighting hierarchy/intermediate | 0.00 / 0.00 | 23.18 / 37.08 | 2.48 / 2.89 |
+| Renderer targets/depth | 50.96 / 50.94 | 9.63 / 9.64 | 26.75 / 26.76 |
+| Particles + indices + children | 10.21 / 10.21 | 0.07 / 0.07 | 0.14 / 0.14 |
+| Unattributed | 3.95 / 3.95 | 0.32 / 0.32 | 1.19 / 1.19 |
+
+Small reduction, diagnostic and geometry allocations are recorded separately in the machine-readable
+summary. No significant unknown allocation remains: the remaining unattributed fraction is under 1%.
+
+### Capacity, overlap and retirement
+
+**flipFluid.** resident pages: 30/128 (23.4%), 96.12 MB, 750955 bytes/reserved and 3204077 bytes/useful; surface
+pages: 735/2,048 (35.9%), 201.30 MB, 98292 bytes/reserved and 273881 bytes/useful. At global peak: current 903.90
+MB, retired 386.48 MB, prepared 378.72 MB; total/endpoint multiplier 4.36×. Largest live identities at that peak:
+velocityCurrentAttribute (FLIP Fluid/FLIPSimulation, 134.09 MB); boundaryAttribute (FLIP Fluid/FLIPSimulation,
+134.09 MB); pressure face/operator storage/stencilIndicesAttribute (FLIP Fluid/FLIPSimulation, 117.33 MB).
+
+**volumetricSmoke.** resident pages: 263/2,048 (12.8%), 276.54 MB, 135031 bytes/reserved and 1051495 bytes/useful;
+lighting probes: 518,400/518,400 (100.0%), 58.07 MB, 112 bytes/reserved and 112 bytes/useful. At global peak:
+current 864.56 MB, retired 157.15 MB; total/endpoint multiplier 2.61×. Largest live identities at that peak:
+boundaryAttribute (Volumetric Smoke/GasSimulation, 67.11 MB); visualAttribute (Volumetric Smoke/GasSimulation,
+67.11 MB); replacement pressure capacity/stencilIndicesAttribute (Volumetric Smoke/GasSimulation, 58.72 MB).
+
+**volumetricFire.** resident pages: 227/1,024 (22.2%), 138.71 MB, 135458 bytes/reserved and 611051 bytes/useful;
+lighting probes: 55,296/55,296 (100.0%), 6.20 MB, 112 bytes/reserved and 112 bytes/useful. At global peak: current
+409.57 MB, retired 78.61 MB; total/endpoint multiplier 2.56×. Largest live identities at that peak:
+boundaryAttribute (Volumetric Fire/GasSimulation, 33.55 MB); visualAttribute (Volumetric Fire/GasSimulation, 33.55
+MB); replacement pressure capacity/stencilIndicesAttribute (Volumetric Fire/GasSimulation, 29.36 MB).
+
+A low utilization is evidence to investigate, not an instruction to shrink. Pool-byte totals can
+include more than one live generation; inspect `state` and `generation` before multiplying an
+aggregate bytes/page ratio by a single generation's capacity. Lighting uses actual allocated/required
+probe counts and spacing; both demos currently use their velocity exports for density-noise stretching.
+Those exports are not redundant for these workloads. These are intentional automatic feature costs; consumer registration or usage detection is not
+part of the current optimization plan.
+
+The transition trace records old steady → preparing → prepared → adopted → reclaimed, followed by
+coarsen/refine checkpoints. `overlap` reports simultaneous current/prepared/retired bytes at the exact
+total peak and separately sampled prepared/retired maxima (10 Hz, so brief states can be missed).
+Gas compatible capacity replacement still reuses compute templates; forced pool growth deliberately
+makes post-transition steady memory larger. Do not compare that final larger-capacity footprint to
+pre-growth steady as though it were a leak.
+
+A canceled capacity/quality preparation can retain resources past queue completion because an async
+**CPU-side compiler still references its bindings**. The diagnostic waits for obsolete as well as
+current preparations before checking teardown. Waiting only the current pool or a GPU fence falsely
+reported ~1.19 GB retained in an 8-second liquid check; waiting both returned it to ~47 MB. This does
+not justify early destruction. Diagnostic restoration uses weak owner references so canceled resource
+owners are not kept alive just by the audit. Post-teardown remainders include the live renderer's
+cached targets/depth, generic event scratch and timestamp/readback storage; they are not all fluid fields.
+The 45-second range and reclaimed teardown are bounded-run evidence, not a proof against every long-run leak.
+
+### Implemented optimizations and remaining opportunities
+
+1. **Unused second pressure buffer removed in both solvers.** The solver uses persistent
+   `pressureCurrent`; `pressureNext` was only allocated, cleared and migrated. Saving is exactly four
+   bytes per reserved cell per live generation: 8.39 MB at liquid capacity 512×4096 cells and 4.19 MB
+   at smoke capacity 2048×512. No pressure stencil, iterations or precision changes.
+2. **Surface filter scratch reduced from three planes to two.** Filtering reads/writes scalar/color
+   and momentum planes; curl/activity remains in the original primary field. Saving is 16 bytes per
+   reserved surface cell: 16.78 MB at 2048×512 cells. Extraction and anisotropic support are unchanged.
+3. **Bounded coarsened FLIP reservations.** A replacement pool cannot use more brick positions than
+   fit inside the configured maximum physical bounds. Its ceiling is the normal geometric tier for
+   `product(floor(maxBoundsAxis / worldBrickWidth))`, still capped by the device binding limit.
+   The 10-unit teapot at cell width 0.125 and 16-cell bricks fits 125 positions, hence tier 128 rather
+   than inherited tier 512. Refinement reads resident demand during asynchronous preparation and
+   reserves up to eight nested pages per retained parent for a 2× refinement. Unrepresentable support
+   rejects preparation instead of silently dropping fields. Raising maxBounds invalidates the target
+   and allows later growth. There is no utilization-driven shrink loop or quality/domain reduction.
+
+Ranked next work: shorten/coalesce overlapping preparations and avoid duplicate pressure scratch
+(the dominant peak consumer); investigate generation-aware scratch reuse only where compiler and GPU
+lifetimes genuinely do not overlap; investigate surface output reservations (six 16.78-MB attribute
+buffers at the measured 2048-page tier); retain automatic render exports. Lighting storage is
+visible but does not justify reducing lighting quality here. Foam/spray particle storage and children
+are minor compared with pressure and surface pools. No speculative lower precision was introduced.
+
+### Validation and limits
+
+Native accounting tests cover weak/deferred association, alias deduplication, packed segments, exact
+peak allocation sets, lifecycle state changes and independent category peaks. Capacity tests cover
+bounded/anisotropic/unbounded domains, raising the cap and conservative refinement. Existing staged
+allocation/fence tests remain enabled. GPU fixtures exercise hydrostatic pressure/outlet motion,
+moving walls, 2× quality migration, surface reconstruction references, attachment, gas source transport,
+lighting and same-tier exact field migration. Test failures and final counts are recorded below;
+do not infer a green suite from the memory measurements.
+
+The attribution pass ended with three failing fixtures. They are resolved in the latest optimization
+section above; the original measurements are retained here as historical baselines. They do not
+represent the latest correctness status or establish a current performance guarantee.
+
+## Previous 60 FPS reliability measurements
+
+**Status: substantial runtime corrections, but the strict full-run 60 FPS target is not yet met.**
+Do not use the previous ~10 ms median as an interactive-FPS claim. Measurements below include the
+current lit/transmissive/distorted bubble foam, its renderer children, deformation/normal emission
+filters, widened teapot, 20-second/45-degree automatic tipping, 32,000 marker ceiling, original
+spray, adaptive domains and unchanged simulation/surface resolution. Reference viewport: 800 × 600,
+local native Chromium/WebGPU. Timings are individual local runs, not cross-machine guarantees.
+
+### Capturing spikes and resource lifetime
+
+Run `apps/demo/benchmarks/fluids/diagnostics/teapot-reliability.mjs <output-directory>`.
+The default records 45 wall-clock seconds using ordinary RAF and `system.update()`. `LIQUID_MODE=fenced`
+runs 2,700 fixed 1/60-second updates for the attribution comparison. `LIQUID_NEIGHBOR_COUNTS=0`
+disables the optional one-write-per-particle neighbor counter. `LIQUID_WARMUP=8` records the initial
+eight seconds separately before a full 45-second measured RAF interval; it does not discard their traces.
+
+The runner emits `summary.json`, `frames.json`, `spikes.json`, and `resources.json`. These stay internal,
+outside ordinary benchmark/PR output. `LIQUID_SPIKE_MS` controls the GPU trigger, default 16.67 ms.
+Each incident retains three frames before/after, its full per-pass timestamps and largest stage.
+`checkpoints.jsonl` additionally streams a compact sample and resource events every 120 frames, so a
+failed long-running browser does not erase all evidence.
+Records include CPU submission, frame/update/render intervals, requested/executed/skipped simulation
+seconds/substeps, system/child counts, FLIP resident capacity/pages, surface pages/cells/triangles,
+query-grid cell width, anisotropic neighbor visits, collider pose, prepared/adopted quality descriptors,
+pipeline creation, native allocation/upload/destruction and pending retirement/fence observations.
+
+An eight-slot timestamp ring resolves asynchronously; a busy ring drops a **diagnostic sample**, never
+blocks an update or reuses mapped storage. Queue completion is sampled every 120 frames without being
+awaited by the RAF callback. Long tasks and device errors/loss are captured. GPU unions are calculated
+per frame; stage medians must not be added. Public particle/page counters are asynchronous observations,
+not a synchronous readback of the timestamped invocation. Optional neighbor statistics add a small
+storage write/readback and are explicitly marked in the result. Frozen foam diagnostics occur after timing.
+
+### Full-run before/after measurements
+
+| Measurement, ms | Before, 45 s RAF | Corrected, 45 s RAF | Corrected, 2,700-step fenced |
+| --- | ---: | ---: | ---: |
+| GPU union median | 10.453 | 10.155 | 9.617 |
+| GPU union p95 | 57.657 | 20.356 | 14.104 |
+| GPU union p99 | 82.462 | 78.671 | 15.622 |
+| GPU union maximum | 138.592 | 89.276 | 46.191 |
+| CPU submission median | 3.1 | 3.1 | 2.7 |
+| CPU submission p95 | 7.2 | 6.0 | 3.3 |
+| CPU submission maximum | 588.5 | 294.4 | 26.7 |
+| RAF interval median | 16.7 | 16.7 | not a RAF run |
+| RAF interval p90 | 33.4 | 16.7 | not a RAF run |
+| RAF interval p95 | 66.7 | 33.3 | not a RAF run |
+| RAF interval p99 | 133.2 | 100.1 | not a RAF run |
+| RAF interval maximum | 616.6 | 333.3 | not a RAF run |
+
+The before/corrected RAF runs contain 1,932/2,227 measured frame intervals. Before: 1,280 exceed
+16.67 ms, 248 exceed 20 ms, 194 exceed 33.33 ms. Corrected: 1,435 / 131 / 111 respectively.
+The higher strict 16.67-ms count is compatible with more frames at nominal 60 Hz: browser timestamps
+quantize normal intervals to 16.7 ms. Preserve raw counts; do not relabel those as GPU overruns.
+GPU frames over 16.67 ms fell from 300/1,933 to 133/2,228; the fenced run had 23/2,700.
+
+After the first eight seconds, the corrected RAF run has GPU p95 13.931 ms, CPU p95 3.6 ms,
+RAF p95 16.8 ms and RAF p99 50.1 ms (2,065 frames). This is a separately identified subset,
+**not** a claim that the whole run meets p95 ≤16.67 ms. The initial fine-tier pressure workload and
+remaining compiler/catch-up episodes must remain visible in acceptance decisions.
+
+### Separate steady RAF and idle control
+
+A second run records eight startup/growth seconds and then **45 full measured RAF seconds**, with the
+neighbor-counter hook disabled. It contains 2,510 measured intervals: median/p90/p95/p99/max
+**16.7 / 16.7 / 16.8 / 50.0 / 250.0 ms**; strict >16.67 / >20 / >33.33 counts are
+**1,577 / 52 / 45**. GPU union median/p95/p99/max is **10.165 / 14.147 / 29.464 / 59.845 ms**;
+CPU median/p95/p99/max is **3.1 / 3.6 / 5.9 / 35.9 ms**. GPU coverage is 2,511 frames.
+The idle 120-interval control in the same browser has median/p95 **16.7/16.7 ms**, p99/max 16.8 ms,
+and zero >20-ms intervals. Thus browser timestamp granularity explains the raw nominal-60-Hz
+threshold ambiguity, but **does not** explain the measured 50–250-ms workload tail. Those remain
+real acceptance work; the headline status is deliberately not marked complete.
+
+### Demonstrated causes and corrections
+
+1. **Reconstruction spikes, not a covariance rewrite.** During a later spill, field reconstruction
+   reached 74–76 ms at ~566k processed surface cells, while an adjacent ordinary frame cost ~1 ms.
+   No new pipelines or substantial native allocation occurred on those incident frames. The auxiliary
+   particle query hash had refined to 0.03125-unit cells while searching support of roughly 0.16 units
+   or more. Each surface voxel therefore enumerated many tiny empty buckets. Its automatic minimum
+   reference quality now follows `voxelSize × influenceRadius × queryCellsPerAxis`; power-of-two
+   quantization gives 0.25-unit query cells for the demo. Exact distance filtering remains enabled,
+   with no change to the simulation/surface lattice, kernel, support radius or neighbor budget.
+   Explicit static quality and bounded-query settings retain their configured behavior.
+2. **Unprepared quality adoption.** Deferring directory growth previously called `setBounds(oldBounds)`.
+   That reinterpreted old rectangular coverage as a fresh quality target, bypassing the prepared
+   replacement. A traced adoption built 39 pipelines and submitted for 588.5 ms. The fallback now
+   resolves coverage at the current quality before setting bounds. The unit regression reproduces
+   the old failure without a GPU. Final traced adoptions have ready, matching candidates; later
+   changes submit in 3.2–4.1 ms. These whole-frame times are not isolated migration timings.
+3. **Background preparation stalls.** Surface preparation compiled the complete graph batch in one
+   call, and other preparation serialized driver round trips. Surface/pressure preparation now uses
+   the shared yielding helper with at most four compilations in flight. Cancellation settles pending
+   compilers before resources can retire. Fresh, zero-filled replacement fields no longer upload
+   redundant CPU zeros; WebGPU guarantees zero initialization. This removes avoidable staging work,
+   but does not make a single expensive TSL graph build interruptible.
+
+### Native memory and retirement
+
+The audit intercepts actual `GPUDevice.createBuffer/createTexture`, explicit destruction, pipeline
+creation, buffer uploads and queue fences. Requested byte estimates include texture mips/layers and
+sample counts; they are **not** driver residency or process RSS. Tracking begins after device init,
+before scene/fluid/surface preparation. Allocation metadata does not retain resource objects.
+
+Before correction, the 45-second run ended with **2.948 GB** of explicitly live workload allocations,
+and **2.691 GB** remained after workload teardown. Compute-only attributes had relied on `.dispose()`
+without a geometry owner to release their native buffers. Storage initialization now binds disposal
+explicitly; pressure/reduction/multigrid owners release their storage, and sparse pools retain the
+renderer needed to destroy buffers after their fences. Destruction also invalidates Three.js attribute
+version/accounting metadata; otherwise reusing a released attribute could leave a missing native binding.
+Repeated moving-wall fixture creation exposed this edge case and now passes. This changes ownership only, not solver maths.
+
+The final corrected RAF trace peaks at **1.707 GB**, ends at **0.695 GB**, and leaves **46.65 MB** after
+workload teardown, with no pending fences. The last five seconds fluctuate only between 695.53 and
+695.80 MB; old/replacement pools are reclaimed rather than accumulating. Renderer/shared textures,
+uniforms and diagnostic timestamp resources remain in that teardown snapshot; it is not a zero-byte
+renderer-destruction test. `StagedGPUAllocation.status.retiredResources` explicitly reports resources
+awaiting a retirement fence. The 45-second evidence supports bounded usage for this fixture, not an
+unlimited-session or all-driver memory guarantee. No memory cap or quality reduction was introduced.
+
+### Current foam cost
+
+At the final frozen RAF checkpoint: **254 simulated markers, 527 generated children, zero overflow**;
+surface query **0.0285 ms**, full attachment including query **0.0149 ms**, foam-only render **0.1038 ms**.
+Full frozen scene rendering was **0.3970 ms** with foam versus **0.3331 ms** without its draw
+(~0.064 ms difference, one local comparison). Query/attachment microbenchmarks are individually noisy
+at this scale; the apparent ordering is not evidence that adding attachment makes a query cheaper.
+The fenced checkpoint similarly measured query/attachment 0.0191/0.0210 ms and full scene
+0.6807/0.5329 ms. These render comparisons retain the same frozen liquid/camera/lighting;
+foam-only rendering includes clear/depth work and is not an additive marginal stage.
+
+Live foam compute remains separately labeled `foam/simulation-and-attachment`; source selection is
+included in secondary subsystem work. Renderer-child counters refresh asynchronously in ordinary
+profiling; focused frozen benchmarks now additionally read the actual arena counters and overflow.
+No foam aesthetic, selection, lifetime or attachment changes were made in this milestone.
+The separate steady control's frozen checkpoint contains **255 simulated markers, 535 generated
+children and zero child overflow** (the asynchronous UI observation was 529 children). Query/full
+attachment measure **0.0214/0.0238 ms**, foam-only rendering **0.1540 ms**, and full scene rendering
+**0.7402/0.5990 ms** with/without the foam draw. These are snapshot counts, not configured budgets.
 
 
-## Liquid profiling follow-up
+### Remaining frame-pacing work
 
-The liquid suite now shares gas's interval-union pass timer, lifecycle categories and summary format.
-It isolates simulation, surface reconstruction and scene-render intervals; overlapping stage medians
-are never added. CPU submission, GPU execution, pipeline creation and fenced completion remain distinct.
-The demo's existing fluid-colored section reads pressure and surface-extraction CPU submission spans
-from public `Benchmarks` providers, with no profiler-owned solver traversal or GPU readbacks.
+- The initial 0.015625-unit FLIP tier remains expensive while its automatic coarser replacement is
+  prepared. In the final run it adopts at 6.39 seconds; the worst remaining GPU frames are pressure-led.
+  This is a real initial growth/preparation cost, not an OS scheduling explanation.
+- Some later compiler tasks still trigger 3–4 catch-up substeps. At 34 seconds, one frame measured
+  53.81 ms total GPU, including 17.52 ms pressure across four steps, while the replacement was in
+  pressure compilation. Other bursts have 10–14 ms pressure across four steps: distinguish repeated
+  ordinary solver work from a single slow solve. Persistent program/binding reuse or finer-grained
+  graph construction is the next preparation improvement; globally reducing pressure sweeps is not
+  justified by ordinary-stage timings.
+- One intermediate run had a 16.08-second RAF gap without a matching JS long task or comparable GPU
+  interval. It is retained as a browser/host pacing incident, separately from the demonstrated CPU/GPU
+  stalls. No device loss was observed. It must not be used to dismiss the actual application stalls.
 
-A source-free 216-marker invariant on a small grid passed 2x coarsening (cell width 0.25 → 0.5) and
-refinement (0.5 → 0.25). Both stages executed their full requested 0.066667 seconds, skipped zero time,
-and retained all particles/mass. RMS translation errors were 0.00000725 and 0.00000129 world units;
-phase momentum drift was 0.000397 and 0.000456 against about 64.8 incoming momentum. These are
-small-fixture correctness observations, not evidence of high-resolution convergence or performance.
-Its cold transition fenced wall times were approximately 23.25 s and 2.02 s in this local browser run,
-including first-use compilation and four frames. This exposes an expensive FLIP transition path;
-it is not a measurement of remapping alone, and this pass does not optimize it.
+### Correctness checks after optimization
 
-A three-frame 2k-marker smoke test validated real timestamps and report generation at 0.125-unit cells,
-36 active pages (18,432 cells), five box colliders and Surface Nets. The sampled GPU interval union was
-about 3.11 ms (one timed sample), with approximately 1.65 ms simulation, 1.44 ms surface compute and
-0.025 ms nonoverlapping scene rendering. The sample retained 2,000 particles and mass, reported zero
-wall-interior particles/nonfinite values, and post-projection maximum divergence around 0.0000091.
-This very short integration check is not a stable performance baseline or a comparison to gas.
+- Exact query-index A/B: 0.03125 versus 0.25-unit bins produced relative field error **8.15e-10**,
+  identical **1,980 triangles**, and no clipping/overflow. Full-neighbor covariance/geometry references
+  pass for calm, translating, stretched and splashing fixtures.
+- Sparse-aware hydrostatic/outlet fixture passes: normalized pressure gradient **0.998557**, sealed
+  maximum divergence **0.000622**, maximum velocity **0.000192**, all **4,032** markers retained,
+  **87** outlet markers and no floor leakage. The old dense-offset synthetic test was reading packed
+  sparse buffers incorrectly; the standard test now uses the accepted sparse-aware fixture.
+- Static/translation/rotation/acceleration moving-wall controls pass, including repeated workload
+  destruction/recreation, mass retention, finite fields, penetration, surface coverage and collider reuse.
+- Source-free 2× coarsening/refinement retains all **216** markers/mass, skips no simulated time,
+  and satisfies the existing displacement/momentum/divergence limits.
+- Surface attachment/query/rebinding, prepared GPU particle counts, material activity and both surface
+  extraction regression checks pass. Tipping/discharge tests now use automatically collected mesh
+  colliders and the current 20-second default; no numerical acceptance thresholds were relaxed.
+- Timestamp interval-union/concurrent ring tests, native disposal/cache invalidation, bounded/cancelled
+  preparation and staged retirement counters pass. Package build and targeted lint pass.
 
-Remaining measurement limits: scene render passes can contain both surface and spray draws;
-collision and integration can share a production compute kernel. Reports identify these shared scopes.
-Surface coverage uses drawn-vertex bounds plus explicit clipping/overflow/invalid-index counters;
-it does not prove the absence of internal holes. Settling energy and center-of-mass height are
-recorded across checkpoints; long-run equilibrium and high-count scaling require the opt-in sustained
-runner. Internal traces and raw per-stage payloads remain excluded from ordinary PR/documented reports.
+## Retained earlier milestone measurements
+
+The following measurements predate the current reliability changes and final foam styling unless
+explicitly stated otherwise. GPU stage medians are not additive; fenced timings are not interactive FPS.
+
+## 1. Startup performance
+
+**Current milestone:** CPU profiling identified redundant CPU voxelization in
+`SpatialEffect.syncGPUTransform` for geometry-backed `FluidCollider`s. The CPU profile spent about
+11.45 seconds cumulatively in `ensureBakedField`, including repeated preparation/first-use work.
+The collider now exclusively uses its existing GPU bake; custom CPU occupancy predicates retain their
+original fallback. A regression test makes any geometry-backed CPU voxel query fail immediately.
+
+The completion pass adds generic non-advancing preparation for native allocation/emission,
+permanent/transient modifiers, collision/integration, render-time attributes and continuous subsystem
+eligibility. This uses the ordinary GPU phase builders and their caches; module update callbacks
+are not run. Preparation configures the renderer and tag/event registries before capturing programs.
+Auto-collected collision backends can prepare their geometry before first use.
+
+Remaining first-use causes were isolated and corrected:
+
+- BVH packing can add an index to an unindexed model. Recording that finalized revision avoids a
+  false first-update topology rebuild and seven dependent pipeline invalidations.
+- Cold velocity/pressure clears now retain their ComputeNodes across preparation and actual use.
+- Capped-bound reconciliation and both full/fresh-brick boundary programs are prepared explicitly.
+- Repeated preparation reconciles particle-buffer identity before compilation. Surface clearing
+  invalidates the query/hides the mesh immediately and defers empty draw arguments to their next upload;
+  it no longer creates a clear compute pass after particle resources have been released.
+
+| Current widened teapot, unchanged foam | Previous pass | Completion pass |
+| --- | ---: | ---: |
+| Preparation wall, ms | 1,704.8 | 2,097.7 |
+| First populated update CPU, ms | 184.3 | 38.3 |
+| First populated update fenced wall, ms | 197.2 | 48.3 |
+| First populated render fenced wall, ms | 49.6 | 49.0 |
+| End-to-first-populated-frame wall, ms | 2,087.1 | 2,322.1 |
+| Prepared / first-update compute pipelines | 84 / 38 | 112 / 0 |
+
+These are individual cold Chromium/WebGPU lifecycle samples at bake resolution 96. The extra
+asynchronous preparation moves work before the first update; this sample does **not** show a further
+end-to-visible latency improvement over the previous pass. The original duplicate-CPU-bake control
+was 14,047 ms. Preparation/compiler latency and first material/render-pipeline compilation remain
+possible improvements, distinct from allocation cost or steady simulation execution.
+
+An actual warm reset/reprepare measured 4.4 ms reset, 1,025.4 ms preparation, 9.0 ms first-update CPU,
+and 47.3 ms first-frame fenced, with **zero new compute pipelines**. A separate populated-state
+re-preparation checkpoint retained exact marker state, bit-for-bit velocity/pressure buffers,
+elapsed time and event-frame sequence.
+The first-update compute preparation acceptance criterion is met for this current fixture, not a
+promise that arbitrary custom callbacks, changed settings or newly encountered geometry need no compilation.
+
+## 2. Quality-tier-change performance
+
+**Current milestone:** the live diagnostic reproduced `Incompatible pressure migration` during
+same-tier resident-pool replacement. Logical dimensions can change while a capacity replacement
+compiles; both its pressure descriptor and the live descriptor must follow their finalized sparse
+layout before migration. Refreshing that topology metadata preserves retained world-cell addresses and
+pressure without weakening compatibility checks. Same-tier layout and prepared-quality adoption now
+also refresh the descriptor after installing the new layout. Errors include both dimensions/face counts.
+
+The source-free 216-marker 2× coarsening/refinement invariant passes: full particle/mass retention,
+zero skipped time, finite fields, and the existing world-displacement/momentum/divergence thresholds.
+This test exercises explicit structural edits, which still have a cold path; it does not establish
+zero-pipeline adoption for automatic changes. `teapot-milestone.mjs` separately records actual
+automatic adoption events, whether replacement preparation was ready, CPU submission and new
+FLIP compute pipelines. Background compilation, adoption and queue latency remain distinct.
+
+The adoption trace identified five late pipelines, all in pressure solving: transfer-only preparation
+suppressed the live reduction variants. Quality and capacity preparation now explicitly compile
+those pressure variants too. A current 900-frame teapot validation recorded prepared changes
+0.015625 → 0.0625 and 0.0625 → 0.125 with **zero new FLIP compute pipelines** and 1.0 / 0.8 ms
+CPU submission for the adopting compute call. These are CPU call times, not queue-completion latency.
+The final 45-second run repeated both prepared changes with zero adoption-time compute pipelines
+and 1.1 / 0.7 ms CPU submission for the FLIP compute call. The source-free 2× invariant passes again.
+Those CPU numbers do not include asynchronous preparation or queue completion, and do not establish
+transition convergence/latency for every workload.
+
+## 3. Performance when fluid colliders move
+
+**Problem:** moving/tipping a container can cause extra cost beyond stationary-collider processing.
+
+**Current measured comparison:** one populated current teapot, 2,705 markers, emission stopped,
+foam/spray retained, 80 updates per mode; ten measured GPU interval-union samples after forty
+settling updates. Translation/rotation use small prescribed rigid transforms; tipping uses the scene's
+normal tip control, speed limit and vertical lift. Modes are sequential, not identical replayed states.
+
+| Motion | Full GPU union, ms | Boundary classification, ms | Pressure solve, ms |
+| --- | ---: | ---: | ---: |
+| Static | 5.275 | cached | 1.317 |
+| Translation | 5.419 | 0.069 | 1.217 |
+| Rotation | 5.646 | 0.069 | 1.221 |
+| Tipping | 7.100 | 0.089 | 1.490 |
+
+All four modes retained the same geometry-local bake objects. Backend full builds remained two
+(teapot and floor), geometry refits remained zero, and rigid updates changed transforms only.
+Tipping's particle-collision scope rose to 0.735 ms. Boundary classification is not the dominant
+cost here, so this pass does not add dirty regions or approximate topology updates. Reproduce with
+`apps/demo/benchmarks/fluids/diagnostics/teapot-motion.mjs`.
+
+## 4. Performance during normal processing
+
+**Final current workload:** 2,700 fixed 1/60-second updates (45 simulated seconds), current widened
+teapot, current cubic-in-out 20-second/45-degree tipping loop, original spray and enabled foam,
+32,000 particle ceiling. Each frame fences the queue to bound backlog. Every 120 frames records
+GPU interval unions, counts, bounds/quality, pressure, surface diagnostics and renderer memory.
+Diagnostic readbacks are outside the timed GPU intervals. This is a paced workload, not an
+unfenced interactive-FPS guarantee.
+
+The full run passed with finite pressure/velocity samples and no surface page/triangle overflow or
+clipped particles. Median full GPU union was **9.986 ms**. At 32 seconds it had 13,135 markers and a
+12.688 ms GPU union; at 40/42/44 seconds the samples were **10.270 / 9.861 / 9.892 ms**. The old
+persistent slowdown at forty seconds was not reproduced. Outlet counts reached 381 at the sampled
+34-second checkpoint, with a reconstructed surface still present and unclipped.
+
+At the 44-second checkpoint (10,374 markers), GPU scopes were:
+
+| Stage | GPU ms |
+| --- | ---: |
+| Particle spatial index | 0.236 |
+| P2G | 0.996 |
+| Pressure | 1.523 |
+| G2P | 0.424 |
+| Density/separation | 0.690 |
+| Anisotropic support | 1.085 |
+| Surface field reconstruction | 1.038 |
+| Surface field filtering | 0.470 |
+| Surface extraction | 0.125 |
+| Secondary spray/foam work | 0.690 |
+
+These are one checkpoint's scopes, not additive medians. Boundary classification on a moving-vessel
+sample was 0.116 ms. No repeated dominant steady-state bottleneck justified changing pressure quality
+or another anisotropic reconstruction optimization in this pass.
+
+**Historical incident motivating the current pass:** one 12-second sample reached 35.006 ms GPU,
+including 21.272 ms reconstruction and 5.350 ms anisotropic support. The event-local follow-up and
+identified query-index cause are documented above; proximity to a quality event was not used as proof.
+
+Historical renderer accounting reached **3.91 GB**, with the fine pool reaching 1,023 slots.
+The native create/destroy audit above supersedes interpretations of that counter: both retained
+capacity and missing native destruction contributed. No persistent device failure occurred in the
+earlier fixture; neither run proves unlimited-session safety.
+
+## 5. Gravity, pressure propagation and inadequate spout discharge
+
+**Current hydrostatic decision tree:** after correcting its obsolete fixture URL and dense-versus-sparse
+addressing assumptions, the broad 16³, 0.125-unit reservoir/riser/outlet fixture passes.
+Normalized hydrostatic pressure slope is 0.998557; sealed maximum speed is 0.0001915 and
+post-projection maximum divergence 0.0006216. Opening the outlet gives positive grid flux 0.0117983.
+The full P2G/pressure/G2P/collision/separation fixture retains all 4,032 markers, equal sealed levels
+within 0.0000034 world units, 87 discharged markers, positive integrated grid discharge, no floor
+leakage and no non-finite samples. This does not demonstrate a general pressure-propagation defect.
+
+**First demonstrated incorrect teapot layer:** the actual 48-texel occupancy bake disconnects the
+interior open-face route near the spout lip at 0.0625-unit liquid cells. Raising only the bake to 96
+restores that route. BVH centerline sweeps at particle radii 0.0425 and 0.025 are clear, and a swept
+bottom-wall positive control hits. The preset therefore uses bake resolution 96, preserving its
+surface thickness, pressure settings, emission and velocity. The probe uses geometry-interior intervals,
+quadrature face openness and logical coordinates independent of resident slot packing; it correctly
+allows the roof to end at the open lip. Resolution/coarse-grid limits still apply; this is not proof
+of connectivity at every possible cell width, grid origin or tilt.
+
+A final same-state teapot check at 12.5 seconds, 0.0625-unit cells, measured positive outward
+vessel-relative grid flux **0.041825 world-volume units/second** through an interior spout section,
+64 spout markers and 108 discharged outlet markers. The actual reconstruction contained **498 spout
+triangles and 1,935 outlet triangles**, with zero page/triangle overflow or clipped particles.
+This closes the grid/marker/visible-reconstruction consistency check, rather than inferring local
+coverage from mesh bounds. The flux is a sampled cross-section integral, not a calibrated
+head-versus-discharge curve. Reproduce with `teapot-discharge.mjs`.
+
+## 6. Contact-surface deformation when the container moves
+
+**Demonstrated defect:** a face can be closed by a conservatively solid adjacent voxel while
+its own face quadrature misses the wall. That face previously inherited zero velocity from its
+fluid-side owner, treating part of a moving container as stationary. In the constant-translation
+fixture, 164/300 sampled closed X-faces were wrong. Correcting this preserves rigid center velocity
+for conservative closures and chooses the solid neighbor's velocity when the fluid owner has no
+blocked face samples. Geometry occupancy and particle collision radii are unchanged.
+
+The controlled fixture uses 1,000 markers, six rigid collider walls, no material activity normals,
+64 fixed 1/120-second steps, no emission, and a plain reconstructed surface. Translation starts
+with matched particle/container velocity. Acceleration applies the same explicit body acceleration
+to the liquid and container as a comoving positive control; it is not an assertion that an
+unforced accelerating container should have no sloshing.
+
+| Fixture | RMS comoving position error | RMS velocity error |
+| --- | ---: | ---: |
+| Static | 0.000336 | 0.000627 |
+| Translation, before correction | 0.061063 | 0.222128 |
+| Translation, corrected | 0.000371 | 0.000671 |
+| Matched acceleration, corrected | 0.000546 | 0.005504 |
+| Rotation, corrected | 0.008928 | 0.025492 |
+| Same rotation without colliders | 0.008260 | 0.029329 |
+
+Corrected translation/acceleration have **zero wrong sampled closed-face velocities**, full mass/marker
+retention and no wall penetration. Rotation stays finite and bounded, with maximum penetration about
+4.6e-6 world units. All rigid cases retain one geometry build and zero refits. Post-projection maximum
+divergence is below 0.005 in every acceptance case. Surface overflow remains zero.
+
+The comparable collider-free rotational evolution shows that its residual deviation is not solely a
+moving-wall frame/contact defect; a finite free surface is not constrained to exact solid-body rotation.
+This corrects the demonstrated artificial contact disturbance without forcing liquid to move as a
+rigid body or suppressing legitimate free-surface evolution. The original swept translation/rotation
+and previous-pose tests also pass. `comoving-liquid.browser.test.mjs` retains these invariants.
+
+## 7. Foam appearance and visibility
+
+**Milestone boundary:** the numerical and performance captures above used the original soft spray-texture
+foam, including 251 foam and 247 spray particles at the earlier 26-second checkpoint. The focused
+surface-attachment, query/rebinding, detachment and swept-contact tests passed before the visual restyle.
+
+**Post-milestone styling:** foam now uses the bubble preset's lit circle sprites, spherical normals,
+transmission map and existing normal map for distortion. The particles remain 0.06–0.12 units wide,
+smaller than the bubble preset's 0.25–1 range. Color is white, alpha is 0.18 and transmission is
+0.8. Soft-particle fading uses a short 0.02-unit distance to retain visibility at the water surface.
+Distortion strength is reduced to -0.02 and multiplied by particle size through DistortionBySize.
+Three visual children per parent, within radius 0.04, add overlapping smaller/translucent bubbles
+without adding simulated particles. Existing foam emission, lifetime, surface attachment and selection
+remain unchanged; bubble motion, collisions and audio were not copied.
+
+The demo additionally filters eligible sources using the reconstructed surface's world-space outward
+normal: `dot(up, normal) >= 0` allows upward-facing and vertical surfaces, while downward-facing or
+invalid surface samples do not emit foam. This affects new foam emission only, not existing attachment.
+Source activity now uses `minimumDeformity: 0.5` with the surface sampler, reading the same reconstructed
+symmetric velocity strain as liquid shading. Absolute speed is no longer required; uniform translation
+does not itself trigger foam. Public benchmark component names supply individual system particle counts
+to the demo profiler, alongside the unchanged aggregate count.
+
+The named counts exposed a cold-preparation counter-binding bug: foam had 256 live GPU markers while
+the public allocation count remained zero. Generic preparation captured an allocation writer before
+creating the actual particle capacity, leaving cached graphs bound to temporary counters. Preparation
+now creates particle storage first. A deterministic GPU regression compares the public particle count
+against actual alive slots and checks three renderer children per live source.
+
+These appearance changes are now measured by the reliability runs above; they are not represented
+by the earlier milestone timings. Persistent foam fields and additional behavior/clustering remain outside this change.

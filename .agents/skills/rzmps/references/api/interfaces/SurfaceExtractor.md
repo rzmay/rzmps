@@ -12,7 +12,9 @@ Build ordered GPU passes against the supplied sparse field and output buffers.
 Increment counters[0] for requested triangles and counters[1] for generated vertices;
 write only within maximumTriangles. Positions use xyz plus w=1 for valid vertices.
 Triangle layout uses three consecutive vertices per triangle. Cell layout uses one
-vertex per sparse cell. LiquidSurface owns shading, draw arguments and pass disposal.
+vertex per sparse cell. Compact layout uses vertexMap[cell] = outputVertex + 1 and
+maximumVertices; zero map entries denote absent vertices. Smoothing scratch is temporary
+and may alias filtering scratch after extraction begins. LiquidSurface owns shading and disposal.
 
 ```ts
 SurfaceExtractor(context): object;
@@ -22,7 +24,9 @@ Build ordered GPU passes against the supplied sparse field and output buffers.
 Increment counters[0] for requested triangles and counters[1] for generated vertices;
 write only within maximumTriangles. Positions use xyz plus w=1 for valid vertices.
 Triangle layout uses three consecutive vertices per triangle. Cell layout uses one
-vertex per sparse cell. LiquidSurface owns shading, draw arguments and pass disposal.
+vertex per sparse cell. Compact layout uses vertexMap[cell] = outputVertex + 1 and
+maximumVertices; zero map entries denote absent vertices. Smoothing scratch is temporary
+and may alias filtering scratch after extraction begins. LiquidSurface owns shading and disposal.
 
 ## Parameters
 
@@ -59,7 +63,7 @@ optional triangleMultiple?: number;
 ### vertexLayout?
 
 ```ts
-optional vertexLayout?: "triangles" | "cells";
+optional vertexLayout?: "compact" | "triangles" | "cells";
 ```
 
-Defaults to triangle soup; set to cells for one vertex per sparse field cell.
+Triangle soup by default; cells preserves sparse addresses, compact supplies a cell-to-output map.

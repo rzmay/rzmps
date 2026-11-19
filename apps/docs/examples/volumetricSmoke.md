@@ -41,6 +41,10 @@ The original upward lifetime force, particle noise motion, shrinking source size
 fade are restored too. ColorOverLifetime changes only alpha; it no longer cycles source colors.
 Source collision retains lifetime loss one and the grid discovers fluid colliders automatically.
 
+Source strength uses emitted mass per second, and scalar diffusion uses world units²/second.
+These values are calibrated at the original 0.125-unit reference cell width; coarser automatic
+quality no longer increases their physical emission or diffusion rate.
+
 <ExampleCode region="modules" />
 
 ## Renderers

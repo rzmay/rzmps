@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { WebGPURenderer } from 'three/webgpu';
-import { Fn, If, float, instanceIndex, uint, vec3 } from 'three/tsl';
+import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
+import { Fn, If, float, instanceIndex, uint, vec3, storage } from 'three/tsl';
 import { Emitter, ParticleSystem, SurfaceRenderer, ColorOverLifetime, ScaleOverLifetime,
   buildSurfaceNets, buildMarchingCubes } from '@rzmps/rzmps';
 const liquidFlowMaterial = new SurfaceRenderer.LiquidMaterial().compositeGPU;
@@ -295,13 +295,14 @@ window.testLiquidMaterial = async () => {
   surface.material = new MeshBasicNodeMaterial();
   surface.materialComposite = undefined;
   const pixels = {};
-  for (const [name, speed, curl, channel] of [
-    ['calm', 0, 0, 'color'], ['moving', 3, 0, 'color'], ['rotating', 0, 8, 'color'],
-    ['smooth', 0, 0, 'roughness'], ['rough', 3, 0, 'roughness'],
+  for (const [name, speed, curl, deformation, channel] of [
+    ['calm', 0, 0, 0, 'color'], ['moving', 3, 0, 0, 'color'],
+    ['deforming', 0, 0, 6, 'color'], ['rotating', 0, 20, 0, 'color'],
+    ['smooth', 0, 0, 0, 'roughness'], ['rough', 0, 0, 6, 'roughness'],
   ]) {
     surface.materialCompositeGPU = (source, dest, context) => {
       const result = liquid.compositeGPU(source, dest, { ...context,
-        surfaceSpeed: float(speed), surfaceVorticityMagnitude: float(curl) });
+        surfaceSpeed: float(speed), surfaceVorticityMagnitude: float(curl), surfaceDeformation: float(deformation) });
       return { color: channel === 'color' ? result.color : vec3(result.roughness) };
     };
     await window.seedSurface(samples, false);
@@ -356,4 +357,136 @@ window.testAutomaticSurfaceGrowth = async () => {
     temporaryPeakBytes: before.allocatedBytes + after.allocatedBytes };
   system.removeRenderer(test); test.destroy(); seed.dispose();
   return result;
+};
+
+window.testSaturatedSupport = async () => {
+  const samples = [];
+  for (let x = -2; x <= 2; x++) for (let y = -2; y <= 2; y++) for (let z = -2; z <= 2; z++)
+    samples.push({ position: [x * 0.04, y * 0.04, z * 0.04], scale: [0.2, 0.2, 0.2], color: [1, 1, 1] });
+  surface.anisotropy = 0;
+  await window.seedSurface(samples, false);
+  const helper = surface.surface, grid = helper.queryGrid;
+  const attribute = new StorageBufferAttribute(new Float32Array(helper.projection.capacity * 12), 4);
+  const original = grid.forEachParticleInRadius;
+  let reference;
+  grid.forEachParticleInRadius = function (point, radius, visitor, options) {
+    return original.call(this, point, radius, visitor, { ...options, stopWhen: undefined });
+  };
+  try {
+    reference = helper.kernels.build(grid, storage(attribute, 'vec4', attribute.count), false);
+    // Fn callbacks are generated lazily on first compute; keep the reference override until then.
+    renderer.compute(reference);
+  } finally { grid.forEachParticleInRadius = original; }
+  try {
+    const read = async attribute => new Float32Array(await renderer.getArrayBufferAsync(attribute));
+    const optimized = await read(helper.kernelAttribute), full = await read(attribute);
+    const bulk = value => THREE.MathUtils.smoothstep(value, surface.dropletSupportMin, surface.dropletSupportMax);
+    let maxError = 0, shortCircuited = 0;
+    for (let i = 0; i < samples.length * 12; i++) {
+      maxError = Math.max(maxError, Math.abs(i % 12 === 7
+        ? bulk(optimized[i]) - bulk(full[i]) : optimized[i] - full[i]));
+      if (i % 12 === 7 && full[i] > optimized[i] + 1e-3) shortCircuited++;
+    }
+    return { maxError, shortCircuited };
+  } finally { reference.dispose(); attribute.dispose(); }
+};
+
+window.compareAnisotropicKernels = async () => {
+  const modes = {
+    reference: { supportSizedBins: false, sharedMoments: false, convergedEigen: false },
+    final: { supportSizedBins: false, sharedMoments: true, convergedEigen: true },
+  };
+  const contact = document.createElement('canvas'); contact.width = 640; contact.height = 960;
+  const context = contact.getContext('2d'), results = [];
+  const read = async attribute => new Float32Array(await renderer.getArrayBufferAsync(attribute));
+  const snapshot = async () => {
+    const helper = surface.surface;
+    const [field, kernels, positions, normals, draw] = await Promise.all([
+      read(helper.fieldAttribute), read(helper.kernelAttribute),
+      read(helper.positionAttribute), read(helper.normalAttribute),
+      renderer.getArrayBufferAsync(helper.drawAttribute),
+    ]);
+    const indices = new Uint32Array(await renderer.getArrayBufferAsync(helper.indexAttribute));
+    const used = new Set(indices.subarray(0, new Uint32Array(draw)[0]));
+    const geometry = new Map([...used].map(vertex => {
+      const point = positions.slice(vertex * 4, vertex * 4 + 3);
+      // A dual vertex is tied to a world-space cell, not an atomic output/resident address.
+      const cell = [...point].map((value, axis) => Math.floor(
+        (value - helper.bounds.min.getComponent(axis)) / surface.voxelSize + 1e-5)).join(',');
+      return [cell, { position: point, normal: normals.slice(vertex * 4, vertex * 4 + 3) }];
+    }));
+    if (geometry.size !== used.size) throw new Error('Dual vertices must have unique logical cells.');
+    return { field: field.subarray(0, helper.grid.cellCount * 4), kernels, geometry,
+      indices: used, triangles: new Uint32Array(draw)[0] / 3 };
+  };
+  for (const [row, kind] of ['calm', 'flowing', 'stretched', 'splashing'].entries()) {
+    const particles = [];
+    for (let x = -2; x <= 2; x++) for (let y = -2; y <= 2; y++) for (let z = -2; z <= 2; z++) {
+      const point = [x * 0.14, y * 0.14, z * 0.14];
+      if (kind === 'stretched') { point[0] *= 2; point[1] *= 0.4; }
+      if (kind === 'splashing') point[1] += 0.2 * Math.sin(x + z);
+      particles.push({ position: point, scale: [0.24, 0.24, 0.24], color: [0.2, 0.5, 1],
+        velocity: kind === 'flowing' ? [3, 0, 0] : [0, 0, 0] });
+    }
+    const snapshots = [];
+    for (const [column, mode] of ['reference', 'final'].entries()) {
+      surface.anisotropy = 0.35; surface.anisotropyMaxStretch = 1.5;
+      surface.kernelOptimization = modes[mode];
+      if (surface.surface) { surface.surface.kernelKey = ''; surface.surface.queryVersion = -1; }
+      await window.seedSurface(particles, false);
+      snapshots.push(await snapshot());
+      await renderer.renderAsync(scene, camera);
+      context.drawImage(renderer.domElement, column * 320, row * 240, 320, 240);
+    }
+    const [a, b] = snapshots;
+    let fieldError = 0, fieldSize = 0, positionError = 0, normalError = 0, shapeError = 0;
+    for (let i = 0; i < a.field.length; i++) {
+      fieldError += Math.abs(a.field[i] - b.field[i]); fieldSize += Math.abs(a.field[i]);
+    }
+    for (const [cell, first] of a.geometry) {
+      const second = b.geometry.get(cell);
+      if (!second) throw new Error(`Missing reconstructed dual cell ${cell}`);
+      positionError = Math.max(positionError, Math.hypot(...first.position.map((value, i) => value - second.position[i])));
+      normalError = Math.max(normalError, Math.hypot(...first.normal.map((value, i) => value - second.normal[i])));
+    }
+    // Axis signs/order may change in an eigenspace. Compare the represented quadratic form A^T A.
+    for (let p = 0; p < particles.length; p++) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+      let x = 0, y = 0;
+      for (let axis = 0; axis < 3; axis++) {
+        x += a.kernels[p * 12 + axis * 4 + i] * a.kernels[p * 12 + axis * 4 + j];
+        y += b.kernels[p * 12 + axis * 4 + i] * b.kernels[p * 12 + axis * 4 + j];
+      }
+      shapeError = Math.max(shapeError, Math.abs(x - y));
+    }
+    results.push({ kind, fieldRelativeError: fieldError / Math.max(fieldSize, 1e-12), positionError, normalError,
+      shapeError, triangles: [a.triangles, b.triangles], vertices: [a.indices.size, b.indices.size] });
+  }
+  contact.id = 'anisotropic-quality'; document.body.append(contact);
+  return results;
+};
+
+window.compareSurfaceQueryCellSizes = async () => {
+  const particles = [];
+  for (let x = -2; x <= 2; x++) for (let y = -2; y <= 2; y++) for (let z = -2; z <= 2; z++)
+    particles.push({ position: [x * 0.14, y * 0.14, z * 0.14], scale: [0.24, 0.24, 0.24], color: [0.2, 0.5, 1] });
+  surface.anisotropy = 0.35;
+  await window.seedSurface(particles, false);
+  const snapshots = [];
+  for (const width of [0.03125, 0.25]) {
+    const helper = surface.surface;
+    helper.queryGrid.setOptions({ autoVolumeQuality: false, volumeQuality: width * helper.queryGrid.cellsPerAxis });
+    await window.seedSurface(particles, false);
+    snapshots.push({ width: helper.queryGrid.cellSize,
+      field: new Float32Array(await renderer.getArrayBufferAsync(helper.fieldAttribute)),
+      diagnostics: await surface.readSurfaceDiagnostics() });
+  }
+  let error = 0, size = 0;
+  const [a, b] = snapshots;
+  for (let i = 0; i < a.field.length; i++) {
+    error += Math.abs(a.field[i] - b.field[i]); size += Math.abs(a.field[i]);
+  }
+  return { widths: snapshots.map(sample => sample.width), relativeFieldError: error / Math.max(size, 1e-12),
+    triangles: snapshots.map(sample => sample.diagnostics.triangles),
+    clipping: snapshots.map(sample => sample.diagnostics.clippedParticles),
+    overflow: snapshots.map(sample => sample.diagnostics.overflowedTriangles) };
 };

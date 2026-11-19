@@ -650,7 +650,7 @@ Kept for older presets. The spatial grid depth takes precedence when supplied.
 scalarDiffusion: number;
 ```
 
-Optional six-neighbor scalar mixing rate in inverse seconds.
+Scalar diffusivity in world units squared per second. Zero disables diffusion.
 
 ***
 
@@ -675,6 +675,8 @@ showGridHelper: boolean;
 ```ts
 sourceStrength: number;
 ```
+
+Emitted mass per second, multiplied by particle mass and alpha; independent of cell size.
 
 ***
 
@@ -1009,6 +1011,8 @@ Nonnegative temperature-driven multiplier of velocityDissipation; omitted means 
 ```ts
 velocitySourceStrength: number;
 ```
+
+Velocity relaxation per unit deposited mass concentration; independent of source discretization.
 
 ***
 

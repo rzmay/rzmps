@@ -44,14 +44,20 @@ export default class SurfaceParticleKernels {
   }
 
   /** Three vec4 rows per particle: inverse axes, amplitude, support, and actual support radius. */
-  build(grid: ParticleSpatialGrid, output: Vectors, anisotropic: boolean): ComputeNode {
+  build(grid: ParticleSpatialGrid, output: Vectors, anisotropic: boolean,
+    optimization: { sharedMoments?: boolean; convergedEigen?: boolean;
+      neighborVisits?: (index: Node<'uint'>, count: Node<'float'>) => void } = {}): ComputeNode {
+    const shared = optimization.sharedMoments !== false;
+    const converged = optimization.convergedEigen !== false;
     return grid.computeParticles(particle => {
       const index = particle.index.mul(3);
       output.element(index).assign(vec4(1, 0, 0, 0));
       output.element(index.add(1)).assign(vec4(0, 1, 0, 0));
       output.element(index.add(2)).assign(vec4(0, 0, 1, 0));
+      optimization.neighborVisits?.(particle.index, float(0));
       If(particle.alive.notEqual(0), () => {
-        const radius = particle.mass.mul(this.neighborhood);
+        const radius = particle.mass.mul(this.neighborhood).toVar();
+        const radiusSquared = max(radius.mul(radius), 1e-12).toVar();
         const support = float(0).toVar('surfaceSupport');
         const count = float(0).toVar();
         const center = vec3(0).toVar();
@@ -61,11 +67,15 @@ export default class SurfaceParticleKernels {
           particle.position,
           radius,
           (neighbor, distanceSq) => {
-            const weight = pow(max(float(1).sub(distanceSq.div(max(radius.mul(radius), 1e-12))), 0), 3);
+            const raw = pow(max(float(1).sub(distanceSq.div(radiusSquared)), 0), 3);
+            const weight = shared ? raw.toVar() : raw;
             support.addAssign(weight);
             count.addAssign(1);
             if (anisotropic) {
-              const offset = neighbor.position.sub(particle.position);
+              const delta = neighbor.position.sub(particle.position);
+              const offset = shared ? delta.toVar() : delta;
+              // The original one-pass raw moments already share the neighborhood. Let the shader
+              // compiler reuse weighted expressions rather than forcing more live vector registers.
               center.addAssign(offset.mul(weight));
               diagonal.addAssign(offset.mul(offset).mul(weight));
               offDiagonal.addAssign(
@@ -73,8 +83,16 @@ export default class SurfaceParticleKernels {
               );
             }
           },
-          { excludeIndex: particle.index },
+          {
+            excludeIndex: particle.index,
+            pruneBounds: shared,
+            // Isotropic support is consumed only through a saturated smoothstep. Positive
+            // remaining weights cannot change it; anisotropic covariance needs every neighbor.
+            stopWhen: anisotropic ? undefined : () => support.greaterThanEqual(this.supportMax),
+          },
         );
+        // Optional internal profiling writes once per particle; no atomics or extra neighbor traversal.
+        optimization.neighborVisits?.(particle.index, count);
         const bulk = this.bulk(support).toVar();
         // A sub-voxel isolated droplet needs at least one interior sample at any grid phase.
         const visualRadius = mix(max(particle.speed, this.cellSize), particle.speed, bulk).toVar();
@@ -87,7 +105,8 @@ export default class SurfaceParticleKernels {
         const axes = [vec3(1, 0, 0).toVar(), vec3(0, 1, 0).toVar(), vec3(0, 0, 1).toVar()];
         const stretch = vec3(1).toVar();
         if (anisotropic)
-          If(count.greaterThanEqual(this.minimumNeighbors).and(support.greaterThan(1e-6)), () => {
+          If(count.greaterThanEqual(this.minimumNeighbors)
+            .and(support.greaterThan(converged ? this.supportMin : float(1e-6))), () => {
             const mean = center.div(support).toVar();
             const d = diagonal
               .div(support)
@@ -103,8 +122,9 @@ export default class SurfaceParticleKernels {
               [o.x, d.y, o.z],
               [o.y, o.z, d.z],
             ];
-            // Fixed Jacobi sweeps avoid convergence loops and handle rank-deficient sheets/streams.
-            for (let sweep = 0; sweep < 4; sweep++)
+            // Off-diagonal residual bounds the remaining symmetric eigenvalue error. Stop only
+            // below the original per-entry rotation tolerance, never from visual activity or speed.
+            const sweep = () => {
               for (const [p, q] of [
                 [0, 1],
                 [0, 2],
@@ -134,6 +154,13 @@ export default class SurfaceParticleKernels {
                   axes[q].assign(vp.mul(sine).add(vq.mul(cosine)));
                 });
               }
+            };
+            for (let iteration = 0; iteration < 4; iteration++) {
+              if (converged) {
+                const residual = max(o.x.abs(), max(o.y.abs(), o.z.abs()));
+                If(residual.greaterThan(h.mul(h).mul(1e-7)), sweep);
+              } else sweep();
+            }
             const eigenvalues = d.max(vec3(h.mul(h).mul(0.001)));
             const geometricMean = pow(eigenvalues.x.mul(eigenvalues.y).mul(eigenvalues.z), 1 / 3);
             stretch.assign(

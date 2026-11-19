@@ -7,7 +7,7 @@ import {
 
 /** Fixed fixtures avoid asset downloads, random emitter density and animated demo-scene changes. */
 export function createLiquidWorkload({ count = 8000, kind = 'medium', translation = false,
-  cellSubdivisions = kind === 'pressure' ? 4 : 3 } = {}) {
+  cellSubdivisions = kind === 'pressure' ? 4 : 3, anisotropy = 0, kernelOptimization } = {}) {
   const bounds = new THREE.Box3(new THREE.Vector3(-2, -2, -2), new THREE.Vector3(2, 2, 2));
   const flip = new FLIPSimulation({
     bounds, automaticPadding: false, boundsPolicy: FluidBoundsPolicy.Ballistic,
@@ -21,12 +21,19 @@ export function createLiquidWorkload({ count = 8000, kind = 'medium', translatio
   });
   const surface = new SurfaceRenderer({
     bounds, voxelSize: kind === 'surface' ? 0.035 : 0.065,
-    maxActiveBricks: kind === 'surface' ? 512 : 128,
+    maxActiveBricks: kind === 'surface' || anisotropy > 0 ? 512 : 128,
     spatialGridOptions: { brickSubdivisions: 2, cellSubdivisions: 3 },
-    extraction: SurfaceExtraction.SurfaceNets,
+    extraction: SurfaceExtraction.SurfaceNets, anisotropy,
     fieldSmoothingIterations: 1, smoothingIterations: kind === 'surface' ? 3 : 1,
     material: new THREE.MeshStandardMaterial({ color: '#8dceeb', roughness: 0.25 }),
   });
+  if (kernelOptimization) surface.kernelOptimization = kernelOptimization;
+  if (kernelOptimization?.supportSizedBins) {
+    // Retain the rejected coarser-hash experiment in diagnostics, never as a renderer default.
+    surface.spatialGridOptions.minVolumeQuality = Math.max(2,
+      2 ** (surface.spatialGridOptions.brickSubdivisions + surface.spatialGridOptions.cellSubdivisions)
+        * surface.voxelSize * surface.influenceRadius * surface.anisotropyRadius * 0.5);
+  }
   const system = new ParticleSystem({
     name: `Liquid benchmark ${kind}`, maxParticles: count, gpuProcessing: true, duration: 0, looping: false,
     gravity: new THREE.Vector3(0, translation ? 0 : -3, 0), gravityModifier: 1,

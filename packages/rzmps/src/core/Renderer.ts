@@ -1,6 +1,6 @@
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import type { Vector3Input } from '../values/valueInput.types';
-import evaluateDynamicVector3 from '../values/evaluateDynamicVector';
+import evaluateByParameterVector3 from '../values/evaluateByParameterVector3';
 import type { MaterialCompositeCallback, MaterialCompositeGPUCallback } from '../rendering/compositing/composite.utils';
 import Appearance from '../rendering/compositing/Appearance';
 import type { TextureAtlasOptions } from '../rendering/TextureAtlas';
@@ -41,12 +41,14 @@ export interface RendererChildrenOptions {
   /** Additional visual copies. Counts are floored and clamped to nonnegative integers. */
   count?: DynamicUntimedValue<number>;
   radius?: DynamicValue<number>;
-  /** Local XYZ Euler offset in radians, composed after the inherited orientation. Defaults to zero. */
-  rotation?: DynamicValue<Vector3Input>;
+  /** Radial local XYZ Euler offset in radians, composed after the inherited orientation. Constants stay fixed. */
+  rotation?: ValueByParameter<Vector3Input>;
   /** Radial multiplier; numeric values are constant. */
   scale?: ValueByParameter<number>;
   /** Radial multiplier; numeric values are constant. */
   alpha?: ValueByParameter<number>;
+  /** Perturbs the radial rotation parameter before radialFalloff, independently of scale and alpha. Default: zero. */
+  randomizeRotation?: number;
   randomizeScale?: number;
   randomizeAlpha?: number;
   radialFalloff?: (parameter: number) => number;
@@ -463,22 +465,29 @@ export default abstract class Renderer extends EventReceiver {
     if (applyDistanceScaling) {
       const options = this.children;
 
+      // Fixed draws keep all three properties independent of which options are enabled.
+      const scaleVariation = random.quick() - 0.5;
+      const alphaVariation = random.quick() - 0.5;
+      const rotationVariation = random.quick() - 0.5;
+      const parameter = (amount: number, variation: number) => {
+        let t = MathUtils.clamp((radius > 0 ? distance : 0) + amount * variation, 0, 1);
+        if (options.radialFalloff) t = options.radialFalloff(t);
+        return t;
+      };
       if (options.rotation !== undefined) {
-        const offset = evaluateDynamicVector3(options.rotation, parent.time, `${child.id}:rotation`);
+        const rotation = options.rotation;
+        const offset = evaluateByParameterVector3(
+          typeof rotation === 'number' || rotation instanceof Vector3 ? [rotation, rotation] : rotation,
+          parameter(options.randomizeRotation ?? 0, rotationVariation),
+        );
         this.childOrientation.setFromEuler(this.childEuler.setFromVector3(parent.rotation));
         this.childOffsetOrientation.setFromEuler(this.childEuler.setFromVector3(offset));
         this.childOrientation.multiply(this.childOffsetOrientation);
         child.rotation = new Vector3().setFromEuler(this.childEuler.setFromQuaternion(this.childOrientation));
       }
-
-      // Fixed draws keep scale and alpha independent of which options are enabled.
-      const scaleVariation = random.quick() - 0.5;
-      const alphaVariation = random.quick() - 0.5;
-      const multiplier = (value: ValueByParameter<number> | undefined, amount: number, variation: number) => {
-        let t = MathUtils.clamp((radius > 0 ? distance : 0) + amount * variation, 0, 1);
-        if (options.radialFalloff) t = options.radialFalloff(t);
-        return typeof value === 'number' || value === undefined ? (value ?? 1) : evaluateByParameterNumber(value, t);
-      };
+      const multiplier = (value: ValueByParameter<number> | undefined, amount: number, variation: number) =>
+        typeof value === 'number' || value === undefined
+          ? (value ?? 1) : evaluateByParameterNumber(value, parameter(amount, variation));
       const scale = multiplier(options.scale, options.randomizeScale ?? 0, scaleVariation);
       if (scale !== 1) child.scale = parent.scale.clone().multiplyScalar(scale);
       child.alpha *= multiplier(options.alpha, options.randomizeAlpha ?? 0, alphaVariation);

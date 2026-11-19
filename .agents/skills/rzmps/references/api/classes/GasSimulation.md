@@ -794,6 +794,8 @@ resolution: number;
 scalarDiffusion: number;
 ```
 
+Scalar diffusivity in world units squared per second. Zero disables diffusion.
+
 ***
 
 <a id="showgridhelper"></a>
@@ -817,6 +819,8 @@ showGridHelper: boolean;
 ```ts
 sourceStrength: number;
 ```
+
+Emitted mass per second, multiplied by particle mass and alpha; independent of cell size.
 
 ***
 
@@ -1077,6 +1081,8 @@ optional velocityDissipationByTemperature?: ValueByParameter<number>;
 ```ts
 velocitySourceStrength: number;
 ```
+
+Velocity relaxation per unit deposited mass concentration; independent of source discretization.
 
 ***
 
@@ -1822,7 +1828,7 @@ Requests a maximum simulation step; Infinity leaves system timing unchanged.
 
 `number`
 
-#### Inherited from
+#### Overrides
 
 [`FluidSimulation`](FluidSimulation.md).[`getSimulationTimestep`](FluidSimulation.md#getsimulationtimestep)
 

@@ -115,3 +115,20 @@ explicitCPU.destroy?.();
 sharedGeometry.dispose();
 replacement.dispose();
 console.log('gpu-collision-backend tests passed');
+
+// BVH packing may generate an index. That setup must not look like user topology mutation next frame.
+{
+  const geometry = new THREE.BoxGeometry().toNonIndexed();
+  const mesh = new THREE.Mesh(geometry);
+  const backend = new ThreeGPUCollisionBackend({ dynamicObjects: [mesh] });
+  backend.update(0, {});
+  const version = backend.resourceVersion, builds = backend.stats.fullBuilds;
+  backend.update(1 / 60, {});
+  assert.equal(backend.resourceVersion, version);
+  assert.equal(backend.stats.fullBuilds, builds);
+  mesh.position.x = 1;
+  backend.update(1 / 60, {});
+  assert.equal(backend.resourceVersion, version);
+  assert.equal(backend.stats.fullBuilds, builds);
+  backend.destroy(); geometry.dispose();
+}

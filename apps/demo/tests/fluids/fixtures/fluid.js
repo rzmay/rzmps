@@ -7,7 +7,11 @@ import { experimentalExamples } from '../../../../../examples/experimental/index
 import createScene from '../../../../../examples/scenes/fluidTeapot.js';
 import createCheckerboard from '../../../../../examples/scenes/checkerboard.js';
 import createMovingColliders from '../../../../../examples/scenes/movingColliders.js';
+import createWind from '../../../../../examples/scenes/wind.js';
 import { Benchmarks, FluidCollider, GasSimulation } from '@rzmps/rzmps';
+import { attributeFluidMemory } from '../../../benchmarks/fluids/fluidMemoryAttribution.utils.js';
+import { trackGPUResources } from '../../../../../benchmarks/lib/gpuResourceTracking.utils.js';
+import traceComputeBuilds from '../../../benchmarks/fluids/traceComputeBuilds.js';
 
 Node.captureStackTrace = new URLSearchParams(location.search).has('nodeTrace');
 const startupStart = performance.now();
@@ -18,6 +22,10 @@ const renderer = new WebGPURenderer({
 renderer.setSize(800, 600);
 document.body.append(renderer.domElement);
 await renderer.init();
+// Opt-in native allocation tracking begins before scene, fluid, surface or secondary preparation.
+const resourceTracking = new URLSearchParams(location.search).has('reliability')
+  ? trackGPUResources(renderer.backend.device, () => ({ frame: window.liquidReliabilityFrame ?? -1,
+    stage: window.liquidReliabilityState?.stage ?? 'preparation' }), { backend: renderer.backend }) : undefined;
 const rendererInitMs = performance.now() - startupStart;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, 800 / 600, 0.01, 200);
@@ -25,7 +33,8 @@ camera.position.set(5, 4, 6);
 camera.lookAt(0, 0.6, 0);
 const example = new URLSearchParams(location.search).get('example') ?? 'flipFluid';
 const gasScene = new URLSearchParams(location.search).get('scene') === 'movingColliders';
-const sceneFactory = example === 'flipFluid' ? createScene : gasScene ? createMovingColliders : createCheckerboard;
+const sceneFactory = example === 'flipFluid' ? createScene : gasScene ? createMovingColliders
+  : new URLSearchParams(location.search).get('scene') === 'wind' ? createWind : createCheckerboard;
 const sceneStart = performance.now();
 const sceneLifecycle = await sceneFactory(scene);
 const sceneLoadMs = performance.now() - sceneStart;
@@ -36,7 +45,10 @@ const reviewBricks = new URLSearchParams(location.search).get('reviewBricks');
 const reviewParticles = new URLSearchParams(location.search).get('reviewParticles');
 const measureStartup = new URLSearchParams(location.search).has('measureStartup');
 const constructorStart = performance.now();
-const system = await [...examples, ...experimentalExamples].find(({ id }) => id === example).create({
+const selectedExample = [...examples, ...experimentalExamples].find(({ id }) => id === example);
+if (!selectedExample) throw new Error(`Unknown fluid fixture preset ${example}; available: `
+  + [...examples, ...experimentalExamples].map(({ id }) => id).join(', '));
+const system = await selectedExample.create({
   ...(reviewBricks ? { maxActiveBricks: Number(reviewBricks) } : {}),
   ...(reviewGrid ? { spatialGridOptions: {
     brickSubdivisions: reviewGrid[0], cellSubdivisions: reviewGrid[1],
@@ -50,6 +62,19 @@ const system = await [...examples, ...experimentalExamples].find(({ id }) => id 
   } : {}),
 });
 const constructorMs = performance.now() - constructorStart;
+if (new URLSearchParams(location.search).has('reliability')) {
+  const records = [];
+  const restore = traceComputeBuilds(renderer, record => {
+    records.push({ ...record, frame: window.liquidReliabilityFrame,
+      qualityPhase: system.modules[0].qualityPreparation?.phase });
+    system.modules[0].benchmarks.increment(`preparation/buildCPUms/${record.family}/${record.stage}`, record.cpuMs);
+  }, node => labelCompute(node));
+  window.fluidBuildTrace = { records, restore };
+}
+const pressureQuality = new URLSearchParams(location.search).get('pressureQuality');
+if (pressureQuality && example === 'flipFluid') {
+  system.modules[0].setSpatialGridOptions({ autoVolumeQuality: false, volumeQuality: Number(pressureQuality) });
+}
 // Long-running numerical regressions keep their original finite source and quality;
 // demoLiquid explicitly exercises the current interactive preset instead.
 if (example === 'flipFluid' && !new URLSearchParams(location.search).has('demoLiquid')) {
@@ -86,6 +111,55 @@ if (reviewGrid) system.modules[0].setSpatialGridOptions({
   brickSubdivisions: reviewGrid[0], cellSubdivisions: reviewGrid[1],
 });
 if (reviewParticles) system.maxParticles = Number(reviewParticles);
+// Fixed reference cell widths isolate allocation changes from asynchronous automatic tier adoption.
+if (new URLSearchParams(location.search).has('memoryReplay')) {
+  system.modules[0].setSpatialGridOptions({ autoVolumeQuality: false,
+    volumeQuality: example === 'volumetricSmoke' ? 16 : 8 });
+}
+// Recorded domain/quality replay excludes wall-clock-dependent guard/readback decisions.
+if (new URLSearchParams(location.search).has('memoryControlled')) {
+  for (const view of system.renderers) {
+    if (view.constructor.name === 'VolumeRenderer') { view.dynamicResolution = false; view.downsample = 1; }
+  }
+  let fluid = system.modules[0];
+  const bounds = example === 'flipFluid'
+    ? new THREE.Box3(new THREE.Vector3(-4, -8, -4), new THREE.Vector3(6, 2, 6))
+    : new THREE.Box3(new THREE.Vector3(-8, -8, -8), new THREE.Vector3(8, 8, 8));
+  if (fluid instanceof GasSimulation) {
+    const previous = fluid;
+    const configuration = { ...previous, bounds, autoBounds: false, automaticPadding: false, boundsPadding: 0,
+      spatialGridOptions: { ...previous.spatialGridOptions, bounds, autoExpand: false, autoShrink: false,
+        autoVolumeQuality: false, volumeQuality: example === 'volumetricSmoke' ? 16 : 8 } };
+    if (!previous._hasCustomCondition) delete configuration.condition;
+    fluid = new GasSimulation(configuration);
+    system.modules = system.modules.map(module => module === previous ? fluid : module);
+    previous.cleanup();
+  }
+  fluid.autoBounds = false; fluid.automaticPadding = false; fluid.boundsPadding = 0;
+  fluid.bounds.copy(bounds);
+  fluid.setSpatialGridOptions({ bounds, autoExpand: false, autoShrink: false,
+    autoVolumeQuality: false, volumeQuality: example === 'volumetricSmoke' ? 16 : 8 });
+  if (new URLSearchParams(location.search).has('memoryReference')) {
+    // Diagnostic reference retains old worst-case output reservations and independent pressure scratch.
+    if (fluid instanceof GasSimulation) {
+      const create = fluid.createPressureProjection;
+      fluid.createPressureProjection = function (...args) {
+        const active = this.pressureProjection;
+        this.pressureProjection = undefined;
+        args[3] = undefined;
+        try { return create.apply(this, args); } finally { this.pressureProjection = active; }
+      };
+    } else {
+      const create = fluid.getPressureProjection;
+      fluid.getPressureProjection = function (...args) {
+        this.pressureScratchSource = undefined;
+        return create.apply(this, args);
+      };
+      const view = system.renderers.find(view => view.constructor.name === 'SurfaceRenderer');
+      view.initialTriangles = 524288;
+    }
+  }
+}
 // Diagnostic reference: retain pool-wide launch/clear work without changing field operators.
 if (new URLSearchParams(location.search).get('reviewDispatch') === 'pool') {
   const gas = system.modules[0];
@@ -115,7 +189,7 @@ if (new URLSearchParams(location.search).get('reviewDispatch') === 'pool') {
           field.element(index).assign(vec4(0));
         }, false, true));
       }
-      for (const field of [this.pressureCurrent, this.pressureNext, this.divergence, this.solid]) {
+      for (const field of [this.pressureCurrent, this.divergence, this.solid]) {
         this.clearNewNodes.push(this.volumeGrid.compute(index => { field.element(index).assign(0); }, false, true));
       }
     }
@@ -132,6 +206,7 @@ const restoreBackend = [];
 const compileCalls = [];
 const startupSpans = [];
 let computeStage = 'unattributed';
+let dispatchNames = [];
 let startupPhase = 'initialRender';
 if (measureStartup) {
   const span = Benchmarks.prototype.span;
@@ -152,7 +227,8 @@ if (measureStartup) {
     const submitMs = performance.now() - start;
     await pending;
     compileCalls.push({ phase: startupPhase, nodes: Array.isArray(nodes) ? nodes.length : 1,
-      submitMs, wallMs: performance.now() - start });
+      submitMs, names: (Array.isArray(nodes) ? nodes : [nodes]).map(node => node.name),
+      wallMs: performance.now() - start });
   };
   restoreBackend.push(() => { renderer.compileComputeAsync = compile; });
   for (const name of ['createStorageAttribute' , 'createIndirectStorageAttribute', 'createIndexAttribute',
@@ -161,21 +237,88 @@ if (measureStartup) {
     renderer.backend[name] = function (...args) {
       const start = performance.now();
       try { return original.apply(this, args); } finally {
-        backendCalls.push({ name, phase: startupPhase, cpuMs: performance.now() - start,
+        backendCalls.push({ name, phase: startupPhase, stage: computeStage, dispatchNames,
+          functions: name === 'createComputePipeline'
+            ? [...args[0].computeProgram.code.matchAll(/fn (\w+)\(/g)].map(match => match[1]) : undefined,
+          cpuMs: performance.now() - start,
           bytes: name.includes('Attribute') && name !== 'updateAttribute' ? args[0].array.byteLength : 0 });
       }
     };
     restoreBackend.push(() => { renderer.backend[name] = original; });
   }
 }
+const startupMethods = [];
+if (measureStartup) {
+  const fluid = system.modules[0];
+  for (const name of ['ensureGridResolution', 'refreshBounds', 'readOccupiedFieldBounds',
+    'computeTransfer', 'ensureWorkPool', 'computeMovingWalls']) {
+    const original = fluid[name];
+    if (!original) continue;
+    fluid[name] = function (...args) {
+      const start = performance.now();
+      try { return original.apply(this, args); } finally {
+        startupMethods.push({ system: system.name, name, phase: startupPhase, ms: performance.now() - start });
+      }
+    };
+    restoreBackend.push(() => { fluid[name] = original; });
+  }
+  for (const owner of [system, ...system.subSystems.keys()]) {
+    const simulation = owner.gpuSimulation;
+    for (const name of ['_getGPUSimulationComputeNode', '_getGPURenderOutputComputeNode',
+      '_computeGPUEmissionPhase', '_computeGPUContinuousSubSystemEmissionPhase',
+      '_computeGPUCollisionAndModifierPhases']) {
+      const original = simulation[name];
+      simulation[name] = function (...args) {
+        const start = performance.now();
+        try { return original.apply(this, args); } finally {
+          startupMethods.push({ system: owner.name, name, phase: startupPhase, ms: performance.now() - start });
+        }
+      };
+      restoreBackend.push(() => { simulation[name] = original; });
+    }
+  }
+}
+const labelCompute = node => {
+  if (node.name) return node.name;
+  const owners = [system, ...system.subSystems.keys()].flatMap(owner => [
+    ...owner.modules, owner.gpuSimulation, ...owner.renderers.flatMap(view =>
+      [view, view.surface, view.surface?.grid, view.surface?.queryGrid, view._gpuChildren]),
+  ]).filter(Boolean);
+  const seen = new Set(owners);
+  for (let depth = 0; depth < 3; depth++) {
+    for (const owner of [...owners]) {
+      for (const child of [owner.pressureProjection, owner.reduction, owner.boundaryReduction,
+        owner.transferReduction, owner.qualityPreparation?.pool?.context,
+        owner.qualityPreparation?.pressure, owner.allocation?.pending?.resources]) {
+        if (child && !seen.has(child)) { seen.add(child); owners.push(child); }
+      }
+    }
+  }
+  const matches = value => value === node || value?.node === node;
+  for (const owner of owners) {
+    for (const [key, value] of Object.entries(owner)) {
+      if (matches(value)) return `${owner.constructor.name}.${key}`;
+      if (Array.isArray(value) && value.some(matches)) return `${owner.constructor.name}.${key}`;
+      if (value instanceof Map && [...value.values()].some(matches)) return `${owner.constructor.name}.${key}`;
+      if (value instanceof Set && [...value].some(matches)) return `${owner.constructor.name}.${key}`;
+      if (Array.isArray(value?.nodes) && value.nodes.includes(node)) return `${owner.constructor.name}.${key}.nodes`;
+    }
+  }
+  return '';
+};
 const compute = renderer.compute.bind(renderer);
 if (measureStartup) renderer.compute = function (nodes, ...args) {
   const start = performance.now();
+  dispatchNames = (Array.isArray(nodes) ? nodes : [nodes]).map(labelCompute);
   const result = compute(nodes, ...args);
+  dispatchNames = [];
   firstDispatches.push({ name: Array.isArray(nodes) ? 'batch' : nodes.name,
     stage: computeStage, phase: startupPhase, ms: performance.now() - start });
   return result;
 };
+const memoryAttribution = resourceTracking && new URLSearchParams(location.search).has('memoryAttribution')
+  ? attributeFluidMemory(resourceTracking, renderer, system, scene) : undefined;
+const memoryPhases = memoryAttribution ? [{ phase: 'construction', ...memoryAttribution.scan() }] : [];
 const renderStart = performance.now();
 await renderer.renderAsync(scene, camera);
 const initialRenderMs = performance.now() - renderStart;
@@ -194,7 +337,16 @@ if (measureStartup && new URLSearchParams(location.search).has('prepareStartup')
   }
   await preparing;
   preparationMs = performance.now() - start;
+  if (memoryAttribution) memoryPhases.push({ phase: 'preparation', ...memoryAttribution.scan() });
 }
+const cacheSnapshot = () => [system, ...system.subSystems.keys()].map(owner => ({
+  name: owner.name, buffers: owner.gpuSimulation._gpuBuffers?.version,
+  modules: owner.getModules(['version']).map(module => ({ name: module.constructor.name, version: module.version })),
+  modifierKeys: [...owner.gpuSimulation._gpuModifierComputeCaches.keys()],
+  simulationKeys: [...owner.gpuSimulation._gpuSimulationComputeCaches.keys()],
+  solidKey: owner.modules[0]?.solidCacheKey, collisionKey: owner.modules[0]?.particleCollisionCacheKey,
+}));
+const preparedCaches = measureStartup ? cacheSnapshot() : undefined;
 startupPhase = 'firstUpdate';
 const updateStart = performance.now();
 system.advanceFrames(1, 1 / 60);
@@ -212,7 +364,13 @@ if (measureStartup) {
   renderer.compute = compute;
   window.fluidStartup = { rendererInitMs, sceneLoadMs, constructorMs, initialRenderMs,
     preparationMs, firstUpdateCpuMs, firstUpdateFencedMs, firstPopulatedRenderMs, firstPopulatedFrameMs,
-    backendCalls, compileCalls, startupSpans,
+    colliderPreparation: system.modules[0].fluidColliders?.map(collider => ({
+      resolution: collider.bakedFieldResolution, metrics: { ...collider.gpuField?.metrics },
+    })),
+    preparedCaches, populatedCaches: cacheSnapshot(),
+    firstUsePrograms: backendCalls.filter(call => call.name === 'createComputePipeline'
+      && call.phase === 'firstUpdate'),
+    backendCalls, compileCalls, startupSpans, startupMethods,
     textureRetained: initialTexture === system.modules[0].getVolumeField?.().texture,
     dispatches: firstDispatches.length,
     slowestDispatches: firstDispatches.sort((a, b) => b.ms - a.ms).slice(0, 6) };
@@ -227,7 +385,9 @@ if (example === 'flipFluid' && new URLSearchParams(location.search).get('reviewL
   flip.pressureProjection = undefined;
   Object.defineProperty(flip, 'cacheSolidOccupancy', { get: () => false });
 }
-window.debugFluid = { renderer, scene, system, flip, camera, THREE, sceneLifecycle,
+if (memoryAttribution) memoryPhases.push({ phase: 'first populated', ...memoryAttribution.scan() });
+window.debugFluid = { renderer, scene, system, flip, camera, THREE, sceneLifecycle, resourceTracking,
+  memoryAttribution, memoryPhases,
   gpu: { Fn, If, instanceIndex, storage, vec4, StorageBufferAttribute } };
 async function readField(attribute, channels = 4) {
   const values = new Float32Array(await renderer.getArrayBufferAsync(attribute));
@@ -504,7 +664,7 @@ window.readGasSourceState = async () => {
   return {
     density: await readField(flip.densityCurrent.value),
     color: await readField(flip.colorCurrent.value),
-    velocity: await readField(flip.velocityCurrentAttribute),
+    velocity: await readField(flip.velocityCurrent.value),
     visual,
   };
 };
@@ -671,6 +831,9 @@ window.readLivePositions = async () => (await system.selectiveReadback(16000, ['
   .filter(({ particle }) => particle.alive).map(({ particle }) => particle.position.toArray());
 window.ready = true;
 window.testMovingFluidWall = async () => {
+  // Motion history is scoped to one completed solver step. Extra CFL substeps legitimately
+  // expire motion before this fixture's final assertion, so isolate the same-step contract.
+  flip.adaptiveTimestep = false;
   const colliders = [];
   scene.traverse(object => { if (object instanceof FluidCollider) colliders.push(object); });
   colliders.forEach(collider => collider.removeFromParent());

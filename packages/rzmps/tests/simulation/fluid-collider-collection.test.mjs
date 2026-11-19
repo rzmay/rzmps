@@ -79,3 +79,29 @@ test('fluid discovery mirrors collision filters, follows meshes, and preserves s
   sphere.dispose();
   material.dispose();
 });
+
+test('geometry fluid collider transform sync never runs the inherited CPU voxel bake', () => {
+  const system = new ParticleSystem({ renderers: [] });
+  const collider = new FluidCollider({ geometry: new BoxGeometry().toNonIndexed(),
+    bakedFieldResolution: 96, surfaceThickness: 0.02 });
+  collider.getLocalFeather = () => { throw new Error('Geometry-backed occupancy must be baked on the GPU'); };
+  collider.syncGPUTransform(system);
+  collider.position.x = 1;
+  collider.syncGPUTransform(system);
+  assert.equal(collider._bakedFieldTexture, undefined);
+  collider.geometry.dispose();
+  system.dispose();
+});
+
+test('custom fluid occupancy retains its CPU predicate bake fallback', () => {
+  const system = new ParticleSystem({ renderers: [] });
+  const collider = new FluidCollider({ geometry: new BoxGeometry().toNonIndexed(),
+    test: () => true, bakedFieldResolution: 2 });
+  let samples = 0;
+  collider.getLocalFeather = () => { samples++; return 1; };
+  collider.syncGPUTransform(system);
+  assert.equal(samples, 8);
+  assert(collider._bakedFieldTexture);
+  collider.geometry.dispose();
+  system.dispose();
+});

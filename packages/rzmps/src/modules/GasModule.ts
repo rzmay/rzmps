@@ -35,6 +35,7 @@ export interface GasModuleContext {
   temperatureDissipation: Node<'float'>;
   colorDissipation: Node<'float'>;
   velocityDissipation: Node<'float'>;
+  /** World units squared per second. Custom increases must respect dt <= cellWidth² / (6 * diffusivity). */
   scalarDiffusion: Node<'float'>;
 }
 

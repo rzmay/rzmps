@@ -32,6 +32,23 @@ export interface GPUStorageBufferRenderer {
   backend?: unknown;
 }
 
+const storageLifetimes = new WeakMap<StorageBufferAttribute, WeakSet<GPUStorageBufferRenderer>>();
+
+/** Compute-only attributes have no geometry owner to release their native buffer on disposal. */
+export function bindStorageAttributeLifetime(renderer: GPUStorageBufferRenderer,
+  attribute: StorageBufferAttribute): void {
+  let owners = storageLifetimes.get(attribute);
+  if (!owners) storageLifetimes.set(attribute, owners = new WeakSet());
+  if (owners.has(renderer)) return;
+  owners.add(renderer);
+  const dispose = () => {
+    destroyStorageAttribute(renderer, attribute);
+    owners!.delete(renderer);
+    attribute.removeEventListener('dispose', dispose);
+  };
+  attribute.addEventListener('dispose', dispose);
+}
+
 export interface GPUReadbackRenderer extends GPUStorageBufferRenderer {
   getArrayBufferAsync(
     attribute: StorageBufferAttribute,
@@ -80,6 +97,7 @@ export function initializeStorageAttribute(
   attribute: StorageBufferAttribute,
   upload = true,
 ): boolean {
+  bindStorageAttributeLifetime(renderer, attribute);
   const backend = renderer.backend as {
     isWebGPUBackend?: boolean;
     device?: {
@@ -151,6 +169,16 @@ export function destroyStorageAttribute(
   } | undefined;
   if (backend?.has && !backend.has(attribute)) return;
   if (backend?.get && !backend.get(attribute).buffer) return;
+  // Invalidate Three's version/accounting cache as well as its native handle. Otherwise a reused
+  // attribute can look initialized to Bindings after its backend buffer has already been destroyed.
+  const attributes = (renderer as { _attributes?: {
+    has(attribute: StorageBufferAttribute): boolean;
+    delete(attribute: StorageBufferAttribute): unknown;
+  } } | undefined)?._attributes;
+  if (attributes?.has(attribute)) {
+    attributes.delete(attribute);
+    return;
+  }
   backend?.destroyAttribute?.(attribute);
 }
 

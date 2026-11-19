@@ -192,3 +192,29 @@ This is render-only flow alignment: it changes neither simulated density nor vel
 4D noise animation still controls temporal evolution; no separate transported noise field is created.
 Fire uses little stretching at high temperatures to preserve flame flicker, with stronger flow-aligned
 detail in the cool smoke.
+
+
+### Liquid surface activity
+
+`SurfaceRenderer.LiquidMaterial` derives its calm-to-active gradient, roughness and normal-detail curves
+from local deformation and vorticity, rather than absolute speed. `flow.deformationRange` defaults to
+`[0.5, 6]` and `flow.vorticityRange` to `[4, 20]`, both in inverse seconds. Their normalized values use
+a bounded union. Uniform translation stays calm; shear/stretching and sufficiently strong curl activate
+whitewater-style appearance. This is surface shading, not simulated foam or secondary emission.
+
+The symmetric strain-rate magnitude and curl reuse one six-neighbor velocity stencil. Custom material
+composition receives `context.surfaceDeformation`, `surfaceVelocity`, `surfaceSpeed`, `surfaceVorticity`
+and `surfaceVorticityMagnitude`. The `surfaceVorticity` geometry attribute packs curl in XYZ and
+scalar deformation in W. `flow.velocityRange` remains stored for custom artistic use; it no longer
+drives the built-in activity. Physical velocity can still advect and stretch procedural normal detail.
+`SurfaceRenderer.deformationDetailRange` separately controls activity-aware field filtering; the
+older `velocityDetailRange` is retained but no longer drives the default filtering response.
+
+
+Surface derivatives use a continuous support-confidence ramp below 5% of the visible isolevel.
+A vanishing neighbor extends the center velocity rather than abruptly contributing a normalized
+near-empty velocity. This is instantaneous spatial stabilization: there is no frame history or
+temporal smoothing. Material deformation/curl remain full strength on supported surface samples.
+Anisotropic reconstruction retains all contributors inside its compact kernel. Exact acceleration
+may prune hash cells proven outside that support and skip already-converged eigen sweeps; it does
+not change anisotropy according to visual activity or impose an arbitrary covariance-neighbor cap.

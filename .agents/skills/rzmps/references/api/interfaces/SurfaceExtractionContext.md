@@ -144,6 +144,16 @@ maximumTriangles: number;
 
 ***
 
+<a id="maximumvertices"></a>
+
+### maximumVertices?
+
+```ts
+optional maximumVertices?: number;
+```
+
+***
+
 <a id="minimum"></a>
 
 ### minimum
@@ -191,3 +201,15 @@ smoothingWeight: Node<"float">;
 ```ts
 topology: SurfaceIntegerStorage;
 ```
+
+***
+
+<a id="vertexmap"></a>
+
+### vertexMap?
+
+```ts
+optional vertexMap?: SurfaceIntegerStorage;
+```
+
+Optional compact cell-to-vertex address map; zero denotes no generated output.

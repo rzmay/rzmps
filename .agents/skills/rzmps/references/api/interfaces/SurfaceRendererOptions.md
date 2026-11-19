@@ -148,6 +148,18 @@ Desired representative cap. Negative or Infinity means unlimited. Defaults to -1
 
 ***
 
+<a id="deformationdetailrange"></a>
+
+### deformationDetailRange
+
+```ts
+deformationDetailRange: [number, number];
+```
+
+Strain rates for flow detail preservation. Defaults to [0.5, 6].
+
+***
+
 <a id="dropletsupportmax"></a>
 
 ### dropletSupportMax
@@ -538,7 +550,7 @@ Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
 velocityDetailRange: [number, number];
 ```
 
-Speeds at which flow detail preservation begins and reaches its maximum. Defaults to [0.5, 3].
+Retained legacy speed range. Built-in filtering uses deformationDetailRange. Defaults to [0.5, 3].
 
 ***
 

@@ -69,14 +69,19 @@ velocity, including the particle speed multiplier; transforming local simulation
 
 ## Foam and spray
 
-`FLIPSimulation.FoamCondition` selects active, partially supported source markers using speed, age and neighbor limits.
+`FLIPSimulation.FoamCondition` selects active, partially supported source markers using deformation, age and neighbor limits.
+Pass `samplerGPU: surfaceRenderer.sampleSurfaceGPU` and `minimumDeformity` (inverse seconds) to use the same
+reconstructed symmetric strain magnitude as liquid shading. With a sampler the threshold defaults to `0.5`, matching
+the start of the material's default deformation range. Uniform translation and rigid rotation alone do not pass this
+gate. Surface queries without deformation cannot be used with a positive threshold. Without a sampler deformation
+filtering is disabled; an optional `minimumSpeed` gate defaults to zero.
 It returns the existing `shouldEmitGPU` callback and managed spatial-grid options, just like `SprayCondition`. The
 minimum neighbor count rejects isolated airborne markers; the maximum approximates free-surface support. This is a
 local heuristic, not a full air-entrainment or foam solver.
 
 Use a separate secondary system with inherited initial velocity, `SurfaceAttachment`, lifetime fading, and translucent
-soft `SpriteRenderer` particles. The experimental FLIP demo includes a small procedural bubble-patch texture with
-randomized size/rotation. Foam follows the liquid while retaining independent sliding. Spray remains a separate
+soft `SpriteRenderer` particles. The experimental FLIP demo uses white, transmissive bubble sprites with existing
+textures and three render children per marker. Foam follows the liquid while retaining independent sliding. Spray remains a separate
 ballistic subsystem using `SprayCondition`, with no attachment module and no required surface-renderer dependency.
 
 ## Profiling
@@ -87,3 +92,26 @@ frozen state and write scratch buffers; full attachment includes the query, so t
 Production constraints stay fused with particle integration, and the ordinary frame report labels that combined foam
 scope separately from FLIP, surface reconstruction, spray and scene rendering. CPU submission, GPU execution and fenced
 wall time remain distinct. Deep traces remain opt-in; see [benchmark controls](./benchmarks.md).
+
+## Liquid normal-noise animation
+
+`LiquidMaterial.flow.noiseSpeed` controls the advection phase's cycles per second. It defaults to
+`[0.2, 0.2]`, preserving the original constant animation rate. Zero freezes the phase; `advection`
+still controls the distance traveled along the local fluid velocity. Like other flow settings,
+`noiseSpeed` accepts a `ValueByParameter` driven by surface activity. Use `[speed, speed]` for a
+constant rate, for example `material.setFlow({ noiseSpeed: [0.4, 0.4] })`.
+
+The demo exposes **Noise Speed** under **Surface Renderer → Material → Flow Appearance**. Changes
+use the existing material update path without rebuilding the liquid surface.
+
+## Surface output addresses
+
+Liquid reconstruction pages and generated mesh output grow independently. Built-in Surface Nets uses
+compact vertex addresses; these addresses can change between frames. Use the implicit surface query
+for particle attachment rather than retaining mesh vertex indices.
+
+Custom `SurfaceExtractor` functions keep the existing triangle and cell layouts. A factory can also
+set `vertexLayout = 'compact'`: the context supplies `maximumVertices` and an atomic `vertexMap`.
+Store `outputVertex + 1` at the source cell address; zero means no vertex. Keep output writes below
+`maximumVertices` and report requested vertex/triangle counts through the existing counters. Smoothing
+storage is temporary and may reuse filtering scratch after extraction starts.

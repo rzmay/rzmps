@@ -156,6 +156,16 @@ compensation: CompensationMode;
 
 ***
 
+<a id="deformationdetailrange"></a>
+
+### deformationDetailRange
+
+```ts
+deformationDetailRange: [number, number];
+```
+
+***
+
 <a id="dropletsupportmax"></a>
 
 ### dropletSupportMax
@@ -1127,18 +1137,18 @@ Clears batches and unsubscribes when a component is removed or its system is des
 ### prepareResources()
 
 ```ts
-prepareResources(_system, _renderer): Promise<void>;
+prepareResources(system, renderer): Promise<void>;
 ```
 
-Prepare optional rendering pipelines without advancing particle or simulation state.
+Compile the first populated reconstruction without dispatching or publishing empty diagnostics.
 
 #### Parameters
 
-##### \_system
+##### system
 
 [`ParticleSystem`](ParticleSystem.md)
 
-##### \_renderer
+##### renderer
 
 `WebGPURenderer`
 
@@ -1146,7 +1156,7 @@ Prepare optional rendering pipelines without advancing particle or simulation st
 
 `Promise`\<`void`\>
 
-#### Inherited from
+#### Overrides
 
 [`Renderer`](Renderer.md).[`prepareResources`](Renderer.md#prepareresources)
 

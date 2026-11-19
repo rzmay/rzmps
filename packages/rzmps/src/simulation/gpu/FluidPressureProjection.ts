@@ -1,8 +1,13 @@
+import type Benchmarks from '../../core/Benchmarks';
+import { retainSharedStorage, releaseSharedStorage } from '../../utils/gpu/sharedStorage.utils';
 import { Vector3 } from 'three';
-import { copyStorageAttributes } from '../../utils/gpu/storage.utils';
+import {
+  bindStorageAttributeLifetime, copyStorageAttributes, initializeStorageAttribute,
+} from '../../utils/gpu/storage.utils';
+import prepareComputePrograms from '../../utils/gpu/prepareComputePrograms';
 import { IndirectStorageBufferAttribute, StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
 import {
-  Fn, If, clamp, float, floor, instanceIndex, int, ivec3, max, mix, storage, uint, uniform, vec3, vec4,
+  Fn, If, Loop, clamp, float, floor, instanceIndex, int, ivec3, max, mix, storage, uint, uniform, vec3, vec4,
 } from 'three/tsl';
 import type { ParticleSpatialGridRenderer } from '../../spatial/structures/ParticleSpatialGrid';
 import SparsePressureMultigrid, {
@@ -71,6 +76,8 @@ export default class FluidPressureProjection {
   private multigridResidual?: FloatStorage;
   private multigridResidualNode?: ComputeNode;
   private readPending = false;
+  private disposed = false;
+  private borrowedOversize = false;
   private preparing = false;
   /** Pipeline collection prepares both Auto paths before any production switch. @internal */
   get isPreparing(): boolean { return this.preparing; }
@@ -143,6 +150,7 @@ export default class FluidPressureProjection {
     private readonly openness?: Vec4Storage,
     private readonly wallVelocity?: Vec4Storage,
     private readonly controls?: () => FluidPressureControls,
+    scratch?: FluidPressureProjection,
   ) {
     this.dimensions = typeof dimensions === 'number' ? new Vector3().setScalar(dimensions) : dimensions;
     this.n = this.dimensions.x;
@@ -151,12 +159,55 @@ export default class FluidPressureProjection {
     this.cellCount = grid?.cellCount ?? this.dimensions.x * this.dimensions.y * this.dimensions.z;
     const faces = this.dimensions.clone().addScalar(1);
     this.faceCount = grid ? grid.capacity * (grid.brickSide + 1) ** 3 + 1 : faces.x * faces.y * faces.z;
-    this.attribute = new StorageBufferAttribute(new Float32Array(this.faceCount * 4), 4);
+    // Compilation never executes a candidate. Compatible generations reuse transient backing;
+    // persistent pressure/convergence/coarse state and program/topology identities stay independent.
+    const compatible = scratch && !scratch.disposed && scratch.faceCount >= this.faceCount
+      && scratch.cellCount >= this.cellCount
+      && !!scratch.beforeAttribute === !!occupancy ? scratch : undefined;
+    this.borrowedOversize = !!compatible && compatible.faceCount > this.faceCount;
+    this.attribute = compatible ? retainSharedStorage(compatible.attribute)
+      : new StorageBufferAttribute(new Float32Array(this.faceCount * 4), 4);
     this.faces = storage(this.attribute, 'vec4', this.faceCount) as Vec4Storage;
     if (occupancy) {
-      this.beforeAttribute = new StorageBufferAttribute(new Float32Array(this.faceCount * 4), 4);
+      this.beforeAttribute = compatible ? retainSharedStorage(compatible.beforeAttribute!)
+        : new StorageBufferAttribute(new Float32Array(this.faceCount * 4), 4);
       this.beforeFaces = storage(this.beforeAttribute, 'vec4', this.faceCount) as Vec4Storage;
     }
+    if (compatible?.stencilIndicesAttribute) {
+      this.stencilIndicesAttribute = retainSharedStorage(compatible.stencilIndicesAttribute);
+      this.stencilWeightsAttribute = retainSharedStorage(compatible.stencilWeightsAttribute!);
+      this.stencilIndices = storage(this.stencilIndicesAttribute, 'uint', this.cellCount * 7);
+      this.stencilWeights = storage(this.stencilWeightsAttribute, 'float', this.cellCount * 6);
+    }
+  }
+
+  /** After adoption/old-generation retirement, replace an oversized borrowed workspace once.
+   * The replacement does not migrate transient values. Next solve reconstructs faces and topology.
+   * Old backing survives the last queued use, including uses by the newly adopted generation.
+   */
+  compactScratch(renderer: ParticleSpatialGridRenderer): void {
+    if (!this.borrowedOversize || this.disposed) return;
+    this.borrowedOversize = false;
+    const retired: StorageBufferAttribute[] = [];
+    const replace = (attribute: StorageBufferAttribute, node: unknown, count: number) => {
+      const ArrayType = attribute.array.constructor as Float32ArrayConstructor | Uint32ArrayConstructor;
+      const next = new StorageBufferAttribute(new ArrayType(count * attribute.itemSize), attribute.itemSize);
+      initializeStorageAttribute(renderer, next, false);
+      (node as { value: StorageBufferAttribute }).value = next;
+      retired.push(attribute);
+      return next;
+    };
+    this.attribute = replace(this.attribute, this.faces, this.faceCount);
+    if (this.beforeAttribute) this.beforeAttribute = replace(this.beforeAttribute, this.beforeFaces, this.faceCount);
+    if (this.stencilIndicesAttribute) {
+      this.stencilIndicesAttribute = replace(this.stencilIndicesAttribute, this.stencilIndices, this.cellCount * 7);
+      this.stencilWeightsAttribute = replace(this.stencilWeightsAttribute!, this.stencilWeights, this.cellCount * 6);
+    }
+    this.updateTopology();
+    const device = (renderer.backend as { device: { queue: { onSubmittedWorkDone(): Promise<void> } } }).device;
+    void device.queue.onSubmittedWorkDone().catch(() => {}).then(() => {
+      retired.forEach(attribute => releaseSharedStorage(attribute, renderer));
+    });
   }
 
   private capacityAttributes(): StorageBufferAttribute[] {
@@ -248,6 +299,7 @@ export default class FluidPressureProjection {
     ] as const) {
       if (node && attribute) (node as unknown as { value: StorageBufferAttribute }).value = attribute;
     }
+    this.borrowedOversize = false;
     this.attribute = payload.facesAttribute;
     this.beforeAttribute = payload.beforeAttribute;
     this.stencilIndicesAttribute = payload.stencilIndicesAttribute;
@@ -276,6 +328,7 @@ export default class FluidPressureProjection {
     output: Vec4Storage,
     iterations: number,
     before?: Vec4Storage,
+    benchmarks?: Benchmarks,
   ): Promise<void> {
     if (!renderer.compileComputeAsync) return;
     const nodes: ComputeNode[] = [];
@@ -291,7 +344,10 @@ export default class FluidPressureProjection {
       if (controls?.diagnostics) this.measure(collector, output, false);
       else if (controls?.measureVelocity) this.measureVelocity(collector, output);
       this.multigrid?.prepareAllLevels(collector);
-      await renderer.compileComputeAsync([...new Set(nodes)]);
+      this.namePrograms(input, before);
+      const programs = [...new Set(nodes)];
+      programs.forEach((node, index) => { if (!node.name) node.setName(`rzmps.pressure.prepare.${index}`); });
+      await prepareComputePrograms(renderer, programs, () => true, benchmarks);
     } finally {
       this.preparing = false;
       this.invalidate();
@@ -299,13 +355,29 @@ export default class FluidPressureProjection {
     }
   }
 
+  /** Stable diagnostic names identify expensive program families across prepared generations. */
+  private namePrograms(input: Vec4Storage, before?: Vec4Storage): void {
+    for (const [key, value] of Object.entries(this)) {
+      if ((value as ComputeNode | undefined)?.isComputeNode) {
+        const node = value as ComputeNode;
+        if (!node.name) node.setName(`rzmps.pressure.${key}`);
+      }
+    }
+    this.builds.get(input)?.setName('rzmps.pressure.buildFaces');
+    this.centers.get(input)?.setName('rzmps.pressure.reconstructCenters');
+    if (before) this.beforeBuilds.get(before)?.setName('rzmps.pressure.buildBeforeFaces');
+  }
+
   /** Pool addresses remain stable during growth, including staggered face velocities. */
   migrateTo(renderer: ParticleSpatialGridRenderer, target: FluidPressureProjection, reindexed = false): void {
     if (target.faceCount < this.faceCount || (!reindexed && !target.dimensions.equals(this.dimensions))) {
-      throw new Error('Incompatible pressure migration.');
+      throw new Error(`Incompatible pressure migration: faces ${this.faceCount} -> ${target.faceCount}; `
+        + `dimensions ${this.dimensions.toArray()} -> ${target.dimensions.toArray()}.`);
     }
     const count = this.faceCount - (this.grid ? 1 : 0);
-    copyStorageAttributes(renderer, [{ source: this.attribute, target: target.attribute, byteLength: count * 16 }]);
+    if (this.attribute !== target.attribute) {
+      copyStorageAttributes(renderer, [{ source: this.attribute, target: target.attribute, byteLength: count * 16 }]);
+    }
     target.initialized = this.initialized;
     target.pressureInitialized = this.pressureInitialized;
   }
@@ -330,17 +402,28 @@ export default class FluidPressureProjection {
       + (this.multigrid?.allocatedBytes ?? 0) + (this.multigridResidualAttribute?.array.byteLength ?? 0);
   }
 
+  private storageRenderer?: ParticleSpatialGridRenderer;
+
   dispose(): void {
-    this.attribute.dispose();
-    this.beforeAttribute?.dispose();
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this.storageRenderer) {
+      for (const attribute of [this.attribute, this.beforeAttribute, this.convergenceAttribute,
+        this.topologyAttribute, this.fallbackDispatch, this.stencilIndicesAttribute,
+        this.stencilWeightsAttribute, this.multigridResidualAttribute]) {
+        if (attribute) bindStorageAttributeLifetime(this.storageRenderer, attribute);
+      }
+    }
+    releaseSharedStorage(this.attribute, this.storageRenderer);
+    if (this.beforeAttribute) releaseSharedStorage(this.beforeAttribute, this.storageRenderer);
     this.convergenceAttribute.dispose();
     this.topologyAttribute.dispose(); this.fallbackDispatch.dispose();
     this.fallbackSchedule?.dispose();
     [this.topologyNode, this.forceCoarseTopologyNode, this.retainCoarseTopologyNode].forEach(node => node?.dispose());
     this.reduction?.dispose();
-    this.stencilIndicesAttribute?.dispose();
-    this.stencilWeightsAttribute?.dispose();
-    this.multigrid?.dispose();
+    if (this.stencilIndicesAttribute) releaseSharedStorage(this.stencilIndicesAttribute, this.storageRenderer);
+    if (this.stencilWeightsAttribute) releaseSharedStorage(this.stencilWeightsAttribute, this.storageRenderer);
+    this.multigrid?.dispose(this.storageRenderer);
     this.multigridResidualAttribute?.dispose();
   }
 
@@ -359,10 +442,15 @@ export default class FluidPressureProjection {
       .add(this.grid.unpack(index.mod((b + 1) ** 3), b + 1)) as Node<'ivec3'>;
   }
 
-  private face(coordinate: Node<'ivec3'>, axis: number, field = this.faces): Node<'float'> {
-    const component = (['x', 'y', 'z'] as const)[axis];
-    if (!this.grid) return field.element(uint(coordinate.x.add(coordinate.y.mul(this.dimensions.x + 1))
-      .add(coordinate.z.mul((this.dimensions.x + 1) * (this.dimensions.y + 1)))))[component] as Node<'float'>;
+  private component(value: Node<'vec4'>, axis: number | Node<'int'>): Node<'float'> {
+    return typeof axis === 'number' ? value[(['x', 'y', 'z'] as const)[axis]] as Node<'float'>
+      : value.xyz.dot(vec3(this.axis(axis)));
+  }
+
+  private face(coordinate: Node<'ivec3'>, axis: number | Node<'int'>, field = this.faces): Node<'float'> {
+    if (!this.grid) return this.component(field.element(uint(coordinate.x
+      .add(coordinate.y.mul(this.dimensions.x + 1))
+      .add(coordinate.z.mul((this.dimensions.x + 1) * (this.dimensions.y + 1))))), axis);
     const b = this.grid.brickSide;
     const side = this.grid.getBrickDimensionsNode();
     const brick = ivec3(clamp(floor(vec3(coordinate).div(b)), vec3(0), vec3(side).sub(1)));
@@ -375,7 +463,7 @@ export default class FluidPressureProjection {
     const index = encoded.greaterThan(uint(0)).select(encoded, uint(1)).sub(1).mul((b + 1) ** 3)
       .add(this.grid.flatten(local, b + 1));
     const address = encoded.greaterThan(0).select(index, this.grid.getCapacityNode().mul((b + 1) ** 3));
-    return field.element(address)[component] as Node<'float'>;
+    return this.component(field.element(address), axis);
   }
 
   private cell(coordinate: Node<'ivec3'>): Node<'uint'> {
@@ -406,8 +494,9 @@ export default class FluidPressureProjection {
       : this.solid.element(this.cell(coordinate)).greaterThanEqual(0.5))));
   }
 
-  private axis(axis: number): Node<'ivec3'> {
-    return ivec3(axis === 0 ? 1 : 0, axis === 1 ? 1 : 0, axis === 2 ? 1 : 0);
+  private axis(axis: number | Node<'int'>): Node<'ivec3'> {
+    return typeof axis === 'number' ? ivec3(axis === 0 ? 1 : 0, axis === 1 ? 1 : 0, axis === 2 ? 1 : 0)
+      : ivec3(int(axis.equal(0).select(1, 0)), int(axis.equal(1).select(1, 0)), int(axis.equal(2).select(1, 0)));
   }
 
   private active(coordinate: Node<'ivec3'>): Node<'bool'> {
@@ -421,32 +510,42 @@ export default class FluidPressureProjection {
       .and(this.grid ? this.grid.active(this.cell(coordinate)) : this.inside(coordinate));
   }
 
-  private open(face: Node<'ivec3'>, axis: number): Node<'float'> {
+  private open(face: Node<'ivec3'>, axis: number | Node<'int'>): Node<'float'> {
     const lower = face.sub(this.axis(axis));
-    const component = (['x', 'y', 'z'] as const)[axis];
     if (!this.openness) return this.occupied(lower).or(this.occupied(face)).select(float(0), float(1));
     const outside = this.inside(face).not()
       .or(this.grid ? this.grid.active(this.cell(face)).not() : this.inside(face).not());
     const closed = this.occupied(lower).or(this.occupied(face));
-    return closed.select(float(0), outside.select(float(1), this.openness.element(this.cell(face))[component]));
+    return closed.select(float(0), outside.select(float(1),
+      this.component(this.openness.element(this.cell(face)), axis)));
   }
 
-  private wall(face: Node<'ivec3'>, axis: number): Node<'float'> {
+  private wall(face: Node<'ivec3'>, axis: number | Node<'int'>): Node<'float'> {
     if (!this.wallVelocity) return float(0);
-    return this.inside(face).select(
-      this.wallVelocity.element(this.cell(face))[(['x', 'y', 'z'] as const)[axis]], float(0),
-    );
+    const lower = face.sub(this.axis(axis));
+    const velocity = this.component(this.wallVelocity.element(this.cell(face)), axis);
+    if (!this.openness) return this.inside(face).select(velocity, float(0));
+    // A lower solid voxel may close a geometrically clear face owned by the fluid voxel.
+    // Its rigid velocity, rather than the fluid owner's zero, defines that conservative wall.
+    const useLower = this.occupied(lower).and(this.component(
+      this.openness.element(this.cell(face)), axis).greaterThanEqual(1));
+    return this.inside(face).select(useLower.select(
+      this.component(this.wallVelocity.element(this.cell(lower)), axis), velocity,
+    ), float(0));
   }
 
-  private flux(face: Node<'ivec3'>, axis: number): Node<'float'> {
+  private flux(face: Node<'ivec3'>, axis: number | Node<'int'>): Node<'float'> {
     const open = this.open(face, axis);
     return this.face(face, axis).mul(open).add(this.wall(face, axis).mul(float(1).sub(open)));
   }
 
   private divergenceAt(c: Node<'ivec3'>): Node<'float'> {
-    return this.flux(c.add(ivec3(1, 0, 0)), 0).sub(this.flux(c, 0))
-      .add(this.flux(c.add(ivec3(0, 1, 0)), 1).sub(this.flux(c, 1)))
-      .add(this.flux(c.add(ivec3(0, 0, 1)), 2).sub(this.flux(c, 2))).div(this.h);
+    const divergence = float(0).toVar();
+    Loop(3, ({ i }) => {
+      divergence.addAssign(this.flux(c.add(this.axis(i)), i));
+      divergence.subAssign(this.flux(c, i));
+    });
+    return divergence.div(this.h);
   }
 
   private stencil(c: Node<'ivec3'>): { sum: Node<'float'>; diagonal: Node<'float'> } {
@@ -481,16 +580,18 @@ export default class FluidPressureProjection {
         this.stencilIndices!.element(indices.add(6)).assign(active.select(
           uint(c.x.add(c.y).add(c.z).mod(2)).add(1), uint(0),
         ));
-        for (let axis = 0; axis < 3; axis++) for (const sign of [-1, 1]) {
-          const entry = axis * 2 + Number(sign > 0);
+        // Six neighbors share one lookup graph; execution order and operator coefficients are unchanged.
+        Loop(6, ({ i }) => {
+          const axis = int(i.div(2)), positive = i.mod(2).greaterThan(0);
+          const entry = uint(i), sign = int(positive.select(1, -1));
           const neighbor = c.add(this.axis(axis).mul(sign));
-          const face = sign < 0 ? c : c.add(this.axis(axis));
+          const face = c.add(this.axis(axis).mul(int(positive.select(1, 0))));
           const weight = this.open(face, axis).mul(this.inside(neighbor).select(1, 2));
           this.stencilWeights!.element(weights.add(entry)).assign(active.select(weight, float(0)));
           this.stencilIndices!.element(indices.add(entry)).assign(this.pressureValid(neighbor).select(
             this.cell(neighbor), this.grid!.getCellCountNode().sub(1),
           ));
-        }
+        });
       });
     });
     renderer.compute(this.stencilNode);
@@ -504,17 +605,6 @@ export default class FluidPressureProjection {
       sum.addAssign(this.pressure.element(this.stencilIndices!.element(index.mul(7).add(entry))).mul(weight));
     }
     return { sum, diagonal };
-  }
-
-  /** Reuse the already-built fine operator when constructing coarse face coefficients. */
-  private cachedFaceOpenness(c: Node<'ivec3'>, axis: number): Node<'float'> {
-    const index = this.cell(c);
-    const weight = this.stencilWeights!.element(index.mul(6).add(axis * 2));
-    const boundary = this.inside(c.sub(this.axis(axis))).select(float(1), float(2));
-    const openness = float(0).toVar();
-    If(this.inside(c).and(this.grid!.active(index)), () => openness.assign(weight.div(boundary)))
-      .Else(() => openness.assign(this.open(c, axis)));
-    return openness;
   }
 
   private createReduction(): FluidReduction {
@@ -572,6 +662,7 @@ export default class FluidPressureProjection {
   }
 
   private build(renderer: ParticleSpatialGridRenderer, input: Vec4Storage, before = false): void {
+    this.storageRenderer = renderer;
     const builds = before ? this.beforeBuilds : this.builds;
     const target = before ? this.beforeFaces! : this.faces;
     const node = builds.get(input) ?? this.compute(index => {
@@ -597,6 +688,7 @@ export default class FluidPressureProjection {
   }
 
   initialize(renderer: ParticleSpatialGridRenderer, input: Vec4Storage): void {
+    this.storageRenderer = renderer;
     if (this.grid) {
       this.clearFacesNode ??= this.grid.compute(index => {
         this.faces.element(index).assign(vec4(0));
@@ -635,15 +727,18 @@ export default class FluidPressureProjection {
       );
       if (this.occupancy) {
         const total = float(0).toVar(), weightSum = float(0).toVar();
-        for (const z of [0, 1]) for (const y of [0, 1]) for (const x of [0, 1]) {
-          const c = ivec3(clamp(base.add(vec3(x, y, z)), vec3(0), limits));
+        // Keep donor traversal in the shader instead of expanding the sparse lookup graph eight times.
+        Loop(8, ({ i }) => {
+          const delta = ivec3(i.mod(2), i.div(2).mod(2), i.div(4));
+          const c = ivec3(clamp(base.add(vec3(delta)), vec3(0), limits));
           const valid = this.active(c).or(this.active(c.sub(this.axis(axis))));
-          const weight = (x ? fraction.x : float(1).sub(fraction.x))
-            .mul(y ? fraction.y : float(1).sub(fraction.y))
-            .mul(z ? fraction.z : float(1).sub(fraction.z)).mul(valid.select(1, 0));
+          const weights = vec3(delta.x.equal(0).select(float(1).sub(fraction.x), fraction.x),
+            delta.y.equal(0).select(float(1).sub(fraction.y), fraction.y),
+            delta.z.equal(0).select(float(1).sub(fraction.z), fraction.z));
+          const weight = weights.x.mul(weights.y).mul(weights.z).mul(valid.select(1, 0));
           total.addAssign(this.face(c, axis, field).mul(weight));
           weightSum.addAssign(weight);
-        }
+        });
         return total.div(weightSum.max(1e-6));
       }
       return mix(
@@ -678,6 +773,7 @@ export default class FluidPressureProjection {
   }
 
   solve(renderer: ParticleSpatialGridRenderer, input: Vec4Storage, output: Vec4Storage, iterations: number): void {
+    this.storageRenderer = renderer;
     const controls = this.controls?.();
     const minimum = controls?.minIterations ?? iterations;
     const maximum = controls?.maxIterations ?? iterations;
@@ -813,25 +909,29 @@ export default class FluidPressureProjection {
         ) as FloatStorage;
         this.multigridResidualNode = this.compute(index => {
           If(this.convergence.element(0).x.lessThan(0.5).and(this.convergence.element(0).w.greaterThan(0.5)), () => {
-            const c = this.coordinate(index, this.n);
             const { sum, diagonal } = this.cachedStencil(index);
             const residual = this.divergence.element(index)
               .sub(sum.sub(diagonal.mul(this.pressure.element(index))).div(this.h.mul(this.h)));
-            this.multigridResidual!.element(index).assign(this.active(c).select(residual, float(0)));
+            // The stencil already classifies wet/solid cells. Reusing it avoids rebinding marker fields.
+            const active = this.stencilIndices!.element(index.mul(7).add(6)).greaterThan(0);
+            this.multigridResidual!.element(index).assign(active.select(residual, float(0)));
           });
         });
       }
       this.multigrid ??= new SparsePressureMultigrid({
         grid: this.grid!,
         spacing: this.h,
-        active: c => this.inside(c).and(this.active(c)).and(this.grid!.active(this.cell(c))),
+        active: c => this.inside(c).and(this.grid!.active(this.cell(c)))
+          .and(this.stencilIndices!.element(this.cell(c).mul(7).add(6)).greaterThan(0)),
         enabled: this.convergence.element(0).x.lessThan(0.5).and(this.convergence.element(0).w.greaterThan(0.5)),
         rebuildOperator: this.convergence.element(0).z.greaterThan(0)
           .and(this.convergence.element(0).w.greaterThan(0.5)),
         pressure: c => this.pressure.element(this.cell(c)),
         residual: c => this.multigridResidual!.element(this.cell(c)),
         updateResidual: target => target.compute(this.multigridResidualNode!),
-        open: (c, axis) => this.cachedFaceOpenness(c, axis),
+        // Coarse geometry needs physical openness even on dry neighbors, whose pressure row is inactive.
+        // Reading it directly also keeps restriction within the baseline eight storage bindings.
+        open: (c, axis) => this.open(c, axis),
         add: (c, value) => {
           If(this.convergence.element(0).x.lessThan(0.5).and(this.convergence.element(0).w.greaterThan(0.5)),
             () => this.pressure.element(this.cell(c)).addAssign(value));
@@ -931,6 +1031,7 @@ export default class FluidPressureProjection {
         this.occupancy ? input.element(index).w : float(0))));
     });
     this.centers.set(input, centerNode);
+    if (!centerNode.name) this.namePrograms(input);
     renderer.compute(centerNode);
     if ((controls?.diagnostics || controls?.measureVelocity) && !this.preparing && !this.readPending) {
       if (controls.diagnostics) this.measure(renderer, output, false);

@@ -306,6 +306,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
 
   /** Compile the layout-only kernels before the first live resize. */
   async prepareLayout(renderer: ParticleSpatialGridRenderer): Promise<void> {
+    this.storageRenderer = renderer;
     const nodes: ComputeNode[] = [], compute = renderer.compute;
     const shifted = this.bounds.clone().translate(new THREE.Vector3(this.brickSize, 0, 0));
     const old = this.bounds.clone();
@@ -524,6 +525,7 @@ export default class SparseVolumeGrid extends SpatialGrid {
 
   /** Rebuilds GPU-only work lists after page assignments change. */
   updateDispatch(renderer: ParticleSpatialGridRenderer): void {
+    this.storageRenderer = renderer;
     this.scheduleNode ??= Fn(() => {
       const previousActive = this.counters.element(0).toVar();
       const active = uint(0).toVar();
@@ -966,7 +968,9 @@ export default class SparseVolumeGrid extends SpatialGrid {
       .reduce((sum, attribute) => sum + attribute.array.byteLength, 0);
   }
 
-  dispose(renderer?: ParticleSpatialGridRenderer): void {
+  private storageRenderer?: ParticleSpatialGridRenderer;
+
+  dispose(renderer: ParticleSpatialGridRenderer | undefined = this.storageRenderer): void {
     this.directoryAllocation?.cancelPending();
     this.directoryAllocation = undefined;
     [this.pagesAttribute, this.previousPagesAttribute,

@@ -113,6 +113,11 @@ export default class FluidCollider extends SpatialEffect {
     }
   }
 
+  /** Geometry-backed fluid occupancy has its own GPU bake; never also voxelize it on the CPU. */
+  protected override ensureBakedField(): void {
+    if (this.customOccupancy) super.ensureBakedField();
+  }
+
   override bakedFieldGPU(particle: GPUParticleLike): Node<'float'> {
     if (this.customOccupancy) return super.bakedFieldGPU(particle);
     if (!this.gpuField) throw new Error('Fluid collider occupancy must be prepared with a GPU renderer.');

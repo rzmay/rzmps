@@ -43,3 +43,30 @@ test('fluid pass timings union overlapping scopes and separate surface, secondar
     else globalThis.GPUMapMode = previousMap;
   }
 });
+
+test('timestamp ring keeps pending frames independent and drops samples rather than waiting', async () => {
+  const previousUsage = globalThis.GPUBufferUsage, previousMap = globalThis.GPUMapMode;
+  globalThis.GPUBufferUsage = { QUERY_RESOLVE: 1, COPY_SRC: 2, COPY_DST: 4, MAP_READ: 8 };
+  globalThis.GPUMapMode = { READ: 1 };
+  const completions = [], times = new BigUint64Array([1_000_000n, 3_000_000n]);
+  const device = { createQuerySet: () => ({ destroy() {} }),
+    createBuffer: () => ({ destroy() {}, unmap() {}, getMappedRange: () => times.buffer,
+      mapAsync: () => new Promise(resolve => completions.push(resolve)) }),
+    createCommandEncoder: () => ({ beginComputePass() {}, beginRenderPass() {},
+      resolveQuerySet() {}, copyBufferToBuffer() {}, finish() {} }), queue: { submit() {} } };
+  const backend = { initTimestampQuery() {} };
+  let stage = 'first';
+  const timer = passTimer(device, backend, () => stage, { slots: 2 });
+  try {
+    assert(timer.start()); device.createCommandEncoder().beginComputePass();
+    const first = timer.finish();
+    stage = 'second'; assert(timer.start()); device.createCommandEncoder().beginComputePass();
+    const second = timer.finish();
+    assert.equal(timer.start(), false);
+    completions[1](); assert.equal((await second).allStageGPUms.second, 2);
+    completions[0](); assert.equal((await first).allStageGPUms.first, 2);
+  } finally {
+    timer.dispose();
+    globalThis.GPUBufferUsage = previousUsage; globalThis.GPUMapMode = previousMap;
+  }
+});

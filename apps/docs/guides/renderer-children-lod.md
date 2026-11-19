@@ -168,14 +168,19 @@ to skip both artistic and LOD child generation on CPU and GPU. Disabled generati
 does not evaluate child counts, allocate child buffers, or dispatch child compute
 passes. Tag filtering and size compensation still apply. The default is true.
 
-`VolumeRenderer` implements children as deterministic displaced/scaled copies
+`VolumeRenderer` implements children as deterministic displaced, rotated and scaled copies
 of its source fields. Copies add alpha-weighted density without normalization,
 reuse source textures, expand visible bounds, and never feed back into simulation.
 They do not generate particle buffers or obey fluid colliders. The same displacement
 stencil applies across each field; these are not independently simulated voxels.
 Volume child controls accept CPU-evaluable values/curves and numeric TSL
 constants/uniforms, not opaque GPU-only expressions. Volume diagnostics count
-additional field copies rather than particles.
+additional field copies rather than particles. Rotation uses the same radial `rotation`, `randomizeRotation`,
+and `radialFalloff` controls as particle children. The rotation pivot is the source field center when
+that copy is first created; it remains fixed when allocation bounds move or grow. Density and color sample
+through the inverse rotation, sampled velocity rotates with the copy, and bounds, empty-space skipping
+and lighting follow that transform. LOD copies inherit artistic rotation without applying it again.
+Changing one nonzero angle to another updates uniforms; copies with no rotation keep the unrotated sampling path.
 
 `renderer.renderedChildCount` reports additional artistic and LOD children. CPU counts update each frame. Reading this property during native GPU processing requests asynchronous diagnostics from the small counters buffer, at most four times per second; it does not read particle data back. The demo adds rendered and child totals to its particle counter only when children are present.
 
@@ -230,12 +235,14 @@ Remove the former update-rate LOD settings from systems, emitters, modules, and 
 ### Child rotation
 
 `children.rotation` is a local XYZ Euler offset in radians, composed after the parent's orientation. It defaults to zero.
-A scalar applies to all three axes; vectors, dynamic functions, random ranges, and sets use the usual dynamic-value
-conventions. Random samples are stable per child identity, independently of radius, scale, and alpha. LOD-only copies
-inherit their parent's completed orientation without applying the artistic offset again.
+Like `scale` and `alpha`, it accepts a `ValueByParameter`: a fixed scalar/vector, a range interpolated by radial distance,
+or a function of that parameter. Constants stay fixed. `randomizeRotation` perturbs the normalized radial parameter
+before `radialFalloff`, independently of `randomizeScale` and `randomizeAlpha`. Its default is zero; random draws remain
+stable per child identity. Rotation functions receive the radial parameter, not particle age. LOD-only copies inherit
+their parent's completed orientation without applying the artistic offset again.
 
 ```ts
-new MeshRenderer({ children: { count: 3, rotation: [-0.25, 0.25] } });
+new MeshRenderer({ children: { count: 3, radius: 1, rotation: [-0.25, 0.25], randomizeRotation: 0.2 } });
 ```
 
 ## Dynamic point lights

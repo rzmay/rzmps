@@ -24,6 +24,10 @@ try {
   const preparation = await page.evaluate(() => window.testPreparation());
   assert.deepEqual(preparation.before, preparation.after, 'preparation must not advance time or emit');
   console.log('Preparation:', preparation);
+  const scratch = await page.evaluate(() => window.testPressureScratchLease());
+  assert(scratch.shared && scratch.compacted && scratch.retainedDuringCompilationOwnership);
+  assert.equal(scratch.destructions, 1, 'shared scratch is destroyed only after its final owner, exactly once');
+  console.log('Pressure scratch ownership:', scratch);
   const growth = await page.evaluate(() => window.testGrowth());
   console.log('Growth:', growth);
   assert(growth.retained);

@@ -7,7 +7,7 @@ import type { ValueByParameter } from '../../values/valueByParameter.types';
 import { evaluateByParameterColorGPU, evaluateByParameterNumberGPU } from '../../values/evaluateByParameterGPU.utils';
 import type { MaterialCompositeGPUCallback } from '../compositing/composite.utils';
 
-/** Appearance curves evaluated from combined normalized speed and curl, in the range zero to one. */
+/** Appearance curves evaluated from combined normalized deformation and curl, in the range zero to one. */
 export interface LiquidFlowOptions {
   /** Calm-to-active color gradient. Multiplies particle color, blending toward the gradient in active water. */
   gradient: ValueByParameter<ColorRepresentation>;
@@ -17,13 +17,17 @@ export interface LiquidFlowOptions {
   normalStrength: ValueByParameter<number>;
   /** Spatial noise frequency in simulation units; defaults to 1. */
   noiseFrequency: ValueByParameter<number>;
+  /** Nonnegative noise animation cycles per second; zero freezes the phase. Defaults to [0.2, 0.2]. */
+  noiseSpeed: ValueByParameter<number>;
   /** Stretch along flow, clamped below one; defaults to 1. */
   distortion: ValueByParameter<number>;
   /** Noise advection multiplier; defaults to 1. */
   advection: ValueByParameter<number>;
-  /** Speeds spanning calm to active water. Defaults to [0, 1]. */
+  /** Symmetric strain rates spanning calm to active water, in inverse seconds. Defaults to [0.5, 6]. */
+  deformationRange: [number, number];
+  /** Retained speed range for artistic/custom effects; speed does not drive built-in aeration. Defaults to [0, 1]. */
   velocityRange: [number, number];
-  /** Curl magnitudes spanning calm to active water. Defaults to [0, 1]. */
+  /** Curl magnitudes spanning calm to active water. Defaults to [4, 20], favoring deformation over rigid rotation. */
   vorticityRange: [number, number];
 }
 
@@ -55,10 +59,12 @@ export default class LiquidMaterial extends MeshPhysicalMaterial {
       roughness: 0.5,
       normalStrength: 1,
       noiseFrequency: 1,
+      noiseSpeed: [0.2, 0.2],
       distortion: 1,
       advection: 1,
       velocityRange: [0, 1],
-      vorticityRange: [0, 1],
+      deformationRange: [0.5, 6],
+      vorticityRange: [4, 20],
       ...flow,
     });
   }
@@ -76,7 +82,7 @@ export default class LiquidMaterial extends MeshPhysicalMaterial {
   /** Update flow controls without replacing the material or rebuilding the surface geometry. */
   setFlow(options: Partial<LiquidFlowOptions>): this {
     const flow = { ...this.flowOptions, ...options };
-    for (const range of [flow.velocityRange, flow.vorticityRange]) {
+    for (const range of [flow.velocityRange, flow.deformationRange, flow.vorticityRange]) {
       if (!range || !range.every(Number.isFinite) || range[1] <= range[0]) {
         throw new RangeError('Liquid material activity ranges must be finite and increasing.');
       }
@@ -87,16 +93,16 @@ export default class LiquidMaterial extends MeshPhysicalMaterial {
       const velocity = context.surfaceVelocity ?? vec3(0);
       const speed = context.surfaceSpeed ?? float(0);
       const curl = context.surfaceVorticityMagnitude ?? float(0);
-      const moving = smoothstep(...flow.velocityRange, speed);
+      const deforming = smoothstep(...flow.deformationRange, context.surfaceDeformation ?? float(0));
       const rotating = smoothstep(...flow.vorticityRange, curl);
-      const activity = float(1).sub(float(1).sub(moving).mul(float(1).sub(rotating)));
+      const activity = float(1).sub(float(1).sub(deforming).mul(float(1).sub(rotating)));
       const numeric = (value: ValueByParameter<number>) => evaluateByParameterNumberGPU(value, activity);
       const tint = evaluateByParameterColorGPU(flow.gradient, activity);
       const point = stretchAlongVelocity(positionLocal, velocity, numeric(flow.distortion), speed)
         .mul(numeric(flow.noiseFrequency).max(0));
 
       // Blend bounded advection phases so restarting a phase does not jump the visible pattern.
-      const phase = time.mul(0.2).fract();
+      const phase = time.mul(numeric(flow.noiseSpeed).max(0)).fract();
       const secondPhase = phase.add(0.5).fract();
       const advection = velocity.mul(numeric(flow.advection));
       const a = mx_fractal_noise_float(point.sub(advection.mul(phase)), 2, 2, 0.5);

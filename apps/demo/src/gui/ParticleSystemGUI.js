@@ -7,7 +7,7 @@ import * as THREE from 'three';
 
 import { createDefaultSceneBackground } from 'examples/utils/background.js';
 import { getSceneParticleRoot, retainSceneParticleRoot } from 'examples/utils/particleRoot.js';
-import { Collision, EndBehavior, MaxCulling, FluidSimulation } from '@rzmps/rzmps';
+import { Collision, EndBehavior, MaxCulling, FluidSimulation, SimulationSpace, SourceLossBehavior } from '@rzmps/rzmps';
 
 import { EmitterGUI } from './particle-system-gui/EmitterGUI';
 import { ModuleGUI } from './particle-system-gui/ModuleGUI';
@@ -25,7 +25,7 @@ const RESOURCE_LINKS = [
 ];
 
 const END_BEHAVIOR_OPTIONS = EndBehavior;
-const MAX_CULLING_OPTIONS = MaxCulling ?? { New: 'new', Old: 'old' };
+const MAX_CULLING_OPTIONS = MaxCulling;
 const RENDERER_MODE_OPTIONS = { WebGL: 'webgl', WebGPU: 'webgpu' };
 
 export class ParticleSystemGUI {
@@ -448,8 +448,8 @@ export class ParticleSystemGUI {
     folder.domElement.classList.add('psgui-system');
     folder.open();
     const destroyed = this.isSystemDestroyed(system);
-    folder.add(system, 'simulationSpace', ['local', 'world', 'transform', 'source']).name('Simulation Space');
-    folder.add(system, 'sourceLoss', ['detach', 'kill']).name('Source Loss');
+    folder.add(system, 'simulationSpace', SimulationSpace).name('Simulation Space');
+    folder.add(system, 'sourceLossBehavior', SourceLossBehavior).name('Source Loss Mode');
     folder.add(system, 'useSpatialEffects').name('Spatial Effects');
     folder.add(system, 'spatialEffectBoundsFiltering').name('Spatial Bounds Filter');
     const gravityFolder = folder.addFolder('Gravity');

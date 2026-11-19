@@ -50,6 +50,18 @@ sourceUV: Node<"vec2">;
 
 ***
 
+<a id="surfacedeformation"></a>
+
+### surfaceDeformation?
+
+```ts
+optional surfaceDeformation?: Node<"float">;
+```
+
+Frobenius norm of the local symmetric velocity gradient, in inverse seconds.
+
+***
+
 <a id="surfacespeed"></a>
 
 ### surfaceSpeed?

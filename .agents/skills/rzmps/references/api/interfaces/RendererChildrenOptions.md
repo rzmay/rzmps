@@ -74,6 +74,18 @@ optional randomizeAlpha?: number;
 
 ***
 
+<a id="randomizerotation"></a>
+
+### randomizeRotation?
+
+```ts
+optional randomizeRotation?: number;
+```
+
+Perturbs the radial rotation parameter before radialFalloff, independently of scale and alpha. Default: zero.
+
+***
+
 <a id="randomizescale"></a>
 
 ### randomizeScale?
@@ -89,10 +101,10 @@ optional randomizeScale?: number;
 ### rotation?
 
 ```ts
-optional rotation?: DynamicValue<Vector3Input>;
+optional rotation?: ValueByParameter<Vector3Input>;
 ```
 
-Local XYZ Euler offset in radians, composed after the inherited orientation. Defaults to zero.
+Radial local XYZ Euler offset in radians, composed after the inherited orientation. Constants stay fixed.
 
 ***
 

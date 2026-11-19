@@ -443,6 +443,13 @@ export default class ThreeGPUCollisionBackend implements ICollisionBackend {
         this.materialRegistry) as BVHComputeDataRuntime;
     }
     this.data.update();
+    // BVH construction may add an index to unindexed input. Record that owned setup change
+    // now, otherwise the next update mistakes it for external topology mutation and repacks again.
+    for (const entry of this.tracked.values()) {
+      entry.indexAttribute = entry.geometry.index;
+      entry.indexCount = entry.geometry.index?.count ?? 0;
+      entry.indexVersion = entry.geometry.index?.version ?? 0;
+    }
     if (!this.capsuleQuery) {
       this.capsuleQuery = capsuleBVHCollisionNode(this.data as unknown as Parameters<
         typeof capsuleBVHCollisionNode

@@ -35,12 +35,13 @@ export default async function createVolumetricFire() {
     velocityDissipation: 0.15,
     buoyancy: 8,
     weight: 0.03,
-    sourceStrength: 8,
-    velocitySourceStrength: 2.2,
+    // World-space source/diffusion units, calibrated at the original 0.125-unit cell width.
+    sourceStrength: 0.016362461737446838,
+    velocitySourceStrength: 0.004499676977797881,
     sourceTemperature: 1.2,
     temperatureOverLifetime: (time) => 1 - time,
     // Preserve thin structures: strong diffusion rounds the plume into soft smoke lobes.
-    scalarDiffusion: 0.02,
+    scalarDiffusion: 5.208333333333334e-05,
     vorticityStrength: 10,
     turbulenceNoiseStrength: 1,
     // Slightly shorter-lived hot gas; retain the exported cool-smoke decay and flow settings.

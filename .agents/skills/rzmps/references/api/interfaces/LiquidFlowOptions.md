@@ -8,7 +8,7 @@
 
 # Interface: LiquidFlowOptions
 
-Appearance curves evaluated from combined normalized speed and curl, in the range zero to one.
+Appearance curves evaluated from combined normalized deformation and curl, in the range zero to one.
 
 ## Properties
 
@@ -21,6 +21,18 @@ advection: ValueByParameter<number>;
 ```
 
 Noise advection multiplier; defaults to 1.
+
+***
+
+<a id="deformationrange"></a>
+
+### deformationRange
+
+```ts
+deformationRange: [number, number];
+```
+
+Symmetric strain rates spanning calm to active water, in inverse seconds. Defaults to [0.5, 6].
 
 ***
 
@@ -60,6 +72,18 @@ Spatial noise frequency in simulation units; defaults to 1.
 
 ***
 
+<a id="noisespeed"></a>
+
+### noiseSpeed
+
+```ts
+noiseSpeed: ValueByParameter<number>;
+```
+
+Nonnegative noise animation cycles per second; zero freezes the phase. Defaults to [0.2, 0.2].
+
+***
+
 <a id="normalstrength"></a>
 
 ### normalStrength
@@ -92,7 +116,7 @@ Physical surface roughness; defaults to 0.5.
 velocityRange: [number, number];
 ```
 
-Speeds spanning calm to active water. Defaults to [0, 1].
+Retained speed range for artistic/custom effects; speed does not drive built-in aeration. Defaults to [0, 1].
 
 ***
 
@@ -104,4 +128,4 @@ Speeds spanning calm to active water. Defaults to [0, 1].
 vorticityRange: [number, number];
 ```
 
-Curl magnitudes spanning calm to active water. Defaults to [0, 1].
+Curl magnitudes spanning calm to active water. Defaults to [4, 20], favoring deformation over rigid rotation.

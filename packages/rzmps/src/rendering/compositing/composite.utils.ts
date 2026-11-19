@@ -19,6 +19,8 @@ export interface MaterialCompositeContext {
   surfaceSpeed?: string;
   surfaceVorticity?: string;
   surfaceVorticityMagnitude?: string;
+  /** Frobenius norm of the local symmetric velocity gradient, in inverse seconds. */
+  surfaceDeformation?: string;
   /** Smooth isolated-to-bulk support metric in [0, 1]. */
   surfaceSupport?: string;
   /** Unperturbed, normalized view-space surface normal. */
@@ -37,6 +39,8 @@ export interface MaterialCompositeGPUContext {
   surfaceSpeed?: Node<'float'>;
   surfaceVorticity?: Node<'vec3'>;
   surfaceVorticityMagnitude?: Node<'float'>;
+  /** Frobenius norm of the local symmetric velocity gradient, in inverse seconds. */
+  surfaceDeformation?: Node<'float'>;
   /** Smooth isolated-to-bulk support metric in [0, 1]. */
   surfaceSupport?: Node<'float'>;
   geometricNormal: Node<'vec3'>;

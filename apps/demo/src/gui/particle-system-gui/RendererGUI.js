@@ -6,6 +6,8 @@ import {
   SurfaceExtraction,
   VolumeInterpolation,
   VolumeDensityMapping,
+  CompensationMode,
+
   DecalRenderer,
   SpriteRenderer,
   LightRenderer,
@@ -43,7 +45,7 @@ export class RendererGUI extends GUIEditorBase {
 
   buildRenderer(folder, renderer, system = this.system) {
     this.addTags(folder, renderer);
-    folder.add(renderer, 'compensation', ['none', 'size', 'children']).name('LOD Compensation');
+    folder.add(renderer, 'compensation', CompensationMode).name('LOD Compensation');
     const children = folder.addFolder('Renderer Children');
     renderer.children ??= {};
     const defaults = {
@@ -52,6 +54,7 @@ export class RendererGUI extends GUIEditorBase {
       rotation: new THREE.Vector3(),
       scale: 1,
       alpha: 1,
+      randomizeRotation: 0,
       randomizeScale: 0,
       randomizeAlpha: 0,
     };
@@ -231,7 +234,7 @@ export class RendererGUI extends GUIEditorBase {
       'fieldSmoothing',
       'fieldClosing',
       'flowSmoothing',
-      'velocityDetailRange',
+      'deformationDetailRange',
       'vorticityDetailRange',
       'isoLevel',
       'bounds',
@@ -251,7 +254,9 @@ export class RendererGUI extends GUIEditorBase {
       // Rebuild only the material graph when an appearance curve changes.
       const settings = { ...renderer.material.flow };
       flow.onChange(() => renderer.material.setFlow(settings));
-      for (const key of Object.keys(settings)) this.addValue(flow, settings, key, this.prettyName(key));
+      for (const key of Object.keys(settings)) {
+        if (key !== 'velocityRange') this.addValue(flow, settings, key, this.prettyName(key));
+      }
     }
     for (const key of [
       'color',

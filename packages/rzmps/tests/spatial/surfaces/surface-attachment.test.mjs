@@ -63,4 +63,6 @@ test('foam and spray use ordinary independent subsystem conditions', () => {
   assert.equal(typeof foam, 'function'); assert.equal(typeof spray, 'function');
   assert(foam.spatialGridOptions); assert(spray.spatialGridOptions);
   assert.throws(() => FLIPSimulation.FoamCondition({ minimumNeighbors: 10, maximumNeighbors: 3 }), /neighbor/);
+  assert.throws(() => FLIPSimulation.FoamCondition({ minimumDeformity: -1 }), /minimumDeformity/);
+  assert.throws(() => FLIPSimulation.FoamCondition({ minimumDeformity: 0.5 }), /samplerGPU/);
 });

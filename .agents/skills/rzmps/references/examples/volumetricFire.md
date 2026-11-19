@@ -21,7 +21,7 @@ It remains open at the cap; outflow is absorbed rather than reflected back into 
 Scale the root system normally to change its world-space size.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L70)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L71)
 
 ```js
   const system = new ParticleSystem({
@@ -134,7 +134,7 @@ Their 0.1-unit scale and shrinking lifetime envelope make compact gas sources. L
 slightly longer source lifetimes produce flickering tongues rather than a uniformly filled column.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L74)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L75)
 
 ```js
     emitters: [
@@ -172,6 +172,10 @@ at 8 / 64 = 0.125 without changing the sixteen-unit physical bounds cap. Automat
 hysteresis in both directions and prepares replacements before adopting them. Its short rolling prediction covers the
 occupied gas as well as source particles. Automatic shrinking remains enabled with the configured delay.
 
+Source strength uses emitted mass per second, and scalar diffusion uses world units²/second.
+These values are calibrated at the original 0.125-unit reference cell width; coarser automatic
+quality no longer increases their physical emission or diffusion rate.
+
 
 [Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L27)
 
@@ -187,12 +191,13 @@ occupied gas as well as source particles. Automatic shrinking remains enabled wi
     velocityDissipation: 0.15,
     buoyancy: 8,
     weight: 0.03,
-    sourceStrength: 8,
-    velocitySourceStrength: 2.2,
+    // World-space source/diffusion units, calibrated at the original 0.125-unit cell width.
+    sourceStrength: 0.016362461737446838,
+    velocitySourceStrength: 0.004499676977797881,
     sourceTemperature: 1.2,
     temperatureOverLifetime: (time) => 1 - time,
     // Preserve thin structures: strong diffusion rounds the plume into soft smoke lobes.
-    scalarDiffusion: 0.02,
+    scalarDiffusion: 5.208333333333334e-05,
     vorticityStrength: 10,
     turbulenceNoiseStrength: 1,
     // Slightly shorter-lived hot gas; retain the exported cool-smoke decay and flow settings.
@@ -219,7 +224,7 @@ occupied gas as well as source particles. Automatic shrinking remains enabled wi
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L92)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L93)
 
 ```js
     modules: [
@@ -273,7 +278,7 @@ Both quality limits are eight, so the 3+3 grid starts and stays at a 0.125-unit 
 This avoids oversampling a compact initial domain; physical bounds still grow and shrink independently.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L124)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L125)
 
 ```js
     renderers: [
@@ -339,7 +344,7 @@ subsystem timing and disposes the distortion texture when destroyed. Distortion 
 soft edges and disables the separate soft-particle depth prepass, avoiding an extra scene render each update.
 
 
-[Source: subsystems:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L179)
+[Source: subsystems:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L180)
 
 ```js
   // Keep the transmitting heat-distortion subsystem configuration beside its parent preset.

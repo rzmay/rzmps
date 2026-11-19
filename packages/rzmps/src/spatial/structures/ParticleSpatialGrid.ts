@@ -20,6 +20,7 @@ import {
   ivec3,
   ivec4,
   max,
+  min,
   storage,
   uint,
   uniform,
@@ -88,7 +89,8 @@ export interface ParticleSpatialGridOptions extends SpatialGridOptions {
   centeredAtOrigin: boolean;
   /** Expands GPU bounds when live particles approach the configured volume. Defaults to true. */
   autoExpand: boolean;
-  /** Maximum physical extent per axis; a number applies to every axis. Defaults to Infinity. */
+  /** Maximum physical extent per axis; a number applies to every axis. Defaults to Infinity.
+   * Adaptive growth rejects excess bricks rather than moving an opposite retained face. */
   maxBounds: number | THREE.Vector3;
   /** Minimum physical extent per axis. Defaults to zero. */
   minBounds: number | THREE.Vector3;
@@ -117,6 +119,10 @@ export interface ParticleSpatialGridQueryOptions {
   excludeIndex?: Node<'uint'>;
   /** Bit mask requiring at least one matching particle tag. */
   tagMask?: number;
+  /** GPU predicate checked between visits; stop once the caller's result is complete. */
+  stopWhen?: () => Node<'bool'>;
+  /** Skip hash buckets whose whole cell is outside the search sphere. Exact, not a neighbor budget. */
+  pruneBounds?: boolean;
 }
 
 export type ParticleSpatialGridVisitor = (
@@ -266,6 +272,18 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
     this.lastBufferVersion = -1;
     if (this.boundsAttribute) this.writeInitialBounds();
     return this;
+  }
+
+  /** Seed an empty grid before populated simulation, without changing its subsequent adaptive policy. @internal */
+  initializeVolumeQuality(referenceSide: number): void {
+    if (!this.autoVolumeQuality) return;
+    const quality = Math.max(this.minVolumeQuality, Math.min(this.maxVolumeQuality, referenceSide));
+    const domain = createSpatialDomain(this.bounds, this.cellsPerAxis, 2 ** this.cellSubdivisions,
+      { ...this.qualityOptions(), minVolumeQuality: quality, maxVolumeQuality: quality });
+    this.resolvedDomains.set(domain.bounds, domain);
+    this.setBounds(domain.bounds);
+    this.qualityRequest = undefined;
+    this.qualityRequestedAt = 0;
   }
 
   /** Applies grid options and rebuilds structural GPU work on the next update. */
@@ -467,7 +485,7 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
 
     // Restore coverage now, using the current lattice. Quality is a separate, deferred request.
     const domain = this.resolveGuardDomain(occupied, {
-      ...this, maxBounds: this.maxBounds,
+      ...this, maxBounds: Infinity,
       minVolumeQuality: this.volumeQualityTier, maxVolumeQuality: this.volumeQualityTier,
     }, guards);
     const delay = this.shrinkDelay * 1000 / 60;
@@ -492,13 +510,23 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
             }
           } else this.shrinkSince[face] = 0;
         }
-        // Hard caps take precedence over retaining an unnecessary old face.
-        const maximum = Math.floor(this.maxBounds[axis] / domain.brickSize) * domain.brickSize;
-        if (domain.bounds.max[axis] - domain.bounds.min[axis] > maximum) {
-          if (domain.bounds.max[axis] > this.bounds.max[axis]) {
-            domain.bounds.min[axis] = domain.bounds.max[axis] - maximum;
-          } else domain.bounds.max[axis] = domain.bounds.min[axis] + maximum;
+        // A maximum is an admission limit, not permission for a new face to evict the old one.
+        // Keep independently accepted shrinkage, then admit whole bricks into the remaining space.
+        const maximum = Math.floor(this.maxBounds[axis] / domain.brickSize + 1e-6) * domain.brickSize;
+        const lower = Math.max(domain.bounds.min[axis], this.bounds.min[axis]);
+        const upper = Math.min(domain.bounds.max[axis], this.bounds.max[axis]);
+        if (lower > upper) {
+          domain.bounds.min[axis] = this.bounds.min[axis];
+          domain.bounds.max[axis] = this.bounds.max[axis];
+          continue;
         }
+        let available = Math.max(0, maximum - (upper - lower));
+        const lowerGrowth = Math.min(lower - domain.bounds.min[axis], available);
+        domain.bounds.min[axis] = lower - lowerGrowth;
+        available -= lowerGrowth;
+        domain.bounds.max[axis] = upper + Math.min(domain.bounds.max[axis] - upper, available);
+        domain.hardCapBreach ||= available < domain.brickSize
+          && (domain.bounds.min[axis] > occupied.min[axis] || domain.bounds.max[axis] < occupied.max[axis]);
       }
     }
     domain.brickDimensions.copy(domain.bounds.getSize(new THREE.Vector3())).divideScalar(domain.brickSize).round();
@@ -515,6 +543,27 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
     if (!request) return undefined;
     // Quality changes debounce in both directions independently of geometric shrink policy.
     const domain = this.resolveGuardDomain(request.occupied, this.qualityOptions(), request.guards);
+    // A quality switch changes the lattice, not which retained faces may be evicted.
+    // Delayed face removal remains the responsibility of ordinary coverage updates.
+    for (const axis of ['x', 'y', 'z'] as const) {
+      const brick = domain.brickSize;
+      const maximum = Math.floor(this.maxBounds[axis] / brick + 1e-6) * brick;
+      let low = Math.floor(this.bounds.min[axis] / brick + 1e-6) * brick;
+      let high = Math.ceil(this.bounds.max[axis] / brick - 1e-6) * brick;
+      if (high - low > maximum) {
+        // Coarsening may round both faces out by one brick; keep the closest aligned cap.
+        low = Math.round(this.bounds.min[axis] / brick) * brick;
+        high = low + maximum;
+      }
+      let available = Math.max(0, maximum - (high - low));
+      const lowerGrowth = Math.min(Math.max(0, low - domain.bounds.min[axis]), available);
+      low -= lowerGrowth;
+      available -= lowerGrowth;
+      high += Math.min(Math.max(0, domain.bounds.max[axis] - high), available);
+      domain.bounds.min[axis] = low; domain.bounds.max[axis] = high;
+      domain.brickDimensions[axis] = Math.round((high - low) / brick);
+      domain.gridDimensions[axis] = domain.brickDimensions[axis] * 2 ** this.cellSubdivisions;
+    }
     // Prepare during hysteresis, not after it. The live tier still waits for both conditions.
     const prepared = !ready || ready(domain);
     if (now - this.qualityRequestedAt < 1000 || !prepared) return undefined;
@@ -633,84 +682,104 @@ export default class ParticleSpatialGrid<L extends SpatialAggregateLayout = Spat
     options: ParticleSpatialGridQueryOptions = {},
   ): void {
     this.assertReady();
-    const queryMin = this.coordinateNode(position.sub(radius));
-    const queryMax = this.coordinateNode(position.add(radius));
-    const radiusSquared = float(radius.mul(radius));
+    const queryMin = this.coordinateNode(position.sub(radius)).toVar();
+    const queryMax = this.coordinateNode(position.add(radius)).toVar();
+    const radiusSquared = float(radius.mul(radius)).toVar();
+    const cellSize = options.pruneBounds ? this.getCellSizeNode().toVar() : undefined;
+    const cellPoint = cellSize ? position.sub(this.getBoundsNode().min).div(cellSize).toVar() : undefined;
+    const compactQuery = cellSize ? radius.lessThanEqual(
+      min(cellSize.x, min(cellSize.y, cellSize.z)).mul(1.5),
+    ).toVar() : undefined;
     const visited = uint(0).toVar('spatialGridVisited');
 
-    Loop(
-      { start: queryMin.x, end: queryMax.x.add(1) },
-      { start: queryMin.y, end: queryMax.y.add(1) },
-      ({ i: gridX, j: gridY }) => {
-        const gridZ = int(queryMin.z).toVar('spatialGridZ');
-        Loop(() => {
-          If(gridZ.greaterThan(queryMax.z), () => {
-            Break();
-          });
-          if (this.maxQuerySteps > 0) {
-            If(visited.greaterThanEqual(uint(this.maxQuerySteps)), () => {
-              Break();
-            });
-          }
-          const coordinate = ivec3(int(gridX), int(gridY), int(gridZ));
-          const bucket = this.hashCoordinateNode(coordinate);
-          const encoded = atomicLoad(this.heads!.element(bucket)).toVar('spatialGridLink');
-          const chainSteps = uint(0).toVar('spatialGridChainSteps');
-
+    const traverse = (prune: boolean) => {
+      Loop(
+        { start: queryMin.x, end: queryMax.x.add(1) },
+        { start: queryMin.y, end: queryMax.y.add(1) },
+        ({ i: gridX, j: gridY }) => {
+          if (options.stopWhen) If(options.stopWhen(), () => Break());
+          const gridZ = int(queryMin.z).toVar('spatialGridZ');
           Loop(() => {
-            If(encoded.equal(uint(EMPTY_LINK)), () => {
+            if (options.stopWhen) If(options.stopWhen(), () => Break());
+            If(gridZ.greaterThan(queryMax.z), () => {
               Break();
             });
-            // A valid bucket visits each slot at most once. This integrity bound is exact,
-            // independent of the optional query-quality budget, and prevents cyclic GPU hangs.
-            If(chainSteps.greaterThanEqual(uint(this.capacity)), () => {
-              Break();
-            });
-            chainSteps.addAssign(1);
-            const slot = encoded.sub(1).toVar('spatialGridSlot');
-            If(slot.greaterThanEqual(uint(this.capacity)), () => {
-              Break();
-            });
-
-            const record = this.coordinates!.element(slot);
-            const exactCell = record.x.equal(coordinate.x)
-              .and(record.y.equal(coordinate.y))
-              .and(record.z.equal(coordinate.z));
-            const particle = this.currentBuffers!.storage.createParticle(slot, true);
-            const currentGeneration = uint(record.w);
-            const acceptedTag = options.tagMask === undefined
-              ? particle.alive.notEqual(uint(0))
-              : particle.alive.notEqual(uint(0))
-                .and(particle.tagMask.bitAnd(uint(options.tagMask)).notEqual(uint(0)));
-            const notSelf = options.excludeIndex === undefined
-              ? acceptedTag
-              : acceptedTag.and(slot.notEqual(options.excludeIndex));
-            const offset = vec3(particle.position.sub(position));
-            const distanceSquared = float(offset.lengthSq());
-
-            If(
-              exactCell
-                .and(notSelf)
-                .and(particle.generation.equal(currentGeneration))
-                .and(distanceSquared.lessThanEqual(radiusSquared)),
-              () => callback(particle, distanceSquared),
-            );
-
-            visited.addAssign(1);
             if (this.maxQuerySteps > 0) {
               If(visited.greaterThanEqual(uint(this.maxQuerySteps)), () => {
-                If(visited.equal(uint(this.maxQuerySteps)), () => {
-                  atomicFunc('atomicAdd', this.diagnostics!.element(0), uint(1));
-                });
                 Break();
               });
             }
-            encoded.assign(atomicLoad(this.heads!.element(slot.add(this.hashCapacity))));
+            const coordinate = ivec3(int(gridX), int(gridY), int(gridZ));
+            const visitBucket = () => {
+              const bucket = this.hashCoordinateNode(coordinate);
+              const encoded = atomicLoad(this.heads!.element(bucket)).toVar('spatialGridLink');
+              const chainSteps = uint(0).toVar('spatialGridChainSteps');
+
+              Loop(() => {
+                if (options.stopWhen) If(options.stopWhen(), () => Break());
+                If(encoded.equal(uint(EMPTY_LINK)), () => {
+                  Break();
+                });
+                // A valid bucket visits each slot at most once. This integrity bound is exact,
+                // independent of the optional query-quality budget, and prevents cyclic GPU hangs.
+                If(chainSteps.greaterThanEqual(uint(this.capacity)), () => {
+                  Break();
+                });
+                chainSteps.addAssign(1);
+                const slot = encoded.sub(1).toVar('spatialGridSlot');
+                If(slot.greaterThanEqual(uint(this.capacity)), () => {
+                  Break();
+                });
+
+                const record = this.coordinates!.element(slot);
+                const exactCell = record.x.equal(coordinate.x)
+                  .and(record.y.equal(coordinate.y))
+                  .and(record.z.equal(coordinate.z));
+                const particle = this.currentBuffers!.storage.createParticle(slot, true);
+                const currentGeneration = uint(record.w);
+                const acceptedTag = options.tagMask === undefined
+                  ? particle.alive.notEqual(uint(0))
+                  : particle.alive.notEqual(uint(0))
+                    .and(particle.tagMask.bitAnd(uint(options.tagMask)).notEqual(uint(0)));
+                const notSelf = options.excludeIndex === undefined
+                  ? acceptedTag
+                  : acceptedTag.and(slot.notEqual(options.excludeIndex));
+                const offset = vec3(particle.position.sub(position));
+                const distanceSquared = float(offset.lengthSq());
+
+                If(
+                  exactCell
+                    .and(notSelf)
+                    .and(particle.generation.equal(currentGeneration))
+                    .and(distanceSquared.lessThanEqual(radiusSquared)),
+                  () => callback(particle, distanceSquared),
+                );
+
+                visited.addAssign(1);
+                if (this.maxQuerySteps > 0) {
+                  If(visited.greaterThanEqual(uint(this.maxQuerySteps)), () => {
+                    If(visited.equal(uint(this.maxQuerySteps)), () => {
+                      atomicFunc('atomicAdd', this.diagnostics!.element(0), uint(1));
+                    });
+                    Break();
+                  });
+                }
+                encoded.assign(atomicLoad(this.heads!.element(slot.add(this.hashCapacity))));
+              });
+            };
+            if (prune && cellSize && cellPoint) {
+              const distance = vec3(coordinate).sub(cellPoint).max(0)
+                .add(cellPoint.sub(vec3(coordinate).add(1)).max(0)).mul(cellSize).toVar();
+              If(distance.lengthSq().lessThanEqual(radiusSquared.mul(1.000001)), visitBucket);
+            } else visitBucket();
+            gridZ.addAssign(1);
           });
-          gridZ.addAssign(1);
-        });
-      },
-    );
+        },
+      );
+    };
+    // Choose once per query, not once per bucket. Wide queries retain the original inexpensive loop.
+    if (compactQuery) If(compactQuery, () => traverse(true)).Else(() => traverse(false));
+    else traverse(false);
   }
 
   /** Emits a GPU bounds update for a grid whose caller already reduced the population.

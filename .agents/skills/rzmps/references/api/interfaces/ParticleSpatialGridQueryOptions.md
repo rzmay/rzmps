@@ -22,6 +22,34 @@ Particle slot omitted from the query, normally the caller's own slot.
 
 ***
 
+<a id="prunebounds"></a>
+
+### pruneBounds?
+
+```ts
+optional pruneBounds?: boolean;
+```
+
+Skip hash buckets whose whole cell is outside the search sphere. Exact, not a neighbor budget.
+
+***
+
+<a id="stopwhen"></a>
+
+### stopWhen?
+
+```ts
+optional stopWhen?: () => Node<"bool">;
+```
+
+GPU predicate checked between visits; stop once the caller's result is complete.
+
+#### Returns
+
+`Node`\<`"bool"`\>
+
+***
+
 <a id="tagmask"></a>
 
 ### tagMask?

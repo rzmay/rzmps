@@ -7,7 +7,7 @@ import { startSiteDev } from '../../../../scripts/site/dev.mjs';
 const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
 let browser;
 try {
-  browser = await puppeteer.launch(browserLaunchOptions('test', { headless: true, args: [...browserLaunchOptions('test').args, '--enable-unsafe-webgpu'] }));
+  browser = await puppeteer.launch(browserLaunchOptions('test'));
   const page = await browser.newPage();
   page.setDefaultTimeout(240000);
   const errors = [];
@@ -29,7 +29,6 @@ try {
     window.tipControls = controllers;
     const pivot = scene.getObjectByName('Teapot Tip Pivot');
     const teapot = scene.getObjectByName('Lidless Utah Teapot');
-    const collider = scene.getObjectByName('Utah Teapot Fluid Collider');
     const emitterPosition = system.getWorldPosition(new THREE.Vector3()).toArray();
     const initial = controllers.automaticTipping.target.automaticTipping;
     const defaults = { period: controllers.period.target.period, angle: controllers.maximumTip.target.maximumTip };
@@ -39,8 +38,18 @@ try {
     const limitedStep = Math.abs(pivot.rotation.z) <= Math.PI * 0.5 / 180 + 1e-9;
     for (let i = 0; i < 30; i++) sceneLifecycle.update(0.1);
     scene.updateMatrixWorld(true);
-    const matched = teapot.matrixWorld.equals(collider.getCollisionObject().matrixWorld);
-    const minY = new THREE.Box3().setFromObject(teapot).min.y;
+    system.modules[0].collectColliders(system);
+    let matched = true, collected = 0;
+    teapot.traverse(object => {
+      if (!object.isMesh) return;
+      const collider = system.modules[0].fluidColliders.find(effect => effect.geometry === object.geometry);
+      collected++;
+      if (!collider) { matched = false; return; }
+      collider.updateWorldMatrix(true, true);
+      matched &&= object.matrixWorld.equals(collider.getCollisionObject().matrixWorld);
+    });
+    matched &&= collected > 0;
+    const minY = new THREE.Box3().setFromObject(teapot, true).min.y;
     const tip = pivot.rotation.z;
     sceneLifecycle.update(1);
     const manualHolds = pivot.rotation.z === tip;
@@ -64,11 +73,13 @@ try {
       maxParticles: system.maxParticles, duration: system.duration };
   });
   assert.equal(controls.initial, true);
-  assert.deepEqual(controls.defaults, { period: 10, angle: 45 });
+  assert.deepEqual(controls.defaults, { period: 20, angle: 45 });
   assert(controls.noTeleport && controls.limitedStep, 'manual tipping must respect the angular speed limit');
   assert(controls.matched && controls.manualHolds && controls.disabledHolds);
   assert(controls.returnedUpright);
   assert(controls.minY > -0.44);
+  assert(controls.minY < -0.42,
+    'floor clearance must follow the actual mesh, without lifting empty bounding-box corners');
   assert(Math.abs(controls.automaticTip + Math.PI * 75 / 180) < 1e-6);
   assert.deepEqual(controls.currentEmitterPosition, controls.emitterPosition);
   assert.equal(controls.resolution, 128);
@@ -88,7 +99,7 @@ try {
     for (let i = 0; i < 144; i++) sceneLifecycle.update(0.1);
     let spoutSamples = 0;
     let spraySamples = 0;
-    const collider = scene.getObjectByName('Utah Teapot Fluid Collider');
+    const collider = scene.getObjectByName('Lidless Utah Teapot');
     for (let i = 0; i < 468; i++) {
       sceneLifecycle.update(1 / 60);
       system.advanceFrames(1, 1 / 60);

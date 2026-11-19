@@ -42,7 +42,7 @@ window.testLighting = async () => {
   const ambientOwner = {};
   grid.update(renderer, scene, bounds, { owner: ambientOwner, version: 0, extinctionGPU: () => uniform(4) });
   const ambientDense = await sample(grid);
-  assert(close(ambientDense[2], 2), 'scene AmbientLight remains visible inside a dense medium');
+  assert(close(ambientDense[2], 2), `scene AmbientLight remains visible inside a dense medium: ${JSON.stringify(ambientDense)}`);
   ambientLight.intensity = 0.5;
   grid.update(renderer, scene, bounds);
   assert(close((await sample(grid))[2], 0.5), 'ambient intensity updates without rebuilding the volume');

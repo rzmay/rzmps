@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { WebGPURenderer } from 'three/webgpu';
-import { uniform } from 'three/tsl';
+import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
+import { uniform, Fn, storage, vec3, vec4 } from 'three/tsl';
 import { Module, GasModule, ParticleSystem, VolumeRenderer } from '@rzmps/rzmps';
 
 const gpu = new URLSearchParams(location.search).get('backend') === 'webgpu';
@@ -59,6 +59,9 @@ window.renderVolume = async tags => {
     children: volume.renderedChildCount,
   };
 };
-window.volumeFixture = { red, blue, volume, system, renderer, scene, camera, THREE, GasModule, uniform };
+window.volumeFixture = {
+  red, blue, volume, system, renderer, scene, camera, THREE, GasModule, uniform,
+  gpu: { Fn, storage, vec3, vec4, StorageBufferAttribute },
+};
 await window.renderVolume();
 window.ready = true;

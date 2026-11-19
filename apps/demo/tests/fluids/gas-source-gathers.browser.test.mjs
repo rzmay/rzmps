@@ -42,7 +42,8 @@ test('source masks preserve exhaustive gathers, transient attributes and source 
         const samples = [
           { position: [0.97, 0.1, -0.2], scale: [0.4, 0.2, 0.6], color: [1, 0.2, 0.4], alpha: 0.8,
             velocity: [0.2, 0.4, -0.1] },
-          { position: [1.01, 0.2, -0.1], scale: [2.8, 0.8, 1.4], color: [0.2, 0.8, 1], alpha: 0.3 },
+          { position: [1.01, 0.2, -0.1], scale: [2.8, 0.8, 1.4], color: [0.2, 0.8, 1], alpha: 0.3,
+            velocity: [-0.1, 0.3, 0.2] },
           { position: [-2.05, -0.9, 1.1], scale: [1.8, 0.3, 1.1], color: [0.8, 0.5, 0.1], alpha: 0.6 },
           { position: [7.8, -0.1, 0.1], scale: [1.2, 1.2, 1.2], color: [0.3, 0.8, 0.6], alpha: 0.4 },
           { position: [3.2, 0.3, -1.1], scale: [3, 2, 1], color: [1, 0, 0], alpha: 1, tagMask: excluded },

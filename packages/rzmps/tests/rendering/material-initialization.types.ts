@@ -2,7 +2,8 @@ import { LightRenderer } from '../../build/index.mjs';
 import * as THREE from 'three';
 import { mix, vec2, normalize } from 'three/tsl';
 import { MaterialCopy, MaterialCopySource, Module, Particle, type ParticleInitializationContext,
-  type GPUParticleInitializationContext, type GPUParticleLike, DecalRenderer, MeshRenderer, AudioRenderer } from '../../build/index.mjs';
+  type GPUParticleInitializationContext, type GPUParticleLike, DecalRenderer, MeshRenderer, AudioRenderer,
+} from '../../build/index.mjs';
 
 class Birth extends Module {
   constructor() { super(() => {}, { modifyGPU() {} }); }
@@ -54,6 +55,7 @@ new MeshRenderer({ textureCopyQuality: 0.5, atlasOptions: { maxTileSize: 2048, m
 new MeshRenderer({ children: { count: 3, rotation: 0.2 } });
 new MeshRenderer({ children: { rotation: new THREE.Vector3(0, 1, 0) } });
 new MeshRenderer({ children: { rotation: [-0.2, 0.2] } });
+// @ts-expect-error Parameterized child rotation uses ranges/functions, not dynamic random sets.
 new MeshRenderer({ children: { rotation: new Set([0.1, new THREE.Vector3(0, 0.2, 0)]) } });
 new MeshRenderer({ children: { rotation: time => new THREE.Vector3(time, 0, 0) } });
 
@@ -66,3 +68,4 @@ new LightRenderer({ brightness: time => 4 * (1 - time),
 new LightRenderer({ intensity: 2 });
 // @ts-expect-error Light options are top-level renderer options.
 new LightRenderer({ lightOptions: { distance: 5 } });
+new MeshRenderer({ children: { rotation: parameter => new THREE.Vector3(parameter, 0, 0), randomizeRotation: 0.4 } });

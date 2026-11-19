@@ -31,10 +31,13 @@ export const buildSurfaceNets: SurfaceExtractor = Object.assign(
       cellSize,
       minimum,
       maximumTriangles,
+      vertexMap,
+      maximumVertices,
       iso: isoLevel,
       smoothing,
       smoothingWeight,
     } = context;
+    if (!vertexMap || maximumVertices === undefined) throw new Error('Surface nets require compact vertex storage.');
     const worldPoint = (coordinate: Node<'ivec3'>) => vec3(coordinate).mul(cellSize).add(minimum);
 
     // Create one dual vertex for every cell containing an iso crossing.
@@ -43,7 +46,7 @@ export const buildSurfaceNets: SurfaceExtractor = Object.assign(
       const samples = corners.map(corner => field.element(grid.index(coordinate.add(ivec3(...corner)))));
       const position = vec3(0).toVar();
       const crossings = float(0).toVar();
-      positions.element(index).assign(vec4(0));
+      atomicStore(vertexMap.element(index), uint(0));
       atomicStore(topology.element(index), uint(0));
       atomicStore(topology.element(index.add(grid.cellCount)), uint(0));
 
@@ -64,8 +67,11 @@ export const buildSurfaceNets: SurfaceExtractor = Object.assign(
           }
           If(crossings.greaterThan(0), () => {
             const point = worldPoint(coordinate).add(position.div(crossings).mul(cellSize));
-            positions.element(index).assign(vec4(point, 1));
-            atomicAdd(counters.element(1), uint(1));
+            const vertex = atomicAdd(counters.element(1), uint(1)).toVar();
+            If(vertex.lessThan(maximumVertices), () => {
+              atomicStore(vertexMap.element(index), vertex.add(1));
+              positions.element(vertex).assign(vec4(point, 1));
+            });
           });
         },
       );
@@ -98,18 +104,14 @@ export const buildSurfaceNets: SurfaceExtractor = Object.assign(
             grid.index(c.sub(ivec3(...u)).sub(ivec3(...v))),
             grid.index(c.sub(ivec3(...v))),
           ];
-          const present = quad.map(at => positions.element(at).w.greaterThan(0)).reduce((a, b) => a.and(b));
+          const addresses = quad.map(at => atomicLoad(vertexMap.element(at)).toVar());
+          const present = addresses.map(at => at.greaterThan(0)).reduce((a, b) => a.and(b));
           If(present, () => {
             const face = atomicAdd(counters.element(0), uint(2)).toVar();
             If(face.add(2).lessThanEqual(maximumTriangles), () => {
-              const order = [
-                quad[0],
-                inside.select(quad[1], quad[3]),
-                quad[2],
-                quad[0],
-                quad[2],
-                inside.select(quad[3], quad[1]),
-              ];
+              const vertices = addresses.map(at => at.sub(1));
+              const order = [vertices[0], inside.select(vertices[1], vertices[3]), vertices[2],
+                vertices[0], vertices[2], inside.select(vertices[3], vertices[1])];
               order.forEach((at, i) => {
                 indices.element(face.mul(3).add(i)).assign(at);
               });
@@ -136,9 +138,11 @@ export const buildSurfaceNets: SurfaceExtractor = Object.assign(
 
     // Follow emitted topology rather than averaging arbitrary nearby vertices.
     const smoothVertex = (index: Node<'uint'>, source: Vec4Storage, target: Vec4Storage, reverse: boolean): void => {
-      const current = source.element(index).toVar();
-      target.element(index).assign(current);
-      If(current.w.greaterThan(0), () => {
+      const address = atomicLoad(vertexMap.element(index)).toVar();
+      If(address.greaterThan(0), () => {
+        const vertex = address.sub(1);
+        const current = source.element(vertex).toVar();
+        target.element(vertex).assign(current);
         // Materialize before conditional neighbor reads so TSL cannot cache it inside only one branch.
         const coordinate = grid.coordinate(index).toVar();
         const mask = atomicLoad(topology.element(index)).toVar();
@@ -150,7 +154,8 @@ export const buildSurfaceNets: SurfaceExtractor = Object.assign(
             offset[axis] = sign;
             const bit = 1 << (axis * 2 + (sign < 0 ? 1 : 0));
             If(mask.bitAnd(bit).notEqual(0), () => {
-              total.addAssign(source.element(grid.index(coordinate.add(ivec3(...offset)))).xyz);
+              const neighbor = atomicLoad(vertexMap.element(grid.index(coordinate.add(ivec3(...offset))))).sub(1);
+              total.addAssign(source.element(neighbor).xyz);
               count.addAssign(1);
             });
           }
@@ -161,7 +166,7 @@ export const buildSurfaceNets: SurfaceExtractor = Object.assign(
             : smoothingWeight;
           const position = current.xyz.add(total.div(count).sub(current.xyz).mul(weight));
           const lower = worldPoint(coordinate);
-          target.element(index).assign(vec4(clamp(position, lower, lower.add(cellSize)), 1));
+          target.element(vertex).assign(vec4(clamp(position, lower, lower.add(cellSize)), 1));
         });
       });
     };
@@ -175,5 +180,5 @@ export const buildSurfaceNets: SurfaceExtractor = Object.assign(
       triangleMultiple: 2,
     };
   },
-  { vertexLayout: 'cells' as const },
+  { vertexLayout: 'compact' as const },
 );

@@ -48,6 +48,10 @@ at 8 / 64 = 0.125 without changing the sixteen-unit physical bounds cap. Automat
 hysteresis in both directions and prepares replacements before adopting them. Its short rolling prediction covers the
 occupied gas as well as source particles. Automatic shrinking remains enabled with the configured delay.
 
+Source strength uses emitted mass per second, and scalar diffusion uses world units²/second.
+These values are calibrated at the original 0.125-unit reference cell width; coarser automatic
+quality no longer increases their physical emission or diffusion rate.
+
 <ExampleCode region="modules" />
 
 ## Renderers

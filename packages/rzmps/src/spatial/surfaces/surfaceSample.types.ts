@@ -17,6 +17,8 @@ export interface GPUSurfaceSample {
   normal: Node<'vec3'>;
   velocity: Node<'vec3'>;
   valid: Node<'bool'>;
+  /** Symmetric velocity strain magnitude in inverse seconds, when supplied by a liquid surface. */
+  deformation?: Node<'float'>;
 }
 
 export type SurfaceQuery = (position: Vector3) => SurfaceSample;

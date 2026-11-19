@@ -9,15 +9,19 @@ import { benchmarkFoam } from './fluids/foamProfiling.utils.js';
 import { runLiquidQualityTransition } from './fluids/liquidTransition.utils.js';
 
 /** GPU-only, fixed population fixtures. Expensive checkpoints and lifecycle setup precede timed measurement. */
-export function liquidBenchmarkCases() {
-  return [
+export function liquidBenchmarkCases({
+  scaling = false, detailedSurface = false, anisotropy = 0, kernelOptimization,
+} = {}) {
+  const cases = scaling ? [2000, 5000, 10000, 15000, 25000]
+    .map(count => [`scaling-${count}`, `Liquid controlled scaling ${count}`, count]) : [
     ['low', 'Liquid steady state 2k', 2000], ['medium', 'Liquid steady state 8k', 8000],
     ['high', 'Liquid steady state 16k', 16000], ['pressure', 'Liquid high-resolution pressure', 8000],
     ['collider', 'Liquid collider-heavy', 8000], ['surface', 'Liquid surface and spray', 8000],
     ['foam', 'Liquid surface foam', 8000],
     ['startup', 'Liquid lifecycle startup', 2000], ['quality', 'Liquid lifecycle quality transition', 2000],
     ['capacity', 'Liquid lifecycle resident/domain growth', 8000], ['sustained', 'Liquid sustained 24k', 24000],
-  ].map(([kind, name, count]) => {
+  ];
+  return cases.map(([kind, name, count]) => {
     let system, renderer, state, timer, restore, clock, device, create, createAsync, initial;
     let pending, frame = 0, pipelines = 0, constructWallMs = 0;
     const advance = async () => {
@@ -45,7 +49,7 @@ export function liquidBenchmarkCases() {
       reportKey: 'liquid', minimumDurationMs: kind === 'sustained' ? 60000 : 0,
       async createSystem() {
         const start = performance.now();
-        system = createLiquidWorkload({ count, kind, translation: kind === 'quality' });
+        system = createLiquidWorkload({ count, kind, anisotropy, kernelOptimization, translation: kind === 'quality' });
         constructWallMs = performance.now() - start;
         return system;
       },
@@ -65,7 +69,8 @@ export function liquidBenchmarkCases() {
         device.createComputePipeline = function (...args) { pipelines++; return create.apply(this, args); };
         device.createComputePipelineAsync = function (...args) { pipelines++; return createAsync.apply(this, args); };
         state = { category: ['startup', 'quality', 'capacity'].includes(kind) ? 'lifecycle' : 'steady',
-          gpuSamples: [], cpuSubmissionMs: [], stage: 'liquid/other', lifecycle: { constructWallMs }, quality: {} };
+          gpuSamples: [], cpuSubmissionMs: [], detailedSurface, stage: 'liquid/other',
+          lifecycle: { constructWallMs }, quality: {} };
         clock = trackSimulationTime(system);
         system.benchmarks.start();
         const started = performance.now();
@@ -188,6 +193,11 @@ export function liquidBenchmarkCases() {
       },
     };
   });
+}
+
+/** Explicit diagnostic sweep; ordinary PR selection retains its compact representative cases. */
+export function liquidScalingCases(options = {}) {
+  return pairBenchmarkCases(liquidBenchmarkCases({ ...options, scaling: true }));
 }
 
 export default {

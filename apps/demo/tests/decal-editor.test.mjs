@@ -17,7 +17,8 @@ test(
       appType: 'custom',
     });
     try {
-      const { DecalRenderer, ParticleSystem } = await server.ssrLoadModule('@rzmps/rzmps');
+      const { DecalRenderer, ParticleSystem, SourceLossBehavior, EndBehavior } =
+        await server.ssrLoadModule('@rzmps/rzmps');
       const THREE = await server.ssrLoadModule('three');
       const { RendererGUI } = await server.ssrLoadModule('/src/gui/particle-system-gui/RendererGUI.js');
       const { ParticleSystemSerializer } = await server.ssrLoadModule(
@@ -35,7 +36,12 @@ test(
         }),
         { maxHits: 3, continuousRate: 1.5, ratio: 0.5 },
       );
-      const system = new ParticleSystem({ emitters: [], renderers: [renderer] });
+      const system = new ParticleSystem({
+        emitters: [],
+        renderers: [renderer],
+        sourceLossBehavior: SourceLossBehavior.Kill,
+        endBehavior: EndBehavior.Destroy,
+      });
       const scene = new THREE.Scene();
       scene.add(system);
       // Generic traversal of renderer -> system -> parent reaches this sentinel.
@@ -47,11 +53,16 @@ test(
       });
       try {
         const inspected = [];
+        const childControls = [];
         const host = {
           prettyName: key => key,
+          rebuild() {},
+          emitCode() {},
           valueEditor: {
             addTags() {},
-            addObject() {},
+            addObject(_folder, object) {
+              childControls.push(...Object.keys(object));
+            },
             addValue(_folder, object, key) {
               inspected.push({ object, key });
             },
@@ -64,10 +75,18 @@ test(
           },
           close() {},
           add() {
-            return { name() {} };
+            return {
+              name() {
+                return this;
+              },
+            };
           },
         };
         new RendererGUI(host).buildRenderer(folder, renderer, system);
+        assert.ok(childControls.includes('rotation'));
+        assert.ok(childControls.includes('randomizeRotation'));
+        assert.equal(renderer.children.randomizeRotation, 0);
+        assert.deepEqual(renderer.children.rotation.toArray(), [0, 0, 0]);
         assert.ok(inspected.length > 0);
         assert.ok(inspected.every(({ object }) => object === renderer));
         assert.ok(inspected.some(({ key }) => key === 'continuousRate'));
@@ -78,6 +97,10 @@ test(
           /Inspected live scene/,
         );
         const code = serializer.serializeParticleSystem();
+        assert.ok(code.includes('sourceLossBehavior: SourceLossBehavior.Kill'));
+        assert.ok(!code.includes('sourceLoss:'));
+        assert.ok(code.includes('simulationSpace: SimulationSpace.Local'));
+        assert.ok(code.includes('endBehavior: EndBehavior.Destroy'));
         assert.ok(code.includes('new DecalRenderer(new THREE.MeshStandardMaterial('));
         assert.ok(code.includes('hitSelection: DecalRenderer.Nearest'));
         assert.ok(code.includes('maxHits: 3'));

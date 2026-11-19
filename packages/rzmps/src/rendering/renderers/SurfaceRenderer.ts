@@ -2,7 +2,8 @@ import { createLiquidSurfaceQuery } from '../gpu/liquidSurfaceSampling.utils';
 import * as THREE from 'three';
 import StagedGPUAllocation from '../../utils/gpu/StagedGPUAllocation';
 import LiquidMaterial from '../materials/LiquidMaterial';
-import type { WebGPURenderer } from 'three/webgpu';
+import type { ComputeNode, WebGPURenderer } from 'three/webgpu';
+import prepareComputePrograms from '../../utils/gpu/prepareComputePrograms';
 import Renderer, { type RendererOptions } from '../../core/Renderer';
 import type ParticleSystem from '../../core/ParticleSystem';
 import type Particle from '../../core/Particle';
@@ -46,8 +47,10 @@ export interface SurfaceRendererOptions extends RendererOptions {
   fieldClosing: number;
   /** Reduction of field smoothing in active flow, zero through one. Defaults to 0.8. */
   flowSmoothing: number;
-  /** Speeds at which flow detail preservation begins and reaches its maximum. Defaults to [0.5, 3]. */
+  /** Retained legacy speed range. Built-in filtering uses deformationDetailRange. Defaults to [0.5, 3]. */
   velocityDetailRange: [number, number];
+  /** Strain rates for flow detail preservation. Defaults to [0.5, 6]. */
+  deformationDetailRange: [number, number];
   /** Curl magnitudes for flow detail preservation. Defaults to [1, 8]. */
   vorticityDetailRange: [number, number];
   /** Bulk density threshold; isolated droplets retain their calibrated radius. Defaults to 0.2. */
@@ -89,6 +92,7 @@ export default class SurfaceRenderer extends Renderer {
   fieldClosing: number;
   flowSmoothing: number;
   velocityDetailRange: [number, number];
+  deformationDetailRange: [number, number];
   vorticityDetailRange: [number, number];
   isoLevel: number;
   maxActiveBricks: number;
@@ -105,6 +109,8 @@ export default class SurfaceRenderer extends Renderer {
   readonly sampleSurfaceGPU = this.surfaceQuery.sampleSurfaceGPU;
   private allocation?: StagedGPUAllocation<LiquidSurface>;
   private requiredTier = 0;
+  private requestedSurfaceBricks = 0;
+  private requestedSurfaceTriangles = 0;
   private surfaceLimits = { bricks: 0, triangles: 0 };
   private resourceFailure?: Error;
   private maximumTier = 1;
@@ -138,6 +144,7 @@ export default class SurfaceRenderer extends Renderer {
     this.fieldSmoothing = options.fieldSmoothing ?? 0.2;
     this.fieldClosing = options.fieldClosing ?? 0;
     this.flowSmoothing = options.flowSmoothing ?? 0.8;
+    this.deformationDetailRange = [...(options.deformationDetailRange ?? [0.5, 6])];
     this.velocityDetailRange = [...(options.velocityDetailRange ?? [0.5, 3])];
     this.vorticityDetailRange = [...(options.vorticityDetailRange ?? [1, 8])];
     this.isoLevel = options.isoLevel ?? 0.2;
@@ -191,6 +198,27 @@ export default class SurfaceRenderer extends Renderer {
     throw new Error('SurfaceRenderer requires native WebGPU particle processing.');
   }
 
+  private preparingResources = false;
+  private inputBuffers?: GPUParticleBufferState | GPUParticleRenderBufferState;
+  private inputVersion = -1;
+
+  /** Compile the first populated reconstruction without dispatching or publishing empty diagnostics. */
+  public override async prepareResources(system: ParticleSystem, renderer: WebGPURenderer): Promise<void> {
+    const buffers = system.prepareGPURenderInput(renderer);
+    const nodes: ComputeNode[] = [], compute = renderer.compute;
+    const visible = this.mesh.visible;
+    this.preparingResources = true;
+    renderer.compute = value => { nodes.push(...(Array.isArray(value) ? value : [value])); return undefined; };
+    try {
+      this.updateSurfaceResources(buffers, system, renderer);
+    } finally {
+      renderer.compute = compute;
+      this.preparingResources = false;
+      this.mesh.visible = visible;
+    }
+    await prepareComputePrograms(renderer, [...new Set(nodes)]);
+  }
+
   protected override _updateGPU(
     buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
     system: ParticleSystem,
@@ -199,6 +227,19 @@ export default class SurfaceRenderer extends Renderer {
     if (!renderer || !(renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend) {
       throw new Error('SurfaceRenderer requires native WebGPU particle processing.');
     }
+    this.updateSurfaceResources(buffers, system, renderer);
+  }
+
+  private updateSurfaceResources(
+    buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
+    system: ParticleSystem,
+    renderer: WebGPURenderer,
+  ): void {
+    // Reset/growth replaces render bindings independently of the reconstruction configuration.
+    // A pending capacity graph must never be adopted with the retired particle input.
+    if (this.inputBuffers !== buffers || this.inputVersion !== buffers.version) this.allocation?.cancelPending();
+    this.inputBuffers = buffers;
+    this.inputVersion = buffers.version;
     this.validate();
     const gpu = renderer.backend as unknown as { device: {
       limits: { maxStorageBufferBindingSize: number }; queue: { onSubmittedWorkDone(): Promise<void> };
@@ -237,22 +278,29 @@ export default class SurfaceRenderer extends Renderer {
       this.resourceFailure = undefined;
       const baseBricks = Math.min(this.initialBricks, maximumBricks);
       const baseTriangles = Math.min(this.initialTriangles, maximumTriangles);
-      const create = (tier: number) => {
+      const reserve = (current: number, demand: number, maximum: number) => demand > current * 0.75
+        ? Math.min(maximum, 2 ** Math.ceil(Math.log2(Math.max(current * 2, demand * 4 / 3)))) : current;
+      this.requestedSurfaceBricks = this.requestedSurfaceTriangles = 0;
+      const create = () => {
+        // Reconstruction coverage and generated topology have independent demand and headroom.
+        const bricks = reserve(this.surface?.grid.capacity ?? baseBricks, this.requestedSurfaceBricks, maximumBricks);
+        const triangles = reserve(this.surface?.triangleCapacity ?? baseTriangles,
+          this.requestedSurfaceTriangles, maximumTriangles);
         const options = Object.create(this) as ConstructorParameters<typeof LiquidSurface>[0];
         Object.defineProperties(options, {
-          maxActiveBricks: { value: Math.min(maximumBricks, baseBricks * tier) },
-          maxTriangles: { value: Math.min(maximumTriangles, baseTriangles * tier) },
+          maxActiveBricks: { value: bricks },
+          maxTriangles: { value: triangles },
         });
         return new LiquidSurface(options, renderer, this.reconstructionVersion === 1, this.extraction);
       };
-      this.maximumTier = 2 ** Math.ceil(Math.log2(Math.max(maximumBricks / baseBricks,
-        maximumTriangles / baseTriangles)));
-      this.surface = create(1);
+      // The staged allocator advances a reservation generation; it no longer multiplies both pools together.
+      this.maximumTier = Number.MAX_SAFE_INTEGER;
+      this.surface = create();
       this.requiredTier = 0;
       this.allocation = new StagedGPUAllocation(this.surface, 1, {
         maximumCapacity: this.maximumTier,
         create,
-        prepare: surface => surface.prepare(() => this.updateSurface(surface, buffers, system)),
+        prepare: surface => surface.prepare(() => this.updateSurface(surface, this.inputBuffers!, system)),
         // Surface fields are ephemeral: rebuild from authoritative render particles before first drawing.
         migrate: () => {},
         swap: surface => { this.surface = surface; this.mesh.geometry = surface.geometry; },
@@ -284,7 +332,7 @@ export default class SurfaceRenderer extends Renderer {
     this.updateSurface(this.surface, buffers, system);
     this.surface.bindSurfaceQuery(this.surfaceQuery, system.getSimulationToWorldMatrix(),
       this.executionContext?.deltaTime ?? 0);
-    if (!this.diagnosticsPending) {
+    if (!this.preparingResources && !this.diagnosticsPending) {
       this.diagnosticsPending = true;
       const observed = this.surface;
       void observed.readDiagnostics()
@@ -302,8 +350,13 @@ export default class SurfaceRenderer extends Renderer {
           // a second immediate grow when a wider source footprint first becomes visible.
           const coverage = Math.max(1, requestedBricks / Math.max(1, stats.activeBricks));
           const predictedTriangles = (stats.triangles + stats.overflowedTriangles) * coverage;
-          this.requiredTier = Math.min(this.maximumTier,
-            Math.max(requestedBricks / this.initialBricks, predictedTriangles / this.initialTriangles));
+          this.requestedSurfaceBricks = requestedBricks;
+          this.requestedSurfaceTriangles = Math.max(predictedTriangles, stats.vertices / 3);
+          const growField = requestedBricks > observed.grid.capacity * 0.75
+            && observed.grid.capacity < this.surfaceLimits.bricks;
+          const growOutput = this.requestedSurfaceTriangles > observed.triangleCapacity * 0.75
+            && observed.triangleCapacity < this.surfaceLimits.triangles;
+          this.requiredTier = growField || growOutput ? this.allocation!.capacity : 0;
           this.benchmarks.set('triangleCount', stats.triangles);
           this.benchmarks.set('vertexCount', stats.vertices);
           this.benchmarks.set('clippedParticles', stats.clippedParticles);
@@ -401,7 +454,7 @@ export default class SurfaceRenderer extends Renderer {
     ) {
       throw new RangeError('Invalid surface field filtering controls.');
     }
-    for (const range of [this.velocityDetailRange, this.vorticityDetailRange]) {
+    for (const range of [this.velocityDetailRange, this.deformationDetailRange, this.vorticityDetailRange]) {
       if (!range.every(Number.isFinite) || range[0] < 0 || range[1] <= range[0]) {
         throw new RangeError('Surface flow detail ranges must be finite and increasing.');
       }

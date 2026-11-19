@@ -47,6 +47,12 @@ can allocate storage, bake static geometry, and call Three.js `compileComputeAsy
 Custom implementations must preserve that non-advancing contract. Await completion before
 updating or disposing the system.
 
+Built-in GPU preparation also captures allocation, emission, collision, integration, transient render
+attributes and continuous subsystem eligibility against persistent particle buffers. Parents prepare
+before their subsystem emission paths. FLIP prepares full/fresh boundary classification and cold-clear
+variants as well as transfer/pressure programs. Preparation on a populated system preserves particle
+state, the simulation clock and the event-frame sequence; reset/reprepare uses the replacement bindings.
+
 Preparation is optional: normal updates can still build resources lazily. It does not promise
 that every renderer, material, or population-dependent kernel is compiled. CPU/WebGL systems
 should use their normal lifecycle instead of calling this WebGPU preparation method.
@@ -140,6 +146,9 @@ Automatic grids use rectangular, offset domains with cubic cells and brick-align
 is the subdivision reference resolution. Explicit `bounds` opt out of automatic sizing/movement.
 
 `spatialGridOptions.minBounds` and `maxBounds` independently constrain physical dimensions per axis.
+For adaptive domains, `maxBounds` limits admission of new brick layers: an expanding face cannot evict
+an opposite retained face to make room. The capped domain can be off-origin. Independent delayed
+shrinking still removes unused faces; explicit bounds changes remain explicit repositioning requests.
 Numbers are cube shortcuts; Vector3 values support anisotropic limits. Defaults are zero/Infinity.
 Physical caps fit whole bricks and do not implicitly cap quality. Runtime changes use
 `module.setSpatialGridOptions({ maxBounds: new THREE.Vector3(4, 16, 4) })` or `grid.maxBounds = 16`.
@@ -346,6 +355,29 @@ are local expressions, not new transported fields. Rules inline at the existing 
 sites: velocity transport commits velocity, scalar transport commits density/temperature/color,
 and confinement reads its local strength. Keep callbacks deterministic shader operations; do not
 assume a once-per-frame JavaScript invocation or accumulate JavaScript side effects.
+
+### Gas source mass and physical diffusion
+
+Gas density is concentration: integrated mass is `sum(density * cellWidth³)`. A source emits
+`particle.mass * particle.alpha * sourceStrength * dt` mass. Its physical scale controls the footprint,
+not total emission. A voxel-integrated, normalized tent deposits the corresponding concentration;
+sub-cell sources and quality changes therefore do not multiply injected mass. Heat and transported
+color use the same mass weights, as do render-time source attributes. Sources outside the domain or
+inside solid cells can still lose their blocked/out-of-domain contribution.
+
+`scalarDiffusion` is diffusivity in **world units²/second**, not a cell-neighbor mixing rate. Diffusion
+reads the completed advected snapshot and mixes six neighbors with coefficient
+`6 * scalarDiffusion * dt / cellWidth²`. The base coefficient limits substep duration to
+`cellWidth² / (6 * scalarDiffusion)`, including when velocity-based adaptive stepping is off.
+Existing substep/time budgets still apply; very high diffusivity can require a larger `maxFluidSubsteps`.
+A `GasModule` that increases local diffusivity must respect that same stability bound; arbitrary
+shader overrides cannot request extra CPU-side substeps. The mixing coefficient is clamped to keep
+such overrides positive, but clamping alone cannot preserve their requested physical diffusion rate.
+
+To convert an old six-neighbor mixing rate at reference width `h`, use `D = oldRate * h² / 6`.
+Density migration remains concentration-preserving: do not rescale stored density when cells resize.
+Semi-Lagrangian numerical smoothing and other discretization errors still depend on resolution;
+physical source normalization does not imply identical voxel detail at every quality.
 
 ### Neighborhood queries (GPU only)
 

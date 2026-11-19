@@ -4,7 +4,7 @@ import { createLiquidWorkload, seedLiquidLattice } from '../../../benchmarks/flu
 import { liquidCheckpoint, compareMarkers } from '../../../benchmarks/fluids/liquidQuality.utils.js';
 import { trackSimulationTime } from '../../../benchmarks/fluids/fluidProfiling.utils.js';
 import { runLiquidQualityTransition } from '../../../benchmarks/fluids/liquidTransition.utils.js';
-import liquid from '../../../benchmarks/liquid.benchmark.js';
+import liquid, { liquidScalingCases } from '../../../benchmarks/liquid.benchmark.js';
 
 const renderer = new WebGPURenderer();
 renderer.setSize(320, 240);
@@ -49,8 +49,11 @@ window.runLiquidInvariant = async (count = 216) => {
 };
 
 /** Run the same descriptor as the demo/CLI. Trace checkpoints stay out of ordinary case reports. */
-window.runLiquidStudy = async ({ kind = 'low', frames = 12, traceEvery = 0 } = {}) => {
-  const entry = liquid.createCases().find(entry => entry.id === `liquid-${kind}:gpu`);
+window.runLiquidStudy = async ({ kind = 'low', frames = 12, traceEvery = 0, detailedSurface = false,
+  anisotropy = 0, kernelOptimization } = {}) => {
+  const cases = kind.startsWith('scaling-')
+    ? liquidScalingCases({ detailedSurface, anisotropy, kernelOptimization }) : liquid.createCases();
+  const entry = cases.find(entry => entry.id === `liquid-${kind}:gpu`);
   if (!entry) throw new Error(`Unknown liquid case ${kind}`);
   const system = await entry.createSystem(), objects = entry.configureScene(scene);
   scene.add(system);
@@ -76,3 +79,23 @@ window.runLiquidStudy = async ({ kind = 'low', frames = 12, traceEvery = 0 } = {
   }
 };
 window.ready = true;
+
+window.profileFrozenAnisotropy = async (count = 25000) => {
+  const { default: profileFrozenAnisotropicSurface } = await import(
+    '../../../benchmarks/fluids/profileFrozenAnisotropicSurface.js');
+  const entry = liquidScalingCases({ anisotropy: 0.35 }).find(entry => entry.id === `liquid-scaling-${count}:gpu`);
+  const system = await entry.createSystem(), objects = entry.configureScene(scene);
+  scene.add(system);
+  try {
+    await entry.prepare(system, renderer, scene, camera);
+    for (let frame = 0; frame < 180; frame++) {
+      system.advanceFrames(1, 1 / 60); await renderer.renderAsync(scene, camera);
+      if (frame % 30 === 0) await renderer.backend.device.queue.onSubmittedWorkDone();
+    }
+    const result = await profileFrozenAnisotropicSurface(system, renderer, scene, camera);
+    return { result, checkpoint: (await liquidCheckpoint(system, renderer)).workload };
+  } finally {
+    await entry.cleanup(); await renderer.backend.device.queue.onSubmittedWorkDone();
+    system.destroy(); system.removeFromParent(); objects.forEach(object => object.removeFromParent());
+  }
+};

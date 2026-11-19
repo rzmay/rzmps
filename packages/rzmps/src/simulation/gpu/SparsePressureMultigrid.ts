@@ -3,6 +3,7 @@ import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgp
 import { If, clamp, float, floor, ivec3, storage, uniform, vec3, vec4 } from 'three/tsl';
 import SparseVolumeGrid from '../../spatial/structures/gpu/SparseVolumeGrid';
 import type { ParticleSpatialGridRenderer } from '../../spatial/structures/ParticleSpatialGrid';
+import { destroyStorageAttribute } from '../../utils/gpu/storage.utils';
 
 type Coordinate = Node<'ivec3'>;
 type Scalar = Node<'float'>;
@@ -121,7 +122,7 @@ export default class SparsePressureMultigrid {
     return this.levels.reduce((sum, level) => sum + level.allocatedBytes, 0);
   }
 
-  dispose(): void { this.levels.forEach(level => level.dispose()); }
+  dispose(renderer?: ParticleSpatialGridRenderer): void { this.levels.forEach(level => level.dispose(renderer)); }
 }
 
 class CoarsePressureLevel implements SparsePressureLevel {
@@ -371,11 +372,13 @@ class CoarsePressureLevel implements SparsePressureLevel {
       + this.grid.allocatedBytes;
   }
 
-  dispose(): void {
+  dispose(renderer?: ParticleSpatialGridRenderer): void {
     [this.restrictNode, this.restrictRHSNode, this.residualNode, this.prolongNode, ...this.smoothNodes]
       .forEach(node => node.dispose());
+    destroyStorageAttribute(renderer, this.valuesAttribute);
+    destroyStorageAttribute(renderer, this.coefficientsAttribute);
     this.valuesAttribute.dispose();
     this.coefficientsAttribute.dispose();
-    this.grid.dispose();
+    this.grid.dispose(renderer);
   }
 }

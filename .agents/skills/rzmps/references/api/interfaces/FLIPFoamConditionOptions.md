@@ -48,6 +48,18 @@ Minimum source age in seconds, preventing immediate emission from newborn liquid
 
 ***
 
+<a id="minimumdeformity"></a>
+
+### minimumDeformity?
+
+```ts
+optional minimumDeformity?: number;
+```
+
+Minimum reconstructed symmetric strain in inverse seconds. Defaults to 0.5 with samplerGPU, otherwise 0.
+
+***
+
 <a id="minimumneighbors"></a>
 
 ### minimumNeighbors?
@@ -68,9 +80,9 @@ Minimum other live neighbors; excludes isolated airborne markers. Defaults to 3.
 optional minimumSpeed?: number;
 ```
 
-Minimum particle speed in simulation units/second, including its speed multiplier. Defaults to 1.
+Optional additional speed gate in simulation units/second. Defaults to 0; deformation is independent of speed.
 
-#### Inherited from
+#### Overrides
 
 [`FLIPSprayConditionOptions`](FLIPSprayConditionOptions.md).[`minimumSpeed`](FLIPSprayConditionOptions.md#minimumspeed)
 
@@ -89,3 +101,15 @@ Search radius as a multiple of largest absolute particle scale. Defaults to 2.
 #### Inherited from
 
 [`FLIPSprayConditionOptions`](FLIPSprayConditionOptions.md).[`neighborRadius`](FLIPSprayConditionOptions.md#neighborradius)
+
+***
+
+<a id="samplergpu"></a>
+
+### samplerGPU?
+
+```ts
+optional samplerGPU?: GPUSurfaceQuery;
+```
+
+World-space surface query supplying deformation, shared with liquid surface shading.

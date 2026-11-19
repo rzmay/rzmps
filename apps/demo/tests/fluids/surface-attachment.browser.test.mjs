@@ -35,6 +35,7 @@ test('GPU attachment samples rigid transforms and the current sparse implicit li
       close(liquid.moved[3], -0.05); close(liquid.moved[17], 0.21);
       close(liquid.sparse[7], 0); assert.equal(liquid.sparse[19], 0, 'invalid support kills opted-in foam');
       close(liquid.missing[3], 0);
+      close(liquid.swapped[3], -0.15); close(liquid.swapped[4], 3); close(liquid.swapped[7], 1);
       assert.deepEqual(errors, []);
     } finally { await browser?.close(); await site.close(); }
   });

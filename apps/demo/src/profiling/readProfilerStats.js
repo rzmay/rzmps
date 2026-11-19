@@ -1,7 +1,8 @@
 /** Read public benchmark providers; no renderer internals, readbacks or simulation-specific traversal. */
 export function readProfilerStats(benchmarks) {
   const snapshot = benchmarks?.snapshot() ?? {};
-  const stats = { particles: 0, children: 0, allocated: 0, activeSlots: 0, fluids: [], renderers: [] };
+  const stats = { particles: 0, children: 0, allocated: 0, activeSlots: 0, systems: [], fluids: [], renderers: [] };
+  const componentNames = benchmarks?.componentNames?.() ?? {};
   const counts = { activeLights: ['Lights', 0], playingClips: ['Audio clips', 0], activeDecals: ['Decals', 0] };
   const present = new Set();
   const systemMetrics = { particleCount: 'particles', childrenCount: 'children',
@@ -11,6 +12,13 @@ export function readProfilerStats(benchmarks) {
     if (value == null) continue;
     const system = path.match(/(?:^|\/)system\/([^/]+)$/);
     if (system && systemMetrics[system[1]]) stats[systemMetrics[system[1]]] += value;
+    if (system?.[1] === 'particleCount') {
+      const prefix = path.slice(0, -'system/particleCount'.length);
+      const name = componentNames[prefix.replace(/\/$/, '')];
+
+      if (name) stats.systems.push({ name, particles: value,
+        children: snapshot[`${prefix}system/childrenCount`] ?? 0 });
+    }
     const metric = path.split('/').at(-1);
     if (counts[metric]) { counts[metric][1] += value; present.add(metric); }
     if (path.endsWith('/grid/cellSize')) {

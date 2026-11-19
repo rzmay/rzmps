@@ -192,3 +192,4 @@ new SurfaceAttachment({ surface: sampledSurface, samplerGPU: sampledSurface.samp
 new SurfaceAttachment({ sampler: position => ({ distance: position.y, normal: new Vector3(0, 1, 0),
   velocity: new Vector3(), valid: true }) });
 FLIPSimulation.FoamCondition({ minimumSpeed: 0.25, minimumNeighbors: 3, maximumNeighbors: 24 });
+FLIPSimulation.FoamCondition({ minimumDeformity: 0.5, samplerGPU: sampledSurface.sampleSurfaceGPU });

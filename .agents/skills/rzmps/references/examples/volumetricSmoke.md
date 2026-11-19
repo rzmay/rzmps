@@ -58,9 +58,10 @@ shrinking keep the domain aligned with source motion and existing smoke support.
         weight: 0.08,
         sourceTemperature: 1,
         temperatureOverLifetime: time => 1 - time,
-        sourceStrength: 30,
-        velocitySourceStrength: 2.2,
-        scalarDiffusion: 0.8,
+        // World-space source/diffusion units, calibrated at the original 0.125-unit cell width.
+        sourceStrength: 0.06135923151542564,
+        velocitySourceStrength: 0.004499676977797881,
+        scalarDiffusion: 0.0020833333333333333,
         turbulenceNoiseStrength: 3,
         vorticityStrength: 10,
 
@@ -102,7 +103,7 @@ shrinking keep the domain aligned with source motion and existing smoke support.
         densityNoiseContrast: 1,
         densityNoiseFrequency: 1,
         densityNoiseSpeed: 0.5,
-        densityNoiseStretch: 0.25,
+        densityNoiseStretch: 0.125,
         densityNoiseStretchBySpeed: [0, 1],
         // Masked thin structures need finer ray sampling than the standard one-sample tier.
         samplesPerVoxel: 2,
@@ -154,6 +155,10 @@ The original upward lifetime force, particle noise motion, shrinking source size
 fade are restored too. ColorOverLifetime changes only alpha; it no longer cycles source colors.
 Source collision retains lifetime loss one and the grid discovers fluid colliders automatically.
 
+Source strength uses emitted mass per second, and scalar diffusion uses world units²/second.
+These values are calibrated at the original 0.125-unit reference cell width; coarser automatic
+quality no longer increases their physical emission or diffusion rate.
+
 
 [Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L34)
 
@@ -173,9 +178,10 @@ Source collision retains lifetime loss one and the grid discovers fluid collider
         weight: 0.08,
         sourceTemperature: 1,
         temperatureOverLifetime: time => 1 - time,
-        sourceStrength: 30,
-        velocitySourceStrength: 2.2,
-        scalarDiffusion: 0.8,
+        // World-space source/diffusion units, calibrated at the original 0.125-unit cell width.
+        sourceStrength: 0.06135923151542564,
+        velocitySourceStrength: 0.004499676977797881,
+        scalarDiffusion: 0.0020833333333333333,
         turbulenceNoiseStrength: 3,
         vorticityStrength: 10,
 
@@ -223,7 +229,7 @@ It inherits two cascades, four finest directions, four interval samples and one 
 new lights entering range and HDRI changes refresh lighting even when particle simulation is paused.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L84)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L85)
 
 ```js
     renderers: [
@@ -237,7 +243,7 @@ new lights entering range and HDRI changes refresh lighting even when particle s
         densityNoiseContrast: 1,
         densityNoiseFrequency: 1,
         densityNoiseSpeed: 0.5,
-        densityNoiseStretch: 0.25,
+        densityNoiseStretch: 0.125,
         densityNoiseStretchBySpeed: [0, 1],
         // Masked thin structures need finer ray sampling than the standard one-sample tier.
         samplesPerVoxel: 2,

@@ -308,7 +308,7 @@ class ParticleSystem extends THREE.Object3D {
     particleDeath: (particle, fromGPUEvent) => this._dispatchParticleDeath(particle, fromGPUEvent),
     notifyDeath: particle => this._notifyParticleDeath(particle),
   });
-  readonly benchmarks = new Benchmarks({ beforeSnapshot: () => this.syncBenchmarks() });
+  readonly benchmarks = new Benchmarks({ beforeSnapshot: () => this.syncBenchmarks(), name: () => this.name });
   particles: Particle[] = [];
   emitters: Emitter[] = [];
   modules: Module[] = [];
@@ -531,9 +531,19 @@ class ParticleSystem extends THREE.Object3D {
   public async prepare(renderer: WebGPURenderer = this.sceneRenderer as WebGPURenderer): Promise<void> {
     if (!ParticleSystem.isWebGPURenderer(renderer)) throw new Error('GPU preparation requires a WebGPU renderer.');
     const visited = new Set<ParticleSystem>();
-    const visit = async (system: ParticleSystem): Promise<void> => {
+    const visit = async (
+      system: ParticleSystem, parent?: ParticleSystem, options?: SubSystemOptions,
+    ): Promise<void> => {
       if (visited.has(system)) return;
       visited.add(system);
+      system._renderer = renderer;
+      const modules = system.getModules(Module), effects = system._getSpatialEffects();
+      system.emitters.forEach(emitter => emitter.syncGPUConfiguration());
+      modules.forEach(module => module.syncGPUConfiguration());
+      system.renderers.forEach(component => component.syncGPUConfiguration());
+      system.gpuSimulation._gpuParameters.sync();
+      system._discoverEventTypes();
+      system.gpuSimulation._prepareGPUTagRegistry(modules, effects);
       // Rendering can compile against persistent provider fields while simulation pipelines prepare.
       // Providers without a field yet retain their normal first-use rendering path.
       const renderPreparation = system.renderers.map(rendererComponent =>
@@ -544,9 +554,25 @@ class ParticleSystem extends THREE.Object3D {
         }
       };
       await Promise.all([modulePreparation(), ...renderPreparation]);
-      for (const child of system.subSystems.keys()) await visit(child);
+      // Component compilation registers dynamic parameter layouts lazily. Finalize their versions
+      // before generic collision/modifier cache keys are captured for the first ordinary update.
+      modules.forEach(module => module.syncGPUConfiguration());
+      if (system._canProcessParticlesOnGPU(modules, effects)) {
+        await system.gpuSimulation.preparePrograms(renderer, modules, effects,
+          parent && options ? { parent, options } : undefined);
+      }
+      for (const [child, childOptions] of system.subSystems) await visit(child, system, childOptions);
     };
     await visit(this);
+  }
+
+  /** Persistent input selected by the ordinary GPU renderer handoff. @internal */
+  prepareGPURenderInput(renderer: WebGPURenderer) {
+    const modifiers = [...this.getModules(Module).filter(module => module.modifiesParticles),
+      ...this._getSpatialEffects().filter(effect => effect.supportsGPU)];
+    return modifiers.some(modifier => modifier.priority >= 0)
+      ? this.gpuSimulation.prepareRenderBuffers(renderer)
+      : this.gpuSimulation.prepareContext(renderer).buffers;
   }
 
   /** Finds modules by constructor (including subclasses) or the presence of all requested members.

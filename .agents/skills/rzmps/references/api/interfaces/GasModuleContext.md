@@ -104,6 +104,8 @@ readonly module: GasModule;
 scalarDiffusion: Node<"float">;
 ```
 
+World units squared per second. Custom increases must respect dt <= cellWidth² / (6 * diffusivity).
+
 ***
 
 <a id="temperaturedissipation"></a>

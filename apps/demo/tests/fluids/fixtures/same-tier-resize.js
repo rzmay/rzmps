@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { WebGPURenderer } from 'three/webgpu';
-import { Fn, instanceIndex, vec4 } from 'three/tsl';
+import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
+import { bindStorageAttributeLifetime } from '../../../../../packages/rzmps/src/utils/gpu/storage.utils.ts';
+import { Fn, float, instanceIndex, vec3, vec4, storage } from 'three/tsl';
 import { ParticleSystem, GasSimulation, FLIPSimulation, VolumeRenderer } from '@rzmps/rzmps';
 
 const renderer = new WebGPURenderer({ trackTimestamp: true });
@@ -10,15 +11,72 @@ const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 50);
 camera.position.set(0, 0, 6);
 const box = () => new THREE.Box3(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1));
 const fields = ['velocityCurrentAttribute', 'velocityNextAttribute', 'pressureCurrentAttribute',
-  'pressureNextAttribute', 'divergenceAttribute', 'solidAttribute', 'boundaryAttribute'];
+  'divergenceAttribute', 'solidAttribute', 'boundaryAttribute'];
 const read = async attribute => new Float32Array(await renderer.getArrayBufferAsync(attribute));
 
-async function create(kind) {
+window.measureFlipSampling = async () => {
+  const { simulation: fluid, system } = await create('liquid');
+  const projection = fluid.getPressureProjection(), grid = fluid.workGrid;
+  const points = [[1.2, 1.7, 1.3], [3.9, 4.1, 3.8], [6.6, 6.5, 6.7]];
+  const output = new StorageBufferAttribute(new Float32Array(points.length * 8), 4);
+  const values = storage(output, 'vec4', points.length * 2);
+  const coefficients = [[0.1, 0.2, 0.3], [0.2, 0.3, 0.4], [0.3, 0.4, 0.5]];
+  const offset = [1, 2, -1], results = [], nodes = [];
+  try {
+    for (const linear of [false, true]) for (const halfDry of [false, true]) {
+      const seed = projection.compute(index => {
+        const c = projection.coordinate(index, fluid.resolution + 1);
+        const velocity = coefficients.map((row, axis) => {
+          const location = vec3(c).add(vec3(axis === 0 ? 0 : 0.5,
+            axis === 1 ? 0 : 0.5, axis === 2 ? 0 : 0.5));
+          return linear ? location.dot(vec3(...row)).add(offset[axis]) : float(offset[axis]);
+        });
+        projection.faces.element(index).assign(vec4(...velocity, 0));
+        projection.beforeFaces.element(index).assign(vec4(...velocity, 0).mul(0.25));
+      }, true);
+      const wet = grid.compute(index => {
+        const x = grid.coordinate(index).x;
+        fluid.velocityNext.element(index).w.assign(halfDry ? x.lessThan(4).select(2, 0) : 2);
+      });
+      const sample = Fn(() => {
+        points.forEach((point, i) => {
+          values.element(i * 2).assign(vec4(projection.sample(vec3(...point)), 0));
+          values.element(i * 2 + 1).assign(vec4(projection.sample(vec3(...point), true), 0));
+        });
+      })().compute(1);
+      nodes.push(seed, wet, sample);
+      renderer.compute([seed, wet, sample]);
+      results.push({ linear, halfDry, points, values: [...await read(output)] });
+    }
+    const controls = projection.controls;
+    projection.controls = () => ({ ...controls(), minIterations: 24, maxIterations: 24,
+      warmStart: false, multigrid: true, diagnostics: false });
+    renderer.backend.device.pushErrorScope('validation');
+    projection.solve(renderer, fluid.velocityNext, fluid.velocityCurrent, 24);
+    await renderer.backend.device.queue.onSubmittedWorkDone();
+    const validation = await renderer.backend.device.popErrorScope();
+    const multigrid = validation ? undefined : await projection.readDiagnostics(renderer, fluid.velocityCurrent);
+    projection.controls = controls;
+    return { results, dimensions: grid.gridDimensions.toArray(), multigrid, validation: validation?.message ?? null };
+  } finally {
+    await renderer.backend.device.queue.onSubmittedWorkDone();
+    nodes.forEach(node => node.dispose());
+    output.dispose(); system.destroy();
+  }
+};
+
+async function create(kind, capacityCase = false) {
   const simulation = new (kind === 'gas' ? GasSimulation : FLIPSimulation)({ bounds: box(),
-    spatialGridOptions: { brickSubdivisions: 1, cellSubdivisions: 2, minVolumeQuality: 2, maxVolumeQuality: 2 },
+    spatialGridOptions: { brickSubdivisions: capacityCase ? 3 : 1, cellSubdivisions: capacityCase ? 4 : 2,
+      minVolumeQuality: 2, maxVolumeQuality: 2 },
     initialBrickCapacity: 8, maxActiveBricks: 8, pressureIterations: 4,
     adaptiveTimestep: false, externalForce: new THREE.Vector3(), sourceStrength: 0,
     buoyancy: 0, weight: 0, densityDissipation: 0, velocityDissipation: 0, particleSeparation: 0 });
+  if (capacityCase) {
+    simulation.workGrid.dispose(); simulation.workGrid = undefined;
+    simulation.velocityBeforeAttribute = undefined; simulation.velocityBefore = undefined;
+    simulation.createWorkGrid(128);
+  }
   const volume = kind === 'gas' ? new VolumeRenderer({ steps: 24, dynamicResolution: false }) : undefined;
   const system = new ParticleSystem({ gpuProcessing: true, maxParticles: 1, emitters: [],
     modules: [simulation], renderers: volume ? [volume] : [] });
@@ -41,7 +99,6 @@ async function create(kind) {
       simulation.velocityCurrent.element(index).assign(vec4(1, 2, 3, 2));
       simulation.velocityNext.element(index).assign(vec4(4, 5, 6, 2));
       simulation.pressureCurrent.element(index).assign(0.75);
-      simulation.pressureNext.element(index).assign(0.25);
       simulation.divergence.element(index).assign(0.1);
       simulation.solid.element(index).assign(0);
       simulation.faceOpenness.element(index).assign(vec4(1));
@@ -305,3 +362,68 @@ window.verifyImmediateCoverage = async () => {
 };
 
 window.ready = true;
+
+// Direct compatible growth: no simulation tick is allowed to hide a migration mismatch.
+window.measureFlipCapacity = async () => {
+  const { simulation: fluid, system } = await create('flip', true);
+  const grid = fluid.workGrid, projection = fluid.getPressureProjection();
+  renderer.compute(grid.compute(index => {
+    fluid.velocityBefore.element(index).assign(vec4(7, 8, 9, 0.25));
+    fluid.solidVelocity.element(index).assign(vec4(-1, -2, -3, 0));
+  }));
+  const attributes = [...fields.map(key => fluid[key]), ...projection.capacityAttributes()];
+  const values = await Promise.all(attributes.map(read));
+  const programs = [fluid.gatherNode, fluid.forceNodeCompute, fluid.transferNode,
+    ...projection.pressureNodes, ...projection.fallbackPressureNodes];
+  const beforeNode = fluid.velocityBefore;
+  const accessorAttribute = new StorageBufferAttribute(new Float32Array(4), 4);
+  bindStorageAttributeLifetime(renderer, accessorAttribute);
+  const output = storage(accessorAttribute, 'vec4', 1);
+  const accessor = Fn(() => output.element(0).assign(fluid.velocityBefore.element(17)))().compute(1);
+  renderer.compute(accessor);
+  await renderer.backend.device.queue.onSubmittedWorkDone();
+  const pool = fluid.workPool;
+  let pipelines = 0;
+  const createPipeline = renderer.backend.createComputePipeline;
+  renderer.backend.createComputePipeline = function (...args) {
+    pipelines++; return createPipeline.apply(this, args);
+  };
+  try {
+    const start = performance.now();
+    pool.request(256); await pool.whenPrepared();
+    const preparationMs = performance.now() - start;
+    const commitStart = performance.now();
+    if (!pool.commit()) throw new Error('Compatible capacity candidate did not commit.');
+    const adoptionCPUms = performance.now() - commitStart;
+    await renderer.backend.device.queue.onSubmittedWorkDone();
+    const fencedMs = performance.now() - commitStart;
+    const next = [...fields.map(key => fluid[key]), ...projection.capacityAttributes()];
+    const after = await Promise.all(next.map(read));
+    let exact = true, newTailZero = true;
+    for (let i = 0; i < values.length; i++) {
+      const planes = i === 0 || i === 5 ? 2 : 1;
+      const oldStride = values[i].length / planes, newStride = after[i].length / planes;
+      const scalarStride = i < fields.length ? attributes[i].itemSize : i === fields.length + 2 ? 7 :
+        i === fields.length + 3 ? 6 : 4;
+      for (let plane = 0; plane < planes; plane++) {
+        for (let j = 0; j < oldStride - scalarStride; j++)
+          exact &&= values[i][plane * oldStride + j] === after[i][plane * newStride + j];
+        for (let j = oldStride - scalarStride; j < newStride; j++)
+          newTailZero &&= after[i][plane * newStride + j] === 0;
+      }
+    }
+    const samePrograms = grid === fluid.workGrid && projection === fluid.getPressureProjection()
+      && programs.every((node, i) => node === [fluid.gatherNode, fluid.forceNodeCompute, fluid.transferNode,
+        ...projection.pressureNodes, ...projection.fallbackPressureNodes][i]) && beforeNode === fluid.velocityBefore;
+    // An actual dispatch verifies the packed before-velocity accessor after rebinding.
+    renderer.compute(accessor);
+    const first = await read(accessorAttribute);
+    accessor.dispose(); accessorAttribute.dispose();
+    return { capacity: grid.capacity, pipelines, preparationMs, adoptionCPUms, fencedMs,
+      exact, newTailZero, samePrograms, beforePlane: [...first], metrics: { ...pool.metrics } };
+  } finally {
+    renderer.backend.createComputePipeline = createPipeline;
+    system.destroy();
+    await renderer.backend.device.queue.onSubmittedWorkDone();
+  }
+};

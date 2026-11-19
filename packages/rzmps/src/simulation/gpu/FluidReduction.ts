@@ -5,6 +5,7 @@ import {
 } from 'three/tsl';
 import type { ParticleSpatialGridRenderer } from '../../spatial/structures/ParticleSpatialGrid';
 import { writeComputeDispatch, type GPUComputeRange } from '../../utils/gpu/computeDispatch.utils';
+import { bindStorageAttributeLifetime } from '../../utils/gpu/storage.utils';
 
 type Vectors = { element(index: Node | number): Node<'vec4'> };
 
@@ -27,6 +28,7 @@ export default class FluidReduction {
   private readonly createdNodes = new Set<ComputeNode>();
   private readonly range?: GPUComputeRange;
   private readonly scheduleNode?: ComputeNode;
+  private storageRenderer?: ParticleSpatialGridRenderer;
 
   /** count reserves the complete hierarchy; compact.count is the live runtime population. */
   constructor(private readonly count: number, private readonly compact?: FluidReductionRange) {
@@ -109,6 +111,7 @@ export default class FluidReduction {
   compute(renderer: ParticleSpatialGridRenderer, key: object,
     sample: (index: Node<'uint'>) => Node<'vec4'>,
     active: (index: Node<'uint'>) => Node<'bool'>, absolute = true): void {
+    this.storageRenderer = renderer;
     let node = this.nodes.get(key);
     if (!node) {
       node = Fn(() => {
@@ -151,6 +154,10 @@ export default class FluidReduction {
   }
 
   dispose(): void {
+    if (this.storageRenderer) {
+      for (const attribute of [this.attribute, ...this.attributes])
+        bindStorageAttributeLifetime(this.storageRenderer, attribute);
+    }
     this.attribute.dispose();
     this.attributes.forEach(attribute => attribute.dispose());
     [...this.createdNodes, ...this.reduceNodes, this.scheduleNode].forEach(node => node?.dispose());

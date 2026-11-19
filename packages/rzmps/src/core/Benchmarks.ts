@@ -89,10 +89,12 @@ export default class Benchmarks {
   private timestampsPending = false;
   private readonly now: () => number;
   private readonly beforeSnapshot?: () => void;
+  private readonly componentName?: () => string;
 
-  constructor(options: { now?: () => number; beforeSnapshot?: () => void } = {}) {
+  constructor(options: { now?: () => number; beforeSnapshot?: () => void; name?: () => string } = {}) {
     this.now = options.now ?? (() => performance.now());
     this.beforeSnapshot = options.beforeSnapshot;
+    this.componentName = options.name;
   }
 
   get enabled(): boolean {
@@ -391,6 +393,19 @@ export default class Benchmarks {
       end?.();
       this.timestampsPending = false;
     }
+  }
+
+  /** Current named component paths, matching snapshot prefixes without a trailing slash.
+   * Names are presentation metadata; changing them does not change metric identity or collected history. */
+  componentNames(): Record<string, string> {
+    const names: Record<string, string> = {};
+
+    this.walk((owner, prefix) => {
+      const name = owner.componentName?.().trim();
+      if (name) names[prefix.replace(/\/$/, '')] = name;
+    });
+
+    return names;
   }
 
   snapshot(names?: readonly string[]): Record<string, number | null> {

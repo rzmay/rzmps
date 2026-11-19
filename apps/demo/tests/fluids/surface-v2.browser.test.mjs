@@ -9,7 +9,8 @@ const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
 await site.demo.watcher.close();
 let browser;
 try {
-  browser = await puppeteer.launch(browserLaunchOptions('test', { headless: true, args: [...browserLaunchOptions('test').args, '--enable-unsafe-webgpu'] }));
+  browser = await puppeteer.launch(browserLaunchOptions('test', { headless: true,
+    args: [...browserLaunchOptions('test').args, '--enable-unsafe-webgpu'] }));
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', error => { errors.push(error.message); console.error(error.message); });
@@ -104,8 +105,9 @@ try {
   console.log('Surface composites:', JSON.stringify({ gpu: materials.gpu, webgl: materials.gl }));
   const liquid = await page.evaluate(() => window.testLiquidMaterial());
   assert(liquid.calm[0] > liquid.calm[1] * 3, 'calm endpoint uses the first gradient color');
-  for (const active of [liquid.moving, liquid.rotating]) {
-    assert(active[1] > active[0] * 3, 'either speed or vorticity reaches the active gradient color');
+  assert.deepEqual(liquid.moving, liquid.calm, 'uniform speed alone does not activate aeration');
+  for (const active of [liquid.deforming, liquid.rotating]) {
+    assert(active[1] > active[0] * 3, 'deformation or sufficiently strong curl reaches the active color');
   }
   assert(liquid.rough[0] > liquid.smooth[0] + 100, 'roughness function evaluates across activity');
   assert(liquid.reusedGeometry && liquid.replacedCallback, 'flow edits update appearance without rebuilding geometry');

@@ -58,10 +58,30 @@ export async function benchmarkFoam(system, renderer, scene, camera, timer, stat
     });
     state.renderStage = 'foam/rendering';
     const rendering = await measure('foam/rendering', () => renderer.renderAsync(scene, camera));
+    // Same frozen liquid, camera and lights: isolate the marginal material/children draw cost too.
+    for (const [object, value] of visible) object.visible = value;
+    const fullScene = [], withoutFoam = [];
+    for (let i = 0; i < 3; i++) {
+      state.renderStage = 'scene/with-foam';
+      fullScene.push(await measure(state.renderStage, () => renderer.renderAsync(scene, camera)));
+      if (mesh) mesh.visible = false;
+      state.renderStage = 'scene/without-foam';
+      withoutFoam.push(await measure(state.renderStage, () => renderer.renderAsync(scene, camera)));
+      if (mesh) mesh.visible = visible.get(mesh) ?? true;
+    }
+    // Read the frozen arena counters explicitly; the ordinary UI observation can lag by 250 ms.
+    const childCounters = foam.renderers[0]._gpuChildren?.counters;
+    const childCounts = childCounters
+      ? new Uint32Array(await renderer.getArrayBufferAsync(childCounters)) : new Uint32Array(3);
     const metrics = { particleCount: markers.length, dispatchedSlots: buffers.count,
+      renderedChildren: Math.max(0, childCounts[0] + childCounts[1] - childCounts[2]),
+      childOverflow: childCounts[2],
+      observedRenderedChildren: foam.renderers.reduce((count, view) => count + view.renderedChildCount, 0),
       surfaceQueryGPUms: median(querySamples.map(sample => sample.gpuMs)),
       surfaceAttachmentGPUms: median(attachmentSamples.map(sample => sample.gpuMs)),
       foamRenderingGPUms: rendering.gpuMs,
+      sceneWithFoamGPUms: median(fullScene.map(sample => sample.gpuMs)),
+      sceneWithoutFoamGPUms: median(withoutFoam.map(sample => sample.gpuMs)),
       scope: 'Frozen-state scratch kernels; attachment includes query. Foam-only scene rendering includes depth/clear.',
       queryCPUms: median(querySamples.map(sample => sample.cpuSubmissionMs)),
       attachmentCPUms: median(attachmentSamples.map(sample => sample.cpuSubmissionMs)),

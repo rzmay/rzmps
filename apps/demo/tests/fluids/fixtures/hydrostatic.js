@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
-import { storage, vec3, vec4 } from 'three/tsl';
+import { Fn, instanceIndex, storage, vec3, vec4 } from 'three/tsl';
 import { FLIPSimulation } from '@rzmps/rzmps';
 const renderer = new WebGPURenderer();
 await renderer.init();
@@ -33,14 +33,22 @@ const accessible = (x, y, z, open) =>
     (x >= 11 && x <= 13 && y >= 2 && y <= 14) ||
     (x >= 8 && x <= 11 && y >= 2 && y <= 3) ||
     (open && x >= 14 && y >= 6 && y <= 7));
-const at = (x, y, z) => x + n * (y + n * z);
+// Explicitly populate the sparse projection domain; logical coordinates are not pool addresses.
+const grid = liquid.workGrid;
+renderer.compute(Fn(() => {
+  grid.pages.element(instanceIndex).assign(instanceIndex.add(1));
+  grid.slots.element(instanceIndex).assign(instanceIndex.add(1));
+})().compute(8));
+grid.updateDispatch(renderer);
+const at = (x, y, z) => (Math.floor(x / 8) + 2 * (Math.floor(y / 8) + 2 * Math.floor(z / 8))) * 512
+  + x % 8 + 8 * (y % 8 + 8 * (z % 8));
 window.hydrostatic = async open => {
   // Isolate the matched FLIP projection from P2G/classification and particle collision.
   // Values are the exact intended pressure domain for a two-cell connecting passage.
-  const input = new Float32Array(n ** 3 * 4),
+  const input = new Float32Array(liquid.cellCount * 4),
     before = new Float32Array(input.length);
-  const solid = new Float32Array(n ** 3),
-    boundary = new Float32Array(n ** 3 * 8);
+  const solid = new Float32Array(liquid.cellCount),
+    boundary = new Float32Array(liquid.cellCount * 8);
   const fluidCells = [];
   for (let z = 0; z < n; z++)
     for (let y = 0; y < n; y++)
@@ -61,20 +69,21 @@ window.hydrostatic = async open => {
         }
         boundary[i * 4 + 3] = inside ? 1 : 0;
       }
-  const upload = (attribute, values) => {
-    attribute.array.set(values);
+  const upload = (attribute, values, offset = 0) => {
+    attribute.array.fill(0);
+    attribute.array.set(values, offset);
     attribute.needsUpdate = true;
   };
   upload(liquid.velocityNextAttribute, input);
-  upload(liquid.velocityBeforeAttribute, before);
+  upload(liquid.velocityBeforeAttribute, before, liquid.cellCount * 4);
   upload(liquid.solidAttribute, solid);
   upload(liquid.boundaryAttribute, boundary);
   liquid.getPressureProjection().invalidate();
   liquid.solveProjection(renderer, liquid.velocityNext, liquid.velocityCurrent);
   const pressure = new Float32Array(await renderer.getArrayBufferAsync(liquid.pressureCurrentAttribute));
   const centerVelocity = new Float32Array(await renderer.getArrayBufferAsync(liquid.velocityCurrentAttribute));
-  const samples = new StorageBufferAttribute(new Float32Array(n ** 3 * 4), 4);
-  const target = storage(samples, 'vec4', n ** 3);
+  const samples = new StorageBufferAttribute(new Float32Array(liquid.cellCount * 4), 4);
+  const target = storage(samples, 'vec4', liquid.cellCount);
   renderer.compute(
     liquid.computeCells(index =>
       target
@@ -131,7 +140,6 @@ window.ready = true;
 // End-to-end marker test: normal P2G classification, MAC pressure, G2P, gravity and BVH collision.
 window.communicatingMarkers = async () => {
   const { ParticleSystem, Emitter, FluidCollider } = await import('@rzmps/rzmps');
-  const { Fn, instanceIndex } = await import('three/tsl');
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
   const colliders = [];
   const box = (minimum, maximum) => {
