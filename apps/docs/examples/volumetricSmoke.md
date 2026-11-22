@@ -9,16 +9,14 @@ example: volumetricSmoke
 
 <ExampleTags />
 
-The initial Gas Volume preset's rolling flow, with a uniform warm-gray color and a very mild reddish tint.
+A continuous cloud of rolling warm-gray smoke with a subtle reddish tint.
 
 <ExamplePreview />
 
 ## Particle System Configuration
 
-This native WebGPU preset continuously emits through a repeating ten-second loop. Its solver,
-emission and motion settings follow the earlier Gas Volume example, before the fire redesign.
-The domain initially reserves 16 local units per side. Directional automatic padding and delayed
-shrinking keep the domain aligned with source motion and existing smoke support.
+This native WebGPU preset continuously emits through a repeating ten-second loop. Directional automatic padding and delayed shrinking
+keep the domain aligned with source motion and existing smoke support.
 
 <ExampleCode region="system" />
 
@@ -34,16 +32,22 @@ each particle expires. There is no pulsed emission gate. The renderer supplies t
 
 Density/color, temperature and velocity dissipate independently. Buoyancy lifts warm gas, scalar
 diffusion spreads concentration, turbulence noise adds motion, and vorticity confinement preserves
-rolling detail. Temperature emission cools over particle lifetime. Turbulence settings use the
+rolling detail. Turbulence strength and frequency are both 1.5, adding smaller-scale motion without
+strongly pushing the entire cloud sideways. Temperature emission cools over particle lifetime. Turbulence settings use the
 `turbulenceNoiseStrength`, `turbulenceNoiseFrequency`, `turbulenceNoiseSpeed` and `turbulenceNoiseOctaves` names.
 
-The original upward lifetime force, particle noise motion, shrinking source sizes and lifetime alpha
-fade are restored too. ColorOverLifetime changes only alpha; it no longer cycles source colors.
-Source collision retains lifetime loss one and the grid discovers fluid colliders automatically.
+Upward lifetime force, particle noise motion, shrinking source sizes and lifetime alpha fade shape
+the source. ColorOverLifetime changes alpha while particle color remains white.
+Source collision uses lifetime loss one and the grid discovers fluid colliders automatically.
+Large mesh-collider sets share an occupancy atlas to stay within WebGPU sampled-texture limits.
+Closed meshes rendered with `BackSide` are collected as containers with a fluid interior; open sheets
+remain surface obstacles.
 
 Source strength uses emitted mass per second, and scalar diffusion uses world units²/second.
-These values are calibrated at the original 0.125-unit reference cell width; coarser automatic
-quality no longer increases their physical emission or diffusion rate.
+The source emits 0.5 mass units per particle per second before particle mass/alpha weighting,
+and diffusivity is 0.005 world units²/second. Density dissipation of 0.35 lets the stronger source
+accumulate into a larger cloud while gentle diffusion broadens its footprint. Coarser automatic quality
+no longer increases physical emission or diffusion rate.
 
 <ExampleCode region="modules" />
 
@@ -53,6 +57,11 @@ The renderer's warm-gray `color` multiplies transported particle color; white pa
 tint. The `densityNoiseStrength`, `densityNoiseContrast`, `densityNoiseFrequency` and `densityNoiseSpeed`
 settings supply visual breakup independently of simulated turbulence. Two samples per voxel and a
 256-step limit resolve masked detail without intentionally changing opacity.
+Sampling is relative to cell width: when cells coarsen from 0.125 to 0.25 units, four samples per voxel
+restore the 0.0625-unit spacing provided by two samples at the finer tier. Larger bounds can also reach
+the maximum-step budget. Increasing either sampling control costs rendering work; density-noise frequency
+stays fixed in simulation space, independently of the grid tier.
+
 
 There is no temperature-driven tint or lifetime color gradient. Simulation lighting/shadows can vary
 brightness, while the transported smoke keeps its single slightly reddish gray hue.
@@ -67,3 +76,11 @@ The demo uses three brick subdivisions and three cell subdivisions for its realt
 domain. Larger smoke support can still request a coarser automatic tier.
 
 Density noise stretches along local flow, tapering to an unstretched mask as the gas comes to rest.
+
+## Render sampling quality
+
+Use `VolumeRenderer.samplesPerVoxel` for finer visual sampling at coarse gas qualities; the demo GUI
+calls it **Samples Per Voxel**. Increase `steps` too if a larger ray interval reaches that sample budget.
+This changes rendering cost and sample spacing, not gas density or simulation resolution. No automatic
+sampling or appearance adjustment is applied when the simulation quality changes. See
+[volume sampling](../guides/gpu-processing.md#volume-sampling) for the quality/performance tradeoff.

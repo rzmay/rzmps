@@ -110,6 +110,34 @@ compensation: CompensationMode;
 
 ***
 
+<a id="condition"></a>
+
+### condition?
+
+```ts
+optional condition?: RendererCondition;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`condition`](Renderer.md#condition)
+
+***
+
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ParticleGPUCondition;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`conditionGPU`](Renderer.md#conditiongpu)
+
+***
+
 <a id="continuousrate"></a>
 
 ### continuousRate
@@ -160,6 +188,26 @@ distanceAffectsOpacity: number = 0;
 
 ```ts
 distanceAffectsSize: number = 0;
+```
+
+***
+
+<a id="duplicatedistance"></a>
+
+### duplicateDistance
+
+```ts
+duplicateDistance: number = 0;
+```
+
+***
+
+<a id="duplicateinterval"></a>
+
+### duplicateInterval
+
+```ts
+duplicateInterval: number = 0.1;
 ```
 
 ***
@@ -324,6 +372,16 @@ inheritAlpha: number = 1;
 
 ```ts
 inheritColor: number = 1;
+```
+
+***
+
+<a id="inheritmaterial"></a>
+
+### inheritMaterial
+
+```ts
+inheritMaterial: boolean = true;
 ```
 
 ***
@@ -538,6 +596,26 @@ readonly textureCopyQuality: number;
 
 ***
 
+<a id="unioncoverage"></a>
+
+### unionCoverage
+
+```ts
+unionCoverage: boolean = false;
+```
+
+***
+
+<a id="warp"></a>
+
+### warp?
+
+```ts
+optional warp?: DecalWarpInput;
+```
+
+***
+
 <a id="capacity"></a>
 
 ### CAPACITY
@@ -550,7 +628,383 @@ readonly static CAPACITY: 1024 = 1024;
 
 [`Renderer`](Renderer.md).[`CAPACITY`](Renderer.md#capacity)
 
+***
+
+<a id="direction-1"></a>
+
+### Direction
+
+```ts
+readonly static Direction: object;
+```
+
+#### Forward
+
+```ts
+Forward: (rotation) => DecalDirectionSampler = DecalRenderer.Forward;
+```
+
+Local +Y forward transformed by particle rotation, with an optional local XYZ offset in radians.
+
+##### Parameters
+
+###### rotation?
+
+`Vector3` = `...`
+
+##### Returns
+
+[`DecalDirectionSampler`](../type-aliases/DecalDirectionSampler.md)
+
+#### Intersect
+
+```ts
+Intersect: () => DecalDirectionSampler = DecalRenderer.Intersect;
+```
+
+Samples the movement segment covered by the ordinary continuous projection interval.
+
+##### Returns
+
+[`DecalDirectionSampler`](../type-aliases/DecalDirectionSampler.md)
+
+#### Radial
+
+```ts
+Radial: (subdivisions) => DecalDirectionSampler = DecalRenderer.Radial;
+```
+
+Deterministic Fibonacci sphere, with exactly subdivisions unit directions.
+
+##### Parameters
+
+###### subdivisions
+
+`number`
+
+##### Returns
+
+[`DecalDirectionSampler`](../type-aliases/DecalDirectionSampler.md)
+
+***
+
+<a id="selection"></a>
+
+### Selection
+
+```ts
+readonly static Selection: object;
+```
+
+#### All
+
+```ts
+All: (hits, _particle, n) => Intersection<Object3D<Object3DEventMap>>[] = DecalRenderer.All;
+```
+
+##### Parameters
+
+###### hits
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+###### \_particle
+
+[`Particle`](Particle.md)
+
+###### n?
+
+`number` = `-1`
+
+##### Returns
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+#### Farthest
+
+```ts
+Farthest: (hits, _particle, n) => Intersection<Object3D<Object3DEventMap>>[] = DecalRenderer.Farthest;
+```
+
+##### Parameters
+
+###### hits
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+###### \_particle
+
+[`Particle`](Particle.md)
+
+###### n?
+
+`number` = `1`
+
+##### Returns
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+#### Nearest
+
+```ts
+Nearest: (hits, _particle, n) => Intersection<Object3D<Object3DEventMap>>[] = DecalRenderer.Nearest;
+```
+
+##### Parameters
+
+###### hits
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+###### \_particle
+
+[`Particle`](Particle.md)
+
+###### n?
+
+`number` = `1`
+
+##### Returns
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+#### Random
+
+```ts
+Random: (hits, particle, n) => Intersection<Object3D<Object3DEventMap>>[] = DecalRenderer.Random;
+```
+
+Shuffles candidates without replacement; defaults to one random hit. Negative n returns every hit shuffled.
+
+##### Parameters
+
+###### hits
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+###### particle
+
+[`Particle`](Particle.md)
+
+###### n?
+
+`number` = `1`
+
+##### Returns
+
+`Intersection`\<`Object3D`\<`Object3DEventMap`\>\>[]
+
+***
+
+<a id="warp-1"></a>
+
+### Warp
+
+```ts
+readonly static Warp: object = decalWarps;
+```
+
+#### Perspective
+
+```ts
+Perspective: (perspective) => DecalWarp;
+```
+
+##### Parameters
+
+###### perspective
+
+`Vector2`
+
+##### Returns
+
+[`DecalWarp`](../interfaces/DecalWarp.md)
+
+#### Rotate
+
+```ts
+Rotate: (rotation) => DecalWarp;
+```
+
+##### Parameters
+
+###### rotation
+
+`number`
+
+##### Returns
+
+[`DecalWarp`](../interfaces/DecalWarp.md)
+
+#### Scale
+
+```ts
+Scale: (scale) => DecalWarp;
+```
+
+##### Parameters
+
+###### scale
+
+`number` \| `Vector2`
+
+##### Returns
+
+[`DecalWarp`](../interfaces/DecalWarp.md)
+
+#### Skew
+
+```ts
+Skew: (skew) => DecalWarp;
+```
+
+##### Parameters
+
+###### skew
+
+`Vector2`
+
+##### Returns
+
+[`DecalWarp`](../interfaces/DecalWarp.md)
+
+#### Combine()
+
+```ts
+Combine(...warps): DecalWarpSampler;
+```
+
+Arguments apply left to right: Combine(A, B) maps p to B * A * p.
+
+##### Parameters
+
+###### warps
+
+...readonly [`DecalWarpInput`](../type-aliases/DecalWarpInput.md)[]
+
+##### Returns
+
+[`DecalWarpSampler`](../type-aliases/DecalWarpSampler.md)
+
+#### FromRay()
+
+```ts
+FromRay(maxStretch?): DecalWarpSampler;
+```
+
+Stretch along the placement ray. maxStretch caps the length multiplier (default 4, minimum 1).
+
+##### Parameters
+
+###### maxStretch?
+
+`number` = `4`
+
+##### Returns
+
+[`DecalWarpSampler`](../type-aliases/DecalWarpSampler.md)
+
+#### FromVelocity()
+
+```ts
+FromVelocity(maxStretch?, factor?): DecalWarpSampler;
+```
+
+Projectively splatter forward along world-space incoming motion, anchoring the impact and rear extent.
+Total extent along motion scales by min(maxStretch, 1 + factor * world-space tangential speed).
+The rear remains close to its original shape while the front stretches and flares; the footprint is off-center.
+
+##### Parameters
+
+###### maxStretch?
+
+`number` = `4`
+
+Maximum length multiplier; defaults to 4 and is clamped to at least 1.
+
+###### factor?
+
+`number` = `1`
+
+Additional stretch per world unit/second of tangential speed; defaults to 1, minimum 0.
+
+##### Returns
+
+[`DecalWarpSampler`](../type-aliases/DecalWarpSampler.md)
+
 ## Accessors
+
+<a id="batchdiagnostics"></a>
+
+### batchDiagnostics
+
+#### Get Signature
+
+```ts
+get batchDiagnostics(): object;
+```
+
+Public diagnostics shared by benchmarks and the demo profiler.
+
+##### Returns
+
+`object`
+
+###### batchCount
+
+```ts
+batchCount: number;
+```
+
+###### batchGrowths
+
+```ts
+batchGrowths: number;
+```
+
+###### batchRepacks
+
+```ts
+batchRepacks: number;
+```
+
+###### geometryBytes
+
+```ts
+geometryBytes: number;
+```
+
+###### instanceTextureBytes
+
+```ts
+instanceTextureBytes: number;
+```
+
+###### liveDecals
+
+```ts
+liveDecals: number;
+```
+
+###### liveGeometryVertices
+
+```ts
+liveGeometryVertices: number;
+```
+
+###### reservedGeometryVertices
+
+```ts
+reservedGeometryVertices: number;
+```
+
+###### reservedSlots
+
+```ts
+reservedSlots: number;
+```
+
+***
 
 <a id="count"></a>
 

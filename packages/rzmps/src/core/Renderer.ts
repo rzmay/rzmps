@@ -1,3 +1,5 @@
+import type { ParticleCondition, ParticleGPUCondition } from './particleCondition.types';
+import GPURendererSelection from '../rendering/gpu/GPURendererSelection';
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import type { Vector3Input } from '../values/valueInput.types';
 import evaluateByParameterVector3 from '../values/evaluateByParameterVector3';
@@ -54,7 +56,18 @@ export interface RendererChildrenOptions {
   radialFalloff?: (parameter: number) => number;
 }
 
+/** CPU predicate with an optional GPU equivalent, used by reusable selection helpers. */
+export type RendererCondition = ParticleCondition & {
+  gpu?: ParticleGPUCondition;
+  /** Optional metadata refresh for CPU consumers of an already compacted GPU snapshot. */
+  prepareReadback?: (particles: Particle[], system: ParticleSystem) => Promise<void>;
+};
+
 export interface RendererOptions extends EventReceiverOptions {
+  /** Filters sources before grouping/children/work; existing persistent output keeps its own lifetime. */
+  condition?: RendererCondition;
+  /** TSL equivalent of condition, following Module.conditionGPU conventions. */
+  conditionGPU?: ParticleGPUCondition;
   materialComposite?: MaterialCompositeCallback;
   materialCompositeGPU?: MaterialCompositeGPUCallback;
   /** Desired representative cap. Negative or Infinity means unlimited. Defaults to -1. */
@@ -227,6 +240,13 @@ export default abstract class Renderer extends EventReceiver {
     return this.ratio;
   }
   private _gpuGrouping?: GPURendererGrouping;
+  condition?: RendererCondition;
+  conditionGPU?: ParticleGPUCondition;
+  private readonly _gpuSelection = new GPURendererSelection();
+  private _lastCondition?: RendererCondition;
+  private _lastConditionGPU?: ParticleGPUCondition;
+  private _selectionReadback = false;
+  private _approvedParticles?: ReadonlySet<Particle>;
   children: RendererChildrenOptions;
   generateChildren: boolean;
   compensation: CompensationMode;
@@ -301,6 +321,8 @@ export default abstract class Renderer extends EventReceiver {
     this.materialTarget = options.materialTarget;
     this.materialCopySampleMode = options.materialCopySampleMode ?? MaterialCopySampleMode.UVPatch;
     this.tags = acceptMultiple(options.tags);
+    this.condition = options.condition;
+    this.conditionGPU = options.conditionGPU;
     this.children = options.children ?? {};
     this.generateChildren = options.generateChildren ?? true;
     this.compensation = options.compensation ?? CompensationMode.None;
@@ -331,6 +353,10 @@ export default abstract class Renderer extends EventReceiver {
 
   /** Synchronizes runtime values and invalidates structural GPU changes. */
   public syncGPUConfiguration(): void {
+    if (this.condition !== this._lastCondition || this.conditionGPU !== this._lastConditionGPU) {
+      this._lastCondition = this.condition; this._lastConditionGPU = this.conditionGPU;
+      this.needsUpdate = true;
+    }
     this.evaluateDynamicGPU.sync();
     if (this.evaluateDynamicGPU.version !== this._gpuParameterVersion) {
       this._gpuParameterVersion = this.evaluateDynamicGPU.version;
@@ -390,7 +416,10 @@ export default abstract class Renderer extends EventReceiver {
     const eligible =
       system.quality === 0
         ? []
-        : particles.filter(particle => particle.alive && (!this.tags || tagsIntersect(this.tags, particle.tags ?? [])));
+        : particles.filter(particle => particle.alive
+          && (!this.tags || tagsIntersect(this.tags, particle.tags ?? []))
+          && (this._selectionReadback || !this.condition
+            || this.condition(particle, deltaTime, this.executionContext!)));
     this.preparePopulation(eligible.length);
     const visible = groupRendererParticles(eligible, this._groupCount, this.groupingRatio, this.groupingRadius, system);
     this.updateView(visible, particles, system, deltaTime);
@@ -449,7 +478,14 @@ export default abstract class Renderer extends EventReceiver {
 
     this._visibleInstanceCount = visible.length;
     this._renderedChildCount = visible.length - originalCount;
-    this._update(visible, system, deltaTime);
+    this._approvedParticles = this.condition ? new Set(visible) : undefined;
+    try { this._update(visible, system, deltaTime); } finally { this._approvedParticles = undefined; }
+  }
+
+  /** Expansion inherits the source decision; event-triggered sources are checked before their own work. */
+  protected conditionAllows(particle: Particle, system: ParticleSystem, deltaTime: number): boolean {
+    return this._approvedParticles?.has(particle) === true || !this.condition
+      || this.condition(particle, deltaTime, { system, deltaTime, events: this.executionContext?.events ?? [] });
   }
 
   private generateChild(parent: Particle, ordinal: number, radius: number, applyDistanceScaling: boolean): Particle {
@@ -512,22 +548,49 @@ export default abstract class Renderer extends EventReceiver {
     deltaTime: number = 0,
   ): void {
     this.prepareAppearance(system);
+    let selectedBuffers = buffers;
 
     if (!this.supportsGPUInput) throw new Error('This particle renderer does not support GPU particle buffers.');
     if (!this.updateGPUUsesCPUReadback) {
       this.beginExecution(system, deltaTime);
       this.beginGPUExecution(system);
     }
+    const conditionGPU = this.conditionGPU ?? this.condition?.gpu;
+    if (this.condition && !conditionGPU && !this.updateGPUUsesCPUReadback) {
+      throw new Error('GPU renderers require conditionGPU (or condition.gpu) for custom particle conditions.');
+    }
+    if (this.updateGPUUsesCPUReadback && this.condition && !conditionGPU) {
+      // A CPU-only predicate must run before CPU grouping, never after GPU representatives were chosen.
+      this._updateGPU(buffers, system, deltaTime);
+      return;
+    }
+    if (conditionGPU) {
+      if (this.updateGPUUsesCPUReadback && this._gpuReadbackPending) {
+        // Freeze the compact snapshot until its small readback completes; persistent outputs still age.
+        this._updateGPU(buffers, system, deltaTime);
+        return;
+      }
+      const selected = this._gpuSelection.prepare(buffers, system, conditionGPU, this.version,
+        system.getGPURendererTagMask(this.tags), this.updateGPUUsesCPUReadback, deltaTime);
+      if (this.updateGPUUsesCPUReadback) {
+        // Persistent renderers still tick their own lifetimes while the compact source snapshot arrives.
+        this._updateGPU(selected, system, deltaTime);
+        return;
+      }
+      selectedBuffers = selected;
+    }
     this._usesGPUChildren = this.generateChildren && this.usesParticleChildren && !this.updateGPUUsesCPUReadback;
     this._renderedChildCount = 0;
     // A non-reducing policy cannot benefit from grouping, including when only a
     // subset of GPU slots is eligible. Do not even construct the spatial helper.
-    const needsGrouping = rendererGroupCount(buffers.count, this._groupCount, this.groupingRatio) < buffers.count;
+    const needsGrouping = rendererGroupCount(selectedBuffers.count, this._groupCount, this.groupingRatio)
+      < selectedBuffers.count;
     const grouping = needsGrouping ? (this._gpuGrouping ??= new GPURendererGrouping()) : undefined;
     const tagMask = system.getGPURendererTagMask(this.tags);
     const grouped =
-      grouping?.prepare(buffers, system, this._groupCount, this.groupingRatio, this.groupingRadius, tagMask) ?? buffers;
-    if (grouped !== buffers && this.updateGPUUsesCPUReadback) {
+      grouping?.prepare(selectedBuffers, system, this._groupCount, this.groupingRatio, this.groupingRadius, tagMask)
+      ?? selectedBuffers;
+    if (grouped !== selectedBuffers && this.updateGPUUsesCPUReadback) {
       this._usesGPUChildren = false;
       if (!this._gpuReadbackPending) {
         const sequence = ++this._gpuReadbackSequence;
@@ -600,19 +663,29 @@ export default abstract class Renderer extends EventReceiver {
     const sequence = this._gpuReadbackSequence + 1;
     this._gpuReadbackSequence = sequence;
     this._gpuReadbackPending = true;
-    void system
-      .selectiveReadback(Math.min(buffers.count, limit), fields)
-      .then(results => {
+    const selected = Boolean(this.conditionGPU ?? this.condition?.gpu);
+    const readback = selected
+      ? this._gpuSelection.readback().then(particles => particles.map(particle => ({ valid: true, particle })))
+      : system.selectiveReadback(Math.min(buffers.count, limit), fields);
+    void readback
+      .then(async results => {
         if (sequence !== this._gpuReadbackSequence || system.paused) return;
-        this.update(
-          results.filter(result => result.valid).map(result => result.particle),
-          system,
-          deltaTime,
-        );
+        const particles = results.filter(result => result.valid).map(result => result.particle);
+        await this.prepareReadbackParticles(particles, system, selected);
+        if (sequence !== this._gpuReadbackSequence || system.paused) return;
+        this._selectionReadback = selected;
+        try { this.update(particles, system, deltaTime); } finally { this._selectionReadback = false; }
       })
       .finally(() => {
         if (sequence === this._gpuReadbackSequence) this._gpuReadbackPending = false;
       });
+  }
+
+  /** Prepare optional compact source metadata before renderer-specific CPU processing. */
+  protected async prepareReadbackParticles(
+    particles: Particle[], system: ParticleSystem, selected: boolean,
+  ): Promise<void> {
+    if (selected) await this.condition?.prepareReadback?.(particles, system);
   }
 
   /** Refresh a CPU/readback renderer from its displayed state, without requesting new particles. */
@@ -633,6 +706,7 @@ export default abstract class Renderer extends EventReceiver {
     this._usesGPUChildren = false;
     this.cancelGPUSelectiveReadback();
     this._gpuChildren.reset();
+    this._gpuSelection.reset();
     this._gpuGrouping?.reset();
     this._gpuGrouping = undefined;
   }

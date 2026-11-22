@@ -5,12 +5,9 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { FluidSimulation } from '@rzmps/rzmps';
 import { readProfilerStats } from '../profiling/readProfilerStats';
 import { ParticleSystemGUI } from '../gui/ParticleSystemGUI';
-import standardPresets from 'examples/index.js';
-import experimentalPresets from 'examples/experimental/index.js';
+import particlePresets from 'examples/index.js';
 import scenePresets from 'examples/scenes/index.js';
 import { getSceneParticleRoot } from 'examples/utils/particleRoot.js';
-
-const particlePresets = { ...standardPresets, ...experimentalPresets };
 
 const RZMPS_VERSION = import.meta.env.VITE_RZMPS_VERSION;
 

@@ -9,23 +9,5 @@
 # Type Alias: ModuleCondition
 
 ```ts
-type ModuleCondition = (particle, deltaTime, context) => boolean;
+type ModuleCondition = ParticleCondition<ModuleExecutionContext>;
 ```
-
-## Parameters
-
-### particle
-
-[`Particle`](../classes/Particle.md)
-
-### deltaTime
-
-`number`
-
-### context
-
-[`ModuleExecutionContext`](../interfaces/ModuleExecutionContext.md)
-
-## Returns
-
-`boolean`

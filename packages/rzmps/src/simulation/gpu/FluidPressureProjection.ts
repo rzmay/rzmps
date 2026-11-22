@@ -19,6 +19,8 @@ import SparseVolumeGrid from '../../spatial/structures/gpu/SparseVolumeGrid';
 
 type Vec4Storage = { element(index: Node | number): Node<'vec4'> };
 type FloatStorage = { element(index: Node | number): Node<'float'> };
+// Three supports dynamic vector components at runtime; its element declarations only cover arrays.
+type DynamicComponents = { element(index: Node<'int'>): Node<'float'> };
 
 /** Unbound, zero-initialized pressure-owned storage for compatible sparse pool growth. @internal */
 export interface FluidPressureCapacityStorage {
@@ -667,10 +669,12 @@ export default class FluidPressureProjection {
     const target = before ? this.beforeFaces! : this.faces;
     const node = builds.get(input) ?? this.compute(index => {
       const face = this.coordinate(index, this.n + 1);
-      const components = (['x', 'y', 'z'] as const).map((component, axis) => {
+      // Keep before/after face reconstruction as one axis graph, not three expanded sparse stencils.
+      const components = vec3(0).toVar() as unknown as Node<'vec3'> & DynamicComponents;
+      Loop(3, ({ i: axis }) => {
         const lower = face.sub(this.axis(axis));
-        const a = input.element(this.cell(lower))[component];
-        const b = input.element(this.cell(face))[component];
+        const a = (input.element(this.cell(lower)) as Node<'vec4'> & DynamicComponents).element(axis);
+        const b = (input.element(this.cell(face)) as Node<'vec4'> & DynamicComponents).element(axis);
         const validA = this.inside(lower).and(this.occupancy
           ? input.element(this.cell(lower)).w.greaterThan(0) : this.inside(lower));
         const validB = this.inside(face).and(this.occupancy
@@ -678,10 +682,14 @@ export default class FluidPressureProjection {
         const average = this.occupancy
           ? validA.and(validB).select(a.add(b).mul(0.5), validA.select(a, validB.select(b, float(0))))
           : this.inside(lower).and(this.inside(face)).select(a.add(b).mul(0.5), this.inside(lower).select(a, b));
-        return this.open(face, axis).lessThanEqual(0).select(this.wall(face, axis), average);
+        components.element(axis).assign(
+          this.open(face, axis).lessThanEqual(0).select(this.wall(face, axis), average),
+        );
       });
-      target.element(index).assign(vec4(components[0], components[1], components[2], 0));
+      target.element(index).assign(vec4(components, 0));
     }, true);
+    // Name before the first capture/compile, including forked offscreen preparation owners.
+    node.setName(before ? 'rzmps.pressure.buildBeforeFaces' : 'rzmps.pressure.buildFaces');
     builds.set(input, node);
     renderer.compute(node);
     this.initialized = true;

@@ -1,3 +1,6 @@
+import FluidColliderAtlas from '../spatial/effects/gpu/FluidColliderAtlas';
+import FluidColliderField from '../spatial/effects/gpu/FluidColliderField';
+import type { WebGPURenderer } from 'three/webgpu';
 import prepareComputePrograms from '../utils/gpu/prepareComputePrograms';
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import { GeometryUpdatePolicy } from '../enums/GeometryUpdatePolicy';
@@ -171,6 +174,7 @@ abstract class FluidSimulation extends Module {
   protected boundsGeneration = 0;
   protected pendingBounds?: { grid: ParticleSpatialGrid; bounds: THREE.Box3 };
   private compactBoundsReadCount = 0;
+  private readonly colliderAtlas = new FluidColliderAtlas();
   private solidNode?: ComputeNode;
   private solidFreshNode?: ComputeNode;
   private boundaryReduction?: FluidReduction;
@@ -708,6 +712,54 @@ abstract class FluidSimulation extends Module {
     });
   }
 
+  /** Prepare occupancy bindings independently of motion tracking, cache invalidation and quadrature. */
+  private prepareColliderQueries(
+    context: GPUParticleUpdateContext,
+    renderer: ParticleSpatialGridRenderer,
+    colliders: FluidCollider[],
+  ) {
+    const fields = [...new Set(colliders.flatMap(collider => {
+      const field = collider.getGPUField();
+      return field ? [field] : [];
+    }))];
+
+    // Uniform power-of-two layouts use the compact path. Other layouts preserve individual sampling
+    // because rounding near field boundaries can change conservative zero/nonzero occupancy decisions.
+    const resolution = fields[0]?.resolution ?? 0;
+    const uniformResolution = resolution > 0 && Number.isInteger(Math.log2(resolution))
+      && fields.every(field => field.resolution === resolution);
+    const canBatch = colliders.length > 8 && uniformResolution
+      && colliders.every(collider => collider.getGPUField() && !collider.conditionGPU);
+    this.colliderAtlas.update(fields, renderer as unknown as WebGPURenderer);
+
+    const samplers = new Map(colliders.map(collider => {
+      const field = collider.getGPUField();
+      return [collider, field ? this.colliderAtlas.sampler(field) : undefined] as const;
+    }));
+    const test = (collider: FluidCollider, position: Node<'vec3'>) =>
+      collider.testPositionGPU(position, context, samplers.get(collider));
+    const batched = !!this.colliderAtlas.texture && canBatch;
+
+    if (batched) {
+      const simulationToWorld = context.system.getSimulationToWorldMatrix();
+      this.colliderAtlas.updateQueries(colliders.map(collider => ({
+        field: collider.getGPUField()!, inverted: collider.inverted,
+        inverse: collider.matrixWorld.clone().invert(),
+        motion: this.boundaryMotion.get(collider)!.transform.value,
+      })), simulationToWorld);
+    }
+
+    const query = batched ? this.colliderAtlas.createQuery(this.boundaryDt) : undefined;
+    const queryKey = `${this.colliderAtlas.texture?.uuid ?? ''}:${batched}:${this.colliderAtlas.queryVersion}:`;
+
+    const cacheKey = queryKey + colliders
+      .map(collider => [collider.uuid, collider.version, collider.geometry?.uuid,
+        collider.bakedFieldResolution, collider.surfaceThickness, collider.inverted].join(':'))
+      .join('|');
+
+    return { query, test, cacheKey };
+  }
+
   protected computeSolidField(
     context: GPUParticleUpdateContext,
     renderer: ParticleSpatialGridRenderer,
@@ -734,10 +786,8 @@ abstract class FluidSimulation extends Module {
     for (const collider of this.boundaryMotion.keys()) {
       if (!colliders.includes(collider)) this.boundaryMotion.delete(collider);
     }
-    const cacheKey = colliders
-      .map(collider => [collider.uuid, collider.version, collider.geometry?.uuid,
-        collider.bakedFieldResolution, collider.surfaceThickness, collider.inverted].join(':'))
-      .join('|');
+    const { query, test, cacheKey } = this.prepareColliderQueries(context, renderer, colliders);
+
     if (cacheKey !== this.solidCacheKey) {
       this.solidCacheKey = cacheKey;
       this.solidNode = undefined;
@@ -780,14 +830,21 @@ abstract class FluidSimulation extends Module {
       const occupied = this.capEnabledNode.greaterThan(0.5).and(this.boundsPolicyNode.equal(2))
         .and(this.isInsideCap(center).not()).select(float(1), float(0)).toVar('fluidSolidCell');
       const centerWallVelocity = vec3(0).toVar();
-      colliders.forEach((collider) => {
-        const hit = collider.testPositionGPU(center, context).toVar();
-        occupied.assign(max(occupied, hit));
-        const previous = this.boundaryMotion.get(collider)!.transform.mul(vec4(center, 1)).xyz;
-        centerWallVelocity.assign(hit.greaterThan(0).select(
-          center.sub(previous).div(this.boundaryDt), centerWallVelocity,
-        ));
-      });
+
+      if (query) {
+        const hit = query(center).toVar();
+        occupied.assign(max(occupied, hit.w));
+        centerWallVelocity.assign(hit.xyz);
+      } else {
+        colliders.forEach((collider) => {
+          const hit = test(collider, center).toVar();
+          occupied.assign(max(occupied, hit));
+          const previous = this.boundaryMotion.get(collider)!.transform.mul(vec4(center, 1)).xyz;
+          centerWallVelocity.assign(hit.greaterThan(0).select(
+            center.sub(previous).div(this.boundaryDt), centerWallVelocity,
+          ));
+        });
+      }
       // Conservatively retain every occupied sample so thin walls cannot disappear.
       this.solid.element(index).assign(occupied.greaterThan(0).select(1, 0));
 
@@ -805,13 +862,19 @@ abstract class FluidSimulation extends Module {
           const position = center.add(offset.mul(this.cellSizeNode));
           const blocked = float(0).toVar();
           const motion = float(0).toVar();
-          colliders.forEach(collider => {
-            const hit = collider.testPositionGPU(position, context).greaterThan(0);
-            const previous = this.boundaryMotion.get(collider)!.transform.mul(vec4(position, 1)).xyz;
-            const component = (['x', 'y', 'z'] as const)[axis];
-            motion.assign(hit.select(position.sub(previous)[component].div(this.boundaryDt), motion));
-            blocked.assign(hit.select(float(1), blocked));
-          });
+          if (query) {
+            const hit = query(position).toVar();
+            blocked.assign(hit.w.greaterThan(0).select(1, 0));
+            motion.assign(hit[(['x', 'y', 'z'] as const)[axis]]);
+          } else {
+            colliders.forEach(collider => {
+              const hit = test(collider, position).greaterThan(0);
+              const previous = this.boundaryMotion.get(collider)!.transform.mul(vec4(position, 1)).xyz;
+              const component = (['x', 'y', 'z'] as const)[axis];
+              motion.assign(hit.select(position.sub(previous)[component].div(this.boundaryDt), motion));
+              blocked.assign(hit.select(float(1), blocked));
+            });
+          }
           open.addAssign(float(1).sub(blocked).mul(0.25));
           velocity.addAssign(motion.mul(blocked).mul(0.25));
         });
@@ -821,6 +884,7 @@ abstract class FluidSimulation extends Module {
         wallVelocity.push(open.lessThan(1).select(velocity.div(float(1).sub(open).max(1e-6)),
           centerWallVelocity[(['x', 'y', 'z'] as const)[axis]]));
       }
+
       // Positive cell volume keeps partially covered cells in pressure/advection.
       const fluid = float(0).toVar();
       Loop(8, ({ i }) => {
@@ -829,9 +893,13 @@ abstract class FluidSimulation extends Module {
         const z = float(i.div(4)).sub(0.5).mul(0.5);
         const point = center.add(vec3(x, y, z).mul(this.cellSizeNode));
         const blocked = float(0).toVar();
-        colliders.forEach(collider => {
-          blocked.assign(max(blocked, collider.testPositionGPU(point, context).greaterThan(0).select(1, 0)));
-        });
+        if (query) {
+          blocked.assign(query(point).w.greaterThan(0).select(1, 0));
+        } else {
+          colliders.forEach(collider => {
+            blocked.assign(max(blocked, test(collider, point).greaterThan(0).select(1, 0)));
+          });
+        }
         fluid.addAssign(float(1).sub(blocked).mul(0.125));
       });
       const unresolved = occupied.greaterThan(0).and(fluid.greaterThan(0.999))
@@ -842,7 +910,11 @@ abstract class FluidSimulation extends Module {
     };
     const solidNode = this.solidNode ?? this.computeSolidCells(bake);
     this.solidFreshNode ??= this.computeNewSolidCells(bake);
+    // Forked preparation owners are absent from live-scene reflection; keep their build attribution stable.
+    solidNode.setName('rzmps.fluid.classifyBoundary');
+    this.solidFreshNode?.setName('rzmps.fluid.classifyFreshBoundary');
     this.solidNode = solidNode;
+
     this.benchmarks.span('boundaryUpdate', () => renderer.compute(solidNode));
     this.solidStateKey = stateKey;
     this.collectBoundaryDiagnostics(renderer);
@@ -1058,6 +1130,7 @@ abstract class FluidSimulation extends Module {
     this.boundaryReduction = undefined;
     this.collectedColliders.forEach(({ collider }) => { collider.geometry = undefined; });
     this.collectedColliders.clear();
+    this.colliderAtlas.dispose();
     this.collisionElapsed = 0;
     this.boundaryMotion.clear();
     this.lastParticleBuffers = undefined;
@@ -1195,9 +1268,11 @@ abstract class FluidSimulation extends Module {
         this.collectedColliders.set(mesh, entry);
       }
       const { collider } = entry;
+      const materials = (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+        .filter(material => material.visible);
       const revision = [getAttributeVersion(mesh.geometry.getAttribute('position')),
         getAttributeVersion(mesh.geometry.index), options?.surfaceThickness ?? 0,
-        options?.bakedFieldResolution ?? 16].join(':');
+        options?.bakedFieldResolution ?? 16, materials.map(material => material.side).join(',')].join(':');
       if (!collider.matrix.equals(mesh.matrixWorld)) {
         entry.lastMovedAt = this.collisionElapsed;
         collider.matrix.copy(mesh.matrixWorld);
@@ -1212,6 +1287,9 @@ abstract class FluidSimulation extends Module {
       collider.surfaceThickness = Math.max(0, options?.surfaceThickness ?? 0);
       collider.bakedFieldResolution = Math.max(2, Math.floor(options?.bakedFieldResolution ?? 16));
       if (revision !== entry.revision) {
+        // A closed inward-facing room contains fluid; its exterior, rather than its interior, is solid.
+        collider.inverted = materials.length > 0 && materials.every(material => material.side === THREE.BackSide)
+          && FluidColliderField.isClosedGeometry(mesh.geometry);
         // Rebuild a stale local BVH even when its previous classification was static or rigid.
         collider.geometry = mesh.geometry;
         collider.needsUpdate = true;

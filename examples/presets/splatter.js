@@ -72,6 +72,7 @@ export default async function splatterPreset() {
       new DecalRenderer(paint, {
         onSpawn: false,
         onCollision: true,
+        warp: DecalRenderer.Warp.FromVelocity(3, 0.3),
         // Backends without mesh identity search opposite the collision normal, including on walls.
         maxDistance: 1,
         depth: 0.08,

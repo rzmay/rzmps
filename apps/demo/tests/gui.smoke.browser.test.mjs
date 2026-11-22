@@ -106,7 +106,7 @@ test('demo GUI initializes population LOD, renderer children, and subsystem edit
         assert.deepEqual(renderingErrors, [], 'Cornell/Bullet startup and replacement must not overflow samplers');
       }
       assert.ok(folders.includes('LOD'), `${preset}: population LOD controls`);
-      assert.ok(folders.includes('Renderer Children'), `${preset}: renderer children controls`);
+      assert.ok(folders.includes('Children'), `${preset}: renderer children controls`);
       if (preset === 'Fireflies') {
         assert.ok(folders.includes('Scene Settings'), 'Checkerboard exposes scene settings');
         const strength = await page.evaluate(() => {

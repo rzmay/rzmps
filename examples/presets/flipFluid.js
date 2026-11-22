@@ -16,6 +16,7 @@ import {
   Textures,
   SurfaceAttachment,
 } from '@rzmps/rzmps';
+import fluidTeapotScene from '../scenes/fluidTeapot.js';
 import sprayAlpha from '../assets/images/spray_alpha.png?url';
 import bubbleNormal from '../assets/images/simple_norm.png?url';
 
@@ -48,6 +49,7 @@ export default async function createFlipFluid() {
   });
   // #endregion docs:modules:1
 
+  // #region docs:renderers:surface
   const liquidSurface = new SurfaceRenderer({
     bounds: new THREE.Box3(new THREE.Vector3(-8, -8, -8), new THREE.Vector3(8, 8, 8)),
     voxelSize: 0.0625,
@@ -77,6 +79,8 @@ export default async function createFlipFluid() {
       attenuationColor: new THREE.Color('#b7e4ee'), attenuationDistance: 3,
     }),
   });
+
+  // #endregion docs:renderers:surface
 
   // #region docs:system:1
   const system = new ParticleSystem({
@@ -116,6 +120,7 @@ export default async function createFlipFluid() {
   });
   // #endregion docs:system:1
 
+  // #region docs:spray
   // #region docs:system:2
   const spray = new ParticleSystem({
     maxParticles: 4000,
@@ -180,6 +185,9 @@ export default async function createFlipFluid() {
     }),
   });
 
+  // #endregion docs:spray
+
+  // #region docs:foam
   // Borrow bubble shading while retaining the liquid's surface attachment and emission rules.
   const foamTransmission = new THREE.TextureLoader().load(Textures.Simple);
   const foamDistortion = new THREE.TextureLoader().load(bubbleNormal);
@@ -264,22 +272,21 @@ export default async function createFlipFluid() {
     shouldEmitGPU: upwardFoamCondition
   });
 
+  // #endregion docs:foam
+
   system.name = 'FLIP Fluid';
   system.position.set(0, 0, 0);
 
   return system;
 }
 
-createFlipFluid.author = 'rzmay';
-
-export const metadata = {
+/** @type {import('../types').ExampleMetadata} */
+createFlipFluid.metadata = {
+  author: 'rzmay',
   id: 'flipFluid',
   title: 'FLIP Fluid',
-  description: 'Particle-carried fluid motion using the shared grid pressure solver.',
-  tags: ['fluid', 'flip', 'webgpu'],
+  description: 'A pouring FLIP liquid with a reconstructed water surface, spray and attached foam.',
+  tags: ['fluid', 'liquid', 'flip', 'surface', 'spray', 'foam', 'webgpu'],
   category: 'effects',
+  previewSettings: { backend: 'webgpu', scene: fluidTeapotScene, duration: 10, warmup: 60 },
 };
-
-createFlipFluid.description = metadata.description;
-
-createFlipFluid.metadata = { ...metadata, author: 'rzmay' };

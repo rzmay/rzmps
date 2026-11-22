@@ -27,6 +27,19 @@ At quality 0.5, emission requests are halved before particles are allocated. Eac
 
 Increasing quality allows ordinary emission to restore density. Finite bursts may never recover their omitted particles. `simulationDistance` remains an independent hard cutoff, and `maxParticles` limits simulation capacity.
 
+## Renderer conditions
+
+`Renderer.condition` filters source particles before grouping, artistic children, compensation or renderer-specific
+work. Its callback receives `(particle, deltaTime, context)` using the shared particle-condition abstraction.
+Native GPU renderers use `conditionGPU` (or a reusable helper's `condition.gpu`) and compact the eligible population
+on GPU before downstream expansion. A CPU-only predicate cannot automatically become shader code: supply its GPU
+equivalent when using a native GPU renderer. Readback renderers can use CPU-only predicates, evaluated before their
+own expensive CPU processing. With neither predicate, renderer behavior is unchanged.
+
+Conditions do not change particle simulation. Persistent output, such as a decal already created by a source,
+retains its independent lifetime even when that particle later fails the condition. See [decals](./decals.md) for
+source eligibility versus persistent output, projective warps and shared batch storage.
+
 ## Spatial grouping
 
 `Renderer` can merge the eligible, tag-filtered simulation population into render-only
@@ -268,3 +281,16 @@ alternative in lumens: when provided it replaces brightness using Three.js's con
 Distance defaults to zero (unlimited) and includes `rangeMultiplier` and optional particle-size scaling.
 Color defaults to white and can multiply particle color through `inheritParticleColor`; decay defaults to two.
 Unused pooled lights have zero intensity; reusing a slot reevaluates every option for the new source.
+
+## Demo editor and code export
+
+The editor uses API property names with spaces for readability. Nested configuration stays in its matching folder:
+**Children**, **Lighting Grid Options**, **Spatial Grid Options**, **Collision Options**, **Allocation**,
+and **Material → Flow**. Volume sampling and density-noise controls remain directly on the renderer,
+matching their constructor options. **Generate Children** controls whether children are generated.
+Opening the editor does not populate optional settings or change exported configuration.
+
+Code export retains renderer grouping and child settings, fluid pressure and timestep controls, and system
+**Cubemap Settings**. Runtime grids, GPU storage, scene references and benchmark data are not tuning controls.
+Function-driven values remain visible as read-only controls; exporting callbacks that capture external variables
+still requires supplying those external dependencies in the consuming application.

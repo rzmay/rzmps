@@ -30,7 +30,7 @@ export class EmitterGUI extends GUIEditorBase {
     this.addTags(folder, emitter);
     folder.add(emitter, 'tagSelection', ['all', 'random', 'distribute']).name('Tag Selection');
 
-    const emissionShapeFolder = folder.addFolder('Emission Shape');
+    const emissionShapeFolder = folder.addFolder('Source');
     emissionShapeFolder.close();
     this.buildEmissionShape(emissionShapeFolder, emitter);
 

@@ -1,3 +1,4 @@
+import { SpatialBackend } from '../enums/SpatialBackend';
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import { EventOrigin } from '../enums/EventOrigin';
 import { registerRendererBenchmarks } from '../rendering/benchmarkRenderer.utils';
@@ -412,7 +413,7 @@ class ParticleSystem extends THREE.Object3D {
   set particleOctree(value: ParticleOctree<unknown> | undefined) {
     this.spatialRuntime.octree = value;
   }
-  private _processingMode?: 'cpu' | 'gpu';
+  private _processingMode?: SpatialBackend;
   private _gpuProcessingInitialized = false;
   /** Whether the most recent simulation step selected GPU compute. */
   get isGPUProcessingActive(): boolean {
@@ -1378,8 +1379,11 @@ class ParticleSystem extends THREE.Object3D {
           this._notifyParticleDeath(particle);
         });
         this.particles.length = this.maxParticles;
-      } else if (this.maxCullingMode == MaxCulling.New) this.particles.splice(this.maxParticles);
-      else this.particles.splice(0, this.particles.length - this.maxParticles);
+      } else if (this.maxCullingMode === MaxCulling.New) {
+        this.particles.splice(this.maxParticles);
+      } else {
+        this.particles.splice(0, this.particles.length - this.maxParticles);
+      }
     }
 
     this.particles.forEach(particle => particle.restore());
@@ -1398,13 +1402,14 @@ class ParticleSystem extends THREE.Object3D {
     this._discoverEventTypes();
     this.gpuSimulation._prepareGPUTagRegistry(modules, spatialEffects);
 
-    const processingMode = this._canProcessParticlesOnGPU(modules, spatialEffects) ? 'gpu' : 'cpu';
+    const processingMode = this._canProcessParticlesOnGPU(modules, spatialEffects)
+      ? SpatialBackend.GPU : SpatialBackend.CPU;
     if (this._processingMode && this._processingMode !== processingMode) {
       this.reset(false);
     }
     this._processingMode = processingMode;
 
-    if (processingMode === 'gpu') {
+    if (processingMode === SpatialBackend.GPU) {
       this.gpuSimulation._processParticlesGPU(modules, spatialEffects);
       return;
     }
@@ -2576,7 +2581,7 @@ class ParticleSystem extends THREE.Object3D {
       // A synchronous prewarm loop cannot await hundreds of GPU dispatches safely.
       // Build authoritative CPU state, then let the next GPU frame upload it once.
       this._gpuProcessing = false;
-      this._processingMode = 'cpu';
+      this._processingMode = SpatialBackend.CPU;
     }
     let remaining = this.duration;
 

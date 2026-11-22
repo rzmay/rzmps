@@ -1,3 +1,4 @@
+import { GasModuleStage } from '../enums/GasModuleStage';
 import type { Node } from 'three/webgpu';
 import Module, { type ModuleOptions } from '../core/Module';
 import type ParticleSystem from '../core/ParticleSystem';
@@ -56,7 +57,6 @@ export interface GasRenderModuleContext {
 
 export type GasModuleUpdate = (cell: GPUGasCell, context: GasModuleContext) => void;
 export type GasRenderModuleUpdate = (cell: GPUGasCell, context: GasRenderModuleContext) => void;
-type Stage = 'simulation' | 'render';
 
 export interface GasModuleOptions extends Partial<Pick<ModuleOptions, 'priority' | 'tags' | 'events' | 'eventScope'>> {
   /** Disables both gas callbacks when false. Defaults to true. */
@@ -73,12 +73,14 @@ export interface GasModuleOptions extends Partial<Pick<ModuleOptions, 'priority'
 export default class GasModule extends Module {
   private static nextId = 0;
   private readonly gasId = GasModule.nextId++;
-  private readonly graphStates = new Map<Stage, { values: readonly unknown[]; revision: number }>();
+  private readonly graphStates = new Map<GasModuleStage, { values: readonly unknown[]; revision: number }>();
   readonly options: GasModuleOptions;
   enabled: boolean;
 
   /** Gas callbacks never participate in the ordinary particle modifier pipeline. */
-  override get modifiesParticles(): boolean { return false; }
+  override get modifiesParticles(): boolean {
+    return false;
+  }
 
   constructor(options: GasModuleOptions = {}) {
     super(() => {}, { ...options, modifyGPU: () => {} });
@@ -87,11 +89,19 @@ export default class GasModule extends Module {
   }
 
   /** Simulation callback, separate from the base class's per-particle modifyGPU hook. */
-  get modifyGasGPU(): GasModuleUpdate | undefined { return this.options.modifyGPU; }
-  set modifyGasGPU(value: GasModuleUpdate | undefined) { this.options.modifyGPU = value; }
+  get modifyGasGPU(): GasModuleUpdate | undefined {
+    return this.options.modifyGPU;
+  }
+  set modifyGasGPU(value: GasModuleUpdate | undefined) {
+    this.options.modifyGPU = value;
+  }
 
-  get modifyRenderGPU(): GasRenderModuleUpdate | undefined { return this.options.modifyRenderGPU; }
-  set modifyRenderGPU(value: GasRenderModuleUpdate | undefined) { this.options.modifyRenderGPU = value; }
+  get modifyRenderGPU(): GasRenderModuleUpdate | undefined {
+    return this.options.modifyRenderGPU;
+  }
+  set modifyRenderGPU(value: GasRenderModuleUpdate | undefined) {
+    this.options.modifyRenderGPU = value;
+  }
 
   /** Callback/dependency structure is tracked per gas stage rather than as particle options. */
   override syncGPUConfiguration(): void {
@@ -99,23 +109,45 @@ export default class GasModule extends Module {
   }
 
   /** @internal Stable stage-local cache identity; uniforms remain ordinary captured TSL uniforms. */
-  graphKey(stage: Stage): string {
+  graphKey(stage: GasModuleStage | keyof typeof GasModuleStage): string {
+    const resolved = GasModuleStage[stage];
+    if (!resolved) throw new RangeError('Unknown gas module stage.');
+
     this.syncGPUConfiguration();
-    const deps = typeof this.options.deps === 'function' ? this.options.deps() : this.options.deps ?? [];
-    const values = [stage === 'simulation' ? this.modifyGasGPU : this.modifyRenderGPU,
-      this.version, this.evaluateDynamicGPU.version, this.priority, ...deps];
-    const previous = this.graphStates.get(stage);
-    if (!previous || values.length !== previous.values.length
-      || values.some((v, i) => !Object.is(v, previous.values[i]))) {
-      this.graphStates.set(stage, { values, revision: (previous?.revision ?? 0) + 1 });
+    const deps = typeof this.options.deps === 'function' ? this.options.deps() : (this.options.deps ?? []);
+    const values = [
+      resolved === GasModuleStage.Simulation ? this.modifyGasGPU : this.modifyRenderGPU,
+      this.version,
+      this.evaluateDynamicGPU.version,
+      this.priority,
+      ...deps,
+    ];
+    const previous = this.graphStates.get(resolved);
+    if (
+      !previous ||
+      values.length !== previous.values.length ||
+      values.some((v, i) => !Object.is(v, previous.values[i]))
+    ) {
+      this.graphStates.set(resolved, { values, revision: (previous?.revision ?? 0) + 1 });
     }
-    return `${this.gasId}:${this.graphStates.get(stage)!.revision}`;
+    return `${this.gasId}:${this.graphStates.get(resolved)!.revision}`;
   }
 
   /** @internal Reuses normal discovery, dependent flattening, tag matching and stable priority ordering. */
-  static collect(system: ParticleSystem, tags: Tag[] | undefined, stage: Stage): GasModule[] {
-    return system.getModules(GasModule, tags).filter(module => module.enabled
-      && (stage === 'simulation' ? module.modifyGasGPU : module.modifyRenderGPU))
+  static collect(
+    system: ParticleSystem,
+    tags: Tag[] | undefined,
+    stage: GasModuleStage | keyof typeof GasModuleStage,
+  ): GasModule[] {
+    const resolved = GasModuleStage[stage];
+    if (!resolved) throw new RangeError('Unknown gas module stage.');
+
+    return system
+      .getModules(GasModule, tags)
+      .filter(
+        module =>
+          module.enabled && (resolved === GasModuleStage.Simulation ? module.modifyGasGPU : module.modifyRenderGPU),
+      )
       .sort((a, b) => a.priority - b.priority);
   }
 }

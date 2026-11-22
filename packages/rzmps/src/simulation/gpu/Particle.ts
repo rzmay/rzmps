@@ -435,6 +435,8 @@ export class GPUParticleRenderContext {
 
 /** Accesses the compact particle attributes consumed by renderer compute/material nodes. */
 export class GPUParticleRenderStorage {
+  /** Optional original simulation identity for compact renderer selections. */
+  sourceIndex?: (index: Node<'uint'>) => Node<'uint'>;
   appearance(index: Node<'uint'>, row: number): Node<'vec4'> {
     return renderFloatElement(this.floatStorage, ParticleRenderFloatSlot.MaterialCopy + row, index);
   }
@@ -453,11 +455,11 @@ export class GPUParticleRenderStorage {
   }
 
   identity(index: Node<'uint'>): Node<'uvec2'> {
-    if (!this.hierarchy) return uvec2(index, this.createStateNode(index).z);
+    if (!this.hierarchy) return uvec2(this.sourceIndex?.(index) ?? index, this.createStateNode(index).z);
     const { mapping, originalCount, lodStart } = this.hierarchy;
     const parent = this.parentIndex(index);
     const root = this.parentIndex(parent);
-    const rootId = uvec2(root, this.createStateNode(root).z);
+    const rootId = uvec2(this.sourceIndex?.(root) ?? root, this.createStateNode(root).z);
     const derive = (id: Node<'uvec2'>, at: Node<'uint'>) => {
       const mappingIndex = at.greaterThanEqual(originalCount).select(at, originalCount).sub(originalCount);
       const ordinal = mapping.element(mappingIndex).y;
@@ -703,9 +705,12 @@ export class GPUParticleBufferState {
 
   /** Full synchronization path; selective readback is pooled by ParticleSystem separately. */
   async readback(renderer: GPUReadbackRenderer, particles: Particle[]): Promise<void> {
+    const count = Math.min(this.count, particles.length);
+    if (!count) return;
+    // Compact render selections can be far smaller than their reserved storage capacity.
     const [floatBuffer, uintBuffer] = await Promise.all([
-      renderer.getArrayBufferAsync(this.attributes.floatData),
-      renderer.getArrayBufferAsync(this.attributes.uintData),
+      renderer.getArrayBufferAsync(this.attributes.floatData, null, 0, count * FLOAT_SLOT_COUNT * 16),
+      renderer.getArrayBufferAsync(this.attributes.uintData, null, 0, count * UINT_SLOT_COUNT * 16),
     ]);
 
     this.floatData.set(new Float32Array(floatBuffer).subarray(0, this.floatData.length));

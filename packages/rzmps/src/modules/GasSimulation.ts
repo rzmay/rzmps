@@ -1,3 +1,4 @@
+import { GasModuleStage } from '../enums/GasModuleStage';
 import { maximumFluidResidentCapacity } from '../simulation/gpu/fluidCapacity.utils';
 import { releaseSharedStorage } from '../utils/gpu/sharedStorage.utils';
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
@@ -335,8 +336,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   }
 
   private prepareGasEffects(system: ParticleSystem): void {
-    this.gasModules = GasModule.collect(system, this.tags, 'simulation');
-    this.gasModulesKey = this.gasModules.map(module => module.graphKey('simulation')).join('|');
+    this.gasModules = GasModule.collect(system, this.tags, GasModuleStage.Simulation);
+    this.gasModulesKey = this.gasModules.map(module => module.graphKey(GasModuleStage.Simulation)).join('|');
     const affectors = new Set(this.spatialEffects.get(GasAffector));
     const effects = this.spatialEffects.filter(effect => effect.visible && effect.supportsGPU
       && (effect.modifiesParticles || affectors.has(effect as GasAffector))
@@ -806,7 +807,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         time: 0,
         offset: new THREE.Vector3(),
       };
-      // Preserve the old noise graph exactly when frequency modulation is absent.
+      // State-dependent frequency transforms the input coordinates; constant frequency uses the noise settings.
       const frequency = modules?.coefficients.turbulenceNoiseFrequency
         ?? this.effectiveBehavior('turbulenceNoiseFrequency',
         float(Math.max(0, this.turbulenceNoiseFrequency)), state);

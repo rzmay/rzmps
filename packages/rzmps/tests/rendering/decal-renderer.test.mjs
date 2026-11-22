@@ -1,12 +1,15 @@
 import { SimulationSpace } from '../../build/index.mjs';
 import assert from 'node:assert/strict';
+import { setImmediate } from 'node:timers';
 import test from 'node:test';
 import * as THREE from 'three';
-import { DecalRenderer, DECAL_RENDERER_USER_DATA_KEY, Particle, ParticleSystem, Emitter, EmissionShape, Collision, ThreeCollisionBackend } from '../../build/index.mjs';
+import { DecalRenderer, Particle, ParticleSystem, Emitter, EmissionShape, Collision, ThreeCollisionBackend } from '../../build/index.mjs';
 
+const fixtures = [];
 const source = () => new Particle({ position: new THREE.Vector3(0, 1, 0), lifetime: 0.1 });
 function fixture(options = {}, material = new THREE.MeshBasicMaterial()) {
   const renderer = new DecalRenderer(material, options);
+  fixtures.push(renderer);
   const system = new ParticleSystem({ emitters: [], renderers: [renderer], gravityModifier: 0 });
   const scene = new THREE.Scene();
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
@@ -15,7 +18,26 @@ function fixture(options = {}, material = new THREE.MeshBasicMaterial()) {
   scene.updateMatrixWorld(true);
   return { renderer, system, scene, floor, material };
 }
-const mark = (floor) => floor.children.find((child) => child.userData[DECAL_RENDERER_USER_DATA_KEY]);
+// Read per-instance state from actual batch slots while retaining the projection assertions below.
+const marks = receiver => fixtures.flatMap(renderer => renderer.decals)
+  .filter(decal => decal.receiver === receiver).map(decal => new Proxy(decal.mesh, {
+    get(target, key) {
+      if (key === 'geometry') return decal.geometry;
+      if (key === 'matrixWorld') return receiver.matrixWorld;
+      if (key === 'material') return new Proxy(target.material, {
+        get(material, key) {
+          const rgba = new THREE.Vector4();
+          decal.mesh.getColorAt(decal.slot.instance, rgba);
+          if (key === 'color') return new THREE.Color(rgba.x, rgba.y, rgba.z);
+          if (key === 'opacity') return rgba.w;
+          const value = Reflect.get(material, key);
+          return typeof value === 'function' ? value.bind(material) : value;
+        },
+      });
+      return Reflect.get(target, key);
+    },
+  }));
+const mark = receiver => marks(receiver)[0];
 const bounds = (mesh) => new THREE.Box3().setFromBufferAttribute(mesh.geometry.getAttribute('position'));
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-5, `${a} != ${b}`);
 
@@ -161,10 +183,11 @@ test('spawn occurs once; independent opacity survives particle death; owned reso
   assert.equal(renderer.count, 1);
   renderer.update([], system, 1.5);
   assert.equal(renderer.count, 0);
-  assert.equal(floor.children.length, 0);
+  assert.equal(marks(floor).length, 0);
   assert.equal(geometryDisposals, 1);
-  assert.equal(materialDisposals, 1);
+  assert.equal(materialDisposals, 0, 'ordinary expiration retains shared batch resources');
   system.destroy();
+  assert.equal(materialDisposals, 1);
   assert.equal(sharedDisposals, 0);
   assert.equal(system.eventRuntime._spawnListeners.length, 0);
   assert.equal(system.eventRuntime._deathListeners.length, 0);
@@ -187,7 +210,7 @@ test('direction callbacks preserve state, invalid vectors skip safely, custom se
   assert.equal(observed.maxHits, 2);
   assert.equal(fixed.y, -7);
   assert.equal(p.position.y, 1);
-  assert.equal(floor.children.length, 2);
+  assert.equal(marks(floor).length, 2);
   system.destroy();
 });
 
@@ -297,8 +320,8 @@ test('inheritance matches subsystem multiplication at zero, half and full, with 
     near(decal.material.opacity, 0.8 * THREE.MathUtils.lerp(1, 0.25, amount));
     p.color.setRGB(1, 1, 1); p.alpha = 1;
     system._notifySpawn(p);
-    assert.notEqual(floor.children[0].material, floor.children[1].material);
-    near(floor.children[1].material.opacity, 0.8);
+    assert.notEqual(marks(floor)[0].material, marks(floor)[1].material);
+    near(marks(floor)[1].material.opacity, 0.8);
     near(material.opacity, 0.8);
     system.destroy();
   }
@@ -338,7 +361,7 @@ test('capacity, repeated clear/setup/reset/destroy, tag filtering, unsupported t
     let disposed = false; oldest.geometry.addEventListener('dispose', () => disposed = true);
     system._notifySpawn(p); system._notifySpawn(p);
     assert.equal(renderer.count, 2); assert.ok(disposed);
-    renderer.clear(); assert.equal(floor.children.length, 0);
+    renderer.clear(); assert.equal(marks(floor).length, 0);
   }
   system._notifySpawn(p);
   renderer.updateGPU({}, system, 9);
@@ -429,7 +452,7 @@ test('raycast normals on transformed meshes and backside hits retain outgoing or
   renderer.direction = normal.clone(); p.position.copy(normal).negate();
   system._notifySpawn(p);
   assert.equal(renderer.count, 2);
-  const back = floor.children[1];
+  const back = marks(floor)[1];
   const world = new THREE.Vector3().fromBufferAttribute(back.geometry.getAttribute('position'), 0).applyMatrix4(floor.matrixWorld);
   near(world.dot(normal), 0.001);
   system.destroy();
@@ -438,11 +461,11 @@ test('raycast normals on transformed meshes and backside hits retain outgoing or
 test('distance attenuation favors near hits and custom selection may return fewer than cap', () => {
   for (const distance of [0.5, 1.5]) {
     const { system, floor } = fixture({ size: 2, maxDistance: 2, distanceAffectsSize: 1, distanceAffectsOpacity: 1, maxHits: 4,
-      hitSelection: (hits, particle, count) => DecalRenderer.Nearest(hits, particle, 1),
+      hitSelection: (hits, particle) => DecalRenderer.Nearest(hits, particle, 1),
     });
     const p = source(); p.position.y = distance;
     system._notifySpawn(p);
-    assert.equal(floor.children.length, 1);
+    assert.equal(marks(floor).length, 1);
     near(mark(floor).material.opacity, 1 - distance / 2);
     near(bounds(mark(floor)).getSize(new THREE.Vector3()).x, 2 * (1 - distance / 2));
     system.destroy();
@@ -530,7 +553,7 @@ test('GPU continuous mode uses updateCPUFromGPU without a rate cap or double-agi
   }
   assert.equal(requests.length, 6, 'each completed readback permits another on the next update');
   assert.equal(renderer.count, 6);
-  near(floor.children[0].material.opacity, 1 - 0.25 / 2);
+  near(marks(floor)[0].material.opacity, 1 - 0.25 / 2);
   assert.deepEqual(requests[0].fields, ['position', 'rotation', 'time', 'realtime', 'scale', 'color', 'alpha']);
   assert.equal(requests[0].limit, 1);
   system.destroy();
@@ -634,7 +657,7 @@ test('Intersect sweeps only traveled distance, marks every entry/exit, and leave
   p.realtime = 120;
   renderer.update([p], system, 0.12);
   assert.equal(renderer.count, 4, 'two crossed boxes contribute entrance and exit marks');
-  assert.equal(walls[2].children.length, 0, 'a future surface remains unmarked');
+  assert.equal(marks(walls[2]).length, 0, 'a future surface remains unmarked');
   assert.deepEqual(p.velocity.toArray(), [0, 0, -50]);
   assert.deepEqual(p.position.toArray(), [0, 1, -4]);
   renderer.update([p], system, 0.12);
@@ -643,7 +666,7 @@ test('Intersect sweeps only traveled distance, marks every entry/exit, and leave
   p.realtime = 200;
   renderer.update([p], system, 0.08);
   assert.equal(renderer.count, 6);
-  assert.equal(walls[2].children.length, 2);
+  assert.equal(marks(walls[2]).length, 2);
   renderer.clear();
   assert.equal(renderer.continuousTicks.size, 0);
   system.destroy(); geometry.dispose(); wallMaterial.dispose();
@@ -876,4 +899,52 @@ test('material images prepare before contact, once per renderer, without touchin
   system.destroy();
   materials.forEach(material => material.dispose());
   shared.dispose(); pending.dispose(); target.dispose();
+});
+
+test('radial queries collect scene membership once and preserve custom raycasts', () => {
+  const { system, scene, floor, renderer } = fixture({ direction: DecalRenderer.Radial(6), maxDistance: 5 });
+  let collections = 0, customCalls = 0;
+  const traverse = scene.traverse;
+  scene.traverse = function (...args) { collections++; return traverse.apply(this, args); };
+  const original = floor.raycast;
+  floor.raycast = function (...args) { customCalls++; return original.apply(this, args); };
+  system._notifySpawn(source());
+  assert.equal(collections, 1);
+  assert.equal(customCalls, 6);
+  system.destroy();
+});
+
+test('dense decal queries retain native hits, source geometry and moving/deforming receiver behavior', () => {
+  for (const indexed of [true, false]) {
+    const { system, scene, floor, renderer } = fixture({ maxDistance: 10, offset: 0 });
+    const geometry = indexed ? new THREE.SphereGeometry(1, 32, 16)
+      : new THREE.SphereGeometry(1, 32, 16).toNonIndexed();
+    const receiver = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+    receiver.scale.set(1.2, 0.8, 0.7); receiver.rotation.z = 0.2;
+    scene.remove(floor); scene.add(receiver); scene.updateMatrixWorld(true);
+    const originalIndex = geometry.index, originalArray = geometry.index?.array.slice();
+    const p = new Particle({ position: new THREE.Vector3(0.1, 3, 0.1), lifetime: 10 });
+    const ray = new THREE.Raycaster(p.position, new THREE.Vector3(0, -1, 0), 0, 10);
+    const check = () => {
+      scene.updateMatrixWorld(true);
+      const expected = ray.intersectObject(receiver, false)[0];
+      const hits = renderer.findHits(p, p.position, system);
+      assert.equal(hits.length, 1);
+      assert.equal(hits[0].object, receiver);
+      assert.ok(hits[0].point.distanceTo(expected.point) < 1e-6);
+      assert.ok(Math.abs(hits[0].distance - expected.distance) < 1e-6);
+      assert.equal(hits[0].faceIndex, expected.faceIndex);
+      assert.ok(hits[0].uv.distanceTo(expected.uv) < 1e-6);
+    };
+    check(); receiver.position.y = -0.3; check();
+    const position = geometry.getAttribute('position');
+    for (let i = 0; i < position.count; i++) position.setY(i, position.getY(i) * 0.8);
+    position.needsUpdate = true; geometry.computeBoundingSphere(); geometry.computeBoundingBox(); check();
+    assert.equal(geometry.index, originalIndex);
+    if (originalArray) assert.deepEqual(geometry.index.array, originalArray);
+    assert.equal(geometry.boundsTree, undefined);
+    receiver.layers.set(1);
+    assert.equal(renderer.findHits(p, p.position, system).length, 0);
+    system.destroy(); geometry.dispose(); receiver.material.dispose();
+  }
 });

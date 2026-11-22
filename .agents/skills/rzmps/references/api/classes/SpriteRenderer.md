@@ -130,6 +130,34 @@ compensation: CompensationMode;
 
 ***
 
+<a id="condition"></a>
+
+### condition?
+
+```ts
+optional condition?: RendererCondition;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`condition`](Renderer.md#condition)
+
+***
+
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ParticleGPUCondition;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`conditionGPU`](Renderer.md#conditiongpu)
+
+***
+
 <a id="events"></a>
 
 ### events

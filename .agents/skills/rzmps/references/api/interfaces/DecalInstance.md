@@ -40,6 +40,16 @@ optional appearanceFrame?: Matrix4;
 
 ***
 
+<a id="color"></a>
+
+### color
+
+```ts
+color: Color;
+```
+
+***
+
 <a id="emissiontransform"></a>
 
 ### emissionTransform?
@@ -49,6 +59,16 @@ optional emissionTransform?: Matrix4;
 ```
 
 Surface-local emission frame; +Y points out of the decal.
+
+***
+
+<a id="geometry"></a>
+
+### geometry
+
+```ts
+geometry: BufferGeometry;
+```
 
 ***
 
@@ -79,8 +99,10 @@ Caller-owned template selected when this mark was created.
 ### mesh
 
 ```ts
-mesh: Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, DecalMaterial>;
+mesh: BatchedMesh;
 ```
+
+Shared draw object, not an individual scene Mesh.
 
 ***
 
@@ -94,12 +116,42 @@ opacity: DynamicValue<number>;
 
 ***
 
+<a id="receiver"></a>
+
+### receiver
+
+```ts
+receiver: Object3D;
+```
+
+***
+
+<a id="renderedopacity"></a>
+
+### renderedOpacity
+
+```ts
+renderedOpacity: number;
+```
+
+***
+
 <a id="seed"></a>
 
 ### seed
 
 ```ts
 seed: string;
+```
+
+***
+
+<a id="slot"></a>
+
+### slot
+
+```ts
+slot: DecalBatchSlot;
 ```
 
 ***

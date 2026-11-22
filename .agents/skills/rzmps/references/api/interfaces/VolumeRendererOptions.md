@@ -188,6 +188,38 @@ Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
+<a id="condition"></a>
+
+### condition?
+
+```ts
+optional condition?: RendererCondition;
+```
+
+Filters sources before grouping/children/work; existing persistent output keeps its own lifetime.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`condition`](RendererOptions.md#condition)
+
+***
+
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ParticleGPUCondition;
+```
+
+TSL equivalent of condition, following Module.conditionGPU conventions.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`conditionGPU`](RendererOptions.md#conditiongpu)
+
+***
+
 <a id="count"></a>
 
 ### count
@@ -820,7 +852,10 @@ renderOrder: number;
 samplesPerVoxel: number;
 ```
 
-Samples per smallest contributing voxel. Defaults to one; two selects high quality.
+Render-only quality: samples per smallest contributing voxel; defaults to one.
+Increase for finer visual sampling at coarse simulation qualities without changing simulation fields.
+The steps budget can limit spacing on long ray intervals; increase it too when necessary.
+Opacity remains distance-corrected. Higher values cost more raymarch work; never raised automatically.
 
 ***
 

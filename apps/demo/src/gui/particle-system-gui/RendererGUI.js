@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   AudioRenderer,
+  Renderer,
   VolumeRenderer,
   SurfaceRenderer,
   SurfaceExtraction,
@@ -45,9 +46,19 @@ export class RendererGUI extends GUIEditorBase {
 
   buildRenderer(folder, renderer, system = this.system) {
     this.addTags(folder, renderer);
-    folder.add(renderer, 'compensation', CompensationMode).name('LOD Compensation');
-    const children = folder.addFolder('Renderer Children');
-    renderer.children ??= {};
+
+    // DecalRenderer.count reports live decals; its constructor count still controls source grouping.
+    const countAccess = Object.getOwnPropertyDescriptor(Renderer.prototype, 'count');
+    const grouping = renderer instanceof DecalRenderer ? {
+      get count() { return countAccess.get.call(renderer); },
+      set count(value) { countAccess.set.call(renderer, value); },
+    } : renderer;
+    folder.add(grouping, 'count', -1).step(1).name('Count');
+    folder.add(renderer, 'ratio', 0, 1).name('Ratio');
+    folder.add(renderer, 'groupingRadius', -1).name('Grouping Radius');
+    folder.add(renderer, 'compensation', CompensationMode).name('Compensation');
+    folder.add(renderer, 'generateChildren').name('Generate Children');
+    const children = folder.addFolder('Children');
     const defaults = {
       count: 0,
       radius: 0,
@@ -58,8 +69,10 @@ export class RendererGUI extends GUIEditorBase {
       randomizeScale: 0,
       randomizeAlpha: 0,
     };
-    for (const [key, value] of Object.entries(defaults)) renderer.children[key] ??= value;
-    this.addObject(children, renderer.children);
+    // Display defaults without changing the renderer merely by opening its editor.
+    const childOptions = { ...defaults, ...renderer.children };
+    children.onChange(() => { renderer.children = { ...childOptions }; });
+    this.addObject(children, childOptions);
 
     if (renderer instanceof VolumeRenderer) {
       this.buildVolumeRenderer(folder, renderer);
@@ -77,6 +90,11 @@ export class RendererGUI extends GUIEditorBase {
       // Only edit configuration. Renderer internals include the owning system/scene.
       for (const key of [
         'materialIndex',
+        'warp',
+        'inheritMaterial',
+        'unionCoverage',
+        'duplicateDistance',
+        'duplicateInterval',
         'direction',
         'hitSelection',
         'maxHits',
@@ -99,7 +117,6 @@ export class RendererGUI extends GUIEditorBase {
         'impulseThreshold',
         'onDeath',
         'continuousRate',
-        'ratio',
         'impulseAffectsSize',
         'impulseAffectsOpacity',
         'impulseAffectsLifetime',
@@ -143,35 +160,45 @@ export class RendererGUI extends GUIEditorBase {
   buildVolumeRenderer(folder, renderer) {
     folder.add(renderer, 'interpolation', Object.values(VolumeInterpolation)).name('Interpolation');
     folder.add(renderer, 'densityMapping', Object.values(VolumeDensityMapping)).name('Density Mapping');
-    folder.add(renderer, 'samplesPerVoxel', 0.25, 8, 0.25).name('Samples / Voxel');
+    folder.add(renderer, 'samplesPerVoxel', 0.25, 8, 0.25).name('Samples Per Voxel');
     folder.add(renderer, 'jitterStrength', 0, 1, 0.01).name('Jitter Strength');
     folder.add(renderer, 'anisotropy', -0.9, 0.9, 0.01).name('Anisotropy');
     folder.add(renderer, 'shadowQuality', 0, 8, 0.25).name('Shadow Quality');
     if (renderer.lightingGridOptions) {
-      const lighting = folder.addFolder('Lighting Grid'), grid = renderer.lightingGridOptions;
-      grid.levels ??= 2; grid.directions ??= 4; grid.samplesPerInterval ??= 4;
-      grid.scatteringIterations ??= 1; grid.environmentIntensity ??= 1; grid.includeSceneLights ??= true;
-      lighting.add(grid, 'levels', 1, 6, 1).name('Cascades');
+      const lighting = folder.addFolder('Lighting Grid Options');
+      const grid = {
+        levels: 2, directions: 4, samplesPerInterval: 4, scatteringIterations: 1,
+        environmentIntensity: 1, includeSceneLights: true, levelScale: 2,
+        ...renderer.lightingGridOptions,
+      };
+      lighting.onChange(() => { renderer.lightingGridOptions = { ...grid }; });
+      lighting.add(grid, 'levelScale', 1, 4, 0.1).name('Level Scale');
+      lighting.add(grid, 'levels', 1, 6, 1).name('Levels');
       if (typeof grid.directions === 'number') lighting.add(grid, 'directions', 2, 16, 1).name('Directions');
-      lighting.add(grid, 'samplesPerInterval', 1, 16, 1).name('Samples / Interval');
+      lighting.add(grid, 'samplesPerInterval', 1, 16, 1).name('Samples Per Interval');
       lighting.add(grid, 'scatteringIterations', 0, 4, 1).name('Scattering Iterations');
       lighting.add(grid, 'environmentIntensity', 0, 4, 0.05).name('Environment Intensity');
       lighting.add(grid, 'includeSceneLights').name('Include Scene Lights');
-      if (grid.cellSize !== undefined) lighting.add(grid, 'cellSize', 0.01, 4, 0.01).name('Probe Spacing');
+      for (const key of ['maxDistance', 'margin', 'ambient']) {
+        if (grid[key] !== undefined) this.addValue(lighting, grid, key, this.prettyName(key));
+      }
+      if (grid.cellSize !== undefined) lighting.add(grid, 'cellSize', 0.01, 4, 0.01).name('Cell Size');
     }
-    folder.add(renderer, 'steps', 1, 512, 1).name('Maximum Ray Steps');
-    const marching = folder.addFolder('Ray Marching');
-    this.addValue(marching, renderer, 'dynamicResolution', 'Dynamic Resolution');
-    marching.add(renderer, 'downsample', 1, 8, 1).name('Downsample Factor');
-    marching.add(renderer, 'emptySpaceSkipping').name('Skip Empty Space');
-    marching.add(renderer, 'adaptiveStepping').name('Opacity-Aware Steps');
-    marching.add(renderer, 'adaptiveStepThreshold', 0, 0.99, 0.01).name('Opacity Start');
-    marching.add(renderer, 'adaptiveStepFactor', 1, 16, 0.25).name('Maximum Step Factor');
-    marching.add(renderer, 'transmittanceThreshold', 0, 0.1, 0.001).name('Stop Transmittance');
-    marching.add(renderer, 'sceneDepthClipping').name('Scene Depth Clipping');
-    marching.add(renderer, 'sceneDepthBias', 0, 0.1, 0.001).name('Scene Depth Bias');
-    marching.add(renderer, 'softParticles').name('Soft Particles');
-    marching.add(renderer, 'softParticleDistance', 0).name('Soft Particle Distance');
+
+    folder.add(renderer, 'steps', 1, 512, 1).name('Steps');
+
+    // These controls are root VolumeRenderer options, not a nested marching object.
+    this.addValue(folder, renderer, 'dynamicResolution', 'Dynamic Resolution');
+    folder.add(renderer, 'downsample', 1, 8, 1).name('Downsample');
+    folder.add(renderer, 'emptySpaceSkipping').name('Empty Space Skipping');
+    folder.add(renderer, 'adaptiveStepping').name('Adaptive Stepping');
+    folder.add(renderer, 'adaptiveStepThreshold', 0, 0.99, 0.01).name('Adaptive Step Threshold');
+    folder.add(renderer, 'adaptiveStepFactor', 1, 16, 0.25).name('Adaptive Step Factor');
+    folder.add(renderer, 'transmittanceThreshold', 0, 0.1, 0.001).name('Transmittance Threshold');
+    folder.add(renderer, 'sceneDepthClipping').name('Scene Depth Clipping');
+    folder.add(renderer, 'sceneDepthBias', 0, 0.1, 0.001).name('Scene Depth Bias');
+    folder.add(renderer, 'softParticles').name('Soft Particles');
+    folder.add(renderer, 'softParticleDistance', 0).name('Soft Particle Distance');
     folder.add(renderer, 'densityGain', 0, 10, 0.05).name('Density Gain');
     folder.add(renderer, 'emissive', 0, 1, 0.01).name('Emissive');
     for (const parameter of ['Temperature', 'Density', 'Speed', 'Vorticity']) {
@@ -186,18 +213,17 @@ export class RendererGUI extends GUIEditorBase {
         this.addValue(folder, renderer, key, this.prettyName(key));
       }
     }
-    const noise = folder.addFolder('Density Noise Mask');
-    noise.add(renderer, 'densityNoiseStrength', 0, 8, 0.01).name('Strength');
-    noise.add(renderer, 'densityNoiseContrast', 0, 8, 0.01).name('Contrast');
-    noise.add(renderer, 'densityNoiseFrequency', 0, 20, 0.1).name('Frequency');
-    noise.add(renderer, 'densityNoiseSpeed', -2, 2, 0.01).name('Animation Speed');
-    noise.add(renderer, 'densityNoiseOctaves', 1, 4, 1).name('Octaves');
-    noise.add(renderer, 'densityNoiseStretch', 0, 0.95, 0.01).name('Velocity Stretch');
+    folder.add(renderer, 'densityNoiseStrength', 0, 8, 0.01).name('Density Noise Strength');
+    folder.add(renderer, 'densityNoiseContrast', 0, 8, 0.01).name('Density Noise Contrast');
+    folder.add(renderer, 'densityNoiseFrequency', 0, 20, 0.1).name('Density Noise Frequency');
+    folder.add(renderer, 'densityNoiseSpeed', -2, 2, 0.01).name('Density Noise Speed');
+    folder.add(renderer, 'densityNoiseOctaves', 1, 4, 1).name('Density Noise Octaves');
+    folder.add(renderer, 'densityNoiseStretch', 0, 0.95, 0.01).name('Density Noise Stretch');
     for (const key of [
       'densityNoiseStrengthByTemperature', 'densityNoiseContrastByTemperature', 'densityNoiseFrequencyByTemperature',
       'densityNoiseStretchByTemperature', 'densityNoiseStretchByDensity', 'densityNoiseStretchBySpeed',
     ]) {
-      this.addValue(noise, renderer, key, this.prettyName(key));
+      this.addValue(folder, renderer, key, this.prettyName(key));
     }
     for (const key of [
       'color',
@@ -208,6 +234,9 @@ export class RendererGUI extends GUIEditorBase {
       'maxDensity',
       'densityCurve',
       'depthTest',
+      'jitter',
+      'jitterSeed',
+      'stepSizeMultiplier',
       'renderOrder',
     ]) {
       this.addValue(folder, renderer, key, this.prettyName(key));
@@ -235,6 +264,7 @@ export class RendererGUI extends GUIEditorBase {
       'fieldClosing',
       'flowSmoothing',
       'deformationDetailRange',
+      'velocityDetailRange',
       'vorticityDetailRange',
       'isoLevel',
       'bounds',
@@ -250,7 +280,7 @@ export class RendererGUI extends GUIEditorBase {
     }
     const material = folder.addFolder('Material');
     if (renderer.material instanceof SurfaceRenderer.LiquidMaterial) {
-      const flow = material.addFolder('Flow Appearance');
+      const flow = material.addFolder('Flow');
       // Rebuild only the material graph when an appearance curve changes.
       const settings = { ...renderer.material.flow };
       flow.onChange(() => renderer.material.setFlow(settings));
@@ -404,15 +434,12 @@ export class RendererGUI extends GUIEditorBase {
   buildLightRenderer(folder, renderer) {
     if (renderer.power === undefined) this.addDynamicValue(folder, renderer, 'brightness', 'Brightness');
     this.addDynamicValue(folder, renderer, 'rangeMultiplier', 'Range Multiplier');
-    folder.add(renderer, 'groupingRadius', -1).name('Grouping Radius');
     this.addDynamicValue(folder, renderer, 'color', 'Color');
     this.addDynamicValue(folder, renderer, 'distance', 'Distance');
     this.addDynamicValue(folder, renderer, 'decay', 'Decay');
-    folder.add(renderer, 'count').min(0).step(1).name('Max Lights');
-    folder.add(renderer, 'ratio', 0, 1).name('Particle Ratio');
-    const allocation = folder.addFolder('Light Allocation');
+    const allocation = folder.addFolder('Allocation');
     allocation.add(renderer.allocation, 'shrinkThreshold', 0, 1).name('Shrink Threshold');
-    allocation.add(renderer.allocation, 'shrinkDelay', 0).name('Shrink Delay (s)');
+    allocation.add(renderer.allocation, 'shrinkDelay', 0).name('Shrink Delay');
     folder.add(renderer, 'inheritParticleColor').name('Inherit Particle Color');
     folder.add(renderer, 'sizeAffectsRange').name('Size Affects Range');
     folder.add(renderer, 'alphaAffectsIntensity').name('Alpha Affects Intensity');
@@ -422,6 +449,7 @@ export class RendererGUI extends GUIEditorBase {
       if (enabled) renderer.power = 4 * Math.PI;
       else renderer.power = undefined;
       this.rebuild();
+      this.emitCode();
     });
     if (power.enabled) this.addDynamicValue(folder, renderer, 'power', 'Power');
   }
@@ -462,7 +490,6 @@ export class RendererGUI extends GUIEditorBase {
         this.rebuild();
       });
 
-    folder.add(renderer, 'ratio', 0, 1).name('Ratio');
 
     this.addDynamicValue(folder, renderer, 'lifetime', 'Lifetime');
 
@@ -517,28 +544,19 @@ export class RendererGUI extends GUIEditorBase {
   }
 
   buildAudioRenderer(folder, renderer) {
-    const hidden = new Set([
-      'executionContext',
-      'gpuExecutionContext',
-      'listener',
-      'sound',
-      'onCollisionSound',
-      'onSpawnSound',
-      'onDeathSound',
-      'tags',
-      ...LOD_GUI_KEYS,
-    ]);
-
-    Object.keys(renderer)
-      .filter(key => !key.startsWith('_') && !hidden.has(key))
-      .forEach(key => this.addValue(folder, renderer, key, this.prettyName(key)));
-
-    const clipsFolder = folder.addFolder('Clips');
-    clipsFolder.close();
-    this.addAudioUpload(clipsFolder, renderer, 'sound', 'Loop Sound');
-    this.addAudioUpload(clipsFolder, renderer, 'onCollisionSound', 'Collision Sound');
-    this.addAudioUpload(clipsFolder, renderer, 'onSpawnSound', 'Spawn Sound');
-    this.addAudioUpload(clipsFolder, renderer, 'onDeathSound', 'Death Sound');
+    // Audio output owns scene nodes and benchmark storage; edit only its public behavior options.
+    for (const key of [
+      'loop', 'maxClips', 'collisionRatio', 'pitch', 'volume', 'highPass', 'lowPass',
+      'onSpawn', 'onCollision', 'onDeath', 'shouldPlay', 'dopplerEffect', 'impulseThreshold',
+      'gpuInterpolationRate',
+      ...['size', 'alpha', 'speed', 'depth', 'impulse'].flatMap(parameter =>
+        ['Pitch', 'Volume', 'HighPass', 'LowPass'].map(property => `${parameter}Affects${property}`)),
+    ]) {
+      this.addDynamicValue(folder, renderer, key, this.prettyName(key));
+    }
+    for (const key of ['sound', 'onCollisionSound', 'onSpawnSound', 'onDeathSound']) {
+      this.addAudioUpload(folder, renderer, key, this.prettyName(key));
+    }
   }
 
   buildMaterialFolder(folder, materialOrMaterials) {

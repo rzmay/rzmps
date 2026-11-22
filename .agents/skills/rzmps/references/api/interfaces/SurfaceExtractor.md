@@ -63,7 +63,11 @@ optional triangleMultiple?: number;
 ### vertexLayout?
 
 ```ts
-optional vertexLayout?: "compact" | "triangles" | "cells";
+optional vertexLayout?:
+  | "Triangles"
+  | "Cells"
+  | "Compact"
+  | SurfaceVertexLayout;
 ```
 
-Triangle soup by default; cells preserves sparse addresses, compact supplies a cell-to-output map.
+Triangle soup by default; Cells preserves sparse addresses and Compact supplies a cell-to-output map.

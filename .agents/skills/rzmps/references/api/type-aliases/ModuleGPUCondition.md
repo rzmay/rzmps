@@ -9,23 +9,5 @@
 # Type Alias: ModuleGPUCondition
 
 ```ts
-type ModuleGPUCondition = (particle, deltaTime, context) => Node<"bool">;
+type ModuleGPUCondition = ParticleGPUCondition<ModuleGPUExecutionContext>;
 ```
-
-## Parameters
-
-### particle
-
-[`GPUParticleLike`](../interfaces/GPUParticleLike.md)
-
-### deltaTime
-
-`Node`\<`"float"`\>
-
-### context
-
-[`ModuleGPUExecutionContext`](../interfaces/ModuleGPUExecutionContext.md)
-
-## Returns
-
-`Node`\<`"bool"`\>

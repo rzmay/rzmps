@@ -6,15 +6,12 @@ import { Stats } from '@react-three/drei';
 import { createWebGPURenderer } from '../rendering/createWebGPURenderer';
 import CameraControls from '../components/CameraControls';
 import ParticleSystemDisplay from '../components/ParticleSystemDisplay';
-import standardPresets, { examples as standardExamples } from 'examples/index.js';
-import experimentalPresets, { experimentalExamples } from 'examples/experimental/index.js';
+import particlePresets, { examples } from 'examples/index.js';
 import { resolveDemoSelection } from 'examples/utils/resolveDemoSelection.js';
 import scenePresets from 'examples/scenes/index.js';
 import BenchmarkPage from './BenchmarkPage';
 import LandingLayout from '../components/LandingLayout';
 
-const particlePresets = { ...standardPresets, ...experimentalPresets };
-const examples = [...standardExamples, ...experimentalExamples];
 const GPU_FLUID_PRESETS = new Set(examples.filter(entry => entry.previewSettings?.backend === 'webgpu')
   .map(entry => entry.title));
 

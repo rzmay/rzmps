@@ -52,8 +52,6 @@ try {
   const catalog = await page.evaluate(async () => {
     const { examples } = await import('/@fs' + window.location.pathname.split('/@fs')[1]
       .split('/scripts/')[0] + '/examples/index.js');
-    const { experimentalExamples } = await import('/@fs' + window.location.pathname.split('/@fs')[1]
-      .split('/scripts/')[0] + '/examples/experimental/index.js');
     const entry = examples.find(item => item.id === 'volumetricFire');
     const fire = await entry.create();
     const distortion = [...fire.subSystems.keys()][0];
@@ -62,7 +60,8 @@ try {
       softParticleDistance: distortion.renderers[0].softParticleDistance,
       autoShrink: fire.modules[0].spatialGridOptions.autoShrink,
       backend: entry.previewSettings.backend, source: entry.sourceUrl,
-      experimental: experimentalExamples.map(item => item.id),
+      liquid: examples.filter(item => item.id === 'flipFluid').map(item => ({
+        id: item.id, backend: item.previewSettings.backend, source: item.sourceUrl })),
       removed: examples.some(item => ['gasVolume', 'steamBurst'].includes(item.id)) };
     fire.destroy();
     return summary;
@@ -75,7 +74,8 @@ try {
   assert.equal(catalog.autoShrink, true);
   assert.equal(catalog.backend, 'webgpu');
   assert(catalog.source.endsWith('/examples/presets/volumetricFire.js'));
-  assert.deepEqual(catalog.experimental, ['flipFluid']);
+  assert.deepEqual(catalog.liquid, [{ id: 'flipFluid', backend: 'webgpu',
+    source: 'https://github.com/rzmay/rzmps/blob/develop/examples/presets/flipFluid.js' }]);
   assert.equal(catalog.removed, false);
   // Exercise preparation on the demo's multisampled path, then keep drawing the live flame.
   await openFixture(page, `http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${fixture}`

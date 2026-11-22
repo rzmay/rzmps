@@ -1,9 +1,27 @@
+import raycastDecalTargets from '../decals/raycastDecalTargets';
+import { retainDecalCoverage, applyDecalCoverage } from '../decals/decalCoverage.utils';
+import { applySurfaceMaterial } from '../compositing/applySurfaceMaterial';
+import DecalBatch, { type DecalBatchSlot } from '../decals/DecalBatch';
+import {
+  decalWarps,
+  sampleDecalWarp,
+  decalWarpBounds,
+  decalHitNormal,
+  type DecalWarpInput,
+} from '../decals/decalWarp.utils';
+export type { DecalWarp, DecalWarpSampler, DecalWarpInput } from '../decals/decalWarp.utils';
 import { BenchmarkMetricType } from '../../enums/BenchmarkMetricType';
 import type { ColorRepresentation } from 'three';
 import type EmissionSource from '../../emission/EmissionSource';
 import type { SubSystemSource } from '../../emission/EmissionSource';
-import { eventNames, parameterEventHandler, subscribeParameterEvent, transformEventParameters,
-  type ParameterEventSubscription, type ParameterEventSubscriptions } from '../../events/events.utils';
+import {
+  eventNames,
+  parameterEventHandler,
+  subscribeParameterEvent,
+  transformEventParameters,
+  type ParameterEventSubscription,
+  type ParameterEventSubscriptions,
+} from '../../events/events.utils';
 import rendererEventParticle from '../rendererEventParticle';
 import type { Tag } from '../../types/tag.types';
 import * as THREE from 'three';
@@ -28,7 +46,6 @@ import acceptMultiple from '../../utils/acceptMultiple';
 import type { StrictMultiple } from '../../types/multiple.types';
 import seedrandom from 'seedrandom';
 import particleRatio from '../../core/particleRatio';
-import { PARTICLE_RENDERER_OBJECT_KEY } from './LiveCubemap';
 import { intersectionSurface, type SurfaceSample } from '../compositing/MaterialCopyRegistry';
 
 export const DECAL_RENDERER_USER_DATA_KEY = '__rzmps_decalRenderer';
@@ -40,13 +57,27 @@ export interface DecalProjectionContext {
   previousPosition?: THREE.Vector3;
 }
 export type DecalDirection = THREE.Vector3 | THREE.Line3;
-export type DecalDirectionSampler = (particle: Particle, context?: DecalProjectionContext) =>
-  DecalDirection | readonly DecalDirection[];
+export type DecalDirectionSampler = (
+  particle: Particle,
+  context?: DecalProjectionContext,
+) => DecalDirection | readonly DecalDirection[];
 export type DecalHitSelection = (
-  hits: THREE.Intersection[], particle: Particle, maxHits?: number,
+  hits: THREE.Intersection[],
+  particle: Particle,
+  maxHits?: number,
 ) => THREE.Intersection[];
 
 export interface DecalRendererOptions extends Partial<RendererOptions> {
+  /** Fixed or sampled projective footprint; Three.js still clips the receiving surface. */
+  warp?: DecalWarpInput;
+  /** Shade covered fragments once per pass. Requires a stencil-enabled framebuffer; reserves stencil bit 0x80. */
+  unionCoverage?: boolean;
+  /** Inherit source/scene material-copy bindings. False keeps a simple overlay. Defaults to true. */
+  inheritMaterial?: boolean;
+  /** Optional surface-local near-duplicate rejection distance; zero disables it. */
+  duplicateDistance?: number;
+  /** Recent-contact window for duplicateDistance, in seconds. Defaults to 0.1. */
+  duplicateInterval?: number;
   /** Optional zero-based material selector; otherwise choose randomly once per mark. */
   materialIndex?: DynamicValue<number>;
   /** Registers each persistent decal as an emission source with these tags. */
@@ -108,7 +139,15 @@ export interface DecalInstance {
   appearanceFrame?: THREE.Matrix4;
   /** Surface-local emission frame; +Y points out of the decal. */
   emissionTransform?: THREE.Matrix4;
-  mesh: THREE.Mesh<THREE.BufferGeometry, DecalMaterial>;
+  /** Shared draw object, not an individual scene Mesh. */
+  mesh: THREE.BatchedMesh;
+  /** @internal Shared batch allocator; use mesh/slot/geometry for public inspection. */
+  batch: DecalBatch;
+  slot: DecalBatchSlot;
+  geometry: THREE.BufferGeometry;
+  receiver: THREE.Object3D;
+  color: THREE.Color;
+  renderedOpacity: number;
   age: number;
   lifetime: number;
   alpha: number;
@@ -137,13 +176,44 @@ interface DecalTrigger {
 
 /** Persistent CPU-clipped surface decals driven by lifecycle events or a per-particle projection rate. */
 export default class DecalRenderer extends Renderer {
-  protected get groupingRatio(): number { return 1; }
+  protected get groupingRatio(): number {
+    return 1;
+  }
+  static readonly Direction = {
+    Forward: DecalRenderer.Forward,
+    Radial: DecalRenderer.Radial,
+    Intersect: DecalRenderer.Intersect,
+  };
+  static readonly Selection = {
+    Nearest: DecalRenderer.Nearest,
+    Farthest: DecalRenderer.Farthest,
+    All: DecalRenderer.All,
+    Random: DecalRenderer.Random,
+  };
+  static readonly Warp = decalWarps;
+  warp?: DecalWarpInput;
+  inheritMaterial = true;
+  unionCoverage = false;
+  private releaseCoverage?: () => void;
+  private localMaterialVersion = -1;
+  duplicateDistance = 0;
+  duplicateInterval = 0.1;
+  private time = 0;
+  private recentContacts = new WeakMap<THREE.Object3D, Map<string, number>>();
+  private readonly batches = new Map<string, DecalBatch>();
+  private readonly hitRays = new WeakMap<THREE.Intersection, THREE.Ray>();
   static Nearest(hits: THREE.Intersection[], _particle: Particle, n = 1): THREE.Intersection[] {
-    return hits.slice().sort((a, b) => a.distance - b.distance).slice(0, n < 0 ? undefined : n);
+    return hits
+      .slice()
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, n < 0 ? undefined : n);
   }
 
   static Farthest(hits: THREE.Intersection[], _particle: Particle, n = 1): THREE.Intersection[] {
-    return hits.slice().sort((a, b) => b.distance - a.distance).slice(0, n < 0 ? undefined : n);
+    return hits
+      .slice()
+      .sort((a, b) => b.distance - a.distance)
+      .slice(0, n < 0 ? undefined : n);
   }
 
   static All(hits: THREE.Intersection[], _particle: Particle, n = -1): THREE.Intersection[] {
@@ -166,30 +236,28 @@ export default class DecalRenderer extends Renderer {
   static Radial(subdivisions: number): DecalDirectionSampler {
     const sd = Math.max(1, Math.floor(Number.isFinite(subdivisions) ? subdivisions : 1));
     const directions = Array.from({ length: sd }, (_, i) => {
-      const y = 1 - 2 * (i + 0.5) / sd;
+      const y = 1 - (2 * (i + 0.5)) / sd;
       const radius = Math.sqrt(1 - y * y);
       const angle = i * Math.PI * (3 - Math.sqrt(5));
       return new THREE.Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
     });
-    return () => directions.map((direction) => direction.clone());
+    return () => directions.map(direction => direction.clone());
   }
 
   /** Local +Y forward transformed by particle rotation, with an optional local XYZ offset in radians. */
   static Forward(rotation = new THREE.Vector3()): DecalDirectionSampler {
-    const direction = new THREE.Vector3(0, 1, 0)
-      .applyEuler(new THREE.Euler(rotation.x, rotation.y, rotation.z));
-    return (particle) => direction.clone().applyEuler(new THREE.Euler(
-      particle.rotation.x, particle.rotation.y, particle.rotation.z,
-    ));
+    const direction = new THREE.Vector3(0, 1, 0).applyEuler(new THREE.Euler(rotation.x, rotation.y, rotation.z));
+    return particle =>
+      direction.clone().applyEuler(new THREE.Euler(particle.rotation.x, particle.rotation.y, particle.rotation.z));
   }
 
   /** Samples the movement segment covered by the ordinary continuous projection interval. */
   static Intersect(): DecalDirectionSampler {
     return (particle, context) => {
       const current = context?.position.clone() ?? particle.position.clone();
-      const previous = context?.previousPosition?.clone() ?? particle.position.clone().addScaledVector(
-        particle.velocity, -particle.speed * (context?.deltaTime ?? 0),
-      );
+      const previous =
+        context?.previousPosition?.clone() ??
+        particle.position.clone().addScaledVector(particle.velocity, -particle.speed * (context?.deltaTime ?? 0));
 
       return new THREE.Line3(previous, current);
     };
@@ -229,34 +297,67 @@ export default class DecalRenderer extends Renderer {
   private system?: ParticleSystem;
   private readonly instances: DecalInstance[] = [];
   private readonly raycaster = new THREE.Raycaster();
-  private readonly continuousTicks = new Map<string, {
-    tick: number;
-    age: number;
-    position: THREE.Vector3;
-  }>();
+  private readonly continuousTicks = new Map<
+    string,
+    {
+      tick: number;
+      age: number;
+      position: THREE.Vector3;
+    }
+  >();
   private projectionSequence = 0;
   private readbackDeltaTime = 0;
-  constructor(public material: StrictMultiple<THREE.Material>, options: Partial<DecalRendererOptions> = {}) {
+  constructor(
+    public material: StrictMultiple<THREE.Material>,
+    options: Partial<DecalRendererOptions> = {},
+  ) {
     super(options);
-    this.benchmarks.register('activeDecals', { type: BenchmarkMetricType.Gauge, unit: 'count',
-        get: () => this.instances.length });
+    for (const key of [
+      'batchCount',
+      'reservedSlots',
+      'liveGeometryVertices',
+      'reservedGeometryVertices',
+      'batchGrowths',
+      'batchRepacks',
+      'geometryBytes',
+      'instanceTextureBytes',
+    ] as const) {
+      this.benchmarks.register(key, {
+        type: BenchmarkMetricType.Gauge,
+        unit: key.endsWith('Bytes') ? 'bytes' : 'count',
+        get: () => this.batchDiagnostics[key],
+      });
+    }
+    this.benchmarks.register('activeDecals', {
+      type: BenchmarkMetricType.Gauge,
+      unit: 'count',
+      get: () => this.instances.length,
+    });
     this.materialIndex = options.materialIndex;
+    this.warp = options.warp;
+    this.inheritMaterial = options.inheritMaterial ?? true;
+    this.unionCoverage = options.unionCoverage ?? false;
+    this.duplicateDistance = Math.max(0, options.duplicateDistance ?? 0);
+    this.duplicateInterval = Math.max(0, options.duplicateInterval ?? 0.1);
     this._parameterEventHandlers = options.onEvent ?? [];
-    this.events = [...new Set([
-      ...this.events, ...eventNames(this._parameterEventHandlers),
-    ])];
+    this.events = [...new Set([...this.events, ...eventNames(this._parameterEventHandlers)])];
     this.impulseAffectsSize = Math.max(0, options.impulseAffectsSize ?? 0);
     this.impulseAffectsOpacity = Math.max(0, options.impulseAffectsOpacity ?? 0);
     this.impulseAffectsLifetime = Math.max(0, options.impulseAffectsLifetime ?? 0);
     this.emissionTags = options.emissionTags?.slice();
     this.direction = options.direction ?? this.direction;
     this.hitSelection = options.hitSelection ?? this.hitSelection;
-    this.maxHits = options.maxHits === undefined ? undefined
-      : Number.isFinite(options.maxHits) ? Math.max(-1, Math.floor(options.maxHits)) : 0;
-    this.maxDistance = Math.max(Number.EPSILON,
-      Number.isFinite(options.maxDistance) ? options.maxDistance! : this.maxDistance);
-    this.depth = Math.max(Number.EPSILON,
-      Number.isFinite(options.depth) ? options.depth! : this.depth);
+    this.maxHits =
+      options.maxHits === undefined
+        ? undefined
+        : Number.isFinite(options.maxHits)
+          ? Math.max(-1, Math.floor(options.maxHits))
+          : 0;
+    this.maxDistance = Math.max(
+      Number.EPSILON,
+      Number.isFinite(options.maxDistance) ? options.maxDistance! : this.maxDistance,
+    );
+    this.depth = Math.max(Number.EPSILON, Number.isFinite(options.depth) ? options.depth! : this.depth);
     this.offset = Number.isFinite(options.offset) ? options.offset! : this.offset;
     this.size = options.size ?? this.size;
     this.rotation = options.rotation ?? this.rotation;
@@ -268,41 +369,65 @@ export default class DecalRenderer extends Renderer {
     this.inheritAlpha = options.inheritAlpha ?? this.inheritAlpha;
     this.distanceAffectsOpacity = options.distanceAffectsOpacity ?? this.distanceAffectsOpacity;
     this.distanceAffectsSize = options.distanceAffectsSize ?? this.distanceAffectsSize;
-    this.maxDecals = Math.max(0, Math.floor(
-      Number.isFinite(options.maxDecals) ? options.maxDecals! : this.maxDecals));
+    this.maxDecals = Math.max(0, Math.floor(Number.isFinite(options.maxDecals) ? options.maxDecals! : this.maxDecals));
     this.onSpawn = options.onSpawn ?? this.onSpawn;
     this.onCollision = options.onCollision ?? this.onCollision;
-    this.impulseThreshold = Math.max(0,
-      Number.isFinite(options.impulseThreshold) ? options.impulseThreshold! : 0);
+    this.impulseThreshold = Math.max(0, Number.isFinite(options.impulseThreshold) ? options.impulseThreshold! : 0);
     this.onDeath = options.onDeath ?? this.onDeath;
-    this.continuousRate = Math.max(0,
-      Number.isFinite(options.continuousRate) ? options.continuousRate! : this.continuousRate);
+    this.continuousRate = Math.max(
+      0,
+      Number.isFinite(options.continuousRate) ? options.continuousRate! : this.continuousRate,
+    );
     this.ratio = Math.min(Math.max(options.ratio ?? this.ratio, 0), 1);
   }
 
   /** Subscribes through the existing event receiver and transforms each selected decal's evaluated parameters. */
   onEvent(name: 'collision', handler: ParameterEventSubscription<DecalParameters, CollisionHit>): this;
   onEvent(name: string, handler?: ParameterEventSubscription<DecalParameters>): this;
-  onEvent(name: string, handler: ParameterEventSubscription<DecalParameters>
-    | ParameterEventSubscription<DecalParameters, CollisionHit> = true): this {
-    this._parameterEventHandlers = subscribeParameterEvent(this._parameterEventHandlers, name,
-      handler as ParameterEventSubscription<DecalParameters>);
+  onEvent(
+    name: string,
+    handler:
+      | ParameterEventSubscription<DecalParameters>
+      | ParameterEventSubscription<DecalParameters, CollisionHit> = true,
+  ): this {
+    this._parameterEventHandlers = subscribeParameterEvent(
+      this._parameterEventHandlers,
+      name,
+      handler as ParameterEventSubscription<DecalParameters>,
+    );
     this.events = [...new Set([...this.events, name])];
     return this;
   }
 
-  get parameterEvents(): ParameterEventSubscriptions<DecalParameters> { return this._parameterEventHandlers; }
+  get parameterEvents(): ParameterEventSubscriptions<DecalParameters> {
+    return this._parameterEventHandlers;
+  }
 
   override get selectedEventNames(): readonly string[] {
-    return [...new Set([...this.events, ...eventNames(this._parameterEventHandlers),
-      ...[['spawn', this.onSpawn], ['death', this.onDeath], ['collision', this.onCollision]]
-        .filter(([, handler]) => handler).map(([name]) => name as string),
-    ])].filter(name => this.eventHandler(name));
+    return [
+      ...new Set([
+        ...this.events,
+        ...eventNames(this._parameterEventHandlers),
+        ...[
+          ['spawn', this.onSpawn],
+          ['death', this.onDeath],
+          ['collision', this.onCollision],
+        ]
+          .filter(([, handler]) => handler)
+          .map(([name]) => name as string),
+      ]),
+    ].filter(name => this.eventHandler(name));
   }
 
   private eventHandler(name: string): ParameterEventSubscription<DecalParameters> {
-    const defaults = name === 'spawn' ? this.onSpawn : name === 'death' ? this.onDeath
-      : name === 'collision' ? this.onCollision : true;
+    const defaults =
+      name === 'spawn'
+        ? this.onSpawn
+        : name === 'death'
+          ? this.onDeath
+          : name === 'collision'
+            ? this.onCollision
+            : true;
     const handler = parameterEventHandler(this._parameterEventHandlers, name) ?? defaults;
     return handler as ParameterEventSubscription<DecalParameters>;
   }
@@ -313,39 +438,116 @@ export default class DecalRenderer extends Renderer {
     if (!system || !this.eventHandler(event.name)) return;
 
     const particle = rendererEventParticle(event, system);
-    const hit = event.name === 'collision' ? event.data as CollisionHit : undefined;
+    const hit = event.name === 'collision' ? (event.data as CollisionHit) : undefined;
     let contact = hit;
 
     if (hit && event.origin !== system) {
       const frame = system.getSimulationToWorldMatrix().invert().multiply(event.origin.getSimulationToWorldMatrix());
-      contact = { ...hit, point: hit.point.clone().applyMatrix4(frame),
+      contact = {
+        ...hit,
+        point: hit.point.clone().applyMatrix4(frame),
         normal: hit.normal.clone().transformDirection(frame),
-        impulse: hit.impulse.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(frame)) };
+        impulse: hit.impulse.clone().applyMatrix3(new THREE.Matrix3().setFromMatrix4(frame)),
+      };
     }
 
     this.project(particle, contact, { name: event.name, data: event.data, source: event.source ?? particle });
   }
 
   /** Number of persistent decals, including those whose particles have died. */
-  get count(): number { return this.instances.length; }
+  get count(): number {
+    return this.instances.length;
+  }
 
   /** Persistent instances remain accessible after their originating particles die. */
-  get decals(): readonly DecalInstance[] { return this.instances; }
+  get decals(): readonly DecalInstance[] {
+    return this.instances;
+  }
+
+  protected override prepareAppearance(system: ParticleSystem): void {
+    if (this.inheritMaterial || this.materialTarget) {
+      super.prepareAppearance(system);
+      return;
+    }
+
+    // Source-less composition must not discover/copy receiver materials or allocate appearance atlases.
+    if (this.localMaterialVersion !== this.version) {
+      this.appearance?.dispose();
+      this.appearance = undefined;
+      this.localMaterialVersion = this.version;
+      this.onMaterialCopyChange();
+    }
+  }
 
   protected override onMaterialCopyChange(): void {
+    // Rebuild only when composition configuration changes, never during ordinary expiration.
+    const previous = [...this.batches.values()];
+    this.batches.clear();
     for (const decal of this.instances) {
-      if (!decal.appearanceParticle || !decal.appearanceFrame || !this.appearance) continue;
-
-      // A fresh owned clone avoids stacking shader injections when callbacks change.
-      const old = decal.mesh.material;
-      const material = this.createMaterial(decal.appearanceParticle, decal.materialTemplate);
-      material.opacity = old.opacity;
-      decal.mesh.material = material;
-      decal.mesh.updateWorldMatrix(true, false);
-      this.appearance.attach(material, decal.mesh.geometry, decal.appearanceParticle,
-        decal.appearanceFrame, decal.mesh.matrixWorld);
-      old.dispose();
+      const material = this.createMaterial(decal.appearanceParticle ?? new Particle(), decal.materialTemplate);
+      if (decal.appearanceParticle && decal.appearanceFrame && this.appearance) {
+        this.appearance.attach(
+          material,
+          decal.geometry,
+          decal.appearanceParticle,
+          decal.appearanceFrame,
+          decal.receiver.matrixWorld,
+        );
+      }
+      const batch = this.getBatch(decal.materialTemplate, material, decal.receiver.receiveShadow);
+      decal.batch = batch;
+      decal.mesh = batch.mesh;
+      decal.slot = batch.add(decal.geometry, decal.receiver, decal.color, decal.renderedOpacity);
     }
+    previous.forEach(batch => batch.dispose());
+  }
+
+  /** Public diagnostics shared by benchmarks and the demo profiler. */
+  get batchDiagnostics() {
+    const values = [...this.batches.values()].map(batch => batch.diagnostics);
+    const sum = (key: keyof DecalBatch['diagnostics']) => values.reduce((total, value) => total + value[key], 0);
+    return {
+      liveDecals: this.count,
+      batchCount: this.batches.size,
+      reservedSlots: sum('reservedSlots'),
+      liveGeometryVertices: sum('liveVertices'),
+      reservedGeometryVertices: sum('reservedVertices'),
+      batchGrowths: sum('growths'),
+      batchRepacks: sum('repacks'),
+      geometryBytes: sum('geometryBytes'),
+      instanceTextureBytes: sum('instanceTextureBytes'),
+    };
+  }
+
+  private getBatch(template: THREE.Material, material: DecalMaterial, receiveShadow = false): DecalBatch {
+    const maps = material as THREE.MeshStandardMaterial;
+    const key = [
+      this.system!.scene?.uuid ?? this.system!.uuid,
+      DecalBatch.materialKey(template),
+      this.appearance?.cacheKey ?? `local:${this.version}`,
+      this.unionCoverage,
+      maps.envMap?.uuid,
+      maps.envMapIntensity,
+      maps.envMapRotation?.toArray().join(','),
+      receiveShadow,
+    ].join('|');
+    let batch = this.batches.get(key);
+    if (!batch) {
+      // Per-decal tint and alpha live in BatchedMesh's color texture, not cloned materials.
+      material.color?.setRGB(1, 1, 1);
+      material.opacity = 1;
+      if (!this.appearance && (this.materialComposite || this.materialCompositeGPU)) {
+        applySurfaceMaterial(material, false, this.materialCompositeGPU, this.materialComposite, true);
+      }
+      if (this.unionCoverage) {
+        applyDecalCoverage(material);
+        this.releaseCoverage ??= retainDecalCoverage(this.system!.scene ?? this.system!);
+      }
+      batch = new DecalBatch(template, material, this.system!.scene ?? this.system!);
+      batch.mesh.userData[DECAL_RENDERER_USER_DATA_KEY] = true;
+      this.batches.set(key, batch);
+    } else material.dispose();
+    return batch;
   }
 
   setup(system: ParticleSystem): void {
@@ -361,16 +563,17 @@ export default class DecalRenderer extends Renderer {
   override update(particles: Particle[], system: ParticleSystem, deltaTime = 0): void {
     if (system.paused) return;
 
-    this.prepareMaterialTextures(system, acceptMultiple(this.material)!);
-    this.prepareAppearance(system);
-    this._update(particles, system, deltaTime);
+    super.update(particles, system, deltaTime);
   }
 
-  protected get updateGPUUsesCPUReadback(): boolean { return true; }
+  protected get updateGPUUsesCPUReadback(): boolean {
+    return true;
+  }
 
   protected override _updateGPU(
     buffers: GPUParticleBufferState | GPUParticleRenderBufferState,
-    system: ParticleSystem, deltaTime = 0,
+    system: ParticleSystem,
+    deltaTime = 0,
   ): void {
     if (system.paused) return;
 
@@ -396,14 +599,27 @@ export default class DecalRenderer extends Renderer {
     // Custom samplers may inspect any field, as with AudioRenderer's custom particle predicates.
     this.readbackDeltaTime = deltaTime;
     this.updateCPUFromGPU(
-      buffers, system, 0, buffers.count,
-      typeof this.direction === 'function' ? undefined : fields,
+      buffers,
+      system,
+      0,
+      buffers.count,
+      typeof this.direction === 'function' || typeof this.warp === 'function' || this.condition ? undefined : fields,
     );
   }
 
   protected _update(particles: Particle[], _system: ParticleSystem, deltaTime: number): void {
+    this.prepareMaterialTextures(_system, acceptMultiple(this.material)!);
     this.ageDecals(deltaTime);
     this.projectContinuous(particles, deltaTime || this.readbackDeltaTime);
+  }
+
+  protected override async prepareReadbackParticles(
+    particles: Particle[],
+    system: ParticleSystem,
+    selected: boolean,
+  ): Promise<void> {
+    await super.prepareReadbackParticles(particles, system, selected);
+    if (typeof this.warp === 'function') await this.warp.prepareReadback?.(particles, system);
   }
 
   private worldPosition(particle: Particle): THREE.Vector3 {
@@ -418,6 +634,7 @@ export default class DecalRenderer extends Renderer {
 
   private ageDecals(deltaTime: number): void {
     const step = Number.isFinite(deltaTime) ? Math.max(0, deltaTime) : 0;
+    this.time += step;
 
     for (let i = this.instances.length - 1; i >= 0; i -= 1) {
       const decal = this.instances[i];
@@ -455,18 +672,20 @@ export default class DecalRenderer extends Renderer {
       const previous = this.continuousTicks.get(particle.id) ?? {
         tick: Math.floor(Math.max(0, age - Math.max(0, deltaTime)) * rate + 1e-9),
         age: Math.max(0, age - Math.max(0, deltaTime)),
-        position: particle.position.clone().addScaledVector(particle.velocity,
-          -particle.speed * Math.min(age, Math.max(0, deltaTime))),
+        position: particle.position
+          .clone()
+          .addScaledVector(particle.velocity, -particle.speed * Math.min(age, Math.max(0, deltaTime))),
       };
 
       // Older missed marks would immediately be evicted, so only catch up to capacity.
       const attempts = Math.min(Math.max(0, tick - previous.tick), this.maxDecals);
 
-      for (let i = 0; i < attempts; i += 1) this.project(particle, undefined, undefined, {
-        deltaTime: (age - previous.age) / attempts,
-        previousPosition: previous.position.clone().lerp(particle.position, i / attempts),
-        position: previous.position.clone().lerp(particle.position, (i + 1) / attempts),
-      });
+      for (let i = 0; i < attempts; i += 1)
+        this.project(particle, undefined, undefined, {
+          deltaTime: (age - previous.age) / attempts,
+          previousPosition: previous.position.clone().lerp(particle.position, i / attempts),
+          position: previous.position.clone().lerp(particle.position, (i + 1) / attempts),
+        });
 
       // Retain the last projection position so samplers cover skipped frames without their own state.
       if (attempts || !this.continuousTicks.has(particle.id)) {
@@ -481,8 +700,13 @@ export default class DecalRenderer extends Renderer {
   }
 
   private supported(object: THREE.Object3D): object is THREE.Mesh {
-    if (!(object instanceof THREE.Mesh) || object instanceof THREE.SkinnedMesh
-      || object instanceof THREE.InstancedMesh || !object.geometry.getAttribute('position')) return false;
+    if (
+      !(object instanceof THREE.Mesh) ||
+      object instanceof THREE.SkinnedMesh ||
+      object instanceof THREE.InstancedMesh ||
+      !object.geometry.getAttribute('position')
+    )
+      return false;
 
     for (let ancestor: THREE.Object3D | null = object; ancestor; ancestor = ancestor.parent) {
       if (isIgnoredCollisionObject(ancestor)) return false;
@@ -492,13 +716,22 @@ export default class DecalRenderer extends Renderer {
   }
 
   private validHit(hit: THREE.Intersection): boolean {
-    return Boolean(hit && this.supported(hit.object)
-      && hit.point instanceof THREE.Vector3 && Number.isFinite(hit.distance) && hit.distance >= 0
-      && (hit.normal instanceof THREE.Vector3 || hit.face?.normal instanceof THREE.Vector3));
+    return Boolean(
+      hit &&
+        this.supported(hit.object) &&
+        hit.point instanceof THREE.Vector3 &&
+        Number.isFinite(hit.distance) &&
+        hit.distance >= 0 &&
+        (hit.normal instanceof THREE.Vector3 || hit.face?.normal instanceof THREE.Vector3),
+    );
   }
 
-  private project(particle: Particle, contact?: CollisionHit,
-    trigger: DecalTrigger = { name: 'continuous', source: particle }, sample?: DecalProjectionContext): void {
+  private project(
+    particle: Particle,
+    contact?: CollisionHit,
+    trigger: DecalTrigger = { name: 'continuous', source: particle },
+    sample?: DecalProjectionContext,
+  ): void {
     const system = this.system;
 
     if (!system || !this.canProject(particle) || !this.eventHandler(trigger.name)) return;
@@ -514,7 +747,9 @@ export default class DecalRenderer extends Renderer {
     system.updateWorldMatrix(true, false);
     const origin = this.worldPosition(particle);
     const hit = contact && this.contactHit(contact, origin, system);
-    const hits = hit ? [hit] : this.findHits(particle, origin, system, contact, sample);
+    const hits = this.benchmarks.span('hitProjection', () =>
+      hit ? [hit] : this.findHits(particle, origin, system, contact, sample),
+    );
 
     // Preserve the collision's UV chart in world space for material copying.
     let surface: SurfaceSample | undefined;
@@ -531,14 +766,30 @@ export default class DecalRenderer extends Renderer {
   }
 
   private canProject(particle: Particle): boolean {
-    return !!this.system && this.maxDecals > 0 && this.maxHits !== 0 && particleRatio(particle, this.ratio)
-      && (!this.tags || tagsIntersect(this.tags, particle.tags ?? []));
+    return (
+      !!this.system &&
+      this.maxDecals > 0 &&
+      this.maxHits !== 0 &&
+      particleRatio(particle, this.ratio) &&
+      (!this.tags || tagsIntersect(this.tags, particle.tags ?? [])) &&
+      this.conditionAllows(particle, this.system!, 0)
+    );
   }
 
-  private projectHits(particle: Particle, hits: THREE.Intersection[], trigger: DecalTrigger,
-    surface?: SurfaceSample): void {
-    if (!this.system || this.maxDecals <= 0 || this.maxHits === 0 || !particleRatio(particle, this.ratio)
-      || (this.tags && !tagsIntersect(this.tags, particle.tags ?? []))) return;
+  private projectHits(
+    particle: Particle,
+    hits: THREE.Intersection[],
+    trigger: DecalTrigger,
+    surface?: SurfaceSample,
+  ): void {
+    if (
+      !this.system ||
+      this.maxDecals <= 0 ||
+      this.maxHits === 0 ||
+      !particleRatio(particle, this.ratio) ||
+      (this.tags && !tagsIntersect(this.tags, particle.tags ?? []))
+    )
+      return;
 
     // Apply the configured selection policy before allocating persistent marks.
     const selected = this.hitSelection(hits, particle, this.maxHits);
@@ -551,13 +802,48 @@ export default class DecalRenderer extends Renderer {
     for (const hit of valid) this.create(particle, hit, surface, trigger);
   }
 
+  private isDuplicate(hit: THREE.Intersection, parameters: DecalParameters, commit = false): boolean {
+    if (!(this.duplicateDistance > 0)) return false;
+    hit.object.updateWorldMatrix(true, false);
+    const p = hit.point.clone().applyMatrix4(hit.object.matrixWorld.clone().invert());
+    let contacts = this.recentContacts.get(hit.object);
+    if (!contacts) {
+      contacts = new Map();
+      this.recentContacts.set(hit.object, contacts);
+    }
+    // The small local hash only suppresses recent contacts in the same tiny receiver-local patch.
+    const distance =
+      Math.min(this.duplicateDistance, Math.min(parameters.size.x, parameters.size.y) * 0.25) /
+      Math.max(hit.object.matrixWorld.getMaxScaleOnAxis(), 1e-6);
+    const n = hit.face?.normal ?? parameters.normal;
+    const key = [
+      ...p.toArray().map(value => Math.floor(value / distance)),
+      ...n.toArray().map(value => Math.round(value * 4)),
+    ].join(':');
+    const previous = contacts.get(key);
+    if (previous !== undefined && this.time - previous < this.duplicateInterval) return true;
+    if (commit) contacts.set(key, this.time);
+    if (contacts.size > this.maxDecals * 2) {
+      for (const [key, time] of contacts) if (this.time - time > this.duplicateInterval) contacts.delete(key);
+    }
+    return false;
+  }
+
   private contactHit(
-    contact: CollisionHit, origin: THREE.Vector3, system: ParticleSystem,
+    contact: CollisionHit,
+    origin: THREE.Vector3,
+    system: ParticleSystem,
   ): THREE.Intersection | undefined {
     const target = contact.object;
 
-    if (!target || !this.supported(target) || !(contact.point instanceof THREE.Vector3)
-      || !(contact.normal instanceof THREE.Vector3) || contact.normal.lengthSq() <= 0) return;
+    if (
+      !target ||
+      !this.supported(target) ||
+      !(contact.point instanceof THREE.Vector3) ||
+      !(contact.normal instanceof THREE.Vector3) ||
+      contact.normal.lengthSq() <= 0
+    )
+      return;
 
     const point = contact.point.clone();
     const normal = contact.normal.clone();
@@ -574,28 +860,37 @@ export default class DecalRenderer extends Renderer {
 
     if (!Number.isFinite(distance) || !Number.isFinite(normal.lengthSq())) return;
 
-    return { object: target, point, distance,
-      face: { a: 0, b: 0, c: 0, materialIndex: 0, normal } };
+    return { object: target, point, distance, face: { a: 0, b: 0, c: 0, materialIndex: 0, normal } };
   }
 
   private findHits(
-    particle: Particle, origin: THREE.Vector3, system: ParticleSystem,
-    contact?: CollisionHit, sample?: DecalProjectionContext,
+    particle: Particle,
+    origin: THREE.Vector3,
+    system: ParticleSystem,
+    contact?: CollisionHit,
+    sample?: DecalProjectionContext,
   ): THREE.Intersection[] {
     // A collision without target identity still supplies a useful projection direction.
     let contactDirection: THREE.Vector3 | undefined;
 
-    if (contact?.normal instanceof THREE.Vector3
-      && Number.isFinite(contact.normal.lengthSq()) && contact.normal.lengthSq() > 0) {
+    if (
+      contact?.normal instanceof THREE.Vector3 &&
+      Number.isFinite(contact.normal.lengthSq()) &&
+      contact.normal.lengthSq() > 0
+    ) {
       contactDirection = contact.normal.clone().negate();
 
       if (system.simulationSpace !== 'world') contactDirection.transformDirection(system.getSimulationToWorldMatrix());
     }
 
     // Ordinary samplers return world directions; segment samplers return bounded simulation-space paths.
-    const sampled = contactDirection
-      ?? (typeof this.direction === 'function' ? this.direction(particle, sample) : this.direction);
+    const sampled =
+      contactDirection ?? (typeof this.direction === 'function' ? this.direction(particle, sample) : this.direction);
     const directions = Array.isArray(sampled) ? sampled : [sampled];
+    // Ordinary radial directions share membership collection and world-matrix updates.
+    if (directions.every(direction => direction instanceof THREE.Vector3)) {
+      return this.queryHits(origin, directions as readonly THREE.Vector3[], system, this.maxDistance);
+    }
     const hits: THREE.Intersection[] = [];
 
     for (const direction of directions) {
@@ -624,17 +919,25 @@ export default class DecalRenderer extends Renderer {
     return hits;
   }
 
-  private queryHits(origin: THREE.Vector3, directions: readonly THREE.Vector3[], system: ParticleSystem,
-    distance: number, sweep = false): THREE.Intersection[] {
-    const backend = system.modules.flatMap((module) => module.withDependents())
-      .find((module) => module instanceof Collision)?.backend;
+  private queryHits(
+    origin: THREE.Vector3,
+    directions: readonly THREE.Vector3[],
+    system: ParticleSystem,
+    distance: number,
+    sweep = false,
+  ): THREE.Intersection[] {
+    const backend = system.modules
+      .flatMap(module => module.withDependents())
+      .find(module => module instanceof Collision)?.backend;
 
     // Reuse collision membership and filters; otherwise collect supported scene meshes once.
-    const targets: THREE.Object3D[] = [];
+    const targets: THREE.Mesh[] = [];
 
     if (!(backend instanceof ThreeCollisionBackend)) {
       system.scene?.updateWorldMatrix(true, true);
-      system.scene?.traverse((object) => { if (this.supported(object)) targets.push(object); });
+      system.scene?.traverse(object => {
+        if (this.supported(object)) targets.push(object);
+      });
     }
 
     const hits: THREE.Intersection[] = [];
@@ -648,19 +951,21 @@ export default class DecalRenderer extends Renderer {
 
       if (!Number.isFinite(length) || length === 0) continue;
 
-      this.raycaster.set(origin, new THREE.Vector3(
-        direction.x / length, direction.y / length, direction.z / length,
-      ));
-      const candidates = backend instanceof ThreeCollisionBackend
-        ? backend.raycast(this.raycaster) : this.raycaster.intersectObjects(targets, false);
+      this.raycaster.set(origin, new THREE.Vector3(direction.x / length, direction.y / length, direction.z / length));
+      const candidates =
+        backend instanceof ThreeCollisionBackend
+          ? backend.raycast(this.raycaster)
+          : raycastDecalTargets(this.raycaster, targets);
 
       if (sweep) {
         // Cast back from the endpoint as well to find outward-facing exit surfaces
         // without changing a target's material side or touching its shaders.
         this.raycaster.near = 0;
         this.raycaster.set(origin.clone().add(direction), this.raycaster.ray.direction.clone().negate());
-        const exits = backend instanceof ThreeCollisionBackend
-          ? backend.raycast(this.raycaster) : this.raycaster.intersectObjects(targets, false);
+        const exits =
+          backend instanceof ThreeCollisionBackend
+            ? backend.raycast(this.raycaster)
+            : raycastDecalTargets(this.raycaster, targets);
 
         for (const exit of exits) candidates.push({ ...exit, distance: distance - exit.distance });
         candidates.sort((a, b) => a.distance - b.distance);
@@ -668,41 +973,56 @@ export default class DecalRenderer extends Renderer {
         // Raycasters can report a triangle seam twice. Keep distinct entry/exit surfaces,
         // including multiple intersections with the same mesh, without duplicate marks.
         for (const candidate of candidates) {
-          if (!this.validHit(candidate) || candidate.distance <= 1e-8
-            || hits.some(hit => hit.object === candidate.object
-              && hit.point.distanceToSquared(candidate.point) < 1e-12)) continue;
+          if (
+            !this.validHit(candidate) ||
+            candidate.distance <= 1e-8 ||
+            hits.some(hit => hit.object === candidate.object && hit.point.distanceToSquared(candidate.point) < 1e-12)
+          )
+            continue;
+          this.hitRays.set(candidate, this.raycaster.ray.clone());
           hits.push(candidate);
         }
       } else {
-        const hit = candidates.find((candidate) => this.validHit(candidate));
+        const hit = candidates.find(candidate => this.validHit(candidate));
 
-        if (hit) hits.push(hit);
+        if (hit) {
+          this.hitRays.set(hit, this.raycaster.ray.clone());
+          hits.push(hit);
+        }
       }
     }
 
     return hits;
   }
 
-  private create(particle: Particle, hit: THREE.Intersection, surface: SurfaceSample | undefined,
-    trigger: DecalTrigger): void {
+  private create(
+    particle: Particle,
+    hit: THREE.Intersection,
+    surface: SurfaceSample | undefined,
+    trigger: DecalTrigger,
+  ): void {
     // Select a complete template once so all its maps remain correlated across the mark's lifetime.
     const seed = `${particle.id}:decal:${this.projectionSequence++}`;
     const materials = acceptMultiple(this.material)!;
     if (!materials.length) return;
 
-    const index = this.materialIndex === undefined
-      ? Math.floor(seedrandom.tychei(seed).quick() * materials.length)
-      : evaluateDynamicNumber(this.materialIndex, particle.time, seed);
+    const index =
+      this.materialIndex === undefined
+        ? Math.floor(seedrandom.tychei(seed).quick() * materials.length)
+        : evaluateDynamicNumber(this.materialIndex, particle.time, seed);
     if (!Number.isFinite(index)) return;
 
     const template = materials[THREE.MathUtils.clamp(Math.floor(index), 0, materials.length - 1)];
-    const material = this.createMaterial(particle, template);
+    const color = (template as DecalMaterial).color?.clone() ?? new THREE.Color(1, 1, 1);
+    color.multiply(evaluateDynamicColor(this.color, particle.time, particle.id));
+    if (this.inheritColor > 0) color.multiply(new THREE.Color(1, 1, 1).lerp(particle.color, this.inheritColor));
 
     // Evaluate inheritance and impulse effects before handing parameters to the callback.
     const impulse = trigger.name === 'collision' ? (trigger.data as CollisionHit).impulse.length() : 1;
     const effect = (exponent: number) => Math.pow(Math.max(0, impulse), exponent);
     const proximity = 1 - THREE.MathUtils.clamp(hit.distance / this.maxDistance, 0, 1);
-    const size = evaluateDynamicVector3(this.size, particle.time, particle.id).clone()
+    const size = evaluateDynamicVector3(this.size, particle.time, particle.id)
+      .clone()
       .multiplyScalar(THREE.MathUtils.lerp(1, proximity, this.distanceAffectsSize) * effect(this.impulseAffectsSize));
 
     if (this.inheritScale > 0) size.multiply(new THREE.Vector3(1, 1, 1).lerp(particle.scale, this.inheritScale));
@@ -710,90 +1030,130 @@ export default class DecalRenderer extends Renderer {
     size.set(Math.abs(size.x), Math.abs(size.y), size.z);
 
     // Convert the sampled mesh normal to the world-space projector orientation.
-    const normal = (hit.normal ?? hit.face!.normal).clone();
-
-    if (hit.face?.normal instanceof THREE.Vector3 && normal.dot(hit.face.normal) < 0) normal.negate();
-
-    normal.applyMatrix3(new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld)).normalize();
+    const normal = decalHitNormal(hit);
 
     // Each hit receives an independent parameter snapshot and rotation seed.
-    const parameters = transformEventParameters(this.eventHandler(trigger.name),
-      trigger.data ?? hit, trigger.source, {
-        position: hit.point.clone(), normal, size,
-        rotation: (Number.isFinite(particle.rotation.z) ? particle.rotation.z : 0)
-          + evaluateDynamicNumber(this.rotation, particle.time, seed),
-        color: material.color?.clone() ?? new THREE.Color(1, 1, 1),
-        opacity: material.opacity
-          * (this.inheritAlpha > 0 ? THREE.MathUtils.lerp(1, particle.alpha, this.inheritAlpha) : 1)
-          * THREE.MathUtils.lerp(1, proximity, this.distanceAffectsOpacity) * effect(this.impulseAffectsOpacity),
-        lifetime: evaluateDynamicNumber(this.lifetime, particle.time, particle.id)
-          * effect(this.impulseAffectsLifetime),
-        depth: this.depth, offset: this.offset,
-      });
+    const parameters = transformEventParameters(this.eventHandler(trigger.name), trigger.data ?? hit, trigger.source, {
+      position: hit.point.clone(),
+      normal,
+      size,
+      rotation:
+        (Number.isFinite(particle.rotation.z) ? particle.rotation.z : 0) +
+        evaluateDynamicNumber(this.rotation, particle.time, seed),
+      color,
+      opacity:
+        template.opacity *
+        (this.inheritAlpha > 0 ? THREE.MathUtils.lerp(1, particle.alpha, this.inheritAlpha) : 1) *
+        THREE.MathUtils.lerp(1, proximity, this.distanceAffectsOpacity) *
+        effect(this.impulseAffectsOpacity),
+      lifetime: evaluateDynamicNumber(this.lifetime, particle.time, particle.id) * effect(this.impulseAffectsLifetime),
+      depth: this.depth,
+      offset: this.offset,
+    });
 
     // Cancellation and invalid dimensions must not leave owned material resources behind.
-    if (!parameters || !Number.isFinite(parameters.lifetime) || parameters.lifetime <= 0
-      || !Number.isFinite(parameters.rotation) || !Number.isFinite(parameters.depth) || parameters.depth <= 0
-      || !Number.isFinite(parameters.offset) || !Number.isFinite(parameters.opacity)
-      || !parameters.position.toArray().every(Number.isFinite) || !parameters.normal.toArray().every(Number.isFinite)
-      || parameters.normal.lengthSq() === 0
-      || ![parameters.size.x, parameters.size.y].every(value => Number.isFinite(value) && value > 0)) {
-      material.dispose();
+    if (
+      !parameters ||
+      !Number.isFinite(parameters.lifetime) ||
+      parameters.lifetime <= 0 ||
+      !Number.isFinite(parameters.rotation) ||
+      !Number.isFinite(parameters.depth) ||
+      parameters.depth <= 0 ||
+      !Number.isFinite(parameters.offset) ||
+      !Number.isFinite(parameters.opacity) ||
+      !parameters.position.toArray().every(Number.isFinite) ||
+      !parameters.normal.toArray().every(Number.isFinite) ||
+      parameters.normal.lengthSq() === 0 ||
+      ![parameters.size.x, parameters.size.y].every(value => Number.isFinite(value) && value > 0)
+    ) {
       return;
     }
+
+    if (this.isDuplicate(hit, parameters)) return;
 
     // Clip the projector volume against the selected surface.
-    const geometry = this.createGeometry(hit, parameters);
+    const ray =
+      this.hitRays.get(hit) ??
+      new THREE.Ray(
+        this.worldPosition(particle),
+        parameters.position.clone().sub(this.worldPosition(particle)).normalize(),
+      );
+    if (ray.direction.lengthSq() < 1e-10) ray.direction.copy(parameters.normal).negate();
+    const warp = sampleDecalWarp(this.warp, particle, ray, hit, this.system);
+    const geometry = this.benchmarks.span('geometryGeneration', () => this.createGeometry(hit, parameters, warp));
 
-    if (!geometry) {
-      material.dispose();
-      return;
-    }
+    if (!geometry) return;
+    const material = template.clone() as DecalMaterial;
 
     if (this.system) this.prepareAppearance(this.system);
 
     material.color?.copy(parameters.color);
     const { lifetime, rotation } = parameters;
     const alpha = parameters.opacity;
-    const mesh = new THREE.Mesh(geometry, material);
+    // Prepare per-geometry composition attributes before adding the geometry to a shared batch.
+    const frame = this.system!.getSimulationToWorldMatrix()
+      .clone()
+      .multiply(
+        new THREE.Matrix4().compose(
+          particle.position,
+          new THREE.Quaternion().setFromEuler(new THREE.Euler().setFromVector3(particle.rotation)),
+          particle.scale,
+        ),
+      );
+    const appearanceSource =
+      this.appearance && !this.materialTarget && (this.materialComposite || this.materialCompositeGPU)
+        ? (surface ?? intersectionSurface(hit))
+        : undefined;
+    const appearanceParticle =
+      this.appearance?.attach(material, geometry, particle, frame, hit.object.matrixWorld, appearanceSource) ??
+      particle.clone();
+    this.appearance?.sync(this.materialTarget, this.materialCopySampleMode, this.system!.sceneRenderer);
+    const tint = parameters.color.clone();
 
-    // Match the contacted surface so decals receive the same scene shadows.
-    mesh.receiveShadow = hit.object.receiveShadow;
-    // Composite surface decals before object-sorted transparent particle batches.
-    mesh.renderOrder = -1;
-    mesh.userData[DECAL_RENDERER_USER_DATA_KEY] = true;
-    mesh.userData[PARTICLE_RENDERER_OBJECT_KEY] = true;
-
-    // Evict oldest resources before attaching the new persistent mark to its surface.
-    const decal: DecalInstance = {
-      mesh, materialTemplate: template, age: 0, lifetime, alpha, opacity: this.opacity, seed: particle.id,
-    };
-    this.fade(decal);
+    // Wait for valid clipped geometry before evicting the oldest decal.
     while (this.instances.length >= this.maxDecals) this.remove(0);
+
+    const batch = this.getBatch(template, material, hit.object.receiveShadow);
+    const slot = this.benchmarks.span('batchUpdate', () => batch.add(geometry, hit.object, tint, alpha));
+    const decal: DecalInstance = {
+      mesh: batch.mesh,
+      batch,
+      slot,
+      geometry,
+      receiver: hit.object,
+      color: tint,
+      renderedOpacity: alpha,
+      materialTemplate: template,
+      age: 0,
+      lifetime,
+      alpha,
+      opacity: this.opacity,
+      seed: particle.id,
+      appearanceFrame: frame,
+      appearanceParticle,
+    };
     this.instances.push(decal);
-    hit.object.add(mesh);
+    this.isDuplicate(hit, parameters, true);
+    this.fade(decal);
 
     // Registered sources carry the original surface inputs, independently of decal shading.
-    let sample = surface?.material ? surface
-      : this.appearance || this.emissionTags ? intersectionSurface(hit) : undefined;
+    let sample = surface?.material
+      ? surface
+      : this.appearance || this.emissionTags
+        ? intersectionSurface(hit)
+        : undefined;
 
     if (sample && !sample.point.equals(parameters.position)) {
       const delta = parameters.position.clone().sub(sample.point);
       const chart = sample.surface;
-      sample = { ...sample, point: parameters.position.clone(), surface: chart && { ...chart,
-        uv: chart.uv.clone().add(new THREE.Vector2(chart.u.dot(delta), chart.v.dot(delta))) } };
-    }
-
-    if (this.system) {
-      mesh.updateWorldMatrix(true, false);
-      decal.appearanceFrame = this.system.getSimulationToWorldMatrix().clone().multiply(new THREE.Matrix4().compose(
-        particle.position, new THREE.Quaternion().setFromEuler(new THREE.Euler().setFromVector3(particle.rotation)),
-        particle.scale));
-      const appearanceSource = !this.materialTarget && (this.materialComposite || this.materialCompositeGPU)
-        ? sample : undefined;
-      decal.appearanceParticle = this.appearance?.attach(material, geometry, particle,
-        decal.appearanceFrame, mesh.matrixWorld, appearanceSource) ?? particle.clone();
-      this.appearance?.sync(this.materialTarget, this.materialCopySampleMode, this.system.sceneRenderer);
+      sample = {
+        ...sample,
+        point: parameters.position.clone(),
+        surface: chart && {
+          ...chart,
+          uv: chart.uv.clone().add(new THREE.Vector2(chart.u.dot(delta), chart.v.dot(delta))),
+        },
+      };
     }
 
     // Optional registered sources follow the mark's surface frame and carry the original material.
@@ -803,15 +1163,22 @@ export default class DecalRenderer extends Renderer {
       orientation.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation));
       const transform = new THREE.Matrix4().compose(
         parameters.position.clone().addScaledVector(normal, parameters.offset),
-        orientation, new THREE.Vector3(parameters.size.x, 1, parameters.size.y));
+        orientation,
+        new THREE.Vector3(parameters.size.x, 1, parameters.size.y),
+      );
       decal.emissionTransform = hit.object.matrixWorld.clone().invert().multiply(transform);
       decal.source = this.system.registerEmissionSource({
-        tags: this.emissionTags, transform: this.emissionMatrix(decal),
-        color: material.color ?? new THREE.Color(1, 1, 1), alpha: material.opacity,
+        tags: this.emissionTags,
+        transform: this.emissionMatrix(decal),
+        color: decal.color,
+        alpha: decal.renderedOpacity,
         metadata: sample && {
           material: sample.material,
-          surface: sample.surface && { uv: sample.surface.uv.clone(),
-            u: sample.surface.u.clone(), v: sample.surface.v.clone() },
+          surface: sample.surface && {
+            uv: sample.surface.uv.clone(),
+            u: sample.surface.u.clone(),
+            v: sample.surface.v.clone(),
+          },
           point: sample.point.clone().applyMatrix4(this.system.getSimulationToWorldMatrix().invert()),
         },
       });
@@ -821,6 +1188,7 @@ export default class DecalRenderer extends Renderer {
   private createGeometry(
     hit: THREE.Intersection,
     parameters: DecalParameters,
+    warp: THREE.Matrix3,
   ): THREE.BufferGeometry | undefined {
     const target = hit.object as THREE.Mesh;
     target.updateWorldMatrix(true, false);
@@ -829,21 +1197,59 @@ export default class DecalRenderer extends Renderer {
 
     const { size, rotation, depth, offset } = parameters;
     const normal = parameters.normal.clone().normalize();
-    const dimensions = new THREE.Vector3(size.x, size.y, depth);
+    const footprint = decalWarpBounds(warp);
+    if (!footprint) return;
+    // Clip only the actual asymmetric footprint, rather than its origin-centered enclosing rectangle.
+    const extents = footprint.getSize(new THREE.Vector2());
+    const center = footprint.getCenter(new THREE.Vector2());
+    const dimensions = new THREE.Vector3(size.x * extents.x, size.y * extents.y, depth);
 
     // DecalGeometry projects along local +Z; particle Z rotation supplies surface roll.
     const axis = new THREE.Vector3(0, 0, 1);
     const orientation = new THREE.Quaternion().setFromUnitVectors(axis, normal);
     orientation.multiply(new THREE.Quaternion().setFromAxisAngle(axis, rotation));
-    const geometry = new DecalGeometry(target, parameters.position,
-      new THREE.Euler().setFromQuaternion(orientation), dimensions);
+    const projectorPosition = parameters.position
+      .clone()
+      .add(new THREE.Vector3(center.x * size.x, center.y * size.y, 0).applyQuaternion(orientation));
+    const geometry = new DecalGeometry(
+      target,
+      projectorPosition,
+      new THREE.Euler().setFromQuaternion(orientation),
+      dimensions,
+    );
+    // Preserve impact-anchored inverse-warp coordinates without another per-vertex shader attribute.
+    const coordinates = geometry.getAttribute('uv');
+    for (let i = 0; i < coordinates.count; i++) {
+      coordinates.setXY(i, coordinates.getX(i) + center.x / extents.x, coordinates.getY(i) + center.y / extents.y);
+    }
     const positions = geometry.getAttribute('position');
     const normals = geometry.getAttribute('normal');
 
-    if (!positions.count || !positions.array.every(Number.isFinite)
-      || (normals && !normals.array.every(Number.isFinite))) {
+    if (
+      !positions.count ||
+      !positions.array.every(Number.isFinite) ||
+      (normals && !normals.array.every(Number.isFinite))
+    ) {
       geometry.dispose();
       return;
+    }
+
+    // Every public warp fixes the projector origin. Its inverse therefore needs only six coefficients;
+    // two more values carry the clipping rectangle extent, fitting two vertex buffers on WebGPU.
+    const inverse = warp.clone().invert(),
+      m = inverse.elements;
+    const columns = [
+      [m[0], m[3], m[1], m[4]],
+      [m[2], m[5], extents.x, extents.y],
+    ];
+    if (!columns.flat().every(value => Number.isFinite(Math.fround(value)))) {
+      geometry.dispose();
+      return;
+    }
+    for (let column = 0; column < 2; column++) {
+      const values = new Float32Array(positions.count * 4);
+      for (let vertex = 0; vertex < positions.count; vertex++) values.set(columns[column], vertex * 4);
+      geometry.setAttribute(`decalWarp${column}`, new THREE.BufferAttribute(values, 4));
     }
 
     // Offset the clipped surface, then store it locally so rigid target motion carries the mark.
@@ -868,12 +1274,15 @@ export default class DecalRenderer extends Renderer {
 
   private fade(decal: DecalInstance): void {
     const alpha = decal.alpha * evaluateDynamicNumber(decal.opacity, decal.age / decal.lifetime, decal.seed);
-    decal.mesh.material.opacity = Number.isFinite(alpha) ? THREE.MathUtils.clamp(alpha, 0, 1) : 0;
+    decal.renderedOpacity = Number.isFinite(alpha) ? THREE.MathUtils.clamp(alpha, 0, 1) : 0;
+    this.benchmarks.span('batchUpdate', () =>
+      decal.batch.update(decal.slot, decal.receiver, decal.color, decal.renderedOpacity),
+    );
   }
 
   private emissionMatrix(decal: DecalInstance): THREE.Matrix4 {
-    decal.mesh.updateWorldMatrix(true, false);
-    const transform = decal.mesh.matrixWorld.clone().multiply(decal.emissionTransform!);
+    decal.receiver.updateWorldMatrix(true, false);
+    const transform = decal.receiver.matrixWorld.clone().multiply(decal.emissionTransform!);
 
     if (this.system && this.system.simulationSpace !== 'world') {
       this.system.updateWorldMatrix(true, false);
@@ -884,24 +1293,35 @@ export default class DecalRenderer extends Renderer {
   }
 
   private updateEmissionSource(decal: DecalInstance): void {
-    decal.source?.update({ transform: this.emissionMatrix(decal),
-      color: decal.mesh.material.color, alpha: decal.mesh.material.opacity });
+    decal.source?.update({ transform: this.emissionMatrix(decal), color: decal.color, alpha: decal.renderedOpacity });
   }
 
   private remove(index: number): void {
     const [decal] = this.instances.splice(index, 1);
     decal.source?.dispose();
-    decal.mesh.removeFromParent();
-    decal.mesh.geometry.dispose();
-    decal.mesh.material.dispose();
+    decal.batch.remove(decal.slot);
+    decal.geometry.dispose();
+    if (
+      decal.batch.mesh.parent !== (this.system?.scene ?? this.system) &&
+      !this.instances.some(instance => instance.batch === decal.batch)
+    ) {
+      for (const [key, batch] of this.batches) if (batch === decal.batch) this.batches.delete(key);
+      decal.batch.dispose();
+    }
   }
 
   clear(): void {
     this.cancelGPUSelectiveReadback();
     this.continuousTicks.clear();
     this.projectionSequence = 0;
+    this.time = 0;
+    this.recentContacts = new WeakMap();
     this.readbackDeltaTime = 0;
     while (this.instances.length) this.remove(this.instances.length - 1);
+    this.batches.forEach(batch => batch.dispose());
+    this.batches.clear();
+    this.releaseCoverage?.();
+    this.releaseCoverage = undefined;
   }
 
   override reset(): void {

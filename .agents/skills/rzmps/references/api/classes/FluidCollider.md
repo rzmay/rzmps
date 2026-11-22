@@ -860,7 +860,11 @@ testGPU(particle, context): Node<"float">;
 ### testPositionGPU()
 
 ```ts
-testPositionGPU(position, context): Node<"float">;
+testPositionGPU(
+   position,
+   context,
+   sampleTexture?
+): Node<"float">;
 ```
 
 #### Parameters
@@ -872,6 +876,10 @@ testPositionGPU(position, context): Node<"float">;
 ##### context
 
 [`GPUParticleUpdateContext`](../interfaces/GPUParticleUpdateContext.md)
+
+##### sampleTexture?
+
+(`uv`) => `Node`\<`"float"`\>
 
 #### Returns
 

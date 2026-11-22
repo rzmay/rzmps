@@ -9,6 +9,8 @@ import {
   materialOpacity,
   materialRoughness,
   normalViewGeometry,
+  positionGeometry,
+  texture,
   vec2,
   vec3,
 } from 'three/tsl';
@@ -32,12 +34,16 @@ const originalProgramKeys = new WeakMap<THREE.Material, THREE.Material['customPr
 let revision = 0;
 const originalNodes = new WeakMap<THREE.Material, Partial<SurfaceMaterial>>();
 
-/** Uses the ordinary material-composite hooks, with visual surface attributes rather than particle state. */
+/**
+ * Source-less composition for reconstructed surfaces and receiver-local decal geometry.
+ * receiverLocal exposes the raw position attribute before Three.js applies the batch's receiver transform.
+ */
 export function applySurfaceMaterial(
   material: THREE.Material,
   particleColors: boolean,
   gpu?: MaterialCompositeGPUCallback,
   cpu?: MaterialCompositeCallback,
+  receiverLocal = false,
 ): void {
   const target = material as SurfaceMaterial;
   let original = originalNodes.get(material);
@@ -59,7 +65,11 @@ export function applySurfaceMaterial(
     const color = particleColors ? attribute('color', 'vec3') : vec3(1);
     const dest: GPUMaterialChannels = {
       color: ((original.colorNode as Node<'vec3'> | null) ?? materialColor.rgb).mul(color),
-      opacity: (original.opacityNode as Node<'float'> | null) ?? materialOpacity,
+      opacity:
+        (original.opacityNode as Node<'float'> | null) ??
+        (receiverLocal && (material as THREE.MeshStandardMaterial).map
+          ? materialOpacity.mul(texture((material as THREE.MeshStandardMaterial).map!).a)
+          : materialOpacity),
       normal: (original.normalNode as Node<'vec3'> | null) ?? materialNormal,
       roughness: (original.roughnessNode as Node<'float'> | null) ?? materialRoughness,
       metalness: (original.metalnessNode as Node<'float'> | null) ?? materialMetalness,
@@ -73,12 +83,13 @@ export function applySurfaceMaterial(
         destUV: vec2(0),
         sampleSource: channel => dest[channel],
         sampleDest: channel => dest[channel],
-        surfaceVelocity: velocity.xyz,
-        surfaceSpeed: velocity.xyz.length(),
-        surfaceSupport: velocity.w,
-        surfaceVorticity: vorticity.xyz,
-        surfaceVorticityMagnitude: vorticity.xyz.length(),
-        surfaceDeformation: vorticity.w,
+        receiverPositionLocal: receiverLocal ? positionGeometry : undefined,
+        surfaceVelocity: receiverLocal ? undefined : velocity.xyz,
+        surfaceSpeed: receiverLocal ? undefined : velocity.xyz.length(),
+        surfaceSupport: receiverLocal ? undefined : velocity.w,
+        surfaceVorticity: receiverLocal ? undefined : vorticity.xyz,
+        surfaceVorticityMagnitude: receiverLocal ? undefined : vorticity.xyz.length(),
+        surfaceDeformation: receiverLocal ? undefined : vorticity.w,
       }),
     };
     // Composite color already includes particle color, so do not multiply it again in Three's vertex-color stage.
@@ -122,23 +133,29 @@ export function applySurfaceMaterial(
         function: (name, code) => {
           functions.set(name, code);
         },
-        surfaceVelocity: 'vSurfaceVelocity.xyz',
-        surfaceSpeed: 'length(vSurfaceVelocity.xyz)',
-        surfaceSupport: 'vSurfaceVelocity.w',
-        surfaceVorticity: 'vSurfaceVorticity.xyz',
-        surfaceVorticityMagnitude: 'length(vSurfaceVorticity.xyz)',
-        surfaceDeformation: 'vSurfaceVorticity.w',
+        receiverPositionLocal: receiverLocal ? 'vReceiverPosition' : undefined,
+        surfaceVelocity: receiverLocal ? undefined : 'vSurfaceVelocity.xyz',
+        surfaceSpeed: receiverLocal ? undefined : 'length(vSurfaceVelocity.xyz)',
+        surfaceSupport: receiverLocal ? undefined : 'vSurfaceVelocity.w',
+        surfaceVorticity: receiverLocal ? undefined : 'vSurfaceVorticity.xyz',
+        surfaceVorticityMagnitude: receiverLocal ? undefined : 'length(vSurfaceVorticity.xyz)',
+        surfaceDeformation: receiverLocal ? undefined : 'vSurfaceVorticity.w',
       });
-      const varyings = 'varying vec4 vSurfaceVelocity;\nvarying vec4 vSurfaceVorticity;\n';
+      const varyings = receiverLocal
+        ? 'varying vec3 vReceiverPosition;\n'
+        : 'varying vec4 vSurfaceVelocity;\nvarying vec4 vSurfaceVorticity;\n';
       shader.vertexShader =
-        `attribute vec4 surfaceVelocity;\nattribute vec4 surfaceVorticity;\n${varyings}` +
+        (receiverLocal ? varyings : `attribute vec4 surfaceVelocity;\nattribute vec4 surfaceVorticity;\n${varyings}`) +
         shader.vertexShader.replace(
           '#include <begin_vertex>',
-          '#include <begin_vertex>\n' + 'vSurfaceVelocity = surfaceVelocity; vSurfaceVorticity = surfaceVorticity;',
+          '#include <begin_vertex>\n' +
+            (receiverLocal
+              ? 'vReceiverPosition = position;'
+              : 'vSurfaceVelocity = surfaceVelocity; vSurfaceVorticity = surfaceVorticity;'),
         );
       let block = '';
       if (output.color) block += `diffuseColor.rgb = ${output.color};\n`;
-      if (output.opacity) block += `diffuseColor.a = ${output.opacity};\n`;
+      if (output.opacity) block += `diffuseColor.a = ${output.opacity};\nif (diffuseColor.a <= 0.0) discard;\n`;
       if (output.normal) block += `normal = normalize(${output.normal});\n`;
       if (output.roughness) block += `roughnessFactor = ${output.roughness};\n`;
       if (output.metalness) block += `metalnessFactor = ${output.metalness};\n`;
@@ -147,8 +164,13 @@ export function applySurfaceMaterial(
         [...functions.values()].join('\n') +
         '\n' +
         shader.fragmentShader.replace(
-          '#include <lights_physical_fragment>',
-          block + '#include <lights_physical_fragment>',
+          shader.fragmentShader.includes('#include <lights_physical_fragment>')
+            ? '#include <lights_physical_fragment>'
+            : '#include <opaque_fragment>',
+          block +
+            (shader.fragmentShader.includes('#include <lights_physical_fragment>')
+              ? '#include <lights_physical_fragment>'
+              : '#include <opaque_fragment>'),
         );
     };
   material.needsUpdate = true;

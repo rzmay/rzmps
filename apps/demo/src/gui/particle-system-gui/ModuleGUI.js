@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
-import { GasModule, FluidSimulation, FluidBoundsPolicy, PressureSolver, SurfaceAttachment } from '@rzmps/rzmps';
+import {
+  GasModule, FluidSimulation, FluidBoundsPolicy, PressureSolver, SurfaceAttachment,
+  AdvectionMethod, GeometryUpdatePolicy,
+} from '@rzmps/rzmps';
 
 export class ModuleGUI extends GUIEditorBase {
   buildModulesFolder(root, system = this.system) {
@@ -44,6 +47,8 @@ export class ModuleGUI extends GUIEditorBase {
     } else if (candidate instanceof FluidSimulation) {
       const tuning = [
         'pressureIterations',
+        'pressureMinIterations',
+        'pressureMaxIterations',
         'pressureTolerance',
         'pressureWarmStart',
         'adaptiveTimestep',
@@ -54,7 +59,6 @@ export class ModuleGUI extends GUIEditorBase {
         'automaticPadding',
         'showGridHelper',
         'picRatio',
-        'advectParticlesEnabled',
         'collisionIterations',
         'particleSeparation',
         'particleSpacing',
@@ -66,6 +70,7 @@ export class ModuleGUI extends GUIEditorBase {
         'buoyancy',
         'weight',
         'sourceStrength',
+        'maxActiveBricks',
         'velocitySourceStrength',
         'supportForceFields',
         'supportSpatialEffects',
@@ -86,6 +91,26 @@ export class ModuleGUI extends GUIEditorBase {
       for (const key of tuning) {
         if (key in candidate) this.addValue(folder, candidate, key, this.prettyName(key));
       }
+
+      // FLIP stores this flag under a runtime name; present its constructor API name.
+      if ('advectParticlesEnabled' in candidate) {
+        const settings = { advectParticles: candidate.advectParticlesEnabled };
+        folder.add(settings, 'advectParticles').name('Advect Particles').onChange(value => {
+          candidate.advectParticlesEnabled = value;
+          this.emitCode();
+        });
+      }
+
+      if (candidate.collisionOptions) {
+        const collision = folder.addFolder('Collision Options');
+        const settings = { surfaceThickness: 0, bakedFieldResolution: 16, staticAfter: 2,
+          updatePolicy: GeometryUpdatePolicy.Auto, ...candidate.collisionOptions };
+        collision.onChange(() => { candidate.collisionOptions = { ...settings }; });
+        collision.add(settings, 'updatePolicy', Object.values(GeometryUpdatePolicy)).name('Update Policy');
+        for (const key of ['surfaceThickness', 'bakedFieldResolution', 'staticAfter']) {
+          this.addValue(collision, settings, key, this.prettyName(key));
+        }
+      }
       folder
         .add(candidate, 'boundsPolicy', Object.values(FluidBoundsPolicy))
         .name('Bounds Policy')
@@ -96,10 +121,12 @@ export class ModuleGUI extends GUIEditorBase {
         const multigrid = folder.addFolder('Multigrid');
         for (const [key, value] of [['preSmoothing', 2], ['postSmoothing', 4], ['bottomIterations', 12]]) {
           const state = { [key]: candidate.multigrid?.[key] ?? value };
-          multigrid.add(state, key, key === 'bottomIterations' ? 1 : 0, 64, 1).onChange(value => {
-            candidate.multigrid ??= {};
-            candidate.multigrid[key] = value; this.emitCode();
-          });
+          multigrid.add(state, key, key === 'bottomIterations' ? 1 : 0, 64, 1)
+            .name(this.prettyName(key)).onChange(value => {
+              candidate.multigrid ??= {};
+              candidate.multigrid[key] = value;
+              this.emitCode();
+            });
         }
       }
     } else if (candidate.options && typeof candidate.options === 'object') {
@@ -206,12 +233,13 @@ export class ModuleGUI extends GUIEditorBase {
             candidate.octreeOptions[key] = value;
             const octree = candidate.getParticleOctree?.();
             if (octree) octree[key] = value;
+            this.emitCode();
           }),
       );
     }
     if (candidate instanceof FluidSimulation && 'advectionMethod' in candidate) {
       folder
-        .add(candidate, 'advectionMethod', ['SemiLagrangian', 'MacCormack'])
+        .add(candidate, 'advectionMethod', Object.values(AdvectionMethod))
         .name('Advection Method')
         .onChange(() => this.emitCode());
     }

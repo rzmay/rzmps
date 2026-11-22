@@ -2,8 +2,13 @@ export { SourceLossBehavior } from './enums/SourceLossBehavior';
 export { profileRenderer } from './rendering/benchmarkRenderer.utils';
 export type { BenchmarkRenderer } from './rendering/benchmarkRenderer.utils';
 export { default as Benchmarks } from './core/Benchmarks';
-export type { BenchmarkMetric, BenchmarkCollectionOptions,
-  BenchmarkDistribution, BenchmarkReport, BenchmarkAssertion } from './core/Benchmarks';
+export type {
+  BenchmarkMetric,
+  BenchmarkCollectionOptions,
+  BenchmarkDistribution,
+  BenchmarkReport,
+  BenchmarkAssertion,
+} from './core/Benchmarks';
 // ParticleSystem
 export { default as ParticleSystem } from './core/ParticleSystem';
 export type {
@@ -99,7 +104,8 @@ export { FluidBoundsPolicy } from './enums/FluidBoundsPolicy';
 
 // Renderers
 export { default as Renderer } from './core/Renderer';
-export type { RendererOptions } from './core/Renderer';
+export type { ParticleCondition, ParticleGPUCondition } from './core/particleCondition.types';
+export type { RendererOptions, RendererCondition } from './core/Renderer';
 export { default as LightRenderer } from './rendering/renderers/LightRenderer';
 export type { LightRendererAllocationOptions } from './rendering/renderers/LightRenderer';
 export { default as MeshRenderer } from './rendering/renderers/MeshRenderer';
@@ -108,6 +114,9 @@ export { default as AudioRenderer } from './rendering/renderers/AudioRenderer';
 export type { AudioParameters } from './rendering/renderers/AudioRenderer';
 export { default as DecalRenderer, DECAL_RENDERER_USER_DATA_KEY } from './rendering/renderers/DecalRenderer';
 export type {
+  DecalWarp,
+  DecalWarpSampler,
+  DecalWarpInput,
   DecalInstance,
   DecalRendererOptions,
   DecalDirectionSampler,
@@ -297,16 +306,31 @@ export type {
 export { default as FluidSimulation } from './modules/FluidSimulation';
 export type { FluidSimulationOptions, FluidCollisionOptions } from './modules/FluidSimulation';
 export { default as GasModule } from './modules/GasModule';
-export type { GPUGasCell, GasGridQuery, GasModuleOptions, GasModuleContext, GasRenderModuleContext,
-  GasModuleUpdate, GasRenderModuleUpdate } from './modules/GasModule';
+export type {
+  GPUGasCell,
+  GasGridQuery,
+  GasModuleOptions,
+  GasModuleContext,
+  GasRenderModuleContext,
+  GasModuleUpdate,
+  GasRenderModuleUpdate,
+} from './modules/GasModule';
 export { default as GasSimulation } from './modules/GasSimulation';
 export type { GasSimulationOptions } from './modules/GasSimulation';
 export { default as FLIPSimulation } from './modules/FLIPSimulation';
-export type { FLIPSimulationOptions, FLIPSprayConditionOptions, FLIPFoamConditionOptions } from './modules/FLIPSimulation';
+export type {
+  FLIPSimulationOptions,
+  FLIPSprayConditionOptions,
+  FLIPFoamConditionOptions,
+} from './modules/FLIPSimulation';
 export { default as SurfaceAttachment } from './modules/SurfaceAttachment';
 export type { SurfaceAttachmentOptions } from './modules/SurfaceAttachment';
-export type { SurfaceSample, GPUSurfaceSample, SurfaceQuery, GPUSurfaceQuery }
-  from './spatial/surfaces/surfaceSample.types';
+export type {
+  SurfaceSample,
+  GPUSurfaceSample,
+  SurfaceQuery,
+  GPUSurfaceQuery,
+} from './spatial/surfaces/surfaceSample.types';
 export { default as SurfaceRenderer } from './rendering/renderers/SurfaceRenderer';
 export type { SurfaceRendererOptions } from './rendering/renderers/SurfaceRenderer';
 export { default as VolumeRenderer } from './rendering/renderers/VolumeRenderer';
@@ -317,6 +341,7 @@ export { default as FluidCollider } from './spatial/effects/FluidCollider';
 export type { FluidColliderOptions } from './spatial/effects/FluidCollider';
 export type { VolumeField, VolumeFieldProvider } from './rendering/volumeField.types';
 export { SurfaceExtraction } from './enums/SurfaceExtraction';
+export { SurfaceVertexLayout } from './enums/SurfaceVertexLayout';
 export { VolumeInterpolation } from './enums/VolumeInterpolation';
 export { VolumeDensityMapping } from './enums/VolumeDensityMapping';
 export type { SubSystemGPUCondition, SubSystemGPUContext } from './core/ParticleSystem';
@@ -326,6 +351,7 @@ export { buildSurfaceNets } from './rendering/gpu/buildSurfaceNets';
 export { buildMarchingCubes } from './rendering/gpu/buildMarchingCubes';
 
 export { default as LiquidMaterial } from './rendering/materials/LiquidMaterial';
+export { default as perturbNormal } from './rendering/materials/perturbNormal';
 export type { LiquidMaterialOptions, LiquidFlowOptions } from './rendering/materials/LiquidMaterial';
 export { default as StagedGPUAllocation } from './utils/gpu/StagedGPUAllocation';
 export type { StagedGPUAllocationOptions } from './utils/gpu/StagedGPUAllocation';

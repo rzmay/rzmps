@@ -202,7 +202,7 @@ window.reconstructSurface = async (samples, settings) => {
 
 window.captureTeapot = async () => {
   const [{ default: createFluid }, { default: createScene }] = await Promise.all([
-    import('../../../../../examples/experimental/flipFluid.js'),
+    import('../../../../../examples/presets/flipFluid.js'),
     import('../../../../../examples/scenes/fluidTeapot.js'),
   ]);
   const temporaryScene = new THREE.Scene();

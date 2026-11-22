@@ -14,8 +14,11 @@ test('soft depth respects visible faces; opaque volume depth excludes transparen
     let browser;
     const results = [];
     try {
-      browser = await puppeteer.launch(browserLaunchOptions('test', { headless: true, args: [...browserLaunchOptions('test').args, '--enable-unsafe-webgpu'] }));
-      for (const backend of ['webgl', 'webgpu', 'webgpu&reversed=true']) {
+      browser = await puppeteer.launch(browserLaunchOptions('test', {
+        headless: true, args: [...browserLaunchOptions('test').args, '--enable-unsafe-webgpu'],
+      }));
+      for (const backend of ['webgl', 'webgpu', 'webgpu&reversed=true',
+        'webgpu&prepare=true']) {
         const page = await browser.newPage(), errors = [];
         page.on('pageerror', error => errors.push(error.message));
         page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });

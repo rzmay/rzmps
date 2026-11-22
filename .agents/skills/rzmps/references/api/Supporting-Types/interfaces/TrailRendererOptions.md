@@ -98,6 +98,38 @@ Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
+<a id="condition"></a>
+
+### condition?
+
+```ts
+optional condition?: RendererCondition;
+```
+
+Filters sources before grouping/children/work; existing persistent output keeps its own lifetime.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`condition`](../../interfaces/RendererOptions.md#condition)
+
+***
+
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ParticleGPUCondition;
+```
+
+TSL equivalent of condition, following Module.conditionGPU conventions.
+
+#### Inherited from
+
+[`RendererOptions`](../../interfaces/RendererOptions.md).[`conditionGPU`](../../interfaces/RendererOptions.md#conditiongpu)
+
+***
+
 <a id="count"></a>
 
 ### count

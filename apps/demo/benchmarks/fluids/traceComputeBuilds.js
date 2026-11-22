@@ -9,6 +9,13 @@ export default function traceComputeBuilds(renderer, report, label = node => nod
 
     const originals = [], family = label(node) || 'compute';
     const origin = family === 'compute' ? new Error('Compute preparation origin').stack : undefined;
+    // Retain the creating TSL function for anonymous prepared owners, absent from the live scene graph.
+    let source, expression = node.computeNode;
+    for (let depth = 0; family === 'compute' && expression && depth < 4; depth++) {
+      const fn = expression.shaderNode?.jsFunc;
+      if (fn) { source = fn.toString(); break; }
+      expression = expression.node; // Fn calls may be wrapped in Three's VarIntentNode.
+    }
     let depth = 0;
     const wrap = (owner, name, phase) => {
       const original = owner[name];
@@ -21,7 +28,8 @@ export default function traceComputeBuilds(renderer, report, label = node => nod
           depth--;
           if (outer) {
             const cpuMs = performance.now() - start;
-            report({ family, stage, start, cpuMs, origin: cpuMs > 8 ? origin : undefined });
+            report({ family, stage, start, cpuMs, origin: cpuMs > 8 ? origin : undefined,
+              source: cpuMs > 8 ? source : undefined });
           }
         }
       };

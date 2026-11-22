@@ -1,3 +1,4 @@
+import type { ParticleCondition, ParticleGPUCondition } from './particleCondition.types';
 import EventReceiver, { type EventExecutionContext, type EventReceiverOptions } from '../events/EventReceiver';
 import Particle, {
   type ParticleInitializer, type GPUParticleInitializer,
@@ -46,11 +47,7 @@ export type ModuleUpdate = (
   context: ModuleExecutionContext,
 ) => void;
 
-export type ModuleCondition = (
-  particle: Particle,
-  deltaTime: number,
-  context: ModuleExecutionContext,
-) => boolean;
+export type ModuleCondition = ParticleCondition<ModuleExecutionContext>;
 
 export type ModuleGPUUpdate = (
   /** Shader-node particle view; mutate fields through TSL assignment methods. */
@@ -59,11 +56,7 @@ export type ModuleGPUUpdate = (
   context: ModuleGPUExecutionContext,
 ) => void;
 
-export type ModuleGPUCondition = (
-  particle: GPUParticleLike,
-  deltaTime: Node<'float'>,
-  context: ModuleGPUExecutionContext,
-) => Node<'bool'>;
+export type ModuleGPUCondition = ParticleGPUCondition<ModuleGPUExecutionContext>;
 
 export interface ModuleOptions extends EventReceiverOptions {
   initializeParticle?: ParticleInitializer;

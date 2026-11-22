@@ -167,7 +167,10 @@ export default class GPURendererGrouping {
       this.selection = this.buildSelection(input);
       this.reductions = this.buildAssignment(input);
       this.output!.instanceCountNode = this.groupRange.count;
-      this.output!.spacingIndex = i => layout.read(layout.seeds, i);
+      const inputIdentity = input instanceof GPUParticleRenderBufferState ? input.storage.sourceIndex : undefined;
+      // Preserve existing grouped seeds unless the input is a compact selection with original identities.
+      this.output!.storage.sourceIndex = inputIdentity ? i => inputIdentity(layout.read(layout.seeds, i)) : undefined;
+      this.output!.spacingIndex = i => inputIdentity?.(layout.read(layout.seeds, i)) ?? layout.read(layout.seeds, i);
       this.output!.version++;
       this.key = key;
     }

@@ -74,6 +74,38 @@ Visual approximation for population removed by system LOD. Defaults to none.
 
 ***
 
+<a id="condition"></a>
+
+### condition?
+
+```ts
+optional condition?: RendererCondition;
+```
+
+Filters sources before grouping/children/work; existing persistent output keeps its own lifetime.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`condition`](RendererOptions.md#condition)
+
+***
+
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ParticleGPUCondition;
+```
+
+TSL equivalent of condition, following Module.conditionGPU conventions.
+
+#### Inherited from
+
+[`RendererOptions`](RendererOptions.md).[`conditionGPU`](RendererOptions.md#conditiongpu)
+
+***
+
 <a id="continuousrate"></a>
 
 ### continuousRate
@@ -147,6 +179,30 @@ Multiplies by lerp(1, 1 - distance / maxDistance, amount). Default 0.
 ```ts
 distanceAffectsSize: number;
 ```
+
+***
+
+<a id="duplicatedistance"></a>
+
+### duplicateDistance?
+
+```ts
+optional duplicateDistance?: number;
+```
+
+Optional surface-local near-duplicate rejection distance; zero disables it.
+
+***
+
+<a id="duplicateinterval"></a>
+
+### duplicateInterval?
+
+```ts
+optional duplicateInterval?: number;
+```
+
+Recent-contact window for duplicateDistance, in seconds. Defaults to 0.1.
 
 ***
 
@@ -295,6 +351,18 @@ inheritColor: number;
 ```
 
 Multiplicative subsystem inheritance amounts. Defaults to 1.
+
+***
+
+<a id="inheritmaterial"></a>
+
+### inheritMaterial?
+
+```ts
+optional inheritMaterial?: boolean;
+```
+
+Inherit source/scene material-copy bindings. False keeps a simple overlay. Defaults to true.
 
 ***
 
@@ -561,3 +629,27 @@ Copied texture resolution multiplier before the atlas cap, in (0, 1]. Default 1.
 #### Inherited from
 
 [`RendererOptions`](RendererOptions.md).[`textureCopyQuality`](RendererOptions.md#texturecopyquality)
+
+***
+
+<a id="unioncoverage"></a>
+
+### unionCoverage?
+
+```ts
+optional unionCoverage?: boolean;
+```
+
+Shade covered fragments once per pass. Requires a stencil-enabled framebuffer; reserves stencil bit 0x80.
+
+***
+
+<a id="warp"></a>
+
+### warp?
+
+```ts
+optional warp?: DecalWarpInput;
+```
+
+Fixed or sampled projective footprint; Three.js still clips the receiving surface.

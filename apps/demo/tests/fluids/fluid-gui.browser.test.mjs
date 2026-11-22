@@ -2,56 +2,43 @@ import { browserLaunchOptions } from '../../../../scripts/browser/launch.utils.m
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import puppeteer from 'puppeteer';
-import { startSiteDev } from '../../../../scripts/site/dev.mjs';
+import { createServer } from 'vite';
 
-const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
+// This fixture tests configuration only; no WebGPU adapter or fluid preparation is necessary.
+const site = await createServer({ root: path.resolve(import.meta.dirname, '../..'),
+  server: { port: 0, host: '127.0.0.1' }, logLevel: 'error' });
 let browser;
 try {
-  browser = await puppeteer.launch(browserLaunchOptions('test', { headless: true, args: [...browserLaunchOptions('test').args, '--enable-unsafe-webgpu'] }));
+  await site.listen();
+  browser = await puppeteer.launch(browserLaunchOptions('test'));
   const page = await browser.newPage();
-  await page.goto(`http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${
-    path.resolve(import.meta.dirname, 'fixtures/fluid.html')}?example=volumetricFire&fixedGas=true`);
+  await page.goto(`http://127.0.0.1:${site.httpServer.address().port}/tests/fluids/fixtures/gui.html`);
   await page.waitForFunction(() => window.ready);
-  for (const directory of ['/src/gui', '/src/gui/particle-system-gui']) {
-    const controls = await page.evaluate(async directory => {
-      const { ModuleGUI } = await import(`${directory}/ModuleGUI.js`);
-      const { RendererGUI } = await import(`${directory}/RendererGUI.js`);
-      const { ParticleSystemSerializer } = await import(`${directory}/ParticleSystemSerializer.js`);
-      const { flip, system } = window.debugFluid;
-      flip.runtimeDataForOtherModules = 42;
-      const exposed = [];
-      const controller = { name() { return this; }, disable() { return this; }, listen() { return this; },
-        onChange() { return this; } };
-      const folder = { add(_owner, key) { exposed.push(key); return controller; },
-        addFolder() { return this; }, close() { return this; } };
-      const context = { addTags() {}, addObject() {}, prettyName: key => key, emitCode() {},
-        addValue(_folder, _owner, key) { exposed.push(key); } };
-      ModuleGUI.prototype.buildModule.call(context, folder, flip, system);
-      const module = [...exposed];
-      exposed.length = 0;
-      RendererGUI.prototype.buildRenderer.call(context, folder, system.renderers[0], system);
-      const serialized = new ParticleSystemSerializer({ system }).serializeRenderer(system.renderers[0]);
-      return { module, renderer: exposed, serialized };
-    }, directory);
-    for (const key of ['pressureIterations', 'maxActiveBricks', 'advectionMethod', 'brickSubdivisions']) {
-      assert(controls.module.includes(key), `${directory}: missing tuning control ${key}`);
-    }
-    for (const key of ['runtimeDataForOtherModules', 'volumeGrid', 'velocityCurrent', 'maxima', 'useSpatialGrid']) {
-      assert(!controls.module.includes(key), `${directory}: internal ${key} leaked into GUI`);
-    }
-    assert(controls.renderer.includes('densityNoiseStrength'));
-    assert(controls.renderer.includes('densityNoiseContrast'));
-    assert(controls.serialized.includes('densityNoiseContrast:'));
-    assert(controls.renderer.includes('steps'));
-    for (const key of ['adaptiveStepping', 'adaptiveStepThreshold', 'adaptiveStepFactor',
-      'transmittanceThreshold', 'sceneDepthClipping', 'sceneDepthBias']) {
-      assert(controls.renderer.includes(key), `${directory}: missing ray control ${key}`);
-      assert(controls.serialized.includes(`${key}:`), `${directory}: missing serialized ray control ${key}`);
-    }
-    assert(!controls.renderer.includes('field'));
-    assert(!controls.renderer.includes('bindings'));
+  const result = await page.evaluate(() => window.checkGUI());
+  assert(result.unchanged, 'Opening the GUI must not mutate configuration or exported code');
+  assert(result.emissions >= 9, 'Edits should regenerate code');
+  for (const path of ['/Volume/Steps', '/Volume/Density Noise Strength', '/Volume/Adaptive Stepping',
+    '/Volume/Lighting Grid Options/Levels', '/Surface/Material/Flow/Noise Speed/0',
+    '/Light/Count', '/Light/Ratio', '/Light/Allocation/Shrink Delay', '/FLIP/Advect Particles']) {
+    assert(result.paths.includes(path), `Missing API control ${path}`);
   }
-  console.log('Fluid and volume GUI exposes tuning parameters only.');
+  for (const path of result.paths) {
+    assert(!/Ray Marching|Density Noise Mask|Flow Appearance|Renderer Children|Light Allocation/.test(path), path);
+    assert(!/Runtime Data|Velocity Current|Volume Grid|Maxima|Use Spatial Grid|Advect Particles Enabled/.test(path), path);
+  }
+  assert.deepEqual(result.system, { substep: false, delta: 0.02, maxCatchup: 0.4,
+    fps: 15, scale: 0.25, intensity: 0.8 });
+  assert.deepEqual(result.gas, { resolution: 24, subdivisions: 3 });
+  assert.deepEqual(result.flip, { advect: true, cfl: 1.5, iterations: 21, tolerance: 0.03,
+    warmStart: false, adaptive: false, substeps: 3 });
+  assert.deepEqual(result.volume, { levels: 3, count: 18, ratio: 0.75, groupingRadius: 3,
+    children: 2, generateChildren: false, stretch: 0.4, emissive: 0.25 });
+  assert.deepEqual(result.audio, { volume: 0.4, accepts: true });
+  assert.deepEqual(result.decal, { scale: [2, 2], inheritMaterial: false, duplicateDistance: 0.2 });
+  assert.equal(result.decalCount, 8);
+  assert.deepEqual(result.surfaceNoise, [0.4, 0.2]);
+  assert.deepEqual(result.light, { allocation: 4, brightness: [2, 3] });
+  console.log('GUI hierarchy, non-mutating initialization, edits and executable code exports passed.');
 } finally {
   await browser?.close();
   await site.close();

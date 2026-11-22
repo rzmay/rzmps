@@ -440,6 +440,19 @@ VolumeRenderer reconstructs density and transported parameters with trilinear fi
 LOD zero by default. `interpolation: 'Nearest'` deliberately selects nearest voxels; `'Cubic'` offers
 more expensive B-spline reconstruction. Simulation fields and resolution are independent of this choice.
 
+`VolumeRenderer.samplesPerVoxel` is the intended **render-quality** control when a coarse simulation
+or a larger ray interval looks too sparsely sampled. It defaults to one sample per smallest contributing
+voxel. Increasing it decreases the requested world-space sample spacing without changing the gas grid,
+density, diffusion or simulation quality. For example, changing cell width from 0.125 to 0.25 while
+raising `samplesPerVoxel` from 2 to 4 requests the same 0.0625-unit spacing.
+
+`steps` caps the raymarch sample budget. A long interval can exhaust that budget and force wider spacing;
+increase `steps` as well if increasing `samplesPerVoxel` alone has little effect. Both controls increase
+rendering cost, and neither is increased automatically. Distance-corrected opacity keeps the field's
+extinction independent of step length, subject to ordinary sampling error. These controls improve visual
+sampling, not the physical detail available in a coarse simulation. The current coarse-volume appearance
+is supported as-is; users choose this quality/performance tradeoff explicitly in the API or GUI.
+
 Full-strength jitter remains the default (`jitterStrength: 1`). Each camera ray fetches one phase from
 an embedded, periodic 32×32 blue-noise rank texture; its integration strata use an irrational rotation
 of that phase. This avoids piecewise-constant world-cell offsets appearing as large surface facets.

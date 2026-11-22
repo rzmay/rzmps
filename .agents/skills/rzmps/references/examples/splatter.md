@@ -52,6 +52,7 @@ An eight-second loop throws paintballs from height 3.5 under gravity. The source
       new DecalRenderer(paint, {
         onSpawn: false,
         onCollision: true,
+        warp: DecalRenderer.Warp.FromVelocity(3, 0.3),
         // Backends without mesh identity search opposite the collision normal, including on walls.
         maxDistance: 1,
         depth: 0.08,
@@ -96,7 +97,7 @@ Five balls per second receive colors from a five-color palette and uniform diame
 
 ## Modules
 
-Collision consumes the complete source lifetime on the first contact. The decal listener captures color, scale, and rotation before the ball dies. A backend supplying a mesh projects directly at that contact. Backends without target identity use a bounded downward ray to find the landing surface. This also works with asynchronous GPU collision events, whose particle velocity may already reflect the bounce response.
+Collision consumes the complete source lifetime on the first contact. The decal listener captures color, scale, and rotation before the ball dies. A backend supplying a mesh projects directly at that contact. Backends without target identity use a bounded downward ray to find the landing surface. Collision events retain the incoming velocity for velocity-based footprint stretching, including asynchronous GPU events.
 
 
 [Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/splatter.js#L59)
@@ -108,7 +109,7 @@ Collision consumes the complete source lifetime on the first contact. The decal 
 
 ## Renderers
 
-The balls reuse the Spheres preset's lit circular sprites and spherical normals, with roughness raised to 0.95 and no metalness for a matte paint finish. The rough decal material uses splat2.png for its white color and transparent silhouette, together with splat2_norm.jpg at normal strength 0.65 for raised paint detail. The color map is sRGB; the normal map stays in linear data space. Each cloned material inherits its source ball's exact color. Full scale inheritance gives each splatter a footprint three times the ball diameter, so larger balls leave proportionally larger marks. Marks stay opaque for the first 85 percent of their 90-second lifetime, then fade smoothly. Capacity 512 accommodates roughly 450 steady-state marks at five impacts per second.
+The balls reuse the Spheres preset's lit circular sprites and spherical normals, with roughness raised to 0.95 and no metalness for a matte paint finish. The rough decal material uses splat2.png for its white color and transparent silhouette, together with splat2_norm.jpg at normal strength 0.65 for raised paint detail. The color map is sRGB; the normal map stays in linear data space. Each cloned material inherits its source ball's exact color. Full scale inheritance gives each splatter a footprint three times the ball diameter, so larger balls leave proportionally larger marks. `DecalRenderer.Warp.FromVelocity(3, 0.3)` warps each footprint forward along the incoming motion projected onto the receiver, keeping the impact and rear extent anchored while the front stretches and flares, with 0.3 additional length multiplier per world unit/second of tangential speed, while retaining exact collision placement and limiting stretch to three times the original length. Marks stay opaque for the first 85 percent of their 90-second lifetime, then fade smoothly. Capacity 512 accommodates roughly 450 steady-state marks at five impacts per second.
 
 
 [Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/splatter.js#L62)
@@ -127,6 +128,7 @@ The balls reuse the Spheres preset's lit circular sprites and spherical normals,
       new DecalRenderer(paint, {
         onSpawn: false,
         onCollision: true,
+        warp: DecalRenderer.Warp.FromVelocity(3, 0.3),
         // Backends without mesh identity search opposite the collision normal, including on walls.
         maxDistance: 1,
         depth: 0.08,

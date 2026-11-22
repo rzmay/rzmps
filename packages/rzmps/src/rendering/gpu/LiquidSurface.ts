@@ -1,3 +1,4 @@
+import { SurfaceVertexLayout } from '../../enums/SurfaceVertexLayout';
 import liquidVelocityActivity from './liquidVelocityActivity';
 import { createLiquidSurfaceQuery, sampleSurfaceField } from './liquidSurfaceSampling.utils';
 import * as THREE from 'three';
@@ -85,8 +86,8 @@ export interface SurfaceExtractor {
     smoothingNodes?: ComputeNode[];
     triangleMultiple?: number;
   };
-  /** Triangle soup by default; cells preserves sparse addresses, compact supplies a cell-to-output map. */
-  vertexLayout?: 'cells' | 'triangles' | 'compact';
+  /** Triangle soup by default; Cells preserves sparse addresses and Compact supplies a cell-to-output map. */
+  vertexLayout?: SurfaceVertexLayout | keyof typeof SurfaceVertexLayout;
 }
 
 interface LiquidSurfaceOptions extends SurfaceKernelOptions {
@@ -136,6 +137,8 @@ export default class LiquidSurface {
   private readonly vertexCurl: Vec4Storage;
   private readonly kernels: SurfaceParticleKernels;
   private kernelAttribute?: StorageBufferAttribute;
+  /** Existing inverse principal axes, indexed by the reconstruction input particle slot. */
+  get particleKernelAttribute(): StorageBufferAttribute | undefined { return this.kernelAttribute; }
   private kernelNode?: ComputeNode;
   private kernelKey = '';
   private readonly filterStrength = uniform(0.15);
@@ -193,6 +196,19 @@ export default class LiquidSurface {
     private readonly legacy = false,
     extraction: SurfaceExtraction | SurfaceExtractor = SurfaceExtraction.SurfaceNets,
   ) {
+    const extractor =
+      typeof extraction === 'function'
+        ? extraction
+        : extraction === SurfaceExtraction.MarchingCubes
+          ? buildMarchingCubes
+          : buildSurfaceNets;
+    const layout = extractor.vertexLayout ?? SurfaceVertexLayout.Triangles;
+    if (!Object.values(SurfaceVertexLayout).includes(layout as SurfaceVertexLayout)) {
+      throw new RangeError('Unknown surface vertex layout.');
+    }
+    this.cellVertices = layout === SurfaceVertexLayout.Cells;
+    const compact = layout === SurfaceVertexLayout.Compact;
+
     // Align independent reconstruction coverage to a fixed voxel lattice.
     const minimum = options.bounds.min.clone().divideScalar(options.voxelSize).floor();
     const maximum = options.bounds.max.clone().divideScalar(options.voxelSize).ceil();
@@ -219,14 +235,6 @@ export default class LiquidSurface {
         Math.max(this.queryGrid.minVolumeQuality, support * this.queryGrid.cellsPerAxis));
       this.queryGrid.setBounds(this.queryGrid.bounds.clone());
     }
-    const extractor =
-      typeof extraction === 'function'
-        ? extraction
-        : extraction === SurfaceExtraction.MarchingCubes
-          ? buildMarchingCubes
-          : buildSurfaceNets;
-    this.cellVertices = extractor.vertexLayout === 'cells';
-    const compact = extractor.vertexLayout === 'compact';
     const vertexCount = this.cellVertices ? this.grid.cellCount
       : compact ? Math.min(this.grid.cellCount, options.maxTriangles * 3) : options.maxTriangles * 3;
     this.outputVertexCapacity = vertexCount;

@@ -164,7 +164,7 @@ dissipation at 0.15. Only a modest temperature multiplier changes density dissip
 Simulation temperature normalization is independent of the renderer's temperature range.
 A render-only GasModule multiplies the existing mask contrast by up to 1.6 in sparse hot tongues,
 reduces it toward 0.75 in dense hot cores, and approaches a neutral multiplier as gas cools.
-The original simulation and renderer values remain unchanged; the module allocates no gas field.
+The render-only module allocates no gas field.
 Collision kills source particles at surfaces, and automatic fluid-collider collection blocks grid flow.
 
 The grid uses 3 brick subdivisions plus 3 cell subdivisions. `maxVolumeQuality: 8` caps cell width
@@ -173,8 +173,8 @@ hysteresis in both directions and prepares replacements before adopting them. It
 occupied gas as well as source particles. Automatic shrinking remains enabled with the configured delay.
 
 Source strength uses emitted mass per second, and scalar diffusion uses world units²/second.
-These values are calibrated at the original 0.125-unit reference cell width; coarser automatic
-quality no longer increases their physical emission or diffusion rate.
+Source strength is 0.016, velocity-source strength is 0.0045 and scalar diffusivity is 0.00005
+world units²/second. Physical emission and diffusion rates are independent of grid quality.
 
 
 [Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricFire.js#L27)
@@ -191,16 +191,16 @@ quality no longer increases their physical emission or diffusion rate.
     velocityDissipation: 0.15,
     buoyancy: 8,
     weight: 0.03,
-    // World-space source/diffusion units, calibrated at the original 0.125-unit cell width.
-    sourceStrength: 0.016362461737446838,
-    velocitySourceStrength: 0.004499676977797881,
+    // Mass emission per second and velocity coupling use world-space source units.
+    sourceStrength: 0.016,
+    velocitySourceStrength: 0.0045,
     sourceTemperature: 1.2,
     temperatureOverLifetime: (time) => 1 - time,
     // Preserve thin structures: strong diffusion rounds the plume into soft smoke lobes.
-    scalarDiffusion: 5.208333333333334e-05,
+    scalarDiffusion: 0.00005,
     vorticityStrength: 10,
     turbulenceNoiseStrength: 1,
-    // Slightly shorter-lived hot gas; retain the exported cool-smoke decay and flow settings.
+    // Hot gas dissipates faster than cool smoke.
     temperatureRange: [0, 1.2],
     densityDissipationByTemperature: [1.2, 1.5],
     // Start compact; physical bounds and the cell-width cap remain independent.

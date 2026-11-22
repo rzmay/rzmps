@@ -3,6 +3,8 @@ import { StorageBufferAttribute, type Node } from 'three/webgpu';
 import { float, floor, ivec3, storage, uniform, vec3, vec4 } from 'three/tsl';
 import type SparseVolumeGrid from '../../spatial/structures/gpu/SparseVolumeGrid';
 import { sparseCellIndex } from '../../spatial/structures/gpu/sparseVolumeSampling.utils';
+import type ParticleSystem from '../../core/ParticleSystem';
+import type { GPUParticleLike } from '../../simulation/gpu/Particle';
 import type { GPUSurfaceQuery } from '../../spatial/surfaces/surfaceSample.types';
 import { transformDirectionGPU, transformPointGPU } from '../../simulation/gpu/transforms.utils';
 
@@ -98,4 +100,16 @@ export function createLiquidSurfaceQuery() {
     },
     dispose() { enabled.value = 0; emptyField.dispose(); emptyPages.dispose(); },
   };
+}
+
+/** Shared exposed-surface/activity classification for foam and contact renderers. */
+export function liquidSurfaceConditionGPU(particle: GPUParticleLike, system: ParticleSystem,
+  sampler: GPUSurfaceQuery, options: { minimumDeformity?: number; upwardOnly?: boolean } = {}) {
+  const toWorld = uniform(system.getSimulationToWorldMatrix())
+    .onFrameUpdate(() => system.getSimulationToWorldMatrix());
+  const sample = sampler(toWorld.mul(vec4(particle.position, 1)).xyz);
+  let valid = sample.valid;
+  if (options.minimumDeformity) valid = valid.and(sample.deformation!.greaterThanEqual(options.minimumDeformity));
+  if (options.upwardOnly) valid = valid.and(sample.normal.y.greaterThanEqual(0));
+  return valid;
 }

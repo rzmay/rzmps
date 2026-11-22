@@ -209,9 +209,7 @@ export class GUIValueEditor {
                         arrayFolder,
                         value,
                         String(index),
-                        index === 0
-                            ? 'Min / 0'
-                            : 'Max / 1',
+                        String(index),
                         seen,
                     )
             );

@@ -7,19 +7,17 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">gas</span> <span class="example-tag">smoke</span> <span class="example-tag">plume</span> <span class="example-tag">volume</span> <span class="example-tag">webgpu</span></div>
 
-The initial Gas Volume preset's rolling flow, with a uniform warm-gray color and a very mild reddish tint.
+A continuous cloud of rolling warm-gray smoke with a subtle reddish tint.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/volumetricSmoke.png)
 
 ## Particle System Configuration
 
-This native WebGPU preset continuously emits through a repeating ten-second loop. Its solver,
-emission and motion settings follow the earlier Gas Volume example, before the fire redesign.
-The domain initially reserves 16 local units per side. Directional automatic padding and delayed
-shrinking keep the domain aligned with source motion and existing smoke support.
+This native WebGPU preset continuously emits through a repeating ten-second loop. Directional automatic padding and delayed shrinking
+keep the domain aligned with source motion and existing smoke support.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L10)
+[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L9)
 
 ```js
   const system = new ParticleSystem({
@@ -29,7 +27,6 @@ shrinking keep the domain aligned with source motion and existing smoke support.
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.45, 18, 10),
-        // Preserve the original continuous smoke source.
         rate: 100,
         radialSpeed: 1.5,
         initialValues: {
@@ -48,9 +45,8 @@ shrinking keep the domain aligned with source motion and existing smoke support.
         supportSpatialEffects: true,
         collisionOptions: { surfaceThickness: 0.02, bakedFieldResolution: 32 },
         pressureIterations: 16,
-        // Match the initial Gas Volume solver; color is independent of heat.
         externalForce: new THREE.Vector3(0, 0.05, 0),
-        densityDissipation: 0.6,
+        densityDissipation: 0.35,
         temperatureDissipation: 1.2,
         colorDissipation: 0.9,
         velocityDissipation: 0.3,
@@ -58,17 +54,16 @@ shrinking keep the domain aligned with source motion and existing smoke support.
         weight: 0.08,
         sourceTemperature: 1,
         temperatureOverLifetime: time => 1 - time,
-        // World-space source/diffusion units, calibrated at the original 0.125-unit cell width.
-        sourceStrength: 0.06135923151542564,
-        velocitySourceStrength: 0.004499676977797881,
-        scalarDiffusion: 0.0020833333333333333,
-        turbulenceNoiseStrength: 3,
+        // Mass emission per second and diffusivity in world units²/second.
+        sourceStrength: 0.5,
+        velocitySourceStrength: 0.0045,
+        scalarDiffusion: 0.005,
+        turbulenceNoiseStrength: 1.5,
         vorticityStrength: 10,
 
-        turbulenceNoiseFrequency: 0.9,
+        turbulenceNoiseFrequency: 1.5,
         turbulenceNoiseSpeed: 0.7,
         turbulenceNoiseOctaves: 2,
-        // Reserve the original domain and retain the current grid-owned cap.
         automaticPadding: true,
         spatialGridOptions: {
           brickSubdivisions: 3,
@@ -89,13 +84,13 @@ shrinking keep the domain aligned with source motion and existing smoke support.
           return new THREE.Vector3(size, size, size);
         }
       }),
-      // Fade source opacity without the original preset's changing particle colors.
+      // Fade particle emission near the end of its lifetime.
       new ColorOverLifetime({ alpha: time => 1 - THREE.MathUtils.smoothstep(time, 0.65, 1) }),
     ],
     renderers: [
       new VolumeRenderer({
         lightingGridOptions: { cellSize: 0.25, maxDistance: 16 },
-        color: '#564d4d',
+        color: '#867979',
         opacity: 0.75,
         threshold: 0.025,
         range: 0.02,
@@ -106,7 +101,7 @@ shrinking keep the domain aligned with source motion and existing smoke support.
         densityNoiseStretch: 0.125,
         densityNoiseStretchBySpeed: [0, 1],
         // Masked thin structures need finer ray sampling than the standard one-sample tier.
-        samplesPerVoxel: 2,
+        samplesPerVoxel: 4,
         steps: 256,
       }),
     ],
@@ -121,13 +116,12 @@ Short lifetimes and shrinking sizes keep the source compact; the Eulerian field 
 each particle expires. There is no pulsed emission gate. The renderer supplies the warm-gray tint.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L15)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L14)
 
 ```js
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.45, 18, 10),
-        // Preserve the original continuous smoke source.
         rate: 100,
         radialSpeed: 1.5,
         initialValues: {
@@ -148,19 +142,25 @@ each particle expires. There is no pulsed emission gate. The renderer supplies t
 
 Density/color, temperature and velocity dissipate independently. Buoyancy lifts warm gas, scalar
 diffusion spreads concentration, turbulence noise adds motion, and vorticity confinement preserves
-rolling detail. Temperature emission cools over particle lifetime. Turbulence settings use the
+rolling detail. Turbulence strength and frequency are both 1.5, adding smaller-scale motion without
+strongly pushing the entire cloud sideways. Temperature emission cools over particle lifetime. Turbulence settings use the
 `turbulenceNoiseStrength`, `turbulenceNoiseFrequency`, `turbulenceNoiseSpeed` and `turbulenceNoiseOctaves` names.
 
-The original upward lifetime force, particle noise motion, shrinking source sizes and lifetime alpha
-fade are restored too. ColorOverLifetime changes only alpha; it no longer cycles source colors.
-Source collision retains lifetime loss one and the grid discovers fluid colliders automatically.
+Upward lifetime force, particle noise motion, shrinking source sizes and lifetime alpha fade shape
+the source. ColorOverLifetime changes alpha while particle color remains white.
+Source collision uses lifetime loss one and the grid discovers fluid colliders automatically.
+Large mesh-collider sets share an occupancy atlas to stay within WebGPU sampled-texture limits.
+Closed meshes rendered with `BackSide` are collected as containers with a fluid interior; open sheets
+remain surface obstacles.
 
 Source strength uses emitted mass per second, and scalar diffusion uses world units²/second.
-These values are calibrated at the original 0.125-unit reference cell width; coarser automatic
-quality no longer increases their physical emission or diffusion rate.
+The source emits 0.5 mass units per particle per second before particle mass/alpha weighting,
+and diffusivity is 0.005 world units²/second. Density dissipation of 0.35 lets the stronger source
+accumulate into a larger cloud while gentle diffusion broadens its footprint. Coarser automatic quality
+no longer increases physical emission or diffusion rate.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L34)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L32)
 
 ```js
     modules: [
@@ -168,9 +168,8 @@ quality no longer increases their physical emission or diffusion rate.
         supportSpatialEffects: true,
         collisionOptions: { surfaceThickness: 0.02, bakedFieldResolution: 32 },
         pressureIterations: 16,
-        // Match the initial Gas Volume solver; color is independent of heat.
         externalForce: new THREE.Vector3(0, 0.05, 0),
-        densityDissipation: 0.6,
+        densityDissipation: 0.35,
         temperatureDissipation: 1.2,
         colorDissipation: 0.9,
         velocityDissipation: 0.3,
@@ -178,17 +177,16 @@ quality no longer increases their physical emission or diffusion rate.
         weight: 0.08,
         sourceTemperature: 1,
         temperatureOverLifetime: time => 1 - time,
-        // World-space source/diffusion units, calibrated at the original 0.125-unit cell width.
-        sourceStrength: 0.06135923151542564,
-        velocitySourceStrength: 0.004499676977797881,
-        scalarDiffusion: 0.0020833333333333333,
-        turbulenceNoiseStrength: 3,
+        // Mass emission per second and diffusivity in world units²/second.
+        sourceStrength: 0.5,
+        velocitySourceStrength: 0.0045,
+        scalarDiffusion: 0.005,
+        turbulenceNoiseStrength: 1.5,
         vorticityStrength: 10,
 
-        turbulenceNoiseFrequency: 0.9,
+        turbulenceNoiseFrequency: 1.5,
         turbulenceNoiseSpeed: 0.7,
         turbulenceNoiseOctaves: 2,
-        // Reserve the original domain and retain the current grid-owned cap.
         automaticPadding: true,
         spatialGridOptions: {
           brickSubdivisions: 3,
@@ -209,7 +207,7 @@ quality no longer increases their physical emission or diffusion rate.
           return new THREE.Vector3(size, size, size);
         }
       }),
-      // Fade source opacity without the original preset's changing particle colors.
+      // Fade particle emission near the end of its lifetime.
       new ColorOverLifetime({ alpha: time => 1 - THREE.MathUtils.smoothstep(time, 0.65, 1) }),
     ],
 ```
@@ -221,6 +219,11 @@ The renderer's warm-gray `color` multiplies transported particle color; white pa
 tint. The `densityNoiseStrength`, `densityNoiseContrast`, `densityNoiseFrequency` and `densityNoiseSpeed`
 settings supply visual breakup independently of simulated turbulence. Two samples per voxel and a
 256-step limit resolve masked detail without intentionally changing opacity.
+Sampling is relative to cell width: when cells coarsen from 0.125 to 0.25 units, four samples per voxel
+restore the 0.0625-unit spacing provided by two samples at the finer tier. Larger bounds can also reach
+the maximum-step budget. Increasing either sampling control costs rendering work; density-noise frequency
+stays fixed in simulation space, independently of the grid tier.
+
 
 There is no temperature-driven tint or lifetime color gradient. Simulation lighting/shadows can vary
 brightness, while the transported smoke keeps its single slightly reddish gray hue.
@@ -229,13 +232,13 @@ It inherits two cascades, four finest directions, four interval samples and one 
 new lights entering range and HDRI changes refresh lighting even when particle simulation is paused.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L85)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/volumetricSmoke.js#L81)
 
 ```js
     renderers: [
       new VolumeRenderer({
         lightingGridOptions: { cellSize: 0.25, maxDistance: 16 },
-        color: '#564d4d',
+        color: '#867979',
         opacity: 0.75,
         threshold: 0.025,
         range: 0.02,
@@ -246,7 +249,7 @@ new lights entering range and HDRI changes refresh lighting even when particle s
         densityNoiseStretch: 0.125,
         densityNoiseStretchBySpeed: [0, 1],
         // Masked thin structures need finer ray sampling than the standard one-sample tier.
-        samplesPerVoxel: 2,
+        samplesPerVoxel: 4,
         steps: 256,
       }),
     ],
@@ -258,3 +261,11 @@ The demo uses three brick subdivisions and three cell subdivisions for its realt
 domain. Larger smoke support can still request a coarser automatic tier.
 
 Density noise stretches along local flow, tapering to an unstretched mask as the gas comes to rest.
+
+## Render sampling quality
+
+Use `VolumeRenderer.samplesPerVoxel` for finer visual sampling at coarse gas qualities; the demo GUI
+calls it **Samples Per Voxel**. Increase `steps` too if a larger ray interval reaches that sample budget.
+This changes rendering cost and sample spacing, not gas density or simulation resolution. No automatic
+sampling or appearance adjustment is applied when the simulation quality changes. See
+[volume sampling](https://rzmps.rzmay.com/docs/guides/gpu-processing.html#volume-sampling) for the quality/performance tradeoff.

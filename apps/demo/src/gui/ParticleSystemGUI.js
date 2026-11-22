@@ -165,6 +165,10 @@ export class ParticleSystemGUI {
     return this.valueEditor.addObject(...args);
   }
 
+  addValue(...args) {
+    return this.valueEditor.addValue(...args);
+  }
+
   addDynamicValue(...args) {
     return this.valueEditor.addDynamicValue(...args);
   }
@@ -449,14 +453,17 @@ export class ParticleSystemGUI {
     folder.open();
     const destroyed = this.isSystemDestroyed(system);
     folder.add(system, 'simulationSpace', SimulationSpace).name('Simulation Space');
-    folder.add(system, 'sourceLossBehavior', SourceLossBehavior).name('Source Loss Mode');
-    folder.add(system, 'useSpatialEffects').name('Spatial Effects');
-    folder.add(system, 'spatialEffectBoundsFiltering').name('Spatial Bounds Filter');
+    folder.add(system, 'sourceLossBehavior', SourceLossBehavior).name('Source Loss Behavior');
+    folder.add(system, 'useSpatialEffects').name('Use Spatial Effects');
+    folder.add(system, 'spatialEffectBoundsFiltering').name('Spatial Effect Bounds Filtering');
     const gravityFolder = folder.addFolder('Gravity');
     gravityFolder.close();
     this.addVector3(gravityFolder, system.gravity, 'Gravity');
     this.addDynamicValue(folder, system, 'gravityModifier', 'Gravity Modifier');
     folder.add(system, 'simulationSpeed', 0, 4, 0.01).name('Simulation Speed');
+    folder.add(system, 'substep').name('Substep');
+    folder.add(system, 'substepDeltaTime', 0.001, 1, 0.001).name('Substep Delta Time');
+    this.addValue(folder, system, 'maxCatchup', 'Max Catchup');
     folder.add(system, 'inheritVelocity', 0, 4, 0.01).name('Inherit Velocity');
     folder.add(system, 'duration', 0.01).name('Duration');
     folder.add(system, 'prewarm').name('Prewarm');
@@ -464,12 +471,12 @@ export class ParticleSystemGUI {
     folder.add(system, 'looping').name('Looping');
     folder.add(system, 'endBehavior', END_BEHAVIOR_OPTIONS).name('End Behavior');
     folder.add(system, 'maxParticles', 0, 100000, 1).name('Max Particles');
-    folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling');
+    folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling Mode');
     folder.add(system, 'simulationDistance', 0, 1000, 0.1).name('Simulation Distance');
     const gpuProcessing = folder.add(system, 'gpuProcessing').name('GPU Processing');
     if (this.viewState.renderer === 'webgl') gpuProcessing.disable();
-    folder.add(system, 'gpuDebug').name('GPU Debug Logs');
-    folder.add(system, 'gpuDebugInterval', 1, 120, 1).name('GPU Debug Every');
+    folder.add(system, 'gpuDebug').name('GPU Debug');
+    folder.add(system, 'gpuDebugInterval', 1, 120, 1).name('GPU Debug Interval');
     const rendererMode = this.viewState.renderer;
     const gpuStatus = {
       get active() {
@@ -481,10 +488,11 @@ export class ParticleSystemGUI {
     const lodFolder = folder.addFolder('LOD');
     lodFolder.close();
     this.buildLOD(lodFolder, system);
-    folder.add(system, 'useLiveCubemap').name('Live Cubemap');
-    folder.add(system.liveCubemap, 'fps', 1, 120, 1).name('Live Cubemap FPS');
-    folder.add(system.liveCubemap, 'resolutionScale', 0.05, 1, 0.01).name('Live Cubemap Scale');
-    folder.add(system.liveCubemap, 'intensity', 0, 10, 0.01).name('Live Cubemap Intensity');
+    folder.add(system, 'useLiveCubemap').name('Use Live Cubemap');
+    const cubemap = folder.addFolder('Cubemap Settings');
+    cubemap.add(system.liveCubemap, 'fps', 1, 120, 1).name('FPS');
+    cubemap.add(system.liveCubemap, 'resolutionScale', 0.05, 1, 0.01).name('Resolution Scale');
+    cubemap.add(system.liveCubemap, 'intensity', 0, 10, 0.01).name('Intensity');
     const controlOptions = {
       children: true,
     };

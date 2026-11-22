@@ -34,3 +34,21 @@ test('compute build tracing excludes async waits, avoids nested double counting 
   restore();
   assert.equal(renderer.debug.onNodeBuilderCreated, previous);
 });
+
+
+test('slow anonymous graph traces identify the captured TSL function without traversing live owners', t => {
+  let now = 0;
+  t.mock.method(performance, 'now', () => (now += 10));
+  const records = [], renderer = { debug: {} };
+  const node = { isComputeNode: true, computeNode: { node: { shaderNode: { jsFunc: () => 'receiver stencil' } } },
+    build() {} };
+  const builder = { getBuildStage: () => 'setup', flowNode() {}, prebuild() {}, buildCode() {},
+    buildUpdateNodes() {}, build() { node.build(this); } };
+  const restore = traceComputeBuilds(renderer, record => records.push(record));
+  renderer.debug.onNodeBuilderCreated(builder, node);
+  builder.build();
+  assert.equal(records[0].family, 'compute');
+  assert.match(records[0].source, /receiver stencil/);
+  assert.match(records[0].origin, /Compute preparation origin/);
+  restore();
+});

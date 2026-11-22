@@ -78,6 +78,28 @@ element(index): Node<"uvec2">;
 originalCount: Node<"uint">;
 ```
 
+***
+
+<a id="sourceindex"></a>
+
+### sourceIndex?
+
+```ts
+optional sourceIndex?: (index) => Node<"uint">;
+```
+
+Optional original simulation identity for compact renderer selections.
+
+#### Parameters
+
+##### index
+
+`Node`\<`"uint"`\>
+
+#### Returns
+
+`Node`\<`"uint"`\>
+
 ## Methods
 
 <a id="appearance"></a>

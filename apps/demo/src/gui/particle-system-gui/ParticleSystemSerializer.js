@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as TSL from 'three/tsl';
 import {
   AudioRenderer,
+  Renderer,
   GasSimulation,
   GasModule,
   FLIPSimulation,
@@ -136,6 +137,12 @@ export class ParticleSystemSerializer {
       `  useSpatialEffects: ${this.serializeValue(system.useSpatialEffects)},`,
       `  spatialEffectBoundsFiltering: ${this.serializeValue(system.spatialEffectBoundsFiltering)},`,
       `  simulationSpeed: ${this.serializeValue(system.simulationSpeed)},`,
+      `  substep: ${this.serializeValue(system.substep)},`,
+      `  substepDeltaTime: ${this.serializeValue(system.substepDeltaTime)},`,
+      `  maxCatchup: ${this.serializeValue(system.maxCatchup)},`,
+      `  gpuProcessing: ${this.serializeValue(system.gpuProcessing)},`,
+      `  gpuDebug: ${this.serializeValue(system.gpuDebug)},`,
+      `  gpuDebugInterval: ${this.serializeValue(system.gpuDebugInterval)},`,
       `  duration: ${this.serializeValue(system.duration)},`,
       `  prewarm: ${this.serializeValue(system.prewarm)},`,
       `  prewarmFPS: ${this.serializeValue(system.prewarmFPS)},`,
@@ -146,9 +153,8 @@ export class ParticleSystemSerializer {
       `  simulationDistance: ${this.serializeValue(system.simulationDistance)},`,
       `  lod: ${this.serializeValue(system.lod)},`,
       `  useLiveCubemap: ${this.serializeValue(system.useLiveCubemap)},`,
-      `  liveCubemapFPS: ${this.serializeValue(system.liveCubemap.fps)},`,
-      `  liveCubemapResolutionScale: ${this.serializeValue(system.liveCubemap.resolutionScale)},`,
-      `  liveCubemapIntensity: ${this.serializeValue(system.liveCubemap.intensity)},`,
+      `  cubemapSettings: ${this.serializeValue({ fps: system.liveCubemap.fps,
+        resolutionScale: system.liveCubemap.resolutionScale, intensity: system.liveCubemap.intensity })},`,
       '  emitters: [',
       this.indent(emitters, 4),
       '  ],',
@@ -314,17 +320,10 @@ export class ParticleSystemSerializer {
         advectionMethod: module.advectionMethod,
         boundsPolicy: module.boundsPolicy,
         bounds: module.autoBounds ? undefined : module.bounds,
-        boundsPadding: module.boundsPadding,
         automaticPadding: module.automaticPadding,
         showGridHelper: module.showGridHelper,
         spatialGridOptions: module.spatialGridOptions,
-        pressureSolver: module.pressureSolver,
-        multigrid: module.multigrid,
-        pressureMinIterations: module.pressureMinIterations,
-        pressureMaxIterations: module.pressureMaxIterations,
-        pressureTolerance: module.pressureTolerance,
-        pressureWarmStart: module.pressureWarmStart,
-        pressureIterations: module.pressureIterations,
+        ...this.getFluidPressureOptions(module),
         externalForce: module.externalForce,
         maxVelocity: module.maxVelocity,
         colorDissipation: module.colorDissipation,
@@ -352,12 +351,11 @@ export class ParticleSystemSerializer {
       return `new FLIPSimulation(${this.serializeValue({
         collisionOptions: module.collisionOptions,
         bounds: module.autoBounds ? undefined : module.bounds,
-        boundsPadding: module.boundsPadding,
         boundsPolicy: module.boundsPolicy,
         automaticPadding: module.automaticPadding,
         showGridHelper: module.showGridHelper,
         spatialGridOptions: module.spatialGridOptions,
-        pressureIterations: module.pressureIterations,
+        ...this.getFluidPressureOptions(module),
         externalForce: module.externalForce,
         maxVelocity: module.maxVelocity,
         picRatio: module.picRatio,
@@ -535,6 +533,8 @@ export class ParticleSystemSerializer {
         emptySpaceSkipping: renderer.emptySpaceSkipping,
         dynamicResolution: renderer.dynamicResolution,
         downsample: renderer.downsample,
+        jitter: renderer.jitter,
+        stepSizeMultiplier: renderer.stepSizeMultiplier,
         jitterStrength: renderer.jitterStrength,
         jitterSeed: renderer.jitterSeed,
         anisotropy: renderer.anisotropy,
@@ -579,6 +579,11 @@ export class ParticleSystemSerializer {
       const material = Array.isArray(renderer.material) ? `[${materials.join(', ')}]` : materials[0];
       const options = {
         materialIndex: renderer.materialIndex,
+        warp: renderer.warp,
+        inheritMaterial: renderer.inheritMaterial,
+        unionCoverage: renderer.unionCoverage,
+        duplicateDistance: renderer.duplicateDistance,
+        duplicateInterval: renderer.duplicateInterval,
         direction: renderer.direction,
         hitSelection: renderer.hitSelection,
         maxHits: renderer.maxHits,
@@ -630,6 +635,8 @@ export class ParticleSystemSerializer {
         events: renderer.events,
         eventScope: renderer.eventScope,
         maxClips: renderer.maxClips,
+        shouldPlay: renderer.shouldPlay,
+        gpuInterpolationRate: renderer.gpuInterpolationRate,
         ratio: renderer.ratio,
         collisionRatio: renderer.collisionRatio,
         pitch: renderer.pitch,
@@ -775,8 +782,23 @@ export class ParticleSystemSerializer {
     return `new ${renderer.constructor.name}(${this.serializeValue(this.getSerializableRuntimeOptions(renderer))})`;
   }
 
+  getFluidPressureOptions(module) {
+    return Object.fromEntries([
+      'pressureIterations', 'pressureSolver', 'multigrid', 'pressureMinIterations',
+      'pressureMaxIterations', 'pressureTolerance', 'pressureWarmStart',
+      'adaptiveTimestep', 'cfl', 'maxFluidSubsteps',
+    ].filter(key => key in module).map(key => [key, module[key]]));
+  }
+
   getLODOptions(target) {
     const options = {};
+    // Keep filtering/grouping controls when exporting any renderer, not just lights.
+    for (const key of ['count', 'ratio', 'groupingRadius', 'condition', 'conditionGPU']) {
+      if (key in target) options[key] = target[key];
+    }
+    if (target instanceof DecalRenderer) {
+      options.count = Object.getOwnPropertyDescriptor(Renderer.prototype, 'count').get.call(target);
+    }
     if ('materialComposite' in target) {
       options.materialComposite = target.materialComposite;
       options.materialCompositeGPU = target.materialCompositeGPU;

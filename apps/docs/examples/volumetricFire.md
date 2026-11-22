@@ -40,7 +40,7 @@ dissipation at 0.15. Only a modest temperature multiplier changes density dissip
 Simulation temperature normalization is independent of the renderer's temperature range.
 A render-only GasModule multiplies the existing mask contrast by up to 1.6 in sparse hot tongues,
 reduces it toward 0.75 in dense hot cores, and approaches a neutral multiplier as gas cools.
-The original simulation and renderer values remain unchanged; the module allocates no gas field.
+The render-only module allocates no gas field.
 Collision kills source particles at surfaces, and automatic fluid-collider collection blocks grid flow.
 
 The grid uses 3 brick subdivisions plus 3 cell subdivisions. `maxVolumeQuality: 8` caps cell width
@@ -49,8 +49,8 @@ hysteresis in both directions and prepares replacements before adopting them. It
 occupied gas as well as source particles. Automatic shrinking remains enabled with the configured delay.
 
 Source strength uses emitted mass per second, and scalar diffusion uses world units²/second.
-These values are calibrated at the original 0.125-unit reference cell width; coarser automatic
-quality no longer increases their physical emission or diffusion rate.
+Source strength is 0.016, velocity-source strength is 0.0045 and scalar diffusivity is 0.00005
+world units²/second. Physical emission and diffusion rates are independent of grid quality.
 
 <ExampleCode region="modules" />
 

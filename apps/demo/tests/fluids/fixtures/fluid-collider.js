@@ -89,3 +89,94 @@ window.sharedFluidSystems = async () => {
   geometry.dispose();
   return { shared, timings };
 };
+
+// Exercise more geometry fields than the baseline device's sampled-texture limit permits individually.
+window.manyFluidColliders = async (sharedGeometry = false) => {
+  const { StorageBufferAttribute } = await import('three/webgpu');
+  const { storage, vec3, uint } = await import('three/tsl');
+  const shared = sharedGeometry ? new THREE.BoxGeometry(0.35, 0.35, 0.35) : undefined;
+  const colliders = Array.from({ length: 20 }, (_, i) => {
+    const collider = new FluidCollider({ geometry: shared ?? new THREE.BoxGeometry(0.35, 0.35, 0.35),
+      bakedFieldResolution: sharedGeometry ? 8 : i % 2 ? 8 : 12 });
+    collider.position.set((i % 4 - 1.5) * 0.45, (Math.floor(i / 4) % 3 - 1) * 0.45,
+      Math.floor(i / 12) * 0.45);
+    return collider;
+  });
+  const gas = new GasSimulation({ spatialEffects: colliders, initialBrickCapacity: 8, maxActiveBricks: 8,
+    bounds: new THREE.Box3(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1)),
+    automaticPadding: false, spatialGridOptions: { brickSubdivisions: 1, cellSubdivisions: 2 } });
+  const owner = new ParticleSystem({ gpuProcessing: true, emitters: [], modules: [gas], renderers: [] });
+  const nodes = [], buffers = [];
+  try {
+    await owner.prepare(renderer);
+    const grid = gas.volumeGrid;
+    renderer.compute(Fn(() => {
+      grid.pages.element(instanceIndex).assign(instanceIndex.add(1));
+      grid.slots.element(instanceIndex).assign(instanceIndex.add(1));
+    })().compute(grid.brickCount));
+    grid.updateDispatch(renderer);
+    const context = { system: owner, deltaTimeNode: uniform(1 / 60) };
+    gas.computeSolidField(context, renderer);
+    const fields = colliders.map(collider => collider.getGPUField());
+    const points = [-0.5, -0.175, -0.12, 0, 0.12, 0.175, 0.5];
+    const referenceAttribute = new StorageBufferAttribute(new Float32Array(points.length * colliders.length), 1);
+    const sampledAttribute = new StorageBufferAttribute(new Float32Array(points.length * colliders.length), 1);
+    buffers.push(referenceAttribute, sampledAttribute);
+    const reference = storage(referenceAttribute, 'float', points.length * colliders.length);
+    const sampled = storage(sampledAttribute, 'float', points.length * colliders.length);
+    for (let i = 0; i < colliders.length; i++) {
+      const node = Fn(() => {
+        points.forEach((x, j) => reference.element(i * points.length + j).assign(
+          fields[i].sample(vec3(x, 0, 0), false)));
+      })().compute(1);
+      nodes.push(node); renderer.compute(node);
+    }
+    const atlasNode = Fn(() => {
+      colliders.forEach((collider, i) => {
+        const sampler = gas.colliderAtlas.sampler(fields[i]);
+        points.forEach((x, j) => sampled.element(uint(i * points.length + j)).assign(
+          fields[i].sample(vec3(x, 0, 0), false, sampler)));
+      });
+    })().compute(1);
+    nodes.push(atlasNode); renderer.compute(atlasNode);
+    const expected = new Float32Array(await renderer.getArrayBufferAsync(referenceAttribute));
+    const actual = new Float32Array(await renderer.getArrayBufferAsync(sampledAttribute));
+    const solids = new Float32Array(await renderer.getArrayBufferAsync(gas.solidAttribute));
+    const boundary = new Float32Array(await renderer.getArrayBufferAsync(gas.boundaryAttribute));
+    const createQuery = gas.colliderAtlas.createQuery;
+    let boundaryError = 0, solidError = 0;
+    try {
+      gas.colliderAtlas.createQuery = () => undefined;
+      gas.solidNode = gas.solidFreshNode = undefined;
+      gas.solidStateKey = '';
+      gas.computeSolidField(context, renderer);
+      const referenceSolid = new Float32Array(await renderer.getArrayBufferAsync(gas.solidAttribute));
+      const referenceBoundary = new Float32Array(await renderer.getArrayBufferAsync(gas.boundaryAttribute));
+      for (let i = 0; i < solids.length; i++) {
+        solidError = Math.max(solidError, Math.abs(referenceSolid[i] - solids[i]));
+      }
+      for (let i = 0; i < boundary.length; i++) {
+        boundaryError = Math.max(boundaryError, Math.abs(referenceBoundary[i] - boundary[i]));
+      }
+    } finally {
+      gas.colliderAtlas.createQuery = createQuery;
+      gas.solidNode = gas.solidFreshNode = undefined;
+    }
+    const compact = !!gas.colliderAtlas.queryAttribute;
+    const firstAtlas = gas.colliderAtlas.texture;
+    gas.computeSolidField(context, renderer);
+    const reused = firstAtlas === gas.colliderAtlas.texture;
+    gas.spatialEffects = colliders.slice(0, 2);
+    gas.computeSolidField(context, renderer);
+    const released = !gas.colliderAtlas.texture;
+    return { fields: fields.length, limit: renderer.backend.device.limits.maxSampledTexturesPerShaderStage,
+      error: Math.max(...actual.map((value, i) => Math.abs(value - expected[i]))),
+      occupied: solids.reduce((sum, value) => sum + value, 0),
+      finite: boundary.every(Number.isFinite), reused, released, boundaryError, solidError, compact,
+      uniqueFields: new Set(fields).size };
+  } finally {
+    await renderer.backend.device.queue.onSubmittedWorkDone();
+    nodes.forEach(node => node.dispose()); buffers.forEach(buffer => buffer.dispose());
+    owner.destroy(); new Set(colliders.map(collider => collider.geometry)).forEach(geometry => geometry.dispose());
+  }
+};

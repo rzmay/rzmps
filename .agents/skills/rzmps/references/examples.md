@@ -15,6 +15,7 @@
 - [Fireball](examples/./fireball.md) — Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks. Preset by [rzmay](https://github.com/rzmay).
 - [Fireflies](examples/./fireflies.md) — Fireflies use spatial queries and native events to emit attached glow pulses and small lights. Preset by [rzmay](https://github.com/rzmay).
 - [Fireworks](examples/./fireworks.md) — Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks. Preset by [rzmay](https://github.com/rzmay).
+- [FLIP Fluid](examples/./flipFluid.md) — A pouring FLIP liquid with a reconstructed water surface, spray and attached foam. Preset by [rzmay](https://github.com/rzmay).
 - [LOD Stress Test](examples/./lodStress.md) — Unified LOD with density compensation under a dense simulation load. Preset by [rzmay](https://github.com/rzmay).
 - [Metal Balls](examples/./collisionSubEmitters.md) — Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces. Preset by [rzmay](https://github.com/rzmay).
 - [Particle Trail](examples/./particleTrail.md) — Per-particle trail rendering with inherited color and alpha over moving particles. Preset by [rzmay](https://github.com/rzmay).
@@ -27,4 +28,4 @@
 - [Suzanne](examples/./suzanne.md) — Mesh-surface emission from a model with lit sprite rendering. Preset by [rzmay](https://github.com/rzmay).
 - [Suzanne Instances](examples/./suzanneInstances.md) — Mesh instancing with Suzanne particles and randomized transforms. Preset by [rzmay](https://github.com/rzmay).
 - [Volumetric Fire](examples/./volumetricFire.md) — Flickering volumetric flames, cooling smoke, particle lights and secondary heat distortion. Preset by [rzmay](https://github.com/rzmay).
-- [Volumetric Smoke](examples/./volumetricSmoke.md) — The original rolling Gas Volume flow, with continuous warm-gray smoke and a subtle reddish tint. Preset by [rzmay](https://github.com/rzmay).
+- [Volumetric Smoke](examples/./volumetricSmoke.md) — A continuous cloud of rolling warm-gray smoke with a subtle reddish tint. Preset by [rzmay](https://github.com/rzmay).

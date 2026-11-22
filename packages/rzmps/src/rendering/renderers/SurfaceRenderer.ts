@@ -1,4 +1,8 @@
-import { createLiquidSurfaceQuery } from '../gpu/liquidSurfaceSampling.utils';
+import LiquidDecalSamples from '../gpu/LiquidDecalSamples';
+import type { RendererCondition } from '../../core/Renderer';
+import type { DecalWarpSampler } from '../decals/decalWarp.utils';
+import { decalHitNormal } from '../decals/decalWarp.utils';
+import { createLiquidSurfaceQuery, liquidSurfaceConditionGPU } from '../gpu/liquidSurfaceSampling.utils';
 import * as THREE from 'three';
 import StagedGPUAllocation from '../../utils/gpu/StagedGPUAllocation';
 import LiquidMaterial from '../materials/LiquidMaterial';
@@ -105,6 +109,7 @@ export default class SurfaceRenderer extends Renderer {
   receiveShadow: boolean;
   private surface?: LiquidSurface;
   private readonly surfaceQuery = createLiquidSurfaceQuery();
+  private readonly decalSamples = new LiquidDecalSamples(this.surfaceQuery.sampleSurfaceGPU);
   /** World-space, near-surface GPU query. Safe before preparation, after clear, and across pool replacement. */
   readonly sampleSurfaceGPU = this.surfaceQuery.sampleSurfaceGPU;
   private allocation?: StagedGPUAllocation<LiquidSurface>;
@@ -173,6 +178,45 @@ export default class SurfaceRenderer extends Renderer {
     this.syncMaterialColor();
   }
 
+  /** Near-surface classification shared with foam; interior markers are not eligible.
+   * GPU reconstruction is required, just as for sampleSurfaceGPU. */
+  surfaceCondition(options: { minimumDeformity?: number; upwardOnly?: boolean } = {}): RendererCondition {
+    if (options.minimumDeformity !== undefined
+      && (!Number.isFinite(options.minimumDeformity) || options.minimumDeformity < 0)) {
+      throw new RangeError('Surface minimumDeformity must be finite and nonnegative.');
+    }
+    const selected = new WeakSet<Particle>();
+    const condition: RendererCondition = particle => selected.has(particle);
+    condition.gpu = (particle, _dt, context) =>
+      liquidSurfaceConditionGPU(particle, context.system, this.sampleSurfaceGPU, options);
+    condition.prepareReadback = async particles => {
+      for (const particle of particles) selected.add(particle);
+    };
+    return condition;
+  }
+
+  /** Projects the already reconstructed anisotropic kernel into the receiver plane; no new covariance work. */
+  decalWarp(): DecalWarpSampler {
+    const sampler: DecalWarpSampler = (particle, _ray, hit) => {
+      const sample = this.decalSamples.get(particle);
+      if (!sample) return {};
+      const normal = decalHitNormal(hit);
+      const rotation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+      rotation.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), particle.rotation.z));
+      const u = new THREE.Vector3(1, 0, 0).applyQuaternion(rotation);
+      const v = new THREE.Vector3(0, 1, 0).applyQuaternion(rotation);
+      const a = u.dot(u.clone().applyMatrix3(sample.axes));
+      const b = u.dot(v.clone().applyMatrix3(sample.axes));
+      const d = v.dot(v.clone().applyMatrix3(sample.axes));
+      const angle = 0.5 * Math.atan2(2 * b, a - d);
+      const delta = Math.sqrt((a - d) ** 2 + 4 * b * b);
+      return { scale: new THREE.Vector2(Math.sqrt(Math.max(1e-6, (a + d + delta) * 0.5)),
+        Math.sqrt(Math.max(1e-6, (a + d - delta) * 0.5))), rotation: angle };
+    };
+    sampler.prepareReadback = (particles, system) => this.decalSamples.prepare(particles, system);
+    return sampler;
+  }
+
   /** Renderer-owned material; the supplied material is cloned and never disposed by this renderer. */
   get material(): THREE.Material {
     return this.mesh.material as THREE.Material;
@@ -228,6 +272,7 @@ export default class SurfaceRenderer extends Renderer {
       throw new Error('SurfaceRenderer requires native WebGPU particle processing.');
     }
     this.updateSurfaceResources(buffers, system, renderer);
+    this.decalSamples.bind(this.surface?.particleKernelAttribute);
   }
 
   private updateSurfaceResources(
@@ -498,6 +543,7 @@ export default class SurfaceRenderer extends Renderer {
 
   clear(): void {
     this.surfaceQuery.invalidate();
+    this.decalSamples.bind();
     this.mesh.visible = false;
     this.surface?.clear();
   }
@@ -509,6 +555,7 @@ export default class SurfaceRenderer extends Renderer {
 
   destroy(): void {
     this.surfaceQuery.dispose();
+    this.decalSamples.dispose();
     super.reset();
     this.mesh.removeFromParent();
     if (this.allocation) this.allocation.dispose();

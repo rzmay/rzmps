@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
+import { createWebGPURenderer } from '../../../src/rendering/createWebGPURenderer.js';
 import { uniform, Fn, storage, vec3, vec4 } from 'three/tsl';
 import { Module, GasModule, ParticleSystem, VolumeRenderer } from '@rzmps/rzmps';
 
 const gpu = new URLSearchParams(location.search).get('backend') === 'webgpu';
-const renderer = gpu ? new WebGPURenderer({
+const renderer = gpu ? await createWebGPURenderer({
   antialias: new URLSearchParams(location.search).has('antialias'),
   trackTimestamp: true,
   reversedDepthBuffer: new URLSearchParams(location.search).has('reversed'),
@@ -42,6 +43,9 @@ scene.add(system);
 if (gpu) await renderer.renderAsync(scene, camera);
 else renderer.render(scene, camera);
 system.addRenderer(volume);
+if (gpu && new URLSearchParams(location.search).has('prepare')) {
+  await volume.prepareResources(system, renderer);
+}
 window.renderVolume = async tags => {
   volume.tags = tags;
   volume.update([], system, 0);

@@ -144,11 +144,13 @@ export default class GPURendererChildren {
     const mapping = storage(this.mapping!, 'uvec2', capacity + 1);
     const counters = storage(this.counters!, 'uint', 4).toAtomic() as unknown as AtomicUintStorage;
     const spacing = this.spacing;
-    const originalCount = uint(count);
+    const originalCount = input instanceof GPUParticleRenderBufferState
+      ? input.instanceCountNode ?? uint(count) : uint(count);
     const lodStart = originalCount.add(atomicLoad(counters.element(0)));
     const range = originalCount.add(atomicLoad(counters.element(0))).add(atomicLoad(counters.element(1)));
     output.instanceCountNode = range.lessThan(uint(capacity)).select(range, uint(capacity)) as Node<'uint'>;
     output.storage.hierarchy = { mapping, originalCount, lodStart: mapping.element(capacity).y };
+    output.storage.sourceIndex = input instanceof GPUParticleRenderBufferState ? input.storage.sourceIndex : undefined;
     // Recreate the public view after installing hierarchy metadata.
     output.particle = output.storage.createParticle();
     output.version += 1;
@@ -192,45 +194,47 @@ export default class GPURendererChildren {
       return vec3(xy.mul(cos(angle)), xy.mul(sin(angle)), z).mul(r);
     };
     nodes.push(Fn(() => {
-      const parent = copy(instanceIndex, instanceIndex, true);
-      const selected = tagMask === undefined ? parent.alive.notEqual(uint(0))
-        : parent.alive.notEqual(uint(0)).and(parent.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)));
-      If(selected, () => {
-        const id = uvec2(instanceIndex, parent.generation);
-        const seed = seedFor(id, uint(0), 12347);
-        const count = this.parameters.number('children.count', () => this.options.count, float(0), 0, seed);
-        const n = uint(count.max(0).floor()).toVar();
-        const start = atomicAdd(counters.element(0), n).add(originalCount).toVar();
-        Loop({ start: uint(0), end: n, type: 'uint', condition: '<' }, ({ i }) => {
-          const destination = start.add(i).toVar();
-          If(destination.lessThan(uint(capacity)), () => {
-            const child = copy(instanceIndex, destination, true);
-            mapping.element(destination.sub(originalCount)).assign(uvec2(instanceIndex, i));
-            const childSeed = seedFor(id, i, 0x72656e64);
-            const radius = this.parameters.number(
-              'children.radius', () => this.options.radius, parent.time, 0, childSeed,
-            ).max(0);
-            const delta = offset(childSeed, radius);
-            child.position.addAssign(delta);
-            const d = radius.greaterThan(float(0)).select(delta.length().div(radius.max(1e-8)), float(0));
-            const parameter = (amount: number, stream: number) => {
-              const t = d.add(hash(childSeed.add(stream)).sub(0.5).mul(amount)).clamp(0, 1);
-              return options.radialFalloff ? evaluateByParameterNumberGPU(options.radialFalloff, t) : t;
-            };
-            if (options.rotation !== undefined) {
-              const rotation = options.rotation;
-              const offset = evaluateByParameterVectorGPU(
-                typeof rotation === 'number' || rotation instanceof Vector3 ? [rotation, rotation] : rotation,
-                parameter(options.randomizeRotation ?? 0, 6),
-              );
-              child.rotation.assign(composeEulerXYZGPU(parent.rotation, offset));
-            }
-            const evaluate = (v: RendererChildrenOptions['scale'], t: Node<'float'>) =>
-              typeof v === 'number' || v === undefined ? float(v ?? 1) : evaluateByParameterNumberGPU(v, t);
-            child.scale.mulAssign(evaluate(options.scale, parameter(options.randomizeScale ?? 0, 4)));
-            child.alpha.mulAssign(evaluate(options.alpha, parameter(options.randomizeAlpha ?? 0, 5)));
-          }).Else(() => {
-            atomicAdd(counters.element(2), uint(1));
+      If(instanceIndex.lessThan(originalCount), () => {
+        const parent = copy(instanceIndex, instanceIndex, true);
+        const selected = tagMask === undefined ? parent.alive.notEqual(uint(0))
+          : parent.alive.notEqual(uint(0)).and(parent.tagMask.bitAnd(uint(tagMask)).notEqual(uint(0)));
+        If(selected, () => {
+          const id = parent.id;
+          const seed = seedFor(id, uint(0), 12347);
+          const count = this.parameters.number('children.count', () => this.options.count, float(0), 0, seed);
+          const n = uint(count.max(0).floor()).toVar();
+          const start = atomicAdd(counters.element(0), n).add(originalCount).toVar();
+          Loop({ start: uint(0), end: n, type: 'uint', condition: '<' }, ({ i }) => {
+            const destination = start.add(i).toVar();
+            If(destination.lessThan(uint(capacity)), () => {
+              const child = copy(instanceIndex, destination, true);
+              mapping.element(destination.sub(originalCount)).assign(uvec2(instanceIndex, i));
+              const childSeed = seedFor(id, i, 0x72656e64);
+              const radius = this.parameters.number(
+                'children.radius', () => this.options.radius, parent.time, 0, childSeed,
+              ).max(0);
+              const delta = offset(childSeed, radius);
+              child.position.addAssign(delta);
+              const d = radius.greaterThan(float(0)).select(delta.length().div(radius.max(1e-8)), float(0));
+              const parameter = (amount: number, stream: number) => {
+                const t = d.add(hash(childSeed.add(stream)).sub(0.5).mul(amount)).clamp(0, 1);
+                return options.radialFalloff ? evaluateByParameterNumberGPU(options.radialFalloff, t) : t;
+              };
+              if (options.rotation !== undefined) {
+                const rotation = options.rotation;
+                const offset = evaluateByParameterVectorGPU(
+                  typeof rotation === 'number' || rotation instanceof Vector3 ? [rotation, rotation] : rotation,
+                  parameter(options.randomizeRotation ?? 0, 6),
+                );
+                child.rotation.assign(composeEulerXYZGPU(parent.rotation, offset));
+              }
+              const evaluate = (v: RendererChildrenOptions['scale'], t: Node<'float'>) =>
+                typeof v === 'number' || v === undefined ? float(v ?? 1) : evaluateByParameterNumberGPU(v, t);
+              child.scale.mulAssign(evaluate(options.scale, parameter(options.randomizeScale ?? 0, 4)));
+              child.alpha.mulAssign(evaluate(options.alpha, parameter(options.randomizeAlpha ?? 0, 5)));
+            }).Else(() => {
+              atomicAdd(counters.element(2), uint(1));
+            });
           });
         });
       });

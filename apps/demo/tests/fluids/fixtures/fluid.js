@@ -3,11 +3,11 @@ import * as THREE from 'three';
 import { WebGPURenderer, StorageBufferAttribute, Node } from 'three/webgpu';
 import { Fn, If, float, instanceIndex, storage, uint, vec3, vec4, ivec4 } from 'three/tsl';
 import { examples } from '../../../../../examples/index.js';
-import { experimentalExamples } from '../../../../../examples/experimental/index.js';
 import createScene from '../../../../../examples/scenes/fluidTeapot.js';
 import createCheckerboard from '../../../../../examples/scenes/checkerboard.js';
 import createMovingColliders from '../../../../../examples/scenes/movingColliders.js';
 import createWind from '../../../../../examples/scenes/wind.js';
+import createLightProbes from '../../../../../examples/scenes/lightProbes.js';
 import { Benchmarks, FluidCollider, GasSimulation } from '@rzmps/rzmps';
 import { attributeFluidMemory } from '../../../benchmarks/fluids/fluidMemoryAttribution.utils.js';
 import { trackGPUResources } from '../../../../../benchmarks/lib/gpuResourceTracking.utils.js';
@@ -36,7 +36,8 @@ const gasScene = new URLSearchParams(location.search).get('scene') === 'movingCo
 const sceneFactory = example === 'flipFluid' ? createScene : gasScene ? createMovingColliders
   : new URLSearchParams(location.search).get('scene') === 'wind' ? createWind : createCheckerboard;
 const sceneStart = performance.now();
-const sceneLifecycle = await sceneFactory(scene);
+const sceneLifecycle = new URLSearchParams(location.search).get('scene') === 'lightProbes'
+  ? await createLightProbes(scene, renderer) : await sceneFactory(scene);
 const sceneLoadMs = performance.now() - sceneStart;
 const fixedGas = new URLSearchParams(location.search).get('fixedGas') === 'true';
 const reviewAdvection = new URLSearchParams(location.search).get('reviewAdvection');
@@ -45,9 +46,9 @@ const reviewBricks = new URLSearchParams(location.search).get('reviewBricks');
 const reviewParticles = new URLSearchParams(location.search).get('reviewParticles');
 const measureStartup = new URLSearchParams(location.search).has('measureStartup');
 const constructorStart = performance.now();
-const selectedExample = [...examples, ...experimentalExamples].find(({ id }) => id === example);
+const selectedExample = examples.find(({ id }) => id === example);
 if (!selectedExample) throw new Error(`Unknown fluid fixture preset ${example}; available: `
-  + [...examples, ...experimentalExamples].map(({ id }) => id).join(', '));
+  + examples.map(({ id }) => id).join(', '));
 const system = await selectedExample.create({
   ...(reviewBricks ? { maxActiveBricks: Number(reviewBricks) } : {}),
   ...(reviewGrid ? { spatialGridOptions: {

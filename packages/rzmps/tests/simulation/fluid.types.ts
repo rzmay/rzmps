@@ -193,3 +193,10 @@ new SurfaceAttachment({ sampler: position => ({ distance: position.y, normal: ne
   velocity: new Vector3(), valid: true }) });
 FLIPSimulation.FoamCondition({ minimumSpeed: 0.25, minimumNeighbors: 3, maximumNeighbors: 24 });
 FLIPSimulation.FoamCondition({ minimumDeformity: 0.5, samplerGPU: sampledSurface.sampleSurfaceGPU });
+
+
+const { SurfaceVertexLayout } = await import('../../build/index.mjs');
+customExtractor.vertexLayout = SurfaceVertexLayout.Compact;
+customExtractor.vertexLayout = 'Cells';
+// @ts-expect-error Unknown vertex layouts are rejected.
+customExtractor.vertexLayout = 'Unknown';

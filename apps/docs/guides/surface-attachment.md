@@ -80,7 +80,7 @@ minimum neighbor count rejects isolated airborne markers; the maximum approximat
 local heuristic, not a full air-entrainment or foam solver.
 
 Use a separate secondary system with inherited initial velocity, `SurfaceAttachment`, lifetime fading, and translucent
-soft `SpriteRenderer` particles. The experimental FLIP demo uses white, transmissive bubble sprites with existing
+soft `SpriteRenderer` particles. The [FLIP Fluid demo](../examples/flipFluid.md) uses white, transmissive bubble sprites with existing
 textures and three render children per marker. Foam follows the liquid while retaining independent sliding. Spray remains a separate
 ballistic subsystem using `SprayCondition`, with no attachment module and no required surface-renderer dependency.
 
@@ -101,7 +101,7 @@ still controls the distance traveled along the local fluid velocity. Like other 
 `noiseSpeed` accepts a `ValueByParameter` driven by surface activity. Use `[speed, speed]` for a
 constant rate, for example `material.setFlow({ noiseSpeed: [0.4, 0.4] })`.
 
-The demo exposes **Noise Speed** under **Surface Renderer → Material → Flow Appearance**. Changes
+The demo exposes **Noise Speed** under **Surface Renderer → Material → Flow**. Changes
 use the existing material update path without rebuilding the liquid surface.
 
 ## Surface output addresses
@@ -110,8 +110,9 @@ Liquid reconstruction pages and generated mesh output grow independently. Built-
 compact vertex addresses; these addresses can change between frames. Use the implicit surface query
 for particle attachment rather than retaining mesh vertex indices.
 
-Custom `SurfaceExtractor` functions keep the existing triangle and cell layouts. A factory can also
-set `vertexLayout = 'compact'`: the context supplies `maximumVertices` and an atomic `vertexMap`.
+Custom `SurfaceExtractor` functions select `SurfaceVertexLayout.Triangles` (the default),
+`SurfaceVertexLayout.Cells`, or `SurfaceVertexLayout.Compact`. Import the enum from `@rzmps/rzmps`. A factory can also
+set `vertexLayout = SurfaceVertexLayout.Compact`: the context supplies `maximumVertices` and an atomic `vertexMap`.
 Store `outputVertex + 1` at the source cell address; zero means no vertex. Keep output writes below
 `maximumVertices` and report requested vertex/triangle counts through the existing counters. Smoothing
 storage is temporary and may reuse filtering scratch after extraction starts.

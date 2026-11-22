@@ -1,6 +1,7 @@
+import perturbNormal from './perturbNormal';
 import type { ColorRepresentation } from 'three';
 import { Color, MeshPhysicalMaterial, type MeshPhysicalMaterialParameters } from 'three';
-import { float, mix, mx_fractal_noise_float, positionLocal, positionView, smoothstep, time, vec3 } from 'three/tsl';
+import { float, mix, mx_fractal_noise_float, positionLocal, smoothstep, time, vec3 } from 'three/tsl';
 import stretchAlongVelocity from '../shaders/stretchAlongVelocity';
 import type { ValueByParameter } from '../../values/valueByParameter.types';
 
@@ -98,8 +99,9 @@ export default class LiquidMaterial extends MeshPhysicalMaterial {
       const activity = float(1).sub(float(1).sub(deforming).mul(float(1).sub(rotating)));
       const numeric = (value: ValueByParameter<number>) => evaluateByParameterNumberGPU(value, activity);
       const tint = evaluateByParameterColorGPU(flow.gradient, activity);
-      const point = stretchAlongVelocity(positionLocal, velocity, numeric(flow.distortion), speed)
-        .mul(numeric(flow.noiseFrequency).max(0));
+      const point = stretchAlongVelocity(positionLocal, velocity, numeric(flow.distortion), speed).mul(
+        numeric(flow.noiseFrequency).max(0),
+      );
 
       // Blend bounded advection phases so restarting a phase does not jump the visible pattern.
       const phase = time.mul(numeric(flow.noiseSpeed).max(0)).fract();
@@ -109,25 +111,11 @@ export default class LiquidMaterial extends MeshPhysicalMaterial {
       const b = mx_fractal_noise_float(point.sub(advection.mul(secondPhase)), 2, 2, 0.5);
       const height = mix(b, a, smoothstep(0, 1, float(1).sub(phase.mul(2).sub(1).abs())));
 
-      // Perturb the implicit geometric normal with a bounded view-space noise gradient.
-      const normal = context.geometricNormal;
-      const dx = positionView.dFdx(),
-        dy = positionView.dFdy();
-      const tangent = dy.cross(normal),
-        bitangent = normal.cross(dx);
-      const determinant = dx.dot(tangent);
-      const gradient = tangent
-        .mul(height.dFdx())
-        .add(bitangent.mul(height.dFdy()))
-        .mul(determinant.sign())
-        .div(determinant.abs().max(1e-6));
-      const detail = gradient.div(gradient.length().max(1)).mul(numeric(flow.normalStrength).max(0));
-
       return {
         color: mix(dest.color.mul(tint), tint, activity.mul(0.65)),
         opacity: source.opacity,
         roughness: numeric(flow.roughness).clamp(0, 1),
-        normal: normal.sub(detail).normalize(),
+        normal: perturbNormal(height, context.geometricNormal, numeric(flow.normalStrength)),
       };
     };
     this.needsUpdate = true;

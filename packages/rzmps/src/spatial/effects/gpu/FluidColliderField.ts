@@ -41,6 +41,12 @@ export default class FluidColliderField {
   readonly metrics = { lookupMs: 0, classificationMs: 0, bvhPackingMs: 0,
     submissionMs: 0, completionMs: 0, uploadMs: 0 };
 
+  /** Closed back-sided receivers describe containers; open back-sided sheets remain surface obstacles. */
+  static isClosedGeometry(geometry: THREE.BufferGeometry): boolean {
+    geometry.computeBoundingBox();
+    return isClosed(geometry);
+  }
+
   static acquire(
     geometry: THREE.BufferGeometry,
     resolution: number,
@@ -228,17 +234,17 @@ export default class FluidColliderField {
       .catch(() => {});
   }
 
-  sample(position: Node<'vec3'>, inverted: boolean): Node<'float'> {
+  /** Reconstruct local occupancy, using the containment mode's canonical value outside the field. */
+  sample(
+    position: Node<'vec3'>,
+    inverted: boolean,
+    sampleTexture?: (uv: Node<'vec3'>) => Node<'float'>,
+  ): Node<'float'> {
     const uv = position.sub(vec3(this.bounds.min)).div(vec3(this.bounds.getSize(new THREE.Vector3())));
-    const texel = uv
-      .clamp(0, 1)
-      .mul(this.resolution - 1)
-      .add(0.5)
-      .div(this.resolution);
-    const value = texture3D(this.texture, texel).r;
-    return uv
-      .greaterThanEqual(0)
-      .all()
+    const texel = uv.clamp(0, 1).mul(this.resolution - 1).add(0.5).div(this.resolution);
+    const value = sampleTexture ? sampleTexture(texel) : texture3D(this.texture, texel).r;
+
+    return uv.greaterThanEqual(0).all()
       .and(uv.lessThanEqual(1).all())
       .select(value, float(inverted ? 1 : 0));
   }

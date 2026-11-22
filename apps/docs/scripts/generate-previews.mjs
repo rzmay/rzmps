@@ -44,7 +44,7 @@ export async function generatePreviews({ force = false, ids = [] } = {}) {
     }
     if (!capture) {
       // Capture local source changes, including a clean checkout with no package build artifacts.
-      execFileSync('npm', ['run', 'build:modules'], { cwd: root, stdio: 'inherit' });
+      execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit' });
       capture = await import('../../../scripts/preview/capture.mjs');
     }
     const output = await fs.mkdtemp(path.join(os.tmpdir(), 'rzmps-doc-preview-'));

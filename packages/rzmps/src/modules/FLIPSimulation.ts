@@ -1,3 +1,4 @@
+import { liquidSurfaceConditionGPU } from '../rendering/gpu/liquidSurfaceSampling.utils';
 import * as THREE from 'three';
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import { StorageBufferAttribute, type ComputeNode, type Node } from 'three/webgpu';
@@ -93,15 +94,9 @@ class FLIPSimulation extends FluidSimulation {
       minimumAge: options.minimumAge ?? 0.1, maximumNeighbors: null, neighborRadius });
     const condition: SubSystemGPUCondition = (particle, dt, context) => {
       const selected = activity(particle, dt, context).toVar();
-      if (minimumDeformity > 0 && options.samplerGPU) {
-        const toWorld = uniform(context.system.getSimulationToWorldMatrix())
-          .onFrameUpdate(() => context.system.getSimulationToWorldMatrix());
-
-        If(selected, () => {
-          const sample = options.samplerGPU!(toWorld.mul(vec4(particle.position, 1)).xyz);
-          if (!sample.deformation) throw new Error('FoamCondition samplerGPU must supply surface deformation.');
-          selected.assign(sample.valid.and(sample.deformation.greaterThanEqual(minimumDeformity)));
-        });
+      if (options.samplerGPU) {
+        If(selected, () => selected.assign(liquidSurfaceConditionGPU(particle, context.system,
+          options.samplerGPU!, { minimumDeformity })));
       }
 
       const grid = context.spatialGrid;
@@ -753,6 +748,7 @@ class FLIPSimulation extends FluidSimulation {
       this.resetFields = false;
     }
     this.clearFieldsNode ??= this.computeCells(clearFields);
+    this.clearFieldsNode.setName('rzmps.flip.clearTransferFields');
     // Clear old addresses before page reassignment, including retired bricks.
     renderer.compute(this.clearFieldsNode);
     this.pressureProjection?.clearPreviousFaces(renderer);
@@ -767,6 +763,7 @@ class FLIPSimulation extends FluidSimulation {
       const coordinate = this.workGrid!.coordinate(index);
       this.pressureCurrent.element(this.cellIndex(coordinate)).assign(0);
     }, false, true);
+    this.clearNewPressureNode.setName('rzmps.flip.clearFreshPressure');
     renderer.compute(this.clearNewPressureNode);
     this.computeSolidField(context, renderer);
 
@@ -851,6 +848,7 @@ class FLIPSimulation extends FluidSimulation {
         ),
       ));
     });
+    force.setName('rzmps.flip.gridForces');
     this.forceNodeCompute = force;
     this.benchmarks.span('gridForces', () => renderer.compute(force));
     this.solveProjection(renderer, this.velocityNext, this.velocityCurrent);

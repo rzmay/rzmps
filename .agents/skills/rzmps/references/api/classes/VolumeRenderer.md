@@ -208,6 +208,34 @@ compensation: CompensationMode;
 
 ***
 
+<a id="condition"></a>
+
+### condition?
+
+```ts
+optional condition?: RendererCondition;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`condition`](Renderer.md#condition)
+
+***
+
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ParticleGPUCondition;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`conditionGPU`](Renderer.md#conditiongpu)
+
+***
+
 <a id="densitycurve"></a>
 
 ### densityCurve
@@ -752,7 +780,10 @@ renderOrder: number;
 samplesPerVoxel: number;
 ```
 
-Samples per smallest contributing voxel. Defaults to one; two selects high quality.
+Render-only quality: samples per smallest contributing voxel; defaults to one.
+Increase for finer visual sampling at coarse simulation qualities without changing simulation fields.
+The steps budget can limit spacing on long ray intervals; increase it too when necessary.
+Opacity remains distance-corrected. Higher values cost more raymarch work; never raised automatically.
 
 ***
 

@@ -44,6 +44,18 @@ Unperturbed, normalized view-space surface normal.
 
 ***
 
+<a id="receiverpositionlocal"></a>
+
+### receiverPositionLocal?
+
+```ts
+optional receiverPositionLocal?: string;
+```
+
+Decal fragment position in the receiving mesh's local frame, before batch/instance transforms.
+
+***
+
 <a id="sourceuv"></a>
 
 ### sourceUV

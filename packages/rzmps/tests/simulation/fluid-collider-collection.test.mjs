@@ -105,3 +105,30 @@ test('custom fluid occupancy retains its CPU predicate bake fallback', () => {
   collider.geometry.dispose();
   system.dispose();
 });
+
+test('closed back-sided receivers contain fluid; sheets and ordinary solids do not invert', async () => {
+  const { BackSide, FrontSide, DoubleSide, PlaneGeometry } = await import('three');
+  const scene = new Scene();
+  const room = new Mesh(new BoxGeometry(8, 4, 8), new MeshBasicMaterial({ side: BackSide }));
+  const solid = new Mesh(new BoxGeometry(), new MeshBasicMaterial({ side: DoubleSide }));
+  const sheet = new Mesh(new PlaneGeometry(), new MeshBasicMaterial({ side: BackSide }));
+  scene.add(room, solid, sheet);
+  const gas = new GasSimulation({ collisionOptions: { world: scene } });
+  const owner = new ParticleSystem({ modules: [gas], emitters: [], renderers: [] });
+  scene.add(owner);
+  try {
+    gas.collectColliders(owner);
+    assert.equal(gas.collectedColliders.get(room).collider.inverted, true);
+    assert.equal(gas.collectedColliders.get(solid).collider.inverted, false);
+    assert.equal(gas.collectedColliders.get(sheet).collider.inverted, false);
+    const wrapper = gas.collectedColliders.get(room).collider;
+    const version = wrapper.version;
+    room.material.side = FrontSide;
+    gas.collectColliders(owner);
+    assert.equal(wrapper.inverted, false);
+    assert(wrapper.version > version, 'material-side changes invalidate occupancy');
+  } finally {
+    owner.destroy();
+    for (const mesh of [room, solid, sheet]) { mesh.geometry.dispose(); mesh.material.dispose(); }
+  }
+});

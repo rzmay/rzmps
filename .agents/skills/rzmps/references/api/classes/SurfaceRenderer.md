@@ -156,6 +156,34 @@ compensation: CompensationMode;
 
 ***
 
+<a id="condition"></a>
+
+### condition?
+
+```ts
+optional condition?: RendererCondition;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`condition`](Renderer.md#condition)
+
+***
+
+<a id="conditiongpu"></a>
+
+### conditionGPU?
+
+```ts
+optional conditionGPU?: ParticleGPUCondition;
+```
+
+#### Inherited from
+
+[`Renderer`](Renderer.md).[`conditionGPU`](Renderer.md#conditiongpu)
+
+***
+
 <a id="deformationdetailrange"></a>
 
 ### deformationDetailRange
@@ -1092,6 +1120,22 @@ Renderer-specific translation retains the destination shader and rendering setti
 
 ***
 
+<a id="decalwarp"></a>
+
+### decalWarp()
+
+```ts
+decalWarp(): DecalWarpSampler;
+```
+
+Projects the already reconstructed anisotropic kernel into the receiver plane; no new covariance work.
+
+#### Returns
+
+[`DecalWarpSampler`](../type-aliases/DecalWarpSampler.md)
+
+***
+
 <a id="destroy"></a>
 
 ### destroy()
@@ -1265,6 +1309,35 @@ Creates rendering resources when attached to a system.
 #### Overrides
 
 [`Renderer`](Renderer.md).[`setup`](Renderer.md#setup)
+
+***
+
+<a id="surfacecondition"></a>
+
+### surfaceCondition()
+
+```ts
+surfaceCondition(options?): RendererCondition;
+```
+
+Near-surface classification shared with foam; interior markers are not eligible.
+GPU reconstruction is required, just as for sampleSurfaceGPU.
+
+#### Parameters
+
+##### options?
+
+###### minimumDeformity?
+
+`number`
+
+###### upwardOnly?
+
+`boolean`
+
+#### Returns
+
+[`RendererCondition`](../type-aliases/RendererCondition.md)
 
 ***
 

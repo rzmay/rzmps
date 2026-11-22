@@ -1,3 +1,4 @@
+import { GasModuleStage } from '../../enums/GasModuleStage';
 import type { ColorRepresentation } from 'three';
 import stretchAlongVelocity from '../shaders/stretchAlongVelocity';
 import LightingGrid, { type LightingGridOptions } from '../lighting/LightingGrid';
@@ -55,12 +56,13 @@ import ParticleSystem from '../../core/ParticleSystem';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../../simulation/gpu/Particle';
 import type { VolumeFieldProvider } from '../volumeField.types';
 import type { VolumeField } from '../volumeField.types';
-import { volumeJitter } from '../shaders/volumeJitter';
+import volumeJitter from '../shaders/volumeJitter';
 import createVolumeJitterTexture from '../shaders/createVolumeJitterTexture';
 import volumeVert from '../shaders/Volume.vert';
 import volumeFrag from '../shaders/Volume.frag';
 import buildVolumeBindings from '../shaders/buildVolumeBindings';
-import volumeChildren, { volumeNumber } from '../volumeChildren';
+import volumeChildren from '../volumeChildren';
+import volumeNumber from '../volumeNumber';
 import evaluateByParameterColor from '../../values/evaluateByParameterColor';
 import evaluateByParameterNumber from '../../values/evaluateByParameterNumber';
 import { VolumeInterpolation } from '../../enums/VolumeInterpolation';
@@ -161,7 +163,10 @@ export interface VolumeRendererOptions extends RendererOptions {
   jitterStrength: number;
   /** Stable volume-space sampling seed. Defaults to zero. */
   jitterSeed: number;
-  /** Samples per smallest contributing voxel. Defaults to one; two selects high quality. */
+  /** Render-only quality: samples per smallest contributing voxel; defaults to one.
+   * Increase for finer visual sampling at coarse simulation qualities without changing simulation fields.
+   * The steps budget can limit spacing on long ray intervals; increase it too when necessary.
+   * Opacity remains distance-corrected. Higher values cost more raymarch work; never raised automatically. */
   samplesPerVoxel: number;
   /** Henyey–Greenstein anisotropy, clamped to [-0.9, 0.9]. Defaults to zero. */
   anisotropy: number;
@@ -295,7 +300,10 @@ class VolumeRenderer extends Renderer {
   jitterStrength: number;
   /** Stable volume-space sampling seed. Defaults to zero. */
   jitterSeed: number;
-  /** Samples per smallest contributing voxel. Defaults to one; two selects high quality. */
+  /** Render-only quality: samples per smallest contributing voxel; defaults to one.
+   * Increase for finer visual sampling at coarse simulation qualities without changing simulation fields.
+   * The steps budget can limit spacing on long ray intervals; increase it too when necessary.
+   * Opacity remains distance-corrected. Higher values cost more raymarch work; never raised automatically. */
   samplesPerVoxel: number;
   /** Henyey–Greenstein anisotropy, clamped to [-0.9, 0.9]. Defaults to zero. */
   anisotropy: number;
@@ -568,7 +576,7 @@ class VolumeRenderer extends Renderer {
     this.syncLightingGrid();
     this.noiseTime += deltaTime * this.densityNoiseSpeed;
     this.gasElapsedTime.value += deltaTime;
-    this.gasModules = GasModule.collect(system, this.tags, 'render');
+    this.gasModules = GasModule.collect(system, this.tags, GasModuleStage.Render);
     this.gpuNoiseTime.value = this.noiseTime;
     this.validateOptions();
     this.dynamicTarget.configure(this.downsample, !!this.dynamicResolution);
@@ -675,7 +683,7 @@ class VolumeRenderer extends Renderer {
         this[`${name}ByTemperature`] != null),
       this.evaluateDynamicGPU.version,
       ...this.layers.flatMap(layer => layer.children.map(child => child.rotated)),
-      ...this.gasModules.map(module => module.graphKey('render')),
+      ...this.gasModules.map(module => module.graphKey(GasModuleStage.Render)),
       ...this.layers.map(layer =>
         JSON.stringify([layer.density.field.parameterChannels, layer.density.field.parametersPremultiplied,
           this.densityNoiseStretch > 0 && !!layer.density.field.sampleVelocityGPU]),
@@ -1426,7 +1434,6 @@ class VolumeRenderer extends Renderer {
     return material;
   }
 
-
   /** Distance to the nearest coarse boundary across all source/copy transforms, only when all are empty. */
   private emptyAdvance(position: Node<'vec3'>, direction: Node<'vec3'>): Node<'float'> {
     const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
@@ -1484,8 +1491,8 @@ class VolumeRenderer extends Renderer {
       const applyMask = () => {
         const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum).toVar();
         if (this.densityNoiseStretch > 0 && velocity) {
-          // Zero local stretch avoids even the sparse velocity lookup. Keep the simulation origin
-          // as the anchor, so domain growth never slides the mask's coordinate lattice.
+          // A zero local stretch skips velocity sampling. Anchor coordinates at the simulation origin
+          // so domain growth cannot translate the mask's coordinate lattice.
           If(stretch.greaterThan(0), () => point.assign(stretchAlongVelocity(point, velocity(), stretch)));
         }
         const noise = generateGPUParticleNoise4D(
@@ -1577,7 +1584,7 @@ class VolumeRenderer extends Renderer {
   }
 
   private createRayJitter(): (point: Node<'vec3'>, index: Node<'float'>) => Node<'float'> {
-    // Fetch once per ray. Screen-space ranks remove the old piecewise-constant world-cell phase.
+    // Fetch one stable screen-space phase per ray, independently of the simulation grid.
     const pixel = ivec2(screenCoordinate.xy.mod(32));
     const rotation = texture(this.jitterTexture).load(pixel).r.mul(255).add(0.5).div(256)
       .add(hash(floatBitsToUint(this.gpuJitterSeed))).toVar('volumeRayJitterRotation');

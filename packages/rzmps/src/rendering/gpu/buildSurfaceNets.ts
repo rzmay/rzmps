@@ -1,3 +1,4 @@
+import { SurfaceVertexLayout } from '../../enums/SurfaceVertexLayout';
 import type { Node } from 'three/webgpu';
 import {
   If,
@@ -180,5 +181,5 @@ export const buildSurfaceNets: SurfaceExtractor = Object.assign(
       triangleMultiple: 2,
     };
   },
-  { vertexLayout: 'compact' as const },
+  { vertexLayout: SurfaceVertexLayout.Compact },
 );

@@ -7,7 +7,6 @@ import { validateFireflyAttachments } from './validateFireflyAttachments.js';
 import { examples } from 'examples/index.js';
 import scenePresets from 'examples/scenes/index.js';
 import { getSceneParticleRoot } from 'examples/utils/particleRoot.js';
-import { experimentalExamples } from 'examples/experimental/index.js';
 import { createWebGPURenderer } from '../../apps/demo/src/rendering/createWebGPURenderer.js';
 
 /** Browser entry point. Only installed for the demo's explicit ?preview route. */
@@ -52,7 +51,7 @@ async function capture(options) {
     };
     const example = Object.hasOwn(fixtures, options.example)
       ? { create: (await fixtures[options.example]()).default }
-      : [...examples, ...experimentalExamples].find(e => e.id === options.example);
+      : examples.find(e => e.id === options.example);
     if (!example)
       throw new Error(`Unknown example ${options.example}. Available: ${examples.map(e => e.id).join(', ')}`);
     if (options.format && options.format !== 'png' && example.tags?.includes('audio')) {

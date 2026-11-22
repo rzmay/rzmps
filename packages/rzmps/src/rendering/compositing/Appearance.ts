@@ -396,7 +396,12 @@ export default class Appearance {
     // Three's materialOpacity includes alphaMap, but diffuse-map alpha normally comes from materialColor.
     const diffuseMap = (material as THREE.MeshStandardMaterial).map;
     const opacity = diffuseMap ? materialOpacity.mul(texture(diffuseMap).a) : materialOpacity;
-    applyMaterialCopies(material, [this.nodes(undefined, undefined, undefined, positionGeometry)], {
+    const copy = this.nodes(undefined, undefined, undefined, positionGeometry);
+    const callback = this.configuration().materialCompositeGPU;
+    if (callback) copy.compositeGPU = (dest, destUV) => compositeGPU(copy, dest,
+      (source, target, context) => callback(source, target, { ...context, receiverPositionLocal: positionGeometry }),
+      destUV);
+    applyMaterialCopies(material, [copy], {
       color: materialColor,
       opacity,
       normal: materialNormal,
@@ -566,6 +571,7 @@ export default class Appearance {
       ]),
     ) as typeof dest;
     const output = this.configuration().materialComposite!(copy, dest, {
+      receiverPositionLocal: mesh ? 'vCopyOffset' : undefined,
       sourceUV: 'copyUV()',
       destUV: mesh ? 'vCopyUV' : 'spriteCoord',
       geometricNormal: lit ? (mesh ? 'nonPerturbedNormal' : 'normalize(vNormal)') : baseNormal,

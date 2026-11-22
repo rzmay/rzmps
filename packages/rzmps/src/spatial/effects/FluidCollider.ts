@@ -100,6 +100,9 @@ export default class FluidCollider extends SpatialEffect {
 
   private gpuField?: FluidColliderField;
 
+  /** Geometry-backed occupancy storage, shared by compatible collider instances. @internal */
+  getGPUField(): FluidColliderField | undefined { return this.gpuField; }
+
   /** Whether a geometry-backed field has been prepared without custom CPU predicates. @internal */
   get hasPreparedGPUField(): boolean { return this.gpuField !== undefined; }
 
@@ -127,10 +130,13 @@ export default class FluidCollider extends SpatialEffect {
   testPositionGPU(
     position: Node<'vec3'>,
     context: GPUParticleUpdateContext,
+    sampleTexture?: (uv: Node<'vec3'>) => Node<'float'>,
   ): Node<'float'> {
     const particle = { position } as GPUParticleLike;
     if (this.customOccupancy) return this.testGPU(particle, context);
-    const strength = this.bakedFieldGPU(particle);
+    const strength = sampleTexture && this.gpuField
+      ? this.gpuField.sample(this.getGPUParticleLocalPosition(particle), this.inverted, sampleTexture)
+      : this.bakedFieldGPU(particle);
     return this.conditionGPU ? this.conditionGPU(particle, context, this).select(strength, 0) : strength;
   }
 

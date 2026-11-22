@@ -1,8 +1,9 @@
 # Surface Decals
 
 `DecalRenderer` clips persistent geometry onto rigid scene meshes with Three.js `DecalGeometry`. Pass a material or a nonempty list of materials first
-and an optional options object. Each mark owns a material clone and geometry; your material, textures, and target
-geometry remain caller-owned. Standard Three.js materials work with WebGL and WebGPU rendering.
+and an optional options object. Marks retain independent clipped geometry, warp, tint, alpha and lifetime,
+while compatible marks share renderer-owned material and `THREE.BatchedMesh` storage. Your material, textures
+and target geometry remain caller-owned. Standard Three.js materials work with WebGL and WebGPU rendering.
 Each decal copies the hit mesh's `receiveShadow` setting at creation, so lit decal materials receive the same
 scene shadows as their surface.
 
@@ -23,10 +24,10 @@ const decals = new DecalRenderer(material, {
 ```
 
 Pass `[impact1, impact2, impact3]` to choose a complete material randomly for each mark. Normal, roughness, alpha, and AO maps
-stay paired because selection happens once before cloning the material. Repeated hits from the same particle can
+stay paired because template selection happens once before placing each mark. Repeated hits from the same particle can
 choose different templates. `materialIndex` optionally selects a zero-based index (a dynamic number); it is rounded down
 and clamped to the available range. Existing marks retain their selected template when composition callbacks change.
-Templates and textures remain caller-owned. This uses `StrictMultiple<THREE.Material>` and adds no GPU storage buffers.
+Templates and textures remain caller-owned. Template selection uses `StrictMultiple<THREE.Material>` and itself adds no GPU storage buffers.
 Ready image textures on the supplied materials upload once per Three.js renderer during normal updates,
 before a collision needs a new variant. Pending images are retried when ready; render-target textures stay under
 their producer's control. This requires no separate atlas initialization or loading API.
@@ -193,15 +194,15 @@ nodes.
 `inheritColor`, `inheritScale`, and `inheritAlpha` default to 1 and follow subsystem math: base multiplied by `lerp(1,
 particleValue, amount)`, component-wise for color and nonuniform scale. Zero and negative amounts retain the base value,
 matching subsystem handling. Half blends halfway, and one inherits fully. The material color, configured color, and
-inherited particle color multiply together. Each decal's material fades independently.
+inherited particle color multiply together. Each decal's batch alpha fades independently.
 
 `distanceAffectsSize` and `distanceAffectsOpacity` default to zero. Their multiplier is `lerp(1, proximity, amount)`,
 where `proximity = 1 - clamp(hit.distance / maxDistance, 0, 1)`. Zero is neutral and one gives full distance
 attenuation.
 
 `maxHits` limits selection per trigger. `maxDecals` instead limits active persistent marks (default 256). Insertion at
-capacity evicts the oldest mark and disposes its geometry and cloned material. Expiry, `clear`, reset, removal from the
-scene, and destruction also release owned resources. Pause freezes decal age; stopping without clearing lets marks
+capacity evicts the oldest mark and recycles its geometry/instance slot. Expiry disposes the clipped source geometry;
+shared batch storage stays available until clear/reset/destruction. Pause freezes decal age; stopping without clearing lets marks
 continue fading. Destruction unregisters callbacks. Renderer update/count LOD does not skip lifetime updates or
 lifecycle placement; tag filters still apply. Normal system simulation LOD and culling affect the system clock as usual.
 
@@ -216,7 +217,7 @@ Fixed direction vectors request position, rotation, normalized age, and elapsed 
 inherited. Arbitrary direction callbacks may inspect every particle field, so those request complete snapshots. Decal
 lifetimes still advance on each simulation update while a readback is in flight. Marks may appear after readback
 latency. GPU contacts currently lack mesh identity and search opposite the collision normal. Follow-up work: preserve
-GPU collision target identity for exact contact projection. Geometry clipping and material allocation remain CPU work;
+GPU collision target identity for exact contact projection. Geometry clipping and batch allocation remain CPU work;
 batching and deforming mesh projection are deferred.
 
 The [Splatter example](../examples/splatter.md) uses matte paintballs and long-lived collision marks that inherit color
@@ -296,3 +297,91 @@ keeps foreground particles in front of surface decals as the camera moves; opaqu
 behind them. Three.js sorts Points and instanced batches as objects, not individual particles. Interleaving particles
 with decals on transparent, non-depth-writing surfaces still requires a more general transparency solution. Custom
 render/group orders must preserve the surface-decal-before-particle ordering.
+
+## Conditions, Projective Warps and Batches
+
+`condition` rejects source particles before grouping, children, direction sampling, raycasts or geometry allocation.
+It controls current source participation: an existing mark keeps its configured lifetime after its source becomes
+ineligible or dies. Supply a CPU predicate and its `conditionGPU` equivalent for native GPU processing, following
+module conditions; reusable helpers can attach the equivalent as `condition.gpu`. GPU predicates run before a compact
+source snapshot is copied/read back. CPU-only renderers can evaluate a CPU-only predicate after ordinary readback;
+GPU-native renderers require the shader equivalent. Predicates use the shared `ParticleCondition`/
+`ParticleGPUCondition` types; their context supplies `system`, and CPU contexts also supply `events` and `deltaTime`.
+
+```ts
+new DecalRenderer(material, {
+  condition: particle => particle.alpha > 0.3,
+  conditionGPU: particle => particle.alpha.greaterThan(0.3),
+  direction: DecalRenderer.Direction.Forward(),
+  hitSelection: DecalRenderer.Selection.Nearest,
+  warp: DecalRenderer.Warp.Combine(
+    DecalRenderer.Warp.FromRay(),
+    DecalRenderer.Warp.Scale(new THREE.Vector2(1.5, 0.8)),
+  ),
+});
+```
+
+Direction helpers live at `DecalRenderer.Direction.Forward/Intersect/Radial`; selection functions at
+`DecalRenderer.Selection.Nearest/Farthest/All/Random`. Selection functions are passed directly, not called as factories.
+The original direct shortcuts remain available.
+
+`warp` accepts a fixed `DecalWarp` or `(particle, ray, hit) => DecalWarp`. The ray is the actual world-space placement
+ray, including bounded movement segments. `scale` defaults to `(1,1)`, `rotation` to zero radians, and `skew` and
+`perspective` to `(0,0)`. Skew components are dimensionless shear coefficients. Coordinates are centered unit
+projector UVs. The forward matrix is `rotation * shear * scale * perspective`.
+`Warp.Scale`, `Rotate`, `Skew`, `Perspective` create fixed warps; `FromRay()`, `FromVelocity()` and `Combine(...)` create samplers.
+`Combine(A,B)` applies **A then B**, composing matrices as `B*A`; it does not merge individual settings.
+
+`FromVelocity(maxStretch = 4, factor = 1)` stretches along incoming velocity projected onto the receiver.
+It preserves world-space speed, including the particle's speed multiplier and local simulation transform.
+The total extent along motion scales by `min(maxStretch, 1 + factor * tangentialSpeed)`.
+A projective deformation fixes the impact point and rear extent while progressively stretching and flaring the front.
+The rear half stays close to its original shape rather than stretching equally in both directions.
+The visible footprint is therefore off-center; existing projector coverage includes that forward extension without
+moving the collision hit. Its diagonal-safe denominator remains finite at the maximum stretch.
+Faster particles leave longer marks until the cap is reached. `factor = 0` disables velocity stretching.
+Stationary and perpendicular impacts remain unstretched. For example, `FromVelocity(3, 0.3)` allows up to
+threefold stretch, adding 0.3 to the length multiplier per world unit/second of motion along the surface.
+This keeps exact collision placement independent of the placement ray. Neither source velocity nor speed is modified.
+
+`FromRay(maxStretch = 4)` stretches along the projected incoming ray. Perpendicular incidence stays identity; grazing incidence
+is capped by the same factory-local maximum. Custom warp samplers are not limited by either factory. Its tangent frame uses the source particle's projector roll.
+Three.js still clips the rectangular projector against the receiver. RZMPS fits and offsets that rectangle to the
+actual warped footprint and applies inverse homogeneous UV lookup in TSL/WebGL. The UV origin is adjusted on
+the CPU so the impact stays anchored without an extra shader attribute. Transparent excess is
+expected; no clipped receiver vertex is warped. Singular matrices and transforms with a pole through the footprint
+reject the mark safely. Texture transforms and ordinary normal/roughness maps continue through the material path.
+No atlas variants, texture baking, warp quantization or geometry union is involved.
+
+Batches split for incompatible template/shader/environment resources. Tint, opacity/fading, placement and warp vary
+inside the shared batch. Ordinary expiration recycles instance and geometry IDs; storage grows geometrically and
+compacts reclaimed ranges only when another geometry needs the space. Receiver-local geometry stays unchanged under
+rigid motion: instance matrices follow the receiver. Arbitrary skinned/deforming receiver attachment is not supported.
+`decals` exposes each record's `geometry`, `receiver`, `slot`, shared `mesh`, `color` and `renderedOpacity`.
+`batchDiagnostics` and benchmark gauges expose live decals, batches, reserved slots, live/reserved geometry vertices,
+growths and repacks. Shared material/storage remains reserved after the last mark expires and is released on clear.
+
+Three.js WebGL uses multidraw when supported. Its current WebGPU BatchedMesh backend still submits one draw command
+per visible geometry range; batching reduces scene objects, material duplication and CPU object submission, but does
+not imply one native WebGPU draw. This backend limitation is reported separately in the focused internal benchmarks.
+Transparent overdraw remains proportional to the actual overlapping marks.
+
+These operations are distinct: **grouping** maps N particles to fewer visual representatives; **conditions** select
+an eligible subset; **batching** preserves the same N individually shaped decals with shared objects/materials.
+
+## Coverage and Receiver-local Materials
+
+`unionCoverage: true` shades each covered fragment once per render pass. It requires a stencil-enabled
+renderer and offscreen targets, and reserves stencil bit **0x80**. Other stencil bits, color and depth
+are preserved. A shared reset draw runs at render order **-2**, followed by union batches at **-1**;
+custom render passes must preserve that order. Ordinary decals default to `unionCoverage: false`.
+Union batches in the same scene share coverage, so use consistent material responses within that group.
+
+`inheritMaterial: false` allows source-less overlays without material-copy atlases. Material composition
+callbacks can use `context.receiverPositionLocal` for procedural detail attached to the receiving mesh,
+independently of decal UVs and warps. `perturbNormal(height, geometricNormal, strength)` provides bounded
+height-gradient normal detail using the same construction as the liquid material.
+
+Radial contact directions share one scene-membership collection per projection. Dense ordinary meshes
+use a cached indirect CPU BVH for contact rays; rigid movement reuses it and position edits refit it.
+Caller-owned geometry indices and custom raycast functions are preserved.

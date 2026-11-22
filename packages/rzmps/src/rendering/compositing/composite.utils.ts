@@ -14,6 +14,8 @@ export type MaterialChannel = keyof MaterialChannels;
 export type GPUMaterialChannels = MaterialChannels<Node<'vec3'>, Node<'float'>>;
 
 export interface MaterialCompositeContext {
+  /** Decal fragment position in the receiving mesh's local frame, before batch/instance transforms. */
+  receiverPositionLocal?: string;
   /** Reconstructed visual flow in simulation coordinates; available on surface geometry. */
   surfaceVelocity?: string;
   surfaceSpeed?: string;
@@ -34,6 +36,8 @@ export interface MaterialCompositeContext {
   function(name: string, source: string): void;
 }
 export interface MaterialCompositeGPUContext {
+  /** Decal fragment position in the receiving mesh's local frame, independent of projector UVs. */
+  receiverPositionLocal?: Node<'vec3'>;
   /** Reconstructed visual flow in simulation coordinates; available on surface geometry. */
   surfaceVelocity?: Node<'vec3'>;
   surfaceSpeed?: Node<'float'>;

@@ -11,9 +11,9 @@ test('gas discovery preserves tags, enabled selection, stable priorities and par
   assert(a instanceof Module);
   assert(a.supportsGPU);
   assert.equal(a.modifiesParticles, false);
-  assert.deepEqual(GasModule.collect(system, ['fire'], 'simulation'), [b, a]);
-  assert.deepEqual(GasModule.collect(system, ['fire'], 'render'), []);
-  assert.deepEqual(GasModule.collect(system, undefined, 'render'), [c]);
+  assert.deepEqual(GasModule.collect(system, ['fire'], 'Simulation'), [b, a]);
+  assert.deepEqual(GasModule.collect(system, ['fire'], 'Render'), []);
+  assert.deepEqual(GasModule.collect(system, undefined, 'Render'), [c]);
   let calls = 0;
   a.modifyGasGPU = () => { calls++; };
   a._modify = () => { throw new Error('GasModule executed as a CPU particle modifier'); };
@@ -28,19 +28,31 @@ test('gas discovery preserves tags, enabled selection, stable priorities and par
 test('stage-local callback and dependency invalidation preserves unrelated graph keys', () => {
   let parameter = 1;
   const module = new GasModule({ modifyGPU() {}, modifyRenderGPU() {}, deps: () => [parameter] });
-  const sim = module.graphKey('simulation'), render = module.graphKey('render');
-  assert.equal(module.graphKey('simulation'), sim);
+  const sim = module.graphKey('Simulation'), render = module.graphKey('Render');
+  assert.equal(module.graphKey('Simulation'), sim);
   module.modifyRenderGPU = () => {};
-  assert.notEqual(module.graphKey('render'), render);
-  assert.equal(module.graphKey('simulation'), sim);
-  const nextRender = module.graphKey('render');
+  assert.notEqual(module.graphKey('Render'), render);
+  assert.equal(module.graphKey('Simulation'), sim);
+  const nextRender = module.graphKey('Render');
   module.modifyGasGPU = () => {};
-  assert.notEqual(module.graphKey('simulation'), sim);
-  assert.equal(module.graphKey('render'), nextRender);
-  const nextSim = module.graphKey('simulation');
+  assert.notEqual(module.graphKey('Simulation'), sim);
+  assert.equal(module.graphKey('Render'), nextRender);
+  const nextSim = module.graphKey('Simulation');
   parameter++;
-  assert.notEqual(module.graphKey('simulation'), nextSim);
-  const depsRender = module.graphKey('render');
+  assert.notEqual(module.graphKey('Simulation'), nextSim);
+  const depsRender = module.graphKey('Render');
   module.needsUpdate = true;
-  assert.notEqual(module.graphKey('render'), depsRender);
+  assert.notEqual(module.graphKey('Render'), depsRender);
+});
+
+
+test('gas stages accept enum keys and reject unknown JavaScript values', () => {
+  const module = new GasModule({ modifyGPU() {}, modifyRenderGPU() {} });
+  const owner = new ParticleSystem({ modules: [module], emitters: [], renderers: [] });
+  assert.equal(typeof module.graphKey('Simulation'), 'string');
+  assert.equal(typeof module.graphKey('Render'), 'string');
+  assert.deepEqual(GasModule.collect(owner, undefined, 'Render'), [module]);
+  assert.throws(() => module.graphKey('Unknown'), /Unknown gas module stage/);
+  assert.throws(() => GasModule.collect(owner, undefined, 'Unknown'), /Unknown gas module stage/);
+  owner.destroy();
 });

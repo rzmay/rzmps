@@ -40,6 +40,18 @@ geometricNormal: Node<"vec3">;
 
 ***
 
+<a id="receiverpositionlocal"></a>
+
+### receiverPositionLocal?
+
+```ts
+optional receiverPositionLocal?: Node<"vec3">;
+```
+
+Decal fragment position in the receiving mesh's local frame, independent of projector UVs.
+
+***
+
 <a id="sourceuv"></a>
 
 ### sourceUV
