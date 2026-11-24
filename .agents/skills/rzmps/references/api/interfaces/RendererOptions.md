@@ -14,9 +14,9 @@
 
 ## Extended by
 
+- [`LightRendererOptions`](LightRendererOptions.md)
 - [`SurfaceRendererOptions`](SurfaceRendererOptions.md)
 - [`VolumeRendererOptions`](VolumeRendererOptions.md)
-- [`LightRendererOptions`](../Supporting-Types/interfaces/LightRendererOptions.md)
 - [`MeshRendererOptions`](../Supporting-Types/interfaces/MeshRendererOptions.md)
 - [`SpriteRendererOptions`](../Supporting-Types/interfaces/SpriteRendererOptions.md)
 - [`TrailRendererOptions`](../Supporting-Types/interfaces/TrailRendererOptions.md)

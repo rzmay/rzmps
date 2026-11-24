@@ -21,6 +21,8 @@ export interface LightRendererAllocationOptions {
 }
 
 export interface LightRendererOptions extends RendererOptions {
+    /** Customize the evaluated point light from its source particle. Runs after the standard light options. */
+    configureLight?: (particle: Particle, light: THREE.PointLight) => void;
     /** Predictive scene-light reservation and shrink hysteresis. */
     allocation: LightRendererAllocationOptions;
     /** Point-light intensity in candela, evaluated per particle. Defaults to one. */
@@ -43,6 +45,7 @@ export interface LightRendererOptions extends RendererOptions {
 
 /** Maps a capped selection of particles to scene lights; limit count to control illumination cost. */
 class LightRenderer extends Renderer {
+    configureLight?: LightRendererOptions['configureLight'];
     lights: THREE.PointLight[] = [];
 
     brightness: DynamicValue<number>;
@@ -81,6 +84,7 @@ class LightRenderer extends Renderer {
       this.benchmarks.register('allocatedLights', { type: BenchmarkMetricType.Gauge, unit: 'count',
         get: () => this.lights.length });
       this.allocation = { shrinkThreshold: 0.75, shrinkDelay: 1, ...options.allocation };
+      this.configureLight = options.configureLight;
       this.brightness = options.brightness ?? 1;
       this.rangeMultiplier = options.rangeMultiplier ?? 1;
       this.color = options.color ?? 0xffffff;
@@ -112,7 +116,7 @@ class LightRenderer extends Renderer {
       if (this.inheritParticleColor) fields.push('color');
       if (this.alphaAffectsIntensity) fields.push('alpha');
       if (this.sizeAffectsRange) fields.push('scale');
-      this.updateCPUFromGPU(buffers, system, deltaTime, sampleLimit, fields);
+      this.updateCPUFromGPU(buffers, system, deltaTime, sampleLimit, this.configureLight ? undefined : fields);
     }
 
     override refresh(system: ParticleSystem): void {
@@ -135,6 +139,7 @@ class LightRenderer extends Renderer {
         light.decay = evaluateDynamicNumber(this.decay, particle.time, particle.id);
         light.distance = this._getDistance(particle);
         light.intensity = this._getIntensity(particle);
+        this.configureLight?.(particle, light);
       });
     }
 

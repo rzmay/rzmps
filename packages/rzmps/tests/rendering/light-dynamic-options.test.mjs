@@ -41,3 +41,39 @@ test('dynamic power uses Three point-light units and deterministic interval eval
   lights._update([source]); assert.equal(lights.lights[0].intensity, 2);
   lights.destroy();
 });
+
+test('configureLight edits evaluated lights and does not leak custom values through pool reuse', () => {
+  const lights = new LightRenderer({ brightness: 4, distance: 6, configureLight(particle, light) {
+    light.intensity *= 1 - particle.time;
+    light.color.set(particle.time < 0.5 ? 'orange' : 'red');
+  } });
+  const source = particle(0.75);
+  lights._update([source]);
+  assert.equal(lights.lights[0].intensity, 1);
+  source.time = 0;
+  lights._update([source]);
+  assert.equal(lights.lights[0].intensity, 4);
+  assert(lights.lights[0].color.equals(new THREE.Color('orange')));
+  lights.configureLight = undefined;
+  lights._update([source]);
+  assert(lights.lights[0].color.equals(new THREE.Color('white')));
+  lights.destroy();
+});
+
+test('CPU grouped lights retain the source of the highest-priority member regardless of input order', async () => {
+  const { ParticleSystem } = await import('../../build/index.mjs');
+  const system = new ParticleSystem({ emitters: [], renderers: [] });
+  const a = system.registerEmissionSource({ transform: new THREE.Matrix4(), age: 1, lifetime: 4 });
+  const b = system.registerEmissionSource({ transform: new THREE.Matrix4(), age: 3, lifetime: 4 });
+  const first = particle(0), second = particle(0, 'source-b');
+  first.lodPriority = 0.8; second.lodPriority = 0.2;
+  system.bindParticleSource(first, a); system.bindParticleSource(second, b);
+  assert.equal(first.shallowClone('copy').source, a);
+  const selected = [];
+  const lights = new LightRenderer({ count: 1, configureLight(particle) { selected.push(particle.source); } });
+  lights.setup(system);
+  lights.update([first, second], system, 0);
+  lights.update([second, first], system, 0);
+  assert.deepEqual(selected, [b, b]);
+  lights.destroy(); system.destroy();
+});

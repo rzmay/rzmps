@@ -144,6 +144,18 @@ inheritVelocity: number;
 
 ***
 
+<a id="initialcapacity"></a>
+
+### initialCapacity
+
+```ts
+initialCapacity: number = GlobalSettings.GPU_INITIAL_BUFFER_SIZE;
+```
+
+Starting GPU slot reserve; rounded/capped on allocation without creating particles.
+
+***
+
 <a id="livecubemap"></a>
 
 ### liveCubemap
@@ -449,6 +461,40 @@ Squared camera distance used for component LOD; explicit advancement refreshes i
 ##### Returns
 
 `number`
+
+***
+
+<a id="capacitygrowththreshold"></a>
+
+### capacityGrowthThreshold
+
+#### Get Signature
+
+```ts
+get capacityGrowthThreshold(): number;
+```
+
+Estimated GPU population fraction that starts background capacity preparation; defaults to 1.
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set capacityGrowthThreshold(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
 
 ***
 
@@ -1346,21 +1392,7 @@ bindParticleSource(particle, source?): void;
 
 ##### source?
 
-`Readonly`\<`Pick`\<[`Particle`](Particle.md),
-  \| `"time"`
-  \| `"alpha"`
-  \| `"id"`
-  \| `"realtime"`
-  \| `"color"`
-  \| `"position"`
-  \| `"scale"`
-  \| `"rotation"`
-  \| `"velocity"`
-  \| `"mass"`
-  \| `"distortionStrength"`
-  \| `"tags"`
-  \| `"lifetime"`
-  \| `"alive"`\>\>
+[`SubSystemSource`](../type-aliases/SubSystemSource.md)
 
 #### Returns
 
@@ -1780,21 +1812,7 @@ getSourceEmissionFrame(source?): Matrix4 | undefined;
 
 ##### source?
 
-`Readonly`\<`Pick`\<[`Particle`](Particle.md),
-  \| `"time"`
-  \| `"alpha"`
-  \| `"id"`
-  \| `"realtime"`
-  \| `"color"`
-  \| `"position"`
-  \| `"scale"`
-  \| `"rotation"`
-  \| `"velocity"`
-  \| `"mass"`
-  \| `"distortionStrength"`
-  \| `"tags"`
-  \| `"lifetime"`
-  \| `"alive"`\>\>
+[`SubSystemSource`](../type-aliases/SubSystemSource.md)
 
 #### Returns
 

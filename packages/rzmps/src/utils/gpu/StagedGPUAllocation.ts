@@ -10,6 +10,8 @@ export interface StagedGPUAllocationOptions<T> {
   /** Resolve when all previously submitted uses of resources have completed. */
   fence(): Promise<unknown>;
   maximumCapacity: number;
+  /** Fraction of current capacity that starts preparation; defaults to the existing 75% reserve. */
+  growthThreshold?(): number;
 }
 
 /** Prepare a separate geometric-capacity replacement while the current resource identity remains usable. */
@@ -59,7 +61,9 @@ export default class StagedGPUAllocation<T> {
       this.metrics.superseded++;
       this.supersedingCapacity = desired;
     }
-    if (this.disposed || this.preparing || this.pending || demand < this.capacity * 0.75) return;
+    const belowThreshold = this.options.growthThreshold
+      ? demand <= this.capacity * this.options.growthThreshold() : demand < this.capacity * 0.75;
+    if (this.disposed || this.preparing || this.pending || belowThreshold) return;
     if (this.capacity >= this.options.maximumCapacity) {
       if (demand > this.capacity)
         this.failure = new Error('GPU resource demand exceeds the device/configured ceiling.');
@@ -129,7 +133,9 @@ export default class StagedGPUAllocation<T> {
     this.metrics.swapMs = performance.now() - swapStart;
     void this.release(previous);
     // Finish useful work first; a newer demand starts the next tier without cancel/restart churn.
-    if (this.latestDemand >= this.capacity * 0.75) this.request(this.latestDemand);
+    const needsNextTier = this.options.growthThreshold
+      ? this.latestDemand > this.capacity * this.options.growthThreshold() : this.latestDemand >= this.capacity * 0.75;
+    if (needsNextTier) this.request(this.latestDemand);
     return true;
   }
 

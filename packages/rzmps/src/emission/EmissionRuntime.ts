@@ -34,6 +34,9 @@ export default class EmissionRuntime {
 
   readonly _stagedBirths: Particle[] = [];
 
+  /** CPU source callbacks produce packets; the GPU owns allocation and particle lifetime. */
+  _stagingBirths = false;
+
   readonly _emitterInstances = new Set<EmitterInstance>();
 
   _emitterInstanceEpoch = 0;
@@ -86,11 +89,7 @@ export default class EmissionRuntime {
       return;
     }
     // CPU-bound sources stage a single birth batch when the simulation runs on GPU.
-    const parent = this.system.subSystemParent;
-    const relationship = parent?.subSystems.get(this.system);
-    const stage =
-      (parent && relationship && this.execution.canUpdateAsGPUChild(parent, relationship)) ||
-      (!this.system.isSubSystem && this.execution.nativeEmission());
+    const stage = this._stagingBirths;
     const end = instance.emitter.benchmarks.begin('update');
     let particles;
     try {
@@ -105,6 +104,12 @@ export default class EmissionRuntime {
 
   _updateEmitterInstances(sources?: Iterable<SubSystemSource>): void {
     this._emitterInstanceEpoch += 1;
+    const parent = this.system.subSystemParent;
+    const relationship = parent?.subSystems.get(this.system);
+    // CPU predicates do not require CPU particle allocation when the child can stay entirely on GPU.
+    this._stagingBirths = !!(parent && relationship && this.execution.canUpdateAsGPUChild(parent, relationship))
+      || (this.execution.nativeEmission()
+        && (!this.system.isSubSystem || this.system.renderers.every(renderer => renderer.supportsGPUInput)));
     // Open every receiver before emitting, so births cannot alter another receiver's current batch.
     const configurations = this.system.emitters.map(emitter => {
       const options = this.system.getEmitterOptions(emitter);
@@ -184,6 +189,10 @@ export default class EmissionRuntime {
       options.inheritScale,
       options.impulseAffectsAlignment ? impulse : undefined,
     );
+    const contact = collision?.point.clone()
+      .applyMatrix4((origin ?? this.system.getSourceProducer(particle)).getSimulationToWorldMatrix())
+      .applyMatrix4(this.system.getSimulationToWorldMatrix().invert());
+    if (contact) transform.setPosition(contact);
     const baseDuration = THREE.MathUtils.lerp(
       this.system.duration,
       Number.isFinite(particle.lifetime) ? particle.lifetime : this.system.duration,
@@ -198,6 +207,7 @@ export default class EmissionRuntime {
     const baseContext = {
       ...inherited,
       transform,
+      ...(contact ? { position: contact } : {}),
       scale: this._getImpulseEffect(collision, options.impulseAffectsScale),
       velocityScale: this._getImpulseEffect(collision, options.impulseAffectsSpeed),
       duration,

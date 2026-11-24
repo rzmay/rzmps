@@ -49,3 +49,27 @@ test('all canonical examples are discoverable and structurally valid', () => {
   assert.ok(examples.length >= 20);
   assert.ok(examples.some(e => e.id === 'fireworks'));
 });
+
+test('walkthrough guides keep explanations and component coverage with intention-led headings', () => {
+  const example = {
+    id: 'fixture',
+    regions: new Map(['system', 'emitters:beam', 'modules:noise', 'renderers:glow']
+      .map(key => [key, [{ code: 'actualSource();', line: 1 }]])),
+  };
+  const guide = '[View live example](https://rzmps.rzmay.com/example/fixture)\n'
+    + '<ExampleAttribution />\n<ExampleTags />\n<ExamplePreview />\n'
+    + '## Build the beam\n\n'
+    + 'Fast particles form the continuous beam, while animated offsets give its silhouette a jagged outline.\n\n'
+    + '<ExampleCode region="system" />\n<ExampleCode region="emitters:beam" />\n'
+    + '## Make it glow\n\n'
+    + 'A bright core and wider soft halo make the moving beam read as concentrated energy against its surroundings.\n\n'
+    + '<ExampleCode region="modules:noise" />\n<ExampleCode region="renderers:glow" />\n';
+  assert.doesNotThrow(() => validateGuide(guide, example));
+  assert.throws(() => validateGuide(guide.replace('<ExampleCode region="modules:noise" />', ''), example),
+    /modules source reference/);
+  assert.throws(() => validateGuide(guide.replace(
+    'A bright core and wider soft halo make the moving beam read as concentrated energy against its surroundings.', ''),
+  example), /needs an explanation/);
+  assert.throws(() => validateGuide(guide.replace('renderers:glow', 'renderers:missing'), example),
+    /missing source region/);
+});

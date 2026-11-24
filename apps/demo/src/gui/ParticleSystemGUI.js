@@ -471,6 +471,8 @@ export class ParticleSystemGUI {
     folder.add(system, 'looping').name('Looping');
     folder.add(system, 'endBehavior', END_BEHAVIOR_OPTIONS).name('End Behavior');
     folder.add(system, 'maxParticles', 0, 100000, 1).name('Max Particles');
+    folder.add(system, 'initialCapacity', 0, 100000, 1).name('Initial Capacity');
+    folder.add(system, 'capacityGrowthThreshold', 0.05, 1, 0.05).name('Capacity Growth Threshold');
     folder.add(system, 'maxCullingMode', MAX_CULLING_OPTIONS).name('Max Culling Mode');
     folder.add(system, 'simulationDistance', 0, 1000, 0.1).name('Simulation Distance');
     const gpuProcessing = folder.add(system, 'gpuProcessing').name('GPU Processing');

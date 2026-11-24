@@ -16,6 +16,7 @@
 - [Fireflies](examples/./fireflies.md) — Fireflies use spatial queries and native events to emit attached glow pulses and small lights. Preset by [rzmay](https://github.com/rzmay).
 - [Fireworks](examples/./fireworks.md) — Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks. Preset by [rzmay](https://github.com/rzmay).
 - [FLIP Fluid](examples/./flipFluid.md) — A pouring FLIP liquid with a reconstructed water surface, spray and attached foam. Preset by [rzmay](https://github.com/rzmay).
+- [Heat Laser](examples/./heatLaser.md) — Interactive heat laser with collision sparks, reheated burns and persistent fire. Preset by [rzmay](https://github.com/rzmay).
 - [LOD Stress Test](examples/./lodStress.md) — Unified LOD with density compensation under a dense simulation load. Preset by [rzmay](https://github.com/rzmay).
 - [Metal Balls](examples/./collisionSubEmitters.md) — Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces. Preset by [rzmay](https://github.com/rzmay).
 - [Particle Trail](examples/./particleTrail.md) — Per-particle trail rendering with inherited color and alpha over moving particles. Preset by [rzmay](https://github.com/rzmay).

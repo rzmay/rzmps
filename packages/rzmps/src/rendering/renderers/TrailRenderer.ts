@@ -4,6 +4,7 @@ import seedrandom from 'seedrandom';
 import Renderer, { type RendererOptions } from '../../core/Renderer';
 import Particle from '../../core/Particle';
 import ParticleSystem from '../../core/ParticleSystem';
+import type { ParticleCondition } from '../../core/particleCondition.types';
 import type { DynamicValue } from '../../values/dynamicValue.types';
 import evaluateDynamicNumber from '../../values/evaluateDynamicNumber';
 import evaluateDynamicColor from '../../values/evaluateDynamicColor';
@@ -92,6 +93,34 @@ type RenderPoint = {
 
 /** Builds particle trails or ribbons; trail lifetime and vertex spacing control persistence and geometry costs. */
 class TrailRenderer extends Renderer {
+  /**
+   * Selects original particles in a zero-based ribbon, using the renderer's stable oldest-first ordering.
+   * @remarks CPU predicate. Renderer children and grouping change the rendered population, so this helper
+   * does not work correctly with either. Other renderer filtering must preserve the same particle population.
+   */
+  static RibbonCondition(ribbonCount: number, index: number): ParticleCondition {
+    const count = Math.max(1, Math.floor(ribbonCount));
+    return (particle, _deltaTime, context) => {
+      let ordinal = 0, found = false;
+      // Count earlier births without sorting or allocating an array for every condition evaluation.
+      for (const candidate of context.system.particles) {
+        if (!candidate.alive) continue;
+        if (candidate === particle) { found = true; continue; }
+        if (candidate.startTime < particle.startTime || candidate.startTime === particle.startTime && !found) ordinal++;
+      }
+      return found && ordinal % count === index;
+    };
+  }
+
+  /**
+   * Shortcut for TrailRenderer.RibbonCondition(this.ribbonCount, index), using the current ribbon count.
+   * @remarks Does not work correctly with renderer children or grouping; other renderer filtering must
+   * preserve the same original particle population.
+   */
+  RibbonCondition(index: number): ParticleCondition {
+    return TrailRenderer.RibbonCondition(this.ribbonCount, index);
+  }
+
   protected get groupingRatio(): number { return 1; }
   mode: TrailMode = TrailMode.Particle;
 
@@ -155,8 +184,9 @@ class TrailRenderer extends Renderer {
     if (options.texture) {
       this.texture = typeof options.texture === 'string' ? textureLoader.load(options.texture) : options.texture;
     } else {
-      // If a map is provided via material options, use that before using the default texture
-      this.texture = options.materialOptions?.map ?? new THREE.TextureLoader().load(defaultTex);
+      const material = Array.isArray(options.material) ? options.material[0] : options.material;
+      this.texture = (material as THREE.MeshStandardMaterial | undefined)?.map
+        ?? options.materialOptions?.map ?? textureLoader.load(defaultTex);
     }
 
     this.mode = (options.mode as TrailMode) ?? this.mode;
@@ -191,6 +221,13 @@ class TrailRenderer extends Renderer {
 
       ...options.materialOptions,
     });
+    // Explicit renderer textures also apply to supplied map-capable materials.
+    if (options.texture && options.material) {
+      const materials = Array.isArray(this.material) ? this.material : [this.material];
+      for (const material of materials) {
+        if ('map' in material) (material as THREE.MeshStandardMaterial).map = this.texture;
+      }
+    }
     this.preprocessMaterial(this.material);
 
     this.mesh = new THREE.Mesh(

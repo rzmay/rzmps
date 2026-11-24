@@ -9,6 +9,7 @@ import {
 } from 'three/webgpu';
 import {
   Fn,
+  bitcast,
   If,
   Loop,
   Break,
@@ -33,7 +34,7 @@ import {
   workgroupArray,
   workgroupBarrier,
 } from 'three/tsl';
-import Particle from '../../core/Particle';
+import Particle, { setParticleSourceBinding } from '../../core/Particle';
 import type ParticleSystem from '../../core/ParticleSystem';
 import {
   GPUParticleRenderBufferState,
@@ -68,6 +69,8 @@ export default class GPURendererGrouping {
   private output?: GPUParticleRenderBufferState;
   private snapshot?: GPUParticleRenderBufferState;
   private scratch?: StorageBufferAttribute;
+  private provenance?: StorageBufferAttribute;
+  private system?: ParticleSystem;
   private scratchNode?: AtomicUintStorage;
   private particleDispatch?: IndirectStorageBufferAttribute;
   private groupDispatch?: IndirectStorageBufferAttribute;
@@ -118,14 +121,17 @@ export default class GPURendererGrouping {
     this.radius = radius;
 
     // Keep allocations stable until the source or required capacity changes.
-    const capacity = nextPowerOfTwo(Math.max(1, input.count));
+    // Live count is runtime dispatch state. Reserve against the existing input storage so
+    // a growing population cannot repeatedly rebuild the snapshot and every spatial level.
+    const capacity = nextPowerOfTwo(Math.max(1, input.capacity));
     const maximum = Math.max(1, rendererGroupCount(input.count, count, ratio));
-    if (this.input !== input || this.capacity < capacity || this.maximum < maximum) {
+    const maximumCapacity = Math.max(1, rendererGroupCount(capacity, count, ratio));
+    if (this.input !== input || this.capacity < capacity || this.maximum < maximumCapacity) {
       this.reset();
       this.renderer = renderer;
       this.input = input;
       this.capacity = capacity;
-      this.maximum = nextPowerOfTwo(maximum);
+      this.maximum = nextPowerOfTwo(maximumCapacity);
       this.output = new GPUParticleRenderBufferState(this.maximum);
       this.snapshot = new GPUParticleRenderBufferState(capacity);
       this.snapshot.ensureCount(input.count);
@@ -151,13 +157,15 @@ export default class GPURendererGrouping {
         throw new RangeError('Renderer grouping exceeds the device storage-buffer capacity.');
       }
       this.scratch = new StorageBufferAttribute(new Uint32Array(words), 1);
+      this.provenance = new StorageBufferAttribute(new Uint32Array(this.maximum * 4), 4);
     }
 
+    this.system = system;
     this.output!.ensureCount(maximum);
     this.snapshot!.ensureCount(input.count);
 
     // Recreate shader graphs only when their inputs or grouping policy change.
-    const key = `${input.version}:${count}:${ratio}:${radius}:${tagMask}`;
+    const key = `${input.version}:${system.gpuParticleBuffers?.version}:${count}:${ratio}:${radius}:${tagMask}`;
     if (key !== this.key) {
       [...this.nodes, ...this.selection, ...this.reductions].forEach(node => node.dispose());
       const layout = this.layout();
@@ -165,7 +173,7 @@ export default class GPURendererGrouping {
       this.groupRange = { count: layout.read(layout.meta, 1), dispatch: this.groupDispatch! };
       this.nodes = this.buildSnapshot(input, count, ratio, tagMask);
       this.selection = this.buildSelection(input);
-      this.reductions = this.buildAssignment(input);
+      this.reductions = this.buildAssignment(input, system);
       this.output!.instanceCountNode = this.groupRange.count;
       const inputIdentity = input instanceof GPUParticleRenderBufferState ? input.storage.sourceIndex : undefined;
       // Preserve existing grouped seeds unless the input is a compact selection with original identities.
@@ -491,8 +499,11 @@ export default class GPURendererGrouping {
     return nodes;
   }
 
-  private buildAssignment(input: Input): ComputeNode[] {
+  private buildAssignment(input: Input, system: ParticleSystem): ComputeNode[] {
     const output = this.output!;
+    const provenance = storage(this.provenance!, 'uvec4', this.maximum);
+    const simulation = system.gpuParticleBuffers ?? (input instanceof GPUParticleRenderBufferState ? undefined : input);
+    const sourceIndex = input instanceof GPUParticleRenderBufferState ? input.storage.sourceIndex : undefined;
     const { records, owners, links, heads, support, meta, at, read, write } = this.layout();
 
     // Link particles to their nearest anchor; selected anchor particles keep their own group.
@@ -528,12 +539,18 @@ export default class GPURendererGrouping {
       const time = float(0).toVar();
       const realtime = float(0).toVar();
       const slot = read(heads, group).toVar();
+      const representative = uint(EMPTY).toVar(), priority = uint(EMPTY).toVar(), identity = uint(EMPTY).toVar();
 
       Loop(() => {
         If(slot.equal(EMPTY), () => {
           Break();
         });
         const source = input.storage.createParticle(slot);
+        const original = sourceIndex?.(slot) ?? slot;
+        If(source.lodPriority.lessThan(priority)
+          .or(source.lodPriority.equal(priority).and(original.lessThan(identity))), () => {
+          representative.assign(slot); priority.assign(source.lodPriority); identity.assign(original);
+        });
         const d = this.toWorld.mul(vec4(source.position, 1)).xyz.sub(center).lengthSq();
         const w = float(1).div(float(1).add(d.div(s.max(1e-12))));
         weightSum.addAssign(w);
@@ -560,6 +577,10 @@ export default class GPURendererGrouping {
       target.time.assign(time.div(weightSum));
       target.realtime.assign(realtime.div(weightSum));
       target.contribution.assign(contribution);
+      // Source identity is independent of the averaged visual channels and anchor-selection order.
+      const original = sourceIndex?.(representative) ?? representative;
+      const link = simulation ? bitcast(simulation.storage.createSourceIdentityNode(original), 'uvec4') : uvec4(0);
+      provenance.element(group).assign(link);
     }).setName('rzmps.grouping.aggregate');
 
     return [assign, reduce];
@@ -569,14 +590,18 @@ export default class GPURendererGrouping {
     const output = this.output!;
     const renderer = this.renderer!;
     const { meta } = this.layout();
-    const [floatBuffer, stateBuffer, metaBuffer] = await Promise.all([
+    const [floatBuffer, stateBuffer, metaBuffer, sourceBuffer] = await Promise.all([
       renderer.getArrayBufferAsync(output.attributes.floatData),
       renderer.getArrayBufferAsync(output.attributes.uintData),
       renderer.getArrayBufferAsync(this.scratch!, null, meta * 4, 8),
+      renderer.getArrayBufferAsync(this.provenance!),
     ]);
     const data = new Float32Array(floatBuffer);
     const states = new Uint32Array(stateBuffer);
     const counts = new Uint32Array(metaBuffer);
+    const sources = new Uint32Array(sourceBuffer);
+    // Capture current source objects before returning mutable CPU renderer snapshots.
+    const records = this.system?.frameRuntime._sourceFrames?.records;
     this.eligibleCount = counts[0];
     return Array.from({ length: Math.min(counts[1], output.count) }, (_, i) => {
       const p = new Particle();
@@ -594,6 +619,12 @@ export default class GPURendererGrouping {
       p.contribution = data[o + 16];
       p.velocity.fromArray(data, o + 17);
       p.id = `group:${i}:${states[i * 4 + 2]}`;
+      const slot = sources[i * 4], generation = sources[i * 4 + 1], kind = sources[i * 4 + 2];
+      const record = kind === 2 ? records?.[slot] : undefined;
+      const source = record && record.generation === generation ? record.source
+        : kind === 1 ? this.system?.subSystemParent?.gpuSimulation
+          ._getGPUParticleIdentity(slot, generation) : undefined;
+      if (source?.alive) setParticleSourceBinding(p, { source, slot, generation, previous: new Matrix4() });
       return p;
     });
   }
@@ -611,6 +642,9 @@ export default class GPURendererGrouping {
     this.snapshot = undefined;
 
     if (this.scratch) destroyGPUStorageAttribute(this.renderer, this.scratch);
+    if (this.provenance) destroyGPUStorageAttribute(this.renderer, this.provenance);
+    this.provenance = undefined;
+    this.system = undefined;
     for (const args of [this.particleDispatch, this.groupDispatch, this.anchorDispatch]) {
       if (args) destroyGPUStorageAttribute(this.renderer, args);
     }

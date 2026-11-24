@@ -340,11 +340,17 @@ export default class FluidPressureProjection {
       const collector = { ...renderer, compute: (node: ComputeNode | ComputeNode[]) => {
         nodes.push(...(Array.isArray(node) ? node : [node]));
       } };
+      // Initialization consumes retained velocity, while solve consumes the advected binding.
+      // Force both captures even when preparing an already initialized projection.
+      this.initialized = false;
+      this.initialize(collector, input);
+      this.initialized = false;
+      this.initialize(collector, output);
       if (before) this.captureBefore(collector, before);
       this.solve(collector, input, output, iterations);
-      const controls = this.controls?.();
-      if (controls?.diagnostics) this.measure(collector, output, false);
-      else if (controls?.measureVelocity) this.measureVelocity(collector, output);
+      // Profiling/adaptive controls can be enabled after cold preparation.
+      this.measure(collector, output, false);
+      this.measureVelocity(collector, output);
       this.multigrid?.prepareAllLevels(collector);
       this.namePrograms(input, before);
       const programs = [...new Set(nodes)];

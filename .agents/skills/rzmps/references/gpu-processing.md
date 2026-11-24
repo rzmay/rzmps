@@ -59,6 +59,45 @@ Preparation is optional: normal updates can still build resources lazily. It doe
 that every renderer, material, or population-dependent kernel is compiled. CPU/WebGL systems
 should use their normal lifecycle instead of calling this WebGPU preparation method.
 
+### Particle capacity growth
+
+`initialCapacity` sets a per-system GPU particle-slot reserve before its first allocation. It defaults
+to `ParticleSystem.Settings.GPU_INITIAL_BUFFER_SIZE`, rounds to the usual geometric capacity tier, and
+is capped by `maxParticles`. It reserves storage without creating particles:
+
+```ts
+const particles = new ParticleSystem({ initialCapacity: 4096, maxParticles: 65536 });
+```
+
+Changing it affects the next initial allocation after clear/reset; it does not resize live storage.
+The population estimator can still reserve more when required. The demo GUI and code export preserve
+this option independently of `maxParticles` and the runtime growth threshold.
+
+`capacityGrowthThreshold` is the only timing control for preparing larger GPU particle storage. It
+accepts a fraction greater than zero and at most one, defaults to `1` (100%), and can change at runtime:
+
+```ts
+particles.capacityGrowthThreshold = 0.5; // Prepare when estimated demand exceeds half the current slots.
+```
+
+The trigger uses the built-in population estimate (including each known live source execution) together
+with observed live occupancy, incoming birth batches and reported allocation shortfalls. It compares
+that demand with allocated slots multiplied by the threshold, then prepares a geometric capacity tier capped by `maxParticles`. Lowering the threshold
+starts preparation earlier; it does not reduce particle counts or change emission settings.
+
+Current particle storage remains active while the replacement allocates and its ordinary particle
+allocation/emission/integration programs compile. At an update boundary, GPU copies retain the latest
+packed particle fields, the stable particle-state wrapper adopts the prepared backing, and replaced
+resources retire after a queue fence. Preparation and adoption do not advance simulation or emission
+clocks. Benchmarks expose `capacityEstimatedPopulation`, `capacityPendingSlots`, `capacityAllocationMs`,
+`capacityPreparationMs`, `capacityMigrationMs` and `capacitySwapMs` under the GPU simulation owner.
+
+This path prepares particle storage and its generic programs. Module-owned gas programs and renderer-owned
+grouping keep their existing binding lifecycle; they do not gain additional preparation hooks. Their
+first use after a backing change can still rebuild dependent programs. Asynchronous WebGPU compilation
+also performs some JavaScript graph construction on the main thread, so an earlier threshold provides
+headroom rather than a guarantee of hitch-free updates.
+
 A module can also override `getSimulationTimestep(requestedDt)` to request a positive maximum
 step in seconds. The default is `Infinity`. The system combines requests with its configured
 substep interval and includes registered subsystems, keeping emission, modifiers, integration,
@@ -330,7 +369,7 @@ fidelity. TSL nodes can be supplied directly where a dynamic value is evaluated 
 `GasModule` is a `Module` subclass for gas cells, discovered through `system.getModules` by
 `GasSimulation` and `VolumeRenderer`. Add it to the system's normal module list. It does not execute
 per particle. Tags select overlapping consumers, untagged modules apply to all, lower priorities
-run first, and `enabled: false` disables both callbacks.
+run first, and `enabled: false` disables all of its callbacks.
 
 ```ts
 import { GasModule } from '@rzmps/rzmps';
@@ -357,6 +396,63 @@ are local expressions, not new transported fields. Rules inline at the existing 
 sites: velocity transport commits velocity, scalar transport commits density/temperature/color,
 and confinement reads its local strength. Keep callbacks deterministic shader operations; do not
 assume a once-per-frame JavaScript invocation or accumulate JavaScript side effects.
+
+### Source-aware gas initialization
+
+`GasModule` also accepts `initialize(particles, emission, context)` and a TSL counterpart,
+`initializeGPU(particles, emission, context)`. These run after gathering a cell's contributing particles,
+before depositing the resulting emission. Mutate `emission.density`, `temperature`, `color` and
+`velocity` in place. Temperature, color and velocity are specific values; density is the deposited
+concentration increment, already including source strength and this substep's emission duration.
+Initializers run in module priority order and only change new emission, not gas already in the grid.
+
+The CPU callback receives a readonly particle array. `GasModule.initializeEmission` provides ordered
+CPU/reference evaluation for custom deposition pipelines and tests. GasSimulation remains GPU-only:
+supply `initializeGPU` when using an initializer with it, just as other GPU modules need TSL callbacks.
+The GPU collection exposes a node-valued `length` and a repeatable `forEach` sparse-query iterator;
+its optional second argument is that particle's original deposited density contribution. No per-cell
+particle arrays or readback are created. An initializer's changes do not rewrite these original weights.
+
+```ts
+const cooling = new GasModule({
+  initialize(particles, emission) {
+    let heat = 0, count = 0;
+    for (const particle of particles) {
+      const source = particle.source;
+      if (!source) continue;
+      heat += Math.max(0, 1 - source.age / source.lifetime);
+      count++;
+    }
+    if (count) emission.temperature *= heat / count;
+  },
+  initializeGPU(particles, emission) {
+    const heat = float(0).toVar(), count = float(0).toVar();
+    particles.forEach(particle => {
+      const source = particle.source;
+      If(source.valid, () => {
+        heat.addAssign(float(1).sub(source.age.div(source.lifetime)).clamp(0, 1));
+        count.addAssign(1);
+      });
+    });
+    If(count.greaterThan(0), () => emission.temperature.mulAssign(heat.div(count)));
+  },
+});
+```
+
+Import `GasModule` from `@rzmps/rzmps` and `If`, `float` from `three/tsl`. CPU particles retain their
+live source independently of simulation space. GPU source views expose `valid`, `age`, `lifetime`
+and `metadata[key]` for registered/CPU-managed sources. Arbitrary numeric or boolean metadata keys
+are discovered when constructing the shader; missing keys return zero. Unsupported metadata values
+throw rather than silently lose data. Removed or reused source slots read as invalid, and the CPU
+particle's `source` becomes undefined when that source is no longer alive. Native GPU-parent source
+origins are not mapped into this registered-source table.
+
+Initialization contexts provide the logical cell index, position, delta time and elapsed time; the GPU
+context also exposes the existing read-only gas grid query. Keep initializers deterministic: the same
+emission rule is evaluated at the velocity-coupling, scalar-deposition and transient visual-source sites.
+They must not rely on one JavaScript call per cell/frame or change simulation fields directly. Later
+initializers see earlier edits to the local emission, while grid queries read the input of the current
+solver stage. Source clocks and metadata updates reuse the compiled graph.
 
 ### Gas source mass and physical diffusion
 

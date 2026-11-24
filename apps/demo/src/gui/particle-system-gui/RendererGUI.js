@@ -93,6 +93,7 @@ export class RendererGUI extends GUIEditorBase {
         'warp',
         'inheritMaterial',
         'unionCoverage',
+        'minDistance',
         'duplicateDistance',
         'duplicateInterval',
         'direction',

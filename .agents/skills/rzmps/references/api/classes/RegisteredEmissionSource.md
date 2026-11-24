@@ -146,6 +146,12 @@ mass: number = 1;
 optional metadata?: unknown;
 ```
 
+#### Implementation of
+
+```ts
+SubSystemSource.metadata
+```
+
 ***
 
 <a id="position"></a>
@@ -279,6 +285,28 @@ readonly velocity: Vector3;
 [`Particle`](Particle.md).[`velocity`](Particle.md#velocity)
 
 ## Accessors
+
+<a id="age"></a>
+
+### age
+
+#### Get Signature
+
+```ts
+get age(): number;
+```
+
+Current particle age in seconds.
+
+##### Returns
+
+`number`
+
+#### Implementation of
+
+[`Particle`](Particle.md).[`age`](Particle.md#age)
+
+***
 
 <a id="data"></a>
 

@@ -353,7 +353,7 @@ window.checkDecalGrowth = async () => {
 };
 
 // A round input mask must stay near the impact at the rear and visibly extend downstream.
-window.checkForwardSplat = async () => {
+window.checkForwardSplat = async (bridge = false) => {
   paint.clear();
   const texels = new Uint8Array(64 * 64 * 4);
   for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
@@ -364,12 +364,15 @@ window.checkForwardSplat = async () => {
   map.needsUpdate = true;
   const material = new THREE.MeshBasicMaterial({ map, color: '#d02010' });
   const results = [];
-  for (const sign of [1, -1]) {
-    const view = new DecalRenderer(material, { size: 0.35, warp: DecalRenderer.Warp.FromVelocity(3, 1) });
+  for (const amount of bridge ? [1, 1.5] : [1, -1]) {
+    const warp = bridge
+      ? DecalRenderer.Warp.FromPoints(new THREE.Vector3(), new THREE.Vector3(0.8, 0, 0), 4, amount)
+      : DecalRenderer.Warp.FromVelocity(3, 1);
+    const view = new DecalRenderer(material, { size: 0.35, warp });
     const owner = new ParticleSystem({ gpuProcessing: false, emitters: [], renderers: [view] });
     scene.add(owner); scene.updateMatrixWorld(true);
     owner._notifySpawn(new Particle({
-      position: new THREE.Vector3(0, 0.1, 0), velocity: new THREE.Vector3(2 * sign, -1, 0), lifetime: 10,
+      position: new THREE.Vector3(0, 0.1, 0), velocity: new THREE.Vector3(2 * amount, -1, 0), lifetime: 10,
     }));
     const target = backend === 'webgl'
       ? new THREE.WebGLRenderTarget(256, 256) : new THREE.RenderTarget(256, 256);

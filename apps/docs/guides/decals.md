@@ -258,6 +258,8 @@ the selected target mesh.
 `rotation` is additional roll in radians, default zero. A range such as `[-Math.PI, Math.PI]` is
 sampled independently per mark, including entry and exit marks from the same particle. The registered
 source frame uses the same roll as the geometry. Source particles are never rotated.
+Base roll is applied before `warp`: randomizing the texture orientation does not rotate the direction
+of a subsequent ray/velocity deformation. Rectangular projector dimensions are included in this mapping.
 
 Built-in event names are `spawn`, `death` and `collision`. `marks.onEvent('collision', callback)`
 selects the same trigger as `onCollision: callback`; an explicit onEvent entry takes precedence,
@@ -329,7 +331,8 @@ The original direct shortcuts remain available.
 ray, including bounded movement segments. `scale` defaults to `(1,1)`, `rotation` to zero radians, and `skew` and
 `perspective` to `(0,0)`. Skew components are dimensionless shear coefficients. Coordinates are centered unit
 projector UVs. The forward matrix is `rotation * shear * scale * perspective`.
-`Warp.Scale`, `Rotate`, `Skew`, `Perspective` create fixed warps; `FromRay()`, `FromVelocity()` and `Combine(...)` create samplers.
+`Warp.Scale`, `Rotate`, `Skew`, `Perspective` create fixed warps;
+`FromRay()`, `FromVelocity()`, `FromPoints(...)` and `Combine(...)` create samplers.
 `Combine(A,B)` applies **A then B**, composing matrices as `B*A`; it does not merge individual settings.
 
 `FromVelocity(maxStretch = 4, factor = 1)` stretches along incoming velocity projected onto the receiver.
@@ -344,8 +347,26 @@ Stationary and perpendicular impacts remain unstretched. For example, `FromVeloc
 threefold stretch, adding 0.3 to the length multiplier per world unit/second of motion along the surface.
 This keeps exact collision placement independent of the placement ray. Neither source velocity nor speed is modified.
 
+`FromPoints(from, to, maxStretch = 4, overlap = 1)` fits the decal between the two world-space points,
+projected onto the receiver's tangent plane. It centers the footprint halfway between the points and
+preserves crosswise width. The fitted length is at least the original footprint's length in that direction.
+`overlap: 1.2` makes the fitted length 20% longer, extending equally beyond both ends; its minimum is one.
+`maxStretch` caps the final length multiplier relative to the original footprint, so a restrictive cap can
+prevent covering a very large gap. Coincident points or motion only along the surface normal leave the
+footprint unchanged. Both vectors are read at placement time and remain unmodified:
+
+```js
+const previousPoint = new THREE.Vector3();
+const currentPoint = new THREE.Vector3();
+const warp = DecalRenderer.Warp.FromPoints(previousPoint, currentPoint, 4, 1.2);
+// At each collision, copy currentPoint into previousPoint, then copy the hit point into currentPoint.
+// Set both to the hit point on first contact or when changing receiver to avoid bridging separate surfaces.
+```
+
 `FromRay(maxStretch = 4)` stretches along the projected incoming ray. Perpendicular incidence stays identity; grazing incidence
-is capped by the same factory-local maximum. Custom warp samplers are not limited by either factory. Its tangent frame uses the source particle's projector roll.
+is capped by the same factory-local maximum. Custom warp samplers are not limited by either factory.
+Warps act in the unrolled receiver tangent frame after the base texture rotation. This keeps directional
+deformation aligned to incoming motion even when each mark has a different random roll.
 Three.js still clips the rectangular projector against the receiver. RZMPS fits and offsets that rectangle to the
 actual warped footprint and applies inverse homogeneous UV lookup in TSL/WebGL. The UV origin is adjusted on
 the CPU so the impact stays anchored without an extra shader attribute. Transparent excess is
@@ -385,3 +406,41 @@ height-gradient normal detail using the same construction as the liquid material
 Radial contact directions share one scene-membership collection per projection. Dense ordinary meshes
 use a cached indirect CPU BVH for contact rays; rigid movement reuses it and position edits refit it.
 Caller-owned geometry indices and custom raycast functions are preserved.
+
+Dense-receiver projection also uses that cached acceleration to select triangles near the projector before
+calling Three.js `DecalGeometry`. Three.js still performs projection and clipping; warp coordinates and
+normals follow the same path as ordinary decals. The conservative query includes the warped footprint,
+projector depth and receiver transform, including nonuniform scale. Source triangle order is preserved.
+Small receivers use the direct Three.js path without building a BVH.
+
+Acceleration is shared across decal renderers using the same geometry, including separate burn/scorch
+layers. Rigid movement does not rebuild it. Position edits refit the tree when the attribute is marked
+`needsUpdate`; index or attribute replacement rebuilds it, and geometry disposal drops the cached entry.
+As with other Three.js geometry updates, in-place array edits must set the attribute's `needsUpdate` flag.
+First use still builds the CPU acceleration structure, so this reduces repeated dense-mesh projection cost
+rather than making initial setup free. Projection retains Three.js's full-geometry behavior independently
+of material groups or `drawRange`; raycasts continue respecting those settings.
+
+## Persistent spacing and overlap queries
+
+`minDistance` is a scalar world-space distance. Its default **-1 disables spacing**; zero also leaves
+placement unrestricted. Finite values below -1 are rejected. Positive values reject a candidate strictly
+closer than that distance to a compatible retained mark; exactly the threshold is accepted. This check
+runs before persistent geometry/source allocation and never changes an existing mark. `maxDecals`
+independently limits total population; size/warp controls coverage, and emission rate controls attempts.
+The recent-contact `duplicateDistance`/`duplicateInterval` filter remains a separate time-window control.
+
+```ts
+const burns = new DecalRenderer(material, { minDistance: 0.2, maxDecals: 48 });
+const nearby = burns.queryDecals(receiver, worldPoint, radius, worldNormal);
+```
+
+The query returns live decals nearest first within an inclusive radius. Receiver-local hash buckets
+survive rigid movement; final distances account for world scale, including nonuniform transforms.
+Passing a normal filters opposite-facing and separated-sheet contacts. Spacing always applies this
+surface compatibility test. It is a local tangent/curvature approximation, not exact geodesic distance
+across arbitrary disconnected coplanar islands. Expiration, eviction and clearing remove index entries.
+
+The [Heat Laser](../examples/heatLaser.md) uses collision events to extend an overlapping mark's
+`lifetime`, leaving `age` unchanged. Its normalized age decreases naturally, driving both emissive
+appearance and persistent source output. Spacing remains independent of this demo-side event response.

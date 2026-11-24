@@ -1,3 +1,4 @@
+import DecalSpatialIndex from '../decals/DecalSpatialIndex';
 import raycastDecalTargets from '../decals/raycastDecalTargets';
 import { retainDecalCoverage, applyDecalCoverage } from '../decals/decalCoverage.utils';
 import { applySurfaceMaterial } from '../compositing/applySurfaceMaterial';
@@ -25,7 +26,7 @@ import {
 import rendererEventParticle from '../rendererEventParticle';
 import type { Tag } from '../../types/tag.types';
 import * as THREE from 'three';
-import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
+import createDecalGeometry from '../decals/createDecalGeometry';
 import Renderer, { type RendererOptions } from '../../core/Renderer';
 import Particle from '../../core/Particle';
 import type ParticleSystem from '../../core/ParticleSystem';
@@ -74,6 +75,9 @@ export interface DecalRendererOptions extends Partial<RendererOptions> {
   unionCoverage?: boolean;
   /** Inherit source/scene material-copy bindings. False keeps a simple overlay. Defaults to true. */
   inheritMaterial?: boolean;
+  /** Minimum world-space distance between compatible live decals on one receiver.
+   * Defaults to -1 (disabled); zero is also unrestricted. Exact threshold distance is accepted. */
+  minDistance?: number;
   /** Optional surface-local near-duplicate rejection distance; zero disables it. */
   duplicateDistance?: number;
   /** Recent-contact window for duplicateDistance, in seconds. Defaults to 0.1. */
@@ -196,6 +200,21 @@ export default class DecalRenderer extends Renderer {
   unionCoverage = false;
   private releaseCoverage?: () => void;
   private localMaterialVersion = -1;
+  private readonly spatialIndex = new DecalSpatialIndex<DecalInstance>();
+  private _minDistance = -1;
+  get minDistance(): number { return this._minDistance; }
+  set minDistance(value: number) {
+    if (!Number.isFinite(value) || value < -1) throw new RangeError('Decal minDistance must be finite and >= -1.');
+    this._minDistance = value;
+  }
+
+  /** Nearby persistent decals, nearest first. Inputs use world space; normals filter incompatible surfaces.
+   * The inclusive query radius is independent of minDistance and does not alter any decal. */
+  queryDecals(receiver: THREE.Object3D, position: THREE.Vector3, radius: number, normal?: THREE.Vector3)
+    : readonly DecalInstance[] {
+    return this.spatialIndex.query(receiver, position, radius, normal);
+  }
+
   duplicateDistance = 0;
   duplicateInterval = 0.1;
   private time = 0;
@@ -337,6 +356,7 @@ export default class DecalRenderer extends Renderer {
     this.warp = options.warp;
     this.inheritMaterial = options.inheritMaterial ?? true;
     this.unionCoverage = options.unionCoverage ?? false;
+    this.minDistance = options.minDistance ?? -1;
     this.duplicateDistance = Math.max(0, options.duplicateDistance ?? 0);
     this.duplicateInterval = Math.max(0, options.duplicateInterval ?? 0.1);
     this._parameterEventHandlers = options.onEvent ?? [];
@@ -559,6 +579,21 @@ export default class DecalRenderer extends Renderer {
     this.synchronize(system);
   }
 
+  private simulationAgeToken?: object;
+  private simulationAgeStep = 0;
+
+  override advanceSimulation(system: ParticleSystem, deltaTime: number): void {
+    this.simulationAgeToken = system.renderFrameToken;
+    this.simulationAgeStep = deltaTime;
+    this.ageDecals(deltaTime);
+  }
+
+  private ageFromRenderer(system: ParticleSystem, deltaTime: number): void {
+    if (this.simulationAgeToken !== system.renderFrameToken || deltaTime !== this.simulationAgeStep) {
+      this.ageDecals(deltaTime);
+    }
+  }
+
   // Persistent instances must age even when source particles are absent or renderer LOD skips them.
   override update(particles: Particle[], system: ParticleSystem, deltaTime = 0): void {
     if (system.paused) return;
@@ -580,7 +615,7 @@ export default class DecalRenderer extends Renderer {
     this.prepareMaterialTextures(system, acceptMultiple(this.material)!);
 
     // TODO: GPU collision events lack target identity; use sampler fallback until identity is available.
-    this.ageDecals(deltaTime);
+    this.ageFromRenderer(system, deltaTime);
     const rate = this.continuousRate;
 
     if (!Number.isFinite(rate) || rate <= 0) {
@@ -609,7 +644,7 @@ export default class DecalRenderer extends Renderer {
 
   protected _update(particles: Particle[], _system: ParticleSystem, deltaTime: number): void {
     this.prepareMaterialTextures(_system, acceptMultiple(this.material)!);
-    this.ageDecals(deltaTime);
+    this.ageFromRenderer(_system, deltaTime);
     this.projectContinuous(particles, deltaTime || this.readbackDeltaTime);
   }
 
@@ -1069,6 +1104,9 @@ export default class DecalRenderer extends Renderer {
       return;
     }
 
+    // Reject spacing candidates before clipping/geometry allocation or persistent source registration.
+    if (this.minDistance > 0 && this.spatialIndex.query(hit.object, parameters.position,
+      this.minDistance, parameters.normal, true).length) return;
     if (this.isDuplicate(hit, parameters)) return;
 
     // Clip the projector volume against the selected surface.
@@ -1079,7 +1117,8 @@ export default class DecalRenderer extends Renderer {
         parameters.position.clone().sub(this.worldPosition(particle)).normalize(),
       );
     if (ray.direction.lengthSq() < 1e-10) ray.direction.copy(parameters.normal).negate();
-    const warp = sampleDecalWarp(this.warp, particle, ray, hit, this.system);
+    const warp = sampleDecalWarp(this.warp, particle, ray, hit, this.system,
+      parameters.rotation, parameters.size, parameters.position);
     const geometry = this.benchmarks.span('geometryGeneration', () => this.createGeometry(hit, parameters, warp));
 
     if (!geometry) return;
@@ -1133,6 +1172,7 @@ export default class DecalRenderer extends Renderer {
       appearanceParticle,
     };
     this.instances.push(decal);
+    this.spatialIndex.add(decal, hit.object, parameters.position, parameters.normal);
     this.isDuplicate(hit, parameters, true);
     this.fade(decal);
 
@@ -1168,7 +1208,7 @@ export default class DecalRenderer extends Renderer {
       );
       decal.emissionTransform = hit.object.matrixWorld.clone().invert().multiply(transform);
       decal.source = this.system.registerEmissionSource({
-        tags: this.emissionTags,
+        tags: this.emissionTags, age: decal.age, lifetime: decal.lifetime,
         transform: this.emissionMatrix(decal),
         color: decal.color,
         alpha: decal.renderedOpacity,
@@ -1182,6 +1222,7 @@ export default class DecalRenderer extends Renderer {
           point: sample.point.clone().applyMatrix4(this.system.getSimulationToWorldMatrix().invert()),
         },
       });
+      decal.source.prepareEmission = () => this.updateEmissionSource(decal);
     }
   }
 
@@ -1211,12 +1252,12 @@ export default class DecalRenderer extends Renderer {
     const projectorPosition = parameters.position
       .clone()
       .add(new THREE.Vector3(center.x * size.x, center.y * size.y, 0).applyQuaternion(orientation));
-    const geometry = new DecalGeometry(
+    const geometry = this.benchmarks.span('receiverProjection', () => createDecalGeometry(
       target,
       projectorPosition,
       new THREE.Euler().setFromQuaternion(orientation),
       dimensions,
-    );
+    ));
     // Preserve impact-anchored inverse-warp coordinates without another per-vertex shader attribute.
     const coordinates = geometry.getAttribute('uv');
     for (let i = 0; i < coordinates.count; i++) {
@@ -1234,13 +1275,30 @@ export default class DecalRenderer extends Renderer {
       return;
     }
 
-    // Every public warp fixes the projector origin. Its inverse therefore needs only six coefficients;
-    // two more values carry the clipping rectangle extent, fitting two vertex buffers on WebGPU.
+    // Fold inverse translation into the UV origin to retain the same six shader coefficients.
+    // This supports centered point-to-point bridges without another attribute/binding.
     const inverse = warp.clone().invert(),
       m = inverse.elements;
+    const determinant = m[0] * m[4] - m[3] * m[1];
+    const shift = new THREE.Vector2(
+      (m[4] * m[6] - m[3] * m[7]) / determinant,
+      (m[0] * m[7] - m[1] * m[6]) / determinant,
+    );
+    const denominator = m[8] - m[2] * shift.x - m[5] * shift.y;
+    if (!Number.isFinite(denominator) || Math.abs(denominator) < 1e-8
+      || !shift.toArray().every(Number.isFinite)) {
+      geometry.dispose();
+      return;
+    }
+    if (shift.lengthSq() > 0) {
+      for (let i = 0; i < coordinates.count; i++) {
+        coordinates.setXY(i, coordinates.getX(i) + shift.x / extents.x,
+          coordinates.getY(i) + shift.y / extents.y);
+      }
+    }
     const columns = [
-      [m[0], m[3], m[1], m[4]],
-      [m[2], m[5], extents.x, extents.y],
+      [m[0] / denominator, m[3] / denominator, m[1] / denominator, m[4] / denominator],
+      [m[2] / denominator, m[5] / denominator, extents.x, extents.y],
     ];
     if (!columns.flat().every(value => Number.isFinite(Math.fround(value)))) {
       geometry.dispose();
@@ -1293,11 +1351,13 @@ export default class DecalRenderer extends Renderer {
   }
 
   private updateEmissionSource(decal: DecalInstance): void {
-    decal.source?.update({ transform: this.emissionMatrix(decal), color: decal.color, alpha: decal.renderedOpacity });
+    decal.source?.update({ transform: this.emissionMatrix(decal), color: decal.color, alpha: decal.renderedOpacity,
+      age: decal.age, lifetime: decal.lifetime });
   }
 
   private remove(index: number): void {
     const [decal] = this.instances.splice(index, 1);
+    this.spatialIndex.remove(decal);
     decal.source?.dispose();
     decal.batch.remove(decal.slot);
     decal.geometry.dispose();
@@ -1315,7 +1375,10 @@ export default class DecalRenderer extends Renderer {
     this.continuousTicks.clear();
     this.projectionSequence = 0;
     this.time = 0;
+    this.simulationAgeToken = undefined;
+    this.simulationAgeStep = 0;
     this.recentContacts = new WeakMap();
+    this.spatialIndex.clear();
     this.readbackDeltaTime = 0;
     while (this.instances.length) this.remove(this.instances.length - 1);
     this.batches.forEach(batch => batch.dispose());

@@ -1053,18 +1053,18 @@ Clears batches and unsubscribes when a component is removed or its system is des
 ### prepareResources()
 
 ```ts
-prepareResources(_system, _renderer): Promise<void>;
+prepareResources(system, renderer): Promise<void>;
 ```
 
 Prepare optional rendering pipelines without advancing particle or simulation state.
 
 #### Parameters
 
-##### \_system
+##### system
 
 [`ParticleSystem`](ParticleSystem.md)
 
-##### \_renderer
+##### renderer
 
 `WebGPURenderer`
 
@@ -1121,6 +1121,33 @@ Restores transient backend state while retaining reusable rendering resources.
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`reset`](Renderer.md#reset)
+
+***
+
+<a id="ribboncondition"></a>
+
+### RibbonCondition()
+
+```ts
+RibbonCondition(index): ParticleCondition;
+```
+
+Shortcut for TrailRenderer.RibbonCondition(this.ribbonCount, index), using the current ribbon count.
+
+#### Parameters
+
+##### index
+
+`number`
+
+#### Returns
+
+[`ParticleCondition`](../type-aliases/ParticleCondition.md)
+
+#### Remarks
+
+Does not work correctly with renderer children or grouping; other renderer filtering must
+preserve the same original particle population.
 
 ***
 
@@ -1274,3 +1301,34 @@ Selects producers without forwarding or traversing beyond immediate relatives.
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`visibleSystems`](Renderer.md#visiblesystems)
+
+***
+
+<a id="ribboncondition-1"></a>
+
+### RibbonCondition()
+
+```ts
+static RibbonCondition(ribbonCount, index): ParticleCondition;
+```
+
+Selects original particles in a zero-based ribbon, using the renderer's stable oldest-first ordering.
+
+#### Parameters
+
+##### ribbonCount
+
+`number`
+
+##### index
+
+`number`
+
+#### Returns
+
+[`ParticleCondition`](../type-aliases/ParticleCondition.md)
+
+#### Remarks
+
+CPU predicate. Renderer children and grouping change the rendered population, so this helper
+does not work correctly with either. Other renderer filtering must preserve the same particle population.

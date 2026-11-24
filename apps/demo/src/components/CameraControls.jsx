@@ -20,6 +20,7 @@ function CameraControls({ fov, zoomSpeed, rotationSpeed }) {
 
   // Ref to the controls, so that we can update them on every frame using useFrame
   const controls = useRef();
+  const appliedSceneView = useRef();
 
   useEffect(() => {
     // FOV
@@ -29,7 +30,18 @@ function CameraControls({ fov, zoomSpeed, rotationSpeed }) {
     camera.lookAt(scene.position);
   }, [camera, fov, scene]);
 
-  useFrame(() => controls.current.update());
+  useFrame(() => {
+    const view = scene.userData.cameraView;
+    if (view !== appliedSceneView.current) {
+      // Apply an authored scene pose once, preserving subsequent user orbit/pan input.
+      if (view) {
+        camera.position.fromArray(view.position);
+        controls.current.target.fromArray(view.target);
+      }
+      appliedSceneView.current = view;
+    }
+    controls.current.update();
+  });
 
   return (
     <orbitControls

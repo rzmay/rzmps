@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { Node } from 'three/webgpu';
-import Module, { type ModuleGPUUpdate, type ModuleOptions, type ModuleUpdate } from '../core/Module';
+import Module, {
+  type ModuleGPUUpdate, type ModuleOptions, type ModuleUpdate,
+  type ModuleExecutionContext, type ModuleGPUExecutionContext,
+} from '../core/Module';
 import Particle from '../core/Particle';
 import type { GPUParticleLike } from '../simulation/gpu/Particle';
 import {
@@ -10,7 +13,7 @@ import {
   type ParticleNoiseValues,
 } from '../utils/noise.utils';
 
-export interface NoiseOptions extends Partial<ModuleOptions> {
+export interface NoiseOptions extends Partial<Omit<ModuleOptions, 'modifyGPU'>> {
     /** Number of noise layers; additional layers increase sampling work. Defaults to 1. */
     octaves: number;
     /** Spatial frequency of the noise; larger values produce smaller features. Defaults to 1. */
@@ -29,12 +32,14 @@ export type NoiseModuleUpdate = (
   particle: Particle,
   deltaTime: number,
   noise: ParticleNoiseValues,
+  context: ModuleExecutionContext,
 ) => void;
 
 export type NoiseModuleGPUUpdate = (
   particle: GPUParticleLike,
   deltaTime: Node<'float'>,
   noise: GPUParticleNoiseValues,
+  context: ModuleGPUExecutionContext,
 ) => void;
 
 /**
@@ -77,13 +82,13 @@ class NoiseModule extends Module {
           particle.noise[key] = noise;
         });
 
-      const modify: ModuleUpdate = (particle, deltaTime) => {
-        update(particle, deltaTime, this.generateNoise(particle));
+      const modify: ModuleUpdate = (particle, deltaTime, context) => {
+        update(particle, deltaTime, this.generateNoise(particle), context);
       };
 
       const modifyGPU: ModuleGPUUpdate = options.modifyGPU
-        ? (particle, deltaTime) => {
-          options.modifyGPU?.(particle, deltaTime, this.generateNoiseGPU(particle));
+        ? (particle, deltaTime, context) => {
+          options.modifyGPU?.(particle, deltaTime, this.generateNoiseGPU(particle), context);
         }
         : Module.GPU_UNSUPPORTED;
 

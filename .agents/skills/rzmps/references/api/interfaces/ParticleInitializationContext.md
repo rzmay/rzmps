@@ -39,21 +39,7 @@ readonly optional event?: SimulationEvent<unknown>;
 ### source?
 
 ```ts
-readonly optional source?: Readonly<Pick<Particle,
-  | "time"
-  | "alpha"
-  | "id"
-  | "realtime"
-  | "color"
-  | "position"
-  | "scale"
-  | "rotation"
-  | "velocity"
-  | "mass"
-  | "distortionStrength"
-  | "tags"
-  | "lifetime"
-| "alive">>;
+readonly optional source?: SubSystemSource;
 ```
 
 ***

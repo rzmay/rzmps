@@ -298,6 +298,24 @@ velocity: Vector3;
 
 ## Accessors
 
+<a id="age"></a>
+
+### age
+
+#### Get Signature
+
+```ts
+get age(): number;
+```
+
+Current particle age in seconds.
+
+##### Returns
+
+`number`
+
+***
+
 <a id="ischild"></a>
 
 ### isChild
@@ -459,6 +477,24 @@ get root(): Particle;
 ##### Returns
 
 `Particle`
+
+***
+
+<a id="source"></a>
+
+### source
+
+#### Get Signature
+
+```ts
+get source(): SubSystemSource | undefined;
+```
+
+Emission origin retained independently of simulation space.
+
+##### Returns
+
+[`SubSystemSource`](../type-aliases/SubSystemSource.md) \| `undefined`
 
 ***
 

@@ -124,6 +124,28 @@ version: number = 0;
 
 ## Methods
 
+<a id="adoptstorage"></a>
+
+### adoptStorage()
+
+```ts
+adoptStorage(prepared): void;
+```
+
+Adopt prepared backing while preserving the live state identity used by modules to detect reset.
+
+#### Parameters
+
+##### prepared
+
+`GPUParticleBufferState`
+
+#### Returns
+
+`void`
+
+***
+
 <a id="dispose"></a>
 
 ### dispose()

@@ -33,6 +33,14 @@ test('projective batched decals render on both backends; GPU conditions compact 
           await writeFile(`/tmp/rzmps-forward-splat-${backend}-${i}.png`,
             Buffer.from(splats[i].image.split(',')[1], 'base64'));
         }
+        const bridges = await page.evaluate(() => window.checkForwardSplat(true));
+        const [fitted, overlap] = bridges;
+        assert(overlap.minX < fitted.minX - 5 && overlap.maxX > fitted.maxX + 5,
+          `${backend}: overlap must extend both ends: ${JSON.stringify(bridges.map(({ minX, maxX }) => ({ minX, maxX })))}`);
+        assert(Math.abs((fitted.minX + fitted.maxX) - (overlap.minX + overlap.maxX)) <= 2,
+          'overlap preserves the midpoint between the two points');
+        await writeFile(`/tmp/rzmps-point-bridge-${backend}.png`,
+          Buffer.from(overlap.image.split(',')[1], 'base64'));
         const growth = await page.evaluate(() => window.checkDecalGrowth());
         assert.deepEqual(growth, { mismatch: 0, flicker: 0, count: 70 });
         const sampling = await page.evaluate(() => window.checkDecalSampling());

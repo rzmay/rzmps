@@ -1,6 +1,7 @@
 import { modifyWithFeatherGPU, snapshotParticleGPU } from '../spatial/effects/spatialEffectSampling.utils';
 import GPUSubSystemPredicates from '../emission/gpu/GPUSubSystemPredicates';
 import prepareComputePrograms from '../utils/gpu/prepareComputePrograms';
+import StagedGPUAllocation from '../utils/gpu/StagedGPUAllocation';
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import Benchmarks from '../core/Benchmarks';
 import GlobalSettings from '../core/GlobalSettings';
@@ -43,10 +44,10 @@ import EventReceiver from '../events/EventReceiver';
 import { cpuEventHandler, eventNames, type GPUEmissionContext } from '../events/events.utils';
 import { SharedGPUEventBatch } from '../events/gpu/SharedGPUEventBatch';
 import type { GPUEventReadbackBatch } from '../events/gpu/EventBuffer';
-import { GPUEventBufferState, GPUEventType } from '../events/gpu/EventBuffer';
+import { GPUCollisionEventBufferState, GPUEventBufferState, GPUEventType } from '../events/gpu/EventBuffer';
 import type { GPUComputeCache, GPUComputeListCache, GPUUniformNode } from '../utils/gpu/computeCache.types';
 import { isWebGPURenderer } from '../utils/gpu/isWebGPURenderer';
-import { nextPowerOfTwo } from '../utils/gpu/storage.utils';
+import { copyStorageAttributes, destroyStorageAttribute, nextPowerOfTwo } from '../utils/gpu/storage.utils';
 import Collision from '../modules/Collision';
 import { GPUAllocationBufferState, type GPUAllocationDiagnostics } from '../simulation/gpu/AllocationBuffer';
 import {
@@ -79,6 +80,22 @@ import { GPUDynamicParameterStore } from '../values/GPUDynamicParameterStore';
 interface GPUSubSystemFrameInput {
   parent: ParticleSystem;
   options: SubSystemOptions;
+}
+// Capacity-specific programs are isolated while live uniforms and emitter clocks remain shared.
+const particleProgramKeys = [
+  '_gpuLODCull', '_gpuSkipTimeCompute', '_gpuEmissionPrepareComputeCache', '_gpuEmissionFinalizeComputeCache',
+  '_gpuContinuousSubSystemComputeCache', '_gpuEventSubSystemComputeCache', '_gpuEmissionComputeCache',
+  '_gpuOldEmissionComputeCache', '_gpuOldSelectionComputeCache', '_gpuOldDeathEventComputeCache',
+  '_gpuAllocationSnapshotComputeCache', '_gpuSpawnEventComputeCache', '_gpuSimulationComputeCache',
+  '_gpuRenderOutputComputeCache', '_stagedBirthCompute',
+] as const;
+interface ParticleCapacityState {
+  buffers: GPUParticleBufferState;
+  programs?: GPUSimulation;
+  key?: string;
+  allocation?: GPUAllocationBufferState;
+  render?: GPUParticleRenderBufferState;
+  collision?: GPUCollisionEventBufferState;
 }
 interface GPUSlotIdentity {
   particle: Particle;
@@ -139,6 +156,13 @@ export default class GPUSimulation {
     this.benchmarks.register('dispatchCount', { type: BenchmarkMetricType.Counter, unit: 'count', perFrame: true,
       source: 'renderer.info.compute.calls delta during this simulation submission' });
   }
+  private particleCapacity?: StagedGPUAllocation<ParticleCapacityState>;
+  private capacityShortfall = 0;
+  private capacityPreparationKey?: string;
+  private capacityInputs?: { modules: Module[]; effects: SpatialEffect[]; nativeEmission: boolean };
+  private preparingParticleCapacity = false;
+  private capacityCollisionBuffer?: GPUCollisionEventBufferState;
+
   _gpuLODCull?: { buffers: GPUParticleBufferState; count: number; version: number; node: ComputeNode };
 
   readonly _gpuLODQuality = uniform(1, 'float');
@@ -165,7 +189,7 @@ export default class GPUSimulation {
 
   /** Compile stable particle/emission phases without executing a simulation step. @internal */
   async preparePrograms(renderer: WebGPURenderer, modules: Module[], effects: SpatialEffect[],
-    input?: GPUSubSystemFrameInput): Promise<void> {
+    input?: GPUSubSystemFrameInput, settled = false): Promise<void> {
     // Establish particle capacity before capturing allocation writers in cached phase graphs.
     // Otherwise cold preparation binds a one-slot temporary counter buffer that runtime replaces.
     const preparedContext = this.prepareContext(renderer);
@@ -210,7 +234,11 @@ export default class GPUSimulation {
         if (input.options.emitContinuous) this._computeGPUContinuousSubSystemEmissionPhase(context, input);
         if (input.options.emitOnDeath || input.options.emitOnSpawn || input.options.emitOnCollision
           || eventNames(input.options.onEvent).length) this._computeGPUEventSubSystemEmissionPhase(context, input);
-      } else this._computeGPUEmissionPhase(context);
+      } else if (this.preparingParticleCapacity
+        ? this.capacityInputs!.nativeEmission : this.execution.nativeEmission()) {
+        this._computeGPUEmissionPhase(context);
+      }
+      if (this._stagedBirthBuffers) nodes.push(...this._getStagedBirthComputeNodes(context, this._stagedBirthBuffers));
       this._computeGPUSpawnEventPhase(context);
       const fused = this._computeGPUCollisionAndModifierPhases(context, permanent, true);
       nodes.push(this._getGPUSimulationComputeNode(context, fused, transient,
@@ -221,7 +249,14 @@ export default class GPUSimulation {
           [...transient, ...render], context));
       }
     } finally { renderer.compute = compute; }
-    await prepareComputePrograms(renderer, [...new Set(nodes)]);
+    const versions = [...this.system.emitters, ...modules].map(component => component.version);
+    await prepareComputePrograms(renderer, [...new Set(nodes)], () => true, this.benchmarks);
+    // Lazy TSL construction can register dynamic layouts. Settle those versions before adopting keys,
+    // otherwise the first live update rebuilds otherwise identical emission/modifier programs.
+    const components = [...this.system.emitters, ...modules];
+    components.forEach(component => component.syncGPUConfiguration());
+    if (!settled && components.some((component, index) => component.version !== versions[index]))
+      await this.preparePrograms(renderer, modules, effects, input, true);
   }
 
   /** @internal Shares the same render storage that the first ordinary update will fill. */
@@ -408,7 +443,8 @@ export default class GPUSimulation {
 
     const debugFrame = this._beginGPUDebugFrame(modules);
     const hasPendingReadback = this._gpuReadbackPending;
-    const preserveGPUState = hasPendingReadback || this._gpuCPUMirrorStale;
+    const stagedEmission = this.system.emissionRuntime._stagingBirths;
+    const preserveGPUState = stagedEmission || hasPendingReadback || this._gpuCPUMirrorStale;
 
     if (preserveGPUState) {
       this._logGPUDebug('CPU mirror stale; preserving GPU state', {
@@ -463,17 +499,11 @@ export default class GPUSimulation {
         (particle, index) => this._getGPUParticleSlotGeneration(particle, index),
       );
     }
-    if (gpuNativeEmission) {
-      const estimatedCapacity = this._getInitialGPUBufferCapacity();
-      if (estimatedCapacity > this._gpuBuffers.capacity && this._gpuBuffers.grow(sceneRenderer, estimatedCapacity)) {
-        this._gpuRenderOutputBuffers?.dispose(sceneRenderer);
-        this._gpuRenderOutputBuffers = undefined;
-        this._gpuAllocationBuffer = undefined;
-        this._disposeGPUComputeCaches();
-      }
+    if (gpuNativeEmission || stagedEmission) {
       this._gpuBuffers.ensureCount(this._gpuBuffers.capacity);
     }
     const mainBufferInitialization = this._gpuBuffers.initialize(sceneRenderer);
+    if (gpuNativeEmission || stagedEmission) this.updateParticleCapacity(sceneRenderer, modules, spatialEffects);
     this._logGPUDebug('uploaded main buffer', {
       count: this._gpuBuffers.count,
       capacity: this._gpuBuffers.capacity,
@@ -554,7 +584,7 @@ export default class GPUSimulation {
     const modifiers = [...modules.filter(module => module.modifiesParticles), ...gpuSpatialEffects];
 
     this.system.frameRuntime._computeGPUFrameConversion(context);
-    if (gpuNativeEmission || this._gpuSubSystemFrameInput) {
+    if (gpuNativeEmission || stagedEmission || this._gpuSubSystemFrameInput) {
       this._computeGPUAllocationSnapshot(context);
     }
 
@@ -570,7 +600,8 @@ export default class GPUSimulation {
       ) {
         this._computeGPUEventSubSystemEmissionPhase(context, this._gpuSubSystemFrameInput);
       }
-    } else {
+    } else if (gpuNativeEmission) {
+      // CPU-managed source/event executions already emitted their births; do not also emit at the system origin.
       this._computeGPUEmissionPhase(context);
       if (this.system.emitters.some(emitter => this.execution.emitterEventNames(emitter).length)) {
         this._computeGPUEventSubSystemEmissionPhase(context, {
@@ -619,7 +650,8 @@ export default class GPUSimulation {
     }
 
     const shouldRequestReadback =
-      !this.execution.skipRender() && !gpuNativeEmission && !hasPendingReadback && this._shouldRequestGPUReadback();
+      !this.execution.skipRender() && !gpuNativeEmission && !stagedEmission
+      && !hasPendingReadback && this._shouldRequestGPUReadback();
     const readbackSequence = shouldRequestReadback ? this._gpuReadbackSequence + 1 : 0;
     const readbackParticles = shouldRequestReadback ? this.system.particles.slice(0, this._gpuBuffers.count) : [];
     const readbackWasAlive = shouldRequestReadback ? readbackParticles.map(particle => particle.alive) : [];
@@ -1091,7 +1123,7 @@ export default class GPUSimulation {
     const renderer = this.system.sceneRenderer;
     if (!this.system.emissionRuntime._stagedBirths.length || !isWebGPURenderer(renderer)) return;
     const count = Math.min(this.system.emissionRuntime._stagedBirths.length, context.buffers.capacity);
-    const capacity = nextPowerOfTwo(count);
+    const capacity = nextPowerOfTwo(Math.max(count, GlobalSettings.GPU_INITIAL_BUFFER_SIZE));
     if (!this._stagedBirthBuffers || this._stagedBirthBuffers.capacity < capacity) {
       this._stagedBirthBuffers?.dispose(renderer);
       this._stagedBirthBuffers = createEmptyGPUParticleBufferState(capacity);
@@ -1100,6 +1132,12 @@ export default class GPUSimulation {
     births.upload(this.system.emissionRuntime._stagedBirths.slice(0, count), p => this._getParticleGPUTagMask(p));
     births.initialize(renderer);
     this._stagedBirthCount.value = count;
+    this._getStagedBirthComputeNodes(context, births).forEach(node => renderer.compute(node));
+    this.system.emissionRuntime._stagedBirths.length = 0;
+  }
+
+  private _getStagedBirthComputeNodes(context: GPUParticleUpdateContext,
+    births: GPUParticleBufferState): ComputeNode[] {
     const key =
       `${births.capacity}` +
       ':' +
@@ -1137,8 +1175,7 @@ export default class GPUSimulation {
       })().compute(1);
       this._stagedBirthCompute = { key, nodes: [reset, node] };
     }
-    this._stagedBirthCompute.nodes.forEach(node => renderer.compute(node));
-    this.system.emissionRuntime._stagedBirths.length = 0;
+    return this._stagedBirthCompute!.nodes;
   }
 
   _computeGPUContinuousSubSystemEmissionPhase(context: GPUParticleUpdateContext, input: GPUSubSystemFrameInput): void {
@@ -1458,11 +1495,13 @@ export default class GPUSimulation {
                             .select(rotateFromYGPU(v, event.collisionImpulse), base) as Node<'vec3'>)
                         : base;
                     };
+                    const emissionOrigin = event.type.equal(uint(GPUEventType.Collision))
+                      .select(event.collisionPoint, event.particle.position);
                     const transform = mat4(
                       vec4(rotate(vec3(transformScale.x, 0, 0)), 0),
                       vec4(rotate(vec3(0, transformScale.y, 0)), 0),
                       vec4(rotate(vec3(0, 0, transformScale.z)), 0),
-                      vec4(event.particle.position, 1),
+                      vec4(emissionOrigin, 1),
                     );
                     const impulseMass = event.type
                       .equal(uint(GPUEventType.Collision))
@@ -1472,7 +1511,7 @@ export default class GPUSimulation {
                       );
                     const resolved: GPUEmissionContext = {
                       transform: producerFrame.mul(transform),
-                      position: producerFrame.mul(vec4(event.particle.position, 1)).xyz,
+                      position: producerFrame.mul(vec4(emissionOrigin, 1)).xyz,
                       color: mix(vec3(1), event.particle.color, float(Math.max(0, options.inheritColor))),
                       alpha: mix(float(1), event.particle.alpha, float(Math.max(0, options.inheritAlpha))),
                       mass: mix(float(1), event.particle.mass, float(Math.max(0, options.inheritMass))).mul(
@@ -2195,9 +2234,18 @@ export default class GPUSimulation {
     this.subSystemPredicates.dispose(isWebGPURenderer(this.system.sceneRenderer)
       ? this.system.sceneRenderer : undefined);
     this.system.frameRuntime.invalidateGPUCompute();
+    this.disposeParticlePrograms();
+  }
+
+  private disposeParticlePrograms(): void {
+    this._gpuSkipTimeCompute?.node.dispose();
+    this._gpuSkipTimeCompute = undefined;
     this._gpuLODCull?.node.dispose();
     this._gpuLODCull = undefined;
     this._gpuEmissionPrepareComputeCache?.nodes.forEach(node => node.dispose?.());
+    this._gpuEmissionFinalizeComputeCache?.nodes.forEach(node => node.dispose?.());
+    this._stagedBirthCompute?.nodes.forEach(node => node.dispose());
+    this._stagedBirthCompute = undefined;
     this._gpuContinuousSubSystemComputeCache?.nodes.forEach(node => node.dispose?.());
     this._gpuEventSubSystemComputeCache?.nodes.forEach(node => node.dispose?.());
     this._gpuEmissionComputeCache?.nodes.forEach(node => node.dispose?.());
@@ -2277,22 +2325,8 @@ export default class GPUSimulation {
       .then(diagnostics => {
         if (lifecycleGeneration !== this._gpuLifecycleGeneration) return;
         this._gpuAllocationDiagnostics = diagnostics;
-        if (
-          this._gpuBuffers &&
-          this._gpuBuffers.capacity < this.system.maxParticles &&
-          (diagnostics.allocationFailures > 0 || diagnostics.recycledDeaths > 0)
-        ) {
-          const nextCapacity = Math.min(
-            this.system.maxParticles,
-            nextPowerOfTwo(this._gpuBuffers.capacity + diagnostics.allocationFailures),
-          );
-          if (this._gpuBuffers.grow(renderer, nextCapacity)) {
-            this._gpuBuffers.ensureCount(nextCapacity);
-            this._gpuAllocationBuffer = undefined;
-            this._gpuRenderOutputBuffers = undefined;
-            this._disposeGPUComputeCaches();
-          }
-        }
+        this.capacityShortfall = diagnostics.allocationFailures > 0
+          ? diagnostics.capacity + diagnostics.allocationFailures : 0;
       })
       .catch(() => {
         // Diagnostics are best-effort and must never interrupt simulation.
@@ -2885,11 +2919,133 @@ export default class GPUSimulation {
     ].join(':');
   }
 
+  private particleCapacityKey(modules: Module[], effects: SpatialEffect[]): string {
+    return [this.system.maxParticles, this.system.maxCullingMode,
+      this._getGPUModifierListSignature([...modules, ...effects]), this._getParticleInitializationSignature(),
+      ...this.system.emitters.map(emitter => `${this._getObjectSignature(emitter)}:${emitter.version}`),
+      this._stagedBirthBuffers?.capacity, this._gpuSubSystemFrameInput?.parent.gpuParticleBuffers?.version,
+      this._gpuStandaloneEmitterInstances ? this._getObjectSignature(this._gpuStandaloneEmitterInstances) : 0,
+      this._gpuContinuousEmitterInstances ? this._getObjectSignature(this._gpuContinuousEmitterInstances) : 0,
+      this._gpuEventEmitterInstances ? this._getObjectSignature(this._gpuEventEmitterInstances) : 0,
+      this._gpuEmissionRuns ? this._getObjectSignature(this._gpuEmissionRuns) : 0,
+      this._getGPUSpatialRegistrySignature(),
+    ].join('|');
+  }
+
+  /** Compile replacement bindings without advancing live particles or resetting source clocks. */
+  private updateParticleCapacity(renderer: WebGPURenderer, modules: Module[], effects: SpatialEffect[]): void {
+    const buffers = this._gpuBuffers!;
+    this.capacityInputs = { modules, effects, nativeEmission: this.execution.nativeEmission() };
+    const maximum = Math.max(buffers.capacity, this.system.maxParticles);
+    if (this.particleCapacity && this.particleCapacity.maximumCapacity !== maximum) {
+      this.particleCapacity.cancelPending();
+      this.particleCapacity = undefined;
+    }
+    if (!this.particleCapacity) {
+      this.particleCapacity = new StagedGPUAllocation<ParticleCapacityState>({ buffers }, buffers.capacity, {
+        maximumCapacity: maximum, growthThreshold: () => this.system.capacityGrowthThreshold,
+        create: capacity => {
+          const replacement = createEmptyGPUParticleBufferState(capacity);
+          replacement.version = buffers.version + 1;
+          replacement.ensureCount(capacity);
+          replacement.initialize(renderer);
+          return { buffers: replacement };
+        },
+        prepare: async state => {
+          const programs = Object.assign(Object.create(GPUSimulation.prototype), this) as GPUSimulation;
+          // Snapshot own state, not a prototype chain of old owners. Only stable uniforms, parameter
+          // storage and emitter runtime clocks are shared; replacement graphs and allocators are isolated.
+          Object.assign(programs, Object.fromEntries(particleProgramKeys.map(key => [key, undefined])), {
+            _gpuBuffers: state.buffers, _gpuAllocationBuffer: undefined, _gpuRenderOutputBuffers: undefined,
+            _gpuSimulationComputeCaches: new Map(), _gpuModifierComputeCaches: new Map(),
+            subSystemPredicates: new GPUSubSystemPredicates(), particleCapacity: undefined,
+            preparingParticleCapacity: true, capacityCollisionBuffer: undefined,
+          });
+          state.programs = programs;
+          const inputs = this.capacityInputs!;
+          state.key = this.particleCapacityKey(inputs.modules, inputs.effects);
+          this.capacityPreparationKey = state.key;
+          const builds = programs._gpuPipelineBuildCount;
+          try {
+            await programs.preparePrograms(renderer, inputs.modules, inputs.effects, this._gpuSubSystemFrameInput);
+            state.key = this.particleCapacityKey(inputs.modules, inputs.effects);
+            this.capacityPreparationKey = state.key;
+          } finally {
+            this._gpuPipelineBuildCount += programs._gpuPipelineBuildCount - builds;
+            state.allocation = programs._gpuAllocationBuffer;
+            state.render = programs._gpuRenderOutputBuffers;
+            state.collision = programs.capacityCollisionBuffer;
+          }
+        },
+        canCommit: (_old, state) => state.key === this.particleCapacityKey(
+          this.capacityInputs!.modules, this.capacityInputs!.effects),
+        migrate: (old, next) => {
+          // Capture the latest submitted state, not the snapshot from when preparation began.
+          old.buffers = Object.assign(Object.create(Object.getPrototypeOf(buffers)), buffers);
+          old.programs = Object.assign(Object.create(GPUSimulation.prototype), this, { particleCapacity: undefined });
+          old.allocation = this._gpuAllocationBuffer;
+          old.render = this._gpuRenderOutputBuffers;
+          old.collision = this.system.eventRuntime._gpuCollisionEventBuffer;
+          copyStorageAttributes(renderer, [
+            { source: buffers.attributes.floatData, target: next.buffers.attributes.floatData },
+            { source: buffers.attributes.uintData, target: next.buffers.attributes.uintData },
+          ]);
+        },
+        swap: state => {
+          buffers.adoptStorage(state.buffers);
+          const programs = state.programs!;
+          Object.assign(this, Object.fromEntries(particleProgramKeys.map(key => [key, programs[key]])), {
+            _gpuSimulationComputeCaches: programs._gpuSimulationComputeCaches,
+            _gpuModifierComputeCaches: programs._gpuModifierComputeCaches,
+            subSystemPredicates: programs.subSystemPredicates,
+          });
+          this._gpuAllocationBuffer = state.allocation;
+          this._gpuRenderOutputBuffers = state.render;
+          if (state.collision) this.system.eventRuntime._gpuCollisionEventBuffer = state.collision;
+          this.capacityShortfall = 0;
+          this._gpuResourceBuildCount++;
+          this.system.frameRuntime.invalidateGPUCompute();
+        },
+        dispose: state => {
+          if (state.buffers.benchmarks !== this._gpuBuffers?.benchmarks) state.buffers.benchmarks.detach();
+          destroyStorageAttribute(renderer, state.buffers.attributes.floatData);
+          destroyStorageAttribute(renderer, state.buffers.attributes.uintData);
+          state.render?.dispose(renderer);
+          state.collision?.dispose(renderer);
+          if (state.allocation) destroyStorageAttribute(renderer, state.allocation.attribute);
+          state.programs?.disposeParticlePrograms();
+          state.programs?.subSystemPredicates.dispose(renderer);
+        },
+        fence: () => (renderer.backend as unknown as {
+          device: { queue: { onSubmittedWorkDone(): Promise<void> } } }).device.queue.onSubmittedWorkDone(),
+      });
+    }
+    // Configuration edits can invalidate prepared bindings, but never dispose the live bank.
+    const capacity = this.particleCapacity;
+    if (this.capacityPreparationKey
+      && this.capacityPreparationKey !== this.particleCapacityKey(modules, effects)) {
+      capacity.cancelPending();
+      this.capacityPreparationKey = undefined;
+    }
+    capacity.commit();
+    const estimated = Math.min(this.system.maxParticles, Math.max(this.system.estimateParticleCount(),
+      this.system.particles.length, (this._gpuAllocationDiagnostics?.activeCount ?? 0)
+        + this.system.emissionRuntime._stagedBirths.length * 4, this.capacityShortfall));
+    this.benchmarks.set('capacityEstimatedPopulation', estimated);
+    capacity.request(estimated);
+    this.benchmarks.set('capacityAllocationMs', capacity.metrics.allocationMs);
+    this.benchmarks.set('capacityPendingSlots', capacity.status.pendingCapacity);
+    this.benchmarks.set('capacityPreparationMs', capacity.metrics.preparationMs);
+    this.benchmarks.set('capacityMigrationMs', capacity.metrics.migrationSubmissionMs);
+    this.benchmarks.set('capacitySwapMs', capacity.metrics.swapMs);
+  }
+
   _getInitialGPUBufferCapacity(): number {
     const required = Math.max(
-      GlobalSettings.GPU_INITIAL_BUFFER_SIZE,
+      this.system.initialCapacity,
       this.system.particles.length,
-      this.system.emissionRuntime._stagedBirths.length,
+      // Reserve several incoming batches so asynchronous occupancy observations can trigger growth before full.
+      (this._gpuAllocationDiagnostics?.activeCount ?? 0) + this.system.emissionRuntime._stagedBirths.length * 4,
       this.system.estimateParticleCount(),
       1,
     );
@@ -2907,6 +3063,11 @@ export default class GPUSimulation {
   }
 
   _acquireGPUCollisionEventBuffer(renderer: WebGPURenderer) {
+    if (this.preparingParticleCapacity) {
+      this.capacityCollisionBuffer ??= new GPUCollisionEventBufferState(this._gpuBuffers!.capacity);
+      this.capacityCollisionBuffer.initialize(renderer);
+      return this.capacityCollisionBuffer;
+    }
     return this.system.eventRuntime.acquireCollisionBuffer(
       renderer,
       Math.max(this._gpuBuffers?.capacity ?? 1, 1),
@@ -3279,6 +3440,11 @@ export default class GPUSimulation {
 
   clear(gpuRenderer?: WebGPURenderer): void {
     this._gpuLifecycleGeneration += 1;
+    this.particleCapacity?.cancelPending();
+    this.particleCapacity = undefined;
+    this.capacityShortfall = 0;
+    this.capacityPreparationKey = undefined;
+    this.capacityInputs = undefined;
     this._isGPUProcessingActive = false;
     this._gpuSkipTimeCompute?.node.dispose();
     this._gpuSkipTimeCompute = undefined;

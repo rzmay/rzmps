@@ -1062,18 +1062,18 @@ Clears batches and unsubscribes when a component is removed or its system is des
 ### prepareResources()
 
 ```ts
-prepareResources(_system, _renderer): Promise<void>;
+prepareResources(system, renderer): Promise<void>;
 ```
 
 Prepare optional rendering pipelines without advancing particle or simulation state.
 
 #### Parameters
 
-##### \_system
+##### system
 
 [`ParticleSystem`](ParticleSystem.md)
 
-##### \_renderer
+##### renderer
 
 `WebGPURenderer`
 

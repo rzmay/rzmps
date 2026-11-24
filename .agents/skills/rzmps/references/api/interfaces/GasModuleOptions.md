@@ -34,7 +34,7 @@ Captured configuration dependencies; replace entries or set needsUpdate after ch
 optional enabled?: boolean;
 ```
 
-Disables both gas callbacks when false. Defaults to true.
+Disables all gas callbacks when false. Defaults to true.
 
 ***
 
@@ -63,6 +63,30 @@ optional eventScope?: EventScope;
 #### Inherited from
 
 [`EventReceiverOptions`](EventReceiverOptions.md).[`eventScope`](EventReceiverOptions.md#eventscope)
+
+***
+
+<a id="initialize"></a>
+
+### initialize?
+
+```ts
+optional initialize?: GasInitializer;
+```
+
+CPU/reference source-deposition callback. Mutates specific emission state in priority order.
+
+***
+
+<a id="initializegpu"></a>
+
+### initializeGPU?
+
+```ts
+optional initializeGPU?: GPUGasInitializer;
+```
+
+GPU counterpart using TSL assignment and lazy sparse source iteration. No particle readback.
 
 ***
 

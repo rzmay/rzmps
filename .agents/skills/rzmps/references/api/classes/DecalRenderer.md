@@ -886,6 +886,53 @@ Arguments apply left to right: Combine(A, B) maps p to B * A * p.
 
 [`DecalWarpSampler`](../type-aliases/DecalWarpSampler.md)
 
+#### FromPoints()
+
+```ts
+FromPoints(
+   from,
+   to,
+   maxStretch?,
+   overlap?
+): DecalWarpSampler;
+```
+
+Fit the tangent footprint between two world-space points, centered halfway between them.
+Preserve its crosswise width and do not shrink below its original length along the connection.
+Overlap extends the fitted length equally beyond both ends; the stretch cap can limit coverage.
+Point vectors are read at placement time, so callers can update them between collision events.
+Base texture rotation is applied before this deformation, as with the other warp factories.
+
+##### Parameters
+
+###### from
+
+`Vector3`
+
+Previous world-space contact point.
+
+###### to
+
+`Vector3`
+
+Current world-space contact point.
+
+###### maxStretch?
+
+`number` = `4`
+
+Maximum length multiplier; defaults to 4 and is clamped to at least 1.
+
+###### overlap?
+
+`number` = `1`
+
+Multiplier of the fitted length; 1 fits, 1.2 adds 20% overlap. Default/minimum 1.
+
+##### Returns
+
+[`DecalWarpSampler`](../type-aliases/DecalWarpSampler.md)
+
 #### FromRay()
 
 ```ts
@@ -1175,6 +1222,38 @@ set materialCompositeGPU(value): void;
 ```ts
 Renderer.materialCompositeGPU
 ```
+
+***
+
+<a id="mindistance"></a>
+
+### minDistance
+
+#### Get Signature
+
+```ts
+get minDistance(): number;
+```
+
+##### Returns
+
+`number`
+
+#### Set Signature
+
+```ts
+set minDistance(value): void;
+```
+
+##### Parameters
+
+###### value
+
+`number`
+
+##### Returns
+
+`void`
 
 ***
 
@@ -1609,18 +1688,18 @@ Subscribes through the existing event receiver and transforms each selected deca
 ### prepareResources()
 
 ```ts
-prepareResources(_system, _renderer): Promise<void>;
+prepareResources(system, renderer): Promise<void>;
 ```
 
 Prepare optional rendering pipelines without advancing particle or simulation state.
 
 #### Parameters
 
-##### \_system
+##### system
 
 [`ParticleSystem`](ParticleSystem.md)
 
-##### \_renderer
+##### renderer
 
 `WebGPURenderer`
 
@@ -1631,6 +1710,46 @@ Prepare optional rendering pipelines without advancing particle or simulation st
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`prepareResources`](Renderer.md#prepareresources)
+
+***
+
+<a id="querydecals"></a>
+
+### queryDecals()
+
+```ts
+queryDecals(
+   receiver,
+   position,
+   radius,
+   normal?
+): readonly DecalInstance[];
+```
+
+Nearby persistent decals, nearest first. Inputs use world space; normals filter incompatible surfaces.
+The inclusive query radius is independent of minDistance and does not alter any decal.
+
+#### Parameters
+
+##### receiver
+
+`Object3D`
+
+##### position
+
+`Vector3`
+
+##### radius
+
+`number`
+
+##### normal?
+
+`Vector3`
+
+#### Returns
+
+readonly [`DecalInstance`](../interfaces/DecalInstance.md)[]
 
 ***
 

@@ -484,6 +484,70 @@ get gpuParameterUploadCount(): number;
 
 ***
 
+<a id="initialize"></a>
+
+### initialize
+
+#### Get Signature
+
+```ts
+get initialize(): GasInitializer | undefined;
+```
+
+##### Returns
+
+[`GasInitializer`](../type-aliases/GasInitializer.md) \| `undefined`
+
+#### Set Signature
+
+```ts
+set initialize(value): void;
+```
+
+##### Parameters
+
+###### value
+
+[`GasInitializer`](../type-aliases/GasInitializer.md) \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
+<a id="initializegpu"></a>
+
+### initializeGPU
+
+#### Get Signature
+
+```ts
+get initializeGPU(): GPUGasInitializer | undefined;
+```
+
+##### Returns
+
+[`GPUGasInitializer`](../type-aliases/GPUGasInitializer.md) \| `undefined`
+
+#### Set Signature
+
+```ts
+set initializeGPU(value): void;
+```
+
+##### Parameters
+
+###### value
+
+[`GPUGasInitializer`](../type-aliases/GPUGasInitializer.md) \| `undefined`
+
+##### Returns
+
+`void`
+
+***
+
 <a id="modifiesparticles"></a>
 
 ### modifiesParticles
@@ -1365,3 +1429,42 @@ Flattens dependents before this module; priority sorting still determines execut
 #### Inherited from
 
 [`Module`](Module.md).[`withDependents`](Module.md#withdependents)
+
+***
+
+<a id="initializeemission"></a>
+
+### initializeEmission()
+
+```ts
+static initializeEmission(
+   modules,
+   particles,
+   emission,
+   context
+): void;
+```
+
+Reference/CPU evaluation uses the same enabled/priority semantics without creating a CPU gas solver.
+
+#### Parameters
+
+##### modules
+
+readonly `GasModule`[]
+
+##### particles
+
+readonly [`Particle`](Particle.md)[]
+
+##### emission
+
+[`GasEmission`](../interfaces/GasEmission.md)
+
+##### context
+
+`Omit`\<[`GasInitializationContext`](../interfaces/GasInitializationContext.md), `"module"`\>
+
+#### Returns
+
+`void`

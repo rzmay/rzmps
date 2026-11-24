@@ -1,5 +1,7 @@
 import GlobalSettings from '../core/GlobalSettings';
 import EmitterInstance from './EmitterInstance';
+import RegisteredEmissionSource from './EmissionSource';
+import seedrandom from 'seedrandom';
 import getAttributeVersion from '../utils/getAttributeVersion';
 import {
   transformPointGPU,
@@ -1178,8 +1180,12 @@ class Emitter extends EventReceiver {
     const step = context.deltaTime ?? 0;
     this.normalizeBurstTimes();
     const elapsedMilliseconds = context.elapsedTime === undefined ? undefined : context.elapsedTime * 1000;
+    const firstUpdate = state.startTime === undefined;
+    const finiteSource = state.source.kind === 'live' && state.source.source instanceof RegisteredEmissionSource
+      && Number.isFinite(state.source.source.lifetime);
     if (state.startTime === undefined) {
-      state.startTime = elapsedMilliseconds ?? now;
+      state.startTime = finiteSource && elapsedMilliseconds !== undefined
+        ? Math.max(0, elapsedMilliseconds - step * 1000) : elapsedMilliseconds ?? now;
       state.lastSpawn = state.startTime;
     }
     const duration = context.duration ?? particleSystem.duration;
@@ -1216,6 +1222,8 @@ class Emitter extends EventReceiver {
     if (rate <= 0) state.lastSpawn = elapsedMilliseconds ?? now;
     if (rate > 0) {
       const secondsPerParticle = 1000 / rate;
+      // Stable sub-interval phases avoid lockstep birth ages across independent persistent sources.
+      if (firstUpdate && finiteSource) state.lastSpawn -= seedrandom.tychei(state.key).quick() * secondsPerParticle;
       const spawnClock = elapsedMilliseconds ?? now;
       const particlesDue = Math.floor((spawnClock - state.lastSpawn) / secondsPerParticle + 1e-9);
 

@@ -3,7 +3,7 @@ import { GUIEditorBase } from './GUIEditorBase';
 import { LOD_GUI_KEYS } from './constants';
 import {
   GasModule, FluidSimulation, FluidBoundsPolicy, PressureSolver, SurfaceAttachment,
-  AdvectionMethod, GeometryUpdatePolicy,
+  AdvectionMethod, GeometryUpdatePolicy, TransformByNoise, TransformMode,
 } from '@rzmps/rzmps';
 
 export class ModuleGUI extends GUIEditorBase {
@@ -129,6 +129,11 @@ export class ModuleGUI extends GUIEditorBase {
             });
         }
       }
+    } else if (candidate instanceof TransformByNoise) {
+      folder.add(candidate, 'transformMode', Object.values(TransformMode)).name('Transform Mode')
+        .onChange(() => { candidate.needsUpdate = true; this.emitCode(); });
+      this.addObject(folder, candidate.options,
+        new Set(['transformMode', 'tags', 'useOctree', 'useSpatialGrid', ...LOD_GUI_KEYS]));
     } else if (candidate.options && typeof candidate.options === 'object') {
       this.addObject(folder, candidate.options, new Set(['tags', 'useOctree', 'useSpatialGrid', ...LOD_GUI_KEYS]));
     } else {

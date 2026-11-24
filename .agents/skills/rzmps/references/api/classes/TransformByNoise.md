@@ -8,8 +8,7 @@
 
 # Class: TransformByNoise
 
-Adds three decorrelated noise channels to velocity using delta seconds; supply strength for the desired per-axis
-response.
+Applies three decorrelated noise channels to position, velocity or force. Velocity is the default.
 
 ## Extends
 
@@ -31,7 +30,7 @@ Creates the modifier with its built-in priority and optional filtering/LOD setti
 
 ##### options?
 
-`Partial`\<[`TransformByNoiseOptions`](../Supporting-Types/interfaces/TransformByNoiseOptions.md)\> = `{}`
+`Partial`\<[`TransformByNoiseOptions`](../interfaces/TransformByNoiseOptions.md)\> = `{}`
 
 #### Returns
 
@@ -442,6 +441,22 @@ time: number = 0;
 #### Inherited from
 
 [`NoiseModule`](NoiseModule.md).[`time`](NoiseModule.md#time)
+
+***
+
+<a id="transformmode"></a>
+
+### transformMode
+
+```ts
+transformMode:
+  | "Position"
+  | "Velocity"
+  | "Force"
+  | TransformMode;
+```
+
+Particle property modified by the sampled noise. Defaults to Velocity.
 
 ***
 

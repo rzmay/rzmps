@@ -193,6 +193,15 @@ class Particle {
 
   tags?: Tag[];
 
+  /** Emission origin retained independently of simulation space. */
+  get source(): SubSystemSource | undefined {
+    const source = getParticleSourceBinding(this)?.source;
+    return source?.alive ? source : undefined;
+  }
+
+  /** Current particle age in seconds. */
+  get age(): number { return this.realtime / 1000; }
+
   // Used to store custom data for special components
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any;
@@ -298,6 +307,8 @@ class Particle {
     if (this._materialCopy) particle.materialCopy = this._materialCopy.clone();
     if (this._materialCopyU) particle.materialCopyU = this._materialCopyU.clone();
     if (this._materialCopyV) particle.materialCopyV = this._materialCopyV.clone();
+    const binding = getParticleSourceBinding(this);
+    if (binding) setParticleSourceBinding(particle, { ...binding, previous: binding.previous.clone() });
     particle.parent = this.parent;
     particle.contribution = this.contribution;
     particle.noise = { ...this.noise };
@@ -312,7 +323,10 @@ class Particle {
    * Override objects are used directly; clone() still provides independent particle attributes.
    */
   shallowClone(id: string, overrides: Partial<ParticleOptions> = {}): Particle {
-    return Object.assign(Object.create(Object.getPrototypeOf(this)), this, overrides, { id });
+    const particle = Object.assign(Object.create(Object.getPrototypeOf(this)), this, overrides, { id });
+    const binding = getParticleSourceBinding(this);
+    if (binding) setParticleSourceBinding(particle, { ...binding, previous: binding.previous.clone() });
+    return particle;
   }
 
   lerp(target: Particle | ParticleCachedValues, alpha: number): this {

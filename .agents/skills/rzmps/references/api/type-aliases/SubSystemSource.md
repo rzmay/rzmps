@@ -23,7 +23,16 @@ type SubSystemSource = Readonly<Pick<Particle,
   | "time"
   | "realtime"
   | "lifetime"
-| "alive">>;
+  | "age"
+  | "alive">> & object;
 ```
 
 Common, read-only view accepted by subsystem selectors and event handlers.
+
+## Type Declaration
+
+### metadata?
+
+```ts
+readonly optional metadata?: unknown;
+```

@@ -62,3 +62,15 @@ test('the fluid profiler formats public submission metrics without requiring sol
   assert.equal(stats.fluids[0].surfaceSubmissionMs, 0.75);
   assert.equal(stats.fluids[0].residentPages, 24);
 });
+
+
+test('GPU occupancy excludes CPU particles in composed systems', () => {
+  const stats = readProfilerStats({ snapshot: () => ({
+    'system/particleCount': 1000, 'system/allocatedSlots': 0, 'system/usedSlots': 0,
+    'systems/gas/system/particleCount': 4000,
+    'systems/gas/system/allocatedSlots': 4096, 'systems/gas/system/usedSlots': 4000,
+  }) });
+  assert.equal(stats.particles, 5000);
+  assert.equal(stats.gpuUsage, 4000 / 4096);
+  assert(stats.gpuUsage < 1);
+});

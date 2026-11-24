@@ -9,7 +9,7 @@
 # Type Alias: NoiseModuleUpdate
 
 ```ts
-type NoiseModuleUpdate = (particle, deltaTime, noise) => void;
+type NoiseModuleUpdate = (particle, deltaTime, noise, context) => void;
 ```
 
 ## Parameters
@@ -25,6 +25,10 @@ type NoiseModuleUpdate = (particle, deltaTime, noise) => void;
 ### noise
 
 [`ParticleNoiseValues`](../interfaces/ParticleNoiseValues-1.md)
+
+### context
+
+[`ModuleExecutionContext`](../../interfaces/ModuleExecutionContext.md)
 
 ## Returns
 

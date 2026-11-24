@@ -100,6 +100,8 @@ optional object?: Object3D<Object3DEventMap>;
 point: Vector3;
 ```
 
+Surface contact in the producer system's simulation space; default origin for collision emission.
+
 ***
 
 <a id="position"></a>

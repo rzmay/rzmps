@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import SparseVolumeGrid from '../../../../../packages/rzmps/src/spatial/structures/gpu/SparseVolumeGrid.ts';
 import VolumeOccupancy from '../../../../../packages/rzmps/src/rendering/gpu/VolumeOccupancy.ts';
 import { WebGPURenderer, StorageBufferAttribute } from 'three/webgpu';
-import { Fn, atomicStore, float, instanceIndex, storage, uint, uniform, vec3, vec4, textureStore } from 'three/tsl';
+import {
+  Fn, If, ivec3, atomicStore, float, instanceIndex, storage, uint, uniform, vec3, vec4, textureStore,
+} from 'three/tsl';
 import {
   Emitter, GasModule, GasSimulation, FLIPSimulation, ParticleSystem, FluidCollider, VolumeRenderer,
 } from '@rzmps/rzmps';
@@ -117,6 +119,8 @@ window.testGrowth = async (required = 64) => {
     gas.solid.element(index).assign(0.25);
     gas.faceOpenness.element(index).assign(vec4(0.75));
     gas.visualDensity.element(index).assign(vec4(0.5, 0.6, 0.7, 0.8));
+    gas.sourceMomentum.element(index).assign(vec4(8, 9, 10, 11));
+    gas.initializedSource.element(index).assign(vec4(12, 13, 14, 15));
     gas.curl.element(index).assign(vec4(4, 5, 6, 7));
   });
   renderer.compute([seed, seedExtra]);
@@ -136,12 +140,15 @@ window.testGrowth = async (required = 64) => {
     solid: await read(gas.solidAttribute),
     faceOpenness: (await read(gas.boundaryAttribute)).slice(0, gas.cellCount * 4),
     visualDensity: (await read(gas.visualAttribute)).slice(0, gas.cellCount * 4), curl: await read(gas.curlAttribute),
+    sourceMomentum: (await read(gas.visualAttribute)).slice(gas.cellCount * 8, gas.cellCount * 12),
+    initializedSource: (await read(gas.visualAttribute)).slice(gas.cellCount * 12, gas.cellCount * 16),
     pressureFaces: await read(gas.getPressureProjection().attribute),
   });
   const before = { density: await read(gas.densityCurrent.value ?? gas.densityAttributeA),
     velocity: await read(gas.velocityCurrentAttribute), pressure: await read(gas.pressureCurrentAttribute),
     wallVelocity: (await read(gas.boundaryAttribute)).slice(gas.cellCount * 4),
-    visualColor: (await read(gas.visualAttribute)).slice(gas.cellCount * 4), ...await snapshotExtra() };
+    visualColor: (await read(gas.visualAttribute)).slice(gas.cellCount * 4, gas.cellCount * 8),
+    ...await snapshotExtra() };
   const capacity = gas.volumeGrid.capacity;
   const previousBytes = gas.allocatedBytes;
   const device = renderer.backend.device;
@@ -268,7 +275,8 @@ window.testGrowth = async (required = 64) => {
   const after = { density: await read(gas.densityCurrent.value ?? gas.densityAttributeA),
     velocity: await read(gas.velocityCurrentAttribute), pressure: await read(gas.pressureCurrentAttribute),
     wallVelocity: (await read(gas.boundaryAttribute)).slice(gas.cellCount * 4),
-    visualColor: (await read(gas.visualAttribute)).slice(gas.cellCount * 4), ...await snapshotExtra() };
+    visualColor: (await read(gas.visualAttribute)).slice(gas.cellCount * 4, gas.cellCount * 8),
+    ...await snapshotExtra() };
   const newSentinelsZero = after.density[count * 4] === 0 && after.pressure[count] === 0
     && after.pressureFaces[(previousFaceCount - 1) * 4] === 0;
   // A retained graph must write the replacement buffers and address slots beyond the original capacity.
@@ -627,7 +635,7 @@ window.testFractionalVisualCoverage = async () => {
 };
 
 window.debugBehavior = { renderer, scene, camera, THREE, StorageBufferAttribute, gas, system, GasModule,
-  tsl: { Fn, storage, vec3, vec4, float, uint, instanceIndex, uniform } };
+  tsl: { Fn, If, ivec3, storage, vec3, vec4, float, uint, instanceIndex, uniform } };
 
 window.testPriorityAdmission = async () => {
   const fluid = new GasSimulation({

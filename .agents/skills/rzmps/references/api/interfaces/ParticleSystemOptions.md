@@ -12,6 +12,26 @@ Construction options; fields can be omitted to use the documented defaults.
 
 ## Properties
 
+<a id="capacitygrowththreshold"></a>
+
+### capacityGrowthThreshold
+
+```ts
+capacityGrowthThreshold: number;
+```
+
+Begin preparing GPU particle storage when estimated population exceeds this fraction of capacity.
+Uses the built-in population estimator; 1 means 100%, and lower values prepare earlier.
+Must be greater than zero and at most one.
+
+#### Default
+
+```ts
+1
+```
+
+***
+
 <a id="cubemapsettings"></a>
 
 ### cubemapSettings
@@ -141,6 +161,19 @@ inheritVelocity: number;
 ```
 
 Multiplier for velocity inherited from movement of the emitter context.
+
+***
+
+<a id="initialcapacity"></a>
+
+### initialCapacity
+
+```ts
+initialCapacity: number;
+```
+
+Initial GPU particle-slot reserve, rounded to a capacity tier and capped by maxParticles.
+Defaults to ParticleSystem.Settings.GPU_INITIAL_BUFFER_SIZE. Does not create particles.
 
 ***
 

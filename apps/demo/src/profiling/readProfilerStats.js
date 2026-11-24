@@ -39,5 +39,6 @@ export function readProfilerStats(benchmarks) {
     fluid.surfaceSubmissionMs = extraction.filter(([path]) => path.startsWith(`${fluid.scope}renderers/`))
       .reduce((sum, [, value]) => sum + (value ?? 0), 0);
   stats.renderers = [...present].map(metric => ({ name: counts[metric][0], count: counts[metric][1] }));
+  stats.gpuUsage = stats.allocated > 0 ? stats.activeSlots / stats.allocated : 0;
   return stats;
 }

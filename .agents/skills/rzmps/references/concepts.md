@@ -778,6 +778,8 @@ the selected target mesh.
 `rotation` is additional roll in radians, default zero. A range such as `[-Math.PI, Math.PI]` is
 sampled independently per mark, including entry and exit marks from the same particle. The registered
 source frame uses the same roll as the geometry. Source particles are never rotated.
+Base roll is applied before `warp`: randomizing the texture orientation does not rotate the direction
+of a subsequent ray/velocity deformation. Rectangular projector dimensions are included in this mapping.
 
 Built-in event names are `spawn`, `death` and `collision`. `marks.onEvent('collision', callback)`
 selects the same trigger as `onCollision: callback`; an explicit onEvent entry takes precedence,
@@ -849,7 +851,8 @@ The original direct shortcuts remain available.
 ray, including bounded movement segments. `scale` defaults to `(1,1)`, `rotation` to zero radians, and `skew` and
 `perspective` to `(0,0)`. Skew components are dimensionless shear coefficients. Coordinates are centered unit
 projector UVs. The forward matrix is `rotation * shear * scale * perspective`.
-`Warp.Scale`, `Rotate`, `Skew`, `Perspective` create fixed warps; `FromRay()`, `FromVelocity()` and `Combine(...)` create samplers.
+`Warp.Scale`, `Rotate`, `Skew`, `Perspective` create fixed warps;
+`FromRay()`, `FromVelocity()`, `FromPoints(...)` and `Combine(...)` create samplers.
 `Combine(A,B)` applies **A then B**, composing matrices as `B*A`; it does not merge individual settings.
 
 `FromVelocity(maxStretch = 4, factor = 1)` stretches along incoming velocity projected onto the receiver.
@@ -864,8 +867,26 @@ Stationary and perpendicular impacts remain unstretched. For example, `FromVeloc
 threefold stretch, adding 0.3 to the length multiplier per world unit/second of motion along the surface.
 This keeps exact collision placement independent of the placement ray. Neither source velocity nor speed is modified.
 
+`FromPoints(from, to, maxStretch = 4, overlap = 1)` fits the decal between the two world-space points,
+projected onto the receiver's tangent plane. It centers the footprint halfway between the points and
+preserves crosswise width. The fitted length is at least the original footprint's length in that direction.
+`overlap: 1.2` makes the fitted length 20% longer, extending equally beyond both ends; its minimum is one.
+`maxStretch` caps the final length multiplier relative to the original footprint, so a restrictive cap can
+prevent covering a very large gap. Coincident points or motion only along the surface normal leave the
+footprint unchanged. Both vectors are read at placement time and remain unmodified:
+
+```js
+const previousPoint = new THREE.Vector3();
+const currentPoint = new THREE.Vector3();
+const warp = DecalRenderer.Warp.FromPoints(previousPoint, currentPoint, 4, 1.2);
+// At each collision, copy currentPoint into previousPoint, then copy the hit point into currentPoint.
+// Set both to the hit point on first contact or when changing receiver to avoid bridging separate surfaces.
+```
+
 `FromRay(maxStretch = 4)` stretches along the projected incoming ray. Perpendicular incidence stays identity; grazing incidence
-is capped by the same factory-local maximum. Custom warp samplers are not limited by either factory. Its tangent frame uses the source particle's projector roll.
+is capped by the same factory-local maximum. Custom warp samplers are not limited by either factory.
+Warps act in the unrolled receiver tangent frame after the base texture rotation. This keeps directional
+deformation aligned to incoming motion even when each mark has a different random roll.
 Three.js still clips the rectangular projector against the receiver. RZMPS fits and offsets that rectangle to the
 actual warped footprint and applies inverse homogeneous UV lookup in TSL/WebGL. The UV origin is adjusted on
 the CPU so the impact stays anchored without an extra shader attribute. Transparent excess is
@@ -905,6 +926,44 @@ height-gradient normal detail using the same construction as the liquid material
 Radial contact directions share one scene-membership collection per projection. Dense ordinary meshes
 use a cached indirect CPU BVH for contact rays; rigid movement reuses it and position edits refit it.
 Caller-owned geometry indices and custom raycast functions are preserved.
+
+Dense-receiver projection also uses that cached acceleration to select triangles near the projector before
+calling Three.js `DecalGeometry`. Three.js still performs projection and clipping; warp coordinates and
+normals follow the same path as ordinary decals. The conservative query includes the warped footprint,
+projector depth and receiver transform, including nonuniform scale. Source triangle order is preserved.
+Small receivers use the direct Three.js path without building a BVH.
+
+Acceleration is shared across decal renderers using the same geometry, including separate burn/scorch
+layers. Rigid movement does not rebuild it. Position edits refit the tree when the attribute is marked
+`needsUpdate`; index or attribute replacement rebuilds it, and geometry disposal drops the cached entry.
+As with other Three.js geometry updates, in-place array edits must set the attribute's `needsUpdate` flag.
+First use still builds the CPU acceleration structure, so this reduces repeated dense-mesh projection cost
+rather than making initial setup free. Projection retains Three.js's full-geometry behavior independently
+of material groups or `drawRange`; raycasts continue respecting those settings.
+
+## Persistent spacing and overlap queries
+
+`minDistance` is a scalar world-space distance. Its default **-1 disables spacing**; zero also leaves
+placement unrestricted. Finite values below -1 are rejected. Positive values reject a candidate strictly
+closer than that distance to a compatible retained mark; exactly the threshold is accepted. This check
+runs before persistent geometry/source allocation and never changes an existing mark. `maxDecals`
+independently limits total population; size/warp controls coverage, and emission rate controls attempts.
+The recent-contact `duplicateDistance`/`duplicateInterval` filter remains a separate time-window control.
+
+```ts
+const burns = new DecalRenderer(material, { minDistance: 0.2, maxDecals: 48 });
+const nearby = burns.queryDecals(receiver, worldPoint, radius, worldNormal);
+```
+
+The query returns live decals nearest first within an inclusive radius. Receiver-local hash buckets
+survive rigid movement; final distances account for world scale, including nonuniform transforms.
+Passing a normal filters opposite-facing and separated-sheet contacts. Spacing always applies this
+surface compatibility test. It is a local tangent/curvature approximation, not exact geodesic distance
+across arbitrary disconnected coplanar islands. Expiration, eviction and clearing remove index entries.
+
+The [Heat Laser](https://rzmps.rzmay.com/docs/examples/heatLaser.html) uses collision events to extend an overlapping mark's
+`lifetime`, leaving `age` unchanged. Its normalized age decreases naturally, driving both emissive
+appearance and persistent source output. Spacing remains independent of this demo-side event response.
 
 
 ---
@@ -1162,12 +1221,35 @@ A source remains alive until disposed or its owner is destroyed. Registration di
 emitter context state; already created child particles and captured event runs finish normally. Ordinary particle
 clearing does not remove externally registered sources; explicit removal or system destruction does.
 
-`realtime` is source age in milliseconds of parent simulation time, respecting pause and simulation speed. `time` is
-that age divided by the owning system duration. Registered sources have no finite particle lifetime; their child
-emitters use their own duration and looping behavior. Set `inheritLifetime: 0` explicitly to communicate that
-independent timing. `rateOverDistance` follows source transform movement using the same per-context distance accumulator
+`age` is source age in seconds; `realtime` expresses the same age in milliseconds. By default it advances
+with parent simulation time, respecting pause and simulation speed. `lifetime` defaults to Infinity; `time`
+uses a finite source lifetime when supplied, otherwise the owning system duration. Passing `age` to
+registration or `source.update` selects an externally managed clock, suitable for an owning decal or other
+application object. Publish its age/lifetime together; updates do not advance that clock again. Set
+`age: undefined` to resume automatic aging. Extending lifetime preserves age and lowers normalized age.
+Emitted particles keep their configured lifetime; finite-source sampling is described below.
+`rateOverDistance` follows source transform movement using the same per-context distance accumulator
 as particle-backed emission. Multiple position updates before one frame contribute the final displacement, rather than
 every intermediate point.
+
+Finite registered sources sample emitter rate and initial-value curves using `source.age / source.lifetime`,
+independently of child-system duration and `inheritLifetime`. Extending source lifetime changes this sampling
+coordinate without resetting emission cadence. Sources with infinite lifetime keep ordinary emitter-duration
+sampling and looping.
+
+GPU simulation can consume CPU-managed source births without enabling standalone GPU emission; the two
+emission paths are exclusive. This includes CPU source-selection predicates on a GPU-simulated child.
+
+Continuous birth scheduling uses each finite source binding's uninterrupted simulation clock, so an
+application-owned age published less frequently than simulation substeps does not stall or bunch up emission.
+A stable source-ID-derived fraction of an emission interval separates birth phases between sources. This
+avoids identical particle ages across sources while preserving their long-run configured rate. A newly
+registered finite source can emit during its first update interval instead of losing that interval.
+
+Decal age, fading and source clocks advance on simulation steps, including intermediate steps that skip
+rendering. Decal-backed sources also refresh their receiver-relative transforms when sampled for emission,
+including between renderer updates. Already emitted world-space particles retain their birth location; they do not attach to
+or chase a moving decal unless Source simulation space is explicitly used.
 
 ## Selecting Sources and Inheriting Attributes
 
@@ -1271,7 +1353,10 @@ An event-only subscription disables continuous emission by default. Set `emitCon
 `emitOnSpawn`, `emitOnDeath` and `emitOnCollision` remain supported; subscribing to a built-in event through both a
 legacy flag and `onEvent` creates one run, with the named callback applied once. Explicit collision events can also
 originate from registered sources. Supplying the established collision hit shape preserves impulse threshold, alignment
-and scaling behavior.
+and scaling behavior. Collision-triggered particles start at `hit.point`, transformed from the producer's
+simulation space into the receiving system's space. The source particle keeps its own corrected-center
+position. Explicit event-handler position/transform overrides still take precedence; emitter shape offsets
+are applied around the resolved emission origin as usual. CPU and native GPU emission use the same rule.
 
 ### Declarative Consumers
 
@@ -2106,6 +2191,45 @@ Preparation is optional: normal updates can still build resources lazily. It doe
 that every renderer, material, or population-dependent kernel is compiled. CPU/WebGL systems
 should use their normal lifecycle instead of calling this WebGPU preparation method.
 
+### Particle capacity growth
+
+`initialCapacity` sets a per-system GPU particle-slot reserve before its first allocation. It defaults
+to `ParticleSystem.Settings.GPU_INITIAL_BUFFER_SIZE`, rounds to the usual geometric capacity tier, and
+is capped by `maxParticles`. It reserves storage without creating particles:
+
+```ts
+const particles = new ParticleSystem({ initialCapacity: 4096, maxParticles: 65536 });
+```
+
+Changing it affects the next initial allocation after clear/reset; it does not resize live storage.
+The population estimator can still reserve more when required. The demo GUI and code export preserve
+this option independently of `maxParticles` and the runtime growth threshold.
+
+`capacityGrowthThreshold` is the only timing control for preparing larger GPU particle storage. It
+accepts a fraction greater than zero and at most one, defaults to `1` (100%), and can change at runtime:
+
+```ts
+particles.capacityGrowthThreshold = 0.5; // Prepare when estimated demand exceeds half the current slots.
+```
+
+The trigger uses the built-in population estimate (including each known live source execution) together
+with observed live occupancy, incoming birth batches and reported allocation shortfalls. It compares
+that demand with allocated slots multiplied by the threshold, then prepares a geometric capacity tier capped by `maxParticles`. Lowering the threshold
+starts preparation earlier; it does not reduce particle counts or change emission settings.
+
+Current particle storage remains active while the replacement allocates and its ordinary particle
+allocation/emission/integration programs compile. At an update boundary, GPU copies retain the latest
+packed particle fields, the stable particle-state wrapper adopts the prepared backing, and replaced
+resources retire after a queue fence. Preparation and adoption do not advance simulation or emission
+clocks. Benchmarks expose `capacityEstimatedPopulation`, `capacityPendingSlots`, `capacityAllocationMs`,
+`capacityPreparationMs`, `capacityMigrationMs` and `capacitySwapMs` under the GPU simulation owner.
+
+This path prepares particle storage and its generic programs. Module-owned gas programs and renderer-owned
+grouping keep their existing binding lifecycle; they do not gain additional preparation hooks. Their
+first use after a backing change can still rebuild dependent programs. Asynchronous WebGPU compilation
+also performs some JavaScript graph construction on the main thread, so an earlier threshold provides
+headroom rather than a guarantee of hitch-free updates.
+
 A module can also override `getSimulationTimestep(requestedDt)` to request a positive maximum
 step in seconds. The default is `Infinity`. The system combines requests with its configured
 substep interval and includes registered subsystems, keeping emission, modifiers, integration,
@@ -2377,7 +2501,7 @@ fidelity. TSL nodes can be supplied directly where a dynamic value is evaluated 
 `GasModule` is a `Module` subclass for gas cells, discovered through `system.getModules` by
 `GasSimulation` and `VolumeRenderer`. Add it to the system's normal module list. It does not execute
 per particle. Tags select overlapping consumers, untagged modules apply to all, lower priorities
-run first, and `enabled: false` disables both callbacks.
+run first, and `enabled: false` disables all of its callbacks.
 
 ```ts
 import { GasModule } from '@rzmps/rzmps';
@@ -2404,6 +2528,63 @@ are local expressions, not new transported fields. Rules inline at the existing 
 sites: velocity transport commits velocity, scalar transport commits density/temperature/color,
 and confinement reads its local strength. Keep callbacks deterministic shader operations; do not
 assume a once-per-frame JavaScript invocation or accumulate JavaScript side effects.
+
+### Source-aware gas initialization
+
+`GasModule` also accepts `initialize(particles, emission, context)` and a TSL counterpart,
+`initializeGPU(particles, emission, context)`. These run after gathering a cell's contributing particles,
+before depositing the resulting emission. Mutate `emission.density`, `temperature`, `color` and
+`velocity` in place. Temperature, color and velocity are specific values; density is the deposited
+concentration increment, already including source strength and this substep's emission duration.
+Initializers run in module priority order and only change new emission, not gas already in the grid.
+
+The CPU callback receives a readonly particle array. `GasModule.initializeEmission` provides ordered
+CPU/reference evaluation for custom deposition pipelines and tests. GasSimulation remains GPU-only:
+supply `initializeGPU` when using an initializer with it, just as other GPU modules need TSL callbacks.
+The GPU collection exposes a node-valued `length` and a repeatable `forEach` sparse-query iterator;
+its optional second argument is that particle's original deposited density contribution. No per-cell
+particle arrays or readback are created. An initializer's changes do not rewrite these original weights.
+
+```ts
+const cooling = new GasModule({
+  initialize(particles, emission) {
+    let heat = 0, count = 0;
+    for (const particle of particles) {
+      const source = particle.source;
+      if (!source) continue;
+      heat += Math.max(0, 1 - source.age / source.lifetime);
+      count++;
+    }
+    if (count) emission.temperature *= heat / count;
+  },
+  initializeGPU(particles, emission) {
+    const heat = float(0).toVar(), count = float(0).toVar();
+    particles.forEach(particle => {
+      const source = particle.source;
+      If(source.valid, () => {
+        heat.addAssign(float(1).sub(source.age.div(source.lifetime)).clamp(0, 1));
+        count.addAssign(1);
+      });
+    });
+    If(count.greaterThan(0), () => emission.temperature.mulAssign(heat.div(count)));
+  },
+});
+```
+
+Import `GasModule` from `@rzmps/rzmps` and `If`, `float` from `three/tsl`. CPU particles retain their
+live source independently of simulation space. GPU source views expose `valid`, `age`, `lifetime`
+and `metadata[key]` for registered/CPU-managed sources. Arbitrary numeric or boolean metadata keys
+are discovered when constructing the shader; missing keys return zero. Unsupported metadata values
+throw rather than silently lose data. Removed or reused source slots read as invalid, and the CPU
+particle's `source` becomes undefined when that source is no longer alive. Native GPU-parent source
+origins are not mapped into this registered-source table.
+
+Initialization contexts provide the logical cell index, position, delta time and elapsed time; the GPU
+context also exposes the existing read-only gas grid query. Keep initializers deterministic: the same
+emission rule is evaluated at the velocity-coupling, scalar-deposition and transient visual-source sites.
+They must not rely on one JavaScript call per cell/frame or change simulation fields directly. Later
+initializers see earlier edits to the local emission, while grid queries read the input of the current
+solver stage. Source clocks and metadata updates reuse the compiled graph.
 
 ### Gas source mass and physical diffusion
 

@@ -12,6 +12,7 @@ export interface CollisionQuery {
 }
 
 export interface CollisionHit {
+  /** Surface contact in the producer system's simulation space; default origin for collision emission. */
   point: THREE.Vector3;
   normal: THREE.Vector3;
 

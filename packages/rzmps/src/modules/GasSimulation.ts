@@ -1,9 +1,12 @@
+import GasSourceData from '../simulation/gpu/GasSourceData';
 import { GasModuleStage } from '../enums/GasModuleStage';
 import { maximumFluidResidentCapacity } from '../simulation/gpu/fluidCapacity.utils';
 import { releaseSharedStorage } from '../utils/gpu/sharedStorage.utils';
 import { BenchmarkMetricType } from '../enums/BenchmarkMetricType';
 import type { SpatialGridDomain } from '../spatial/structures/spatialGridDomain.utils';
-import GasModule, { type GPUGasCell, type GasGridQuery, type GasModuleContext } from './GasModule';
+import GasModule, {
+  type GPUGasCell, type GasGridQuery, type GasModuleContext, type GPUGasEmission, type GPUGasParticles,
+} from './GasModule';
 import SpatialEffect from '../spatial/effects/SpatialEffect';
 import GasAffector from '../spatial/effects/GasAffector';
 import FluidCollider from '../spatial/effects/FluidCollider';
@@ -249,6 +252,11 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private colorNext!: Vec4Storage;
   private visualDensity!: Vec4Storage;
   private visualColor!: Vec4Storage;
+  // Physical raw moments occupy the visual workspace until render-time reconstruction overwrites it.
+  private sourceMomentum!: Vec4Storage;
+  private initializedSource!: Vec4Storage;
+  private sourceMomentNodes = new WeakMap<object, ComputeNode>();
+  private scalarInitializerNodes = new WeakMap<object, ComputeNode>();
   private readonly occupiedGasBounds = new THREE.Box3();
   private maximaMinimum = new THREE.Vector3();
   private maximaCellSize = 1;
@@ -306,6 +314,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private transientEffects: SpatialEffect[] = [];
   private spatialEffectsKey = '';
   private gasModules: GasModule[] = [];
+  private initializers: GasModule[] = [];
+  private initializationKey = '';
+  private readonly sourceData = new GasSourceData();
   private gasModulesKey = '';
   private effectNodes = new Map<string, WeakMap<object, ComputeNode>>();
   private visualStateNodes = new WeakMap<object, ComputeNode>();
@@ -336,6 +347,11 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   }
 
   private prepareGasEffects(system: ParticleSystem): void {
+    this.initializers = GasModule.collect(system, this.tags, GasModuleStage.Initialization);
+    for (const module of this.initializers) {
+      if (!module.initializeGPU) throw new Error('GasModule.initialize requires initializeGPU for GPU gas simulation.');
+    }
+    this.initializationKey = this.initializers.map(module => module.graphKey(GasModuleStage.Initialization)).join('|');
     this.gasModules = GasModule.collect(system, this.tags, GasModuleStage.Simulation);
     this.gasModulesKey = this.gasModules.map(module => module.graphKey(GasModuleStage.Simulation)).join('|');
     const affectors = new Set(this.spatialEffects.get(GasAffector));
@@ -757,6 +773,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private computeTransport(context: GPUParticleUpdateContext, renderer: ParticleSpatialGridRenderer,
     grid: ParticleSpatialGrid): void {
     const dt = context.deltaTimeNode;
+    if (this.initializers.length) this.sourceData.update(context.system);
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
     const sourceGrid = this.getSourceGrid(context, renderer, grid);
 
@@ -767,11 +784,13 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       this.sourceTemperature, Boolean(this.temperatureOverLifetime), this.turbulenceNoiseStrength,
       this.turbulenceNoiseFrequency,
       this.turbulenceNoiseSpeed, this.turbulenceNoiseOctaves, this.advectionMethod,
-      this.behaviorKey, this.gasModulesKey, this.scalarDiffusion > 0].join('|');
+      this.behaviorKey, this.gasModulesKey, this.initializationKey, this.scalarDiffusion > 0].join('|');
     if (cacheKey !== this.gpuCacheKey) {
       this.gpuCacheKey = cacheKey;
       this.velocityNodes = new WeakMap();
       this.velocitySourceNode = undefined;
+      this.sourceMomentNodes = new WeakMap();
+      this.scalarInitializerNodes = new WeakMap();
       this.sourceNodes = new WeakMap();
       this.scalarModuleNodes = new WeakMap();
       this.scalarSourceNodes = new WeakMap();
@@ -838,24 +857,18 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.velocityNodes.set(velocityDensity, velocity);
     this.benchmarks.span('advectionForces', () => renderer.compute(velocity));
 
+    // Gather raw moments once, at the original velocity-initialization stage.
+    this.gatherPhysicalSources(context, renderer, sourceGrid, tagMask);
     const velocitySources = this.velocitySourceNode ?? this.computeCells(index => {
       If(this.volumeGrid.sourceActive(index), () => {
-        const coordinate = this.cellCoordinate(index);
-        const center = this.cellCenter(coordinate);
-        const momentum = vec3(0).toVar('gasSourceMomentum');
-        const sourceMass = float(0).toVar('gasSourceMass');
-        const radius = gasSourceQueryRadius(sourceGrid.getMaxParticleRadiusNode(), this.cellSizeNode);
-        sourceGrid.forEachParticleInRadius(center, radius, (particle) => {
-          const weight = gasSourceWeight(center, particle.position, particle.scale, this.cellSizeNode);
-          const mass = max(particle.mass, float(0)).mul(particle.alpha).mul(weight)
-            .mul(this.sourceStep(particle, dt));
-          sourceMass.addAssign(mass);
-          momentum.addAssign(particle.velocity.mul(mass));
-        }, { tagMask });
-        const blend = clamp(float(1).sub(pow(float(Math.E), sourceMass.mul(-this.velocitySourceStrength))), 0, 1);
+        const raw = this.visualDensity.element(index);
+        const initialized = this.initializedSource.element(index);
+        const coupling = this.initializers.length ? initialized.w : raw.x;
+        const velocity = this.initializers.length ? initialized.xyz
+          : this.sourceMomentum.element(index).xyz.div(raw.x.max(1e-6));
+        const blend = clamp(float(1).sub(pow(float(Math.E), coupling.mul(-this.velocitySourceStrength))), 0, 1);
         const previous = vec3(this.velocityNext.element(index).xyz);
-        const updated = mix(previous, momentum.div(max(sourceMass, float(1e-6))), blend);
-        this.velocityNext.element(index).assign(vec4(this.clampVelocity(updated), 0));
+        this.velocityNext.element(index).assign(vec4(this.clampVelocity(mix(previous, velocity, blend)), 0));
       });
     });
     this.velocitySourceNode = velocitySources;
@@ -976,28 +989,30 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       colorNext = this.colorNext;
     }
 
+    if (this.initializers.length) {
+      const initialize = this.scalarInitializerNodes.get(this.densityCurrent) ?? this.computeCells(index => {
+        this.initializedSource.element(index).assign(vec4(0));
+        If(this.volumeGrid.sourceActive(index), () => {
+          const { emission } = this.gatherInitializedEmission(this.cellCenter(this.cellCoordinate(index)),
+            this.cellCoordinate(index), context, sourceGrid, tagMask, undefined, index);
+          // Raw momentum is no longer needed after this stage; reuse it for the initialized color.
+          this.initializedSource.element(index).assign(vec4(emission.density,
+            emission.density.mul(emission.temperature), 0, 0));
+          this.sourceMomentum.element(index).assign(vec4(emission.color.mul(emission.density), 0));
+        });
+      });
+      this.scalarInitializerNodes.set(this.densityCurrent, initialize);
+      this.benchmarks.span('scalarSourceInitialization', () => renderer.compute(initialize));
+    }
     const scalarSources = this.scalarSourceNodes.get(densityNext) ?? this.computeCells(index => {
       If(this.volumeGrid.sourceActive(index), () => {
-        const center = this.cellCenter(this.cellCoordinate(index));
-        const sourceDensity = float(0).toVar('gasSourceDensity');
-        const sourceTemperature = float(0).toVar('gasSourceTemperature');
-        const sourceColor = vec3(0).toVar('gasSourceColor');
-        const radius = gasSourceQueryRadius(sourceGrid.getMaxParticleRadiusNode(), this.cellSizeNode);
-        sourceGrid.forEachParticleInRadius(center, radius, (particle) => {
-          const weight = gasSourceWeight(center, particle.position, particle.scale, this.cellSizeNode);
-          const contribution = max(particle.mass, float(0)).mul(particle.alpha)
-            .mul(weight).mul(this.sourceStrength).mul(this.sourceStep(particle, dt));
-          sourceDensity.addAssign(contribution);
-          sourceTemperature.addAssign(contribution.mul(this.particleTemperature(particle.time, particle.index)));
-          sourceColor.addAssign(particle.color.mul(contribution));
-        }, { tagMask });
+        const source = this.initializers.length ? this.initializedSource.element(index)
+          : this.visualDensity.element(index).mul(this.sourceStrength);
+        const color = this.initializers.length ? this.sourceMomentum.element(index).xyz
+          : this.visualColor.element(index).xyz.mul(this.sourceStrength);
         const previous = densityNext.element(index);
-        densityNext.element(index).assign(vec4(
-          previous.x.add(sourceDensity), previous.y.add(sourceTemperature), 0, 0,
-        ));
-        colorNext.element(index).assign(vec4(
-          colorNext.element(index).xyz.add(sourceColor), 0,
-        ));
+        densityNext.element(index).assign(vec4(previous.x.add(source.x), previous.y.add(source.y), 0, 0));
+        colorNext.element(index).assign(vec4(colorNext.element(index).xyz.add(color), 0));
       });
     });
     this.scalarSourceNodes.set(densityNext, scalarSources);
@@ -1040,11 +1055,13 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   ): void {
     if (!grid) return;
     const sourceGrid = this.getSourceGrid(context, renderer, grid);
+    if (this.initializers.length) this.sourceData.update(context.system);
     const tagMask = context.system.getGPUFilterTagMask(this.tags);
     this.volumeGrid.updateRenderSourceMask(context, renderBuffers, renderer,
       this.boundsMinNode, this.cellSizeNode, tagMask);
     const cacheKey = [context.buffers.version, renderBuffers.version,
       tagMask, this.sourceStrength, this.sourceTemperature, Boolean(this.temperatureOverLifetime),
+      this.initializationKey,
     ].join('|');
     if (cacheKey !== this.visualCacheKey) {
       this.visualCacheKey = cacheKey;
@@ -1057,6 +1074,15 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
       this.visualColor.element(index).assign(vec4(0));
       If(this.volumeGrid.sourceActive(index), () => {
         const center = this.cellCenter(this.cellCoordinate(index));
+        if (this.initializers.length) {
+          const source = this.gatherInitializedEmission(center, this.cellCoordinate(index), context,
+            sourceGrid, tagMask, renderBuffers);
+          const emission = source.emission;
+          this.visualDensity.element(index).assign(vec4(emission.density,
+            emission.density.mul(emission.temperature), 0, 0));
+          this.visualColor.element(index).assign(vec4(emission.color.mul(emission.density), 0));
+          return;
+        }
         const total = float(0).toVar('visualGasDensity');
         const temperature = float(0).toVar('visualGasTemperature');
         const color = vec3(0).toVar('visualGasColor');
@@ -1148,6 +1174,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
   private resetGasNodes(): void {
     this.gpuCacheKey = '';
+    this.sourceMomentNodes = new WeakMap();
+    this.scalarInitializerNodes = new WeakMap();
     this.effectNodes = new Map();
     this.visualStateNodes = new WeakMap();
     this.remapNodes = new WeakMap();
@@ -1205,7 +1233,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   }
 
   private adoptQualityPrograms(programs: GasSimulation): void {
-    const keys = ['gpuCacheKey', 'effectNodes', 'visualStateNodes', 'velocityNodes', 'velocitySourceNode',
+    const keys = ['sourceMomentNodes', 'scalarInitializerNodes',
+      'gpuCacheKey', 'effectNodes', 'visualStateNodes', 'velocityNodes', 'velocitySourceNode',
       'sourceNodes', 'scalarModuleNodes', 'scalarSourceNodes', 'solidClearNodes', 'outputNodes', 'visualCacheKey',
       'visualSourceNode', 'visualOutputNodes', 'maximaNodes', 'maximaResetNode', 'curlNode', 'confinementNodes',
       'advectionNodes', 'clearNewNodes', 'clearTexturesNode'] as const;
@@ -1588,12 +1617,13 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         const copies = current.attributes.flatMap((attribute, index) => {
           const target = replacement.attributes[index];
           if (attribute === target) return [];
-          // Runtime plane offsets avoid capacity-specific shaders; two GPU copies preserve packed fields.
-          if (attribute === this.boundaryAttribute || attribute === this.visualAttribute) return [
-            { source: attribute, target, byteLength: count * 16 },
-            { source: attribute, target, sourceOffset: this.cellCount * 16,
-              targetOffset: nextCount * 16, byteLength: count * 16 },
-          ];
+          // Packed plane offsets are runtime strides, so every workspace plane moves independently.
+          if (attribute === this.boundaryAttribute || attribute === this.visualAttribute) {
+            const planes = attribute.count / this.cellCount;
+            return Array.from({ length: planes }, (_, plane) => ({ source: attribute, target,
+              sourceOffset: plane * this.cellCount * 16, targetOffset: plane * nextCount * 16,
+              byteLength: count * 16 }));
+          }
           return [{ source: attribute, target, byteLength: count * attribute.itemSize * 4 }];
         });
         copyStorageAttributes(renderer, copies);
@@ -1648,9 +1678,9 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
 
   private maximumResidentCapacity(renderer: ParticleSpatialGridRenderer): number {
     const device = (renderer.backend as { device: { limits: { maxStorageBufferBindingSize: number } } }).device;
-    const bytesPerBrick = Math.max(this.volumeGrid.cellsPerBrick * 32, (this.volumeGrid.brickSide + 1) ** 3 * 16);
+    const bytesPerBrick = Math.max(this.volumeGrid.cellsPerBrick * 64, (this.volumeGrid.brickSide + 1) ** 3 * 16);
     const nativeMaximum = Math.min(this.maxActiveBricks,
-      Math.floor((device.limits.maxStorageBufferBindingSize - 32) / bytesPerBrick));
+      Math.floor((device.limits.maxStorageBufferBindingSize - 64) / bytesPerBrick));
     // Finite domains cannot populate more positions than their world-space brick lattice permits.
     // Existing backing is retained; this is a growth ceiling, not a utilization-driven shrink.
     if (nativeMaximum < this.volumeGrid.capacity) {
@@ -1768,6 +1798,7 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.poolAllocation?.cancelPending(); this.poolAllocation = undefined;
     super.cleanup();
     this.sourceGrid?.dispose();
+    this.sourceData.dispose();
     this.sourceGrid = undefined;
     this.disposeGasFields();
     this.volumeGrid.dispose();
@@ -1827,7 +1858,8 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
   private clearNewBricks(renderer: ParticleSpatialGridRenderer): void {
     if (!this.clearNewNodes.length) {
       const vectors = [this.velocityCurrent, this.velocityNext, this.densityCurrent, this.densityNext,
-        this.colorCurrent, this.colorNext, this.curl, this.visualDensity, this.visualColor];
+        this.colorCurrent, this.colorNext, this.curl, this.visualDensity, this.visualColor,
+        this.sourceMomentum, this.initializedSource];
       const scalars = [this.pressureCurrent, this.divergence, this.solid];
       const clears = [
         ...vectors.map(field => (index: Node<'uint'>) => { field.element(index).assign(vec4(0)); }),
@@ -1922,17 +1954,19 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
     this.densityAttributeB = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
     this.colorAttributeA = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
     this.colorAttributeB = new StorageBufferAttribute(new Float32Array(this.cellCount * 4), 4);
-    this.visualAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 8), 4);
+    this.visualAttribute = new StorageBufferAttribute(new Float32Array(this.cellCount * 16), 4);
     this.maximaAttribute = new StorageBufferAttribute(new Uint32Array(12), 1);
     this.densityCurrent = storage(this.densityAttributeA, 'vec4', this.cellCount) as Vec4Storage;
     this.densityNext = storage(this.densityAttributeB, 'vec4', this.cellCount) as Vec4Storage;
     this.colorCurrent = storage(this.colorAttributeA, 'vec4', this.cellCount) as Vec4Storage;
     this.colorNext = storage(this.colorAttributeB, 'vec4', this.cellCount) as Vec4Storage;
-    // Both transient targets share one binding so a single gather fits the eight-buffer limit.
-    const visual = storage(this.visualAttribute, 'vec4', this.cellCount * 2) as Vec4Storage;
+    // Four packed planes share one binding. Physical moments/initialization use them before rendering.
+    const visual = storage(this.visualAttribute, 'vec4', this.cellCount * 4) as Vec4Storage;
     const stride = this.fieldStrideNode;
     this.visualDensity = visual;
     this.visualColor = { element: index => visual.element(uint(index as Node<'uint'>).add(stride)) };
+    this.sourceMomentum = { element: index => visual.element(uint(index as Node<'uint'>).add(stride.mul(2))) };
+    this.initializedSource = { element: index => visual.element(uint(index as Node<'uint'>).add(stride.mul(3))) };
     this.maxima = storage(this.maximaAttribute, 'uint', 12).toAtomic() as AtomicUintStorage;
     this.densityTexture = this.makeTexture();
     this.colorTexture = this.makeTexture();
@@ -2189,6 +2223,93 @@ class GasSimulation extends FluidSimulation implements VolumeFieldProvider {
         };
       },
     };
+  }
+
+  /** Raw, pre-initializer moments are independent of pressure and reusable within one physical step. */
+  private gatherPhysicalSources(context: GPUParticleUpdateContext, renderer: ParticleSpatialGridRenderer,
+    grid: ParticleSpatialGrid, tagMask?: number): void {
+    const node = this.sourceMomentNodes.get(this.densityCurrent) ?? this.computeCells(index => {
+      this.visualDensity.element(index).assign(vec4(0));
+      this.visualColor.element(index).assign(vec4(0));
+      this.sourceMomentum.element(index).assign(vec4(0));
+      If(this.volumeGrid.sourceActive(index), () => {
+        const center = this.cellCenter(this.cellCoordinate(index));
+        const { mass, heat, count, color, momentum } = this.gatherSourceMoments(center, context, grid, tagMask);
+        this.visualDensity.element(index).assign(vec4(mass, heat, count, 0));
+        this.visualColor.element(index).assign(vec4(color, 0));
+        this.sourceMomentum.element(index).assign(vec4(momentum, 0));
+        if (this.initializers.length) {
+          const source = this.gatherInitializedEmission(center, this.cellCoordinate(index),
+            context, grid, tagMask, undefined, index);
+          const coupling = this.sourceStrength > 0
+            ? source.emission.density.div(this.sourceStrength) : source.mass;
+          this.initializedSource.element(index).assign(vec4(source.emission.velocity, coupling));
+        }
+      });
+    });
+    this.sourceMomentNodes.set(this.densityCurrent, node);
+    this.benchmarks.span('sourceMomentGather', () => renderer.compute(node));
+  }
+
+  /** One consistent weighting/eligibility rule for cached physical and uncached render-time gathers. */
+  private forEachSourceContribution(center: Node<'vec3'>, context: GPUParticleUpdateContext,
+    grid: ParticleSpatialGrid, tagMask: number | undefined, visual: GPUParticleRenderBufferState | undefined,
+    callback: (particle: GPUParticleLike, contribution: Node<'float'>) => void): void {
+    const radius = gasSourceQueryRadius(grid.getMaxParticleRadiusNode(), this.cellSizeNode);
+    grid.forEachParticleInRadius(center, radius, particle => {
+      const vectors = visual?.storage.createVectorNodes(particle.index);
+      const scalars = visual?.storage.createScalarNodes(particle.index);
+      const weight = gasSourceWeight(center, vectors?.position ?? particle.position,
+        vectors?.scale ?? particle.scale, this.cellSizeNode);
+      const contribution = max(particle.mass, float(0)).mul(scalars?.alpha ?? particle.alpha)
+        .mul(weight).mul(visual ? context.deltaTimeNode : this.sourceStep(particle, context.deltaTimeNode));
+      If(contribution.greaterThan(0), () => callback(particle, contribution));
+    }, { tagMask });
+  }
+
+  private gatherSourceMoments(center: Node<'vec3'>, context: GPUParticleUpdateContext,
+    grid: ParticleSpatialGrid, tagMask?: number, visual?: GPUParticleRenderBufferState) {
+    const mass = float(0).toVar(), heat = float(0).toVar(), count = float(0).toVar();
+    const color = vec3(0).toVar(), momentum = vec3(0).toVar();
+    this.forEachSourceContribution(center, context, grid, tagMask, visual, (particle, contribution) => {
+      const vectors = visual?.storage.createVectorNodes(particle.index);
+      const scalars = visual?.storage.createScalarNodes(particle.index);
+      mass.addAssign(contribution); count.addAssign(1);
+      heat.addAssign(contribution.mul(this.particleTemperature(scalars?.time ?? particle.time, particle.index)));
+      color.addAssign((vectors?.color ?? particle.color).mul(contribution));
+      momentum.addAssign(particle.velocity.mul(contribution));
+    });
+    return { mass, heat, count, color, momentum };
+  }
+
+  /** Seed from this step's raw moments; initializer callbacks still observe their own stage's gas state. */
+  private gatherInitializedEmission(
+    center: Node<'vec3'>, coordinate: Node<'ivec3'>, context: GPUParticleUpdateContext,
+    grid: ParticleSpatialGrid, tagMask?: number, visual?: GPUParticleRenderBufferState, cachedIndex?: Node<'uint'>,
+  ): { emission: GPUGasEmission; mass: Node<'float'> } {
+    const totals = cachedIndex ? this.visualDensity.element(cachedIndex).toVar() : undefined;
+    const { mass, heat, count, color, momentum } = cachedIndex ? {
+      mass: totals!.x.toVar(), heat: totals!.y.toVar(), count: totals!.z.toVar(),
+      color: this.visualColor.element(cachedIndex).xyz.toVar(),
+      momentum: this.sourceMomentum.element(cachedIndex).xyz.toVar(),
+    } : this.gatherSourceMoments(center, context, grid, tagMask, visual);
+    const denominator = mass.max(1e-20);
+    const emission: GPUGasEmission = {
+      density: mass.mul(this.sourceStrength).toVar(), temperature: heat.div(denominator).toVar(),
+      color: color.div(denominator).toVar(), velocity: momentum.div(denominator).toVar(),
+    };
+    const particles: GPUGasParticles = {
+      length: count,
+      forEach: callback => this.forEachSourceContribution(center, context, grid, tagMask, visual,
+        (particle, contribution) => callback(
+          this.sourceData.particle(particle, context.buffers), contribution.mul(this.sourceStrength))),
+    };
+    const query = this.createGasGridQuery(this.densityCurrent, this.colorCurrent, this.velocityCurrent);
+    for (const module of this.initializers) {
+      module.initializeGPU!(particles, emission, { module, index: coordinate, position: center, grid: query,
+        deltaTime: context.deltaTimeNode, elapsedTime: context.elapsedTimeNode });
+    }
+    return { emission, mass };
   }
 
   /** Inline rules at the existing coefficient sites; no coefficient fields or additional dispatches. */

@@ -236,21 +236,39 @@ export function validateGuide(markdown, example, strict = true) {
   }
   if (liveUrl.pathname !== `/example/${example.id}` || liveUrl.search || liveUrl.hash)
     throw new Error(`${example.id}: stale live example route; expected /example/${example.id}`);
-  let last = -1;
-  for (const [key, title] of sections) {
-    const index = markdown.indexOf(`## ${title}\n`);
-    if (index <= last) throw new Error(`${example.id}: missing/out-of-order ${title}`);
-    const end = markdown.indexOf('\n## ', index + 1);
-    const body = markdown.slice(index, end < 0 ? undefined : end);
-    if (!body.includes(`<ExampleCode region="${key}`))
-      throw new Error(`${example.id}: ${title} needs a source reference`);
-    const prose = body
+  const explanation = body =>
+    body
       .replace(/^## .*\n/, '')
       .replace(/<!--[\s\S]*?-->/g, '')
       .replace(/<ExampleCode[^>]*\/>/g, '')
       .trim();
-    if (strict && prose.length < 60) throw new Error(`${example.id}: ${title} needs an explanation`);
-    last = index;
+  const canonical = sections.some(([, title]) => markdown.includes(`## ${title}\n`));
+  if (canonical) {
+    let last = -1;
+    for (const [key, title] of sections) {
+      const index = markdown.indexOf(`## ${title}\n`);
+      if (index <= last) throw new Error(`${example.id}: missing/out-of-order ${title}`);
+      const end = markdown.indexOf('\n## ', index + 1);
+      const body = markdown.slice(index, end < 0 ? undefined : end);
+      if (!body.includes(`<ExampleCode region="${key}`))
+        throw new Error(`${example.id}: ${title} needs a source reference`);
+      if (strict && explanation(body).length < 60) throw new Error(`${example.id}: ${title} needs an explanation`);
+      last = index;
+    }
+  } else {
+    // A staged walkthrough can explain several component types together to build one visible effect.
+    // Retain component coverage and explanatory prose without imposing the template's heading order.
+    const references = [...markdown.matchAll(/<ExampleCode region="([^"]+)"\s*\/>/g)].map(match => match[1]);
+    for (const [key] of sections) {
+      if (!references.some(region => region === key || region.startsWith(`${key}:`)))
+        throw new Error(`${example.id}: walkthrough needs a ${key} source reference`);
+    }
+    const steps = markdown.split(/^## /m).slice(1);
+    if (!steps.length) throw new Error(`${example.id}: walkthrough needs section headings`);
+    for (const step of steps) {
+      if (strict && step.includes('<ExampleCode') && explanation(`## ${step}`).length < 60)
+        throw new Error(`${example.id}: ${step.split('\n')[0]} needs an explanation`);
+    }
   }
   if (/TODO/.test(markdown)) {
     if (strict) throw new Error(`${example.id}: unresolved guide TODO`);

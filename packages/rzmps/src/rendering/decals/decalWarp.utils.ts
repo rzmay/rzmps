@@ -17,6 +17,9 @@ export type DecalWarpSampler = ((particle: Particle, ray: THREE.Ray, hit: THREE.
 export type DecalWarpInput = DecalWarp | DecalWarpSampler;
 const composed = new WeakMap<DecalWarp, THREE.Matrix3>();
 const placementFrames = new WeakMap<Particle, THREE.Matrix4>();
+const placementProjectors = new WeakMap<Particle, {
+  rotation: number; size: THREE.Vector2; position?: THREE.Vector3;
+}>();
 
 /** Forward map on centered unit UVs. Combined warps retain their exact matrix rather than decomposing it. */
 export function decalWarpMatrix(warp: DecalWarp): THREE.Matrix3 {
@@ -41,12 +44,27 @@ export function sampleDecalWarp(
   ray: THREE.Ray,
   hit: THREE.Intersection,
   system?: ParticleSystem,
+  projectionRotation?: number,
+  projectionSize?: THREE.Vector3,
+  projectionPosition?: THREE.Vector3,
 ): THREE.Matrix3 {
+  const previousProjector = placementProjectors.get(particle);
+  if (projectionRotation !== undefined) placementProjectors.set(particle, { rotation: projectionRotation,
+    size: new THREE.Vector2(projectionSize?.x ?? 1, projectionSize?.y ?? 1), position: projectionPosition });
   const previous = placementFrames.get(particle);
   if (system) placementFrames.set(particle, system.getSimulationToWorldMatrix());
   try {
-    return decalWarpMatrix(typeof warp === 'function' ? warp(particle, ray, hit) : (warp ?? {}));
+    const matrix = decalWarpMatrix(typeof warp === 'function' ? warp(particle, ray, hit) : (warp ?? {}));
+    if (projectionRotation === undefined) return matrix;
+    // Geometry keeps its rolled projector, but the warp acts after base rotation in the fixed surface frame.
+    // Conjugate by S^-1 R S to include rectangular projector dimensions, not just square textures.
+    const sx = projectionSize?.x ?? 1, sy = projectionSize?.y ?? 1;
+    const c = Math.cos(projectionRotation), s = Math.sin(projectionRotation);
+    const base = new THREE.Matrix3().set(c, -s * sy / sx, 0, s * sx / sy, c, 0, 0, 0, 1);
+    return base.clone().invert().multiply(matrix).multiply(base);
   } finally {
+    if (previousProjector === undefined) placementProjectors.delete(particle);
+    else placementProjectors.set(particle, previousProjector);
     if (system) {
       if (previous) placementFrames.set(particle, previous);
       else placementFrames.delete(particle);
@@ -91,7 +109,9 @@ function incidenceWarp(
   const normal = decalHitNormal(hit),
     incidence = Math.abs(normal.dot(incoming)) / incoming.length();
   const orientation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
-  orientation.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), particle.rotation.z));
+  const projector = placementProjectors.get(particle);
+  const roll = projector ? 0 : particle.rotation.z;
+  orientation.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), roll));
   const projected = incoming.clone().applyQuaternion(orientation.invert());
   const length = Math.hypot(projected.x, projected.y);
   if (length < 1e-6) return {};
@@ -104,13 +124,14 @@ function incidenceWarp(
 
   // Ray projection stays symmetric. Velocity splats keep the rear extent and extend forward instead.
   // The square's support radius bounds the denominator even for diagonal motion at the stretch cap.
-  const support = (Math.abs(x) + Math.abs(y)) / 2;
+  const c = Math.cos(projector?.rotation ?? 0), s = Math.sin(projector?.rotation ?? 0);
+  const support = projector
+    ? (Math.abs(x * c + y * s) * projector.size.x + Math.abs(-x * s + y * c) * projector.size.y) / 2
+    : (Math.abs(x) + Math.abs(y)) / 2;
   const perspective = velocityFactor === undefined ? 0 : (scale - 1) / (scale * support);
   const stretch = velocityFactor === undefined ? scale - 1 : 1 - 1 / scale;
   const result = {};
-  composed.set(
-    result,
-    new THREE.Matrix3().set(
+  const matrix = new THREE.Matrix3().set(
       1 + stretch * x * x,
       stretch * x * y,
       0,
@@ -120,8 +141,12 @@ function incidenceWarp(
       -perspective * x,
       -perspective * y,
       1,
-    ),
-  );
+    );
+  if (projector) {
+    const size = new THREE.Matrix3().set(projector.size.x, 0, 0, 0, projector.size.y, 0, 0, 0, 1);
+    matrix.premultiply(size.clone().invert()).multiply(size);
+  }
+  composed.set(result, matrix);
   return result;
 }
 
@@ -152,6 +177,49 @@ export const decalWarps = {
       const frame = placementFrames.get(particle);
       if (frame) velocity.applyMatrix3(new THREE.Matrix3().setFromMatrix4(frame));
       return incidenceWarp(particle, velocity, hit, limit, strength);
+    };
+  },
+  /**
+   * Fit the tangent footprint between two world-space points, centered halfway between them.
+   * Preserve its crosswise width and do not shrink below its original length along the connection.
+   * Overlap extends the fitted length equally beyond both ends; the stretch cap can limit coverage.
+   * Point vectors are read at placement time, so callers can update them between collision events.
+   * Base texture rotation is applied before this deformation, as with the other warp factories.
+   * @param from Previous world-space contact point.
+   * @param to Current world-space contact point.
+   * @param maxStretch Maximum length multiplier; defaults to 4 and is clamped to at least 1.
+   * @param overlap Multiplier of the fitted length; 1 fits, 1.2 adds 20% overlap. Default/minimum 1.
+   */
+  FromPoints(from: THREE.Vector3, to: THREE.Vector3, maxStretch = 4, overlap = 1): DecalWarpSampler {
+    const multiplier = Number.isFinite(overlap) ? Math.max(1, overlap) : 1;
+    const limit = Number.isFinite(maxStretch) ? Math.max(1, maxStretch) : 4;
+    return (particle, _ray, hit) => {
+      const normal = decalHitNormal(hit);
+      const frame = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+      const projector = placementProjectors.get(particle);
+      if (!projector) frame.multiply(new THREE.Quaternion()
+        .setFromAxisAngle(new THREE.Vector3(0, 0, 1), particle.rotation.z));
+      frame.invert();
+      const delta = to.clone().sub(from).applyQuaternion(frame);
+      const distance = Math.hypot(delta.x, delta.y);
+      if (!delta.toArray().every(Number.isFinite) || distance < 1e-6) return {};
+
+      // Measure the already-rotated rectangle along the connection in physical surface units.
+      const x = delta.x / distance, y = delta.y / distance;
+      const sx = projector?.size.x ?? 1, sy = projector?.size.y ?? 1;
+      const c = Math.cos(projector?.rotation ?? 0), s = Math.sin(projector?.rotation ?? 0);
+      const width = Math.abs(x * c + y * s) * sx + Math.abs(-x * s + y * c) * sy;
+      const stretch = Math.min(limit, Math.max(1, distance / width) * multiplier) - 1;
+      const center = from.clone().add(to).multiplyScalar(0.5)
+        .sub(projector?.position ?? hit.point).applyQuaternion(frame);
+      const result = {};
+      const matrix = new THREE.Matrix3().set(
+        1 + stretch * x * x, stretch * x * y * sy / sx, center.x / sx,
+        stretch * x * y * sx / sy, 1 + stretch * y * y, center.y / sy,
+        0, 0, 1,
+      );
+      composed.set(result, matrix);
+      return result;
     };
   },
   /** Arguments apply left to right: Combine(A, B) maps p to B * A * p. */

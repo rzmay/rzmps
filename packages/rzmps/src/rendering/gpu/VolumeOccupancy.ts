@@ -70,6 +70,14 @@ export default class VolumeOccupancy {
   getResolutionNode(): Node<'vec3'> { return this.dimensionsNode; }
   sample(uv: Node<'vec3'>): Node<'vec4'> { return this.sampleNode.sample(uv).level(float(0)); }
 
+  /** Compile the existing reduction without changing occupancy or dispatching any work. */
+  async prepare(renderer: ParticleSpatialGridRenderer): Promise<void> {
+    const compiler = renderer as ParticleSpatialGridRenderer & {
+      compileComputeAsync?: (nodes: ComputeNode[]) => Promise<void>;
+    };
+    await compiler.compileComputeAsync?.([this.node]);
+  }
+
   update(renderer: ParticleSpatialGridRenderer, version: number): void {
     if (version === this.version) return;
     renderer.compute(this.node);

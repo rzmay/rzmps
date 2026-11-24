@@ -15,8 +15,9 @@ export const previewDefaults = Object.freeze({
 export function previewArguments(example, output) {
   const { scene, ...overrides } = example.previewSettings ?? {};
   const settings = { ...previewDefaults, ...overrides, example: example.id, output };
-  return Object.entries(settings).flatMap(([key, value]) => [
-    '--' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()),
-    Array.isArray(value) ? value.join(',') : String(value),
-  ]);
+  return Object.entries(settings).flatMap(([key, value]) => {
+    const option = '--' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase());
+    const argument = Array.isArray(value) ? value.join(',') : String(value);
+    return argument.startsWith('-') ? [`${option}=${argument}`] : [option, argument];
+  });
 }

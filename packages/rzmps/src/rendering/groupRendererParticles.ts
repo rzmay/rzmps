@@ -1,5 +1,5 @@
 import { Box3, Vector3 } from 'three';
-import Particle from '../core/Particle';
+import Particle, { getParticleSourceBinding, setParticleSourceBinding } from '../core/Particle';
 import ParticleOctree, { type OctreeNode } from '../spatial/structures/ParticleOctree';
 import type ParticleSystem from '../core/ParticleSystem';
 
@@ -122,6 +122,11 @@ export default function groupRendererParticles(
     const anchor = particles[anchors[g]];
     const aggregate = anchor.shallowClone(anchor.id);
     members.sort((a, b) => particles[a].id.localeCompare(particles[b].id));
+    // Preserve one real member's source, preferring the particle with the highest LOD retention priority.
+    const representative = members.reduce((best, i) =>
+      particles[i].lodPriority < particles[best].lodPriority ? i : best, members[0]);
+    const binding = getParticleSourceBinding(particles[representative]);
+    setParticleSourceBinding(aggregate, binding ? { ...binding, previous: binding.previous.clone() } : undefined);
     let scaleSquared = scales[g];
     if (radius > 0) scaleSquared = radius * radius;
     const weights = members.map(i => 1 / (1 + world[i].distanceToSquared(centers[g].position) / scaleSquared));

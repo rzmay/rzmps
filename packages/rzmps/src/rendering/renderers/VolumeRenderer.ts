@@ -538,6 +538,8 @@ class VolumeRenderer extends Renderer {
     try {
       this._update([], system, 0);
       if (!this.mesh.visible) return;
+      await Promise.all([...new Set(this.layers.map(layer => layer.density.occupancy))]
+        .map(occupancy => occupancy?.prepare(renderer)));
       if (this.lightingGrid) {
         this.mesh.updateWorldMatrix(true, false);
         this.updateLighting(renderer, scene);
@@ -1319,6 +1321,9 @@ class VolumeRenderer extends Renderer {
         const lightDirection = modelWorldMatrixInverse.mul(vec4(this.gpuLightDirection, 0)).xyz.normalize();
         const sampleJitter = this.createRayJitter();
         const accumulated = vec4(0).toVar('volumeAccumulated');
+        // Occupancy is constant until the ray crosses a source/copy's coarse-cell boundary.
+        // Reuse that interval instead of reading the same occupancy texel for every fine stratum.
+        const nextOccupancyBoundary = start.toVar('volumeNextOccupancyBoundary');
         // Keep the quality budget uniform-backed: edits reuse the compiled raymarch pipeline.
         Loop({ start: 0, end: this.gpuSteps, type: 'int' }, ({ i }) => {
           // Derive the lattice from its index: repeated additions and DDA jumps must not
@@ -1331,17 +1336,20 @@ class VolumeRenderer extends Renderer {
             smoothstep(this.gpuAdaptiveStepThreshold, float(1), accumulated.a).mul(this.gpuAdaptiveStepping),
           );
           if (this.emptySpaceSkipping && this.layers.every(layer => !!layer.density.occupancy)) {
-            const advance = this.emptyAdvance(origin.add(direction.mul(distance)), direction);
-            const stride = baseStep.mul(growth);
-            const skip = min(advance, far.sub(distance))
-              .div(stride)
-              .floor()
-              .min(float(this.gpuSteps).sub(float(i)))
-              .toVar();
-            If(skip.greaterThan(0), () => {
-              distance.addAssign(stride.mul(skip));
-              i.addAssign(int(skip.sub(1)));
-              Continue();
+            If(distance.greaterThanEqual(nextOccupancyBoundary), () => {
+              const interval = this.emptyInterval(origin.add(direction.mul(distance)), direction).toVar();
+              nextOccupancyBoundary.assign(distance.add(interval.y));
+              const stride = baseStep.mul(growth);
+              const skip = min(interval.x, far.sub(distance))
+                .div(stride)
+                .floor()
+                .min(float(this.gpuSteps).sub(float(i)))
+                .toVar();
+              If(skip.greaterThan(0), () => {
+                distance.addAssign(stride.mul(skip));
+                i.addAssign(int(skip.sub(1)));
+                Continue();
+              });
             });
           }
           const segment = min(baseStep.mul(growth), far.sub(distance)).toVar('volumeSegment');
@@ -1358,7 +1366,10 @@ class VolumeRenderer extends Renderer {
               If(viewZ.lessThanEqual(sceneZ.add(this.gpuSceneDepthBias)), () => Break());
             });
           }
-          const sample = this.sampleVolume(position);
+          const sample = this.sampleVolume(position, true, () => {
+            distance.addAssign(segment);
+            Continue();
+          });
           const density = this.modulateDensity(
             position, sample.density, sample.temperature, sample.noise, () => sample.velocity,
           );
@@ -1434,8 +1445,8 @@ class VolumeRenderer extends Renderer {
     return material;
   }
 
-  /** Distance to the nearest coarse boundary across all source/copy transforms, only when all are empty. */
-  private emptyAdvance(position: Node<'vec3'>, direction: Node<'vec3'>): Node<'float'> {
+  /** Empty advance and distance to the next coarse boundary across every source/copy transform. */
+  private emptyInterval(position: Node<'vec3'>, direction: Node<'vec3'>): Node<'vec2'> {
     const point = position.add(0.5).mul(this.gpuBoundsSize).add(this.gpuBoundsMinimum);
     const travel = direction.mul(this.gpuBoundsSize);
     const occupied = bool(false).toVar();
@@ -1478,7 +1489,7 @@ class VolumeRenderer extends Renderer {
         });
       }
     }
-    return occupied.select(float(0), distance);
+    return vec2(occupied.select(float(0), distance), distance);
   }
 
   private modulateDensity(position: Node<'vec3'>, density: Node<'float'>,
@@ -1594,6 +1605,7 @@ class VolumeRenderer extends Renderer {
   private sampleVolume(
     position: Node<'vec3'>,
     includeColor = true,
+    onTransparent?: () => void,
   ): {
     color: Node<'vec3'>;
     density: Node<'float'>;
@@ -1624,7 +1636,9 @@ class VolumeRenderer extends Renderer {
           const color = vec3(base).toVar();
           if (includeColor && layer.color) {
             const colorUV = sourcePoint.sub(layer.color.minimum).div(layer.color.size);
-            If(colorUV.greaterThanEqual(0).all().and(colorUV.lessThanEqual(1).all()), () => {
+            const visibleColor = density.greaterThan(0)
+              .and(colorUV.greaterThanEqual(0).all()).and(colorUV.lessThanEqual(1).all());
+            If(visibleColor, () => {
               const sample = this.readVolume(layer.color!, colorUV);
               color.assign(base.mul(mix(vec3(1), sample.rgb, sample.a)));
             });
@@ -1632,6 +1646,11 @@ class VolumeRenderer extends Renderer {
           result.addAssign(vec4(color.mul(density), density));
         });
       }
+    }
+    // Ordinary appearance multipliers cannot restore opacity below the density-remap floor.
+    // Custom render modules can change density, so they must still run for these samples.
+    if (onTransparent && !this.gasModules.length) {
+      If(result.a.mul(this.gpuDensityGain).lessThanEqual(this.gpuDensityRange.x), onTransparent);
     }
     const physical = parameters.div(max(result.a, 1e-6));
     const values = [physical.x, result.a.mul(this.gpuDensityGain), physical.y, physical.z];

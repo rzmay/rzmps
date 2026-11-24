@@ -156,7 +156,7 @@ Explicit static collision membership; supplying an empty list deliberately exclu
 optional timeQuality?: number;
 ```
 
-Dynamic octree rebuild fraction; reducing it trades freshness for CPU cost. Defaults to 1.
+Dynamic octree refresh fraction; reducing it trades freshness for CPU cost. Defaults to 1.
 
 ***
 

@@ -494,6 +494,19 @@ Optional selector count; negative is unlimited, zero disables creation.
 
 ***
 
+<a id="mindistance"></a>
+
+### minDistance?
+
+```ts
+optional minDistance?: number;
+```
+
+Minimum world-space distance between compatible live decals on one receiver.
+Defaults to -1 (disabled); zero is also unrestricted. Exact threshold distance is accepted.
+
+***
+
 <a id="offset"></a>
 
 ### offset

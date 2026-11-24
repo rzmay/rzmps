@@ -149,6 +149,8 @@ export class ParticleSystemSerializer {
       `  looping: ${this.serializeValue(system.looping)},`,
       `  endBehavior: ${this.serializeEndBehavior(system.endBehavior)},`,
       `  maxParticles: ${this.serializeValue(system.maxParticles)},`,
+      `  initialCapacity: ${this.serializeValue(system.initialCapacity)},`,
+      `  capacityGrowthThreshold: ${this.serializeValue(system.capacityGrowthThreshold)},`,
       `  maxCullingMode: ${this.serializeValue(system.maxCullingMode)},`,
       `  simulationDistance: ${this.serializeValue(system.simulationDistance)},`,
       `  lod: ${this.serializeValue(system.lod)},`,
@@ -387,6 +389,7 @@ export class ParticleSystemSerializer {
     if (module instanceof TransformByNoise) {
       return `new TransformByNoise(${this.serializeValue({
         ...module.options,
+        transformMode: module.transformMode,
         octaves: module.octaves,
         frequency: module.frequency,
         lacunarity: module.lacunarity,
@@ -582,6 +585,7 @@ export class ParticleSystemSerializer {
         warp: renderer.warp,
         inheritMaterial: renderer.inheritMaterial,
         unionCoverage: renderer.unionCoverage,
+        minDistance: renderer.minDistance,
         duplicateDistance: renderer.duplicateDistance,
         duplicateInterval: renderer.duplicateInterval,
         direction: renderer.direction,

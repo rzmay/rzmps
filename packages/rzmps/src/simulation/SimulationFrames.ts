@@ -55,12 +55,13 @@ export default class SimulationFrames {
   }
 
   bindParticleSource(particle: Particle, source?: SubSystemSource): void {
-    if (this.simulationSpace !== SimulationSpace.Source || !this.system.subSystemParent || !source?.alive) return;
+    if (!source?.alive) return;
     this._sourceFrames ??= new GPUSourceFrameBuffer(1);
     const record = this._sourceFrames.register(source);
     if (this._sourceFrames.records.length > this._sourceFrames.capacity) {
       this._sourceFrames = this._sourceFrames.grow(
-        isWebGPURenderer(this.system.sceneRenderer) ? this.system.sceneRenderer : undefined,
+        this.simulationSpace === SimulationSpace.Source && isWebGPURenderer(this.system.sceneRenderer)
+          ? this.system.sceneRenderer : undefined,
         this._sourceFrames.records.length);
     }
     setParticleSourceBinding(particle, {

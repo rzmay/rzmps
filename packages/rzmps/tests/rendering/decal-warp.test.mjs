@@ -257,6 +257,84 @@ test('velocity stretch retains speed and exposes a factor independent of ray inc
   }
 });
 
+// Reconstruct the physical inverse including translation folded into geometry UVs.
+function bridgeFootprint(decal, rotation = 0, size = new THREE.Vector2(1, 1)) {
+  const geometry = decal.decals[0].geometry, uv = geometry.getAttribute('uv');
+  const positions = geometry.getAttribute('position');
+  const values = geometry.getAttribute('decalWarp1').array;
+  const point = new THREE.Vector2(positions.getX(0), positions.getY(0))
+    .rotateAround(new THREE.Vector2(), -rotation).divide(size);
+  const shift = new THREE.Vector2((uv.getX(0) - 0.5) * values[2], (uv.getY(0) - 0.5) * values[3]).sub(point);
+  return footprintMatrix(decal).invert()
+    .multiply(new THREE.Matrix3().set(1, 0, shift.x, 0, 1, shift.y, 0, 0, 1)).invert();
+}
+
+test('point-to-point bridges fit the gap, extend both ends for overlap, and honor stretch caps', () => {
+  for (const [distance, overlap, expected] of [[0, 1.2, 1], [0.5, 1.2, 1.2], [2, 1, 2],
+    [2, 1.25, 2.5], [20, 1.25, 4], [2, 0, 2]]) {
+    const from = new THREE.Vector3(), to = new THREE.Vector3(distance, 10, 0);
+    const original = [from.toArray(), to.toArray()];
+    const f = fixture({ warp: DecalRenderer.Warp.FromPoints(from, to, 4, overlap) });
+    f.particle.velocity.set(-100, -1, 100);
+    f.system._notifySpawn(f.particle);
+    const matrix = bridgeFootprint(f.decal);
+    const left = footprintPoint(matrix, -0.5, 0), right = footprintPoint(matrix, 0.5, 0);
+    near(right.x - left.x, expected);
+    near((right.x + left.x) / 2, distance / 2);
+    near(dimensions(f.decal).y, 1);
+    assert.deepEqual([from.toArray(), to.toArray()], original);
+    f.system.destroy();
+  }
+});
+
+test('point-to-point bridges read updated endpoints and fit independently of ray incidence', () => {
+  const from = new THREE.Vector3(), to = new THREE.Vector3();
+  const warp = DecalRenderer.Warp.FromPoints(from, to, 4, 1.25);
+  to.set(2, 0, 0);
+  for (const direction of [new THREE.Vector3(0, -1, 0), new THREE.Vector3(-0.8, -1, 0.2)]) {
+    const f = fixture({ direction, warp });
+    f.system._notifySpawn(f.particle);
+    const box = new THREE.Box3().setFromBufferAttribute(f.decal.decals[0].geometry.getAttribute('position'));
+    near(box.min.x, -0.25); near(box.max.x, 2.25);
+    near(box.min.y, -0.5); near(box.max.y, 0.5);
+    f.system.destroy();
+  }
+  from.copy(to);
+  const stopped = fixture({ warp });
+  stopped.system._notifySpawn(stopped.particle);
+  near(footprintWidth(stopped.decal), 1);
+  stopped.system.destroy();
+});
+
+test('point-to-point world endpoints remain fixed when a placement callback shifts the projector', () => {
+  const f = fixture({
+    onSpawn: (_hit, _source, parameters) => { parameters.position.x = 3; },
+    warp: DecalRenderer.Warp.FromPoints(new THREE.Vector3(), new THREE.Vector3(2, 0, 0), 4, 1.25),
+  });
+  f.system._notifySpawn(f.particle);
+  const box = new THREE.Box3().setFromBufferAttribute(f.decal.decals[0].geometry.getAttribute('position'));
+  near(box.min.x, -0.25); near(box.max.x, 2.25);
+  f.system.destroy();
+});
+
+test('point-to-point fitting preserves randomized rotation, rectangular width and translated UV lookup', () => {
+  for (const rotation of [0.23, 1.17, 2.41]) {
+    const size = new THREE.Vector2(1.7, 0.8);
+    const from = new THREE.Vector3(-1, 0, 0), to = new THREE.Vector3(2, 0, 0);
+    const f = fixture({ rotation, size: new THREE.Vector3(size.x, size.y, 1),
+      warp: DecalRenderer.Warp.FromPoints(from, to, 4, 1.2) });
+    f.system._notifySpawn(f.particle);
+    const matrix = bridgeFootprint(f.decal, rotation, size), box = new THREE.Box2();
+    for (const x of [-0.5, 0.5]) for (const y of [-0.5, 0.5]) {
+      box.expandByPoint(footprintPoint(matrix, x, y).multiply(size).rotateAround(new THREE.Vector2(), rotation));
+    }
+    near(box.min.x, -1.3); near(box.max.x, 2.3);
+    near(box.getSize(new THREE.Vector2()).y, Math.abs(Math.sin(rotation)) * size.x
+      + Math.abs(Math.cos(rotation)) * size.y);
+    f.system.destroy();
+  }
+});
+
 
 test('velocity splats anchor impact/rear extent and stretch only the forward footprint', () => {
   for (const angle of [0, Math.PI / 4, Math.PI / 2, Math.PI, -Math.PI / 4]) {
@@ -350,5 +428,66 @@ test('forward splats clip their asymmetric footprint without shifting the impact
   const positions = geometry.getAttribute('position'), uv = geometry.getAttribute('uv');
   const extents = new THREE.Vector2().fromArray(geometry.getAttribute('decalWarp1').array, 2);
   for (let i = 0; i < uv.count; i++) near((uv.getX(i) - 0.5) * extents.x, positions.getX(i));
+  f.system.destroy();
+});
+
+test('renderer base rotation precedes incidence warping without changing the source particle', () => {
+  const bounds = [];
+  for (const rotation of [0, Math.PI / 2]) {
+    const f = fixture({ rotation, warp: DecalRenderer.Warp.FromVelocity(4, 1) });
+    f.particle.velocity.set(2, -1, 0);
+    f.system._notifySpawn(f.particle);
+    const matrix = footprintMatrix(f.decal);
+    const orientation = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), rotation));
+    const box = new THREE.Box3();
+    for (const x of [-0.5, 0.5]) for (const y of [-0.5, 0.5]) {
+      const point = footprintPoint(matrix, x, y);
+      box.expandByPoint(new THREE.Vector3(point.x, point.y, 0).applyQuaternion(orientation));
+    }
+    bounds.push(box);
+    near(f.particle.rotation.z, 0);
+    f.system.destroy();
+  }
+  near(bounds[0].min.x, bounds[1].min.x);
+  near(bounds[0].max.x, bounds[1].max.x);
+  near(bounds[0].getSize(new THREE.Vector3()).z, bounds[1].getSize(new THREE.Vector3()).z);
+});
+
+test('arbitrary base rolls and rectangular projectors precede a fixed world-aligned ray warp', () => {
+  const direction = new THREE.Vector3(0.6, -1, 0.4).normalize();
+  const normal = new THREE.Vector3(0, 1, 0), axis = new THREE.Vector3(0, 0, 1);
+  const frame = new THREE.Quaternion().setFromUnitVectors(axis, normal);
+  const tangent = direction.clone().applyQuaternion(frame.clone().invert());
+  const along = new THREE.Vector2(tangent.x, tangent.y).normalize();
+  const stretch = 1 / Math.abs(direction.dot(normal));
+  for (const roll of [0.23, 1.17, 2.41]) {
+    const f = fixture({ rotation: roll, size: new THREE.Vector3(1.7, 0.8, 1),
+      direction, warp: DecalRenderer.Warp.FromRay(4) });
+    f.system._notifySpawn(f.particle);
+    const warp = footprintMatrix(f.decal);
+    for (const [x, y] of [[0.3, -0.2], [-0.4, 0.1], [0.2, 0.4]]) {
+      // Rotate the original rectangle first, then stretch along the physical ray projection.
+      const base = new THREE.Vector2(1.7 * x, 0.8 * y).rotateAround(new THREE.Vector2(), roll);
+      const expected = base.clone().addScaledVector(along, (stretch - 1) * base.dot(along));
+      const mapped = footprintPoint(warp, x, y).multiply(new THREE.Vector2(1.7, 0.8))
+        .rotateAround(new THREE.Vector2(), roll);
+      near(mapped.x, expected.x); near(mapped.y, expected.y);
+    }
+    f.system.destroy();
+  }
+});
+
+test('static and combined warps also operate after randomized base rotation', () => {
+  const roll = 0.67;
+  const f = fixture({ rotation: roll, warp: DecalRenderer.Warp.Combine(
+    DecalRenderer.Warp.Skew(new THREE.Vector2(0.4, 0)), DecalRenderer.Warp.Scale(new THREE.Vector2(2, 1))) });
+  f.system._notifySpawn(f.particle);
+  const point = new THREE.Vector2(0.3, 0.2), base = point.clone().rotateAround(new THREE.Vector2(), roll);
+  const expected = new THREE.Vector2((base.x + 0.4 * base.y) * 2, base.y);
+  const mapped = footprintPoint(footprintMatrix(f.decal), point.x, point.y)
+    .rotateAround(new THREE.Vector2(), roll);
+  near(mapped.x, expected.x); near(mapped.y, expected.y);
   f.system.destroy();
 });

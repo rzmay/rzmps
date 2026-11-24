@@ -28,7 +28,7 @@ new LightRenderer(options?): LightRenderer;
 
 ##### options?
 
-`Partial`\<[`LightRendererOptions`](../Supporting-Types/interfaces/LightRendererOptions.md)\> = `{}`
+`Partial`\<[`LightRendererOptions`](../interfaces/LightRendererOptions.md)\> = `{}`
 
 #### Returns
 
@@ -161,6 +161,30 @@ optional conditionGPU?: ParticleGPUCondition;
 #### Inherited from
 
 [`Renderer`](Renderer.md).[`conditionGPU`](Renderer.md#conditiongpu)
+
+***
+
+<a id="configurelight"></a>
+
+### configureLight?
+
+```ts
+optional configureLight?: (particle, light) => void;
+```
+
+#### Parameters
+
+##### particle
+
+[`Particle`](Particle.md)
+
+##### light
+
+`PointLight`
+
+#### Returns
+
+`void`
 
 ***
 
@@ -965,18 +989,18 @@ Clears batches and unsubscribes when a component is removed or its system is des
 ### prepareResources()
 
 ```ts
-prepareResources(_system, _renderer): Promise<void>;
+prepareResources(system, renderer): Promise<void>;
 ```
 
 Prepare optional rendering pipelines without advancing particle or simulation state.
 
 #### Parameters
 
-##### \_system
+##### system
 
 [`ParticleSystem`](ParticleSystem.md)
 
-##### \_renderer
+##### renderer
 
 `WebGPURenderer`
 

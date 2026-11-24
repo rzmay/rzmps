@@ -100,3 +100,11 @@ test('metadata permits wrapped static strings without evaluating expressions', (
   assert.equal(readExampleMetadata(source).description, 'long description');
   assert.throws(() => readExampleMetadata(source.replace('"description"', 'getDescription()')), /static literal/);
 });
+
+
+test('preview camera vectors beginning with a negative coordinate are unambiguous CLI values', () => {
+  const options = parseOptions(previewArguments({ id: 'heatLaser',
+    previewSettings: { cameraPosition: [-7, 4, 9], cameraTarget: [-1, 1, 0] } }, '/tmp/preview-camera'));
+  assert.deepEqual(options.cameraPosition, [-7, 4, 9]);
+  assert.deepEqual(options.cameraTarget, [-1, 1, 0]);
+});

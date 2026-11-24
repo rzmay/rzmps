@@ -112,6 +112,22 @@ Resolve when all previously submitted uses of resources have completed.
 
 ***
 
+<a id="growththreshold"></a>
+
+### growthThreshold()?
+
+```ts
+optional growthThreshold(): number;
+```
+
+Fraction of current capacity that starts preparation; defaults to the existing 75% reserve.
+
+#### Returns
+
+`number`
+
+***
+
 <a id="migrate"></a>
 
 ### migrate()

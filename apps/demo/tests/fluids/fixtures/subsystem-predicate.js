@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WebGPURenderer } from 'three/webgpu';
-import { Emitter, EmissionShape, FLIPSimulation, Module, ParticleSystem } from '@rzmps/rzmps';
+import { vec3 } from 'three/tsl';
+import { Collision, Emitter, EmissionShape, FLIPSimulation, Module, ParticleSystem } from '@rzmps/rzmps';
 
 const renderer = new WebGPURenderer();
 renderer.setSize(64, 64);
@@ -64,3 +65,29 @@ window.runPredicateCase = async (mode, kind = 'spray') => {
   return result;
 };
 window.ready = true;
+
+
+window.runCollisionOriginCase = async override => {
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshBasicMaterial());
+  floor.rotation.x = -Math.PI / 2;
+  const child = new ParticleSystem({ gpuProcessing: true, renderers: [], maxParticles: 16,
+    gravityModifier: 0, duration: 0.05, looping: false,
+    emitters: new Emitter({ source: EmissionShape.Sphere(1e-8), radialSpeed: 0, rate: 0,
+      bursts: { time: 0, count: 1 }, initialValues: { lifetime: 5, velocity: new THREE.Vector3() } }) });
+  const parent = new ParticleSystem({ gpuProcessing: true, renderers: [], maxParticles: 8,
+    gravityModifier: 0, duration: 1, looping: false,
+    emitters: new Emitter({ source: EmissionShape.Sphere(1e-8), radialSpeed: 0, rate: 0,
+      bursts: { time: 0, count: 1 }, initialValues: { position: new THREE.Vector3(0, 1, 0),
+        velocity: new THREE.Vector3(0, -4, 0), scale: 0.4, lifetime: 4, mass: 1 } }),
+    modules: [new Collision({ lifetimeLoss: 1 })] });
+  parent.addSubSystem(child, { emitOnCollision: true, emitContinuous: false,
+    inheritVelocity: 0, inheritScale: 0, inheritLifetime: 0,
+    ...(override ? { onEvent: { gpu: { collision: () => ({ position: vec3(0, 2, 0) }) } } } : {}) });
+  scene.add(floor, parent);
+  await renderer.renderAsync(scene, camera);
+  parent.advanceFrames(24, 1 / 60);
+  const result = { parentGPU: parent.isGPUProcessingActive, childGPU: child.isGPUProcessingActive,
+    children: await alive(child) };
+  parent.destroy(); floor.removeFromParent(); floor.geometry.dispose(); floor.material.dispose();
+  return result;
+};

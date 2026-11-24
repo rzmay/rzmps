@@ -12,6 +12,18 @@ CPU-managed attributes in the owning system's simulation space.
 
 ## Properties
 
+<a id="age"></a>
+
+### age?
+
+```ts
+optional age?: number;
+```
+
+Seconds of owner-managed age. Supplying age makes the caller responsible for advancing the clock.
+
+***
+
 <a id="alpha"></a>
 
 ### alpha?
@@ -39,6 +51,19 @@ optional color?: Color;
 ```ts
 optional distortionStrength?: number;
 ```
+
+***
+
+<a id="lifetime"></a>
+
+### lifetime?
+
+```ts
+optional lifetime?: number;
+```
+
+Intrinsic source lifetime in seconds. A finite value defines emitter-curve sampling independently of child
+duration; Infinity retains ordinary emitter-duration sampling and looping.
 
 ***
 

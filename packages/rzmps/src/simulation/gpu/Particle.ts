@@ -637,6 +637,20 @@ export class GPUParticleBufferState {
     this.count = Math.max(this.count, Math.min(Math.floor(count), this.capacity));
   }
 
+  /** Adopt prepared backing while preserving the live state identity used by modules to detect reset. */
+  adoptStorage(prepared: GPUParticleBufferState): void {
+    this.capacity = prepared.capacity;
+    this.count = prepared.count;
+    this.version = prepared.version;
+    this.floatData = prepared.floatData;
+    this.uintData = prepared.uintData;
+    this.attributes = prepared.attributes;
+    this.storage = prepared.storage;
+    this.particle = prepared.particle;
+    this.alive = prepared.alive;
+    this.tagMask = prepared.tagMask;
+  }
+
   grow(renderer: GPUStorageBufferRenderer, requestedCapacity: number): boolean {
     const nextCapacity = Math.max(this.capacity, Math.floor(requestedCapacity));
     if (nextCapacity <= this.capacity) return false;

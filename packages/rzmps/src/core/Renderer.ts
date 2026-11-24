@@ -28,7 +28,8 @@ import evaluateDynamicNumber from '../values/evaluateDynamicNumber';
 import evaluateByParameterNumber from '../values/evaluateByParameterNumber';
 import GPURendererChildren from '../rendering/gpu/GPURendererChildren';
 import type { GPUParticleBufferState, GPUParticleRenderBufferState } from '../simulation/gpu/Particle';
-import type { Node, WebGPURenderer } from 'three/webgpu';
+import type { ComputeNode, Node, WebGPURenderer } from 'three/webgpu';
+import prepareComputePrograms from '../utils/gpu/prepareComputePrograms';
 import { bitAnd, float, uint, uniform } from 'three/tsl';
 import { GPUDynamicParameterStore } from '../values/GPUDynamicParameterStore';
 import type { GPUParticleReadbackField } from '../simulation/gpu/GPUSelectiveReadbackState';
@@ -332,11 +333,38 @@ export default abstract class Renderer extends EventReceiver {
   /** Creates rendering resources when attached to a system. */
   public abstract setup(system: ParticleSystem): void;
 
-  /** Prepare optional rendering pipelines without advancing particle or simulation state. */
-  public async prepareResources(_system: ParticleSystem, _renderer: WebGPURenderer): Promise<void> {
-    // Most renderers have no preparation work independent of their particle buffers.
+  /** Advance persistent renderer-owned state even when an intermediate render is skipped. @internal */
+  public advanceSimulation(_system: ParticleSystem, _deltaTime: number): void {
     void _system;
-    void _renderer;
+    void _deltaTime;
+  }
+
+  /** Prepare optional rendering pipelines without advancing particle or simulation state. */
+  public async prepareResources(system: ParticleSystem, renderer: WebGPURenderer): Promise<void> {
+    // Conditional snapshots have their own bindings; only capture the direct grouped handoff here.
+    if (!system.gpuProcessing || !this.supportsGPUInput || !this.updateGPUUsesCPUReadback
+      || this.condition || this.conditionGPU
+      || !renderer.compileComputeAsync) return;
+    const input = system.prepareGPURenderInput(renderer);
+    if (rendererGroupCount(input.capacity, this._groupCount, this.groupingRatio) >= input.capacity) return;
+    const count = input.count, compute = renderer.compute;
+    const nodes: ComputeNode[] = [];
+    try {
+      // Empty cold systems still need the graphs used by their reserved particle slots.
+      input.count = input.capacity;
+      renderer.compute = value => {
+        nodes.push(...(Array.isArray(value) ? value : [value]));
+        return undefined;
+      };
+      (this._gpuGrouping ??= new GPURendererGrouping()).prepare(
+        input, system, this._groupCount, this.groupingRatio, this.groupingRadius,
+        system.getGPURendererTagMask(this.tags),
+      );
+    } finally {
+      renderer.compute = compute;
+      input.count = count;
+    }
+    await prepareComputePrograms(renderer, [...new Set(nodes)], () => true, this.benchmarks);
   }
 
   protected abstract _update(particles: Particle[], system: ParticleSystem, deltaTime: number): void;

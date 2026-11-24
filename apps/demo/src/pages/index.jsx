@@ -203,7 +203,7 @@ function DemoPage() {
       const count = typeof stats === 'number' ? stats : stats.particles;
       const allocated = typeof stats === 'number' ? 0 : stats.allocated;
       const activeSlots = typeof stats === 'number' ? 0 : stats.activeSlots;
-      const usage = allocated > 0 ? (count / allocated) * 100 : 0;
+      const usage = typeof stats === 'number' ? 0 : stats.gpuUsage * 100;
       const children = typeof stats === 'number' ? 0 : stats.children;
       particleCountRef.current.textContent = children > 0
         ? `${count.toLocaleString()} simulated (${(count + children).toLocaleString()} rendered)`

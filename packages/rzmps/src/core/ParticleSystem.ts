@@ -21,7 +21,7 @@ import EventReceiver, { type EventScope, type SimulationEvent } from '../events/
 import EventRuntime from '../events/EventRuntime';
 import { cpuEventHandler, eventNames, type EventSubscriptions } from '../events/events.utils';
 import { emptyGPUEvents, SharedGPUEventBatch, type GPUEventBatch } from '../events/gpu/SharedGPUEventBatch';
-import { GPUEventBufferState } from '../events/gpu/EventBuffer';
+import { GPUEventBufferState, GPU_EVENT_FLOAT_SLOT_COUNT } from '../events/gpu/EventBuffer';
 import { isWebGPURenderer } from '../utils/gpu/isWebGPURenderer';
 import type { PackedFloatStorage } from '../utils/gpu/storage.utils';
 import Collision, { type CollisionListener } from '../modules/Collision';
@@ -124,6 +124,13 @@ export interface ParticleSystemOptions {
   endBehavior: EndBehavior;
   /** Maximum retained particles; excess particles are culled during simulation. */
   maxParticles: number;
+  /** Begin preparing GPU particle storage when estimated population exceeds this fraction of capacity.
+   * Uses the built-in population estimator; 1 means 100%, and lower values prepare earlier.
+   * Must be greater than zero and at most one. @default 1 */
+  capacityGrowthThreshold: number;
+  /** Initial GPU particle-slot reserve, rounded to a capacity tier and capped by maxParticles.
+   * Defaults to ParticleSystem.Settings.GPU_INITIAL_BUFFER_SIZE. Does not create particles. */
+  initialCapacity: number;
   /** Chooses whether old or newly spawned particles are culled at capacity.
    * @defaultValue MaxCulling.New */
   maxCullingMode: MaxCulling;
@@ -372,6 +379,16 @@ class ParticleSystem extends THREE.Object3D {
   endBehavior: EndBehavior;
 
   maxParticles: number = 10000;
+  /** Starting GPU slot reserve; rounded/capped on allocation without creating particles. */
+  initialCapacity = GlobalSettings.GPU_INITIAL_BUFFER_SIZE;
+  private _capacityGrowthThreshold = 1;
+  /** Estimated GPU population fraction that starts background capacity preparation; defaults to 1. */
+  get capacityGrowthThreshold(): number { return this._capacityGrowthThreshold; }
+  set capacityGrowthThreshold(value: number) {
+    if (!Number.isFinite(value) || value <= 0 || value > 1)
+      throw new RangeError('capacityGrowthThreshold must be greater than zero and at most one.');
+    this._capacityGrowthThreshold = value;
+  }
   maxCullingMode: MaxCulling;
   simulationDistance: number;
   lod?: Partial<LODSettings>;
@@ -547,8 +564,10 @@ class ParticleSystem extends THREE.Object3D {
       system.gpuSimulation._prepareGPUTagRegistry(modules, effects);
       // Rendering can compile against persistent provider fields while simulation pipelines prepare.
       // Providers without a field yet retain their normal first-use rendering path.
-      const renderPreparation = system.renderers.map(rendererComponent =>
-        rendererComponent.prepareResources(system, renderer));
+      const readbackRenderers = system.renderers.filter(component =>
+        component.supportsGPUInput && !component.supportsGPUEventInput);
+      const renderPreparation = system.renderers.filter(component => !readbackRenderers.includes(component))
+        .map(rendererComponent => rendererComponent.prepareResources(system, renderer));
       const modulePreparation = async () => {
         for (const module of system.getModules(Module)) {
           await module.benchmarks.spanAsync('resourcePreparation', () => module.prepareResources(system, renderer));
@@ -562,6 +581,9 @@ class ParticleSystem extends THREE.Object3D {
         await system.gpuSimulation.preparePrograms(renderer, modules, effects,
           parent && options ? { parent, options } : undefined);
       }
+      // Grouped readback graphs capture both render-input and simulation-buffer identities/versions.
+      // Finalize the generic particle bindings before warming their spatial snapshots.
+      for (const component of readbackRenderers) await component.prepareResources(system, renderer);
       for (const [child, childOptions] of system.subSystems) await visit(child, system, childOptions);
     };
     await visit(this);
@@ -881,14 +903,13 @@ class ParticleSystem extends THREE.Object3D {
     const uses = (system: ParticleSystem): boolean =>
       system.modules.some(module => module.events.length > 0) ||
       system.renderers.some(renderer => renderer.events.length > 0) ||
-      system.emitters.some(
-        emitter =>
-          emitter.events.length > 0 ||
-          emitter.onEvent !== undefined ||
-          emitter.emitOnSpawn !== undefined ||
-          emitter.emitOnDeath !== undefined ||
-          emitter.emitOnCollision !== undefined,
-      ) ||
+      system.emitters.some(emitter => {
+        if (emitter.events.length > 0) return true;
+        const options = system.getEmitterOptions(emitter);
+        // CPU source callbacks stage births directly; only native GPU subscribers need a shared journal.
+        return emitter.visibleSystems(system).some(producer => system._emitterEventNames(emitter)
+          .some(name => system.gpuSimulation._canHandleNativeGPUEvent(producer, options, name)));
+      }) ||
       [...system._subSystemOverrides.values()].some(options => options.eventScope !== undefined) ||
       [...system.subSystems.keys()].some(uses);
     return uses(this._eventRoot());
@@ -928,10 +949,19 @@ class ParticleSystem extends THREE.Object3D {
       system.subSystems.forEach((_options, child) => count(child));
     };
     if (!root.eventRuntime._sharedGPUEvents) count(root);
-    return root.eventRuntime.acquireJournal(renderer, Math.min(262144, Math.max(4096, capacity)), journal => {
-      root._reconcileEventReceivers();
-      root._registerGPUEventReceivers(journal, renderer);
-    });
+    // A journal stores live and snapshot rows in one binding; its rounded capacity must fit the device.
+    const limits = (renderer.backend as unknown as {
+      device?: { limits: { maxStorageBufferBindingSize: number; maxBufferSize: number } };
+    }).device?.limits;
+    const bytesPerEvent = GPU_EVENT_FLOAT_SLOT_COUNT * 16 * 2;
+    const maximumBytes = Math.min(limits?.maxStorageBufferBindingSize ?? 128 * 1024 * 1024,
+      limits?.maxBufferSize ?? 256 * 1024 * 1024);
+    const maximumEvents = 2 ** Math.floor(Math.log2(maximumBytes / bytesPerEvent));
+    return root.eventRuntime.acquireJournal(renderer,
+      Math.min(262144, maximumEvents, Math.max(4096, capacity)), journal => {
+        root._reconcileEventReceivers();
+        root._registerGPUEventReceivers(journal, renderer);
+      });
   }
 
   private _playing = true;
@@ -1007,6 +1037,11 @@ class ParticleSystem extends THREE.Object3D {
     this.endBehavior = (options.endBehavior as EndBehavior) ?? EndBehavior.None;
 
     this.maxParticles = Math.max(options.maxParticles ?? this.maxParticles, 0);
+    this.capacityGrowthThreshold = options.capacityGrowthThreshold ?? 1;
+    const initialCapacity = options.initialCapacity ?? GlobalSettings.GPU_INITIAL_BUFFER_SIZE;
+    if (!Number.isFinite(initialCapacity) || initialCapacity < 0)
+      throw new RangeError('initialCapacity must be finite and nonnegative.');
+    this.initialCapacity = Math.floor(initialCapacity);
     this.maxCullingMode = (options.maxCullingMode as MaxCulling) ?? MaxCulling.New;
     this.simulationDistance = Math.max(options.simulationDistance ?? 0, 0);
     this.lod = options.lod;
@@ -1313,8 +1348,7 @@ class ParticleSystem extends THREE.Object3D {
       }
       this.emissionRuntime._updateEmitterInstances(parentSources);
       for (const source of this.emissionRuntime._emissionSources.values()) {
-        source.realtime += seconds * 1000;
-        source.time = source.realtime / (Math.max(this.duration, Number.EPSILON) * 1000);
+        source.advanceClock(seconds, this.duration);
       }
       const buffers = this.gpuSimulation._gpuBuffers;
       const renderer = this.sceneRenderer;
@@ -1358,6 +1392,7 @@ class ParticleSystem extends THREE.Object3D {
   private _processParticles() {
     this._particlesIntegrated = false;
     this._renderFrameToken = {};
+    this.renderers.forEach(renderer => renderer.advanceSimulation(this, this.deltaTime));
     this._updateLODQuality();
     // LOD destruction is deliberately separate from lifecycle death notification.
     if (!this.gpuSimulation._isGPUProcessingActive && this.quality < 1) {
@@ -1518,6 +1553,13 @@ class ParticleSystem extends THREE.Object3D {
 
   public estimateParticleCount(tags?: readonly Tag[]): number {
     const inputs: unknown[] = [GlobalSettings.GPU_DYNAMIC_VALUE_RESOLUTION];
+    // One emitter definition may run continuously for many registered/live sources. Predict each
+    // live execution, while unknown/native/event-driven demand still uses observed allocation headroom.
+    const executions = new Map<Emitter, number>();
+    for (const instance of this.emissionRuntime._emitterInstances) {
+      if (instance.active && instance.source.kind === 'live' && instance.source.source.alive)
+        executions.set(instance.emitter, (executions.get(instance.emitter) ?? 0) + 1);
+    }
     const track = (value: unknown, depth = 0): void => {
       if (depth > 8) return;
       if (Array.isArray(value) || value instanceof Set) {
@@ -1531,7 +1573,7 @@ class ParticleSystem extends THREE.Object3D {
       }
     };
     this.emitters.forEach(emitter => {
-      inputs.push(emitter, JSON.stringify(emitter.tags), emitter.bursts.length);
+      inputs.push(emitter, JSON.stringify(emitter.tags), emitter.bursts.length, executions.get(emitter) ?? 0);
       track(emitter.rate);
       track(emitter.initialValues.lifetime ?? 1);
       emitter.bursts.forEach(burst => track(burst.count));
@@ -1554,8 +1596,9 @@ class ParticleSystem extends THREE.Object3D {
       if (tags && !tagsIntersect([...tags], emitter.tags ?? [])) return total;
       return (
         total +
-        maximum(emitter.rate) * maximum(emitter.initialValues.lifetime ?? 1) +
-        emitter.bursts.reduce((sum, burst) => sum + maximum(burst.count), 0)
+        (maximum(emitter.rate) * maximum(emitter.initialValues.lifetime ?? 1) +
+          emitter.bursts.reduce((sum, burst) => sum + maximum(burst.count), 0))
+          * Math.max(1, executions.get(emitter) ?? 0)
       );
     }, 0);
     const result = Math.ceil(predicted);
@@ -1798,8 +1841,7 @@ class ParticleSystem extends THREE.Object3D {
       this.gpuSimulation._readGPUContinuousSources();
     }
     for (const source of this.emissionRuntime._emissionSources.values()) {
-      source.realtime += this.deltaTime * 1000;
-      source.time = source.realtime / (Math.max(this.duration, Number.EPSILON) * 1000);
+      source.advanceClock(this.deltaTime, this.duration);
     }
     this.subSystems.forEach((options, subSystem) => {
       if (subSystem.gpuSimulation._canUpdateAsGPUSubSystem(this, options)) {
@@ -2172,6 +2214,7 @@ class ParticleSystem extends THREE.Object3D {
     if (!source) return;
     this.emissionRuntime._emissionSources.delete(id);
     source.alive = false;
+    source.prepareEmission = undefined;
     this._dispatchSourceEvent(source, 'death');
     this.subSystems.forEach((_options, child) => child.emitters.forEach(emitter => emitter.clearContext(id, child)));
   }
@@ -2226,6 +2269,7 @@ class ParticleSystem extends THREE.Object3D {
       lifetime: Infinity,
       time: 0,
       realtime: 0,
+      age: 0,
       alive: true,
     };
   }

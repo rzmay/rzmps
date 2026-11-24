@@ -45,12 +45,35 @@ A source remains alive until disposed or its owner is destroyed. Registration di
 emitter context state; already created child particles and captured event runs finish normally. Ordinary particle
 clearing does not remove externally registered sources; explicit removal or system destruction does.
 
-`realtime` is source age in milliseconds of parent simulation time, respecting pause and simulation speed. `time` is
-that age divided by the owning system duration. Registered sources have no finite particle lifetime; their child
-emitters use their own duration and looping behavior. Set `inheritLifetime: 0` explicitly to communicate that
-independent timing. `rateOverDistance` follows source transform movement using the same per-context distance accumulator
+`age` is source age in seconds; `realtime` expresses the same age in milliseconds. By default it advances
+with parent simulation time, respecting pause and simulation speed. `lifetime` defaults to Infinity; `time`
+uses a finite source lifetime when supplied, otherwise the owning system duration. Passing `age` to
+registration or `source.update` selects an externally managed clock, suitable for an owning decal or other
+application object. Publish its age/lifetime together; updates do not advance that clock again. Set
+`age: undefined` to resume automatic aging. Extending lifetime preserves age and lowers normalized age.
+Emitted particles keep their configured lifetime; finite-source sampling is described below.
+`rateOverDistance` follows source transform movement using the same per-context distance accumulator
 as particle-backed emission. Multiple position updates before one frame contribute the final displacement, rather than
 every intermediate point.
+
+Finite registered sources sample emitter rate and initial-value curves using `source.age / source.lifetime`,
+independently of child-system duration and `inheritLifetime`. Extending source lifetime changes this sampling
+coordinate without resetting emission cadence. Sources with infinite lifetime keep ordinary emitter-duration
+sampling and looping.
+
+GPU simulation can consume CPU-managed source births without enabling standalone GPU emission; the two
+emission paths are exclusive. This includes CPU source-selection predicates on a GPU-simulated child.
+
+Continuous birth scheduling uses each finite source binding's uninterrupted simulation clock, so an
+application-owned age published less frequently than simulation substeps does not stall or bunch up emission.
+A stable source-ID-derived fraction of an emission interval separates birth phases between sources. This
+avoids identical particle ages across sources while preserving their long-run configured rate. A newly
+registered finite source can emit during its first update interval instead of losing that interval.
+
+Decal age, fading and source clocks advance on simulation steps, including intermediate steps that skip
+rendering. Decal-backed sources also refresh their receiver-relative transforms when sampled for emission,
+including between renderer updates. Already emitted world-space particles retain their birth location; they do not attach to
+or chase a moving decal unless Source simulation space is explicitly used.
 
 ## Selecting Sources and Inheriting Attributes
 
@@ -154,7 +177,10 @@ An event-only subscription disables continuous emission by default. Set `emitCon
 `emitOnSpawn`, `emitOnDeath` and `emitOnCollision` remain supported; subscribing to a built-in event through both a
 legacy flag and `onEvent` creates one run, with the named callback applied once. Explicit collision events can also
 originate from registered sources. Supplying the established collision hit shape preserves impulse threshold, alignment
-and scaling behavior.
+and scaling behavior. Collision-triggered particles start at `hit.point`, transformed from the producer's
+simulation space into the receiving system's space. The source particle keeps its own corrected-center
+position. Explicit event-handler position/transform overrides still take precedence; emitter shape offsets
+are applied around the resolved emission origin as usual. CPU and native GPU emission use the same rule.
 
 ### Declarative Consumers
 

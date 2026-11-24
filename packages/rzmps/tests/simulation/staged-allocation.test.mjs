@@ -58,3 +58,18 @@ assert(coalesced.commit());
 assert.equal(coalesced.capacity, 32);
 assert.equal(coalesced.metrics.requests, 2);
 coalesced.dispose();
+
+// A user threshold changes preparation timing, not geometric tier selection or commit ordering.
+let threshold = 1;
+const early = new StagedGPUAllocation({ capacity: 4 }, 4, {
+  maximumCapacity: 16, growthThreshold: () => threshold,
+  create: capacity => ({ capacity }), prepare: async () => {},
+  migrate: () => {}, swap: () => {}, dispose: () => {}, fence: async () => {},
+});
+early.request(4); await early.whenPrepared();
+assert.equal(early.status.state, 'idle', '100% usage does not exceed the default threshold');
+threshold = 0.5;
+early.request(3); await early.whenPrepared();
+assert.equal(early.capacity, 4, 'preparation never changes the active capacity');
+assert(early.commit()); assert.equal(early.capacity, 8);
+early.dispose();

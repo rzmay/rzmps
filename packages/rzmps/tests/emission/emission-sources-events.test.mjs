@@ -22,7 +22,7 @@ const origin = (system, data = {}) => system.registerEmissionSource({ transform:
 test('GPU tag helpers resolve names, preserve unrelated bits and reject unregistered tags', () => {
   const system = root();
   const tags = Array.from({ length: 32 }, (_, index) => `tag-${index}`);
-  system.gpuSimulation._prepareGPUTagRegistry(tags.map(tag => ({ tags: [tag] })));
+  system.gpuSimulation._prepareGPUTagRegistry(tags.map(tag => ({ tags: [tag], spatialEffects: [] })));
   let mask = 2;
   const particle = { tagMask: {
     bitOr: node => (mask | node.node.value) >>> 0,
@@ -151,7 +151,8 @@ test('legacy and named built-in subscriptions create one run; source death runs 
   frame(system, 0.5);
   assert.equal(child.particles.length, 2);
   frame(system, 1);
-  assert.equal([...child.emissionRuntime._emitterInstances].filter(instance => instance.source.kind === 'snapshot').length, 0);
+  assert.equal(
+    [...child.emissionRuntime._emitterInstances].filter(instance => instance.source.kind === 'snapshot').length, 0);
   assert.equal((child.emitters[0]._instances.get(child.id)?.size ?? 0), 0);
   system.destroy();
 });
@@ -173,7 +174,8 @@ test('continuous sources share numeric inheritance and nested event behavior', (
 test('automatic discovery includes gpu-only events, preserves built-in IDs, and diagnoses limits', () => {
   const system = root();
   system.addSubSystem(effect(), { onEvent: { gpu: { hot: () => ({}) }, cold: true } });
-  assert.deepEqual([...system.eventRuntime._eventTypes], [['death', 1], ['spawn', 2], ['collision', 3], ['cold', 4], ['hot', 5]]);
+  assert.deepEqual([...system.eventRuntime._eventTypes],
+    [['death', 1], ['spawn', 2], ['collision', 3], ['cold', 4], ['hot', 5]]);
   const before = [...system.eventRuntime._eventTypes];
   origin(system).emitEvent('undiscovered');
   assert.deepEqual([...system.eventRuntime._eventTypes], before);
@@ -182,7 +184,7 @@ test('automatic discovery includes gpu-only events, preserves built-in IDs, and 
   system.destroy();
 });
 
-test('GPU event ABI retains payload and appearance slots, full payloads, distinct records, snapshots and generation IDs', async () => {
+test('GPU event ABI preserves payloads, appearance, distinct records, snapshots and generations', async () => {
   assert.equal(GPU_EVENT_FLOAT_SLOT_COUNT, 22);
   const buffer = new GPUEventBufferState(2);
   buffer.reset(7);
@@ -247,12 +249,14 @@ test('GPU-origin numerical payloads reach CPU callbacks in frame order after par
   } } });
   const dead = new Particle({ position: new THREE.Vector3(3, 4, 5) });
   dead.id = 'gpu:7:9'; dead.alive = false;
-  const batch = sequence => ({ sequence, events: [{ type: system.eventRuntime._eventTypes.get('hot'), slot: 7, generation: 9,
+  const batch = sequence => ({ sequence, events: [{
+    type: system.eventRuntime._eventTypes.get('hot'), slot: 7, generation: 9,
     particle: dead.clone(), data: [new THREE.Vector4(sequence, 0, 0, 0), new THREE.Vector4(), new THREE.Vector4()] }],
     overflowCount: 0, rawEventCount: 1, capacity: 10 });
   system.eventRuntime._gpuCompletedEventBatches.set(2, batch(2)); system.gpuSimulation._flushGPUEventBatches();
   assert.equal(delivered.length, 0);
-  system.eventRuntime._gpuCompletedEventBatches.set(1, batch(1)); system.gpuSimulation._flushGPUEventBatches(); frame(system);
+  system.eventRuntime._gpuCompletedEventBatches.set(1, batch(1));
+  system.gpuSimulation._flushGPUEventBatches(); frame(system);
   assert.deepEqual(delivered, [['gpu:7:9', 1], ['gpu:7:9', 2]]);
   assert.deepEqual(child.particles.map(p => p.scale.x).sort(), [1, 2]);
   system.destroy();
@@ -311,7 +315,8 @@ test('explicit registered collision events preserve impulse rules and capture co
   frame(system, 0.5);
   assert.equal(child.particles.at(-1).scale.x, 2);
   source.emitEvent('collision', { ...hit, impulse: new THREE.Vector3(0, 0.5, 0) });
-  assert.equal([...child.emissionRuntime._emitterInstances].filter(instance => instance.source.kind === 'snapshot').length, 1);
+  assert.equal(
+    [...child.emissionRuntime._emitterInstances].filter(instance => instance.source.kind === 'snapshot').length, 1);
   system.destroy();
 });
 
@@ -324,7 +329,8 @@ test('GPU particles feed CPU continuous predicates through snapshots and release
   system.gpuSimulation._gpuBuffers.ensureCount(2);
   const snapshot = new Particle({ alpha: 1 }); snapshot.id = 'gpu:0:4';
   let alive = true;
-  system.gpuSimulation._readbackGPUParticles = async () => [{ slot: 0, generation: 4, valid: alive, particle: snapshot }];
+  system.gpuSimulation._readbackGPUParticles = async () => [
+    { slot: 0, generation: 4, valid: alive, particle: snapshot }];
   system.gpuSimulation._readGPUContinuousSources(); await Promise.resolve(); await Promise.resolve();
   frame(system);
   assert.equal(child.particles.length, 1);
@@ -511,4 +517,49 @@ test('false event transforms cancel whole runs without suppressing other subscri
   assert.ok(filtered.particles.length > 0, 'accepted events must still create runs');
   assert.equal(filtered.particles[0].scale.x, 2);
   system.destroy();
+});
+
+
+test('CPU source event handlers do not reserve a native GPU journal for GPU children', () => {
+  const parent = root();
+  const child = new ParticleSystem({ gpuProcessing: true, maxParticles: 65536,
+    emitters: new Emitter({ rate: 0, bursts: { time: 0, count: 2 },
+      onEvent: { reheat: () => ({ duration: 0.05 }) } }), renderers: [] });
+  parent.addSubSystem(child, { inheritLifetime: 0 });
+  assert.equal(parent._usesSharedGPUEvents(), false);
+  parent.destroy();
+});
+
+
+test('native journal capacity fits its full double-buffered device binding after rounding', () => {
+  const system = root();
+  system.maxParticles = 65536;
+  system.eventRuntime.acquireJournal = (_renderer, capacity) => ({ capacity });
+  const limits = { maxStorageBufferBindingSize: 128 * 1024 * 1024, maxBufferSize: 256 * 1024 * 1024 };
+  const journal = system._journal({ backend: { device: { limits } } });
+  const storage = new GPUEventBufferState(journal.capacity, true);
+  assert(storage.floatAttribute.array.byteLength <= limits.maxStorageBufferBindingSize);
+  assert.equal(storage.capacity, journal.capacity);
+  storage.dispose(); system.destroy();
+});
+
+
+test('collision emission uses the contact point in child space and honors explicit position overrides', () => {
+  for (const override of [false, true]) {
+    const system = root(), child = effect();
+    system.simulationSpace = 'local'; system.position.set(4, 2, -3); system.rotation.y = Math.PI / 3;
+    child.simulationSpace = 'local'; child.position.set(-2, 1, 5);
+    system.addSubSystem(child, { emitOnCollision: true, inheritVelocity: 0, inheritScale: 0,
+      ...(override ? { onEvent: { collision: () => ({ position: new THREE.Vector3(9, 8, 7) }) } } : {}) });
+    const source = origin(system, { transform: new THREE.Matrix4().makeTranslation(100, 100, 100) });
+    const point = new THREE.Vector3(1, 2, 3);
+    const expected = override ? new THREE.Vector3(9, 8, 7) : point.clone()
+      .applyMatrix4(system.getSimulationToWorldMatrix()).applyMatrix4(child.getSimulationToWorldMatrix().invert());
+    source.emitEvent('collision', { point, normal: new THREE.Vector3(0, 1, 0),
+      impulse: new THREE.Vector3(0, 1, 0) });
+    frame(system);
+    assert(child.particles.length > 0);
+    assert(child.particles[0].position.distanceTo(expected) < 1e-6);
+    system.destroy();
+  }
 });

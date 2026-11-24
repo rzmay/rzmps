@@ -10,11 +10,11 @@
 
 ## Extends
 
-- `Partial`\<[`ModuleOptions`](../../interfaces/ModuleOptions.md)\>
+- `Partial`\<`Omit`\<[`ModuleOptions`](../../interfaces/ModuleOptions.md), `"modifyGPU"`\>\>
 
 ## Extended by
 
-- [`TransformByNoiseOptions`](TransformByNoiseOptions.md)
+- [`TransformByNoiseOptions`](../../interfaces/TransformByNoiseOptions.md)
 
 ## Properties
 
@@ -127,22 +127,6 @@ lacunarity: number;
 ```
 
 Frequency multiplier between successive noise octaves. Defaults to 2.
-
-***
-
-<a id="modifygpu"></a>
-
-### modifyGPU?
-
-```ts
-optional modifyGPU?: ModuleGPUUpdate | null;
-```
-
-TSL modifier used when GPU processing is active.
-
-#### Inherited from
-
-[`ModuleOptions`](../../interfaces/ModuleOptions.md).[`modifyGPU`](../../interfaces/ModuleOptions.md#modifygpu)
 
 ***
 

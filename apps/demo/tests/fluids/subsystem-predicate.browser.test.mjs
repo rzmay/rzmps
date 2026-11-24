@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import puppeteer from 'puppeteer';
 import { startSiteDev } from '../../../../scripts/site/dev.mjs';
+import { openFixture } from './openFixture.mjs';
 
 const site = await startSiteDev({ port: 0, host: '127.0.0.1' });
+await site.demo.watcher.close();
 let browser;
 try {
-  browser = await puppeteer.launch(browserLaunchOptions('test', { headless: true, args: [...browserLaunchOptions('test').args, '--enable-unsafe-webgpu'] }));
+  browser = await puppeteer.launch(browserLaunchOptions('test'));
   const page = await browser.newPage();
   page.setDefaultTimeout(120000);
   const errors = [];
@@ -18,9 +20,8 @@ try {
       console.error(message.text());
     }
   });
-  await page.goto(`http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${
-    path.resolve(import.meta.dirname, 'fixtures/subsystem-predicate.html')}`);
-  await page.waitForFunction(() => window.ready);
+  await openFixture(page, `http://127.0.0.1:${site.demo.httpServer.address().port}/@fs${
+    path.resolve(import.meta.dirname, 'fixtures/subsystem-predicate.html')}`, errors);
   const continuous = await page.evaluate(() => window.runPredicateCase('continuous'));
   console.log('GPU continuous spray:', JSON.stringify(continuous));
   assert(continuous.parentGPU && continuous.childGPU && continuous.supported);
@@ -40,5 +41,12 @@ try {
   const eventNeighbors = await page.evaluate(() => window.runPredicateCase('spawn', 'spray-neighbors'));
   assert.equal(eventNeighbors.children.length, 1, 'event predicates can query current parent neighborhoods');
   assert(eventNeighbors.children[0].position[0] > 1);
+  for (const override of [false, true]) {
+    const collision = await page.evaluate(value => window.runCollisionOriginCase(value), override);
+    assert(collision.parentGPU && collision.childGPU);
+    assert.equal(collision.children.length, 1);
+    assert(Math.abs(collision.children[0].position[1] - (override ? 2 : 0)) < 1e-4,
+      `collision births use the contact point unless overridden: ${JSON.stringify(collision)}`);
+  }
   assert.deepEqual(errors, []);
 } finally { await browser?.close(); await site.close(); }

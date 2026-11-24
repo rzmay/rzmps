@@ -27,6 +27,7 @@ const IGNORED_COLLISION_USER_DATA_KEYS = [
   SPRITE_RENDERER_USER_DATA_KEY,
 ];
 
+/** Shared scene-query filter for particle-owned render objects and debug helpers. */
 export function isIgnoredCollisionObject(object: THREE.Object3D): boolean {
   // Keep ParticleSystem as a live binding: collision modules participate in its
   // import cycle, so capturing it in the eager constructor array can store undefined.

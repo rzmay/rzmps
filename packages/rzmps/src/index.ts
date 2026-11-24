@@ -107,7 +107,7 @@ export { default as Renderer } from './core/Renderer';
 export type { ParticleCondition, ParticleGPUCondition } from './core/particleCondition.types';
 export type { RendererOptions, RendererCondition } from './core/Renderer';
 export { default as LightRenderer } from './rendering/renderers/LightRenderer';
-export type { LightRendererAllocationOptions } from './rendering/renderers/LightRenderer';
+export type { LightRendererAllocationOptions, LightRendererOptions } from './rendering/renderers/LightRenderer';
 export { default as MeshRenderer } from './rendering/renderers/MeshRenderer';
 export { default as SpriteRenderer } from './rendering/renderers/SpriteRenderer';
 export { default as AudioRenderer } from './rendering/renderers/AudioRenderer';
@@ -147,6 +147,8 @@ export { default as NoiseModule } from './modules/NoiseModule';
 export { default as ForceOverLifetime } from './modules/ForceOverLifetime';
 export { default as LimitVelocityOverLifetime } from './modules/LimitVelocityOverLifetime';
 export { default as TransformByNoise } from './modules/TransformByNoise';
+export type { TransformByNoiseOptions } from './modules/TransformByNoise';
+export { TransformMode } from './enums/TransformMode';
 export { default as ColorBySize } from './modules/ColorBySize';
 export { default as ColorBySpeed } from './modules/ColorBySpeed';
 export { default as ColorByDepth } from './modules/ColorByDepth';
@@ -206,6 +208,7 @@ export type { ForceFieldOptions } from './spatial/effects/ParticleForceField';
 export { default as ParticleForceFieldHelper } from './spatial/effects/ParticleForceFieldHelper';
 
 // Collision
+export { isIgnoredCollisionObject } from './collision/isIgnoredCollisionObject';
 export type { ICollisionBackend, CollisionHit, CollisionQuery } from './collision/collision.types';
 export { default as ThreeCollisionBackend } from './collision/ThreeCollisionBackend';
 export type { ThreeCollisionBackendOptions } from './collision/ThreeCollisionBackend';
@@ -307,6 +310,8 @@ export { default as FluidSimulation } from './modules/FluidSimulation';
 export type { FluidSimulationOptions, FluidCollisionOptions } from './modules/FluidSimulation';
 export { default as GasModule } from './modules/GasModule';
 export type {
+  GasEmission, GPUGasEmission, GPUGasParticles, GasInitializationContext, GPUGasInitializationContext,
+  GasInitializer, GPUGasInitializer,
   GPUGasCell,
   GasGridQuery,
   GasModuleOptions,
@@ -315,6 +320,7 @@ export type {
   GasModuleUpdate,
   GasRenderModuleUpdate,
 } from './modules/GasModule';
+export type { GPUGasSource, GPUGasSourceParticle } from './simulation/gpu/GasSourceData';
 export { default as GasSimulation } from './modules/GasSimulation';
 export type { GasSimulationOptions } from './modules/GasSimulation';
 export { default as FLIPSimulation } from './modules/FLIPSimulation';

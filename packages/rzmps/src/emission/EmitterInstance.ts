@@ -65,6 +65,11 @@ export default class EmitterInstance {
       if (!binding.source.alive) return;
       this.elapsed += deltaTime;
       const context = EmitterInstance.sourceContext(system, binding.source, options!);
+      // Finite registered sources sample their owner clock, but schedule births on an uninterrupted local clock.
+      // Their owner may publish age only once for several simulation substeps.
+      if (binding.source instanceof EmissionSource && Number.isFinite(binding.source.lifetime)) {
+        return { ...context, elapsedTime: this.elapsed };
+      }
       // Owned registered sources advance after emission; parent sources already carry
       // their parent's end-of-step clock when a subsystem is processed.
       const elapsedTime = context.elapsedTime === undefined ? this.elapsed
@@ -107,6 +112,8 @@ export default class EmitterInstance {
     source: SubSystemSource,
     options: SubSystemOptions,
   ): Partial<EmissionContext> {
+    if (source instanceof EmissionSource) source.prepareEmission?.();
+    const sourceClock = source instanceof EmissionSource && Number.isFinite(source.lifetime);
     const lifetime = Number.isFinite(source.lifetime) ? options.inheritLifetime : 0;
     const parentToChild = system.getSimulationToWorldMatrix().invert()
       .multiply(system.getSourceProducer(source).getSimulationToWorldMatrix());
@@ -115,10 +122,11 @@ export default class EmitterInstance {
       key: source.id,
       transform: system.getParticleEmissionTransform(source, options.inheritScale),
       position: source.position.clone().applyMatrix4(parentToChild),
-      time: lifetime > 0 ? source.time * lifetime : undefined,
+      time: sourceClock ? source.age / source.lifetime : lifetime > 0 ? source.time * lifetime : undefined,
       elapsedTime: source instanceof EmissionSource ? source.realtime / 1000 : undefined,
-      duration: lifetime > 0 ? THREE.MathUtils.lerp(system.duration, source.lifetime, lifetime) : undefined,
-      looping: lifetime > 0 ? false : system.looping,
+      duration: sourceClock ? source.lifetime
+        : lifetime > 0 ? THREE.MathUtils.lerp(system.duration, source.lifetime, lifetime) : undefined,
+      looping: sourceClock || lifetime > 0 ? false : system.looping,
       color: new THREE.Color(1, 1, 1).lerp(source.color, Math.max(0, options.inheritColor)),
       alpha: THREE.MathUtils.lerp(1, source.alpha, Math.max(0, options.inheritAlpha)),
       mass: THREE.MathUtils.lerp(1, source.mass, Math.max(0, options.inheritMass)),

@@ -9,7 +9,7 @@
 # Type Alias: NoiseModuleGPUUpdate
 
 ```ts
-type NoiseModuleGPUUpdate = (particle, deltaTime, noise) => void;
+type NoiseModuleGPUUpdate = (particle, deltaTime, noise, context) => void;
 ```
 
 ## Parameters
@@ -25,6 +25,10 @@ type NoiseModuleGPUUpdate = (particle, deltaTime, noise) => void;
 ### noise
 
 [`GPUParticleNoiseValues`](../interfaces/GPUParticleNoiseValues.md)
+
+### context
+
+[`ModuleGPUExecutionContext`](../../interfaces/ModuleGPUExecutionContext.md)
 
 ## Returns
 

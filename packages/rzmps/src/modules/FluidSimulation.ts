@@ -166,7 +166,7 @@ abstract class FluidSimulation extends Module {
   private lastBoundsRead = 0;
   private guardPrediction?: FluidGuardPrediction;
   private guardContext?: GPUParticleUpdateContext;
-  private readonly guardParticleKeys = new WeakMap<object, Map<number | undefined, object>>();
+  private readonly guardParticleKeys = new WeakMap<object, Map<string, object>>();
   /** @internal Observations only; these are not simulation tuning parameters. */
   readonly guardDiagnostics = { faces: [] as FluidGuardFace[], observedAt: 0, supportObservationAgeMs: 0 };
   private capacityObservation = { demand: 0, time: 0 };
@@ -1082,8 +1082,10 @@ abstract class FluidSimulation extends Module {
     const buffers = context.buffers, tagMask = context.system.getGPUFilterTagMask(this.tags);
     let keys = this.guardParticleKeys.get(buffers);
     if (!keys) { keys = new Map(); this.guardParticleKeys.set(buffers, keys); }
-    let key = keys.get(tagMask);
-    if (!key) { key = {}; keys.set(tagMask, key); }
+    // Capacity growth replaces particle storage even though the buffer-state object survives.
+    const signature = `${buffers.version}:${tagMask}`;
+    let key = keys.get(signature);
+    if (!key) { keys.clear(); key = {}; keys.set(signature, key); }
     return [{ key, compute: callback => Fn(() => callback(instanceIndex))().compute(buffers.count),
       sample: index => {
         const particle = buffers.storage.createParticle(index, true);

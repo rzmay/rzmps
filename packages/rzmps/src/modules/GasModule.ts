@@ -1,4 +1,7 @@
 import { GasModuleStage } from '../enums/GasModuleStage';
+import type * as THREE from 'three';
+import type Particle from '../core/Particle';
+import type { GPUGasSourceParticle } from '../simulation/gpu/GasSourceData';
 import type { Node } from 'three/webgpu';
 import Module, { type ModuleOptions } from '../core/Module';
 import type ParticleSystem from '../core/ParticleSystem';
@@ -18,6 +21,42 @@ export interface GasGridQuery {
   /** Missing/nonresident/out-of-range cells return zero state. Never writes neighbor storage. */
   getCell(x: Node, y: Node, z: Node): Readonly<GPUGasCell>;
 }
+
+/** Specific source emission: temperature/color/velocity are not density-premultiplied. */
+export interface GasEmission {
+  density: number;
+  temperature: number;
+  color: THREE.Color;
+  velocity: THREE.Vector3;
+}
+
+export interface GPUGasEmission {
+  density: Node<'float'>;
+  temperature: Node<'float'>;
+  color: Node<'vec3'>;
+  velocity: Node<'vec3'>;
+}
+
+/** Lazy view over the current cell's contributing source particles; each iteration repeats the sparse query. */
+export interface GPUGasParticles {
+  readonly length: Node<'float'>;
+  forEach(callback: (particle: GPUGasSourceParticle, contribution: Node<'float'>) => void): void;
+}
+
+export interface GasInitializationContext {
+  readonly module: GasModule;
+  readonly index: THREE.Vector3;
+  readonly position: THREE.Vector3;
+  readonly deltaTime: number;
+  readonly elapsedTime: number;
+}
+
+export type GPUGasInitializationContext = Pick<GasModuleContext,
+  'module' | 'index' | 'grid' | 'deltaTime' | 'elapsedTime'> & { readonly position: Node<'vec3'> };
+export type GasInitializer = (particles: readonly Particle[], emission: GasEmission,
+  context: GasInitializationContext) => void;
+export type GPUGasInitializer = (particles: GPUGasParticles, emission: GPUGasEmission,
+  context: GPUGasInitializationContext) => void;
 
 /** Local solver coefficients, initialized after the simulation's by-parameter controls. */
 export interface GasModuleContext {
@@ -59,8 +98,12 @@ export type GasModuleUpdate = (cell: GPUGasCell, context: GasModuleContext) => v
 export type GasRenderModuleUpdate = (cell: GPUGasCell, context: GasRenderModuleContext) => void;
 
 export interface GasModuleOptions extends Partial<Pick<ModuleOptions, 'priority' | 'tags' | 'events' | 'eventScope'>> {
-  /** Disables both gas callbacks when false. Defaults to true. */
+  /** Disables all gas callbacks when false. Defaults to true. */
   enabled?: boolean;
+  /** CPU/reference source-deposition callback. Mutates specific emission state in priority order. */
+  initialize?: GasInitializer;
+  /** GPU counterpart using TSL assignment and lazy sparse source iteration. No particle readback. */
+  initializeGPU?: GPUGasInitializer;
   /** GPU solver callback. Mutate nodes with assign/addAssign/mulAssign, not JavaScript assignment. */
   modifyGPU?: GasModuleUpdate;
   /** GPU ray-sample callback. All changes are transient. Native WebGPU only. */
@@ -86,6 +129,19 @@ export default class GasModule extends Module {
     super(() => {}, { ...options, modifyGPU: () => {} });
     this.options = options;
     this.enabled = options.enabled ?? true;
+  }
+
+  get initialize(): GasInitializer | undefined { return this.options.initialize; }
+  set initialize(value: GasInitializer | undefined) { this.options.initialize = value; }
+  get initializeGPU(): GPUGasInitializer | undefined { return this.options.initializeGPU; }
+  set initializeGPU(value: GPUGasInitializer | undefined) { this.options.initializeGPU = value; }
+
+  /** Reference/CPU evaluation uses the same enabled/priority semantics without creating a CPU gas solver. */
+  static initializeEmission(modules: readonly GasModule[], particles: readonly Particle[], emission: GasEmission,
+    context: Omit<GasInitializationContext, 'module'>): void {
+    for (const module of [...modules].filter(module => module.enabled).sort((a, b) => a.priority - b.priority)) {
+      module.initialize?.(particles, emission, { ...context, module });
+    }
   }
 
   /** Simulation callback, separate from the base class's per-particle modifyGPU hook. */
@@ -116,7 +172,9 @@ export default class GasModule extends Module {
     this.syncGPUConfiguration();
     const deps = typeof this.options.deps === 'function' ? this.options.deps() : (this.options.deps ?? []);
     const values = [
-      resolved === GasModuleStage.Simulation ? this.modifyGasGPU : this.modifyRenderGPU,
+      resolved === GasModuleStage.Initialization ? this.initializeGPU
+        : resolved === GasModuleStage.Simulation ? this.modifyGasGPU : this.modifyRenderGPU,
+      resolved === GasModuleStage.Initialization ? this.initialize : undefined,
       this.version,
       this.evaluateDynamicGPU.version,
       this.priority,
@@ -146,7 +204,8 @@ export default class GasModule extends Module {
       .getModules(GasModule, tags)
       .filter(
         module =>
-          module.enabled && (resolved === GasModuleStage.Simulation ? module.modifyGasGPU : module.modifyRenderGPU),
+          module.enabled && (resolved === GasModuleStage.Initialization ? module.initialize || module.initializeGPU
+            : resolved === GasModuleStage.Simulation ? module.modifyGasGPU : module.modifyRenderGPU),
       )
       .sort((a, b) => a.priority - b.priority);
   }

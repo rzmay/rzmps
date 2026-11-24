@@ -8,6 +8,10 @@
 
 # Interface: GPUParticleLike
 
+## Extended by
+
+- [`GPUGasSourceParticle`](GPUGasSourceParticle.md)
+
 ## Properties
 
 <a id="acceleration"></a>

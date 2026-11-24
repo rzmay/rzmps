@@ -24,6 +24,9 @@ test('volume children rotate color/density on both backends and rotate GPU veloc
         const result = await page.evaluate(async gpu => {
           const { red, volume, THREE, renderer } = window.volumeFixture;
           red.density.bounds.min.set(-1.2, -0.15, -0.3); red.density.bounds.max.set(1.2, 0.15, 0.3);
+          // This fixture replaces the source geometry, rather than resizing a live gas domain.
+          // A new field identity establishes its new rotation pivot; live-domain pivots deliberately stay fixed.
+          red.density = { ...red.density };
           for (let i = 0; i < red.color.data.length; i += 4)
             red.color.data.set(i / 4 % 8 < 4 ? [1, 0, 0, 1] : [0, 0, 1, 1], i);
           red.color.version++;
@@ -61,7 +64,8 @@ test('volume children rotate color/density on both backends and rotate GPU veloc
           return { unrotated, rotated, reversed, bounds, retainedMaterial, velocity, skipped };
         }, backend === 'webgpu');
         assert(result.unrotated.every(pixel => Math.max(...pixel.slice(0, 3)) < 5));
-        assert(result.rotated[0][2] > 30 && result.rotated[0][2] > result.rotated[0][0], backend);
+        assert(result.rotated[0][2] > 30 && result.rotated[0][2] > result.rotated[0][0],
+          `${backend}: ${JSON.stringify(result)}`);
         assert(result.rotated[1][0] > 30 && result.rotated[1][0] > result.rotated[1][2], backend);
         assert(result.reversed[0][0] > result.reversed[0][2]);
         assert(result.reversed[1][2] > result.reversed[1][0]);

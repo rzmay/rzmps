@@ -22,7 +22,7 @@ export interface ThreeCollisionBackendOptions {
 
   /** Seconds without movement before automatic objects become static. Defaults to 2. */
   staticAfter?: number;
-  /** Dynamic octree rebuild fraction; reducing it trades freshness for CPU cost. Defaults to 1. */
+  /** Dynamic octree refresh fraction; reducing it trades freshness for CPU cost. Defaults to 1. */
   timeQuality?: number;
   /** Scene membership scan fraction; defaults to timeQuality. */
   refreshQuality?: number;
@@ -60,6 +60,20 @@ type TrackedObject = {
   indexCount: number;
 };
 
+interface DynamicOctreeState {
+  entries: Array<{
+    object: THREE.Mesh;
+    position: THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+    index: THREE.BufferAttribute | null;
+    uv?: THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+    revision: string;
+    matrix: THREE.Matrix4;
+  }>;
+  settings: string;
+  vertices: THREE.Vector3[];
+  nodes: Octree[];
+}
+
 type MembershipChanges = {
   staticChanged: boolean;
   dynamicChanged: boolean;
@@ -95,6 +109,7 @@ class ThreeCollisionBackend implements ICollisionBackend {
   trianglesPerLeaf: number | null;
   private trackedObjects = new Map<string, TrackedObject>();
   private invalidatedGeometry = new Set<string>();
+  private dynamicState?: DynamicOctreeState;
 
   private elapsedTime = 0;
   private dynamicUpdateAccumulator = 0;
@@ -211,7 +226,7 @@ class ThreeCollisionBackend implements ICollisionBackend {
     }
 
     if (dynamicMembershipChanged) {
-      this.rebuildDynamicOctree();
+      this.rebuildDynamicOctree(true);
       this.dynamicUpdateAccumulator = 0;
       return;
     }
@@ -555,14 +570,81 @@ class ThreeCollisionBackend implements ICollisionBackend {
     this.staticOctree = this.buildOctree(objects);
   }
 
-  private rebuildDynamicOctree(): void {
-    const objects = Array.from(
-      this.trackedObjects.values(),
-    )
-      .filter((tracked) => tracked.dynamic)
-      .map((tracked) => tracked.object);
+  private rebuildDynamicOctree(force = false): void {
+    // Separate geometry/settings changes from pose changes before deciding whether topology can be reused.
+    const entries = Array.from(this.trackedObjects.values()).filter(tracked => tracked.dynamic).map(({ object }) => ({
+      object, position: object.geometry.getAttribute('position'), index: object.geometry.index,
+      uv: object.geometry.getAttribute('uv'),
+      revision: [object.geometry.uuid, getAttributeVersion(object.geometry.getAttribute('position')),
+        object.geometry.getAttribute('position').count, getAttributeVersion(object.geometry.index),
+        object.geometry.index?.count, getAttributeVersion(object.geometry.getAttribute('uv')),
+        object.geometry.getAttribute('uv')?.count, object.geometry.groups.map(group => `${group.start}:${group.count}:`
+          + `${group.materialIndex}`).join(','),
+        (Array.isArray(object.material) ? object.material : [object.material]).map(material => material.side).join(','),
+      ].join('|'),
+      matrix: object.matrixWorld,
+    }));
+    const settings = `${this.respectMaterialSide}:${this.maxLevel}:${this.trianglesPerLeaf}`;
+    const previous = this.dynamicState;
 
-    this.dynamicOctree = this.buildOctree(objects);
+    const compatible = !force && previous && settings === previous.settings
+      && previous.entries.length === entries.length && entries.every((entry, i) => {
+        const old = previous.entries[i];
+        return entry.object === old.object && entry.position === old.position && entry.index === old.index
+          && entry.uv === old.uv
+          && entry.revision === old.revision;
+      });
+
+    if (compatible) {
+      if (entries.every((entry, i) => entry.matrix.equals(previous.entries[i].matrix))) return;
+
+      const first = previous.entries[0]?.matrix;
+      if (first && Math.abs(first.determinant()) > Number.EPSILON) {
+        const delta = entries[0].matrix.clone().multiply(first.clone().invert());
+        const commonMotion = entries.every((entry, i) => {
+          const expected = delta.clone().multiply(previous.entries[i].matrix).elements;
+          return entry.matrix.elements.every((value, j) => Math.abs(value - expected[j]) <= 1e-9);
+        });
+
+        if (commonMotion && delta.elements.every(Number.isFinite)) {
+          this.benchmarks.span('dynamicOctreeRefit', () => {
+            // Triangle metadata references these same vertices, so contact UV/material provenance follows the motion.
+            previous.vertices.forEach(vertex => vertex.applyMatrix4(delta));
+
+            // Refit tight bounds bottom-up. Rotating old AABBs repeatedly would otherwise inflate them over time.
+            for (let i = previous.nodes.length - 1; i >= 0; i--) {
+              const node = previous.nodes[i];
+              node.bounds.makeEmpty();
+              for (const triangle of node.triangles)
+                node.bounds.expandByPoint(triangle.a).expandByPoint(triangle.b).expandByPoint(triangle.c);
+              for (const child of node.subTrees) if (child.box) node.bounds.union(child.box);
+              if (!node.bounds.isEmpty() && !node.subTrees.length) node.bounds.expandByScalar(1e-8);
+              node.box ??= new THREE.Box3();
+              node.box.copy(node.bounds);
+            }
+
+            entries.forEach((entry, i) => previous.entries[i].matrix.copy(entry.matrix));
+          });
+          return;
+        }
+      }
+    }
+
+    // Independent object motion or geometry edits need a new partition; retain vertex/node lists for later refits.
+    this.dynamicOctree = this.benchmarks.span('dynamicOctreeBuild',
+      () => this.buildOctree(entries.map(entry => entry.object)));
+    const nodes: Octree[] = [], vertices = new Set<THREE.Vector3>();
+    const collect = (node: Octree) => {
+      nodes.push(node);
+      node.triangles.forEach(triangle => {
+        vertices.add(triangle.a); vertices.add(triangle.b); vertices.add(triangle.c);
+      });
+      node.subTrees.forEach(collect);
+    };
+
+    collect(this.dynamicOctree);
+    this.dynamicState = { entries: entries.map(entry => ({ ...entry, matrix: entry.matrix.clone() })),
+      settings, vertices: [...vertices], nodes };
   }
 
   private buildOctree(

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { NodeFrame, ViewportDepthTextureNode, WebGPURenderer } from 'three/webgpu';
-import { NodeUpdateType } from 'three/tsl';
+import { MeshBasicNodeMaterial, NodeFrame, ViewportDepthTextureNode, WebGPURenderer } from 'three/webgpu';
+import { NodeUpdateType, uniform, vec3 } from 'three/tsl';
 import { DEPTH_CAPTURE_OBJECT } from '../DepthMaterialCache';
 import { PARTICLE_RENDERER_OBJECT_KEY } from '../renderers/LiveCubemap';
 
@@ -10,7 +10,7 @@ export default class OpaqueSceneDepth {
   readonly node = new ViewportDepthTextureNode(undefined, undefined, this.defaultDepth);
   private readonly frame = new NodeFrame();
   private readonly geometry = new THREE.PlaneGeometry(0, 0);
-  private readonly material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false });
+  private readonly material = new MeshBasicNodeMaterial({ colorWrite: false, depthWrite: false, depthTest: false });
   private readonly mesh = new THREE.Mesh(this.geometry, this.material);
   private readonly root = new THREE.Group();
   private readonly textures = new Set<THREE.Texture>();
@@ -26,13 +26,16 @@ export default class OpaqueSceneDepth {
     this.geometry.boundingBox = new THREE.Box3();
     this.mesh.frustumCulled = false;
     this.root.add(this.mesh);
-    this.mesh.onBeforeRender = (renderer, scene) => {
-      if (!(renderer instanceof WebGPURenderer) || scene.overrideMaterial) return;
+    // Object callbacks also run during compileAsync, when no render pass is open.
+    // Node updates run only for an actual draw, so a compilation cannot copy stale depth.
+    this.material.colorNode = vec3(uniform(0).onObjectUpdate(({ renderer, scene }) => {
+      if (!(renderer instanceof WebGPURenderer) || scene?.overrideMaterial) return 0;
       this.frame.renderer = renderer;
       this.node.updateReference(this.frame);
       this.node.updateBefore(this.frame);
       this.textures.add(this.node.value);
-    };
+      return 0;
+    }));
   }
 
   attach(scene: THREE.Scene | undefined, enabled: boolean): void {
