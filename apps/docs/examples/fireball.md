@@ -9,31 +9,55 @@ example: fireball
 
 <ExampleTags />
 
-Burst emission, animated sprite growth, particle lights, heat distortion, and persistent radial scorch marks.
+This effect should read as a brief expanding explosion, followed by disturbed air and a visible trace on nearby
+surfaces. A quiet gap between bursts keeps the timing clear.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Prepare the heat and scorch resources
 
-A 1.25-second loop separates repeated explosions. The main sprites live for 0.6 seconds, leaving a quiet gap before the next burst. A spawn-triggered distortion subsystem has independent lifetime and scale, with velocity inheritance 0.5 so the heat wave can partially follow the source particle. The same fireball particles continuously project faint scorch marks onto nearby scene meshes; use Checkerboard to see them accumulate on the floor.
+Load the distortion map and scorch mask before creating the burst. The mark material is separate from the animated
+fireball so it can stay fixed on a surface after the flame has faded. This setup is shared by repeated bursts of the
+same system; it does not reload textures for every particle.
 
-<ExampleCode region="system" />
+<ExampleCode region="system:resources" />
 
-## Emitters
+## Build one overlapping burst
 
-The main emitter has no continuous rate: five particles burst at time zero from a radius-0.2 sphere. Their 2.5-unit scale overlaps into one explosion. The secondary burst creates five larger distortion particles lasting 0.5 seconds; radial speed 2 spreads their silhouette beyond the visible flame.
+The main emitter uses a time-zero burst rather than continuous emission. Several large sprites overlap into one
+fireball. Their short lifetimes leave room before the next system loop; scale growth expands the silhouette while
+the cubic alpha fade removes the flame late in its life. Tune burst count and starting size together before widening
+the source, otherwise the explosion can break into unrelated small puffs.
 
-<ExampleCode region="emitters" />
+<ExampleCode region="emitters:1" />
+<ExampleCode region="modules:1" />
 
-## Modules
+## Make the flash affect its surroundings
 
-The main scale multiplier grows from 0.35 to 1.8, making the explosion expand rather than drift. Cubic alpha decay holds brightness until late in life. Secondary upward force and noise stop the heat wave looking like a rigid expanding disc, while its cubic growth and alpha envelope independently remove the distortion.
+The animated atlas supplies rapid internal flame motion, and particle lights illuminate nearby geometry. Radial
+scorch searches choose nearby hits while the burst is alive. The marks have their own fixed footprint and slow fade,
+so they remain after the flame disappears. Low opacity lets repeated bursts accumulate damage gently. Choose a scene
+with nearby surfaces to see this layer; the empty background cannot receive decals.
 
-<ExampleCode region="modules" />
+<ExampleCode region="renderers:1" />
 
-## Renderers
+## Follow the flash with a heat wave
 
-The 5×4 atlas supplies 20 frames at 30 fps, close to the main lifetime. Soft intersections blend the explosion against geometry. Up to 18 particle lights at brightness 5 illuminate the environment briefly. The distortion material uses transmission 1, opacity 0.3, and strength 0.05; its low opacity keeps the background readable. A DecalRenderer uses the supplied scorch texture and twenty-four spherical rays to select the nearest surface within three units. Continuous rate 4 gives each short-lived particle projection opportunities at ages 0.25 and 0.5 seconds. Marks have a fixed 2.5-unit footprint, independent of sprite growth, color, and alpha. Each mark lives eight seconds, fades in over 0.08 seconds to a peak opacity of 0.035, then fades out over its final 3.2 seconds. Overlapping bursts build up the burn gradually. Capacity 128 bounds persistent geometry, and the factory disposes the scorch material and texture on destruction.
+A spawn-triggered child burst supplies larger distortion particles on a separate lifetime. Partial velocity inheritance
+connects the wave to the source without forcing it to copy the whole flame motion. Noise, growth and an opacity
+envelope soften the expanding shape. Keep this layer subtle enough that the background remains readable through it.
 
-<ExampleCode region="renderers" />
+<ExampleCode region="system:2" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />
+
+Connect the secondary behavior to the root with the relationships below. The root owns child updates; their
+inheritance and event filters decide when each layer starts and which source it follows.
+
+<ExampleCode region="system:connections" />

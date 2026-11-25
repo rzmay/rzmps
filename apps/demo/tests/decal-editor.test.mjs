@@ -20,6 +20,7 @@ test(
       const { DecalRenderer, ParticleSystem, SourceLossBehavior, EndBehavior } =
         await server.ssrLoadModule('@rzmps/rzmps');
       const THREE = await server.ssrLoadModule('three');
+      const { Curve } = await server.ssrLoadModule('curves');
       for (const prefix of ['', 'particle-system-gui/']) {
         const { RendererGUI } = await server.ssrLoadModule(`/src/gui/${prefix}RendererGUI.js`);
         const { ParticleSystemSerializer } = await server.ssrLoadModule(
@@ -97,7 +98,10 @@ test(
             () => serializer.serializeValue(serializer.getSerializableRuntimeOptions(renderer)),
             /Inspected live scene/,
           );
+          renderer.children.alpha = new Curve({ 0: 0, 0.2: 1, 1: 0 });
           const code = serializer.serializeParticleSystem();
+          assert.ok(code.includes("import { Curve } from 'curves';"));
+          assert.ok(code.includes('new Curve({ 0: 0, 0.2: 1, 1: 0 })'));
           assert.ok(code.includes('sourceLossBehavior: SourceLossBehavior.Kill'));
           assert.ok(!code.includes('sourceLoss:'));
           assert.ok(code.includes('simulationSpace: SimulationSpace.Local'));
@@ -109,7 +113,12 @@ test(
           assert.ok(code.length < 10000);
           assert.ok(!code.includes('runtimeSentinel'));
           assert.ok(!code.includes('raycaster:'));
-          const exported = new Function('THREE', 'DecalRenderer', `return ${serializer.serializeRenderer(renderer)}`)(
+          const exported = new Function(
+            'THREE',
+            'DecalRenderer',
+            'Curve',
+            `return ${serializer.serializeRenderer(renderer)}`,
+          )(
             {
               ...THREE,
               TextureLoader: class {
@@ -119,7 +128,9 @@ test(
               },
             },
             DecalRenderer,
+            Curve,
           );
+          assert.equal(exported.children.alpha(0.2), 1);
           assert.equal(exported.continuousRate, 1.5);
           assert.equal(exported.ratio, 0.5);
           assert.equal(exported.material.map.image.src, '/splat2.png');

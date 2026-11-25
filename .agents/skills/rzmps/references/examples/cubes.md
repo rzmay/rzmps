@@ -7,87 +7,32 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">cubes</span> <span class="example-tag">meshes</span> <span class="example-tag">instancing</span> <span class="example-tag">rotation</span> <span class="example-tag">effects</span></div>
 
-Instanced mesh rendering with randomized cube particles and simple lifetime rotation and fade-out.
+Here the particles should clearly have faces, edges and tumbling motion. A shared box mesh gives them a geometric
+silhouette, while the rest of the preset stays simple enough to separate movement from shading.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/cubes.png)
 
-## Particle System Configuration
+## Scatter a readable group of cubes
 
-A 10-second loop keeps emission continuous, while zero gravity isolates instanced mesh appearance and rotation. Lifetimes of 4–8 seconds leave enough time to watch each cube tumble before it fades away.
+Zero gravity leaves the initial outward motion easy to follow. Sizes vary within a restrained range, and a discrete
+palette keeps the cubes colorful without producing intermediate hues. The emitter scale multiplies the small box
+geometry, so tune both together when adapting the preset to another scene's units.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L20)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L17)
 
 ```js
-  const system = new ParticleSystem({
-    maxParticles: 256,
-    duration: 10,
-    looping: true,
-    gravity: new THREE.Vector3(0, 0, 0),
-    gravityModifier: 0,
+import { Emitter } from '@rzmps/rzmps';
 
     emitters: [
       new Emitter({
         rate: 12,
         radialSpeed: 1,
-
         initialValues: {
           lifetime: [4, 8],
           speed: 1,
           color: colors,
-          scale: [
-            0.4,
-            1.0,
-          ],
-          alpha: 1,
-        },
-      }),
-    ],
-
-    modules: [
-      new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
-      }),
-      new ColorOverLifetime({
-        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)))
-      })
-    ],
-
-    renderers: [
-      new MeshRenderer({
-        mesh: new THREE.Mesh(
-          new THREE.BoxGeometry(0.25, 0.25, 0.25),
-          new THREE.MeshStandardMaterial()
-        ),
-        castShadow: true,
-        receiveShadow: true,
-      }),
-    ],
-  });
-```
-
-
-## Emitters
-
-Rate 12 and mean lifetime 6 imply roughly 72 simultaneous cubes. The discrete color Set avoids intermediate hues. Scale ranges from 0.4 to 1, applied to a 0.25-unit box mesh, so visible cube edges stay small enough to separate the instances.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L28)
-
-```js
-    emitters: [
-      new Emitter({
-        rate: 12,
-        radialSpeed: 1,
-
-        initialValues: {
-          lifetime: [4, 8],
-          speed: 1,
-          color: colors,
-          scale: [
-            0.4,
-            1.0,
-          ],
+          scale: [0.4, 1.0],
           alpha: 1,
         },
       }),
@@ -95,43 +40,51 @@ Rate 12 and mean lifetime 6 imply roughly 72 simultaneous cubes. The discrete co
 ```
 
 
-## Modules
+## Tumble, then disappear quietly
 
-Angular velocity is sampled between differently oriented vectors so cubes do not all rotate around the same axis. The cubic fade keeps them opaque early and removes them near death. There is no added acceleration module, so the emitter’s initial motion stays easy to distinguish from rotation.
+Angular velocity varies across axes so the cubes reveal different faces instead of spinning as one synchronized group.
+The cubic alpha fade keeps them readable early in life and removes them near the end. There is no extra force or noise
+layer: add those only if the intended motion needs more than the emitter's initial trajectory.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L48)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L33)
 
 ```js
+import * as THREE from 'three';
+import { ColorOverLifetime, RotationOverLifetime } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
+
     modules: [
       new RotationOverLifetime({
         angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
       }),
+
       new ColorOverLifetime({
-        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)))
-      })
+        alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
+      }),
     ],
 ```
 
 
-## Renderers
+## Let light describe real faces
 
-MeshRenderer instances a BoxGeometry and MeshStandardMaterial. Cast and receive shadows are enabled, making real geometric faces apparent when the scene has shadow-casting lights. Compare this example with the sprite-based Spheres preset to see the difference between geometry and spherical normal shading.
+A standard material and cast/receive shadows make the box geometry legible against the scene. Use shadow-enabled
+lights to see that contact cue. Unlike [Spheres](https://rzmps.rzmay.com/docs/examples/spheres.html), the rounded appearance is not being synthesized on a
+billboard: every visible face belongs to the shared mesh.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L59)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L45)
 
 ```js
+import * as THREE from 'three';
+import { MeshRenderer } from '@rzmps/rzmps';
+
     renderers: [
       new MeshRenderer({
-        mesh: new THREE.Mesh(
-          new THREE.BoxGeometry(0.25, 0.25, 0.25),
-          new THREE.MeshStandardMaterial()
-        ),
+        mesh: new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshStandardMaterial()),
         castShadow: true,
         receiveShadow: true,
       }),
     ],
 ```
-
 

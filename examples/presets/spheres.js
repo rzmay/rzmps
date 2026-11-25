@@ -1,64 +1,58 @@
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
-import {
-  Emitter,
-  ParticleSystem,
-  SpriteRenderer,
-  Textures,
-} from '@rzmps/rzmps';
+import { Emitter, ParticleSystem, SpriteRenderer, Textures } from '@rzmps/rzmps';
 
 export default async function spheresPreset() {
-  const colors = new Set([
-    '#ff3333',
-    '#33ff66',
-    '#ffdd22',
-    '#3388ff',
-  ]);
+  const colors = new Set(['#ff3333', '#33ff66', '#ffdd22', '#3388ff']);
 
   // #region docs:system:1
+  // #region docs:emitters:1
+  const systemEmitters = [
+    new Emitter({
+      rate: 12,
+      radialSpeed: 1,
+      initialValues: {
+        lifetime: [6, 12],
+        speed: 1,
+        color: colors,
+        scale: [0.1, 0.25],
+        alpha: 1,
+      },
+    }),
+  ];
+  // #endregion docs:emitters:1
+
+  // #region docs:modules:1
+  const systemModules = [];
+  // #endregion docs:modules:1
+
+  // #region docs:renderers:1
+  const systemRenderers = [
+    new SpriteRenderer(Textures.Circle, {
+      material: SpriteMaterialType.Lit,
+      materialOptions: {
+        roughness: 0.5,
+        sphericalNormals: 1,
+        normalLighting: 1,
+      },
+    }),
+  ];
+  // #endregion docs:renderers:1
+
+  // #region docs:system:assembly
   const system = new ParticleSystem({
     duration: 10,
     looping: true,
     gravity: new THREE.Vector3(0, 0, 0),
     gravityModifier: 0,
 
-    // #region docs:emitters:1
-    emitters: [
-      new Emitter({
-        rate: 12,
-        radialSpeed: 1,
-        initialValues: {
-          lifetime: [6, 12],
-          speed: 1,
-          color: colors,
-          scale: [
-            0.1,
-            0.25,
-          ],
-          alpha: 1,
-        },
-      }),
-    ],
-    // #endregion docs:emitters:1
+    emitters: systemEmitters,
 
-    // #region docs:modules:1
-    modules: [],
-    // #endregion docs:modules:1
+    modules: systemModules,
 
-    // #region docs:renderers:1
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-
-        materialOptions: {
-          roughness: 0.5,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-      }),
-    ],
-    // #endregion docs:renderers:1
+    renderers: systemRenderers,
   });
+  // #endregion docs:system:assembly
   // #endregion docs:system:1
 
   system.name = 'Spheres';
@@ -70,9 +64,9 @@ export default async function spheresPreset() {
 /** @type {import("../types").ExampleMetadata} */
 spheresPreset.metadata = {
   author: 'rzmay',
-  'id': 'spheres',
-  'title': 'Spheres',
-  'description': 'Lit sprite particles with spherical normals for a 3D effect.',
+  id: 'spheres',
+  title: 'Spheres',
+  description: 'Lit sprite particles with spherical normals for a 3D effect.',
   tags: ['spheres', 'sprites', 'lighting', 'spherical-normals', 'effects'],
   previewSettings: {
     duration: 10,

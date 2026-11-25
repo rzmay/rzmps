@@ -1,3 +1,4 @@
+import { serializeCurve } from './serializeCurve';
 import * as THREE from 'three';
 import {
   AudioRenderer,
@@ -38,6 +39,7 @@ export class ParticleSystemSerializer {
     ]);
     this.collectImports(this.system, imports);
     this.usesEasing = false;
+    this.usesCurves = false;
 
     const counter = { value: 0 };
     const rootName = 'particleSystem';
@@ -48,12 +50,14 @@ export class ParticleSystemSerializer {
       `import { ${Array.from(imports).sort().join(', ')} } from '@rzmps/rzmps';`,
     ];
 
+    if (this.usesCurves) lines.push("import { Curve } from 'curves';");
     if (this.usesEasing) {
       lines.push("import { Easing } from 'eaz';");
     }
 
     lines.push(...systemLines, '', `export default ${rootName};`, '');
     this.usesEasing = false;
+    this.usesCurves = false;
     return lines.join('\n');
   }
 
@@ -742,6 +746,11 @@ export class ParticleSystemSerializer {
   }
 
   serializeFunction(value) {
+    const curve = serializeCurve(value);
+    if (curve) {
+      this.usesCurves = true;
+      return curve;
+    }
     const source = value.toString();
     if (/\bEasing\./.test(source)) {
       this.usesEasing = true;

@@ -7,24 +7,56 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">collisionSubEmitters</span> <span class="example-tag">metal</span> <span class="example-tag">balls</span> <span class="example-tag">audio</span> <span class="example-tag">collision</span> <span class="example-tag">events</span> <span class="example-tag">subsystems</span> <span class="example-tag">trails</span> <span class="example-tag">effects</span></div>
 
-Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces.
+A metal ball should announce an impact through more than a change of direction. This preset layers a short spark
+burst and a contact sound onto bouncing, reflective balls, tying those cues to the force of each collision.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/collisionSubEmitters.png)
 
-## Particle System Configuration
+## Load the impact sound
 
-The parent loops every five seconds under gravity and uses live cubemap reflections with intensity 3. A separate nonlooping spark system lasts 0.08 seconds as an emission window. It is triggered on contacts above impulse threshold 1.2; inheritance and impulse scaling let spark motion differ from the heavy parent.
+Decode the contact sound before creating the renderers so the first collision can play it. The helper records the
+clip's source URL for the demo's code exporter; it does not change the sound. Keep this setup separate from volume
+and impulse tuning, which control how the loaded clip is used.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L32)
+[Source: system:audioSources](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L20)
 
 ```js
-  const collision = new ParticleSystem({
-    duration: 5,
-    looping: true,
-    gravityModifier: 1,
-    useLiveCubemap: true,
-    liveCubemapIntensity: 3,
+const withAudioSource = (buffer, url) => {
+  Object.defineProperty(buffer, '__rzmpsAudioBufferSource', {
+    value: { url, name: url.split('/').pop() ?? url },
+    configurable: true,
+  });
+
+  return buffer;
+};
+```
+
+
+[Source: system:resources](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L32)
+
+```js
+import * as THREE from 'three';
+import ballHitUrl from 'examples/assets/audio/ball_hit.mp3?url';
+
+  const ballHit = await new THREE.AudioLoader().loadAsync(ballHitUrl);
+  withAudioSource(ballHit, ballHitUrl);
+
+```
+
+
+## Make the balls feel solid
+
+The parent emits a small stream under gravity. Long particle lifetimes let the same ball strike the scene repeatedly.
+The Collision module uses a lively bounce with modest damping, so contacts remain easy to hear and see. Choose a
+scene with geometry; the live cubemap and metallic material need an environment to reflect.
+
+
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L46)
+
+```js
+import { Emitter, EmissionShape } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.25),
@@ -38,6 +70,14 @@ The parent loops every five seconds under gravity and uses live cubemap reflecti
         },
       }),
     ],
+```
+
+
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L62)
+
+```js
+import { Collision } from '@rzmps/rzmps';
+
     modules: [
       new Collision({
         bounce: 0.75,
@@ -45,39 +85,30 @@ The parent loops every five seconds under gravity and uses live cubemap reflecti
         radiusScale: 1,
       }),
     ],
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          roughness: 0.2,
-          metalness: 0.6,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-      }),
-      new AudioRenderer({
-        onCollisionSound: ballHit,
-        collisionRatio: 1,
-        pitch: [0.8, 1.2],
-        volume: 0.18,
-        impulseAffectsVolume: 0.5,
-        impulseThreshold: 0.5,
-        lowPass: 1800,
-        impulseAffectsLowPass: 1,
-      }),
-    ],
-  });
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L89)
+## Make stronger contacts throw brighter fragments
+
+A separate spark system is triggered only above an impulse threshold. Its brief emission window starts a burst;
+the sparks' own lifetimes let their streaks finish afterward. Impulse-dependent speed and scale connect the size of
+the response to the hit. The collision normal supplies a useful outward direction instead of scattering sparks
+through the struck surface.
+
+
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L99)
 
 ```js
+import { Easing } from 'eaz';
+import * as THREE from 'three';
+import { ColorOverLifetime, Emitter, EmissionShape, EmissionSource, ParticleSystem, Textures, TrailRenderer } from '@rzmps/rzmps';
+
   const sparks = new ParticleSystem({
     maxParticles: 128,
     duration: 0.08,
     looping: false,
     gravityModifier: 1,
+
     emitters: [
       new Emitter({
         source: new EmissionShape({
@@ -94,11 +125,13 @@ The parent loops every five seconds under gravity and uses live cubemap reflecti
         },
       }),
     ],
+
     modules: [
       new ColorOverLifetime({
-        alpha: time => Math.max(0, 1 - time),
+        alpha: time => 1 - Easing.linear.in(Math.min(time, 1)),
       }),
     ],
+
     renderers: [
       new TrailRenderer({
         texture: Textures.Circle,
@@ -121,89 +154,20 @@ The parent loops every five seconds under gravity and uses live cubemap reflecti
 ```
 
 
-## Emitters
+## Let sound and reflections reinforce the material
 
-The balls emit at five per second with lifetime eight, keeping the population near 40 for manageable collision and audio costs. Each contact burst emits 3–6 sparks with lifetimes 0.18–0.42 and radial speed 0.5–2. The short emission window does not truncate those particle lifetimes.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L39)
-
-```js
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.25),
-        rate: 5,
-        radialSpeed: [1, 5],
-        initialValues: {
-          lifetime: 8,
-          scale: 0.125,
-          mass: 1,
-          color: '#aaa',
-        },
-      }),
-    ],
-```
+Low roughness and metalness make the balls look reflective. Contact audio varies in pitch and responds to impulse,
+while filtering changes its tone. Keep the sound below the level where repeated bounces blend into one loud bed.
+The short emissive spark trails provide a contrasting flash. Use the live demo with audio enabled to tune how the
+visual and audible cues meet.
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L95)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L72)
 
 ```js
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.ConeGeometry(0.01, 0.01, 32, 1, true),
-          source: EmissionSource.Volume,
-        }),
-        rate: 0,
-        bursts: [{ time: 0, count: [3, 6] }],
-        radialSpeed: [0.5, 2],
-        initialValues: {
-          lifetime: [0.18, 0.42],
-          scale: [0.05, 0.15],
-          color: ['#fff4b0', '#ff8a3d'],
-        },
-      }),
-    ],
-```
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import { AudioRenderer, SpriteRenderer, Textures } from '@rzmps/rzmps';
 
-
-## Modules
-
-The parent Collision module retains bounce 0.75 and dampen 0.05, so balls can strike surfaces repeatedly. The spark ColorOverLifetime module fades linearly. Subsystem impulse factors increase spark scale and speed for stronger contacts and align emission using the collision normal.
-
-
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L54)
-
-```js
-    modules: [
-      new Collision({
-        bounce: 0.75,
-        dampen: 0.05,
-        radiusScale: 1,
-      }),
-    ],
-```
-
-
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L113)
-
-```js
-    modules: [
-      new ColorOverLifetime({
-        alpha: time => Math.max(0, 1 - time),
-      }),
-    ],
-```
-
-
-## Renderers
-
-Lit sprites with metalness 0.6 and roughness 0.2 make live reflections visible. Collision audio uses volume 0.18, pitch variation 0.8–1.2, and impulse-dependent volume and low-pass filtering. Sparks use short 0.16-second emissive trails with depth writing disabled so their bright streaks layer cleanly. PNG previews cannot validate the sound itself.
-
-
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L63)
-
-```js
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: SpriteMaterialType.Lit,
@@ -214,6 +178,7 @@ Lit sprites with metalness 0.6 and roughness 0.2 make live reflections visible. 
           normalLighting: 1,
         },
       }),
+
       new AudioRenderer({
         onCollisionSound: ballHit,
         collisionRatio: 1,
@@ -226,29 +191,4 @@ Lit sprites with metalness 0.6 and roughness 0.2 make live reflections visible. 
       }),
     ],
 ```
-
-
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L120)
-
-```js
-    renderers: [
-      new TrailRenderer({
-        texture: Textures.Circle,
-        lifetime: 0.16,
-        minimumVertexDistance: 0.015,
-        dieWithParticles: false,
-        width: 0.18,
-        sizeAffectsWidth: true,
-        inheritParticleColor: true,
-        materialOptions: {
-          emissive: new THREE.Color('#ffb347'),
-          emissiveIntensity: 2,
-          roughness: 1,
-          transparent: true,
-          depthWrite: false,
-        },
-      }),
-    ],
-```
-
 

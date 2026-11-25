@@ -9,33 +9,42 @@ example: smoke
 
 <ExampleTags />
 
-Lit smoke sprites with soft particles and lifetime scale/color shaping.
+A smoke plume should read as a soft, rising volume rather than a stream of separate cards. This preset builds that
+illusion from overlapping sprites, slow buoyancy and a lifetime envelope. Start here before adding a fire source or
+changing the material to luminous smoke.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Start with a broad, slow source
 
-The 10-second loop sustains a plume while particles live for 4.5 seconds. The small negative gravity modifier reverses the default downward acceleration, adding slow buoyancy. Long particle lifetimes let the plume accumulate and spread instead of looking like short flame tongues.
-
-<ExampleCode region="system" />
-
-## Emitters
-
-A cone of radius 0.75 and height 1.2 provides a broad source. Rate 36 and lifetime 4.5 imply about 162 live particles at steady emission. Upward velocity 0.75 and radial speed 0.18 favor a column with modest spread. Scale 2.5 overlaps the low-opacity, alpha-0.55 sprites into a continuous volume.
-
-Uniform scale values and color strings use the standard input shortcuts.
+The cone spreads births across the base of the plume. Upward velocity gives the smoke an initial rise, while a small
+negative gravity modifier keeps it buoyant. Modest radial speed lets the base stay together instead of exploding outward.
+Large initial sprites overlap; their low opacity lets those overlaps suggest a volume. Shorten the lifetime for a compact
+puff, or increase it when the smoke should travel farther before disappearing.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Let older smoke expand and lose definition
 
-Noise is stronger horizontally (0.65) than vertically (0.35), producing rolling lateral motion. Velocity limits and drag prevent indefinite acceleration. The scale multiplier grows from 0.35 to 1.8, representing dispersal, and the alpha curve hides the first fifth and final quarter of the lifetime. Random angular velocity breaks up repeated texture orientation.
+Horizontal noise bends the column into curls, while weaker vertical noise leaves the upward direction readable.
+Velocity limits and drag prevent the curls from becoming an accelerating spray. The scale ramp expands each wisp as
+it ages. The three opacity timestamps bring it into view, then remove it gradually. Rotation
+breaks up repeated texture orientation. Together these choices hide individual births without obscuring the plume's flow.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Give flat sprites a soft, lit silhouette
 
-Lit sprites use the smoke alpha image as their silhouette. Roughness 1 avoids glossy highlights; spherical normals 1 and normal lighting 0.5 give each billboard some volume under scene lighting. Soft-particle distance 1 reduces hard lines where the smoke intersects geometry.
+The smoke image is an alpha mask, not a solid square. Rough lighting and spherical normals give each billboard some
+volume under the scene's lights; soft particles blur the line where it meets geometry. Use a lit scene when tuning this
+material. For a glowing alternative, compare [Additive Smoke](./additiveSmoke.md): its blending changes the meaning of overlap.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

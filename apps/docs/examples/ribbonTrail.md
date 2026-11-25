@@ -9,31 +9,32 @@ example: ribbonTrail
 
 <ExampleTags />
 
-Ribbon trail rendering for continuous streaks with lifetime fading.
+Instead of one independent streak behind each particle, this preset connects particles into three moving ribbons.
+The goal is a continuous set of strands whose shape comes from the relationship between successive samples.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Place enough samples along the ribbon
 
-The 4-second loop supplies a continuous ribbon field. Each particle lasts one second, so its contribution remains near the current emitter rather than accumulating indefinitely. No gravity override is supplied; the system’s default gravity behavior still applies.
-
-<ExampleCode region="system" />
-
-## Emitters
-
-The torus source emits 50 particles per second with radial speed 5. A short one-second lifetime and scale 0.12 produce many closely spaced samples around the source. Increasing speed without increasing emission rate would separate those samples and visibly change the ribbon shape.
+A torus source sends particles radially outward. The stream is dense relative to the short particle lifetime so
+neighboring samples remain close. Motion uses the initial velocity and ordinary system gravity; no extra motion
+modules are needed. Increasing speed without increasing emission spreads the samples apart and stretches the strands.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Connect samples into a readable strand
 
-No module array is supplied here; the system therefore uses its empty module default. The system configuration shown below is the actual source for that absence. Motion comes from initial radial velocity and default system integration, while width and color variation are handled by the trail renderer.
-
-<ExampleCode region="modules" />
-
-## Renderers
-
-Ribbon mode connects particles into three ribbons rather than assigning an independent trail to each particle. Ratio 1 includes all samples and width 0.15 keeps the strands narrow. The width envelope tapers both ends and the white-to-cyan gradient distinguishes the length of the ribbon. Roughness and metalness zero create a clean nonmetallic surface response.
+Ribbon mode groups the particles into three ribbons. A narrow width keeps them distinct, while the eased width envelope
+soften their ends. The white-to-cyan gradient gives the length of each strand a direction. A nonmetallic material
+keeps the appearance clean. Adjust ribbon count to change the number of strands, then tune width and emission
+spacing together rather than treating them as unrelated settings.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

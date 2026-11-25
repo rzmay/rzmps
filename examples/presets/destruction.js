@@ -14,7 +14,7 @@ import {
   ColorOverLifetime,
 } from '@rzmps/rzmps';
 
-import { Easing } from 'eaz';
+import { Curve } from 'curves';
 import impact1Normal from 'examples/assets/images/impact/512/T_concrete_impact_01_normal.PNG?url';
 import impact1Opacity from 'examples/assets/images/impact/512/T_concrete_impact_01_opacity.PNG?url';
 import impact1AO from 'examples/assets/images/impact/512/T_concrete_impact_01_ambientocclusion.PNG?url';
@@ -153,124 +153,147 @@ export default async function destructionPreset() {
       return Math.min(size.x, size.y, size.z);
     })
     .sort((a, b) => a - b);
-  // Collision uses a sphere; use representative rock thickness rather than the old unit-sized geometry.
+  // Collision uses a sphere; use representative rock thickness so small fragments have appropriately sized contacts.
   const collisionDiameter = thicknesses[Math.floor(thicknesses.length / 2)] ?? 0.7;
 
   // #region docs:system:1
+  // #region docs:emitters:1
+  const systemEmitters = new Emitter({
+    source: EmissionShape.Sphere(0.3),
+    rate: 3,
+    radialSpeed: [2, 4],
+    initialValues: {
+      position: new THREE.Vector3(0, 3, 0),
+      velocity: new THREE.Vector3(0, -2, 0),
+      lifetime: 4,
+      scale: 0.16,
+      mass: 1,
+    },
+  });
+  // #endregion docs:emitters:1
+
+  // #region docs:modules:1
+  const systemModules = new Collision({ bounce: 0.55, dampen: 0.1 });
+  // #endregion docs:modules:1
+
+  // #region docs:renderers:1
+  const systemRenderers = [
+    new MeshRenderer({
+      geometry: new THREE.SphereGeometry(0.5, 12, 8),
+      materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
+    }),
+
+    new DecalRenderer(impactMaterials, {
+      atlasOptions: { minCapacity: 4 },
+      textureCopyQuality: 1,
+      // The final opacity blend masks all damage lighting once, preserving soft edges.
+      materialComposite: (source, dest) => ({
+        color: source.color,
+        opacity: `${source.opacity} * ${dest.opacity}`,
+        normal: source.normal,
+        roughness: `${source.roughness} * ${dest.roughness}`,
+        metalness: source.metalness,
+      }),
+      materialCompositeGPU: (source, dest) => ({
+        color: source.color,
+        opacity: source.opacity.mul(dest.opacity),
+        normal: source.normal,
+        roughness: source.roughness.mul(dest.roughness),
+        metalness: source.metalness,
+      }),
+      onSpawn: false,
+      impulseThreshold: 4,
+      rotation: [-Math.PI, Math.PI],
+      size: 0.55,
+      impulseAffectsSize: 0.3,
+      onCollision: (hit, source, parameters) => ({
+        size: parameters.size.clone().clampScalar(0.5, 1.4),
+      }),
+      depth: 0.06,
+      maxDistance: 0.5,
+      inheritScale: 0,
+      inheritColor: 0,
+      inheritAlpha: 0,
+      lifetime: 60,
+      maxDecals: 384,
+      opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1),
+    }),
+  ];
+  // #endregion docs:renderers:1
+
+  // #region docs:system:assembly
   const system = new ParticleSystem({
     gpuProcessing: true,
     gravityModifier: 1,
-    // #region docs:emitters:1
-    emitters: new Emitter({
-      source: EmissionShape.Sphere(0.3),
-      rate: 3,
-      radialSpeed: [2, 4],
-      initialValues: {
-        position: new THREE.Vector3(0, 3, 0),
-        velocity: new THREE.Vector3(0, -2, 0),
-        lifetime: 4,
-        scale: 0.16,
-        mass: 1,
-      },
-    }),
-    // #endregion docs:emitters:1
-    // #region docs:modules:1
-    modules: new Collision({ bounce: 0.55, dampen: 0.1 }),
-    // #endregion docs:modules:1
-    // #region docs:renderers:1
-    renderers: [
-      new MeshRenderer({
-        geometry: new THREE.SphereGeometry(0.5, 12, 8),
-        materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
-      }),
-      new DecalRenderer(impactMaterials, {
-        atlasOptions: { minCapacity: 4 },
-        textureCopyQuality: 1,
-        // The final opacity blend masks all damage lighting once, preserving soft edges.
-        materialComposite: (source, dest) => ({
-          color: source.color,
-          opacity: `${source.opacity} * ${dest.opacity}`,
-          normal: source.normal,
-          roughness: `${source.roughness} * ${dest.roughness}`,
-          metalness: source.metalness,
-        }),
-        materialCompositeGPU: (source, dest) => ({
-          color: source.color,
-          opacity: source.opacity.mul(dest.opacity),
-          normal: source.normal,
-          roughness: source.roughness.mul(dest.roughness),
-          metalness: source.metalness,
-        }),
-        onSpawn: false,
-        impulseThreshold: 4,
-        rotation: [-Math.PI, Math.PI],
-        size: 0.55,
-        impulseAffectsSize: 0.3,
-        onCollision: (hit, source, parameters) => ({
-          size: parameters.size.clone().clampScalar(0.5, 1.4),
-        }),
-        depth: 0.06,
-        maxDistance: 0.5,
-        inheritScale: 0,
-        inheritColor: 0,
-        inheritAlpha: 0,
-        lifetime: 60,
-        maxDecals: 384,
-        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1),
-      }),
-    ],
-    // #endregion docs:renderers:1
+
+    emitters: systemEmitters,
+
+    modules: systemModules,
+
+    renderers: systemRenderers,
   });
+  // #endregion docs:system:assembly
   // #endregion docs:system:1
 
   // #region docs:system:2
+  // #region docs:emitters:2
+  const debrisEmitters = new Emitter({
+    source: EmissionShape.Sphere(0.02),
+    rate: 0,
+    bursts: [{ time: 0, count: [6, 10] }],
+    radialSpeed: [0.25, 1.5],
+    initialValues: {
+      lifetime: [2, 3],
+      mass: 1,
+      scale: 1,
+    },
+  });
+  // #endregion docs:emitters:2
+
+  // #region docs:modules:2
+  const debrisModules = [
+    new MaterialCopy({ source: MaterialCopySource.Collision, sampleMode: MaterialCopySampleMode.UVPatch }),
+    // Contact damping reduces sliding while allowing fragments to tumble and rebound.
+    new Collision({ bounce: 0.3, dampen: [0.2, 0.5], radiusScale: collisionDiameter }),
+    new RotationBySpeed({
+      speedRange: [0.25, 0.5],
+      angularVelocity: [new THREE.Vector3(), new THREE.Vector3(20, 40, 10)],
+    }),
+
+    new ColorOverLifetime({
+      alpha: new Curve({ 0: 1, 0.8: 1, 1: 0 }),
+    }),
+  ];
+  // #endregion docs:modules:2
+
+  // #region docs:renderers:2
+  // Neutral factors preserve the source appearance. Render each fragment only once.
+  const debrisRenderers = new MeshRenderer({
+    mesh: fragments,
+    atlasOptions: { minCapacity: 4 },
+    textureCopyQuality: 1,
+    maxParticles: 512,
+    materialOptions: { roughness: 1, metalness: 1 },
+  });
+  // #endregion docs:renderers:2
+
   const debris = new ParticleSystem({
     gpuProcessing: true,
     duration: 0.05,
     looping: false,
     maxParticles: 512,
     gravityModifier: 1,
-    // #region docs:emitters:2
-    emitters: new Emitter({
-      source: EmissionShape.Sphere(0.02),
-      rate: 0,
-      bursts: [{ time: 0, count: [6, 10] }],
-      radialSpeed: [0.25, 1.5],
-      initialValues: {
-        lifetime: [2, 3],
-        mass: 1,
-        scale: 1,
-      },
-    }),
-    // #endregion docs:emitters:2
-    // #region docs:modules:2
-    modules: [
-      new MaterialCopy({ source: MaterialCopySource.Collision, sampleMode: MaterialCopySampleMode.UVPatch }),
-      // Contact damping reduces sliding while allowing fragments to tumble and rebound.
-      new Collision({ bounce: 0.3, dampen: [0.2, 0.5], radiusScale: collisionDiameter }),
-      new RotationBySpeed({
-        speedRange: [0.25, 0.5],
-        angularVelocity: [new THREE.Vector3(), new THREE.Vector3(20, 40, 10)],
-      }),
-      new ColorOverLifetime({
-        alpha: t => (t < 0.8 ? 1 : Easing.cubic.out(1 - (t - 0.8) * 5)),
-      }),
-    ],
-    // #endregion docs:modules:2
-    // #region docs:renderers:2
-    // Neutral factors preserve the source appearance. Render each fragment only once.
-    renderers: new MeshRenderer({
-      mesh: fragments,
-      atlasOptions: { minCapacity: 4 },
-      textureCopyQuality: 1,
-      maxParticles: 512,
-      materialOptions: { roughness: 1, metalness: 1 },
-    }),
-    // #endregion docs:renderers:2
+
+    emitters: debrisEmitters,
+
+    modules: debrisModules,
+
+    renderers: debrisRenderers,
   });
   // #endregion docs:system:2
 
   // #region docs:system:3
+  // #region docs:system:connections
   system.addSubSystem(debris, {
     emitOnCollision: true,
     inheritScale: 0,
@@ -282,6 +305,7 @@ export default async function destructionPreset() {
     impulseAffectsAlignment: true,
     impulseThreshold: 0.5,
   });
+  // #endregion docs:system:connections
   // #endregion docs:system:3
 
   system.addEventListener('destroyed', () => {

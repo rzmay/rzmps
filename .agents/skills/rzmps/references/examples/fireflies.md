@@ -7,41 +7,82 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">fireflies</span> <span class="example-tag">gpu</span> <span class="example-tag">events</span> <span class="example-tag">spatial-grid</span> <span class="example-tag">spatial</span> <span class="example-tag">lights</span> <span class="example-tag">effects</span></div>
 
-Drifting fireflies respond to neighboring flashes with native events, attached glow pulses, and small lights.
+Fireflies should form small groups of responding flashes rather than one synchronized blinking field. Each insect
+charges toward a flash; nearby flashes can bring it closer to that threshold, and a rest period separates its pulses.
 
-<span class="example-author">Preset by <a href="https://github.com/rzmay" rel="author">rzmay</a></span>
 ![Example preview](https://rzmps.rzmay.com/docs/previews/fireflies.png)
 
-## Particle System Configuration
+## Give the insects room to form groups
 
-An initial burst of 64 fireflies drifts through a 24 × 6 × 16 box, with sprites sized at 0.22.
-Each accumulates charge, and nearby flashing neighbors accelerate
-its approach to a threshold. Crossing the threshold emits a custom flash event, resets charge, and starts a 1.4-second
-refractory period. This condition depends on the surrounding population rather than spawn, death, collision, or age
-alone. The larger, sparse volume and local radius allow separate flash clusters and isolated insects instead of one
-pulse immediately synchronizing the whole population.
-
-The event creates one 0.65-second glow particle. Its strength controls glow size; its source identity keeps the glow
-attached to the moving firefly through Source simulation space. GPU processing uses a slot and generation pair,
-rejecting a dead or reused source slot. Both systems remain owned and updated by the root.
+An initial burst fills a broad, shallow volume. Gentle noise and a speed limit keep them drifting instead of flying
+outward from a single point. The main sprite shows the insect even between flashes. Keep the volume spacious relative
+to the neighbor radius if you want some insects to flash alone and others to gather into loose clusters.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L23)
+[Source: system:settings](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L24)
 
 ```js
+import * as THREE from 'three';
+import { EmissionShape } from '@rzmps/rzmps';
+
   // Sparse neighbors allow local flash clusters without synchronizing the entire population.
   const radius = 2.25;
   const pulseDuration = 0.65;
   const cooldown = 1.4;
-  const spawnBounds = new THREE.Box3(
-    new THREE.Vector3(-12, -0.5, -8),
-    new THREE.Vector3(12, 5.5, 8),
-  );
+  const spawnBounds = new THREE.Box3(new THREE.Vector3(-12, -0.5, -8), new THREE.Vector3(12, 5.5, 8));
   // Spawn inside the central box, but allow substantial travel before recycling a firefly.
   const killBounds = spawnBounds.clone().expandByVector(new THREE.Vector3(10, 4, 8));
   const size = spawnBounds.getSize(new THREE.Vector3());
   const source = EmissionShape.Box(size.x, size.y, size.z);
   source.position.copy(spawnBounds.getCenter(new THREE.Vector3()));
+
+```
+
+
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L125)
+
+```js
+import { Emitter } from '@rzmps/rzmps';
+
+    emitters: new Emitter({
+      source,
+      rate: 8,
+      bursts: { time: 0, count: 64 },
+      initialValues: {
+        lifetime: [24, 32],
+        scale: 0.22,
+        mass: [0, 1], // Stagger the initial charge so the insects start out of phase.
+        color: '#b0b8a2',
+      },
+    }),
+```
+
+
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L149)
+
+```js
+import { SpriteRenderer } from '@rzmps/rzmps';
+import fireflyImage from 'examples/assets/images/firefly.png?url';
+
+    renderers: new SpriteRenderer(fireflyImage, {
+      materialOptions: { depthWrite: false },
+    }),
+```
+
+
+## Let a nearby flash influence the next one
+
+The custom flash module uses a charge value and a cooldown. Only sufficiently charged insects respond to neighbors,
+so a passing flash can advance a pulse without making every insect react instantly. This preset uses particle mass
+as its own charge accumulator because no physical force here needs mass. That is an example-specific choice, not a
+requirement for custom events. A separate glow population keeps the visible pulse independent of the insect's lifetime.
+
+
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L38)
+
+```js
+import { If, float, vec3, vec4 } from 'three/tsl';
+import { Module } from '@rzmps/rzmps';
 
   // Mass is an application-owned charge accumulator here: negative values are the refractory period.
   const flashing = charge => charge < -(cooldown - pulseDuration);
@@ -122,37 +163,24 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
       },
     },
   );
+```
 
-  const fireflies = new ParticleSystem({
-    duration: 120,
-    gravityModifier: 0,
-    maxParticles: 96,
-    emitters: new Emitter({
-      source,
-      rate: 8,
-      bursts: { time: 0, count: 64 },
-      initialValues: {
-        lifetime: [24, 32],
-        scale: 0.22,
-        mass: [0, 1], // Stagger the initial charge so the insects start out of phase.
-        color: '#b0b8a2',
-      },
-    }),
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(1.5, 0.55, 1.5),
-        frequency: 0.18,
-        scrollSpeed: 0.18,
-      }),
-      cullOutside,
-      new LimitVelocityOverLifetime({ limit: 1.3, drag: 0.55 }),
-      flash,
-    ],
-    renderers: new SpriteRenderer(fireflyImage, {
-      materialOptions: { depthWrite: false },
-    }),
-  });
-  fireflies.name = 'Fireflies';
+
+## Keep each glow attached and local
+
+Source simulation space attaches a glow to the insect that triggered it. `SourceLossBehavior.Kill` removes the glow
+if that insect disappears. A smooth periodic envelope shapes opacity and light brightness together. Small additive
+sprites and short-range yellow-green lights keep the pulse local. Use Checkerboard with lower scene light strength
+to see the glow on the floor. For event and attachment details, see [Sources and Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html).
+
+
+[Source: system:glow](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L157)
+
+```js
+import { SourceLossBehavior } from '@rzmps/rzmps';
+import { SimulationSpace } from '@rzmps/rzmps';
+import * as THREE from 'three';
+import { ColorOverLifetime, Emitter, EmissionShape, LightRenderer, ParticleSystem, ScaleOverLifetime, SpriteRenderer, Textures } from '@rzmps/rzmps';
 
   // Source space keeps each pulse attached without application-owned source maps or update callbacks.
   const pulse = t => Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5);
@@ -162,6 +190,7 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
     sourceLossBehavior: SourceLossBehavior.Kill,
     gravityModifier: 0,
     maxParticles: 128,
+
     emitters: new Emitter({
       source: EmissionShape.Box(0.01, 0.01, 0.01),
       radialSpeed: 0, // A pulse stays at its sampled source offset; it has no motion of its own.
@@ -173,10 +202,12 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
         alpha: 0.65,
       },
     }),
+
     modules: [
       new ColorOverLifetime({ alpha: pulse }),
       new ScaleOverLifetime({ scale: t => 0.7 + 0.3 * Math.sin(Math.PI * t) }),
     ],
+
     renderers: [
       new SpriteRenderer(Textures.Simple, {
         materialOptions: {
@@ -184,6 +215,7 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
           depthWrite: false,
         },
       }),
+
       new LightRenderer({
         count: 16,
         ratio: 0.25,
@@ -208,8 +240,7 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
     onEvent: {
       // CPU payloads are unknown to the library; the application narrows its own schema.
       flash: data => {
-        if (typeof data !== 'object' || data === null || !('strength' in data)
-          || typeof data.strength !== 'number') {
+        if (typeof data !== 'object' || data === null || !('strength' in data) || typeof data.strength !== 'number') {
           return;
         }
         return { scale: data.strength };
@@ -223,225 +254,3 @@ rejecting a dead or reused source slot. Both systems remain owned and updated by
 
 ```
 
-
-## Emitters
-
-A box volume distributes the insects across the scene, with randomized initial charge to stagger their first pulses.
-Eight new insects per second quickly replenish deaths, with the live population capped at 96. Insects live for
-24–32 seconds unless they leave the larger kill volume first. A single point-source burst emits each glow, so the event
-has a visible purpose without adding decorative sparks or a permanent trail. Its `radialSpeed` is explicitly zero:
-Source space carries independent particle motion with the source, so the emitter's default speed of 1 would make a
-pulse drift away from the insect.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L124)
-
-```js
-    emitters: new Emitter({
-      source,
-      rate: 8,
-      bursts: { time: 0, count: 64 },
-      initialValues: {
-        lifetime: [24, 32],
-        scale: 0.22,
-        mass: [0, 1], // Stagger the initial charge so the insects start out of phase.
-        color: '#b0b8a2',
-      },
-    }),
-```
-
-
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L163)
-
-```js
-    emitters: new Emitter({
-      source: EmissionShape.Box(0.01, 0.01, 0.01),
-      radialSpeed: 0, // A pulse stays at its sampled source offset; it has no motion of its own.
-      bursts: { time: 0, count: 1 },
-      initialValues: {
-        lifetime: pulseDuration,
-        scale: 0.38,
-        color: '#d9ff65',
-        alpha: 0.65,
-      },
-    }),
-```
-
-
-## Modules
-
-Low-frequency noise supplies smooth motion, with stronger forces and a 1.3-unit-per-second limit on each velocity axis.
-Drag damps the motion without steering insects back toward the box. A boundary module calls particle.kill() when an
-insect leaves a separate 44 × 14 × 32 kill volume. This adds margins of 10 units on X, 4 on Y, and 8 on Z around
-the spawn box, allowing substantial free flight before recycling. Both spatial query structures cover this larger
-volume. GPU grid auto-expansion is disabled;
-dead particles are excluded from its rebuild. The flash module queries a managed CPU octree or
-GPU spatial grid within radius 2.25, excluding the querying firefly. Only sufficiently charged insects respond to nearby
-flashes, and the cooldown prevents continuous retriggering.
-
-The example uses mass as an application-owned charge accumulator because no physical forces depend on mass here.
-Negative charge represents the refractory period; its first 0.65 seconds signal a visible flash to neighbors.
-The CPU event carries an object containing strength. The GPU event packs strength into the first component of one vec4;
-the GPU handler consumes strength. Source space handles source identity automatically, leaving the other payload
-components available to applications that need more metadata.
-
-The glow system uses `simulationSpace: 'source'` to keep its small sampled offset attached to the moving insect.
-`sourceLoss: 'kill'` removes a pulse when its insect dies. It needs no follow module, source maps, or scratch identity
-attributes. ColorOverLifetime supplies the smooth sine opacity pulse. No per-particle tag changes are needed because
-the glow population is separate from the insects.
-
-
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L38)
-
-```js
-  // Mass is an application-owned charge accumulator here: negative values are the refractory period.
-  const flashing = charge => charge < -(cooldown - pulseDuration);
-  const flash = new Module(
-    (particle, dt, { octree }) => {
-      let neighbors = 0;
-
-      // An insect must recharge before it can respond to another insect's flash.
-      if (particle.mass >= 0.35) {
-        for (const other of octree.particlesInRadius(particle.position, radius)) {
-          if (other !== particle && flashing(other.mass)) neighbors++;
-        }
-      }
-
-      const nearbyFlashes = Math.min(neighbors, 4);
-      const strength = 0.75 + nearbyFlashes * 0.15;
-      const chargeRate = particle.mass < 0 ? 1 : 0.18 + nearbyFlashes * 0.5;
-      particle.mass += dt * chargeRate;
-
-      // This threshold depends on neighbors, not just the particle's age or lifecycle.
-      if (particle.mass >= 1) {
-        particle.mass = -cooldown;
-        particle.emitEvent('flash', { strength });
-      }
-    },
-    {
-      useOctree: true,
-      octreeOptions: { bounds: killBounds },
-      spatialGridOptions: {
-        bounds: killBounds,
-        brickSubdivisions: 1,
-        cellSubdivisions: 3,
-        autoExpand: false,
-      },
-      modifyGPU(particle, dt, { spatialGrid: grid }) {
-        // The paired TSL implementation runs entirely on GPU particle storage.
-        const neighbors = float(0).toVar('flashingNeighbors');
-
-        If(particle.mass.greaterThanEqual(0.35), () => {
-          grid.forEachParticleInRadius(
-            particle.position,
-            float(radius),
-            other => {
-              If(other.mass.lessThan(-(cooldown - pulseDuration)), () => {
-                neighbors.addAssign(1);
-              });
-            },
-            { excludeIndex: particle.index },
-          );
-        });
-
-        const nearbyFlashes = neighbors.min(4);
-        const strength = nearbyFlashes.mul(0.15).add(0.75);
-        const chargeRate = particle.mass.lessThan(0).select(float(1), nearbyFlashes.mul(0.5).add(0.18));
-        particle.mass.addAssign(dt.mul(chargeRate));
-
-        If(particle.mass.greaterThanEqual(1), () => {
-          particle.mass.assign(-cooldown);
-          // Payload convention: X is glow strength; the remaining components are unused.
-          particle.emitEvent('flash', vec4(strength, 0, 0, 0));
-        });
-      },
-    },
-  );
-
-  // Fireflies drift freely until they leave the volume; killing avoids both boundary crowding and grid growth.
-  const cullOutside = new Module(
-    particle => {
-      if (!killBounds.containsPoint(particle.position)) particle.kill();
-    },
-    {
-      modifyGPU(particle) {
-        const below = particle.position.lessThan(vec3(killBounds.min)).any();
-        const above = particle.position.greaterThan(vec3(killBounds.max)).any();
-        If(below.or(above), () => {
-          particle.kill();
-        });
-      },
-    },
-  );
-```
-
-
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L176)
-
-```js
-    modules: [
-      new ColorOverLifetime({ alpha: pulse }),
-      new ScaleOverLifetime({ scale: t => 0.7 + 0.3 * Math.sin(Math.PI * t) }),
-    ],
-```
-
-
-## Renderers
-
-The supplied firefly PNG displays the insects. Soft additive sprites display pulses, while a LightRenderer attached
-only to the glow system selects a quarter of the pulses and supplies at most sixteen small yellow-green point lights.
-This also makes its bounded GPU sample cover the glow system's 128 slots, including sparse active slots. The small
-0.38-size glow sprites and 1.1-unit light range keep each pulse local. The brightness callback evaluates the same sine
-pulse envelope with peak intensity 0.52. It evaluates the curve explicitly because GPU light readback uses stored
-simulation state, while ColorOverLifetime applies opacity during the transient render phase.
-
-The particle factory adds no scene geometry. Select Checkerboard and lower **Scene Settings → Light Strength**
-to about 0.08 to see the insects and local light patches against a dim floor. This control scales the scene's ambient
-and point lights together, leaving particle lights independent. The default value of 1 preserves normal scene lighting.
-
-On WebGPU, insect simulation, neighbor queries, custom event consumption, and glow simulation remain native.
-The LightRenderer uses bounded selective particle readback to position Three.js lights; it does not read the custom
-event buffer. Disabling that renderer leaves the particle effect and event processing entirely on the GPU.
-
-
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L147)
-
-```js
-    renderers: new SpriteRenderer(fireflyImage, {
-      materialOptions: { depthWrite: false },
-    }),
-```
-
-
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireflies.js#L182)
-
-```js
-    renderers: [
-      new SpriteRenderer(Textures.Simple, {
-        materialOptions: {
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-        },
-      }),
-      new LightRenderer({
-        count: 16,
-        ratio: 0.25,
-        groupingRadiusRatio: 0,
-        // Light readback uses stored state; evaluate the same pulse curve explicitly for light intensity.
-        alphaAffectsIntensity: false,
-        brightness: t => 0.52 * Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5),
-        lightOptions: {
-          distance: 1.1,
-          intensity: 1,
-          decay: 2,
-        },
-      }),
-    ],
-```
-
-
-See [Sources and Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) for event payloads and readback semantics,
-[Particle Spatial Acceleration](https://rzmps.rzmay.com/docs/guides/particle-octree.html) for neighbor queries, and
-[Using Tags](https://rzmps.rzmay.com/docs/guides/tags.html) for optional GPU tag mutation helpers.
-
-See [Simulation frames](https://rzmps.rzmay.com/docs/guides/subsystems.html#simulation-frames) for attachment and source-loss behavior.

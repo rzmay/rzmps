@@ -9,63 +9,70 @@ example: dopplerBullet
 
 <ExampleTags />
 
-A piercing bullet leaves surface-blended bullet holes, with Doppler audio, smoke, faint trails and a distortion wake.
+This projectile should read as a fast flyby followed by a short wake, with separate evidence left at impacts. The
+flash, distortion, sound and surface damage each make a different part of that brief event perceptible.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Load the projectile, wake and impact assets
 
-The root loops over 5.5 seconds, caps at eight particles, and disables gravity for nearly straight flight. Five subsystems provide smoke wake, heat wake, muzzle flash, spawn shockwave, and impact dust. Their inheritance factors are zeroed so the small fast bullet does not force every secondary effect to copy its scale or velocity.
+Prepare the bullet template, looping flyby sound, launch sound and damage maps before constructing the layers.
+Separate resources let the projectile remain metallic while smoke, distortion and surface marks use their own
+appearance. The model and emission-shape helpers remain local to this factory's source file.
 
-<ExampleCode region="system" />
+<ExampleCode region="system:resources" />
 
-## Emitters
+## Establish a fast, straight flight
 
-The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 to -36. Its source cone is placed near z=34, giving it a long path across the scene. Smoke uses rateOverDistance 5, maintaining wake spacing as the bullet moves; flash and shockwave use time-zero bursts rather than continuous emission.
+The root disables gravity and sends a small metallic bullet across the scene. A low launch rate leaves space between
+shots. A faint trail shows its path without replacing the projectile's silhouette, while the Doppler sound makes
+approach and departure audible. The model, launch direction and scene placement belong to this preset; adapt those
+together when changing the firing position.
 
-<ExampleCode region="emitters" />
+<ExampleCode region="emitters:1" />
 
-## Modules
+## Mark the surfaces crossed by the projectile
 
-The root has no explicit module list; piercing marks use no Collision module and never change bullet velocity. Secondary smoke uses force, noise, growth, rotation, and a fade envelope. Heat and shockwave systems grow while distortion fades; flash color shifts from pale yellow to orange. These separate timing curves keep the initial flash brief while the slower wake remains visible.
+A segment sweep places bullet-hole decals along the traveled path. This preset is piercing: the marks do not stop or
+bounce the bullet. The damage material blends its albedo mask, normal and roughness into the surface so a hole reads
+as part of that material. A short trail and positional audio reinforce the flight between contacts. Use **UV debug**
+for visible receiving surfaces, and enable sound in the live demo to hear the flyby.
 
-<ExampleCode region="modules" />
+<ExampleCode region="renderers:7" />
+<ExampleCode region="renderers:1" />
 
-## Renderers
+## Leave a wake that can outlive the bullet
 
-The metallic mesh is paired with a faint 0.28-second trail of width 0.055 and opacity 0.22. AudioRenderer uses dopplerEffect 2.4, speed/depth volume response, and pitch variation to emphasize a fast flyby. The 5×4 flash atlas plays at 36 fps, while non-billboard, double-sided distortion sprites show the shockwave from either side.
+Smoke emission follows distance traveled so the path stays spaced along a fast trajectory. Its growth, noise and fade
+make it linger briefly instead of moving as a rigid extension of the mesh. A separate heat layer distorts the background
+without needing the smoke's color. Their inheritance settings keep a tiny bullet from forcing tiny secondary effects.
 
-A DecalRenderer uses the `DecalRenderer.Intersect()` direction sampler at `continuousRate: 60`
-and `hitSelection: DecalRenderer.All`
-to sweep each traveled segment and mark entry and exit faces. Its 0.55-unit bullet-hole decals
-last 24 seconds and fade during the final fifth, with a cap of 128 marks. Albedo alpha, normal
-and roughness maps combine with the hit surface through shared GLSL/TSL compositing. The albedo's alpha
-masks every damage channel together through transparent blending, rather than using fixed normal/roughness blend weights.
-The surface's own normal detail is layered onto the bullet-hole normal before lighting. Within the mark,
-roughness comes from the bullet-hole map; destruction impacts instead multiply their roughness map by the surface value.
-Both WebGL and WebGPU preserve the albedo alpha during compositing. Each hole copies its hit mesh's
-`receiveShadow` setting at creation and borrows the surface's environment map where applicable.
-Texture loading, the bullet-hole material, and both compositor callbacks are defined inline in the factory,
-so the source excerpts include the complete damage setup. Each hole uses an independently randomized projector roll. Surface UVs stay independent of the damage projector UVs.
-Each hole registers a source tagged `bullet-hole`, carrying the original surface material and impact
-UV in its metadata. Source birth triggers one burst of 5–8 smoke particles, with 0.4–0.65-second
-lifetimes, 0.28–0.44-unit starting sizes, and 30–45% initial opacity. The puff starts just outside the surface and moves outward;
-a short 0.025-unit soft-particle fade keeps it visible near the wall.
-A named spawn transformer derives the outward velocity from the decal source frame, instead of
-using a world-up initial velocity. `MaterialCopySource.Source` with `MaterialCopySampleMode.Color` samples
-that fixed impact UV, so each puff has a uniform surface color instead of a UV patch or the dark
-bullet-hole albedo or projectile tint. Its composition callback overrides only color, retaining the smoke's own mask
-and lighting. WebGL sprites apply Three.js tone mapping and output color conversion before display;
-otherwise linear cream surface colors look dark and bronze despite a correct material binding.
-Dust reuses the decal's original surface metadata instead of casting another ray; projection excludes
-particle-renderer geometry, including the bullet's instanced mesh.
-The source's +Y axis points outward, directing the puff away from the surface.
+<ExampleCode region="system:2" />
+<ExampleCode region="system:3" />
 
-The primary emitter tags bullets `projectile`. The flash, shockwave and continuous wake relationships
-select that tag, while dust selects `bullet-hole`. Registering a hole is a source spawn event; these
-filters keep that event from replaying the gunshot effects or leaving a wake on a stationary decal.
+## Separate the launch flash from impact dust
 
-Choose **UV debug** to see the holes on its wall and ramp. The preset itself adds no scene geometry.
+The flash and shockwave are spawn bursts: they should happen once at launch, not continuously along the wake. Impact
+dust instead selects the registered bullet-hole sources. Sampling the struck surface's color makes that puff look
+like wall material rather than projectile smoke. Source filters keep a new hole from replaying the muzzle effects.
+Change these timings independently when you want a brighter launch or a more lingering impact.
 
-<ExampleCode region="renderers" />
+<ExampleCode region="system:4" />
+<ExampleCode region="system:5" />
+<ExampleCode region="system:7" />
 
+See [Sources and Events](../guides/emission-sources-events.md) and
+[Material Copying](../guides/material-copying.md) for adapting the impact relationship.
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />
+
+Connect the secondary behavior to the root with the relationships below. The root owns child updates; their
+inheritance and event filters decide when each layer starts and which source it follows.
+
+<ExampleCode region="system:connections" />

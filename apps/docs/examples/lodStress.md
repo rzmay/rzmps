@@ -9,31 +9,41 @@ example: lodStress
 
 <ExampleTags />
 
-Unified population LOD with density compensation.
+This preset makes distance-based density changes easy to see in a busy particle field. Move the camera away and
+back while watching the shape and motion, then adjust the LOD settings to suit your own effect.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Establish the full-density appearance
 
-The system caps simulation at 50000 particles and loops over 10 seconds. Its single `lod` setting scales emission and permanently removes particles above the current birth-priority threshold as the camera moves away. Survivors run every simulation step. Moving closer replenishes the population through ordinary emission.
+A continuous source and multi-second lifetimes form a sustained field. Begin close to it so the unmodified density
+is clear. The system's `lod` settings reduce new emission and the surviving population as distance increases.
+Approaching again replenishes the field through ordinary emission; a particle that has been removed does not reappear.
 
-<ExampleCode region="system" />
-
-## Emitters
-
-Rate 1800 with lifetime 2.5–5 sustains roughly 6750 simulated particles at full quality. System LOD begins at distance 10, with quality 0.7 and up to five levels. Emitters allocate only the reduced population; each new particle receives an eligible LOD priority.
-
+<ExampleCode region="system:lod" />
 <ExampleCode region="emitters" />
 
-## Modules
+## Keep surviving particles moving smoothly
 
-Velocity, noise, scale, and alpha modules update every surviving particle each step. Noise strength 2.5 and frequency 2.2 exercise simulation work that population LOD can eliminate without motion stutter.
+Velocity and noise give the field enough motion that changes in density remain visible. Scale and opacity envelopes
+hide individual births and deaths. LOD changes how many particles exist rather than making survivors move in visible
+steps. Tune the visual envelope first, then the distances at which a thinner field still reads as the same effect.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Fill visual gaps at lower density
 
-The lit Circle renderer has artistic children disabled. `CompensationMode.Children` adds density copies only when system LOD reduces quality. Automatic local spacing estimates spread compensation copies; they inherit their immediate parent’s scale and opacity. All children remain outside simulation. Soft-particle distance 1 reduces intersections.
+`CompensationMode.Children` adds visual copies around survivors when system quality falls. Their spacing helps the
+field keep a continuous appearance; they inherit their parent's size and opacity. Artistic children are disabled so
+this example isolates compensation. Soft particles help the copies meet geometry without sharp intersections.
+See [Renderer Children and LOD](../guides/renderer-children-lod.md) for the settings and their visual tradeoffs.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

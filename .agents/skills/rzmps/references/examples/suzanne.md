@@ -7,67 +7,60 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">suzanne</span> <span class="example-tag">meshes</span> <span class="example-tag">surface</span> <span class="example-tag">emission</span> <span class="example-tag">emission-source</span> <span class="example-tag">sprites</span> <span class="example-tag">effects</span></div>
 
-Mesh-surface emission from a model with lit sprite rendering.
+The goal is to reveal a model's surface through particles. Suzanne supplies the emission shape; the particles
+leaving it are small cyan sprites, not copies of the whole model.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/suzanne.png)
 
-## Particle System Configuration
+## Load a surface to sample
 
-This continuously looping 10-second system emits from a loaded model. Geometry is cloned before transformation so the GLTF asset’s original mesh is not modified. The source applies rotateX(-90), which Three.js interprets in radians; this documents the current transform rather than assuming it means a quarter-turn.
+Load the GLTF and clone its geometry before orienting it. That keeps the imported asset intact and gives the emitter
+its own source geometry. Adapt the clone's transform to your model; Three.js geometry rotations use radians.
+The source is ready before the particle system is constructed.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L33)
+[Source: system:resources](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L18)
 
 ```js
-  const suzanne = new ParticleSystem({
-    duration: 10,
-    looping: true,
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: suzanneGeometry,
-          source: EmissionSource.Surface
-        }),
-        rate: 256,
-        radialSpeed: 1.1,
-        initialValues: {
-          lifetime: 2.2,
-          speed: 0,
-          scale: 0.1125,
-          color: '#70d6ff',
-          alpha: 0.85,
-          velocity: new THREE.Vector3(0, 0, 0),
-        },
-      }),
-    ],
-    modules: [
-      new ColorOverLifetime({
-        color: '#70d6ff',
-        alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
-      }),
-    ],
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-      }),
-    ],
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import suzanneModel from 'examples/assets/models/suzanne.glb?url';
+
+  const gltf = await new GLTFLoader().loadAsync(suzanneModel);
+
+  let suzanneGeometry = null;
+  gltf.scene.traverse(child => {
+    if (!suzanneGeometry && child.isMesh) {
+      suzanneGeometry = child.geometry.clone();
+      suzanneGeometry.rotateX(-90);
+    }
   });
+
+  if (!suzanneGeometry) {
+    throw new Error('suzanne.glb does not contain a mesh');
+  }
+
 ```
 
 
-## Emitters
+## Use a recognizable surface as the source
 
-EmissionSource.Surface samples Suzanne’s geometry at 256 particles per second. Lifetime 2.2 gives roughly 563 visible particles before culling, enough to outline the model. Initial speed and velocity are zero, while radial speed 1.1 supplies source-directed motion; small scale 0.1125 keeps the sampled shape legible.
+The factory loads the GLTF, clones its geometry and orients the clone for emission. Sampling `EmissionSource.Surface`
+places births on that geometry. Small particle sizes and a steady stream let the outline remain visible while radial
+speed carries particles away from it. Lower that speed to hold a shell around the model, or increase it to make the
+surface appear to dissolve outward.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L37)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L40)
 
 ```js
+import * as THREE from 'three';
+import { Emitter, EmissionShape, EmissionSource } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: new EmissionShape({
           geometry: suzanneGeometry,
-          source: EmissionSource.Surface
+          source: EmissionSource.Surface,
         }),
         rate: 256,
         radialSpeed: 1.1,
@@ -84,36 +77,46 @@ EmissionSource.Surface samples Suzanne’s geometry at 256 particles per second.
 ```
 
 
-## Modules
+## Preserve the outline before fading it
 
-The color module keeps the cyan tint and applies a cubic alpha fade. Late fading preserves a recognizable shell for most of each particle’s life, then reduces visible popping as particles expire. No additional noise or force module obscures the model-based emission pattern.
+The cyan color and cubic alpha fade keep a clear shell early in life, then soften its disappearance. No noise layer
+is added because the surface distribution is the feature being taught. Add motion only after the source shape is
+recognizable, otherwise it becomes difficult to tell whether a change comes from emission or later movement.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L57)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L61)
 
 ```js
+import * as THREE from 'three';
+import { ColorOverLifetime } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
+
     modules: [
       new ColorOverLifetime({
         color: '#70d6ff',
-        alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
+        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
     ],
 ```
 
 
-## Renderers
+## Draw samples rather than model copies
 
-Circle sprites with lit material render each sample without instancing the entire Suzanne mesh per particle. The model is only the emission source. This makes the surface sampling easy to see while avoiding a scene filled with hundreds of full model instances.
+Lit circular sprites give each sample a compact, soft-edged appearance. The model remains an emission resource.
+Compare [Suzanne Instances](https://rzmps.rzmay.com/docs/examples/suzanneInstances.html) if you want every particle to be a miniature model instead of a
+point sampled from its surface.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L65)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L70)
 
 ```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import { SpriteRenderer, Textures } from '@rzmps/rzmps';
+
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: SpriteMaterialType.Lit,
       }),
     ],
 ```
-
 

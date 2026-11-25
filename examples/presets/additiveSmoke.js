@@ -1,3 +1,5 @@
+import { Curve } from 'curves';
+import { Easing } from 'eaz';
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import {
@@ -16,74 +18,84 @@ import smokeAlpha from 'examples/assets/images/smoke_alpha.jpg?url';
 
 export default async function additiveSmokePreset() {
   // #region docs:system:1
+
+  // #region docs:emitters:1
+  const smokeEmitters = [
+    new Emitter({
+      source: new EmissionShape({
+        geometry: new THREE.ConeGeometry(0.75, 1.2, 24),
+      }),
+      rate: 36,
+      radialSpeed: 0.18,
+      initialValues: {
+        lifetime: 4.5,
+        speed: 0.55,
+        scale: 2.5,
+        color: ['#343230', '#79746e'],
+        alpha: 0.35,
+        velocity: new THREE.Vector3(0, 0.75, 0),
+      },
+    }),
+  ];
+  // #endregion docs:emitters:1
+
+  // #region docs:modules:1
+  const smokeModules = [
+    new TransformByNoise({
+      strength: new THREE.Vector3(0.65, 0.35, 0.65),
+      frequency: 0.8,
+    }),
+
+    new LimitVelocityOverLifetime({
+      limit: new THREE.Vector3(1.1, 1.35, 1.1),
+      drag: 0.1,
+      multiplyDragByVelocity: true,
+    }),
+
+    new ScaleOverLifetime({
+      scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
+    }),
+
+    new ColorOverLifetime({
+      color: '#ffffff',
+      alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
+    }),
+
+    new RotationOverLifetime({
+      angularVelocity: [-1, 1],
+    }),
+  ];
+  // #endregion docs:modules:1
+
+  // #region docs:renderers:1
+  const smokeRenderers = [
+    new SpriteRenderer(Textures.Default, {
+      material: SpriteMaterialType.Lit,
+      alphaMap: smokeAlpha,
+      softParticleDistance: 1,
+      materialOptions: {
+        roughness: 1,
+        normalLighting: 0.5,
+        sphericalNormals: 1,
+        blending: THREE.AdditiveBlending,
+      },
+    }),
+  ];
+  // #endregion docs:renderers:1
+
+  // #region docs:system:assembly
   const smoke = new ParticleSystem({
     duration: 10,
     looping: true,
     gravityModifier: -0.015,
-    // #region docs:emitters:1
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.ConeGeometry(0.75, 1.2, 24),
-        }),
-        rate: 36,
-        radialSpeed: 0.18,
-        initialValues: {
-          lifetime: 4.5,
-          speed: 0.55,
-          scale: 2.5,
-          color: ['#343230', '#79746e'],
-          alpha: 0.35,
-          velocity: new THREE.Vector3(0, 0.75, 0),
-        },
-      }),
-    ],
-    // #endregion docs:emitters:1
-    // #region docs:modules:1
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.35, 0.65),
-        frequency: 0.8,
-      }),
-      new LimitVelocityOverLifetime({
-        limit: new THREE.Vector3(1.1, 1.35, 1.1),
-        drag: 0.1,
-        multiplyDragByVelocity: true,
-      }),
-      new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time);
-          return size;
-        },
-      }),
-      new ColorOverLifetime({
-        color: '#ffffff',
-        alpha: (time) =>
-        ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-          ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-          : 0.85 * (1 - (((time) - 0.75) / 0.25))),
-      }),
-      new RotationOverLifetime({
-        angularVelocity: [-1, 1],
-      }),
-    ],
-    // #endregion docs:modules:1
-    // #region docs:renderers:1
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        material: SpriteMaterialType.Lit,
-        alphaMap: smokeAlpha,
-        softParticleDistance: 1,
-        materialOptions: {
-          roughness: 1,
-          normalLighting: 0.5,
-          sphericalNormals: 1,
-          blending: THREE.AdditiveBlending,
-        }
-      }),
-    ],
-    // #endregion docs:renderers:1
+
+    emitters: smokeEmitters,
+
+    modules: smokeModules,
+
+    renderers: smokeRenderers,
   });
+  // #endregion docs:system:assembly
   // #endregion docs:system:1
 
   smoke.name = 'Smoke';
@@ -95,9 +107,9 @@ export default async function additiveSmokePreset() {
 /** @type {import("../types").ExampleMetadata} */
 additiveSmokePreset.metadata = {
   author: 'rzmay',
-  'id': 'additiveSmoke',
-  'title': 'Additive Smoke',
-  'description': 'Additive blending with soft particles and layered lifetime color ramps for luminous smoke.',
+  id: 'additiveSmoke',
+  title: 'Additive Smoke',
+  description: 'Additive blending with soft particles and layered lifetime color ramps for luminous smoke.',
   tags: ['additiveSmoke', 'additive-blending', 'additive', 'blending', 'smoke', 'sprites', 'noise'],
   previewSettings: {
     duration: 10,

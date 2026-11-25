@@ -1,8 +1,8 @@
 # Contributing to 🧅 RZMPS
 
-The canonical contributor guide is [apps/docs/contributing.md](apps/docs/contributing.md).
-It covers shared examples, source regions, authored explanations, TSDoc, generated agent
-references, checks, and WebGL/WebGPU preview commands.
+Documentation workflow lives in [apps/docs/README.md](apps/docs/README.md).
+Read [Writing Example Guides](apps/docs/README.md#writing-example-guides) for intent-led explanations, readable curves,
+source regions and example code style. This root guide owns repository-wide contribution and API conventions.
 
 Start with `npm install`, `npm run build`, and `npm test`.
 Run `npm run generate --workspace @rzmps/docs` after documentation or example changes and `npm run scripts check:docs`

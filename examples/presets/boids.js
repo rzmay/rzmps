@@ -3,12 +3,15 @@ import { Boids, Emitter, EmissionShape, MeshRenderer, OrientToDirection, Particl
 import boidAffectorsScene from 'examples/scenes/boidAffectors.js';
 
 export default async function boidsPreset() {
+  // #region docs:system:resources
   const flockColors = new Set(['#7ce7ff', '#c7fff3', '#95ff7c']);
 
   const hazardColors = new Set(['#ff4c5f', '#ff9a4c']);
 
   const flockSource = EmissionShape.Sphere(12, 32, 16);
   const hazardSource = EmissionShape.Torus(7.5, 0.45, 16, 48);
+
+  // #endregion docs:system:resources
 
   // #region docs:modules:setup
   const boids = new Boids({
@@ -53,6 +56,79 @@ export default async function boidsPreset() {
   // #endregion docs:modules:setup
 
   // #region docs:system:1
+  // #region docs:emitters:1
+  const systemEmitters = [
+    new Emitter({
+      source: flockSource,
+      rate: 38,
+      radialSpeed: 0.9,
+      tags: 'boid',
+      initialValues: {
+        lifetime: [9, 16],
+        speed: [3.2, 4.8],
+        color: flockColors,
+        scale: [0.34, 0.48],
+        alpha: 0.88,
+      },
+    }),
+
+    new Emitter({
+      source: hazardSource,
+      rate: 2,
+      radialSpeed: 0.72,
+      tags: 'hazard',
+      initialValues: {
+        lifetime: [14, 22],
+        speed: [2.6, 3.7],
+        color: hazardColors,
+        scale: [0.65, 1.05],
+        alpha: 0.95,
+      },
+    }),
+  ];
+  // #endregion docs:emitters:1
+
+  // #region docs:modules:1
+  const systemModules = [
+    boids,
+    hazardBoids,
+    new OrientToDirection({
+      axis: new THREE.Vector3(0, 1, 0),
+    }),
+  ];
+  // #endregion docs:modules:1
+
+  // #region docs:renderers:1
+  const systemRenderers = [
+    new MeshRenderer({
+      tags: 'boid',
+      mesh: new THREE.Mesh(
+        new THREE.ConeGeometry(0.32, 0.9, 12, 1),
+        new THREE.MeshStandardMaterial({
+          roughness: 0.52,
+          metalness: 0.05,
+          emissive: new THREE.Color('#071018'),
+          emissiveIntensity: 0.18,
+        }),
+      ),
+    }),
+
+    new MeshRenderer({
+      tags: 'hazard',
+      mesh: new THREE.Mesh(
+        new THREE.ConeGeometry(0.38, 1.05, 14, 1),
+        new THREE.MeshStandardMaterial({
+          roughness: 0.35,
+          metalness: 0.05,
+          emissive: new THREE.Color('#601018'),
+          emissiveIntensity: 0.55,
+        }),
+      ),
+    }),
+  ];
+  // #endregion docs:renderers:1
+
+  // #region docs:system:assembly
   const system = new ParticleSystem({
     duration: 24,
     looping: true,
@@ -60,76 +136,13 @@ export default async function boidsPreset() {
     gravityModifier: 0,
     maxParticles: 700,
 
-    // #region docs:emitters:1
-    emitters: [
-      new Emitter({
-        source: flockSource,
-        rate: 38,
-        radialSpeed: 0.9,
-        tags: 'boid',
-        initialValues: {
-          lifetime: [9, 16],
-          speed: [3.2, 4.8],
-          color: flockColors,
-          scale: [0.34, 0.48],
-          alpha: 0.88,
-        },
-      }),
-      new Emitter({
-        source: hazardSource,
-        rate: 2,
-        radialSpeed: 0.72,
-        tags: 'hazard',
-        initialValues: {
-          lifetime: [14, 22],
-          speed: [2.6, 3.7],
-          color: hazardColors,
-          scale: [0.65, 1.05],
-          alpha: 0.95,
-        },
-      }),
-    ],
-    // #endregion docs:emitters:1
+    emitters: systemEmitters,
 
-    // #region docs:modules:1
-    modules: [
-      boids,
-      hazardBoids,
-      new OrientToDirection({
-        axis: new THREE.Vector3(0, 1, 0),
-      }),
-    ],
-    // #endregion docs:modules:1
+    modules: systemModules,
 
-    // #region docs:renderers:1
-    renderers: [
-      new MeshRenderer({
-        tags: 'boid',
-        mesh: new THREE.Mesh(
-          new THREE.ConeGeometry(0.32, 0.9, 12, 1),
-          new THREE.MeshStandardMaterial({
-            roughness: 0.52,
-            metalness: 0.05,
-            emissive: new THREE.Color('#071018'),
-            emissiveIntensity: 0.18,
-          }),
-        ),
-      }),
-      new MeshRenderer({
-        tags: 'hazard',
-        mesh: new THREE.Mesh(
-          new THREE.ConeGeometry(0.38, 1.05, 14, 1),
-          new THREE.MeshStandardMaterial({
-            roughness: 0.35,
-            metalness: 0.05,
-            emissive: new THREE.Color('#601018'),
-            emissiveIntensity: 0.55,
-          }),
-        ),
-      }),
-    ],
-    // #endregion docs:renderers:1
+    renderers: systemRenderers,
   });
+  // #endregion docs:system:assembly
   // #endregion docs:system:1
 
   system.name = 'Boids';

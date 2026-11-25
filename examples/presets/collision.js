@@ -5,50 +5,60 @@ import { Collision, Emitter, EmissionShape, ParticleSystem, SpriteRenderer, Text
 
 export default async function collisionPreset() {
   // #region docs:system:1
+  // #region docs:emitters:1
+  const collisionEmitters = [
+    new Emitter({
+      source: new EmissionShape({
+        geometry: new THREE.SphereGeometry(0.25, 16, 12),
+      }),
+      rate: 30,
+      radialSpeed: [1, 5],
+      initialValues: {
+        lifetime: 8,
+        scale: 0.125,
+        mass: 1,
+        color: ['#ff6633', '#ffd166'],
+      },
+    }),
+  ];
+  // #endregion docs:emitters:1
+
+  // #region docs:modules:1
+  const collisionModules = [
+    new Collision({
+      bounce: 0.75,
+      dampen: 0.05,
+      radiusScale: 1,
+    }),
+  ];
+  // #endregion docs:modules:1
+
+  // #region docs:renderers:1
+  const collisionRenderers = [
+    new SpriteRenderer(Textures.Circle, {
+      material: SpriteMaterialType.Lit,
+      materialOptions: {
+        roughness: 0.5,
+        sphericalNormals: 1,
+        normalLighting: 1,
+      },
+    }),
+  ];
+  // #endregion docs:renderers:1
+
+  // #region docs:system:assembly
   const collision = new ParticleSystem({
     duration: 5,
     looping: true,
     gravityModifier: 1,
-    // #region docs:emitters:1
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.SphereGeometry(0.25, 16, 12),
-        }),
-        rate: 30,
-        radialSpeed: [1, 5],
-        initialValues: {
-          lifetime: 8,
-          scale: 0.125,
-          mass: 1,
-          color: ['#ff6633', '#ffd166'],
-        },
-      }),
-    ],
-    // #endregion docs:emitters:1
-    // #region docs:modules:1
-    modules: [
-      new Collision({
-        bounce: 0.75,
-        dampen: 0.05,
-        radiusScale: 1,
-      }),
-    ],
-    // #endregion docs:modules:1
-    // #region docs:renderers:1
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
 
-        materialOptions: {
-          roughness: 0.5,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-      }),
-    ],
-    // #endregion docs:renderers:1
+    emitters: collisionEmitters,
+
+    modules: collisionModules,
+
+    renderers: collisionRenderers,
   });
+  // #endregion docs:system:assembly
   // #endregion docs:system:1
 
   collision.name = 'Collision';

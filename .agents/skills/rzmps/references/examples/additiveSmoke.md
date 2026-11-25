@@ -7,91 +7,25 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">additiveSmoke</span> <span class="example-tag">additive-blending</span> <span class="example-tag">additive</span> <span class="example-tag">blending</span> <span class="example-tag">smoke</span> <span class="example-tag">sprites</span> <span class="example-tag">noise</span></div>
 
-Additive blending with soft particles and layered lifetime color ramps for luminous smoke.
+This plume should feel luminous, as if light is scattered through a cloud. Its motion resembles the ordinary
+[Smoke](https://rzmps.rzmay.com/docs/examples/smoke.html) preset, but additive blending makes overlapping wisps contribute light instead of building a dark mass.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/additiveSmoke.png)
 
-## Particle System Configuration
+## Build a plume before adding glow
 
-A 10-second loop and 4.5-second particle lifetime maintain a slow plume. Gravity modifier -0.015 adds gentle upward acceleration. The simulation matches the ordinary smoke structure, making the blending change easy to compare using the same camera and warmup.
-
-
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/additiveSmoke.js#L19)
-
-```js
-  const smoke = new ParticleSystem({
-    duration: 10,
-    looping: true,
-    gravityModifier: -0.015,
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.ConeGeometry(0.75, 1.2, 24),
-        }),
-        rate: 36,
-        radialSpeed: 0.18,
-        initialValues: {
-          lifetime: 4.5,
-          speed: 0.55,
-          scale: 2.5,
-          color: ['#343230', '#79746e'],
-          alpha: 0.35,
-          velocity: new THREE.Vector3(0, 0.75, 0),
-        },
-      }),
-    ],
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.35, 0.65),
-        frequency: 0.8,
-      }),
-      new LimitVelocityOverLifetime({
-        limit: new THREE.Vector3(1.1, 1.35, 1.1),
-        drag: 0.1,
-        multiplyDragByVelocity: true,
-      }),
-      new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time);
-          return size;
-        },
-      }),
-      new ColorOverLifetime({
-        color: '#ffffff',
-        alpha: (time) =>
-        ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-          ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-          : 0.85 * (1 - (((time) - 0.75) / 0.25))),
-      }),
-      new RotationOverLifetime({
-        angularVelocity: [-1, 1],
-      }),
-    ],
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        material: SpriteMaterialType.Lit,
-        alphaMap: smokeAlpha,
-        softParticleDistance: 1,
-        materialOptions: {
-          roughness: 1,
-          normalLighting: 0.5,
-          sphericalNormals: 1,
-          blending: THREE.AdditiveBlending,
-        }
-      }),
-    ],
-  });
-```
+A broad cone, slow upward velocity and a small buoyancy term establish a recognizable smoke column. Long-lived,
+overlapping sprites fill the gaps between births. The darker starting colors and lower alpha are deliberate: additive
+overlap can wash out the shape if each particle starts too bright. Increase brightness in small steps after the plume
+has enough overlapping layers.
 
 
-## Emitters
-
-The cone source emits 36 particles per second, giving roughly 162 live particles before culling. Scale 2.5 creates overlapping patches, but initial alpha 0.35 and the darker color range reduce the brightness contributed by each patch. Upward velocity 0.75 and radial speed 0.18 hold the plume together near the base.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/additiveSmoke.js#L24)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/additiveSmoke.js#L28)
 
 ```js
+import * as THREE from 'three';
+import { Emitter, EmissionShape } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: new EmissionShape({
@@ -112,37 +46,43 @@ The cone source emits 36 particles per second, giving roughly 162 live particles
 ```
 
 
-## Modules
+## Break up the column and fade its edges
 
-Low-frequency noise (0.8) moves the smoke in broad curls, with less vertical than horizontal strength. Velocity limits and drag contain the flow. Growing scale from 0.35 to 1.8 widens older particles, while the fade envelope and varied angular velocities prevent visible rectangular births and repeated texture alignment.
+Noise creates sideways curls while drag keeps motion contained. The lifetime scale ramp makes older wisps spread,
+and the opacity envelope avoids hard appearances and disappearances. Random angular velocity rotates the mask so
+neighboring particles do not reveal the same silhouette. Keep these changes slow enough that the smoke still feels
+like a drifting cloud rather than flickering sparks.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/additiveSmoke.js#L43)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/additiveSmoke.js#L48)
 
 ```js
+import { Curve } from 'curves';
+import { Easing } from 'eaz';
+import * as THREE from 'three';
+import { ColorOverLifetime, LimitVelocityOverLifetime, RotationOverLifetime, ScaleOverLifetime, TransformByNoise } from '@rzmps/rzmps';
+
     modules: [
       new TransformByNoise({
         strength: new THREE.Vector3(0.65, 0.35, 0.65),
         frequency: 0.8,
       }),
+
       new LimitVelocityOverLifetime({
         limit: new THREE.Vector3(1.1, 1.35, 1.1),
         drag: 0.1,
         multiplyDragByVelocity: true,
       }),
+
       new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time);
-          return size;
-        },
+        scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
       }),
+
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) =>
-        ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-          ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-          : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
       }),
+
       new RotationOverLifetime({
         angularVelocity: [-1, 1],
       }),
@@ -150,14 +90,21 @@ Low-frequency noise (0.8) moves the smoke in broad curls, with less vertical tha
 ```
 
 
-## Renderers
+## Make overlap read as light
 
-The lit smoke sprites use AdditiveBlending, so overlapping particles brighten the scene rather than darkening it like opaque soot. The low starting alpha counterbalances that accumulation. Roughness 1 and spherical normals retain lighting cues, while soft-particle distance 1 blends contacts with scene geometry.
+The renderer uses additive blending with a smoke alpha mask. Overlapping regions brighten, so they suggest a luminous
+core. Rough, softly lit billboards still respond to the scene, and soft-particle fading helps them meet nearby geometry.
+Use ordinary smoke blending instead when the intended result is dense soot that should darken what is behind it.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/additiveSmoke.js#L72)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/additiveSmoke.js#L76)
 
 ```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import * as THREE from 'three';
+import { SpriteRenderer, Textures } from '@rzmps/rzmps';
+import smokeAlpha from 'examples/assets/images/smoke_alpha.jpg?url';
+
     renderers: [
       new SpriteRenderer(Textures.Default, {
         material: SpriteMaterialType.Lit,
@@ -168,9 +115,8 @@ The lit smoke sprites use AdditiveBlending, so overlapping particles brighten th
           normalLighting: 0.5,
           sphericalNormals: 1,
           blending: THREE.AdditiveBlending,
-        }
+        },
       }),
     ],
 ```
-
 

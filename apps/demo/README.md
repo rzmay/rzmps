@@ -288,7 +288,7 @@ registry directly as `examples/index.js`, preserving GUI metadata and code gener
 Scene presets live in `examples/scenes` and are imported as `examples/scenes/index.js`.
 Assets live in `examples/assets/`, alongside shared helpers in `examples/utils/`.
 
-See [contributing](../../apps/docs/contributing.md) for adding metadata and source regions,
+See [contributing](../../apps/docs/README.md#writing-example-guides) for adding metadata and source regions,
 authoring explanations, and generating documentation. From the repository root, build packages
 then run `npm run preview -- --example fire --backend webgl` (or `webgpu`). Preview output
 contains canvas PNGs, a contact sheet, and diagnostic metadata. `--scene` selects a demo scene.

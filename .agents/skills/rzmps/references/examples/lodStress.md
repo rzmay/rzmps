@@ -7,26 +7,35 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">lodStress</span> <span class="example-tag">lod</span> <span class="example-tag">performance</span> <span class="example-tag">sprites</span> <span class="example-tag">effects</span></div>
 
-Unified population LOD with density compensation.
+This preset makes distance-based density changes easy to see in a busy particle field. Move the camera away and
+back while watching the shape and motion, then adjust the LOD settings to suit your own effect.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/lodStress.png)
 
-## Particle System Configuration
+## Establish the full-density appearance
 
-The system caps simulation at 50000 particles and loops over 10 seconds. Its single `lod` setting scales emission and permanently removes particles above the current birth-priority threshold as the camera moves away. Survivors run every simulation step. Moving closer replenishes the population through ordinary emission.
+A continuous source and multi-second lifetimes form a sustained field. Begin close to it so the unmodified density
+is clear. The system's `lod` settings reduce new emission and the surviving population as distance increases.
+Approaching again replenishes the field through ordinary emission; a particle that has been removed does not reappear.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L27)
+[Source: system:lod](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L19)
 
 ```js
-  const system = new ParticleSystem({
-    duration: 10,
-    looping: true,
-    maxParticles: 50000,
-    simulationSpeed: 1,
-    lod,
-    gravity: new THREE.Vector3(0, 0, 0),
-    gravityModifier: 0,
+const lod = {
+  distance: 10,
+  quality: 0.7,
+  falloff: 1,
+  maxLevel: 5,
+  continuous: true,
+};
+```
+
+
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L41)
+
+```js
+import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
     emitters: [
       new Emitter({
@@ -37,36 +46,63 @@ The system caps simulation at 50000 particles and loops over 10 seconds. Its sin
           lifetime: [2.5, 5],
           speed: [0.6, 1.8],
           scale: 0.08,
-          color: new Set([
-            '#57d6ff',
-            '#fff176',
-            '#ff6fb1',
-            '#8aff8a',
-          ]),
+          color: new Set(['#57d6ff', '#fff176', '#ff6fb1', '#8aff8a']),
           alpha: 0.85,
         },
       }),
     ],
+```
+
+
+## Keep surviving particles moving smoothly
+
+Velocity and noise give the field enough motion that changes in density remain visible. Scale and opacity envelopes
+hide individual births and deaths. LOD changes how many particles exist rather than making survivors move in visible
+steps. Tune the visual envelope first, then the distances at which a thinner field still reads as the same effect.
+
+
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L58)
+
+```js
+import { Curve } from 'curves';
+import * as THREE from 'three';
+import { ColorOverLifetime, ScaleOverLifetime, TransformByNoise, VelocityOverLifetime } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
 
     modules: [
       new VelocityOverLifetime({
         linear: new THREE.Vector3(0, 0.35, 0),
       }),
+
       new TransformByNoise({
         strength: 2.5,
         frequency: 2.2,
       }),
+
       new ScaleOverLifetime({
-        scale: (time) => {
-          if (time < 0.2) return time / 0.2;
-          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
-          return 0.85 * (1 - ((time - 0.75) / 0.25));
-        },
+        scale: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
       }),
+
       new ColorOverLifetime({
-        alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
+        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
     ],
+```
+
+
+## Fill visual gaps at lower density
+
+`CompensationMode.Children` adds visual copies around survivors when system quality falls. Their spacing helps the
+field keep a continuous appearance; they inherit their parent's size and opacity. Artistic children are disabled so
+this example isolates compensation. Soft particles help the copies meet geometry without sharp intersections.
+See [Renderer Children and LOD](https://rzmps.rzmay.com/docs/guides/renderer-children-lod.html) for the settings and their visual tradeoffs.
+
+
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L79)
+
+```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import { CompensationMode, SpriteRenderer, Textures } from '@rzmps/rzmps';
 
     renderers: [
       new SpriteRenderer(Textures.Circle, {
@@ -75,85 +111,5 @@ The system caps simulation at 50000 particles and loops over 10 seconds. Its sin
         compensation: CompensationMode.Children,
       }),
     ],
-  });
 ```
-
-
-## Emitters
-
-Rate 1800 with lifetime 2.5–5 sustains roughly 6750 simulated particles at full quality. System LOD begins at distance 10, with quality 0.7 and up to five levels. Emitters allocate only the reduced population; each new particle receives an eligible LOD priority.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L37)
-
-```js
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.7, 24, 12),
-        rate: 1800,
-        radialSpeed: 1.8,
-        initialValues: {
-          lifetime: [2.5, 5],
-          speed: [0.6, 1.8],
-          scale: 0.08,
-          color: new Set([
-            '#57d6ff',
-            '#fff176',
-            '#ff6fb1',
-            '#8aff8a',
-          ]),
-          alpha: 0.85,
-        },
-      }),
-    ],
-```
-
-
-## Modules
-
-Velocity, noise, scale, and alpha modules update every surviving particle each step. Noise strength 2.5 and frequency 2.2 exercise simulation work that population LOD can eliminate without motion stutter.
-
-
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L59)
-
-```js
-    modules: [
-      new VelocityOverLifetime({
-        linear: new THREE.Vector3(0, 0.35, 0),
-      }),
-      new TransformByNoise({
-        strength: 2.5,
-        frequency: 2.2,
-      }),
-      new ScaleOverLifetime({
-        scale: (time) => {
-          if (time < 0.2) return time / 0.2;
-          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
-          return 0.85 * (1 - ((time - 0.75) / 0.25));
-        },
-      }),
-      new ColorOverLifetime({
-        alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
-      }),
-    ],
-```
-
-
-## Renderers
-
-The lit Circle renderer has artistic children disabled. `CompensationMode.Children` adds density copies only when system LOD reduces quality. Automatic local spacing estimates spread compensation copies; they inherit their immediate parent’s scale and opacity. All children remain outside simulation. Soft-particle distance 1 reduces intersections.
-
-
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L81)
-
-```js
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        softParticleDistance: 1,
-        compensation: CompensationMode.Children,
-      }),
-    ],
-```
-
 

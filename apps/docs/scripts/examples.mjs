@@ -4,12 +4,7 @@ import { previewDefaults } from './preview-settings.mjs';
 import path from 'node:path';
 import ts from 'typescript';
 export const root = path.resolve(import.meta.dirname, '../../..');
-export const sections = [
-  ['system', 'Particle System Configuration'],
-  ['emitters', 'Emitters'],
-  ['modules', 'Modules'],
-  ['renderers', 'Renderers'],
-];
+const sourceCategories = ['system', 'emitters', 'modules', 'renderers'];
 
 /** Parse balanced regions, including nesting and repeated names, without changing source formatting. */
 export function extractRegions(source, file = '<source>') {
@@ -170,20 +165,84 @@ export function discoverExamples() {
       seen.add(metadata.id);
       titles.add(metadata.title);
       const regions = extractRegions(source, file);
-      for (const [key] of sections)
+      for (const key of sourceCategories)
         if (![...regions.keys()].some(n => n === key || n.startsWith(key + ':')))
           throw new Error(`${file}: missing docs:${key} region`);
       return { ...metadata, author, file, regions };
     });
 }
+/** Show only the imports used by an excerpt, preserving the preset's actual module paths and aliases. */
+function excerptImports(declarations, code) {
+  const identifiers = new Set();
+  const existingImports = new Set();
+  const ast = ts.createSourceFile('excerpt.js', code, ts.ScriptTarget.Latest, true);
+  function visit(node) {
+    if (ts.isImportDeclaration(node)) {
+      const clause = node.importClause;
+      if (clause?.name) existingImports.add(clause.name.text);
+      const bindings = clause?.namedBindings;
+      if (bindings && ts.isNamespaceImport(bindings)) existingImports.add(bindings.name.text);
+      if (bindings && ts.isNamedImports(bindings))
+        bindings.elements.forEach(binding => existingImports.add(binding.name.text));
+      return;
+    }
+    if (ts.isIdentifier(node)) identifiers.add(node.text);
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  const used = name => identifiers.has(name) && !existingImports.has(name);
+  return declarations
+    .flatMap(declaration => {
+      const clause = declaration.importClause;
+      if (!clause) return [];
+      const parts = [];
+      if (clause.name && used(clause.name.text)) parts.push(clause.name.text);
+      const bindings = clause.namedBindings;
+      if (bindings && ts.isNamespaceImport(bindings) && used(bindings.name.text))
+        parts.push(`* as ${bindings.name.text}`);
+      if (bindings && ts.isNamedImports(bindings)) {
+        const selected = bindings.elements.filter(binding => used(binding.name.text));
+        if (selected.length) parts.push(`{ ${selected.map(binding => binding.getText()).join(', ')} }`);
+      }
+      return parts.length ? [`import ${parts.join(', ')} from ${declaration.moduleSpecifier.getText()};`] : [];
+    })
+    .join('\n');
+}
+
+function standaloneSnippet(code, file, region) {
+  const lines = code.split('\n');
+  const indentation = Math.min(...lines.filter(line => line.trim()).map(line => line.match(/^\s*/)[0].length));
+  const snippet = lines
+    .map(line => line.slice(indentation))
+    .join('\n')
+    .trim();
+  const ast = ts.createSourceFile('excerpt.js', snippet, ts.ScriptTarget.Latest, true);
+  const invalidStatement = ast.statements.some(
+    statement => ts.isLabeledStatement(statement) || ts.isReturnStatement(statement),
+  );
+  if (ast.parseDiagnostics.length || invalidStatement) {
+    throw new Error(
+      `${file}: docs:${region} must contain complete JavaScript statements, not object members or return fragments`,
+    );
+  }
+  return snippet;
+}
+
 export function resolveCode(markdown, example) {
+  const file = example.file && path.join(root, 'examples', example.file);
+  const source = example.source ?? (file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '');
+  const declarations = ts
+    .createSourceFile('preset.js', source, ts.ScriptTarget.Latest, true)
+    .statements.filter(ts.isImportDeclaration);
   return markdown.replace(/<ExampleCode region="([\w:-]+)"\s*\/>/g, (_, key) => {
     const matches = [...example.regions].filter(([name]) => name === key || name.startsWith(key + ':'));
     if (!matches.length) throw new Error(`${example.id}: missing source region ${key}`);
     return matches
       .flatMap(([name, entries]) =>
-        entries.map(
-          ({ code, line }) =>
+        entries.map(({ code, line }) => {
+          const snippet = standaloneSnippet(code, example.file ?? example.id, name);
+          const imports = excerptImports(declarations, snippet);
+          return (
             '\n[Source: ' +
             `${name}` +
             '](https://github.com/rzmay/rzmps/blob/develop/examples/' +
@@ -191,9 +250,10 @@ export function resolveCode(markdown, example) {
             '#L' +
             `${line}` +
             ')\n\n```js\n' +
-            `${code}` +
-            '\n```\n',
-        ),
+            `${imports ? imports + '\n\n' : ''}${snippet}` +
+            '\n```\n'
+          );
+        }),
       )
       .join('\n');
   });
@@ -207,14 +267,19 @@ export function guideTemplate(example) {
     `\n---\n\n[View live example](${demoUrl}example/${example.id})\n\n` +
     `# ${example.title} <ExampleAttribution />\n\n<ExampleTags />\n\n` +
     `${example.description}\n\n<ExamplePreview />\n\n` +
-    sections
+    [
+      ['system', 'Shape the effect'],
+      ['emitters', 'Choose where particles begin'],
+      ['modules', 'Make motion support the idea'],
+      ['renderers', 'Give the particles their appearance'],
+    ]
       .map(
         ([key, title]) =>
           '## ' +
           `${title}` +
           '\n\n<!-- TODO: Explain the ' +
           `${key}` +
-          ', its purpose, and why the important configuration values suit this effect. ' +
+          ' choices through the visual or audible intention they serve. Rename or regroup these sections as needed. ' +
           '-->\n\n<ExampleCode region="' +
           `${key}` +
           '" />\n',
@@ -236,21 +301,16 @@ export function validateGuide(markdown, example, strict = true) {
   }
   if (liveUrl.pathname !== `/example/${example.id}` || liveUrl.search || liveUrl.hash)
     throw new Error(`${example.id}: stale live example route; expected /example/${example.id}`);
-  let last = -1;
-  for (const [key, title] of sections) {
-    const index = markdown.indexOf(`## ${title}\n`);
-    if (index <= last) throw new Error(`${example.id}: missing/out-of-order ${title}`);
-    const end = markdown.indexOf('\n## ', index + 1);
-    const body = markdown.slice(index, end < 0 ? undefined : end);
-    if (!body.includes(`<ExampleCode region="${key}`))
-      throw new Error(`${example.id}: ${title} needs a source reference`);
+  if (!/<ExampleCode region="[\w:-]+"\s*\/>/.test(markdown))
+    throw new Error(`${example.id}: guide needs a source reference`);
+  // Source categories do not prescribe article headings or their order.
+  for (const body of markdown.split(/^#{1,6} .+$/m)) {
+    if (!/<ExampleCode\b/.test(body)) continue;
     const prose = body
-      .replace(/^## .*\n/, '')
       .replace(/<!--[\s\S]*?-->/g, '')
       .replace(/<ExampleCode[^>]*\/>/g, '')
       .trim();
-    if (strict && prose.length < 60) throw new Error(`${example.id}: ${title} needs an explanation`);
-    last = index;
+    if (strict && prose.length < 60) throw new Error(`${example.id}: source section needs an explanation`);
   }
   if (/TODO/.test(markdown)) {
     if (strict) throw new Error(`${example.id}: unresolved guide TODO`);

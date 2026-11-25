@@ -22,7 +22,9 @@ Use workspace paths such as `examples/assets/images/smoke.png?url` or `examples/
 Mark the actual configuration with balanced `docs:system`, `docs:emitters`, `docs:modules` and `docs:renderers` source
 regions. Include material/texture setup and local helper definitions that the example needs; named suffixes can
 separate root and child systems. Authored guides reference these regions with `<ExampleCode region="system" />`
-and equivalent component blocks. Do not paste a second implementation into Markdown.
+and equivalent component blocks. These are extraction categories, not required article headings.
+Organize explanations around the effect's design intentions, and do not paste a second implementation into Markdown.
+See [Writing Example Guides](../apps/docs/README.md#writing-example-guides) for readable curves, code style and walkthroughs.
 
 ## Validation
 
@@ -35,7 +37,7 @@ npm run scripts check:source
 ```
 
 Self-contained presets are a contributor design guideline. Existing documentation checks validate metadata, balanced
-source regions and required guide sections; no additional import-policy CI gate is imposed.
+source regions and source-linked explanations; no additional import-policy CI gate is imposed.
 
 After editing, regenerate docs and the published skill with `npm run generate --workspace @rzmps/docs`, and run `npm run scripts check:docs`
 before opening a PR. See [the contributor guide](../CONTRIBUTING.md) for architecture, filenames, API input types,

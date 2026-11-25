@@ -9,31 +9,40 @@ example: collision
 
 <ExampleTags />
 
-Particle collision with automatic mesh detection and sorting between static and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, Rapier, and Ammo can be used as external physics backends, allowing particles to affect other physics objects in the scene.
+The particles should visibly hit surfaces and rebound, so their source, lifetime and shading make individual contacts
+easy to follow. Choose a collision scene in the demo: an empty environment has nothing to bounce against.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Launch particles that have time to bounce
 
-A five-second loop emits particles with eight-second lifetimes under full gravity modifier 1. Long life lets several bounces remain visible. Select a collision scene in the demo or pass a collision scene to the preview command; a neutral empty scene cannot show contacts.
-
-<ExampleCode region="system" />
-
-## Emitters
-
-The radius-0.25 sphere emits 30 particles per second with radial speeds 1–5. At lifetime eight, the population can approach 240 before culling. Mass 1 and uniform scale 0.125 make contact behavior easier to compare, while the orange/yellow range distinguishes particles from collision geometry.
+Full gravity gives the stream a clear downward arc. Radial launch speeds spread the particles, and long lifetimes let
+you watch repeated contacts rather than only the first hit. A consistent small size makes changes to bounce and drag
+easy to compare. The warm color range separates the particles from the environment.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Choose a lively rebound
 
-Collision uses bounce 0.75 and dampen 0.05, retaining substantial rebound while losing some motion at each contact. radiusScale 1 uses the particle’s normal collision size. applyImpulses true allows compatible external backends to transfer contact impulses to scene bodies; the built-in mesh backend supplies geometric collision queries.
+The Collision module retains much of the incoming motion through a high bounce setting, while light damping removes
+some energy on each contact. Lower bounce for heavy or soft material; raise damping when particles should settle.
+`applyImpulses` lets a compatible external physics backend push scene bodies. The built-in scene-mesh collision path
+still works when you only need particles to react to geometry.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Make contact and height readable
 
-Lit Circle sprites use spherical normals and normal lighting 1 to appear round at low geometric cost. Roughness 0.5 softens highlights and castShadow true helps locate particles above scene geometry. Shadows require the scene lights and renderer to enable shadow support.
+Lit circles with spherical normals look rounded. Shadows help locate each particle relative to the floor, provided
+the scene has shadow-enabled lighting. The appearance remains deliberately plain so motion, rather than a texture
+animation, explains the contact. For effects triggered by those contacts, continue with [Metal Balls](./collisionSubEmitters.md).
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

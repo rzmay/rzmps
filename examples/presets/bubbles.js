@@ -21,6 +21,7 @@ import bubblePop2Url from 'examples/assets/audio/bubble_pop_2.mp3?url';
 import { Easing } from 'eaz';
 import cornellBoxScene from 'examples/scenes/cornellBox.js';
 
+// #region docs:system:audioSources
 const withAudioSource = (buffer, url) => {
   Object.defineProperty(buffer, '__rzmpsAudioBufferSource', {
     value: { url, name: url.split('/').pop() ?? url },
@@ -29,8 +30,10 @@ const withAudioSource = (buffer, url) => {
 
   return buffer;
 };
+// #endregion docs:system:audioSources
 
 export default async function bubblesPreset() {
+  // #region docs:system:resources
   const audioLoader = new THREE.AudioLoader();
 
   const simple = new THREE.TextureLoader().load(Textures.Simple);
@@ -46,108 +49,110 @@ export default async function bubblesPreset() {
   withAudioSource(bubblePop1, bubblePop1Url);
   withAudioSource(bubblePop2, bubblePop2Url);
 
+  // #endregion docs:system:resources
+
   // #region docs:system:1
+  // #region docs:emitters:1
+  const systemEmitters = [
+    new Emitter({
+      source: new EmissionShape({
+        geometry: new THREE.SphereGeometry(0.5, 16, 12),
+      }),
+      rate: 8,
+      radialSpeed: [1, 3],
+      initialValues: {
+        lifetime: [7, 12],
+        scale: [0.25, 1],
+        mass: 0.25,
+        color: ['#bdefff', '#d8c8ff'],
+      },
+    }),
+  ];
+  // #endregion docs:emitters:1
+
+  // #region docs:modules:1
+  const systemModules = [
+    new TransformByNoise({
+      strength: new THREE.Vector3(0.2, 0.05, 0.2),
+      frequency: 0.6,
+    }),
+
+    new Collision({
+      bounce: 0.9,
+      dampen: 0.03,
+      radiusScale: 1,
+      lifetimeLoss: 1,
+    }),
+
+    new ScaleOverLifetime({
+      scale: time => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)),
+    }),
+
+    new DistortionBySize({
+      sizeRange: [0, 1],
+      distortionStrength: [0, 1],
+    }),
+  ];
+  // #endregion docs:modules:1
+
+  // #region docs:renderers:1
+  const systemRenderers = [
+    new SpriteRenderer(Textures.Circle, {
+      material: SpriteMaterialType.Lit,
+      materialOptions: {
+        roughness: 0.15,
+        metalness: 0.5,
+        sphericalNormals: 1,
+        normalLighting: 0.75,
+        transmissionMap: simple,
+        transmission: 0.7,
+        distortionMap: distortionSimple,
+        distortionStrength: -0.05,
+      },
+    }),
+
+    new AudioRenderer({
+      sound: bubbles,
+      onCollisionSound: [bubblePop1, bubblePop2],
+
+      // Only a few particles need looping positional audio.
+      // Having every bubble play the same bubbling track would get loud.
+      ratio: 0.15,
+
+      // Every bubble pops
+      collisionRatio: 1,
+      pitch: 1,
+      volume: 1,
+
+      // Larger bubbles have a somewhat deeper sound.
+      sizeAffectsPitch: 0.3,
+      sizeAffectsVolume: 0.15,
+
+      // Fade the looping sound with the particle.
+      alphaAffectsPitch: 0,
+      alphaAffectsVolume: 1,
+
+      // Fast-moving bubbles become slightly more animated sounding.
+      speedAffectsPitch: 0.08,
+      speedAffectsVolume: 0.05,
+    }),
+  ];
+  // #endregion docs:renderers:1
+
+  // #region docs:system:assembly
   const system = new ParticleSystem({
     duration: 10,
     looping: true,
     gravityModifier: 0.05,
     useLiveCubemap: true,
 
-    // #region docs:emitters:1
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.SphereGeometry(0.5, 16, 12),
-        }),
+    emitters: systemEmitters,
 
-        rate: 8,
+    modules: systemModules,
 
-        radialSpeed: [1, 3],
-
-        initialValues: {
-          lifetime: [7, 12],
-
-          scale: [0.25, 1],
-
-          mass: 0.25,
-
-          color: ['#bdefff', '#d8c8ff'],
-        },
-      }),
-    ],
-    // #endregion docs:emitters:1
-
-    // #region docs:modules:1
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.2, 0.05, 0.2),
-        frequency: 0.6,
-      }),
-
-      new Collision({
-        bounce: 0.9,
-        dampen: 0.03,
-        radiusScale: 1,
-        lifetimeLoss: 1,
-      }),
-
-      new ScaleOverLifetime({
-        scale: time => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)),
-      }),
-
-      new DistortionBySize({
-        sizeRange: [0, 1],
-        distortionStrength: [0, 1],
-      }),
-    ],
-    // #endregion docs:modules:1
-
-    // #region docs:renderers:1
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-
-        materialOptions: {
-          roughness: 0.15,
-          metalness: 0.5,
-          sphericalNormals: 1,
-          normalLighting: 0.75,
-          transmissionMap: simple,
-          transmission: 0.7,
-          distortionMap: distortionSimple,
-          distortionStrength: -0.05,
-        },
-      }),
-      new AudioRenderer({
-        sound: bubbles,
-
-        onCollisionSound: [bubblePop1, bubblePop2],
-
-        // Only a few particles need looping positional audio.
-        // Having every bubble play the same bubbling track would get loud.
-        ratio: 0.15,
-
-        // Every bubble pops
-        collisionRatio: 1,
-
-        pitch: 1,
-        volume: 1,
-
-        // Larger bubbles have a somewhat deeper sound.
-        sizeAffectsPitch: 0.3,
-        sizeAffectsVolume: 0.15,
-
-        // Fade the looping sound with the particle.
-        alphaAffectsPitch: 0,
-        alphaAffectsVolume: 1,
-
-        // Fast-moving bubbles become slightly more animated sounding.
-        speedAffectsPitch: 0.08,
-        speedAffectsVolume: 0.05,
-      }),
-    ],
-    // #endregion docs:renderers:1
+    renderers: systemRenderers,
   });
+  // #endregion docs:system:assembly
   // #endregion docs:system:1
 
   system.name = 'Audio Bubbles';

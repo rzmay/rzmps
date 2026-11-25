@@ -34,58 +34,70 @@ export default async function splatterPreset() {
     new THREE.Color('#bb44ff'),
   ]);
   // #region docs:system:1
+  // #region docs:emitters:1
+  const systemEmitters = [
+    new Emitter({
+      source: EmissionShape.Sphere(0.12),
+      rate: 5,
+      radialSpeed: 3,
+      initialValues: {
+        position: new THREE.Vector3(0, 3.5, 0),
+        velocity: new THREE.Vector3(0, 1.5, 0),
+        lifetime: 8,
+        scale: new THREE.Vector3(0.2, 0.2, 0.2),
+        color: colors,
+        rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
+      },
+    }),
+  ];
+  // #endregion docs:emitters:1
+
+  // #region docs:modules:1
+  const systemModules = [new Collision({ lifetimeLoss: 1 })];
+  // #endregion docs:modules:1
+
+  // #region docs:renderers:1
+  const systemRenderers = [
+    new SpriteRenderer(Textures.Circle, {
+      material: SpriteMaterialType.Lit,
+      materialOptions: {
+        roughness: 0.95,
+        metalness: 0,
+        sphericalNormals: 1,
+        normalLighting: 1,
+      },
+    }),
+
+    new DecalRenderer(paint, {
+      onSpawn: false,
+      onCollision: true,
+      // Backends without mesh identity search opposite the collision normal, including on walls.
+      maxDistance: 1,
+      depth: 0.08,
+      size: 5,
+      inheritColor: 1,
+      inheritScale: 1,
+      inheritAlpha: 1,
+      lifetime: 90,
+      opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.85, 1),
+      maxDecals: 512,
+    }),
+  ];
+  // #endregion docs:renderers:1
+
+  // #region docs:system:assembly
   const system = new ParticleSystem({
     duration: 8,
     looping: true,
     gravityModifier: 1,
-    // #region docs:emitters:1
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.12),
-        rate: 5,
-        radialSpeed: 3,
-        initialValues: {
-          position: new THREE.Vector3(0, 3.5, 0),
-          velocity: new THREE.Vector3(0, 1.5, 0),
-          lifetime: 8,
-          scale: new THREE.Vector3(0.2, 0.2, 0.2),
-          color: colors,
-          rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
-        },
-      }),
-    ],
-    // #endregion docs:emitters:1
-    // #region docs:modules:1
-    modules: [new Collision({ lifetimeLoss: 1 })],
-    // #endregion docs:modules:1
-    // #region docs:renderers:1
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          roughness: 0.95,
-          metalness: 0,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-      }),
-      new DecalRenderer(paint, {
-        onSpawn: false,
-        onCollision: true,
-        // Backends without mesh identity search opposite the collision normal, including on walls.
-        maxDistance: 1,
-        depth: 0.08,
-        size: 5,
-        inheritColor: 1,
-        inheritScale: 1,
-        inheritAlpha: 1,
-        lifetime: 90,
-        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.85, 1),
-        maxDecals: 512,
-      }),
-    ],
-    // #endregion docs:renderers:1
+
+    emitters: systemEmitters,
+
+    modules: systemModules,
+
+    renderers: systemRenderers,
   });
+  // #endregion docs:system:assembly
   // #endregion docs:system:1
   system.name = 'Splatter';
   system.addEventListener('destroyed', () => {

@@ -9,31 +9,40 @@ example: tags
 
 <ExampleTags />
 
-Tag-based module and renderer filtering by mixing cubes and spheres in one particle system.
+This example puts two distinct visual behaviors in one particle system: cubes tumble and fade, while spheres grow
+and collide. Tags express that artistic split without requiring two separately updated systems.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Give each birth one role
 
-The 10-second loop shares emission and zero-gravity integration between cubes and spheres. This demonstrates how one system can own several appearances without maintaining two independent simulations. Lifetimes 6–12 seconds leave time to compare the tagged behaviors.
-
-<ExampleCode region="system" />
-
-## Emitters
-
-The emitter assigns spheres and cubes with tagSelection distribute instead of giving every particle both tags. CPU emission alternates births; GPU emission selects by buffer slot modulo the number of tags, without a shared emission counter. Slots retain that selection when reused, so the live mix depends on which slots are occupied. Rate 12 yields roughly six per second in each group as the population fills. Scale 0.1–0.25 and a discrete four-color Set vary appearance while keeping particle motion comparable.
+The emitter distributes the `cubes` and `spheres` tags rather than giving every particle both. The shared source and
+color palette keep the populations visually related. Zero gravity makes their different treatment easier to see;
+longer lifetimes leave enough time for growth and rotation to become apparent.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Make the two roles behave differently
 
-Only cubes receive rotation and cubic alpha fade. Only spheres receive growth from multiplier 0.35 to 1.8 and a Collision module. Matching tags on each module prevents accidental cross-group changes. Add collision scene geometry to see the sphere-only contact response.
+Cube-tagged particles receive rotation and a late alpha fade. Sphere-tagged particles grow and collide with scene
+geometry. Each module carries the tag for the group it should affect. If a new behavior belongs to both groups,
+leave its filter shared; if it belongs to just one, match that group's tag deliberately.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Match appearance to the same roles
 
-The sphere renderer filters to spheres and uses a lit Circle sprite with spherical normals. The cube renderer filters to cubes and instances BoxGeometry with MeshStandardMaterial. Both enable shadow casting, and cubes also receive shadows. Distributed tags avoid drawing both a mesh and a sprite for every particle.
+One renderer draws spherical billboards, the other box meshes. Their matching filters ensure each birth gets the
+intended appearance rather than both. Shadows make the boxes' faces visible, while spherical normals round the
+sprite lighting. Add a collision scene to see the sphere-only contacts. See [Using Tags](../guides/tags.md) when adapting
+the pattern to more groups.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

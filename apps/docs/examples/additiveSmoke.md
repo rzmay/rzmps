@@ -9,31 +9,41 @@ example: additiveSmoke
 
 <ExampleTags />
 
-Additive blending with soft particles and layered lifetime color ramps for luminous smoke.
+This plume should feel luminous, as if light is scattered through a cloud. Its motion resembles the ordinary
+[Smoke](./smoke.md) preset, but additive blending makes overlapping wisps contribute light instead of building a dark mass.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Build a plume before adding glow
 
-A 10-second loop and 4.5-second particle lifetime maintain a slow plume. Gravity modifier -0.015 adds gentle upward acceleration. The simulation matches the ordinary smoke structure, making the blending change easy to compare using the same camera and warmup.
-
-<ExampleCode region="system" />
-
-## Emitters
-
-The cone source emits 36 particles per second, giving roughly 162 live particles before culling. Scale 2.5 creates overlapping patches, but initial alpha 0.35 and the darker color range reduce the brightness contributed by each patch. Upward velocity 0.75 and radial speed 0.18 hold the plume together near the base.
+A broad cone, slow upward velocity and a small buoyancy term establish a recognizable smoke column. Long-lived,
+overlapping sprites fill the gaps between births. The darker starting colors and lower alpha are deliberate: additive
+overlap can wash out the shape if each particle starts too bright. Increase brightness in small steps after the plume
+has enough overlapping layers.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Break up the column and fade its edges
 
-Low-frequency noise (0.8) moves the smoke in broad curls, with less vertical than horizontal strength. Velocity limits and drag contain the flow. Growing scale from 0.35 to 1.8 widens older particles, while the fade envelope and varied angular velocities prevent visible rectangular births and repeated texture alignment.
+Noise creates sideways curls while drag keeps motion contained. The lifetime scale ramp makes older wisps spread,
+and the opacity envelope avoids hard appearances and disappearances. Random angular velocity rotates the mask so
+neighboring particles do not reveal the same silhouette. Keep these changes slow enough that the smoke still feels
+like a drifting cloud rather than flickering sparks.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Make overlap read as light
 
-The lit smoke sprites use AdditiveBlending, so overlapping particles brighten the scene rather than darkening it like opaque soot. The low starting alpha counterbalances that accumulation. Roughness 1 and spherical normals retain lighting cues, while soft-particle distance 1 blends contacts with scene geometry.
+The renderer uses additive blending with a smoke alpha mask. Overlapping regions brighten, so they suggest a luminous
+core. Rough, softly lit billboards still respond to the scene, and soft-particle fading helps them meet nearby geometry.
+Use ordinary smoke blending instead when the intended result is dense soot that should darken what is behind it.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

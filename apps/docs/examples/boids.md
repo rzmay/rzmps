@@ -9,31 +9,48 @@ example: boids
 
 <ExampleTags />
 
-Flocking particles using ParticleOctree aggregation, with red hazard particles acting as tagged particle affectors.
+The flock should move together without collapsing into one point, while larger red hazards interrupt its flow.
+The two populations have opposing goals, making steering decisions visible through their movement.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Prepare the two populations
 
-The 24-second loop and lifetimes up to 22 seconds sustain two interacting populations. Gravity is disabled so steering controls their paths. maxParticles 700 bounds the flocking workload; the estimated full-lifetime population can approach that cap as both populations build up.
+Start with distinct palettes and emission shapes so the flock and hazards are visually separable before tuning
+steering. The sphere gives the flock room to spread; the torus places hazards around it. Keeping these resources
+named makes the tagged emitter configuration below easier to follow.
 
-<ExampleCode region="system" />
+<ExampleCode region="system:resources" />
 
-## Emitters
+## Give the flock and hazards distinct roles
 
-The main flock emits 38 particles per second from a radius-12 sphere, while two hazards per second begin on a torus. Tags separate their rules. Main lifetimes 9–16 and hazard lifetimes 14–22 make the hazards persist longer; hazards are also larger (0.65–1.05 versus 0.34–0.48), making pursuit and avoidance visible.
+A broad sphere source spreads the main flock. Hazards begin around a torus and persist longer, so encounters can
+build over time. Tags separate their behaviors; cool flock colors and larger warm-colored hazards distinguish the
+roles before motion begins. Gravity is disabled so steering, rather than falling, determines their paths.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Balance togetherness against personal space
 
-Two Boids modules use opposite particle-affector roles: hazards repel boids as obstacles, while boids act as targets for hazards. Main separation weight 2.4 exceeds cohesion 1.35 to resist clumping. Hazard affector weight 5.5 makes target seeking strong. OrientToDirection aligns cone geometry with motion so heading remains readable.
+The flock balances alignment, cohesion and separation. Stronger separation resists clumping, while hazard particles
+act as obstacles. The hazard population treats the flock as targets instead, creating a visible pursuit-and-avoidance
+relationship. Tune one weight at a time: increase separation for a looser flock or reduce attraction for less pursuit.
+These are this preset's steering choices, not a universal flocking recipe.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Make direction legible in the silhouette
 
-Two tag-filtered MeshRenderers use cone meshes and separate materials. Cool flock colors contrast with red/orange hazards, whose material has stronger emissive intensity 0.55. The geometric cone points reveal direction more clearly than a circular billboard would.
+Tag-filtered cone meshes point along each particle's movement through OrientToDirection. That pointed silhouette
+shows heading more clearly than a round billboard. Separate materials and a warmer hazard glow reinforce the roles.
+Start with the supplied scene, then adapt the tagged particle-affector arrangement to your own obstacles and targets.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

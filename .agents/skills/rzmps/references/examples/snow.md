@@ -7,93 +7,24 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">snow</span> <span class="example-tag">children</span> <span class="example-tag">renderer-children</span> <span class="example-tag">weather</span> <span class="example-tag">sprites</span> <span class="example-tag">noise</span> <span class="example-tag">depth</span> <span class="example-tag">effects</span></div>
 
-Depth-based fading, noise-driven motion, warmup, and broad low-cost emission.
+Snow should fill a space with small, gently drifting flakes rather than spray out from a point. This preset combines
+a wide source, slow falling motion and unobtrusive fades so the snowfall feels continuous.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/snow.png)
 
-## Particle System Configuration
+## Fill the air above the scene
 
-The snow is positioned five units above the origin. A 10-second loop with prewarm fills the scene before the ordinary
-demo begins; the preview CLI instead uses its explicit warmup count. Gravity modifier 0.025 gives a slow fall over the
-long 16-second particle lifetime.
-
-
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L19)
-
-```js
-  const snow = new ParticleSystem({
-    duration: 10,
-    prewarm: true,
-    looping: true,
-    gravityModifier: 0.025,
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.BoxGeometry(30, 0.1, 30),
-        }),
-        rate: 70,
-        radialSpeed: 0,
-        initialValues: {
-          lifetime: 16,
-          speed: 1,
-          scale: 0.25,
-          color: '#e9f7ff',
-          alpha: 0.9,
-          velocity: new THREE.Vector3(0, -0.35, 0),
-        },
-      }),
-    ],
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.28, 0.02, 0.28),
-        frequency: 0.55,
-      }),
-      new LimitVelocityOverLifetime({
-        limit: new THREE.Vector3(0.7, 0.65, 0.7),
-        drag: 0.12,
-        multiplyDragByVelocity: true,
-      }),
-      new RotationOverLifetime({
-        angularVelocity: 0.65,
-      }),
-      new ColorOverLifetime({
-        alpha: (t) =>
-          ((t) < 0.2 ? (t) / 0.2 : (t) < 0.75 ? 1 - 0.15 * (((t) - 0.2) / 0.55) : 0.85 * (1 - (((t) - 0.75) / 0.25)))
-      }),
-      new ColorByDepth({
-        alpha: [1, 0.5],
-        depthRange: [6, 24],
-      }),
-      new ColorByDepth({
-        alpha: [0, 1],
-        depthRange: [1, 2],
-      }),
-    ],
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        material: SpriteMaterialType.Lit,
-        children: { count: 5, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
-        alphaMap: snowflakeAlpha,
-        materialOptions: {
-          normalLighting: 0.25,
-          sphericalNormals: 0.1
-        }
-      }),
-    ],
-  });
-```
+The system sits above the origin and emits across a broad, shallow box. A small downward velocity and weak gravity
+create a slow fall; long lifetimes let flakes cross the scene. Prewarm fills the volume when the effect starts, so it
+does not look like a newly opened tap. Keep radial speed at zero to avoid an outward explosion from the source.
 
 
-## Emitters
-
-A 30×0.1×30 box distributes snow across a wide area. Rate 70 can sustain about 1120 simulated particles and 3360 visual
-instances at full lifetime, so the 0.25-unit flakes remain individually small. Radial speed is zero and initial vertical
-velocity is -0.35, avoiding an outward blast from the box.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L25)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L28)
 
 ```js
+import * as THREE from 'three';
+import { Emitter, EmissionShape } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: new EmissionShape({
@@ -114,39 +45,46 @@ velocity is -0.35, avoiding an outward blast from the box.
 ```
 
 
-## Modules
+## Add drift without losing the fall
 
-Horizontal noise strength 0.28 and vertical strength 0.02 create drifting flakes. Velocity limits and drag prevent rapid
-falling. Scalar angular velocity 0.65 rotates each billboard silhouette at 0.65 radians per second.
-The same vector-input shorthand as scale avoids constructing a Vector3 for sprite roll. Depth fades reduce distant alpha
-between depths 6 and 24 and remove flakes very near the camera between depths 1 and 2; the lifetime envelope softens
-population turnover.
+Horizontal noise is stronger than vertical noise, creating sideways motion while preserving a downward tendency.
+Velocity limits keep the drift gentle, and rotation varies the flake silhouette. Depth fades remove flakes close to
+the camera and soften distant ones; the lifetime fade hides normal turnover. Move the camera through the effect to
+check those boundaries rather than judging only a stationary view.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L44)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L48)
 
 ```js
+import { Curve } from 'curves';
+import * as THREE from 'three';
+import { LimitVelocityOverLifetime, RotationOverLifetime, TransformByNoise, ColorOverLifetime, ColorByDepth } from '@rzmps/rzmps';
+
     modules: [
       new TransformByNoise({
         strength: new THREE.Vector3(0.28, 0.02, 0.28),
         frequency: 0.55,
       }),
+
       new LimitVelocityOverLifetime({
         limit: new THREE.Vector3(0.7, 0.65, 0.7),
         drag: 0.12,
         multiplyDragByVelocity: true,
       }),
+
       new RotationOverLifetime({
         angularVelocity: 0.65,
       }),
+
       new ColorOverLifetime({
-        alpha: (t) =>
-          ((t) < 0.2 ? (t) / 0.2 : (t) < 0.75 ? 1 - 0.15 * (((t) - 0.2) / 0.55) : 0.85 * (1 - (((t) - 0.75) / 0.25)))
+        alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
       }),
+
       new ColorByDepth({
         alpha: [1, 0.5],
         depthRange: [6, 24],
       }),
+
       new ColorByDepth({
         alpha: [0, 1],
         depthRange: [1, 2],
@@ -155,16 +93,21 @@ population turnover.
 ```
 
 
-## Renderers
+## Build a field of delicate silhouettes
 
-The snowflake alpha texture provides detail using lit billboards with artistic children per simulated particle. Normal
-lighting 0.25 and spherical normals 0.1 keep shading subtle instead of making flakes look like balls. This is less
-geometric work than individually modeled snowflakes at the same population.
+The snowflake mask supplies the detail. Subtle normal lighting keeps it from looking like a ball. Two artistic
+renderer children add nearby visual copies with radial scale and alpha shaping, giving each simulated trajectory a
+small cloud of flakes. LOD is disabled here: the children are part of the chosen snowfall appearance. Reduce their
+count or radius if your scene needs more isolated flakes.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L72)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L81)
 
 ```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import { SpriteRenderer, Textures } from '@rzmps/rzmps';
+import snowflakeAlpha from 'examples/assets/images/snowflake_alpha.png?url';
+
     renderers: [
       new SpriteRenderer(Textures.Default, {
         material: SpriteMaterialType.Lit,
@@ -172,14 +115,9 @@ geometric work than individually modeled snowflakes at the same population.
         alphaMap: snowflakeAlpha,
         materialOptions: {
           normalLighting: 0.25,
-          sphericalNormals: 0.1
-        }
+          sphericalNormals: 0.1,
+        },
       }),
     ],
 ```
 
-
-
-The emitter simulates 70 flakes per second. Two artistic renderer children per flake bring full-quality visual emission
-to 210 flakes per second. Their deterministic offsets span a 1.5-unit radius with radial size and alpha multipliers. LOD
-is disabled by default; these artistic children provide density without changing the simulated population.

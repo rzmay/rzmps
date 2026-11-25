@@ -9,33 +9,56 @@ example: fire
 
 <ExampleTags />
 
-Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces.
+The fire should have a rising flame, a warmer patch of light around it, and heat that continues to disturb the air.
+Faint scorch marks let nearby surfaces record the flame's presence. The layers have different jobs and timings.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Prepare flame distortion and scorch resources
 
-The 10-second loop schedules a continuous flame; individual flame particles last only 1.35 seconds. The shorter particle lifetime keeps the flame near its source while the secondary distortion system supplies a separate one-second heat shimmer. Inheritance is disabled for the shimmer’s appearance so its scale and opacity do not collapse with the flame. Flame particles continuously project faint scorch marks onto nearby surfaces; use Checkerboard to see the burn build up on a floor.
+Load the distortion map and scorch mask once while constructing the effect. The scorch image is color data, so it
+uses sRGB color space. Keeping a separate mark material lets the burn's appearance stay independent of the animated
+flame sprites. These resources are disposed with the root system.
 
-<ExampleCode region="system" />
+<ExampleCode region="system:resources" />
 
-## Emitters
+## Make the flame rise and break apart
 
-A cone surface spreads the base of the flame. At 90 particles per second and a 1.35-second lifetime, the main population is roughly 122 sprites before culling. Upward velocity 2.2 and radial speed 0.2 make vertical flow dominate the horizontal spread; the 2.5-unit scale lets adjacent sprites overlap. The flame particles also supply the scorch renderer with their live positions and rotations. There is no separate scorch emitter or invisible source population.
+A broad cone, upward velocity and overlapping sprites establish the main silhouette. Short particle lifetimes keep
+it near the source instead of letting flame tongues drift far away. Noise interrupts the regular rise; upward force
+maintains the overall direction. The scale ramp narrows old flames, and opacity keyframes hide their birth and death.
+Start by tuning this layer before adding light or distortion.
 
-Uniform scale values and color strings use the standard input shortcuts.
-
-<ExampleCode region="emitters" />
-
-## Modules
-
-Noise strength 2.1 and frequency 1.35 break up the regular rise. The additional upward force bends the motion over time, while the scale multiplier shrinks from 1.3 to 0.2. The alpha curve fades in during the first fifth of life and fades out over the final quarter, hiding sprite births and deaths. The distortion subsystem uses gentler noise and its own grow-and-fade curve.
-
+<ExampleCode region="emitters:1" />
 <ExampleCode region="modules" />
 
-## Renderers
+## Put light and accumulated heat into the scene
 
-The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one animation across the 1.35-second life. Soft-particle distance 1 blends intersections. Particle lights are limited to 18 with ratio 0.3, avoiding a light per sprite. The secondary sprite transmits the background with distortion strength 0.05 and disables depth writing so the shimmer does not occlude the flame. DecalRenderer disables spawn placement and uses continuousRate 1.5, so each surviving flame particle projects after each two-thirds of a second of particle age. Twenty-four spherical directions find the nearest surface within three world units. The supplied black scorch texture uses a 2.5-unit footprint and shallow 0.06-unit clipping depth. Each mark lives eight seconds, fades in over its first 0.08 seconds, and fades out over its final 3.2 seconds. Peak opacity is just 0.035, so overlapping marks from multiple flame particles gradually darken the surface. Color, scale, and alpha inheritance are disabled so flame tint and lifetime modifiers do not change the burn marks. The factory disposes its scorch template material and texture when destroyed.
+The animated flame atlas gives each sprite internal motion. Warm particle lights connect the flame to nearby objects.
+The scorch renderer casts radial searches around selected flame particles and chooses a random hit among nearby
+surfaces. Small, low-opacity marks build a burn gradually rather than stamping one dark patch. Their scale, color and
+alpha inheritance are disabled so the marks do not shrink or disappear with the flames. Use Checkerboard to see the
+floor darken; adjust scorch opacity separately from flame brightness.
 
-<ExampleCode region="renderers" />
+<ExampleCode region="renderers:1" />
 
+## Let the air shimmer on its own timing
+
+A continuous child system draws distortion separately from the flame image. Its growth and fading make the heat
+layer disperse, while its own motion keeps it from looking like another flame card. Appearance inheritance is disabled
+so flame color and lifetime changes do not collapse the shimmer. Update only the root system; it owns this child.
+
+<ExampleCode region="system:2" />
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />
+
+Connect the secondary behavior to the root with the relationships below. The root owns child updates; their
+inheritance and event filters decide when each layer starts and which source it follows.
+
+<ExampleCode region="system:connections" />

@@ -7,67 +7,24 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">collision</span> <span class="example-tag">physics</span> <span class="example-tag">sprites</span> <span class="example-tag">effects</span> <span class="example-tag">ammo</span> <span class="example-tag">jolt</span> <span class="example-tag">rapier</span></div>
 
-Particle collision with automatic mesh detection and sorting between static and dynamic objects for optimizing octree rebuilds. Alternatively Jolt, Rapier, and Ammo can be used as external physics backends, allowing particles to affect other physics objects in the scene.
+The particles should visibly hit surfaces and rebound, so their source, lifetime and shading make individual contacts
+easy to follow. Choose a collision scene in the demo: an empty environment has nothing to bounce against.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/collision.png)
 
-## Particle System Configuration
+## Launch particles that have time to bounce
 
-A five-second loop emits particles with eight-second lifetimes under full gravity modifier 1. Long life lets several bounces remain visible. Select a collision scene in the demo or pass a collision scene to the preview command; a neutral empty scene cannot show contacts.
-
-
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L8)
-
-```js
-  const collision = new ParticleSystem({
-    duration: 5,
-    looping: true,
-    gravityModifier: 1,
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.SphereGeometry(0.25, 16, 12),
-        }),
-        rate: 30,
-        radialSpeed: [1, 5],
-        initialValues: {
-          lifetime: 8,
-          scale: 0.125,
-          mass: 1,
-          color: ['#ff6633', '#ffd166'],
-        },
-      }),
-    ],
-    modules: [
-      new Collision({
-        bounce: 0.75,
-        dampen: 0.05,
-        radiusScale: 1,
-      }),
-    ],
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-
-        materialOptions: {
-          roughness: 0.5,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-      }),
-    ],
-  });
-```
+Full gravity gives the stream a clear downward arc. Radial launch speeds spread the particles, and long lifetimes let
+you watch repeated contacts rather than only the first hit. A consistent small size makes changes to bounce and drag
+easy to compare. The warm color range separates the particles from the environment.
 
 
-## Emitters
-
-The radius-0.25 sphere emits 30 particles per second with radial speeds 1–5. At lifetime eight, the population can approach 240 before culling. Mass 1 and uniform scale 0.125 make contact behavior easier to compare, while the orange/yellow range distinguishes particles from collision geometry.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L13)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L14)
 
 ```js
+import * as THREE from 'three';
+import { Emitter, EmissionShape } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: new EmissionShape({
@@ -86,14 +43,19 @@ The radius-0.25 sphere emits 30 particles per second with radial speeds 1–5. A
 ```
 
 
-## Modules
+## Choose a lively rebound
 
-Collision uses bounce 0.75 and dampen 0.05, retaining substantial rebound while losing some motion at each contact. radiusScale 1 uses the particle’s normal collision size. applyImpulses true allows compatible external backends to transfer contact impulses to scene bodies; the built-in mesh backend supplies geometric collision queries.
+The Collision module retains much of the incoming motion through a high bounce setting, while light damping removes
+some energy on each contact. Lower bounce for heavy or soft material; raise damping when particles should settle.
+`applyImpulses` lets a compatible external physics backend push scene bodies. The built-in scene-mesh collision path
+still works when you only need particles to react to geometry.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L30)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L32)
 
 ```js
+import { Collision } from '@rzmps/rzmps';
+
     modules: [
       new Collision({
         bounce: 0.75,
@@ -104,18 +66,22 @@ Collision uses bounce 0.75 and dampen 0.05, retaining substantial rebound while 
 ```
 
 
-## Renderers
+## Make contact and height readable
 
-Lit Circle sprites use spherical normals and normal lighting 1 to appear round at low geometric cost. Roughness 0.5 softens highlights and castShadow true helps locate particles above scene geometry. Shadows require the scene lights and renderer to enable shadow support.
+Lit circles with spherical normals look rounded. Shadows help locate each particle relative to the floor, provided
+the scene has shadow-enabled lighting. The appearance remains deliberately plain so motion, rather than a texture
+animation, explains the contact. For effects triggered by those contacts, continue with [Metal Balls](https://rzmps.rzmay.com/docs/examples/collisionSubEmitters.html).
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L39)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L42)
 
 ```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import { SpriteRenderer, Textures } from '@rzmps/rzmps';
+
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: SpriteMaterialType.Lit,
-
         materialOptions: {
           roughness: 0.5,
           sphericalNormals: 1,
@@ -124,5 +90,4 @@ Lit Circle sprites use spherical normals and normal lighting 1 to appear round a
       }),
     ],
 ```
-
 

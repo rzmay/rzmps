@@ -7,71 +7,56 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">suzanneInstances</span> <span class="example-tag">meshes</span> <span class="example-tag">instancing</span> <span class="example-tag">effects</span></div>
 
-Mesh instancing with Suzanne particles and randomized transforms.
+Every particle in this example should be recognizable as a small Suzanne model. It contrasts with the surface-emission
+example, where Suzanne only determines where circular particles begin.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/suzanneInstances.png)
 
-## Particle System Configuration
+## Prepare a model as the particle template
 
-The 10-second loop and zero gravity keep the instanced models floating. GLTF geometry is cloned once and shared by the renderer. The existing rotateX(-90) call uses radians, so inspect the current orientation in a preview if changing the imported model.
+Load the GLTF and clone its geometry before building the renderer. The clone's orientation becomes the template for
+every particle, so choose that transform with your model's forward direction in mind. Geometry rotations use radians.
+The palette is shared setup, while each birth chooses its own color.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L36)
+[Source: system:resources](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L9)
 
 ```js
-  const system = new ParticleSystem({
-    maxParticles: 256,
-    duration: 10,
-    looping: true,
-    gravity: new THREE.Vector3(0, 0, 0),
-    gravityModifier: 0,
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import suzanneModel from 'examples/assets/models/suzanne.glb?url';
 
-    emitters: [
-      new Emitter({
-        rate: 12,
-        radialSpeed: 1,
-        alignment: 1,
-        initialValues: {
-          lifetime: [4, 8],
-          speed: 1,
-          color: colors,
-          scale: [
-            0.4,
-            1.0,
-          ],
-          alpha: 1,
-        },
-      }),
-    ],
+  const gltf = await new GLTFLoader().loadAsync(suzanneModel);
 
-    modules: [
-      new ColorOverLifetime({
-        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)))
-      })
-    ],
-
-    renderers: [
-      new MeshRenderer({
-        mesh: new THREE.Mesh(
-          suzanneGeometry,
-          new THREE.MeshStandardMaterial()
-        ),
-        castShadow: true,
-        receiveShadow: true,
-      }),
-    ],
+  let suzanneGeometry = null;
+  gltf.scene.traverse(child => {
+    if (!suzanneGeometry && child.isMesh) {
+      suzanneGeometry = child.geometry.clone();
+      suzanneGeometry.rotateX(-90);
+    }
   });
+
+  if (!suzanneGeometry) {
+    throw new Error('suzanne.glb does not contain a mesh');
+  }
+
+  const colors = new Set(['#ff3333', '#33ff66', '#ffdd22', '#3388ff']);
+
 ```
 
 
-## Emitters
+## Give each model space and direction
 
-Rate 12, lifetimes 4–8 seconds, and scale 0.4–1 produce a manageable group of roughly 72 instances at average lifetime. Alignment 1 orients particles to emission direction. A four-color Set varies the instances without constructing a separate material for each particle.
+The factory loads and clones the model geometry for the renderer. A restrained stream, varied scales and zero gravity
+keep individual silhouettes readable. Directional alignment turns each model with its launch direction, while a
+four-color palette distinguishes neighboring instances. Widen the source before increasing density if the models
+begin to overlap too heavily.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L44)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L36)
 
 ```js
+import { Emitter } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         rate: 12,
@@ -81,10 +66,7 @@ Rate 12, lifetimes 4–8 seconds, and scale 0.4–1 produce a manageable group o
           lifetime: [4, 8],
           speed: 1,
           color: colors,
-          scale: [
-            0.4,
-            1.0,
-          ],
+          scale: [0.4, 1.0],
           alpha: 1,
         },
       }),
@@ -92,40 +74,47 @@ Rate 12, lifetimes 4–8 seconds, and scale 0.4–1 produce a manageable group o
 ```
 
 
-## Modules
+## Keep the model recognizable until it leaves
 
-The sole ColorOverLifetime module applies a cubic alpha fade. It leaves scale and trajectory alone so the recognizable mesh silhouette and directional alignment carry the effect. Most of each lifetime remains visible before the late fade removes the instance.
+A cubic alpha fade removes instances late in life. No additional motion module distorts the simple flight, so shape
+and alignment carry the effect. This is a useful starting point for debris or repeated props: establish the silhouette
+first, then add the particular spin or acceleration that your intended material calls for.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L64)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L53)
 
 ```js
+import * as THREE from 'three';
+import { ColorOverLifetime } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
+
     modules: [
       new ColorOverLifetime({
-        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)))
-      })
+        alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
+      }),
     ],
 ```
 
 
-## Renderers
+## Share geometry, keep geometric shading
 
-MeshRenderer shares the loaded Suzanne geometry with a MeshStandardMaterial and enables cast/receive shadows. Unlike the Suzanne surface-emission example, every particle represents a full model. Watch geometry cost and draw workload when increasing the population.
+MeshRenderer uses the loaded geometry with a standard material and shadows. Faces and shadows provide cues that a
+billboard would not. The source mesh is a template for appearance, not the emission surface. See
+[Suzanne](https://rzmps.rzmay.com/docs/examples/suzanne.html) for the opposite use of the same asset.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L72)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L61)
 
 ```js
+import * as THREE from 'three';
+import { MeshRenderer } from '@rzmps/rzmps';
+
     renderers: [
       new MeshRenderer({
-        mesh: new THREE.Mesh(
-          suzanneGeometry,
-          new THREE.MeshStandardMaterial()
-        ),
+        mesh: new THREE.Mesh(suzanneGeometry, new THREE.MeshStandardMaterial()),
         castShadow: true,
         receiveShadow: true,
       }),
     ],
 ```
-
 

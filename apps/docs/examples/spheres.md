@@ -9,31 +9,34 @@ example: spheres
 
 <ExampleTags />
 
-Lit sprite particles with spherical normals for a 3D effect.
+These particles should look rounded even though they are flat billboards. The preset keeps motion and color simple
+so you can see how lighting creates the illusion before layering on a more complex effect.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Leave room to read each particle
 
-This 10-second looping system has zero gravity and no gravity modifier, so the particles show simple outward movement without falling. Lifetimes of 6–12 seconds keep particles visible long enough to inspect the lighting illusion as they spread.
-
-<ExampleCode region="system" />
-
-## Emitters
-
-Rate 12 and mean lifetime 9 imply roughly 108 live particles before culling. A discrete four-color Set keeps recognizable red, green, yellow, and blue groups. Scale varies from 0.1 to 0.25 so the field has depth and size variation without a few large particles dominating.
+A small source sends particles outward, and zero gravity keeps falling motion from distracting from their appearance.
+A few distinct colors and modest size variation make individual spheres easy to follow. Their long lifetimes give you
+time to move the camera and inspect the lighting. The module list is empty: there is no hidden lifetime change to
+explain the highlights or silhouette.
 
 <ExampleCode region="emitters" />
-
-## Modules
-
-The module collection is explicitly empty. Position changes come from the emitter’s initial velocity and system integration. Color, alpha, and size remain at their initial values, making this a useful baseline for checking the renderer before adding lifetime modifiers.
-
 <ExampleCode region="modules" />
 
-## Renderers
+## Suggest a sphere through lighting
 
-A Circle sprite with lit material, spherical normals 1, and normal lighting 1 simulates rounded lighting on a flat billboard. Roughness 0.5 provides a softer surface response. The particles look volumetric without the vertex cost of one sphere mesh per particle.
+The circular mask supplies the silhouette, while spherical normals make the lighting turn across its face. Full normal
+lighting emphasizes that rounded response; moderate roughness keeps the highlight from looking like polished metal.
+The model is still a billboard, so this is useful when the appearance matters more than a geometric sphere silhouette
+from every angle. Compare [Cube Instances](./cubes.md) when actual faces and edges should be visible.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

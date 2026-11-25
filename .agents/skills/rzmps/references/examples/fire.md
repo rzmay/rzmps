@@ -7,21 +7,48 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">fire</span> <span class="example-tag">flames</span> <span class="example-tag">sprites</span> <span class="example-tag">sprite-sheet</span> <span class="example-tag">lights</span> <span class="example-tag">distortion</span> <span class="example-tag">decals</span> <span class="example-tag">scorch</span> <span class="example-tag">soot</span> <span class="example-tag">ash</span> <span class="example-tag">effects</span></div>
 
-Sprite-sheet flames, particle lights, heat distortion, and persistent textured scorch marks on nearby surfaces.
+The fire should have a rising flame, a warmer patch of light around it, and heat that continues to disturb the air.
+Faint scorch marks let nearby surfaces record the flame's presence. The layers have different jobs and timings.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/fire.png)
 
-## Particle System Configuration
+## Prepare flame distortion and scorch resources
 
-The 10-second loop schedules a continuous flame; individual flame particles last only 1.35 seconds. The shorter particle lifetime keeps the flame near its source while the secondary distortion system supplies a separate one-second heat shimmer. Inheritance is disabled for the shimmer’s appearance so its scale and opacity do not collapse with the flame. Flame particles continuously project faint scorch marks onto nearby surfaces; use Checkerboard to see the burn build up on a floor.
+Load the distortion map and scorch mask once while constructing the effect. The scorch image is color data, so it
+uses sRGB color space. Keeping a separate mark material lets the burn's appearance stay independent of the animated
+flame sprites. These resources are disposed with the root system.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L32)
+[Source: system:resources](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L27)
 
 ```js
-  const fire = new ParticleSystem({
-    duration: 10,
-    looping: true,
+import * as THREE from 'three';
+import warpNormal from 'examples/assets/images/warp_norm.jpg?url';
+import scorchTexture from 'examples/assets/images/scorch.png?url';
+
+  const textureLoader = new THREE.TextureLoader();
+  const heatDistortion = textureLoader.load(warpNormal);
+  const scorchMap = textureLoader.load(scorchTexture);
+  scorchMap.colorSpace = THREE.SRGBColorSpace;
+  const scorchMaterial = new THREE.MeshBasicMaterial({ map: scorchMap });
+
+```
+
+
+## Make the flame rise and break apart
+
+A broad cone, upward velocity and overlapping sprites establish the main silhouette. Short particle lifetimes keep
+it near the source instead of letting flame tongues drift far away. Noise interrupts the regular rise; upward force
+maintains the overall direction. The scale ramp narrows old flames, and opacity keyframes hide their birth and death.
+Start by tuning this layer before adding light or distortion.
+
+
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L42)
+
+```js
+import * as THREE from 'three';
+import { Emitter, EmissionShape, EmissionSource } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: new EmissionShape({
@@ -40,34 +67,100 @@ The 10-second loop schedules a continuous flame; individual flame particles last
         },
       }),
     ],
+```
+
+
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L63)
+
+```js
+import { Curve } from 'curves';
+import * as THREE from 'three';
+import { ColorOverLifetime, ForceOverLifetime, RotationOverLifetime, ScaleOverLifetime, TransformByNoise, VelocityOverLifetime } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
+
     modules: [
       new VelocityOverLifetime({
         linear: new THREE.Vector3(0, 0.25, 0),
       }),
+
       new TransformByNoise({
         strength: 2.1,
         frequency: 1.35,
       }),
+
       new ForceOverLifetime({
         force: new THREE.Vector3(0, 0.5, 0),
       }),
+
       new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (1.3 + (0.2 - 1.3) * time);
-          return size;
-        },
+        scale: time => THREE.MathUtils.lerp(1.3, 0.2, Easing.linear.in(time)),
       }),
+
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) =>
-        ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-          ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-          : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
       }),
+
       new RotationOverLifetime({
         angularVelocity: [new THREE.Vector3(-0.5, 0, 0), new THREE.Vector3(0.5, 0, 0)],
       }),
     ],
+```
+
+
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L190)
+
+```js
+import * as THREE from 'three';
+import { ColorOverLifetime, RotationOverLifetime, ScaleOverLifetime, TransformByNoise, VelocityOverLifetime } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
+
+    modules: [
+      new VelocityOverLifetime({
+        linear: new THREE.Vector3(0, 0.5, 0),
+      }),
+
+      new TransformByNoise({
+        strength: new THREE.Vector3(0.65, 0.35, 0.65),
+        frequency: 1.7,
+      }),
+
+      new ScaleOverLifetime({
+        scale: time => {
+          const size = (0.35 + (1.8 - 0.35) * time) * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)));
+          return size;
+        },
+      }),
+
+      new ColorOverLifetime({
+        alpha: time =>
+          Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)) *
+          (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
+      }),
+
+      new RotationOverLifetime({
+        angularVelocity: [-0.45, 0.45],
+      }),
+    ],
+```
+
+
+## Put light and accumulated heat into the scene
+
+The animated flame atlas gives each sprite internal motion. Warm particle lights connect the flame to nearby objects.
+The scorch renderer casts radial searches around selected flame particles and chooses a random hit among nearby
+surfaces. Small, low-opacity marks build a burn gradually rather than stamping one dark patch. Their scale, color and
+alpha inheritance are disabled so the marks do not shrink or disappear with the flames. Use Checkerboard to see the
+floor darken; adjust scorch opacity separately from flame brightness.
+
+
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L93)
+
+```js
+import { Curve } from 'curves';
+import { DecalRenderer, LightRenderer, SpriteRenderer } from '@rzmps/rzmps';
+import fireSprite from 'examples/assets/images/fire_tile_8x4_n32.png?url';
+
     renderers: [
       new SpriteRenderer(fireSprite, {
         gridSize: { x: 8, y: 4 },
@@ -75,6 +168,7 @@ The 10-second loop schedules a continuous flame; individual flame particles last
         fps: 24,
         softParticleDistance: 1,
       }),
+
       new LightRenderer({
         count: 18,
         ratio: 0.3,
@@ -90,14 +184,14 @@ The 10-second loop schedules a continuous flame; individual flame particles last
           decay: 2,
         },
       }),
+
       new DecalRenderer(scorchMaterial, {
         onSpawn: false,
         ratio: 0.5,
         continuousRate: 3,
         direction: DecalRenderer.Radial(24),
-        hitSelection: (hits, particle, maxHits) => DecalRenderer.Random(
-          DecalRenderer.Nearest(hits, particle, 5), particle, maxHits,
-        ),
+        hitSelection: (hits, particle, maxHits) =>
+          DecalRenderer.Random(DecalRenderer.Nearest(hits, particle, 5), particle, maxHits),
         maxDistance: 1.5,
         depth: 0.06,
         size: 2.5,
@@ -105,21 +199,31 @@ The 10-second loop schedules a continuous flame; individual flame particles last
         inheritScale: 0,
         inheritAlpha: 0,
         lifetime: 8,
-        opacity: (t) => 0.05 * THREE.MathUtils.smoothstep(t, 0, 0.025)
-          * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
+        opacity: new Curve({ 0: 0, 0.025: 0.05, 0.6: 0.05, 1: 0 }),
         maxDecals: 100,
       }),
     ],
-  });
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L159)
+## Let the air shimmer on its own timing
+
+A continuous child system draws distortion separately from the flame image. Its growth and fading make the heat
+layer disperse, while its own motion keeps it from looking like another flame card. Appearance inheritance is disabled
+so flame color and lifetime changes do not collapse the shimmer. Update only the root system; it owns this child.
+
+
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L168)
 
 ```js
+import * as THREE from 'three';
+import { ColorOverLifetime, Emitter, EmissionShape, ParticleSystem, RotationOverLifetime, ScaleOverLifetime, SpriteRenderer, TransformByNoise, VelocityOverLifetime, Textures } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
+
   return new ParticleSystem({
     duration: 1,
     looping: true,
+
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.05, 8, 6),
@@ -134,28 +238,35 @@ The 10-second loop schedules a continuous flame; individual flame particles last
         },
       }),
     ],
+
     modules: [
       new VelocityOverLifetime({
         linear: new THREE.Vector3(0, 0.5, 0),
       }),
+
       new TransformByNoise({
         strength: new THREE.Vector3(0.65, 0.35, 0.65),
         frequency: 1.7,
       }),
+
       new ScaleOverLifetime({
-        scale: (time) => {
+        scale: time => {
           const size = (0.35 + (1.8 - 0.35) * time) * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)));
           return size;
         },
       }),
+
       new ColorOverLifetime({
-        alpha: (time) => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0,
-          1)) * (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
+        alpha: time =>
+          Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)) *
+          (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
       }),
+
       new RotationOverLifetime({
         angularVelocity: [-0.45, 0.45],
       }),
     ],
+
     renderers: [
       new SpriteRenderer(Textures.Default, {
         alphaMap,
@@ -170,194 +281,4 @@ The 10-second loop schedules a continuous flame; individual flame particles last
     ],
   });
 ```
-
-
-## Emitters
-
-A cone surface spreads the base of the flame. At 90 particles per second and a 1.35-second lifetime, the main population is roughly 122 sprites before culling. Upward velocity 2.2 and radial speed 0.2 make vertical flow dominate the horizontal spread; the 2.5-unit scale lets adjacent sprites overlap. The flame particles also supply the scorch renderer with their live positions and rotations. There is no separate scorch emitter or invisible source population.
-
-Uniform scale values and color strings use the standard input shortcuts.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L36)
-
-```js
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.ConeGeometry(1, 1.7, 24),
-          source: EmissionSource.Surface,
-        }),
-        rate: 90,
-        radialSpeed: 0.2,
-        initialValues: {
-          lifetime: 1.35,
-          speed: 1.2,
-          scale: 2.5,
-          color: ['#ff9c88', '#ffd47f'],
-          alpha: 0.95,
-          velocity: new THREE.Vector3(0, 2.2, 0),
-        },
-      }),
-    ],
-```
-
-
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L163)
-
-```js
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.05, 8, 6),
-        rate: options.rate,
-        radialSpeed: 1,
-        initialValues: {
-          lifetime: options.lifetime,
-          scale: options.scale,
-          velocity: new THREE.Vector3(0, options.velocity, 0),
-          color: '#ffffff',
-          rotation: [-Math.PI, Math.PI],
-        },
-      }),
-    ],
-```
-
-
-## Modules
-
-Noise strength 2.1 and frequency 1.35 break up the regular rise. The additional upward force bends the motion over time, while the scale multiplier shrinks from 1.3 to 0.2. The alpha curve fades in during the first fifth of life and fades out over the final quarter, hiding sprite births and deaths. The distortion subsystem uses gentler noise and its own grow-and-fade curve.
-
-
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L56)
-
-```js
-    modules: [
-      new VelocityOverLifetime({
-        linear: new THREE.Vector3(0, 0.25, 0),
-      }),
-      new TransformByNoise({
-        strength: 2.1,
-        frequency: 1.35,
-      }),
-      new ForceOverLifetime({
-        force: new THREE.Vector3(0, 0.5, 0),
-      }),
-      new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (1.3 + (0.2 - 1.3) * time);
-          return size;
-        },
-      }),
-      new ColorOverLifetime({
-        color: '#ffffff',
-        alpha: (time) =>
-        ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-          ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-          : 0.85 * (1 - (((time) - 0.75) / 0.25))),
-      }),
-      new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-0.5, 0, 0), new THREE.Vector3(0.5, 0, 0)],
-      }),
-    ],
-```
-
-
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L179)
-
-```js
-    modules: [
-      new VelocityOverLifetime({
-        linear: new THREE.Vector3(0, 0.5, 0),
-      }),
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.35, 0.65),
-        frequency: 1.7,
-      }),
-      new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time) * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)));
-          return size;
-        },
-      }),
-      new ColorOverLifetime({
-        alpha: (time) => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0,
-          1)) * (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
-      }),
-      new RotationOverLifetime({
-        angularVelocity: [-0.45, 0.45],
-      }),
-    ],
-```
-
-
-## Renderers
-
-The 8×4 atlas contains 32 flame frames played at 24 fps, approximately one animation across the 1.35-second life. Soft-particle distance 1 blends intersections. Particle lights are limited to 18 with ratio 0.3, avoiding a light per sprite. The secondary sprite transmits the background with distortion strength 0.05 and disables depth writing so the shimmer does not occlude the flame. DecalRenderer disables spawn placement and uses continuousRate 1.5, so each surviving flame particle projects after each two-thirds of a second of particle age. Twenty-four spherical directions find the nearest surface within three world units. The supplied black scorch texture uses a 2.5-unit footprint and shallow 0.06-unit clipping depth. Each mark lives eight seconds, fades in over its first 0.08 seconds, and fades out over its final 3.2 seconds. Peak opacity is just 0.035, so overlapping marks from multiple flame particles gradually darken the surface. Color, scale, and alpha inheritance are disabled so flame tint and lifetime modifiers do not change the burn marks. The factory disposes its scorch template material and texture when destroyed.
-
-
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L86)
-
-```js
-    renderers: [
-      new SpriteRenderer(fireSprite, {
-        gridSize: { x: 8, y: 4 },
-        frames: 32,
-        fps: 24,
-        softParticleDistance: 1,
-      }),
-      new LightRenderer({
-        count: 18,
-        ratio: 0.3,
-        inheritParticleColor: true,
-        sizeAffectsRange: true,
-        alphaAffectsIntensity: true,
-        brightness: 1.8,
-        rangeMultiplier: 3,
-        lightOptions: {
-          color: '#ffb570',
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
-      }),
-      new DecalRenderer(scorchMaterial, {
-        onSpawn: false,
-        ratio: 0.5,
-        continuousRate: 3,
-        direction: DecalRenderer.Radial(24),
-        hitSelection: (hits, particle, maxHits) => DecalRenderer.Random(
-          DecalRenderer.Nearest(hits, particle, 5), particle, maxHits,
-        ),
-        maxDistance: 1.5,
-        depth: 0.06,
-        size: 2.5,
-        inheritColor: 0,
-        inheritScale: 0,
-        inheritAlpha: 0,
-        lifetime: 8,
-        opacity: (t) => 0.05 * THREE.MathUtils.smoothstep(t, 0, 0.025)
-          * (1 - THREE.MathUtils.smoothstep(t, 0.6, 1)),
-        maxDecals: 100,
-      }),
-    ],
-```
-
-
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L203)
-
-```js
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        alphaMap,
-        softParticleDistance: 2.5,
-        materialOptions: {
-          transmission: 1,
-          distortionMap,
-          distortionStrength: 0.05,
-          depthWrite: false,
-        },
-      }),
-    ],
-```
-
 

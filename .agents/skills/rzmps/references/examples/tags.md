@@ -7,23 +7,23 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">tags</span> <span class="example-tag">collision</span> <span class="example-tag">meshes</span> <span class="example-tag">sprites</span> <span class="example-tag">tag-filtering</span> <span class="example-tag">effects</span></div>
 
-Tag-based module and renderer filtering by mixing cubes and spheres in one particle system.
+This example puts two distinct visual behaviors in one particle system: cubes tumble and fade, while spheres grow
+and collide. Tags express that artistic split without requiring two separately updated systems.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/tags.png)
 
-## Particle System Configuration
+## Give each birth one role
 
-The 10-second loop shares emission and zero-gravity integration between cubes and spheres. This demonstrates how one system can own several appearances without maintaining two independent simulations. Lifetimes 6–12 seconds leave time to compare the tagged behaviors.
+The emitter distributes the `cubes` and `spheres` tags rather than giving every particle both. The shared source and
+color palette keep the populations visually related. Zero gravity makes their different treatment easier to see;
+longer lifetimes leave enough time for growth and rotation to become apparent.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L26)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L28)
 
 ```js
-  const system = new ParticleSystem({
-    duration: 10,
-    looping: true,
-    gravity: new THREE.Vector3(0, 0, 0),
-    gravityModifier: 0,
+import { TagSelectionMethod } from '@rzmps/rzmps';
+import { Emitter } from '@rzmps/rzmps';
 
     emitters: [
       new Emitter({
@@ -35,33 +35,63 @@ The 10-second loop shares emission and zero-gravity integration between cubes an
           lifetime: [6, 12],
           speed: 1,
           color: colors,
-          scale: [
-            0.1,
-            0.25,
-          ],
+          scale: [0.1, 0.25],
           alpha: 1,
         },
       }),
     ],
+```
+
+
+## Make the two roles behave differently
+
+Cube-tagged particles receive rotation and a late alpha fade. Sphere-tagged particles grow and collide with scene
+geometry. Each module carries the tag for the group it should affect. If a new behavior belongs to both groups,
+leave its filter shared; if it belongs to just one, match that group's tag deliberately.
+
+
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L46)
+
+```js
+import * as THREE from 'three';
+import { Collision, RotationOverLifetime, ColorOverLifetime, ScaleOverLifetime } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
 
     modules: [
       new RotationOverLifetime({
         angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
         tags: 'cubes',
       }),
+
       new ColorOverLifetime({
-        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1))),
+        alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
         tags: 'cubes',
       }),
+
       new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time);
-          return size;
-        },
-        tags: 'spheres'
+        scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
+        tags: 'spheres',
       }),
-      new Collision({ tags: 'spheres' })
+
+      new Collision({ tags: 'spheres' }),
     ],
+```
+
+
+## Match appearance to the same roles
+
+One renderer draws spherical billboards, the other box meshes. Their matching filters ensure each birth gets the
+intended appearance rather than both. Shadows make the boxes' faces visible, while spherical normals round the
+sprite lighting. Add a collision scene to see the sphere-only contacts. See [Using Tags](https://rzmps.rzmay.com/docs/guides/tags.html) when adapting
+the pattern to more groups.
+
+
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L67)
+
+```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import * as THREE from 'three';
+import { SpriteRenderer, MeshRenderer, Textures } from '@rzmps/rzmps';
 
     renderers: [
       new SpriteRenderer(Textures.Circle, {
@@ -74,107 +104,13 @@ The 10-second loop shares emission and zero-gravity integration between cubes an
         },
         castShadow: true,
       }),
+
       new MeshRenderer({
         tags: 'cubes',
-        mesh: new THREE.Mesh(
-          new THREE.BoxGeometry(1, 1, 1),
-          new THREE.MeshStandardMaterial()
-        ),
-        castShadow: true,
-        receiveShadow: true,
-      }),
-    ],
-  });
-```
-
-
-## Emitters
-
-The emitter assigns spheres and cubes with tagSelection distribute instead of giving every particle both tags. CPU emission alternates births; GPU emission selects by buffer slot modulo the number of tags, without a shared emission counter. Slots retain that selection when reused, so the live mix depends on which slots are occupied. Rate 12 yields roughly six per second in each group as the population fills. Scale 0.1–0.25 and a discrete four-color Set vary appearance while keeping particle motion comparable.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L33)
-
-```js
-    emitters: [
-      new Emitter({
-        rate: 12,
-        radialSpeed: 1,
-        tags: ['spheres', 'cubes'],
-        tagSelection: TagSelectionMethod.Distribute,
-        initialValues: {
-          lifetime: [6, 12],
-          speed: 1,
-          color: colors,
-          scale: [
-            0.1,
-            0.25,
-          ],
-          alpha: 1,
-        },
-      }),
-    ],
-```
-
-
-## Modules
-
-Only cubes receive rotation and cubic alpha fade. Only spheres receive growth from multiplier 0.35 to 1.8 and a Collision module. Matching tags on each module prevents accidental cross-group changes. Add collision scene geometry to see the sphere-only contact response.
-
-
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L54)
-
-```js
-    modules: [
-      new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
-        tags: 'cubes',
-      }),
-      new ColorOverLifetime({
-        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1))),
-        tags: 'cubes',
-      }),
-      new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time);
-          return size;
-        },
-        tags: 'spheres'
-      }),
-      new Collision({ tags: 'spheres' })
-    ],
-```
-
-
-## Renderers
-
-The sphere renderer filters to spheres and uses a lit Circle sprite with spherical normals. The cube renderer filters to cubes and instances BoxGeometry with MeshStandardMaterial. Both enable shadow casting, and cubes also receive shadows. Distributed tags avoid drawing both a mesh and a sprite for every particle.
-
-
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L75)
-
-```js
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        tags: 'spheres',
-        materialOptions: {
-          roughness: 0.5,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-        castShadow: true,
-      }),
-      new MeshRenderer({
-        tags: 'cubes',
-        mesh: new THREE.Mesh(
-          new THREE.BoxGeometry(1, 1, 1),
-          new THREE.MeshStandardMaterial()
-        ),
+        mesh: new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()),
         castShadow: true,
         receiveShadow: true,
       }),
     ],
 ```
-
 

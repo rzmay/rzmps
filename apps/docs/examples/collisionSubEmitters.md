@@ -9,31 +9,56 @@ example: collisionSubEmitters
 
 <ExampleTags />
 
-Collision-triggered subsystems and sound effects with physics-driven EQ filtering and live-cubemap rendering for convincing metallic surfaces.
+A metal ball should announce an impact through more than a change of direction. This preset layers a short spark
+burst and a contact sound onto bouncing, reflective balls, tying those cues to the force of each collision.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Load the impact sound
 
-The parent loops every five seconds under gravity and uses live cubemap reflections with intensity 3. A separate nonlooping spark system lasts 0.08 seconds as an emission window. It is triggered on contacts above impulse threshold 1.2; inheritance and impulse scaling let spark motion differ from the heavy parent.
+Decode the contact sound before creating the renderers so the first collision can play it. The helper records the
+clip's source URL for the demo's code exporter; it does not change the sound. Keep this setup separate from volume
+and impulse tuning, which control how the loaded clip is used.
 
-<ExampleCode region="system" />
+<ExampleCode region="system:audioSources" />
+<ExampleCode region="system:resources" />
 
-## Emitters
+## Make the balls feel solid
 
-The balls emit at five per second with lifetime eight, keeping the population near 40 for manageable collision and audio costs. Each contact burst emits 3–6 sparks with lifetimes 0.18–0.42 and radial speed 0.5–2. The short emission window does not truncate those particle lifetimes.
+The parent emits a small stream under gravity. Long particle lifetimes let the same ball strike the scene repeatedly.
+The Collision module uses a lively bounce with modest damping, so contacts remain easy to hear and see. Choose a
+scene with geometry; the live cubemap and metallic material need an environment to reflect.
 
-<ExampleCode region="emitters" />
+<ExampleCode region="emitters:1" />
+<ExampleCode region="modules:1" />
 
-## Modules
+## Make stronger contacts throw brighter fragments
 
-The parent Collision module retains bounce 0.75 and dampen 0.05, so balls can strike surfaces repeatedly. The spark ColorOverLifetime module fades linearly. Subsystem impulse factors increase spark scale and speed for stronger contacts and align emission using the collision normal.
+A separate spark system is triggered only above an impulse threshold. Its brief emission window starts a burst;
+the sparks' own lifetimes let their streaks finish afterward. Impulse-dependent speed and scale connect the size of
+the response to the hit. The collision normal supplies a useful outward direction instead of scattering sparks
+through the struck surface.
 
-<ExampleCode region="modules" />
+<ExampleCode region="system:2" />
 
-## Renderers
+## Let sound and reflections reinforce the material
 
-Lit sprites with metalness 0.6 and roughness 0.2 make live reflections visible. Collision audio uses volume 0.18, pitch variation 0.8–1.2, and impulse-dependent volume and low-pass filtering. Sparks use short 0.16-second emissive trails with depth writing disabled so their bright streaks layer cleanly. PNG previews cannot validate the sound itself.
+Low roughness and metalness make the balls look reflective. Contact audio varies in pitch and responds to impulse,
+while filtering changes its tone. Keep the sound below the level where repeated bounces blend into one loud bed.
+The short emissive spark trails provide a contrasting flash. Use the live demo with audio enabled to tune how the
+visual and audible cues meet.
 
-<ExampleCode region="renderers" />
+<ExampleCode region="renderers:1" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />
+
+Connect the secondary behavior to the root with the relationships below. The root owns child updates; their
+inheritance and event filters decide when each layer starts and which source it follows.
+
+<ExampleCode region="system:connections" />

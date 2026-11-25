@@ -7,27 +7,25 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">acid</span> <span class="example-tag">decals</span> <span class="example-tag">sources</span> <span class="example-tag">events</span> <span class="example-tag">smoke</span></div>
 
-Green acid pools emit rotating smoke and floating refractive bubbles. Select Checkerboard for a floor.
+The acid should leave active pools, not just a splash that disappears. Falling droplets create surface marks; each
+pool continues to give off smoke and occasional bubbles after the droplet is gone. Choose Checkerboard for a floor.
 
-<span class="example-author">Preset by <a href="https://github.com/rzmay" rel="author">rzmay</a></span>
 ![Example preview](https://rzmps.rzmay.com/docs/previews/acid.png)
 
-## Particle System Configuration
+## Make droplets leave a lasting source
 
-This self-contained factory configures droplet collisions, surface projection, lighting, textures, and disposal. The droplet
-rate is 0.3 per second. Pools last eighteen seconds and have twice the previous width and height. The pool keeps its
-registered emission source after its original droplet dies. Each source disappears with its decal, while previously
-emitted smoke and splash particles finish their own lifetimes. Update only the root system.
+The root emits slowly so individual pools have room to develop. Collision ends the airborne droplet, while the decal
+renderer leaves its green footprint on the hit surface. Registering that footprint as a tagged source gives the smoke
+and bubbles a stable place to begin. Only those pool sources are selected for the secondary effects, so airborne
+droplets do not smoke or bubble before landing.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L43)
+[Source: emitters:pool](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L51)
 
 ```js
-  const acid = new ParticleSystem({
-    duration: 8,
-    looping: true,
-    prewarm: true,
-    gravityModifier: 1,
+import * as THREE from 'three';
+import { Emitter, EmissionShape } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.12),
@@ -43,7 +41,25 @@ emitted smoke and splash particles finish their own lifetimes. Update only the r
         },
       }),
     ],
+```
+
+
+[Source: modules:pool](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L69)
+
+```js
+import { Collision } from '@rzmps/rzmps';
+
     modules: [new Collision({ lifetimeLoss: 1 })],
+```
+
+
+[Source: renderers:pool](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L73)
+
+```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import * as THREE from 'three';
+import { DecalRenderer, SpriteRenderer, Textures } from '@rzmps/rzmps';
+
     renderers: [
       new SpriteRenderer(Textures.Circle, {
         material: SpriteMaterialType.Lit,
@@ -54,6 +70,7 @@ emitted smoke and splash particles finish their own lifetimes. Update only the r
           normalLighting: 1,
         },
       }),
+
       new DecalRenderer(paint, {
         onSpawn: false,
         onCollision: true,
@@ -70,334 +87,26 @@ emitted smoke and splash particles finish their own lifetimes. Update only the r
         emissionTags: ['acid-pool'],
       }),
     ],
-  });
-  acid.name = 'Acid';
-  const decals = acid.renderers.find(renderer => renderer instanceof DecalRenderer);
-
-  // Shape points become offsets within each pool's emission frame, including its scale.
-  const smokeShape = EmissionShape.Sphere(0.2);
-  smokeShape.scale.set(1, 0.12, 1);
-  const smoke = new ParticleSystem({
-    duration: 60,
-    gravityModifier: -0.005,
-    maxParticles: 4096,
-    emitters: new Emitter({
-      source: smokeShape,
-      rate: 5,
-      radialSpeed: 0.08,
-      initialValues: {
-        lifetime: [2, 3.5],
-        scale: 1.5,
-        alpha: 0.025,
-        color: '#83cf3e',
-        velocity: new THREE.Vector3(0, 0.55, 0),
-      },
-    }),
-    modules: [
-      new TransformByNoise({ strength: 0.25, frequency: 0.7 }),
-      new RotationOverLifetime({
-        angularVelocity: [-0.5, 0.5],
-      }),
-      new ScaleOverLifetime({ scale: t => 0.35 + (1.8 - 0.35) * t }),
-      new ColorOverLifetime({ alpha: t => Math.sin(t * Math.PI) }),
-    ],
-    renderers: new SpriteRenderer(Textures.Default, {
-      alphaMap: smokeAlpha,
-      softParticleDistance: 0.4,
-    }),
-  });
-  const bubbleShape = EmissionShape.Sphere(0.35);
-  bubbleShape.scale.set(1, 0.12, 1);
-  bubbleShape.position.y = 0.1;
-  const bubbles = new ParticleSystem({
-    duration: 0.35,
-    gravityModifier: -0.005,
-    maxParticles: 2048,
-    useLiveCubemap: true,
-    emitters: new Emitter({
-      source: bubbleShape,
-      bursts: { time: 0, count: 6 },
-      radialSpeed: 0.12,
-      initialValues: {
-        lifetime: [4, 7],
-        scale: [0.12, 0.26],
-        mass: 0.25,
-        color: ['#ccffd0', '#e0ffb8'],
-        velocity: new THREE.Vector3(0, 0.35, 0),
-      },
-    }),
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.2, 0.05, 0.2),
-        frequency: 0.6,
-      }),
-      new ScaleOverLifetime({
-        scale: t => Math.pow(THREE.MathUtils.clamp(t * 5, 0, 1), 3),
-      }),
-      new DistortionBySize({ sizeRange: [0, 1], distortionStrength: [0, 1] }),
-      new ColorOverLifetime({ alpha: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1) }),
-    ],
-    renderers: new SpriteRenderer(Textures.Circle, {
-      material: SpriteMaterialType.Lit,
-      materialOptions: {
-        roughness: 0.15,
-        metalness: 0.5,
-        sphericalNormals: 1,
-        normalLighting: 0.75,
-        transmissionMap,
-        transmission: 0.7,
-        distortionMap,
-        distortionStrength: -0.05,
-      },
-    }),
-  });
-
-  class PoolBubbling extends Module {
-    constructor() {
-      super(() => { }, { modifyGPU() { } });
-      this.remaining = new Map();
-    }
-
-    // A once-per-step hook for this factory's scheduler; modify/modifyGPU remain empty.
-    prepare(context) {
-      super.prepare(context);
-      const { deltaTime: dt } = context;
-      const alive = new Set();
-      for (const decal of decals.decals) {
-        const source = decal.source;
-        if (!source) continue;
-        alive.add(source.id);
-        const remaining = (this.remaining.get(source.id) ?? (2 + Math.random() * 2)) - dt;
-        if (remaining <= 0) {
-          source.emitEvent('bubble', { strength: 0.5 + Math.random() });
-          this.remaining.set(source.id, 7 + Math.random() * 4);
-        } else this.remaining.set(source.id, remaining);
-      }
-      for (const id of this.remaining.keys()) if (!alive.has(id)) this.remaining.delete(id);
-    }
-  }
-  acid.addModule(new PoolBubbling());
-
-  smoke.name = 'Pool Smoke';
-  bubbles.name = 'Pool Bubbles';
-  acid.addSubSystem(smoke, {
-    tags: ['acid-pool'],
-    emitContinuous: true,
-    inheritLifetime: 0,
-    inheritColor: 0,
-    inheritScale: 1,
-    inheritAlpha: 1,
-  });
-  acid.addSubSystem(bubbles, {
-    tags: ['acid-pool'],
-    inheritLifetime: 0,
-    inheritColor: 0,
-    onEvent: {
-      bubble: (data, source, context) => {
-        const strength = typeof data === 'object' && data !== null
-          && 'strength' in data && typeof data.strength === 'number' ? data.strength : 1;
-        return {
-          scale: strength,
-          velocity: new THREE.Vector3(0, strength * 0.12, 0),
-          alpha: context.alpha,
-        };
-      },
-    },
-  });
 ```
 
 
-## Emitters
+## Give the surface a wet, fading footprint
 
-Smoke uses five particles per second per pool with alpha 0.13. Its rotation and scale match the Smoke example:
-initial size 2.5, a lifetime scale multiplier growing from 0.35 to 1.8, and angular velocity sampled between -1 and 1
-radians per second. Billboard sprites use rotation X for screen-space roll. A flattened radius-0.45 sphere supplies
-random local offsets across the pool before the source transform is applied. Noise, expansion, subtle rotation and
-a sine opacity envelope create varied wisps. Bubble events create six
-pastel green bubbles with 4–7 second lifetimes,
-slow upward velocity and gentle buoyancy. Event strength scales their size and adds a small upward drift. The smoke and
-bubble systems use the same emitter contexts on CPU; GPU children receive batched births allocated into actual free GPU
-slots.
+The pool material and opacity curve make the acid read as a surface layer rather than another floating particle.
+Its lifetime controls how long that source remains active. Child particles have independent lifetimes, allowing an
+existing wisp or bubble to finish naturally when a pool fades. Keep the pool's scale separate from the original
+droplet when changing the footprint.
 
 
-[Source: emitters:pool](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L49)
+[Source: renderers:materials](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L27)
 
 ```js
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.12),
-        rate: 0.3,
-        radialSpeed: 3,
-        initialValues: {
-          position: new THREE.Vector3(0, 3.5, 0),
-          velocity: new THREE.Vector3(0, 1.5, 0),
-          lifetime: 8,
-          scale: new THREE.Vector3(0.2, 0.2, 0.2),
-          color: '#7ee927',
-          rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
-        },
-      }),
-    ],
-```
+import * as THREE from 'three';
+import { Textures } from '@rzmps/rzmps';
+import splatterTexture from 'examples/assets/images/splat2.png?url';
+import splatterNormal from 'examples/assets/images/splat2_norm.jpg?url';
+import simpleNorm from 'examples/assets/images/simple_norm.png?url';
 
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L101)
-
-```js
-  // Shape points become offsets within each pool's emission frame, including its scale.
-  const smokeShape = EmissionShape.Sphere(0.2);
-  smokeShape.scale.set(1, 0.12, 1);
-  const smoke = new ParticleSystem({
-    duration: 60,
-    gravityModifier: -0.005,
-    maxParticles: 4096,
-    emitters: new Emitter({
-      source: smokeShape,
-      rate: 5,
-      radialSpeed: 0.08,
-      initialValues: {
-        lifetime: [2, 3.5],
-        scale: 1.5,
-        alpha: 0.025,
-        color: '#83cf3e',
-        velocity: new THREE.Vector3(0, 0.55, 0),
-      },
-    }),
-    modules: [
-      new TransformByNoise({ strength: 0.25, frequency: 0.7 }),
-      new RotationOverLifetime({
-        angularVelocity: [-0.5, 0.5],
-      }),
-      new ScaleOverLifetime({ scale: t => 0.35 + (1.8 - 0.35) * t }),
-      new ColorOverLifetime({ alpha: t => Math.sin(t * Math.PI) }),
-    ],
-    renderers: new SpriteRenderer(Textures.Default, {
-      alphaMap: smokeAlpha,
-      softParticleDistance: 0.4,
-    }),
-  });
-  const bubbleShape = EmissionShape.Sphere(0.35);
-  bubbleShape.scale.set(1, 0.12, 1);
-  bubbleShape.position.y = 0.1;
-  const bubbles = new ParticleSystem({
-    duration: 0.35,
-    gravityModifier: -0.005,
-    maxParticles: 2048,
-    useLiveCubemap: true,
-    emitters: new Emitter({
-      source: bubbleShape,
-      bursts: { time: 0, count: 6 },
-      radialSpeed: 0.12,
-      initialValues: {
-        lifetime: [4, 7],
-        scale: [0.12, 0.26],
-        mass: 0.25,
-        color: ['#ccffd0', '#e0ffb8'],
-        velocity: new THREE.Vector3(0, 0.35, 0),
-      },
-    }),
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.2, 0.05, 0.2),
-        frequency: 0.6,
-      }),
-      new ScaleOverLifetime({
-        scale: t => Math.pow(THREE.MathUtils.clamp(t * 5, 0, 1), 3),
-      }),
-      new DistortionBySize({ sizeRange: [0, 1], distortionStrength: [0, 1] }),
-      new ColorOverLifetime({ alpha: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1) }),
-    ],
-    renderers: new SpriteRenderer(Textures.Circle, {
-      material: SpriteMaterialType.Lit,
-      materialOptions: {
-        roughness: 0.15,
-        metalness: 0.5,
-        sphericalNormals: 1,
-        normalLighting: 0.75,
-        transmissionMap,
-        transmission: 0.7,
-        distortionMap,
-        distortionStrength: -0.05,
-      },
-    }),
-  });
-```
-
-
-## Modules
-
-PoolBubbling uses `Module.prepare(context)` as a once-per-simulation-step hook, including GPU processing. Its
-per-particle
-`modify` and `modifyGPU` callbacks intentionally do nothing; the empty GPU callback preserves GPU eligibility. The
-factory returns a ParticleSystem rather than its own animation loop, so prepare() keeps the scheduler on the system's
-clock, respecting pause, simulation speed and fixed-step advancement. Call `super.prepare(context)` when overriding it.
-
-This is also a useful pattern for other effect-level scheduling. In an application that owns the animation loop, the
-same scheduling code can run outside a module before calling the root system's update(). Do not update children
-separately.
-
-Independent countdowns follow decal source IDs: each pool waits 2–4 seconds before its first burst, then 7–11 seconds
-between subsequent bursts. The longer gaps distinguish bubbling events from continuous smoke. Expiry removes timer
-state, and ordinary source updates do not restart countdowns. No interval callbacks or hidden particles keep pools
-alive.
-
-
-[Source: modules:pool](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L66)
-
-```js
-    modules: [new Collision({ lifetimeLoss: 1 })],
-```
-
-
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L181)
-
-```js
-  class PoolBubbling extends Module {
-    constructor() {
-      super(() => { }, { modifyGPU() { } });
-      this.remaining = new Map();
-    }
-
-    // A once-per-step hook for this factory's scheduler; modify/modifyGPU remain empty.
-    prepare(context) {
-      super.prepare(context);
-      const { deltaTime: dt } = context;
-      const alive = new Set();
-      for (const decal of decals.decals) {
-        const source = decal.source;
-        if (!source) continue;
-        alive.add(source.id);
-        const remaining = (this.remaining.get(source.id) ?? (2 + Math.random() * 2)) - dt;
-        if (remaining <= 0) {
-          source.emitEvent('bubble', { strength: 0.5 + Math.random() });
-          this.remaining.set(source.id, 7 + Math.random() * 4);
-        } else this.remaining.set(source.id, remaining);
-      }
-      for (const id of this.remaining.keys()) if (!alive.has(id)) this.remaining.delete(id);
-    }
-  }
-  acid.addModule(new PoolBubbling());
-```
-
-
-## Renderers
-
-The DecalRenderer publishes acid-pool tags. Both children select that tag, excluding the airborne parent
-droplets. Smoke continuously follows each pool; bubbles subscribe to bubble events. Alpha inherits the fading decal
-opacity, so emissions soften near expiry. Full transform-scale inheritance spreads emission across each pool's
-footprint. The emitter shape defines local offsets, then the registered source transform places and scales them.
-Lifetime inheritance is zero because pools are persistent external sources with independent child lifetimes.
-
-Bubbles copy the Bubbles preset's lit material settings: spherical normals 1, roughness 0.15,
-metalness 0.5, normal lighting 0.75, transmission 0.7 with the simple texture, and normal-map
-refraction distortion -0.05. Size-driven distortion and a gentle wobble soften their movement.
-The bubble subsystem owns a live cubemap; normal root updates refresh subsystem cubemaps too.
-The factory disposes both bubble material textures with the root.
-
-
-[Source: renderers:materials](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L26)
-
-```js
   const textureLoader = new THREE.TextureLoader();
   const paintMap = textureLoader.load(splatterTexture);
   paintMap.colorSpace = THREE.SRGBColorSpace;
@@ -415,41 +124,145 @@ The factory disposes both bubble material textures with the root.
 ```
 
 
-[Source: renderers:pool](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L69)
+## Let smoke rise and bubbles arrive in episodes
+
+Smoke emits continuously from local offsets across the pool. Growth, slow rotation and noise make the wisps spread.
+Bubbles arrive on separate per-pool countdowns rather than as a constant stream, giving the surface a quieter interval
+between reactions. A short bubble-growth ramp makes each one form before drifting away. Refractive bubble materials
+and their own reflections suggest a thin shell. Increase the countdown gaps for calmer acid, or the smoke rate for
+a more active, vaporous pool. See [Sources and Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) for source selection.
+
+
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L106)
 
 ```js
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          roughness: 0.95,
-          metalness: 0,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
+import { Easing } from 'eaz';
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import * as THREE from 'three';
+import { ColorOverLifetime, DistortionBySize, Emitter, EmissionShape, ParticleSystem, RotationOverLifetime, ScaleOverLifetime, SpriteRenderer, Textures, TransformByNoise } from '@rzmps/rzmps';
+import smokeAlpha from 'examples/assets/images/smoke_alpha.jpg?url';
+
+  // Shape points become offsets within each pool's emission frame, including its scale.
+  const smokeShape = EmissionShape.Sphere(0.2);
+  smokeShape.scale.set(1, 0.12, 1);
+  const smoke = new ParticleSystem({
+    duration: 60,
+    gravityModifier: -0.005,
+    maxParticles: 4096,
+    emitters: new Emitter({
+      source: smokeShape,
+      rate: 5,
+      radialSpeed: 0.08,
+      initialValues: {
+        lifetime: [2, 3.5],
+        scale: 1.5,
+        alpha: 0.025,
+        color: '#83cf3e',
+        velocity: new THREE.Vector3(0, 0.55, 0),
+      },
+    }),
+    modules: [
+      new TransformByNoise({ strength: 0.25, frequency: 0.7 }),
+      new RotationOverLifetime({
+        angularVelocity: [-0.5, 0.5],
       }),
-      new DecalRenderer(paint, {
-        onSpawn: false,
-        onCollision: true,
-        // Backends without mesh identity search opposite the collision normal, including on walls.
-        maxDistance: 1,
-        depth: 0.08,
-        size: 15,
-        inheritColor: 1,
-        inheritScale: 1,
-        inheritAlpha: 1,
-        lifetime: 18,
-        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.55, 1),
-        maxDecals: 64,
-        emissionTags: ['acid-pool'],
-      }),
+
+      new ScaleOverLifetime({ scale: t => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(t)) }),
+      new ColorOverLifetime({ alpha: t => Math.sin(t * Math.PI) }),
     ],
+    renderers: new SpriteRenderer(Textures.Default, {
+      alphaMap: smokeAlpha,
+      softParticleDistance: 0.4,
+    }),
+  });
+  const bubbleShape = EmissionShape.Sphere(0.35);
+  bubbleShape.scale.set(1, 0.12, 1);
+  bubbleShape.position.y = 0.1;
+  const bubbles = new ParticleSystem({
+    duration: 0.35,
+    gravityModifier: -0.005,
+    maxParticles: 2048,
+    useLiveCubemap: true,
+    emitters: new Emitter({
+      source: bubbleShape,
+      bursts: { time: 0, count: 6 },
+      radialSpeed: 0.12,
+      initialValues: {
+        lifetime: [4, 7],
+        scale: [0.12, 0.26],
+        mass: 0.25,
+        color: ['#ccffd0', '#e0ffb8'],
+        velocity: new THREE.Vector3(0, 0.35, 0),
+      },
+    }),
+    modules: [
+      new TransformByNoise({
+        strength: new THREE.Vector3(0.2, 0.05, 0.2),
+        frequency: 0.6,
+      }),
+
+      new ScaleOverLifetime({
+        scale: t => Easing.cubic.in(THREE.MathUtils.clamp(t * 5, 0, 1)),
+      }),
+
+      new DistortionBySize({ sizeRange: [0, 1], distortionStrength: [0, 1] }),
+      new ColorOverLifetime({ alpha: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1) }),
+    ],
+    renderers: new SpriteRenderer(Textures.Circle, {
+      material: SpriteMaterialType.Lit,
+      materialOptions: {
+        roughness: 0.15,
+        metalness: 0.5,
+        sphericalNormals: 1,
+        normalLighting: 0.75,
+        transmissionMap,
+        transmission: 0.7,
+        distortionMap,
+        distortionStrength: -0.05,
+      },
+    }),
+  });
 ```
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L209)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L189)
 
 ```js
+import { Module } from '@rzmps/rzmps';
+
+  class PoolBubbling extends Module {
+    constructor() {
+      super(() => {}, { modifyGPU() {} });
+      this.remaining = new Map();
+    }
+
+    // A once-per-step hook for this factory's scheduler; modify/modifyGPU remain empty.
+    prepare(context) {
+      super.prepare(context);
+      const { deltaTime: dt } = context;
+      const alive = new Set();
+      for (const decal of decals.decals) {
+        const source = decal.source;
+        if (!source) continue;
+        alive.add(source.id);
+        const remaining = (this.remaining.get(source.id) ?? 2 + Math.random() * 2) - dt;
+        if (remaining <= 0) {
+          source.emitEvent('bubble', { strength: 0.5 + Math.random() });
+          this.remaining.set(source.id, 7 + Math.random() * 4);
+        } else this.remaining.set(source.id, remaining);
+      }
+      for (const id of this.remaining.keys()) if (!alive.has(id)) this.remaining.delete(id);
+    }
+  }
+  acid.addModule(new PoolBubbling());
+```
+
+
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/acid.js#L217)
+
+```js
+import * as THREE from 'three';
+
   smoke.name = 'Pool Smoke';
   bubbles.name = 'Pool Bubbles';
   acid.addSubSystem(smoke, {
@@ -466,8 +279,10 @@ The factory disposes both bubble material textures with the root.
     inheritColor: 0,
     onEvent: {
       bubble: (data, source, context) => {
-        const strength = typeof data === 'object' && data !== null
-          && 'strength' in data && typeof data.strength === 'number' ? data.strength : 1;
+        const strength =
+          typeof data === 'object' && data !== null && 'strength' in data && typeof data.strength === 'number'
+            ? data.strength
+            : 1;
         return {
           scale: strength,
           velocity: new THREE.Vector3(0, strength * 0.12, 0),
@@ -478,6 +293,3 @@ The factory disposes both bubble material textures with the root.
   });
 ```
 
-
-See [Sources and Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html), [Surface Decals](https://rzmps.rzmay.com/docs/guides/decals.html), and
-[Fireflies](https://rzmps.rzmay.com/docs/examples/fireflies.html) for neighbor-triggered GPU light pulses.

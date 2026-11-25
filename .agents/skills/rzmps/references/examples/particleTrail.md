@@ -7,23 +7,24 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">particleTrail</span> <span class="example-tag">trails</span> <span class="example-tag">noise</span> <span class="example-tag">effects</span></div>
 
-Per-particle trail rendering with inherited color and alpha over moving particles.
+The visible effect is the path left behind a moving particle. Each source follows an arcing, disturbed trajectory;
+its trail gives that brief motion enough persistence to read as a streak.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/particleTrail.png)
 
-## Particle System Configuration
+## Launch a few distinct paths
 
-The 2-second loop continuously feeds particles with 2.5-second lifetimes. Gravity (0, -1.5, 0) bends initially upward trajectories into arcs. Particle and trail lifetimes differ, allowing the path to linger after its source has moved on.
+A compact source starts particles upward with varied lateral velocity. Downward gravity bends those launches into
+arcs. Only a modest stream is needed because a trail occupies the path, not just its current endpoint. Keep the
+launches separate enough to follow one before increasing their overlap.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L17)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L26)
 
 ```js
-  const particleTrail = new ParticleSystem({
-    maxParticles: 64,
-    duration: 2,
-    looping: true,
-    gravity: new THREE.Vector3(0, -1.5, 0),
+import * as THREE from 'three';
+import { Emitter, EmissionShape } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: new EmissionShape({
@@ -32,70 +33,7 @@ The 2-second loop continuously feeds particles with 2.5-second lifetimes. Gravit
         rate: 8,
         initialValues: {
           lifetime: 2.5,
-          velocity: [
-            new THREE.Vector3(-1.5, 4, -1.5),
-            new THREE.Vector3(1.5, 6, 1.5),
-          ],
-          scale: 0.15,
-        },
-      }),
-    ],
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(100, 0, 100),
-        frequency: 5,
-      }),
-    ],
-    renderers: [
-      new TrailRenderer({
-        mode: TrailMode.Particle,
-        ratio: 1,
-        lifetime: 0.75,
-        minimumVertexDistance: 0.05,
-        dieWithParticles: false,
-        width: 0.18,
-        widthOverTrail: (time) => {
-          if (time < 0.2) return time / 0.2;
-          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
-          return 0.85 * (1 - ((time - 0.75) / 0.25));
-        },
-        colorOverTrail: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#00d0ff'),
-          new THREE.Color('#ff66ba'),
-          time,
-        ),
-        inheritParticleColor: true,
-        textureMode: TrailTextureMode.Stretch,
-        materialOptions: {
-          roughness: 0.7,
-          map: simpleSpriteTexture,
-        },
-      }),
-    ],
-  });
-```
-
-
-## Emitters
-
-Only eight particles per second are needed because their trails supply most of the visible coverage. Emission starts within a radius-0.15 sphere, with upward velocities 4–6 and lateral components between -1.5 and 1.5. The 0.15 particle scale keeps each moving source compact.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L23)
-
-```js
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.SphereGeometry(0.15, 12, 8),
-        }),
-        rate: 8,
-        initialValues: {
-          lifetime: 2.5,
-          velocity: [
-            new THREE.Vector3(-1.5, 4, -1.5),
-            new THREE.Vector3(1.5, 6, 1.5),
-          ],
+          velocity: [new THREE.Vector3(-1.5, 4, -1.5), new THREE.Vector3(1.5, 6, 1.5)],
           scale: 0.15,
         },
       }),
@@ -103,14 +41,19 @@ Only eight particles per second are needed because their trails supply most of t
 ```
 
 
-## Modules
+## Disturb the path sideways
 
-TransformByNoise uses strong horizontal components (100) and zero vertical strength at frequency 5. The result strongly perturbs the lateral path while gravity and initial vertical velocity still shape its height. The large strength is a visible parameter to inspect carefully when adapting the effect to another scene scale.
+Noise acts strongly across the horizontal plane while leaving the launch height mostly to velocity and gravity.
+That choice produces erratic lateral motion instead of a smooth fountain. The strength is intentionally pronounced;
+reduce it when adapting the effect to a calmer wake or a smaller scene.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L41)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L42)
 
 ```js
+import * as THREE from 'three';
+import { TransformByNoise } from '@rzmps/rzmps';
+
     modules: [
       new TransformByNoise({
         strength: new THREE.Vector3(100, 0, 100),
@@ -120,14 +63,21 @@ TransformByNoise uses strong horizontal components (100) and zero vertical stren
 ```
 
 
-## Renderers
+## Let the path linger and taper
 
-Particle mode gives every selected particle its own trail, with ratio 1. Trail lifetime 0.75 and minimum vertex distance 0.05 balance persistence against vertex count. Width 0.18 tapers at both ends; the cyan-to-pink gradient makes progression along the path readable. dieWithParticles false lets older trail segments finish fading.
+Particle mode gives each source its own trail. Its lifetime controls how much past motion remains visible, while
+minimum vertex distance controls how closely the path is sampled. An eased width envelope tapers the beginning and end so
+the streak does not end as a blunt strip. A cyan-to-pink gradient makes progression along the trail clear.
+`dieWithParticles: false` lets the remaining segments finish after their source disappears.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L49)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L51)
 
 ```js
+import { Curve } from 'curves';
+import * as THREE from 'three';
+import { TrailRenderer, TrailMode, TrailTextureMode } from '@rzmps/rzmps';
+
     renderers: [
       new TrailRenderer({
         mode: TrailMode.Particle,
@@ -136,16 +86,9 @@ Particle mode gives every selected particle its own trail, with ratio 1. Trail l
         minimumVertexDistance: 0.05,
         dieWithParticles: false,
         width: 0.18,
-        widthOverTrail: (time) => {
-          if (time < 0.2) return time / 0.2;
-          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
-          return 0.85 * (1 - ((time - 0.75) / 0.25));
-        },
-        colorOverTrail: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#00d0ff'),
-          new THREE.Color('#ff66ba'),
-          time,
-        ),
+        widthOverTrail: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
+        colorOverTrail: time =>
+          new THREE.Color().lerpColors(new THREE.Color('#00d0ff'), new THREE.Color('#ff66ba'), time),
         inheritParticleColor: true,
         textureMode: TrailTextureMode.Stretch,
         materialOptions: {
@@ -155,5 +98,4 @@ Particle mode gives every selected particle its own trail, with ratio 1. Trail l
       }),
     ],
 ```
-
 

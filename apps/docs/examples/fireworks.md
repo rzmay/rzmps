@@ -9,33 +9,46 @@ example: fireworks
 
 <ExampleTags />
 
-Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks.
+A firework should have an anticipation phase, a clear burst and a lingering trail of evidence. This preset separates
+the rising rocket, its smoke, and the spark explosion so each can have the right lifetime and appearance.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Send up a rocket with a clear launch cue
 
-The 2.6-second looping rocket system owns continuous smoke and a death-triggered sparkle system. Rocket lifetime two seconds sets the burst timing. Smoke has a separate 4.5-second particle lifetime; sparkles are nonlooping with reduced gravity modifier 0.18, producing a slower downward arc after the explosion.
+The root launches colored rockets upward. Its particle lifetime sets when the explosion happens, while the system
+loop keeps launches recurring. A discrete palette gives each rocket a coherent color to pass to its sparks. The
+rocket has no extra motion modules: launch velocity and gravity establish its flight.
 
-<ExampleCode region="system" />
+<ExampleCode region="emitters:1" />
+<ExampleCode region="renderers:1" />
 
-## Emitters
+## Leave smoke behind the climb
 
-Three rockets per second begin in a radius-one sphere with upward velocity 8.5. A discrete five-color Set gives each launch a clear color. Smoke emits at 36 per second per active context with low alpha 0.1. Each death burst creates 100–300 sparkles at radial speed 4.5–12, spreading the inherited rocket color into a broad shell.
+Continuous child emission supplies smoke while the rocket is alive. The smoke lives longer, expands and drifts, so
+the launch path remains visible after the bright source has passed. Its own lifetime is not truncated by the rocket's
+death. Noise and a cubic fade keep the trail soft rather than turning it into another rigid streak.
 
-<ExampleCode region="emitters" />
+<ExampleCode region="system:2" />
 
-## Modules
+## Turn the rocket's death into a colored explosion
 
-The rocket module list is empty, leaving normal integration to shape flight. Smoke uses lateral noise, velocity limits, growth, rotation, and cubic fading. Sparkles fade linearly over their 0.75–1.35-second lifetimes. Child lifetime inheritance is disabled so event particles survive after the rocket dies.
+The death-triggered child emits a radial burst. Inherited color connects it to the launch, while reduced gravity
+lets the sparks arc downward more slowly. Animated sprites, short trails and a few lights create distinct bright
+points with lingering motion. Artistic renderer children broaden each spark's visible presence. The burst sound
+marks the transition from climb to explosion; enable audio in the demo when tuning that moment.
 
-<ExampleCode region="modules" />
+<ExampleCode region="system:3" />
 
-## Renderers
+## Assemble the effect
 
-Rocket sprites are lit, with launch and death audio selected from two clips and pitch range 0.8–1.2. Smoke uses rough lit alpha sprites. Sparkles use a 5×2 animated atlas at 10 fps with random starting frames, short 0.1-second trails, and up to ten bright lights. The light cap limits a burst’s illumination cost even when hundreds of particles spawn.
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
 
-<ExampleCode region="renderers" />
+<ExampleCode region="system:assembly" />
 
+Connect the secondary behavior to the root with the relationships below. The root owns child updates; their
+inheritance and event filters decide when each layer starts and which source it follows.
 
-Spark bursts simulate 50–150 particles, with one small artistic sprite child per spark. Spark-system population LOD reduces births at distance and uses renderer child compensation. Finite bursts recover only through future emission events; moving closer does not restore previously omitted or culled sparks. The trail renderer uses matching artistic children, each maintaining an independent history under its stable child ID.
+<ExampleCode region="system:connections" />

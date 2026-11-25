@@ -7,68 +7,23 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">ribbonTrail</span> <span class="example-tag">trails</span> <span class="example-tag">ribbon</span> <span class="example-tag">effects</span></div>
 
-Ribbon trail rendering for continuous streaks with lifetime fading.
+Instead of one independent streak behind each particle, this preset connects particles into three moving ribbons.
+The goal is a continuous set of strands whose shape comes from the relationship between successive samples.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/ribbonTrail.png)
 
-## Particle System Configuration
+## Place enough samples along the ribbon
 
-The 4-second loop supplies a continuous ribbon field. Each particle lasts one second, so its contribution remains near the current emitter rather than accumulating indefinitely. No gravity override is supplied; the system’s default gravity behavior still applies.
-
-
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L12)
-
-```js
-  const ribbonTrail = new ParticleSystem({
-    maxParticles: 128,
-    duration: 4,
-    looping: true,
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Torus(),
-        rate: 50,
-        radialSpeed: 5,
-        initialValues: {
-          lifetime: 1,
-          scale: 0.12,
-        },
-      }),
-    ],
-    renderers: [
-      new TrailRenderer({
-        mode: TrailMode.Ribbon,
-        ratio: 1,
-        ribbonCount: 3,
-        width: 0.15,
-        widthOverTrail: (time) => {
-          if (time < 0.2) return time / 0.2;
-          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
-          return 0.85 * (1 - ((time - 0.75) / 0.25));
-        },
-        colorOverTrail: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#fff'),
-          new THREE.Color('#66e0ff'),
-          time,
-        ),
-        inheritParticleColor: true,
-        materialOptions: {
-          roughness: 0,
-          metalness: 0,
-        },
-      }),
-    ],
-  });
-```
+A torus source sends particles radially outward. The stream is dense relative to the short particle lifetime so
+neighboring samples remain close. Motion uses the initial velocity and ordinary system gravity; no extra motion
+modules are needed. Increasing speed without increasing emission spreads the samples apart and stretches the strands.
 
 
-## Emitters
-
-The torus source emits 50 particles per second with radial speed 5. A short one-second lifetime and scale 0.12 produce many closely spaced samples around the source. Increasing speed without increasing emission rate would separate those samples and visibly change the ribbon shape.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L18)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L16)
 
 ```js
+import { Emitter, EmissionShape } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: EmissionShape.Torus(),
@@ -83,80 +38,29 @@ The torus source emits 50 particles per second with radial speed 5. A short one-
 ```
 
 
-## Modules
+## Connect samples into a readable strand
 
-No module array is supplied here; the system therefore uses its empty module default. The system configuration shown below is the actual source for that absence. Motion comes from initial radial velocity and default system integration, while width and color variation are handled by the trail renderer.
+Ribbon mode groups the particles into three ribbons. A narrow width keeps them distinct, while the eased width envelope
+soften their ends. The white-to-cyan gradient gives the length of each strand a direction. A nonmetallic material
+keeps the appearance clean. Adjust ribbon count to change the number of strands, then tune width and emission
+spacing together rather than treating them as unrelated settings.
 
 
-[Source: modules:none](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L13)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L30)
 
 ```js
-  const ribbonTrail = new ParticleSystem({
-    maxParticles: 128,
-    duration: 4,
-    looping: true,
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Torus(),
-        rate: 50,
-        radialSpeed: 5,
-        initialValues: {
-          lifetime: 1,
-          scale: 0.12,
-        },
-      }),
-    ],
+import { Curve } from 'curves';
+import * as THREE from 'three';
+import { TrailRenderer, TrailMode } from '@rzmps/rzmps';
+
     renderers: [
       new TrailRenderer({
         mode: TrailMode.Ribbon,
         ratio: 1,
         ribbonCount: 3,
         width: 0.15,
-        widthOverTrail: (time) => {
-          if (time < 0.2) return time / 0.2;
-          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
-          return 0.85 * (1 - ((time - 0.75) / 0.25));
-        },
-        colorOverTrail: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#fff'),
-          new THREE.Color('#66e0ff'),
-          time,
-        ),
-        inheritParticleColor: true,
-        materialOptions: {
-          roughness: 0,
-          metalness: 0,
-        },
-      }),
-    ],
-  });
-```
-
-
-## Renderers
-
-Ribbon mode connects particles into three ribbons rather than assigning an independent trail to each particle. Ratio 1 includes all samples and width 0.15 keeps the strands narrow. The width envelope tapers both ends and the white-to-cyan gradient distinguishes the length of the ribbon. Roughness and metalness zero create a clean nonmetallic surface response.
-
-
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L31)
-
-```js
-    renderers: [
-      new TrailRenderer({
-        mode: TrailMode.Ribbon,
-        ratio: 1,
-        ribbonCount: 3,
-        width: 0.15,
-        widthOverTrail: (time) => {
-          if (time < 0.2) return time / 0.2;
-          if (time < 0.75) return 1 - 0.15 * ((time - 0.2) / 0.55);
-          return 0.85 * (1 - ((time - 0.75) / 0.25));
-        },
-        colorOverTrail: (time) => new THREE.Color().lerpColors(
-          new THREE.Color('#fff'),
-          new THREE.Color('#66e0ff'),
-          time,
-        ),
+        widthOverTrail: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
+        colorOverTrail: time => new THREE.Color().lerpColors(new THREE.Color('#fff'), new THREE.Color('#66e0ff'), time),
         inheritParticleColor: true,
         materialOptions: {
           roughness: 0,
@@ -165,5 +69,4 @@ Ribbon mode connects particles into three ribbons rather than assigning an indep
       }),
     ],
 ```
-
 

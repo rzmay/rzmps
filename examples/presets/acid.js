@@ -1,3 +1,4 @@
+import { Easing } from 'eaz';
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import checkerboardScene from 'examples/scenes/checkerboard.js';
 import * as THREE from 'three';
@@ -40,62 +41,76 @@ export default async function acidPreset() {
   // #endregion docs:renderers:materials
 
   // #region docs:system:1
+  // #region docs:emitters:pool
+  const acidEmitters = [
+    new Emitter({
+      source: EmissionShape.Sphere(0.12),
+      rate: 0.3,
+      radialSpeed: 3,
+      initialValues: {
+        position: new THREE.Vector3(0, 3.5, 0),
+        velocity: new THREE.Vector3(0, 1.5, 0),
+        lifetime: 8,
+        scale: new THREE.Vector3(0.2, 0.2, 0.2),
+        color: '#7ee927',
+        rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
+      },
+    }),
+  ];
+  // #endregion docs:emitters:pool
+
+  // #region docs:modules:pool
+  const acidModules = [new Collision({ lifetimeLoss: 1 })];
+  // #endregion docs:modules:pool
+
+  // #region docs:renderers:pool
+  const acidRenderers = [
+    new SpriteRenderer(Textures.Circle, {
+      material: SpriteMaterialType.Lit,
+      materialOptions: {
+        roughness: 0.95,
+        metalness: 0,
+        sphericalNormals: 1,
+        normalLighting: 1,
+      },
+    }),
+
+    new DecalRenderer(paint, {
+      onSpawn: false,
+      onCollision: true,
+      // Backends without mesh identity search opposite the collision normal, including on walls.
+      maxDistance: 1,
+      depth: 0.08,
+      size: 15,
+      inheritColor: 1,
+      inheritScale: 1,
+      inheritAlpha: 1,
+      lifetime: 18,
+      opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.55, 1),
+      maxDecals: 64,
+      emissionTags: ['acid-pool'],
+    }),
+  ];
+  // #endregion docs:renderers:pool
+
+  // #region docs:system:assembly
   const acid = new ParticleSystem({
     duration: 8,
     looping: true,
     prewarm: true,
     gravityModifier: 1,
-    // #region docs:emitters:pool
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.12),
-        rate: 0.3,
-        radialSpeed: 3,
-        initialValues: {
-          position: new THREE.Vector3(0, 3.5, 0),
-          velocity: new THREE.Vector3(0, 1.5, 0),
-          lifetime: 8,
-          scale: new THREE.Vector3(0.2, 0.2, 0.2),
-          color: '#7ee927',
-          rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
-        },
-      }),
-    ],
-    // #endregion docs:emitters:pool
-    // #region docs:modules:pool
-    modules: [new Collision({ lifetimeLoss: 1 })],
-    // #endregion docs:modules:pool
-    // #region docs:renderers:pool
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          roughness: 0.95,
-          metalness: 0,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-      }),
-      new DecalRenderer(paint, {
-        onSpawn: false,
-        onCollision: true,
-        // Backends without mesh identity search opposite the collision normal, including on walls.
-        maxDistance: 1,
-        depth: 0.08,
-        size: 15,
-        inheritColor: 1,
-        inheritScale: 1,
-        inheritAlpha: 1,
-        lifetime: 18,
-        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.55, 1),
-        maxDecals: 64,
-        emissionTags: ['acid-pool'],
-      }),
-    ],
-    // #endregion docs:renderers:pool
+
+    emitters: acidEmitters,
+
+    modules: acidModules,
+
+    renderers: acidRenderers,
   });
+  // #endregion docs:system:assembly
   acid.name = 'Acid';
+  // #region docs:system:connections
   const decals = acid.renderers.find(renderer => renderer instanceof DecalRenderer);
+  // #endregion docs:system:connections
 
   // #region docs:emitters:1
   // Shape points become offsets within each pool's emission frame, including its scale.
@@ -122,7 +137,8 @@ export default async function acidPreset() {
       new RotationOverLifetime({
         angularVelocity: [-0.5, 0.5],
       }),
-      new ScaleOverLifetime({ scale: t => 0.35 + (1.8 - 0.35) * t }),
+
+      new ScaleOverLifetime({ scale: t => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(t)) }),
       new ColorOverLifetime({ alpha: t => Math.sin(t * Math.PI) }),
     ],
     renderers: new SpriteRenderer(Textures.Default, {
@@ -155,9 +171,11 @@ export default async function acidPreset() {
         strength: new THREE.Vector3(0.2, 0.05, 0.2),
         frequency: 0.6,
       }),
+
       new ScaleOverLifetime({
-        scale: t => Math.pow(THREE.MathUtils.clamp(t * 5, 0, 1), 3),
+        scale: t => Easing.cubic.in(THREE.MathUtils.clamp(t * 5, 0, 1)),
       }),
+
       new DistortionBySize({ sizeRange: [0, 1], distortionStrength: [0, 1] }),
       new ColorOverLifetime({ alpha: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1) }),
     ],
@@ -180,7 +198,7 @@ export default async function acidPreset() {
   // #region docs:modules:1
   class PoolBubbling extends Module {
     constructor() {
-      super(() => { }, { modifyGPU() { } });
+      super(() => {}, { modifyGPU() {} });
       this.remaining = new Map();
     }
 
@@ -193,7 +211,7 @@ export default async function acidPreset() {
         const source = decal.source;
         if (!source) continue;
         alive.add(source.id);
-        const remaining = (this.remaining.get(source.id) ?? (2 + Math.random() * 2)) - dt;
+        const remaining = (this.remaining.get(source.id) ?? 2 + Math.random() * 2) - dt;
         if (remaining <= 0) {
           source.emitEvent('bubble', { strength: 0.5 + Math.random() });
           this.remaining.set(source.id, 7 + Math.random() * 4);
@@ -202,12 +220,16 @@ export default async function acidPreset() {
       for (const id of this.remaining.keys()) if (!alive.has(id)) this.remaining.delete(id);
     }
   }
-  acid.addModule(new PoolBubbling());
   // #endregion docs:modules:1
+
+  // #region docs:system:connections
+  acid.addModule(new PoolBubbling());
+  // #endregion docs:system:connections
 
   // #region docs:renderers:1
   smoke.name = 'Pool Smoke';
   bubbles.name = 'Pool Bubbles';
+  // #region docs:system:connections
   acid.addSubSystem(smoke, {
     tags: ['acid-pool'],
     emitContinuous: true,
@@ -216,14 +238,18 @@ export default async function acidPreset() {
     inheritScale: 1,
     inheritAlpha: 1,
   });
+  // #endregion docs:system:connections
+  // #region docs:system:connections
   acid.addSubSystem(bubbles, {
     tags: ['acid-pool'],
     inheritLifetime: 0,
     inheritColor: 0,
     onEvent: {
       bubble: (data, source, context) => {
-        const strength = typeof data === 'object' && data !== null
-          && 'strength' in data && typeof data.strength === 'number' ? data.strength : 1;
+        const strength =
+          typeof data === 'object' && data !== null && 'strength' in data && typeof data.strength === 'number'
+            ? data.strength
+            : 1;
         return {
           scale: strength,
           velocity: new THREE.Vector3(0, strength * 0.12, 0),
@@ -232,6 +258,7 @@ export default async function acidPreset() {
       },
     },
   });
+  // #endregion docs:system:connections
   // #endregion docs:renderers:1
   // #endregion docs:system:1
   acid.addEventListener('destroyed', () => {

@@ -20,19 +20,19 @@ import fireflyImage from 'examples/assets/images/firefly.png?url';
 
 export default async function firefliesPreset() {
   // #region docs:system:1
+  // #region docs:system:settings
   // Sparse neighbors allow local flash clusters without synchronizing the entire population.
   const radius = 2.25;
   const pulseDuration = 0.65;
   const cooldown = 1.4;
-  const spawnBounds = new THREE.Box3(
-    new THREE.Vector3(-12, -0.5, -8),
-    new THREE.Vector3(12, 5.5, 8),
-  );
+  const spawnBounds = new THREE.Box3(new THREE.Vector3(-12, -0.5, -8), new THREE.Vector3(12, 5.5, 8));
   // Spawn inside the central box, but allow substantial travel before recycling a firefly.
   const killBounds = spawnBounds.clone().expandByVector(new THREE.Vector3(10, 4, 8));
   const size = spawnBounds.getSize(new THREE.Vector3());
   const source = EmissionShape.Box(size.x, size.y, size.z);
   source.position.copy(spawnBounds.getCenter(new THREE.Vector3()));
+
+  // #endregion docs:system:settings
 
   // #region docs:modules:1
   // Mass is an application-owned charge accumulator here: negative values are the refractory period.
@@ -116,23 +116,33 @@ export default async function firefliesPreset() {
   );
   // #endregion docs:modules:1
 
+  // #region docs:emitters:1
+  const firefliesEmitters = new Emitter({
+    source,
+    rate: 8,
+    bursts: { time: 0, count: 64 },
+    initialValues: {
+      lifetime: [24, 32],
+      scale: 0.22,
+      mass: [0, 1], // Stagger the initial charge so the insects start out of phase.
+      color: '#b0b8a2',
+    },
+  });
+  // #endregion docs:emitters:1
+
+  // #region docs:renderers:1
+  const firefliesRenderers = new SpriteRenderer(fireflyImage, {
+    materialOptions: { depthWrite: false },
+  });
+  // #endregion docs:renderers:1
+
+  // #region docs:system:assembly
   const fireflies = new ParticleSystem({
     duration: 120,
     gravityModifier: 0,
     maxParticles: 96,
-    // #region docs:emitters:1
-    emitters: new Emitter({
-      source,
-      rate: 8,
-      bursts: { time: 0, count: 64 },
-      initialValues: {
-        lifetime: [24, 32],
-        scale: 0.22,
-        mass: [0, 1], // Stagger the initial charge so the insects start out of phase.
-        color: '#b0b8a2',
-      },
-    }),
-    // #endregion docs:emitters:1
+
+    emitters: firefliesEmitters,
     modules: [
       new TransformByNoise({
         strength: new THREE.Vector3(1.5, 0.55, 1.5),
@@ -143,66 +153,76 @@ export default async function firefliesPreset() {
       new LimitVelocityOverLifetime({ limit: 1.3, drag: 0.55 }),
       flash,
     ],
-    // #region docs:renderers:1
-    renderers: new SpriteRenderer(fireflyImage, {
-      materialOptions: { depthWrite: false },
-    }),
-    // #endregion docs:renderers:1
+
+    renderers: firefliesRenderers,
   });
+  // #endregion docs:system:assembly
   fireflies.name = 'Fireflies';
 
+  // #region docs:system:glow
   // Source space keeps each pulse attached without application-owned source maps or update callbacks.
   const pulse = t => Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5);
+  // #region docs:emitters:2
+  const glowEmitters = new Emitter({
+    source: EmissionShape.Box(0.01, 0.01, 0.01),
+    radialSpeed: 0, // A pulse stays at its sampled source offset; it has no motion of its own.
+    bursts: { time: 0, count: 1 },
+    initialValues: {
+      lifetime: pulseDuration,
+      scale: 0.38,
+      color: '#d9ff65',
+      alpha: 0.65,
+    },
+  });
+  // #endregion docs:emitters:2
+
+  // #region docs:modules:2
+  const glowModules = [
+    new ColorOverLifetime({ alpha: pulse }),
+    new ScaleOverLifetime({ scale: t => 0.7 + 0.3 * Math.sin(Math.PI * t) }),
+  ];
+  // #endregion docs:modules:2
+
+  // #region docs:renderers:2
+  const glowRenderers = [
+    new SpriteRenderer(Textures.Simple, {
+      materialOptions: {
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      },
+    }),
+
+    new LightRenderer({
+      count: 16,
+      ratio: 0.25,
+      groupingRadiusRatio: 0,
+      // Light readback uses stored state; evaluate the same pulse curve explicitly for light intensity.
+      alphaAffectsIntensity: false,
+      brightness: t => 0.52 * Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5),
+      lightOptions: {
+        distance: 1.1,
+        intensity: 1,
+        decay: 2,
+      },
+    }),
+  ];
+  // #endregion docs:renderers:2
+
   const glow = new ParticleSystem({
     duration: 0.1,
     simulationSpace: SimulationSpace.Source,
     sourceLossBehavior: SourceLossBehavior.Kill,
     gravityModifier: 0,
     maxParticles: 128,
-    // #region docs:emitters:2
-    emitters: new Emitter({
-      source: EmissionShape.Box(0.01, 0.01, 0.01),
-      radialSpeed: 0, // A pulse stays at its sampled source offset; it has no motion of its own.
-      bursts: { time: 0, count: 1 },
-      initialValues: {
-        lifetime: pulseDuration,
-        scale: 0.38,
-        color: '#d9ff65',
-        alpha: 0.65,
-      },
-    }),
-    // #endregion docs:emitters:2
-    // #region docs:modules:2
-    modules: [
-      new ColorOverLifetime({ alpha: pulse }),
-      new ScaleOverLifetime({ scale: t => 0.7 + 0.3 * Math.sin(Math.PI * t) }),
-    ],
-    // #endregion docs:modules:2
-    // #region docs:renderers:2
-    renderers: [
-      new SpriteRenderer(Textures.Simple, {
-        materialOptions: {
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-        },
-      }),
-      new LightRenderer({
-        count: 16,
-        ratio: 0.25,
-        groupingRadiusRatio: 0,
-        // Light readback uses stored state; evaluate the same pulse curve explicitly for light intensity.
-        alphaAffectsIntensity: false,
-        brightness: t => 0.52 * Math.pow(Math.max(0, Math.sin(Math.PI * t)), 1.5),
-        lightOptions: {
-          distance: 1.1,
-          intensity: 1,
-          decay: 2,
-        },
-      }),
-    ],
-    // #endregion docs:renderers:2
+
+    emitters: glowEmitters,
+
+    modules: glowModules,
+
+    renderers: glowRenderers,
   });
   glow.name = 'Firefly Pulses';
+  // #region docs:system:connections
   fireflies.addSubSystem(glow, {
     inheritScale: 0,
     inheritColor: 0,
@@ -211,8 +231,7 @@ export default async function firefliesPreset() {
     onEvent: {
       // CPU payloads are unknown to the library; the application narrows its own schema.
       flash: data => {
-        if (typeof data !== 'object' || data === null || !('strength' in data)
-          || typeof data.strength !== 'number') {
+        if (typeof data !== 'object' || data === null || !('strength' in data) || typeof data.strength !== 'number') {
           return;
         }
         return { scale: data.strength };
@@ -223,6 +242,9 @@ export default async function firefliesPreset() {
       },
     },
   });
+  // #endregion docs:system:connections
+
+  // #endregion docs:system:glow
 
   // #endregion docs:system:1
   return fireflies;

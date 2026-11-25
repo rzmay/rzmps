@@ -9,31 +9,39 @@ example: cubes
 
 <ExampleTags />
 
-Instanced mesh rendering with randomized cube particles and simple lifetime rotation and fade-out.
+Here the particles should clearly have faces, edges and tumbling motion. A shared box mesh gives them a geometric
+silhouette, while the rest of the preset stays simple enough to separate movement from shading.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Scatter a readable group of cubes
 
-A 10-second loop keeps emission continuous, while zero gravity isolates instanced mesh appearance and rotation. Lifetimes of 4–8 seconds leave enough time to watch each cube tumble before it fades away.
-
-<ExampleCode region="system" />
-
-## Emitters
-
-Rate 12 and mean lifetime 6 imply roughly 72 simultaneous cubes. The discrete color Set avoids intermediate hues. Scale ranges from 0.4 to 1, applied to a 0.25-unit box mesh, so visible cube edges stay small enough to separate the instances.
+Zero gravity leaves the initial outward motion easy to follow. Sizes vary within a restrained range, and a discrete
+palette keeps the cubes colorful without producing intermediate hues. The emitter scale multiplies the small box
+geometry, so tune both together when adapting the preset to another scene's units.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Tumble, then disappear quietly
 
-Angular velocity is sampled between differently oriented vectors so cubes do not all rotate around the same axis. The cubic fade keeps them opaque early and removes them near death. There is no added acceleration module, so the emitter’s initial motion stays easy to distinguish from rotation.
+Angular velocity varies across axes so the cubes reveal different faces instead of spinning as one synchronized group.
+The cubic alpha fade keeps them readable early in life and removes them near the end. There is no extra force or noise
+layer: add those only if the intended motion needs more than the emitter's initial trajectory.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Let light describe real faces
 
-MeshRenderer instances a BoxGeometry and MeshStandardMaterial. Cast and receive shadows are enabled, making real geometric faces apparent when the scene has shadow-casting lights. Compare this example with the sprite-based Spheres preset to see the difference between geometry and spherical normal shading.
+A standard material and cast/receive shadows make the box geometry legible against the scene. Use shadow-enabled
+lights to see that contact cue. Unlike [Spheres](./spheres.md), the rounded appearance is not being synthesized on a
+billboard: every visible face belongs to the shared mesh.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

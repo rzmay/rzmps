@@ -7,423 +7,59 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">dopplerBullet</span> <span class="example-tag">bullet</span> <span class="example-tag">projectile</span> <span class="example-tag">piercing</span> <span class="example-tag">decals</span> <span class="example-tag">materials</span> <span class="example-tag">compositing</span> <span class="example-tag">sources</span> <span class="example-tag">events</span> <span class="example-tag">dust</span> <span class="example-tag">smoke</span> <span class="example-tag">audio</span> <span class="example-tag">doppler</span> <span class="example-tag">trails</span> <span class="example-tag">distortion</span> <span class="example-tag">shockwave</span> <span class="example-tag">effects</span></div>
 
-A piercing bullet leaves surface-blended bullet holes, with Doppler audio, smoke, faint trails and a distortion wake.
+This projectile should read as a fast flyby followed by a short wake, with separate evidence left at impacts. The
+flash, distortion, sound and surface damage each make a different part of that brief event perceptible.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/dopplerBullet.png)
 
-## Particle System Configuration
+## Load the projectile, wake and impact assets
 
-The root loops over 5.5 seconds, caps at eight particles, and disables gravity for nearly straight flight. Five subsystems provide smoke wake, heat wake, muzzle flash, spawn shockwave, and impact dust. Their inheritance factors are zeroed so the small fast bullet does not force every secondary effect to copy its scale or velocity.
+Prepare the bullet template, looping flyby sound, launch sound and damage maps before constructing the layers.
+Separate resources let the projectile remain metallic while smoke, distortion and surface marks use their own
+appearance. The model and emission-shape helpers remain local to this factory's source file.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L68)
+[Source: system:resources](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L39)
 
 ```js
-  const bulletSystem = new ParticleSystem({
-    duration: 5.5,
-    looping: true,
-    maxParticles: 8,
-    useLiveCubemap: true,
-    cubemapSettings: {
-      fps: 8,
-      resolutionScale: 0.5,
-      intensity: 1.35,
-    },
-    gravity: new THREE.Vector3(0, 0, 0),
-    emitters: [
-      new Emitter({
-        source: bulletEmissionCone(),
-        tags: ['projectile'],
-        rate: 0.9,
-        radialSpeed: [0.1, 0.35],
-        alignment: 1,
-        initialValues: {
-          lifetime: 1.9,
-          velocity: [new THREE.Vector3(-0.38, -0.16, -31), new THREE.Vector3(0.38, 0.16, -36)],
-          scale: 0.22,
-          color: '#d7c091',
-          alpha: 1,
-          mass: 1,
-        },
-      }),
-    ],
-    renderers: [
-      // Sweep the traveled segment: bullets keep flying through every marked surface.
-      new DecalRenderer(holeMaterial, {
-        direction: DecalRenderer.Intersect(),
-        continuousRate: 60,
-        onSpawn: false,
-        emissionTags: ['bullet-hole'],
-        rotation: [-Math.PI, Math.PI],
-        hitSelection: DecalRenderer.All,
-        // Surface color and normal detail remain tied to the hit, independently of projector UVs.
-        materialComposite: (source, dest) => ({
-          color: `${source.color} * clamp(${dest.color} * 4.0, 0.0, 1.0)`,
-          opacity: `${source.opacity} * ${dest.opacity}`,
-          normal: source.normal,
-          roughness: dest.roughness,
-          metalness: dest.metalness,
-        }),
-        materialCompositeGPU: (source, dest) => ({
-          color: source.color.mul(dest.color.mul(4).clamp(0, 1)),
-          opacity: source.opacity.mul(dest.opacity),
-          normal: source.normal,
-          roughness: dest.roughness,
-          metalness: dest.metalness,
-        }),
-        size: 0.55,
-        depth: 0.04,
-        offset: 0.002,
-        inheritScale: 0,
-        inheritColor: 0,
-        inheritAlpha: 0,
-        lifetime: 24,
-        maxDecals: 128,
-        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.8, 1),
-      }),
-      new AudioRenderer({
-        sound: bulletLoopSound,
-        tags: ['projectile'],
-        onSpawnSound: gunshotSound,
-        loop: true,
-        maxClips: 8,
-        volume: 3.5,
-        pitch: [0.82, 1.24],
-        lowPass: 14000,
-        speedAffectsVolume: 0.12,
-        depthAffectsVolume: 0.45,
-        dopplerEffect: 2.4,
-      }),
-      new MeshRenderer({
-        mesh: bulletMesh,
-        maxParticles: 8,
-      }),
-      new TrailRenderer({
-        mode: TrailMode.Particle,
-        ratio: 1,
-        lifetime: 0.28,
-        minimumVertexDistance: 0.1,
-        dieWithParticles: false,
-        width: 0.055,
-        widthOverTrail: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-        colorOverTrail: time =>
-          new THREE.Color().lerpColors(
-            new THREE.Color('#f9e6ae'),
-            new THREE.Color('#8391a5'),
-            THREE.MathUtils.clamp(time, 0, 1),
-          ),
-        inheritParticleColor: true,
-        textureMode: TrailTextureMode.Stretch,
-        materialOptions: {
-          map: simpleSpriteTexture,
-          transparent: true,
-          opacity: 0.22,
-          depthWrite: false,
-          roughness: 0.9,
-        },
-      }),
-    ],
-  });
+import * as THREE from 'three';
+import { Textures } from '@rzmps/rzmps';
+import shockwaveNormal from 'examples/assets/images/shockwave_alt_norm.jpg?url';
+import bulletShootUrl from 'examples/assets/audio/bullet_shoot.mp3?url';
+import bulletWhizzUrl from 'examples/assets/audio/bullet_whizz.wav?url';
+import holeAlbedo from 'examples/assets/images/bullet-hole/bullet-hole_albedo.png?url';
+import holeNormal from 'examples/assets/images/bullet-hole/bullet-hole_normal.png?url';
+import holeRoughness from 'examples/assets/images/bullet-hole/bullet-hole_roughness.png?url';
+
+  const textureLoader = new THREE.TextureLoader();
+  const simpleSpriteTexture = textureLoader.load(Textures.Simple);
+  const shockwaveDistortion = textureLoader.load(shockwaveNormal);
+  const [bulletMesh, bulletLoopSound, gunshotSound, holeMap, holeNormalMap, holeRoughnessMap] = await Promise.all([
+    Promise.resolve(createBulletMesh()),
+    new THREE.AudioLoader().loadAsync(bulletWhizzUrl),
+    new THREE.AudioLoader().loadAsync(bulletShootUrl),
+    textureLoader.loadAsync(holeAlbedo),
+    textureLoader.loadAsync(holeNormal),
+    textureLoader.loadAsync(holeRoughness),
+  ]);
+
 ```
 
 
-[Source: system:6](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L224)
+## Establish a fast, straight flight
+
+The root disables gravity and sends a small metallic bullet across the scene. A low launch rate leaves space between
+shots. A faint trail shows its path without replacing the projectile's silhouette, while the Doppler sound makes
+approach and departure audible. The model, launch direction and scene placement belong to this preset; adapt those
+together when changing the firing position.
+
+
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L84)
 
 ```js
-  bulletSystem.addSubSystem(createImpactDust(), {
-    tags: ['bullet-hole'],
-    onEvent: {
-      spawn: (_data, _source, context) => ({
-        // Initial velocity is in simulation space; derive the puff's outward direction from the source frame.
-        velocity: new THREE.Vector3(0, 1, 0).transformDirection(context.transform).multiplyScalar(0.65),
-      }),
-    },
-    emitContinuous: false,
-    inheritScale: 0,
-    inheritLifetime: 0,
-    inheritColor: 0,
-    inheritAlpha: 0,
-    inheritMass: 0,
-    inheritVelocity: 0,
-  });
-```
+import * as THREE from 'three';
+import { Emitter } from '@rzmps/rzmps';
 
-
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L257)
-
-```js
-  return new ParticleSystem({
-    duration: 1.1,
-    maxParticles: 256,
-    looping: true,
-    gravity: new THREE.Vector3(0, 0.2, 0),
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.08, 8, 6),
-        rate: 0,
-        rateOverDistance: 5,
-        radialSpeed: 0.1,
-        initialValues: {
-          lifetime: [0.55, 0.95],
-          scale: [0.18, 0.34],
-          velocity: [new THREE.Vector3(-0.18, 0.02, -0.25), new THREE.Vector3(0.18, 0.35, 0.25)],
-          color: ['#9a9fa4', '#d8d0c0'],
-          alpha: 0.1,
-        },
-      }),
-    ],
-    modules: [
-      new ForceOverLifetime({
-        force: new THREE.Vector3(0, 0.12, 0),
-      }),
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.2, 0.65),
-        frequency: 1.6,
-      }),
-      new ScaleOverLifetime({
-        scale: time => {
-          const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = 0.85 + 2.35 * Easing.cubic.out(t);
-          return size;
-        },
-      }),
-      new ColorOverLifetime({
-        color: '#d0c8bc',
-        alpha: time => fadeInOut(time, 0.18, 0.65),
-      }),
-      new RotationOverLifetime({
-        angularVelocity: [-1, 1],
-      }),
-    ],
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        material: SpriteMaterialType.Lit,
-        alphaMap: smokeAlpha,
-        softParticleDistance: 1.2,
-        materialOptions: {
-          opacity: 0.62,
-          roughness: 0.8,
-          depthWrite: false,
-        },
-      }),
-    ],
-  });
-```
-
-
-[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L324)
-
-```js
-  return new ParticleSystem({
-    duration: 0.7,
-    maxParticles: 128,
-    looping: true,
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.04, 8, 6),
-        rate: 24,
-        radialSpeed: 0.18,
-        initialValues: {
-          lifetime: [0.5, 0.85],
-          scale: [0.9, 1.45],
-          velocity: [new THREE.Vector3(-0.04, 0.02, 0.25), new THREE.Vector3(0.04, 0.16, 0.65)],
-          color: '#ffffff',
-        },
-      }),
-    ],
-    modules: [
-      new ScaleOverLifetime({
-        scale: time => {
-          const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = 0.45 + 1.75 * Easing.cubic.out(t);
-          return size;
-        },
-      }),
-      new DistortionOverLifetime({
-        distortionStrength: time => fadeInOut(time, 0.15, 0.55),
-      }),
-      new ColorOverLifetime({
-        alpha: time => 0.95 * fadeInOut(time, 0.12, 0.58),
-      }),
-    ],
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        billboard: false,
-        alphaMap,
-        materialOptions: {
-          opacity: 0.62,
-          transmission: 1,
-          distortionMap,
-          distortionStrength: 0.1,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        },
-      }),
-    ],
-  });
-```
-
-
-[Source: system:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L382)
-
-```js
-  return new ParticleSystem({
-    duration: 0.45,
-    maxParticles: 64,
-    looping: true,
-    emitters: [
-      new Emitter({
-        source: pointEmissionShape(),
-        bursts: [{ time: 0, count: 5 }],
-        rate: 0,
-        radialSpeed: [0.2, 0.8],
-        initialValues: {
-          lifetime: [0.22, 0.36],
-          scale: [1.0, 1.8],
-          velocity: [new THREE.Vector3(-0.35, -0.12, -0.2), new THREE.Vector3(0.35, 0.32, 0.8)],
-          color: ['#ffffff', '#ffd07a'],
-          alpha: 1,
-          rotation: [-Math.PI, Math.PI],
-        },
-      }),
-    ],
-    modules: [
-      new ScaleOverLifetime({
-        scale: time => {
-          const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = (0.32 + 1.45 * Easing.cubic.out(t)) * (1 - 0.35 * Easing.cubic.in(t));
-          return size;
-        },
-      }),
-      new ColorOverLifetime({
-        color: time =>
-          new THREE.Color().lerpColors(
-            new THREE.Color('#fff8d7'),
-            new THREE.Color('#ff9f45'),
-            THREE.MathUtils.clamp(time, 0, 1),
-          ),
-        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-      }),
-    ],
-    renderers: [
-      new SpriteRenderer(texture, {
-        gridSize: { x: 5, y: 4 },
-        frames: 20,
-        fps: 36,
-        softParticleDistance: 1,
-        materialOptions: {
-          opacity: 0.82,
-          depthWrite: false,
-        },
-      }),
-    ],
-  });
-```
-
-
-[Source: system:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L444)
-
-```js
-  return new ParticleSystem({
-    duration: 0.65,
-    maxParticles: 64,
-    looping: true,
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.SphereGeometry(0.1, 16, 8),
-          source: EmissionSource.Surface,
-        }),
-        bursts: [{ time: 0, count: 10 }],
-        rate: 0,
-        radialSpeed: 2.6,
-        initialValues: {
-          lifetime: 0.55,
-          scale: 2.0,
-          color: '#ffffff',
-        },
-      }),
-    ],
-    modules: [
-      new ScaleOverLifetime({
-        scale: time => {
-          const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = 0.28 + 4.5 * Easing.cubic.out(t);
-          return size;
-        },
-      }),
-      new DistortionOverLifetime({
-        distortionStrength: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-      }),
-    ],
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        billboard: false,
-        alphaMap,
-        softParticleDistance: 1,
-        materialOptions: {
-          transmission: 1,
-          distortionMap,
-          distortionStrength: 2,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        },
-      }),
-    ],
-  });
-```
-
-
-[Source: system:7](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L502)
-
-```js
-  const dust = new ParticleSystem({
-    duration: 0.12,
-    looping: false,
-    maxParticles: 128,
-    gravityModifier: -0.02,
-    emitters: new Emitter({
-      source: EmissionShape.Sphere(0.025),
-      rate: 0,
-      bursts: [{ time: 0, count: [5, 8] }],
-      radialSpeed: [0.1, 0.25],
-      initialValues: {
-        position: new THREE.Vector3(0, 0.045, 0),
-        lifetime: [0.4, 0.65],
-        scale: [0.28, 0.44],
-        alpha: [0.3, 0.45],
-      },
-    }),
-    modules: [
-      new MaterialCopy({ source: MaterialCopySource.Source, sampleMode: MaterialCopySampleMode.Color }),
-      new ScaleOverLifetime({ scale: t => 0.7 + 1.4 * t }),
-      new ColorOverLifetime({ alpha: t => 1 - t }),
-      new RotationOverLifetime({ angularVelocity: [-0.7, 0.7] }),
-    ],
-    renderers: new SpriteRenderer(Textures.Default, {
-      material: SpriteMaterialType.Lit,
-      alphaMap: smokeAlpha,
-      // A broad depth fade erased these small puffs while they were still close to the impact surface.
-      softParticleDistance: 0.025,
-      // Smoke takes only the sampled surface color; its mask, opacity and lighting remain its own.
-      materialComposite: source => ({ color: source.color }),
-      materialCompositeGPU: source => ({ color: source.color }),
-      materialOptions: { roughness: 1, depthWrite: false },
-    }),
-  });
-  dust.name = 'Bullet Impact Dust';
-  return dust;
-```
-
-
-## Emitters
-
-The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 to -36. Its source cone is placed near z=34, giving it a long path across the scene. Smoke uses rateOverDistance 5, maintaining wake spacing as the bullet moves; flash and shockwave use time-zero bursts rather than continuous emission.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L80)
-
-```js
     emitters: [
       new Emitter({
         source: bulletEmissionCone(),
@@ -444,257 +80,19 @@ The bullet emits at rate 0.9 with lifetime 1.9 seconds and z velocity from -31 t
 ```
 
 
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L263)
+## Mark the surfaces crossed by the projectile
+
+A segment sweep places bullet-hole decals along the traveled path. This preset is piercing: the marks do not stop or
+bounce the bullet. The damage material blends its albedo mask, normal and roughness into the surface so a hole reads
+as part of that material. A short trail and positional audio reinforce the flight between contacts. Use **UV debug**
+for visible receiving surfaces, and enable sound in the live demo to hear the flyby.
+
+
+[Source: renderers:7](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L54)
 
 ```js
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.08, 8, 6),
-        rate: 0,
-        rateOverDistance: 5,
-        radialSpeed: 0.1,
-        initialValues: {
-          lifetime: [0.55, 0.95],
-          scale: [0.18, 0.34],
-          velocity: [new THREE.Vector3(-0.18, 0.02, -0.25), new THREE.Vector3(0.18, 0.35, 0.25)],
-          color: ['#9a9fa4', '#d8d0c0'],
-          alpha: 0.1,
-        },
-      }),
-    ],
-```
+import * as THREE from 'three';
 
-
-[Source: emitters:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L329)
-
-```js
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.04, 8, 6),
-        rate: 24,
-        radialSpeed: 0.18,
-        initialValues: {
-          lifetime: [0.5, 0.85],
-          scale: [0.9, 1.45],
-          velocity: [new THREE.Vector3(-0.04, 0.02, 0.25), new THREE.Vector3(0.04, 0.16, 0.65)],
-          color: '#ffffff',
-        },
-      }),
-    ],
-```
-
-
-[Source: emitters:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L387)
-
-```js
-    emitters: [
-      new Emitter({
-        source: pointEmissionShape(),
-        bursts: [{ time: 0, count: 5 }],
-        rate: 0,
-        radialSpeed: [0.2, 0.8],
-        initialValues: {
-          lifetime: [0.22, 0.36],
-          scale: [1.0, 1.8],
-          velocity: [new THREE.Vector3(-0.35, -0.12, -0.2), new THREE.Vector3(0.35, 0.32, 0.8)],
-          color: ['#ffffff', '#ffd07a'],
-          alpha: 1,
-          rotation: [-Math.PI, Math.PI],
-        },
-      }),
-    ],
-```
-
-
-[Source: emitters:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L449)
-
-```js
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.SphereGeometry(0.1, 16, 8),
-          source: EmissionSource.Surface,
-        }),
-        bursts: [{ time: 0, count: 10 }],
-        rate: 0,
-        radialSpeed: 2.6,
-        initialValues: {
-          lifetime: 0.55,
-          scale: 2.0,
-          color: '#ffffff',
-        },
-      }),
-    ],
-```
-
-
-[Source: emitters:6](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L508)
-
-```js
-    emitters: new Emitter({
-      source: EmissionShape.Sphere(0.025),
-      rate: 0,
-      bursts: [{ time: 0, count: [5, 8] }],
-      radialSpeed: [0.1, 0.25],
-      initialValues: {
-        position: new THREE.Vector3(0, 0.045, 0),
-        lifetime: [0.4, 0.65],
-        scale: [0.28, 0.44],
-        alpha: [0.3, 0.45],
-      },
-    }),
-```
-
-
-## Modules
-
-The root has no explicit module list; piercing marks use no Collision module and never change bullet velocity. Secondary smoke uses force, noise, growth, rotation, and a fade envelope. Heat and shockwave systems grow while distortion fades; flash color shifts from pale yellow to orange. These separate timing curves keep the initial flash brief while the slower wake remains visible.
-
-
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L280)
-
-```js
-    modules: [
-      new ForceOverLifetime({
-        force: new THREE.Vector3(0, 0.12, 0),
-      }),
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.2, 0.65),
-        frequency: 1.6,
-      }),
-      new ScaleOverLifetime({
-        scale: time => {
-          const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = 0.85 + 2.35 * Easing.cubic.out(t);
-          return size;
-        },
-      }),
-      new ColorOverLifetime({
-        color: '#d0c8bc',
-        alpha: time => fadeInOut(time, 0.18, 0.65),
-      }),
-      new RotationOverLifetime({
-        angularVelocity: [-1, 1],
-      }),
-    ],
-```
-
-
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L344)
-
-```js
-    modules: [
-      new ScaleOverLifetime({
-        scale: time => {
-          const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = 0.45 + 1.75 * Easing.cubic.out(t);
-          return size;
-        },
-      }),
-      new DistortionOverLifetime({
-        distortionStrength: time => fadeInOut(time, 0.15, 0.55),
-      }),
-      new ColorOverLifetime({
-        alpha: time => 0.95 * fadeInOut(time, 0.12, 0.58),
-      }),
-    ],
-```
-
-
-[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L405)
-
-```js
-    modules: [
-      new ScaleOverLifetime({
-        scale: time => {
-          const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = (0.32 + 1.45 * Easing.cubic.out(t)) * (1 - 0.35 * Easing.cubic.in(t));
-          return size;
-        },
-      }),
-      new ColorOverLifetime({
-        color: time =>
-          new THREE.Color().lerpColors(
-            new THREE.Color('#fff8d7'),
-            new THREE.Color('#ff9f45'),
-            THREE.MathUtils.clamp(time, 0, 1),
-          ),
-        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-      }),
-    ],
-```
-
-
-[Source: modules:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L467)
-
-```js
-    modules: [
-      new ScaleOverLifetime({
-        scale: time => {
-          const t = THREE.MathUtils.clamp(time, 0, 1);
-          const size = 0.28 + 4.5 * Easing.cubic.out(t);
-          return size;
-        },
-      }),
-      new DistortionOverLifetime({
-        distortionStrength: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-      }),
-    ],
-```
-
-
-[Source: modules:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L522)
-
-```js
-    modules: [
-      new MaterialCopy({ source: MaterialCopySource.Source, sampleMode: MaterialCopySampleMode.Color }),
-      new ScaleOverLifetime({ scale: t => 0.7 + 1.4 * t }),
-      new ColorOverLifetime({ alpha: t => 1 - t }),
-      new RotationOverLifetime({ angularVelocity: [-0.7, 0.7] }),
-    ],
-```
-
-
-## Renderers
-
-The metallic mesh is paired with a faint 0.28-second trail of width 0.055 and opacity 0.22. AudioRenderer uses dopplerEffect 2.4, speed/depth volume response, and pitch variation to emphasize a fast flyby. The 5×4 flash atlas plays at 36 fps, while non-billboard, double-sided distortion sprites show the shockwave from either side.
-
-A DecalRenderer uses the `DecalRenderer.Intersect()` direction sampler at `continuousRate: 60`
-and `hitSelection: DecalRenderer.All`
-to sweep each traveled segment and mark entry and exit faces. Its 0.55-unit bullet-hole decals
-last 24 seconds and fade during the final fifth, with a cap of 128 marks. Albedo alpha, normal
-and roughness maps combine with the hit surface through shared GLSL/TSL compositing. The albedo's alpha
-masks every damage channel together through transparent blending, rather than using fixed normal/roughness blend weights.
-The surface's own normal detail is layered onto the bullet-hole normal before lighting. Within the mark,
-roughness comes from the bullet-hole map; destruction impacts instead multiply their roughness map by the surface value.
-Both WebGL and WebGPU preserve the albedo alpha during compositing. Each hole copies its hit mesh's
-`receiveShadow` setting at creation and borrows the surface's environment map where applicable.
-Texture loading, the bullet-hole material, and both compositor callbacks are defined inline in the factory,
-so the source excerpts include the complete damage setup. Each hole uses an independently randomized projector roll. Surface UVs stay independent of the damage projector UVs.
-Each hole registers a source tagged `bullet-hole`, carrying the original surface material and impact
-UV in its metadata. Source birth triggers one burst of 5–8 smoke particles, with 0.4–0.65-second
-lifetimes, 0.28–0.44-unit starting sizes, and 30–45% initial opacity. The puff starts just outside the surface and moves outward;
-a short 0.025-unit soft-particle fade keeps it visible near the wall.
-A named spawn transformer derives the outward velocity from the decal source frame, instead of
-using a world-up initial velocity. `MaterialCopySource.Source` with `MaterialCopySampleMode.Color` samples
-that fixed impact UV, so each puff has a uniform surface color instead of a UV patch or the dark
-bullet-hole albedo or projectile tint. Its composition callback overrides only color, retaining the smoke's own mask
-and lighting. WebGL sprites apply Three.js tone mapping and output color conversion before display;
-otherwise linear cream surface colors look dark and bronze despite a correct material binding.
-Dust reuses the decal's original surface metadata instead of casting another ray; projection excludes
-particle-renderer geometry, including the bullet's instanced mesh.
-The source's +Y axis points outward, directing the puff away from the surface.
-
-The primary emitter tags bullets `projectile`. The flash, shockwave and continuous wake relationships
-select that tag, while dust selects `bullet-hole`. Registering a hole is a source spawn event; these
-filters keep that event from replaying the gunshot effects or leaving a wake on a stationary decal.
-
-Choose **UV debug** to see the holes on its wall and ramp. The preset itself adds no scene geometry.
-
-
-[Source: renderers:7](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L51)
-
-```js
   // Damage maps use projector UVs; the albedo alpha masks their combined lighting.
   holeMap.colorSpace = THREE.SRGBColorSpace;
   holeNormalMap.colorSpace = holeRoughnessMap.colorSpace = THREE.NoColorSpace;
@@ -712,9 +110,13 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L99)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L104)
 
 ```js
+import * as THREE from 'three';
+import { AudioRenderer, DecalRenderer, MeshRenderer, TrailMode, TrailRenderer, TrailTextureMode } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
+
     renderers: [
       // Sweep the traveled segment: bullets keep flying through every marked surface.
       new DecalRenderer(holeMaterial, {
@@ -749,6 +151,7 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
         maxDecals: 128,
         opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.8, 1),
       }),
+
       new AudioRenderer({
         sound: bulletLoopSound,
         tags: ['projectile'],
@@ -762,10 +165,12 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
         depthAffectsVolume: 0.45,
         dopplerEffect: 2.4,
       }),
+
       new MeshRenderer({
         mesh: bulletMesh,
         maxParticles: 8,
       }),
+
       new TrailRenderer({
         mode: TrailMode.Particle,
         ratio: 1,
@@ -794,9 +199,72 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
 ```
 
 
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L305)
+## Leave a wake that can outlive the bullet
+
+Smoke emission follows distance traveled so the path stays spaced along a fast trajectory. Its growth, noise and fade
+make it linger briefly instead of moving as a rigid extension of the mesh. A separate heat layer distorts the background
+without needing the smoke's color. Their inheritance settings keep a tiny bullet from forcing tiny secondary effects.
+
+
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L265)
 
 ```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import * as THREE from 'three';
+import { ColorOverLifetime, Emitter, EmissionShape, ForceOverLifetime, ParticleSystem, RotationOverLifetime, ScaleOverLifetime, SpriteRenderer, Textures, TransformByNoise } from '@rzmps/rzmps';
+import smokeAlpha from 'examples/assets/images/smoke_alpha.jpg?url';
+import { Easing } from 'eaz';
+
+  return new ParticleSystem({
+    duration: 1.1,
+    maxParticles: 256,
+    looping: true,
+    gravity: new THREE.Vector3(0, 0.2, 0),
+
+    emitters: [
+      new Emitter({
+        source: EmissionShape.Sphere(0.08, 8, 6),
+        rate: 0,
+        rateOverDistance: 5,
+        radialSpeed: 0.1,
+        initialValues: {
+          lifetime: [0.55, 0.95],
+          scale: [0.18, 0.34],
+          velocity: [new THREE.Vector3(-0.18, 0.02, -0.25), new THREE.Vector3(0.18, 0.35, 0.25)],
+          color: ['#9a9fa4', '#d8d0c0'],
+          alpha: 0.1,
+        },
+      }),
+    ],
+
+    modules: [
+      new ForceOverLifetime({
+        force: new THREE.Vector3(0, 0.12, 0),
+      }),
+
+      new TransformByNoise({
+        strength: new THREE.Vector3(0.65, 0.2, 0.65),
+        frequency: 1.6,
+      }),
+
+      new ScaleOverLifetime({
+        scale: time => {
+          const t = THREE.MathUtils.clamp(time, 0, 1);
+          const size = 0.85 + 2.35 * Easing.cubic.out(t);
+          return size;
+        },
+      }),
+
+      new ColorOverLifetime({
+        color: '#d0c8bc',
+        alpha: time => fadeInOut(time, 0.18, 0.65),
+      }),
+
+      new RotationOverLifetime({
+        angularVelocity: [-1, 1],
+      }),
+    ],
+
     renderers: [
       new SpriteRenderer(Textures.Default, {
         material: SpriteMaterialType.Lit,
@@ -809,12 +277,54 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
         },
       }),
     ],
+  });
 ```
 
 
-[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L361)
+[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L339)
 
 ```js
+import * as THREE from 'three';
+import { ColorOverLifetime, DistortionOverLifetime, Emitter, EmissionShape, ParticleSystem, ScaleOverLifetime, SpriteRenderer, Textures } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
+
+  return new ParticleSystem({
+    duration: 0.7,
+    maxParticles: 128,
+    looping: true,
+
+    emitters: [
+      new Emitter({
+        source: EmissionShape.Sphere(0.04, 8, 6),
+        rate: 24,
+        radialSpeed: 0.18,
+        initialValues: {
+          lifetime: [0.5, 0.85],
+          scale: [0.9, 1.45],
+          velocity: [new THREE.Vector3(-0.04, 0.02, 0.25), new THREE.Vector3(0.04, 0.16, 0.65)],
+          color: '#ffffff',
+        },
+      }),
+    ],
+
+    modules: [
+      new ScaleOverLifetime({
+        scale: time => {
+          const t = THREE.MathUtils.clamp(time, 0, 1);
+          const size = 0.45 + 1.75 * Easing.cubic.out(t);
+          return size;
+        },
+      }),
+
+      new DistortionOverLifetime({
+        distortionStrength: time => fadeInOut(time, 0.15, 0.55),
+      }),
+
+      new ColorOverLifetime({
+        alpha: time => 0.95 * fadeInOut(time, 0.12, 0.58),
+      }),
+    ],
+
     renderers: [
       new SpriteRenderer(Textures.Default, {
         billboard: false,
@@ -829,12 +339,67 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
         },
       }),
     ],
+  });
 ```
 
 
-[Source: renderers:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L425)
+## Separate the launch flash from impact dust
+
+The flash and shockwave are spawn bursts: they should happen once at launch, not continuously along the wake. Impact
+dust instead selects the registered bullet-hole sources. Sampling the struck surface's color makes that puff look
+like wall material rather than projectile smoke. Source filters keep a new hole from replaying the muzzle effects.
+Change these timings independently when you want a brighter launch or a more lingering impact.
+
+
+[Source: system:4](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L402)
 
 ```js
+import * as THREE from 'three';
+import { ColorOverLifetime, Emitter, ParticleSystem, ScaleOverLifetime, SpriteRenderer } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
+
+  return new ParticleSystem({
+    duration: 0.45,
+    maxParticles: 64,
+    looping: true,
+
+    emitters: [
+      new Emitter({
+        source: pointEmissionShape(),
+        bursts: [{ time: 0, count: 5 }],
+        rate: 0,
+        radialSpeed: [0.2, 0.8],
+        initialValues: {
+          lifetime: [0.22, 0.36],
+          scale: [1.0, 1.8],
+          velocity: [new THREE.Vector3(-0.35, -0.12, -0.2), new THREE.Vector3(0.35, 0.32, 0.8)],
+          color: ['#ffffff', '#ffd07a'],
+          alpha: 1,
+          rotation: [-Math.PI, Math.PI],
+        },
+      }),
+    ],
+
+    modules: [
+      new ScaleOverLifetime({
+        scale: time => {
+          const t = THREE.MathUtils.clamp(time, 0, 1);
+          const size = (0.32 + 1.45 * Easing.cubic.out(t)) * (1 - 0.35 * Easing.cubic.in(t));
+          return size;
+        },
+      }),
+
+      new ColorOverLifetime({
+        color: time =>
+          new THREE.Color().lerpColors(
+            new THREE.Color('#fff8d7'),
+            new THREE.Color('#ff9f45'),
+            THREE.MathUtils.clamp(time, 0, 1),
+          ),
+        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+      }),
+    ],
+
     renderers: [
       new SpriteRenderer(texture, {
         gridSize: { x: 5, y: 4 },
@@ -847,12 +412,53 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
         },
       }),
     ],
+  });
 ```
 
 
-[Source: renderers:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L481)
+[Source: system:5](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L468)
 
 ```js
+import * as THREE from 'three';
+import { DistortionOverLifetime, Emitter, EmissionShape, EmissionSource, ParticleSystem, ScaleOverLifetime, SpriteRenderer, Textures } from '@rzmps/rzmps';
+import { Easing } from 'eaz';
+
+  return new ParticleSystem({
+    duration: 0.65,
+    maxParticles: 64,
+    looping: true,
+
+    emitters: [
+      new Emitter({
+        source: new EmissionShape({
+          geometry: new THREE.SphereGeometry(0.1, 16, 8),
+          source: EmissionSource.Surface,
+        }),
+        bursts: [{ time: 0, count: 10 }],
+        rate: 0,
+        radialSpeed: 2.6,
+        initialValues: {
+          lifetime: 0.55,
+          scale: 2.0,
+          color: '#ffffff',
+        },
+      }),
+    ],
+
+    modules: [
+      new ScaleOverLifetime({
+        scale: time => {
+          const t = THREE.MathUtils.clamp(time, 0, 1);
+          const size = 0.28 + 4.5 * Easing.cubic.out(t);
+          return size;
+        },
+      }),
+
+      new DistortionOverLifetime({
+        distortionStrength: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+      }),
+    ],
+
     renderers: [
       new SpriteRenderer(Textures.Default, {
         billboard: false,
@@ -867,12 +473,45 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
         },
       }),
     ],
+  });
 ```
 
 
-[Source: renderers:6](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L530)
+[Source: system:7](https://github.com/rzmay/rzmps/blob/develop/examples/presets/dopplerBullet.js#L530)
 
 ```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import * as THREE from 'three';
+import { ColorOverLifetime, Emitter, EmissionShape, MaterialCopy, MaterialCopySampleMode, MaterialCopySource, ParticleSystem, RotationOverLifetime, ScaleOverLifetime, SpriteRenderer, Textures } from '@rzmps/rzmps';
+import smokeAlpha from 'examples/assets/images/smoke_alpha.jpg?url';
+import { Easing } from 'eaz';
+
+  const dust = new ParticleSystem({
+    duration: 0.12,
+    looping: false,
+    maxParticles: 128,
+    gravityModifier: -0.02,
+
+    emitters: new Emitter({
+      source: EmissionShape.Sphere(0.025),
+      rate: 0,
+      bursts: [{ time: 0, count: [5, 8] }],
+      radialSpeed: [0.1, 0.25],
+      initialValues: {
+        position: new THREE.Vector3(0, 0.045, 0),
+        lifetime: [0.4, 0.65],
+        scale: [0.28, 0.44],
+        alpha: [0.3, 0.45],
+      },
+    }),
+
+    modules: [
+      new MaterialCopy({ source: MaterialCopySource.Source, sampleMode: MaterialCopySampleMode.Color }),
+      new ScaleOverLifetime({ scale: t => THREE.MathUtils.lerp(0.7, 2.1, Easing.linear.in(t)) }),
+      new ColorOverLifetime({ alpha: t => 1 - Easing.linear.in(t) }),
+      new RotationOverLifetime({ angularVelocity: [-0.7, 0.7] }),
+    ],
+
     renderers: new SpriteRenderer(Textures.Default, {
       material: SpriteMaterialType.Lit,
       alphaMap: smokeAlpha,
@@ -883,6 +522,11 @@ Choose **UV debug** to see the holes on its wall and ramp. The preset itself add
       materialCompositeGPU: source => ({ color: source.color }),
       materialOptions: { roughness: 1, depthWrite: false },
     }),
+  });
+  dust.name = 'Bullet Impact Dust';
+  return dust;
 ```
 
 
+See [Sources and Events](https://rzmps.rzmay.com/docs/guides/emission-sources-events.html) and
+[Material Copying](https://rzmps.rzmay.com/docs/guides/material-copying.html) for adapting the impact relationship.

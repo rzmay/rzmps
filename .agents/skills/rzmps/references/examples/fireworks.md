@@ -7,22 +7,24 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">fireworks</span> <span class="example-tag">audio</span> <span class="example-tag">bursts</span> <span class="example-tag">subsystems</span> <span class="example-tag">events</span> <span class="example-tag">lights</span> <span class="example-tag">trails</span> <span class="example-tag">sprite-sheet</span> <span class="example-tag">effects</span></div>
 
-Chained subsystems, event bursts, audio cues, particle lights, and colorful sprite-sheet fireworks.
+A firework should have an anticipation phase, a clear burst and a lingering trail of evidence. This preset separates
+the rising rocket, its smoke, and the spark explosion so each can have the right lifetime and appearance.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/fireworks.png)
 
-## Particle System Configuration
+## Send up a rocket with a clear launch cue
 
-The 2.6-second looping rocket system owns continuous smoke and a death-triggered sparkle system. Rocket lifetime two seconds sets the burst timing. Smoke has a separate 4.5-second particle lifetime; sparkles are nonlooping with reduced gravity modifier 0.18, producing a slower downward arc after the explosion.
+The root launches colored rockets upward. Its particle lifetime sets when the explosion happens, while the system
+loop keeps launches recurring. A discrete palette gives each rocket a coherent color to pass to its sparks. The
+rocket has no extra motion modules: launch velocity and gravity establish its flight.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L54)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L60)
 
 ```js
-  const fireworks = new ParticleSystem({
-    maxParticles: 32,
-    duration: 2.6,
-    looping: true,
+import * as THREE from 'three';
+import { Emitter, EmissionShape } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(1),
@@ -31,17 +33,20 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
           lifetime: 2,
           velocity: new THREE.Vector3(0, 8.5, 0),
           scale: 0.5,
-          color: new Set([
-            '#ff4d6d',
-            '#ffe14b',
-            '#3eff3b',
-            '#f786ff',
-            '#11dfff',
-          ]),
+          color: new Set(['#ff4d6d', '#ffe14b', '#3eff3b', '#f786ff', '#11dfff']),
         },
       }),
     ],
-    modules: [],
+```
+
+
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L79)
+
+```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import { AudioRenderer, SpriteRenderer } from '@rzmps/rzmps';
+import fireworkSprite from 'examples/assets/images/firework.png?url';
+
     renderers: [
       new AudioRenderer({
         sound: [launchSound1, launchSound2],
@@ -49,26 +54,40 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
         pitch: [0.8, 1.2],
         loop: false,
       }),
+
       new SpriteRenderer(fireworkSprite, {
         material: SpriteMaterialType.Lit,
         materialOptions: {
           normalLighting: 1.0,
           sphericalNormals: 1.0,
-        }
+        },
       }),
     ],
-  });
 ```
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L102)
+## Leave smoke behind the climb
+
+Continuous child emission supplies smoke while the rocket is alive. The smoke lives longer, expands and drifts, so
+the launch path remains visible after the bright source has passed. Its own lifetime is not truncated by the rocket's
+death. Noise and a cubic fade keep the trail soft rather than turning it into another rigid streak.
+
+
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L100)
 
 ```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import * as THREE from 'three';
+import { ColorOverLifetime, Emitter, EmissionShape, ParticleSystem, ScaleOverLifetime, SpriteRenderer, TransformByNoise, LimitVelocityOverLifetime, RotationOverLifetime, Textures } from '@rzmps/rzmps';
+import smokeAlpha from 'examples/assets/images/smoke_alpha.jpg?url';
+import { Easing } from 'eaz';
+
   const smoke = new ParticleSystem({
     maxParticles: 2048,
     duration: 10,
     looping: true,
     gravityModifier: -0.015,
+
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.1),
@@ -84,30 +103,33 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
         },
       }),
     ],
+
     modules: [
       new TransformByNoise({
         strength: new THREE.Vector3(0.65, 0.35, 0.65),
         frequency: 0.8,
       }),
+
       new LimitVelocityOverLifetime({
         limit: new THREE.Vector3(1.1, 1.35, 1.1),
         drag: 0.1,
         multiplyDragByVelocity: true,
       }),
+
       new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time);
-          return size;
-        },
+        scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
       }),
+
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
+        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
       }),
+
       new RotationOverLifetime({
         angularVelocity: [-1, 1],
       }),
     ],
+
     renderers: [
       new SpriteRenderer(Textures.Default, {
         material: SpriteMaterialType.Lit,
@@ -117,22 +139,37 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
           roughness: 1,
           normalLighting: 0.5,
           sphericalNormals: 1,
-        }
+        },
       }),
     ],
   });
 ```
 
 
-[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L169)
+## Turn the rocket's death into a colored explosion
+
+The death-triggered child emits a radial burst. Inherited color connects it to the launch, while reduced gravity
+lets the sparks arc downward more slowly. Animated sprites, short trails and a few lights create distinct bright
+points with lingering motion. Artistic renderer children broaden each spark's visible presence. The burst sound
+marks the transition from climb to explosion; enable audio in the demo when tuning that moment.
+
+
+[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L171)
 
 ```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import * as THREE from 'three';
+import { ColorOverLifetime, Emitter, CompensationMode, EmissionShape, LightRenderer, ParticleSystem, SpriteRenderer, TrailRenderer, TrailTextureMode, Textures } from '@rzmps/rzmps';
+import sparklesSprite from 'examples/assets/images/sparkle_tile_5x2_n10.png?url';
+import { Easing } from 'eaz';
+
   const sparkles = new ParticleSystem({
     maxParticles: 512,
     lod: { distance: 30, quality: 0.5, maxLevel: 2, continuous: true },
     duration: 5,
     looping: false,
     gravityModifier: 0.18,
+
     emitters: [
       new Emitter({
         source: EmissionShape.Sphere(0.08),
@@ -142,16 +179,18 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
         initialValues: {
           lifetime: [0.75, 1.35],
           scale: [0.5, 1],
-          color: '#ffffff'
+          color: '#ffffff',
         },
       }),
     ],
+
     modules: [
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) => Math.max(0, 1 - time),
+        alpha: time => 1 - Easing.linear.in(Math.min(time, 1)),
       }),
     ],
+
     renderers: [
       new SpriteRenderer(sparklesSprite, {
         children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
@@ -161,12 +200,13 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
         fps: 10,
         randomStartFrame: true,
       }),
+
       new TrailRenderer({
         children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
         lifetime: 0.1,
         minimumVertexDistance: 0.02,
         dieWithParticles: false,
-        width: (t) => 0.05 * (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1))),
+        width: t => 0.05 * (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1))),
         inheritParticleColor: true,
         alpha: 0.5,
         textureMode: TrailTextureMode.Stretch,
@@ -176,6 +216,7 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
           map: new THREE.TextureLoader().load(Textures.Simple),
         },
       }),
+
       new LightRenderer({
         count: 10,
         ratio: 0.5,
@@ -194,218 +235,3 @@ The 2.6-second looping rocket system owns continuous smoke and a death-triggered
   });
 ```
 
-
-## Emitters
-
-Three rockets per second begin in a radius-one sphere with upward velocity 8.5. A discrete five-color Set gives each launch a clear color. Smoke emits at 36 per second per active context with low alpha 0.1. Each death burst creates 100–300 sparkles at radial speed 4.5–12, spreading the inherited rocket color into a broad shell.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L59)
-
-```js
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(1),
-        rate: 3,
-        initialValues: {
-          lifetime: 2,
-          velocity: new THREE.Vector3(0, 8.5, 0),
-          scale: 0.5,
-          color: new Set([
-            '#ff4d6d',
-            '#ffe14b',
-            '#3eff3b',
-            '#f786ff',
-            '#11dfff',
-          ]),
-        },
-      }),
-    ],
-```
-
-
-[Source: emitters:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L108)
-
-```js
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.1),
-        rate: 36,
-        radialSpeed: 0.18,
-        initialValues: {
-          lifetime: 4.5,
-          speed: 0.55,
-          scale: 0.75,
-          color: ['#4e4d4a', '#a7a097'],
-          alpha: 0.1,
-          velocity: new THREE.Vector3(0, 0.75, 0),
-        },
-      }),
-    ],
-```
-
-
-[Source: emitters:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L176)
-
-```js
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.08),
-        rate: 0,
-        bursts: [{ time: 0, count: [50, 150] }],
-        radialSpeed: [4.5, 12],
-        initialValues: {
-          lifetime: [0.75, 1.35],
-          scale: [0.5, 1],
-          color: '#ffffff'
-        },
-      }),
-    ],
-```
-
-
-## Modules
-
-The rocket module list is empty, leaving normal integration to shape flight. Smoke uses lateral noise, velocity limits, growth, rotation, and cubic fading. Sparkles fade linearly over their 0.75–1.35-second lifetimes. Child lifetime inheritance is disabled so event particles survive after the rocket dies.
-
-
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L79)
-
-```js
-    modules: [],
-```
-
-
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L125)
-
-```js
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.35, 0.65),
-        frequency: 0.8,
-      }),
-      new LimitVelocityOverLifetime({
-        limit: new THREE.Vector3(1.1, 1.35, 1.1),
-        drag: 0.1,
-        multiplyDragByVelocity: true,
-      }),
-      new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time);
-          return size;
-        },
-      }),
-      new ColorOverLifetime({
-        color: '#ffffff',
-        alpha: (time) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1))),
-      }),
-      new RotationOverLifetime({
-        angularVelocity: [-1, 1],
-      }),
-    ],
-```
-
-
-[Source: modules:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L191)
-
-```js
-    modules: [
-      new ColorOverLifetime({
-        color: '#ffffff',
-        alpha: (time) => Math.max(0, 1 - time),
-      }),
-    ],
-```
-
-
-## Renderers
-
-Rocket sprites are lit, with launch and death audio selected from two clips and pitch range 0.8–1.2. Smoke uses rough lit alpha sprites. Sparkles use a 5×2 animated atlas at 10 fps with random starting frames, short 0.1-second trails, and up to ten bright lights. The light cap limits a burst’s illumination cost even when hundreds of particles spawn.
-
-
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L82)
-
-```js
-    renderers: [
-      new AudioRenderer({
-        sound: [launchSound1, launchSound2],
-        onDeathSound: [blastSound1, blastSound2],
-        pitch: [0.8, 1.2],
-        loop: false,
-      }),
-      new SpriteRenderer(fireworkSprite, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          normalLighting: 1.0,
-          sphericalNormals: 1.0,
-        }
-      }),
-    ],
-```
-
-
-[Source: renderers:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L151)
-
-```js
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        material: SpriteMaterialType.Lit,
-        alphaMap: smokeAlpha,
-        softParticleDistance: 1,
-        materialOptions: {
-          roughness: 1,
-          normalLighting: 0.5,
-          sphericalNormals: 1,
-        }
-      }),
-    ],
-```
-
-
-[Source: renderers:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L199)
-
-```js
-    renderers: [
-      new SpriteRenderer(sparklesSprite, {
-        children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
-        compensation: CompensationMode.Children,
-        material: SpriteMaterialType.Unlit,
-        gridSize: { x: 5, y: 2 },
-        fps: 10,
-        randomStartFrame: true,
-      }),
-      new TrailRenderer({
-        children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
-        lifetime: 0.1,
-        minimumVertexDistance: 0.02,
-        dieWithParticles: false,
-        width: (t) => 0.05 * (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1))),
-        inheritParticleColor: true,
-        alpha: 0.5,
-        textureMode: TrailTextureMode.Stretch,
-        materialOptions: {
-          roughness: 1,
-          transparent: true,
-          map: new THREE.TextureLoader().load(Textures.Simple),
-        },
-      }),
-      new LightRenderer({
-        count: 10,
-        ratio: 0.5,
-        inheritParticleColor: true,
-        sizeAffectsRange: false,
-        alphaAffectsIntensity: true,
-        brightness: 50,
-        rangeMultiplier: 5,
-        lightOptions: {
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
-      }),
-    ],
-```
-
-
-
-Spark bursts simulate 50–150 particles, with one small artistic sprite child per spark. Spark-system population LOD reduces births at distance and uses renderer child compensation. Finite bursts recover only through future emission events; moving closer does not restore previously omitted or culled sparks. The trail renderer uses matching artistic children, each maintaining an independent history under its stable child ID.

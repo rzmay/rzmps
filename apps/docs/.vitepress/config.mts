@@ -16,7 +16,7 @@ export default defineConfig({
   lang: 'en-US',
   title: 'RZMPS',
   description: 'Modular particle effects for Three.js',
-  srcExclude: ['public/**'],
+  srcExclude: ['public/**', 'README.md'],
   base: new URL(docsUrl).pathname,
   sitemap: { hostname: docsUrl, transformItems: sitemapItems },
   head: [['meta', {name:'theme-color',content:'#3451b2'}], ['link', {rel:'icon',type:'image/png',href: `${new URL(docsUrl).pathname}favicon.png`}]],

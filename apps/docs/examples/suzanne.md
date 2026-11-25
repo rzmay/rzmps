@@ -9,31 +9,48 @@ example: suzanne
 
 <ExampleTags />
 
-Mesh-surface emission from a model with lit sprite rendering.
+The goal is to reveal a model's surface through particles. Suzanne supplies the emission shape; the particles
+leaving it are small cyan sprites, not copies of the whole model.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Load a surface to sample
 
-This continuously looping 10-second system emits from a loaded model. Geometry is cloned before transformation so the GLTF asset’s original mesh is not modified. The source applies rotateX(-90), which Three.js interprets in radians; this documents the current transform rather than assuming it means a quarter-turn.
+Load the GLTF and clone its geometry before orienting it. That keeps the imported asset intact and gives the emitter
+its own source geometry. Adapt the clone's transform to your model; Three.js geometry rotations use radians.
+The source is ready before the particle system is constructed.
 
-<ExampleCode region="system" />
+<ExampleCode region="system:resources" />
 
-## Emitters
+## Use a recognizable surface as the source
 
-EmissionSource.Surface samples Suzanne’s geometry at 256 particles per second. Lifetime 2.2 gives roughly 563 visible particles before culling, enough to outline the model. Initial speed and velocity are zero, while radial speed 1.1 supplies source-directed motion; small scale 0.1125 keeps the sampled shape legible.
+The factory loads the GLTF, clones its geometry and orients the clone for emission. Sampling `EmissionSource.Surface`
+places births on that geometry. Small particle sizes and a steady stream let the outline remain visible while radial
+speed carries particles away from it. Lower that speed to hold a shell around the model, or increase it to make the
+surface appear to dissolve outward.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Preserve the outline before fading it
 
-The color module keeps the cyan tint and applies a cubic alpha fade. Late fading preserves a recognizable shell for most of each particle’s life, then reduces visible popping as particles expire. No additional noise or force module obscures the model-based emission pattern.
+The cyan color and cubic alpha fade keep a clear shell early in life, then soften its disappearance. No noise layer
+is added because the surface distribution is the feature being taught. Add motion only after the source shape is
+recognizable, otherwise it becomes difficult to tell whether a change comes from emission or later movement.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Draw samples rather than model copies
 
-Circle sprites with lit material render each sample without instancing the entire Suzanne mesh per particle. The model is only the emission source. This makes the surface sampling easy to see while avoiding a scene filled with hundreds of full model instances.
+Lit circular sprites give each sample a compact, soft-edged appearance. The model remains an emission resource.
+Compare [Suzanne Instances](./suzanneInstances.md) if you want every particle to be a miniature model instead of a
+point sampled from its surface.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

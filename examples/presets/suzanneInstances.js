@@ -1,20 +1,15 @@
 import * as THREE from 'three';
-import {
-  ColorOverLifetime,
-  Emitter,
-  MeshRenderer,
-  ParticleSystem,
-} from '@rzmps/rzmps';
+import { ColorOverLifetime, Emitter, MeshRenderer, ParticleSystem } from '@rzmps/rzmps';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import suzanneModel from 'examples/assets/models/suzanne.glb?url';
 import { Easing } from 'eaz';
 
-
 export default async function suzanneInstancesPreset() {
+  // #region docs:system:resources
   const gltf = await new GLTFLoader().loadAsync(suzanneModel);
 
   let suzanneGeometry = null;
-  gltf.scene.traverse((child) => {
+  gltf.scene.traverse(child => {
     if (!suzanneGeometry && child.isMesh) {
       suzanneGeometry = child.geometry.clone();
       suzanneGeometry.rotateX(-90);
@@ -25,14 +20,47 @@ export default async function suzanneInstancesPreset() {
     throw new Error('suzanne.glb does not contain a mesh');
   }
 
-  const colors = new Set([
-    '#ff3333',
-    '#33ff66',
-    '#ffdd22',
-    '#3388ff',
-  ]);
+  const colors = new Set(['#ff3333', '#33ff66', '#ffdd22', '#3388ff']);
+
+  // #endregion docs:system:resources
 
   // #region docs:system:1
+  // #region docs:emitters:1
+  const systemEmitters = [
+    new Emitter({
+      rate: 12,
+      radialSpeed: 1,
+      alignment: 1,
+      initialValues: {
+        lifetime: [4, 8],
+        speed: 1,
+        color: colors,
+        scale: [0.4, 1.0],
+        alpha: 1,
+      },
+    }),
+  ];
+  // #endregion docs:emitters:1
+
+  // #region docs:modules:1
+  const systemModules = [
+    new ColorOverLifetime({
+      alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
+    }),
+  ];
+  // #endregion docs:modules:1
+
+  // #region docs:renderers:1
+  const systemRenderers = [
+    new MeshRenderer({
+      mesh: new THREE.Mesh(suzanneGeometry, new THREE.MeshStandardMaterial()),
+      castShadow: true,
+      receiveShadow: true,
+    }),
+  ];
+  // #endregion docs:renderers:1
+
+  // #region docs:system:assembly
   const system = new ParticleSystem({
     maxParticles: 256,
     duration: 10,
@@ -40,47 +68,13 @@ export default async function suzanneInstancesPreset() {
     gravity: new THREE.Vector3(0, 0, 0),
     gravityModifier: 0,
 
-    // #region docs:emitters:1
-    emitters: [
-      new Emitter({
-        rate: 12,
-        radialSpeed: 1,
-        alignment: 1,
-        initialValues: {
-          lifetime: [4, 8],
-          speed: 1,
-          color: colors,
-          scale: [
-            0.4,
-            1.0,
-          ],
-          alpha: 1,
-        },
-      }),
-    ],
-    // #endregion docs:emitters:1
+    emitters: systemEmitters,
 
-    // #region docs:modules:1
-    modules: [
-      new ColorOverLifetime({
-        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)))
-      })
-    ],
-    // #endregion docs:modules:1
+    modules: systemModules,
 
-    // #region docs:renderers:1
-    renderers: [
-      new MeshRenderer({
-        mesh: new THREE.Mesh(
-          suzanneGeometry,
-          new THREE.MeshStandardMaterial()
-        ),
-        castShadow: true,
-        receiveShadow: true,
-      }),
-    ],
-    // #endregion docs:renderers:1
+    renderers: systemRenderers,
   });
+  // #endregion docs:system:assembly
   // #endregion docs:system:1
 
   system.name = 'Spheres';
@@ -92,9 +86,9 @@ export default async function suzanneInstancesPreset() {
 /** @type {import("../types").ExampleMetadata} */
 suzanneInstancesPreset.metadata = {
   author: 'rzmay',
-  'id': 'suzanneInstances',
-  'title': 'Suzanne Instances',
-  'description': 'Mesh instancing with Suzanne particles and randomized transforms.',
+  id: 'suzanneInstances',
+  title: 'Suzanne Instances',
+  description: 'Mesh instancing with Suzanne particles and randomized transforms.',
   tags: ['suzanneInstances', 'meshes', 'instancing', 'effects'],
   previewSettings: {
     duration: 10,

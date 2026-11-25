@@ -7,100 +7,45 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">boids</span> <span class="example-tag">flocking</span> <span class="example-tag">meshes</span> <span class="example-tag">spatial-effects</span> <span class="example-tag">fish</span> <span class="example-tag">octree</span> <span class="example-tag">spatial</span> <span class="example-tag">aggregate</span></div>
 
-Flocking particles using ParticleOctree aggregation, with red hazard particles acting as tagged particle affectors.
+The flock should move together without collapsing into one point, while larger red hazards interrupt its flow.
+The two populations have opposing goals, making steering decisions visible through their movement.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/boids.png)
 
-## Particle System Configuration
+## Prepare the two populations
 
-The 24-second loop and lifetimes up to 22 seconds sustain two interacting populations. Gravity is disabled so steering controls their paths. maxParticles 700 bounds the flocking workload; the estimated full-lifetime population can approach that cap as both populations build up.
+Start with distinct palettes and emission shapes so the flock and hazards are visually separable before tuning
+steering. The sphere gives the flock room to spread; the torus places hazards around it. Keeping these resources
+named makes the tagged emitter configuration below easier to follow.
 
 
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L56)
+[Source: system:resources](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L7)
 
 ```js
-  const system = new ParticleSystem({
-    duration: 24,
-    looping: true,
-    gravity: new THREE.Vector3(0, 0, 0),
-    gravityModifier: 0,
-    maxParticles: 700,
+import { EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: flockSource,
-        rate: 38,
-        radialSpeed: 0.9,
-        tags: 'boid',
-        initialValues: {
-          lifetime: [9, 16],
-          speed: [3.2, 4.8],
-          color: flockColors,
-          scale: [0.34, 0.48],
-          alpha: 0.88,
-        },
-      }),
-      new Emitter({
-        source: hazardSource,
-        rate: 2,
-        radialSpeed: 0.72,
-        tags: 'hazard',
-        initialValues: {
-          lifetime: [14, 22],
-          speed: [2.6, 3.7],
-          color: hazardColors,
-          scale: [0.65, 1.05],
-          alpha: 0.95,
-        },
-      }),
-    ],
+  const flockColors = new Set(['#7ce7ff', '#c7fff3', '#95ff7c']);
 
-    modules: [
-      boids,
-      hazardBoids,
-      new OrientToDirection({
-        axis: new THREE.Vector3(0, 1, 0),
-      }),
-    ],
+  const hazardColors = new Set(['#ff4c5f', '#ff9a4c']);
 
-    renderers: [
-      new MeshRenderer({
-        tags: 'boid',
-        mesh: new THREE.Mesh(
-          new THREE.ConeGeometry(0.32, 0.9, 12, 1),
-          new THREE.MeshStandardMaterial({
-            roughness: 0.52,
-            metalness: 0.05,
-            emissive: new THREE.Color('#071018'),
-            emissiveIntensity: 0.18,
-          }),
-        ),
-      }),
-      new MeshRenderer({
-        tags: 'hazard',
-        mesh: new THREE.Mesh(
-          new THREE.ConeGeometry(0.38, 1.05, 14, 1),
-          new THREE.MeshStandardMaterial({
-            roughness: 0.35,
-            metalness: 0.05,
-            emissive: new THREE.Color('#601018'),
-            emissiveIntensity: 0.55,
-          }),
-        ),
-      }),
-    ],
-  });
+  const flockSource = EmissionShape.Sphere(12, 32, 16);
+  const hazardSource = EmissionShape.Torus(7.5, 0.45, 16, 48);
+
 ```
 
 
-## Emitters
+## Give the flock and hazards distinct roles
 
-The main flock emits 38 particles per second from a radius-12 sphere, while two hazards per second begin on a torus. Tags separate their rules. Main lifetimes 9–16 and hazard lifetimes 14–22 make the hazards persist longer; hazards are also larger (0.65–1.05 versus 0.34–0.48), making pursuit and avoidance visible.
+A broad sphere source spreads the main flock. Hazards begin around a torus and persist longer, so encounters can
+build over time. Tags separate their behaviors; cool flock colors and larger warm-colored hazards distinguish the
+roles before motion begins. Gravity is disabled so steering, rather than falling, determines their paths.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L64)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L67)
 
 ```js
+import { Emitter } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: flockSource,
@@ -115,6 +60,7 @@ The main flock emits 38 particles per second from a radius-12 sphere, while two 
           alpha: 0.88,
         },
       }),
+
       new Emitter({
         source: hazardSource,
         rate: 2,
@@ -132,14 +78,19 @@ The main flock emits 38 particles per second from a radius-12 sphere, while two 
 ```
 
 
-## Modules
+## Balance togetherness against personal space
 
-Two Boids modules use opposite particle-affector roles: hazards repel boids as obstacles, while boids act as targets for hazards. Main separation weight 2.4 exceeds cohesion 1.35 to resist clumping. Hazard affector weight 5.5 makes target seeking strong. OrientToDirection aligns cone geometry with motion so heading remains readable.
+The flock balances alignment, cohesion and separation. Stronger separation resists clumping, while hazard particles
+act as obstacles. The hazard population treats the flock as targets instead, creating a visible pursuit-and-avoidance
+relationship. Tune one weight at a time: increase separation for a looser flock or reduce attraction for less pursuit.
+These are this preset's steering choices, not a universal flocking recipe.
 
 
-[Source: modules:setup](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L14)
+[Source: modules:setup](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L17)
 
 ```js
+import { Boids } from '@rzmps/rzmps';
+
   const boids = new Boids({
     tags: 'boid',
     alignmentWeight: 1.55,
@@ -161,9 +112,11 @@ Two Boids modules use opposite particle-affector roles: hazards repel boids as o
 ```
 
 
-[Source: modules:setup](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L35)
+[Source: modules:setup](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L38)
 
 ```js
+import { Boids } from '@rzmps/rzmps';
+
   const hazardBoids = new Boids({
     tags: 'hazard',
     alignmentWeight: 1.25,
@@ -185,9 +138,12 @@ Two Boids modules use opposite particle-affector roles: hazards repel boids as o
 ```
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L95)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L99)
 
 ```js
+import * as THREE from 'three';
+import { OrientToDirection } from '@rzmps/rzmps';
+
     modules: [
       boids,
       hazardBoids,
@@ -198,14 +154,19 @@ Two Boids modules use opposite particle-affector roles: hazards repel boids as o
 ```
 
 
-## Renderers
+## Make direction legible in the silhouette
 
-Two tag-filtered MeshRenderers use cone meshes and separate materials. Cool flock colors contrast with red/orange hazards, whose material has stronger emissive intensity 0.55. The geometric cone points reveal direction more clearly than a circular billboard would.
+Tag-filtered cone meshes point along each particle's movement through OrientToDirection. That pointed silhouette
+shows heading more clearly than a round billboard. Separate materials and a warmer hazard glow reinforce the roles.
+Start with the supplied scene, then adapt the tagged particle-affector arrangement to your own obstacles and targets.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L105)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L109)
 
 ```js
+import * as THREE from 'three';
+import { MeshRenderer } from '@rzmps/rzmps';
+
     renderers: [
       new MeshRenderer({
         tags: 'boid',
@@ -219,6 +180,7 @@ Two tag-filtered MeshRenderers use cone meshes and separate materials. Cool floc
           }),
         ),
       }),
+
       new MeshRenderer({
         tags: 'hazard',
         mesh: new THREE.Mesh(
@@ -233,5 +195,4 @@ Two tag-filtered MeshRenderers use cone meshes and separate materials. Cool floc
       }),
     ],
 ```
-
 

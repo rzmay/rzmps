@@ -9,31 +9,40 @@ example: particleTrail
 
 <ExampleTags />
 
-Per-particle trail rendering with inherited color and alpha over moving particles.
+The visible effect is the path left behind a moving particle. Each source follows an arcing, disturbed trajectory;
+its trail gives that brief motion enough persistence to read as a streak.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Launch a few distinct paths
 
-The 2-second loop continuously feeds particles with 2.5-second lifetimes. Gravity (0, -1.5, 0) bends initially upward trajectories into arcs. Particle and trail lifetimes differ, allowing the path to linger after its source has moved on.
-
-<ExampleCode region="system" />
-
-## Emitters
-
-Only eight particles per second are needed because their trails supply most of the visible coverage. Emission starts within a radius-0.15 sphere, with upward velocities 4–6 and lateral components between -1.5 and 1.5. The 0.15 particle scale keeps each moving source compact.
+A compact source starts particles upward with varied lateral velocity. Downward gravity bends those launches into
+arcs. Only a modest stream is needed because a trail occupies the path, not just its current endpoint. Keep the
+launches separate enough to follow one before increasing their overlap.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Disturb the path sideways
 
-TransformByNoise uses strong horizontal components (100) and zero vertical strength at frequency 5. The result strongly perturbs the lateral path while gravity and initial vertical velocity still shape its height. The large strength is a visible parameter to inspect carefully when adapting the effect to another scene scale.
+Noise acts strongly across the horizontal plane while leaving the launch height mostly to velocity and gravity.
+That choice produces erratic lateral motion instead of a smooth fountain. The strength is intentionally pronounced;
+reduce it when adapting the effect to a calmer wake or a smaller scene.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Let the path linger and taper
 
-Particle mode gives every selected particle its own trail, with ratio 1. Trail lifetime 0.75 and minimum vertex distance 0.05 balance persistence against vertex count. Width 0.18 tapers at both ends; the cyan-to-pink gradient makes progression along the path readable. dieWithParticles false lets older trail segments finish fading.
+Particle mode gives each source its own trail. Its lifetime controls how much past motion remains visible, while
+minimum vertex distance controls how closely the path is sampled. An eased width envelope tapers the beginning and end so
+the streak does not end as a blunt strip. A cyan-to-pink gradient makes progression along the trail clear.
+`dieWithParticles: false` lets the remaining segments finish after their source disappears.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

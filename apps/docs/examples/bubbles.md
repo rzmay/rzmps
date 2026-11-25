@@ -9,33 +9,49 @@ example: bubbles
 
 <ExampleTags />
 
-Refractive sprite transmission with spherical normals and size-driven distortion. Both continuous sounds and collision-triggered bubble pops.
+These bubbles should feel like thin, moving shells: they wobble, distort the scene behind them, and disappear with
+a pop when they touch geometry. The Cornell Box scene makes their highlights and refraction easy to see.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Prepare the shell textures and sounds
 
-The 10-second loop uses a small gravity modifier 0.05 and live cubemap reflections. Particle lifetimes 7–12 seconds allow slow movement and collisions. The physics remains ordinary particles; transmission and distortion create the bubble appearance.
+Load the transparency/distortion textures and decode the continuous and pop sounds before creating the system.
+The small audio helper records where a clip came from so the demo can offer a useful code export. Your own application
+can keep its asset URLs alongside its audio-loading code in the same way.
 
-<ExampleCode region="system" />
+<ExampleCode region="system:audioSources" />
+<ExampleCode region="system:resources" />
 
-## Emitters
+## Begin with a varied, gentle stream
 
-Eight particles per second from a radius-0.5 sphere yield around 76 particles at average lifetime before contact losses. Scale 0.25–1 gives varied bubble sizes, and radial speed 1–3 spreads them. Mass 0.25 changes the physics response relative to the heavier collision examples.
-
-Uniform scale values and color strings use the standard input shortcuts.
+A small sphere source and varied size keep the bubbles from appearing as identical beads. Radial speed separates them,
+and their long lifetimes leave time for drifting and contact. A small gravity modifier keeps the motion gentle.
+Live cubemap reflections supply environmental cues; they do not replace the particles' ordinary motion.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Let them form, wobble and pop
 
-Gentle noise strength (0.2, 0.05, 0.2) adds lateral wobble. Collision lifetimeLoss 1 removes bubbles on contact, driving their pop cue. Scale grows rapidly during the first fifth of life rather than appearing at full size immediately. DistortionBySize maps size 0–1 to distortion multiplier 0–1, emphasizing larger bubbles.
+The early cubic scale ramp makes each bubble grow into view. Gentle sideways noise adds wobble, while the collision
+module removes a bubble on contact. DistortionBySize makes larger bubbles bend the background more strongly, so the
+size variation affects appearance as well as silhouette. Use a scene with collision geometry to see the pop behavior.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Combine a transparent shell with a restrained sound bed
 
-The lit sprite combines spherical normals, low roughness 0.15, transmission 0.7, and distortion strength -0.05 to suggest a curved transparent shell. Only ratio 0.15 of particles play the looping bubble track, while collisionRatio 1 permits every bubble to pop. Size lowers pitch and slightly increases volume; inspect sound in the interactive demo as well as the visual preview.
+Spherical normals, low roughness, transmission and a distortion map suggest a curved surface on a billboard. The
+looping bubbling track is applied to only some particles so it does not overwhelm the mix; every collision can play
+a pop. Larger bubbles sound deeper. Adjust the material under scene lighting, then enable audio to tune the relative
+level of the continuous bed and individual pops.
 
 <ExampleCode region="renderers" />
 
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

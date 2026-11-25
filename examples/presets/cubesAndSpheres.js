@@ -15,86 +15,84 @@ import {
 import { Easing } from 'eaz';
 
 export default async function cubesAndSpheresPreset() {
-  const colors = new Set([
-    '#ff3333',
-    '#33ff66',
-    '#ffdd22',
-    '#3388ff',
-  ]);
+  const colors = new Set(['#ff3333', '#33ff66', '#ffdd22', '#3388ff']);
 
   // #region docs:system:1
+  // #region docs:emitters:1
+  const systemEmitters = [
+    new Emitter({
+      rate: 12,
+      radialSpeed: 1,
+      tags: ['spheres', 'cubes'],
+      tagSelection: TagSelectionMethod.Distribute,
+      initialValues: {
+        lifetime: [6, 12],
+        speed: 1,
+        color: colors,
+        scale: [0.1, 0.25],
+        alpha: 1,
+      },
+    }),
+  ];
+  // #endregion docs:emitters:1
+
+  // #region docs:modules:1
+  const systemModules = [
+    new RotationOverLifetime({
+      angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
+      tags: 'cubes',
+    }),
+
+    new ColorOverLifetime({
+      alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
+      tags: 'cubes',
+    }),
+
+    new ScaleOverLifetime({
+      scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
+      tags: 'spheres',
+    }),
+
+    new Collision({ tags: 'spheres' }),
+  ];
+  // #endregion docs:modules:1
+
+  // #region docs:renderers:1
+  const systemRenderers = [
+    new SpriteRenderer(Textures.Circle, {
+      material: SpriteMaterialType.Lit,
+      tags: 'spheres',
+      materialOptions: {
+        roughness: 0.5,
+        sphericalNormals: 1,
+        normalLighting: 1,
+      },
+      castShadow: true,
+    }),
+
+    new MeshRenderer({
+      tags: 'cubes',
+      mesh: new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()),
+      castShadow: true,
+      receiveShadow: true,
+    }),
+  ];
+  // #endregion docs:renderers:1
+
+  // #region docs:system:assembly
   const system = new ParticleSystem({
     duration: 10,
     looping: true,
     gravity: new THREE.Vector3(0, 0, 0),
     gravityModifier: 0,
 
-    // #region docs:emitters:1
-    emitters: [
-      new Emitter({
-        rate: 12,
-        radialSpeed: 1,
-        tags: ['spheres', 'cubes'],
-        tagSelection: TagSelectionMethod.Distribute,
-        initialValues: {
-          lifetime: [6, 12],
-          speed: 1,
-          color: colors,
-          scale: [
-            0.1,
-            0.25,
-          ],
-          alpha: 1,
-        },
-      }),
-    ],
-    // #endregion docs:emitters:1
+    emitters: systemEmitters,
 
-    // #region docs:modules:1
-    modules: [
-      new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
-        tags: 'cubes',
-      }),
-      new ColorOverLifetime({
-        alpha: (t) => (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1))),
-        tags: 'cubes',
-      }),
-      new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time);
-          return size;
-        },
-        tags: 'spheres'
-      }),
-      new Collision({ tags: 'spheres' })
-    ],
-    // #endregion docs:modules:1
+    modules: systemModules,
 
-    // #region docs:renderers:1
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        tags: 'spheres',
-        materialOptions: {
-          roughness: 0.5,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-        castShadow: true,
-      }),
-      new MeshRenderer({
-        tags: 'cubes',
-        mesh: new THREE.Mesh(
-          new THREE.BoxGeometry(1, 1, 1),
-          new THREE.MeshStandardMaterial()
-        ),
-        castShadow: true,
-        receiveShadow: true,
-      }),
-    ],
-    // #endregion docs:renderers:1
+    renderers: systemRenderers,
   });
+  // #endregion docs:system:assembly
   // #endregion docs:system:1
 
   system.name = 'Spheres';
@@ -106,9 +104,9 @@ export default async function cubesAndSpheresPreset() {
 /** @type {import("../types").ExampleMetadata} */
 cubesAndSpheresPreset.metadata = {
   author: 'rzmay',
-  'id': 'tags',
-  'title': 'Cubes and Spheres',
-  'description': 'Tag-based module and renderer filtering by mixing cubes and spheres in one particle system.',
+  id: 'tags',
+  title: 'Cubes and Spheres',
+  description: 'Tag-based module and renderer filtering by mixing cubes and spheres in one particle system.',
   tags: ['tags', 'collision', 'meshes', 'sprites', 'tag-filtering', 'effects'],
   previewSettings: {
     duration: 10,

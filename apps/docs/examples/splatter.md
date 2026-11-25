@@ -9,32 +9,42 @@ example: splatter
 
 <ExampleTags />
 
-Matte, multicolored paintballs leave long-lived splatters matching their color and size, with randomized surface rotation. Select a scene with collision geometry, such as Checkerboard.
+Paint balls should stop being moving objects at contact, while their color stays behind as a mark. This preset
+connects each short flight to a long-lived, rough splatter on the struck surface.
 
 <ExamplePreview />
 
-## Particle System Configuration
+## Throw varied blobs of paint
 
-An eight-second loop throws paintballs from height 3.5 under gravity. The source particles disappear on impact, while their paint stays on the surface for 90 seconds. Use Checkerboard for a clear floor or a collision scene to catch paint on several surfaces. Known mesh contacts place decals directly; backends without mesh identity search opposite the collision normal so walls receive paint as well as floors. The factory owns and disposes its splatter color/alpha map, normal map, and template material when the root system is destroyed.
-
-<ExampleCode region="system" />
-
-## Emitters
-
-Five balls per second receive colors from a five-color palette and uniform diameters between 0.2 and 0.45. Radial speed 3 scatters their trajectories, with a small upward launch velocity before gravity pulls them down. Random Z rotation covers a full turn; it becomes the decal's surface roll at impact. Source lifetime eight seconds is a fallback for balls that miss scene geometry.
+A small stream receives colors from a discrete palette. Size variation changes both the ball and the inherited
+splatter footprint, while a little upward velocity gives gravity room to bend the flight. Random initial roll keeps
+the marks from sharing one orientation. Choose Checkerboard or another collision scene so the paint has somewhere to land.
 
 <ExampleCode region="emitters" />
 
-## Modules
+## Replace the ball with evidence of its impact
 
-Collision consumes the complete source lifetime on the first contact. The decal listener captures color, scale, and rotation before the ball dies. A backend supplying a mesh projects directly at that contact. Backends without target identity use a bounded downward ray to find the landing surface. This also works with asynchronous GPU collision events, whose particle velocity may already reflect the bounce response.
+Collision consumes the ball's remaining lifetime on the first hit. The decal renderer uses that contact to place a
+mark and inherit the paint color and scale. The ball therefore disappears at the same place its paint appears,
+rather than bouncing away and leaving an unexplained duplicate.
 
 <ExampleCode region="modules" />
 
-## Renderers
+## Make the mark look like raised, wet paint
 
-The balls reuse the Spheres preset's lit circular sprites and spherical normals, with roughness raised to 0.95 and no metalness for a matte paint finish. The rough decal material uses splat2.png for its white color and transparent silhouette, together with splat2_norm.jpg at normal strength 0.65 for raised paint detail. The color map is sRGB; the normal map stays in linear data space. Each cloned material inherits its source ball's exact color. Full scale inheritance gives each splatter a footprint three times the ball diameter, so larger balls leave proportionally larger marks. Marks stay opaque for the first 85 percent of their 90-second lifetime, then fade smoothly. Capacity 512 accommodates roughly 450 steady-state marks at five impacts per second.
+A white splatter image provides the mask so inherited color remains visible. The normal map adds raised detail,
+while rough shading keeps the finish matte. Scale inheritance makes a larger ball leave a larger mark. The marks
+hold their opacity for most of their long lifetime, then fade rather than vanishing at once. Tune the decal size
+relative to the ball when adapting the preset to another surface scale.
 
 <ExampleCode region="renderers" />
 
-[Fire](./fire.md) demonstrates textured scorch marks. See [Surface Decals](../guides/decals.md) for selection callbacks, inheritance, lifetimes, and supported targets.
+For other surface reactions, compare [Fire](./fire.md) or read [Surface Decals](../guides/decals.md).
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+<ExampleCode region="system:assembly" />

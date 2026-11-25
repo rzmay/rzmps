@@ -7,92 +7,26 @@
 
 <div class="example-tags" aria-label="Example tags"><span class="example-tag">smoke</span> <span class="example-tag">sprites</span> <span class="example-tag">noise</span> <span class="example-tag">transparency</span> <span class="example-tag">effects</span></div>
 
-Lit smoke sprites with soft particles and lifetime scale/color shaping.
+A smoke plume should read as a soft, rising volume rather than a stream of separate cards. This preset builds that
+illusion from overlapping sprites, slow buoyancy and a lifetime envelope. Start here before adding a fire source or
+changing the material to luminous smoke.
 
 ![Example preview](https://rzmps.rzmay.com/docs/previews/smoke.png)
 
-## Particle System Configuration
+## Start with a broad, slow source
 
-The 10-second loop sustains a plume while particles live for 4.5 seconds. The small negative gravity modifier reverses the default downward acceleration, adding slow buoyancy. Long particle lifetimes let the plume accumulate and spread instead of looking like short flame tongues.
-
-
-[Source: system:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L19)
-
-```js
-  const smoke = new ParticleSystem({
-    duration: 10,
-    looping: true,
-    gravityModifier: -0.015,
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.ConeGeometry(0.75, 1.2, 24),
-        }),
-        rate: 36,
-        radialSpeed: 0.18,
-        initialValues: {
-          lifetime: 4.5,
-          speed: 0.55,
-          scale: 2.5,
-          color: ['#4e4d4a', '#a7a097'],
-          alpha: 0.55,
-          velocity: new THREE.Vector3(0, 0.75, 0),
-        },
-      }),
-    ],
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.35, 0.65),
-        frequency: 0.8,
-      }),
-      new LimitVelocityOverLifetime({
-        limit: new THREE.Vector3(1.1, 1.35, 1.1),
-        drag: 0.1,
-        multiplyDragByVelocity: true,
-      }),
-      new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time);
-          return size;
-        },
-      }),
-      new ColorOverLifetime({
-        color: '#ffffff',
-        alpha: (time) =>
-          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
-      }),
-      new RotationOverLifetime({
-        angularVelocity: [-1, 1],
-      }),
-    ],
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        material: SpriteMaterialType.Lit,
-        alphaMap: smokeAlpha,
-        softParticleDistance: 1,
-        materialOptions: {
-          roughness: 1,
-          normalLighting: 0.5,
-          sphericalNormals: 1,
-        }
-      }),
-    ],
-  });
-```
+The cone spreads births across the base of the plume. Upward velocity gives the smoke an initial rise, while a small
+negative gravity modifier keeps it buoyant. Modest radial speed lets the base stay together instead of exploding outward.
+Large initial sprites overlap; their low opacity lets those overlaps suggest a volume. Shorten the lifetime for a compact
+puff, or increase it when the smoke should travel farther before disappearing.
 
 
-## Emitters
-
-A cone of radius 0.75 and height 1.2 provides a broad source. Rate 36 and lifetime 4.5 imply about 162 live particles at steady emission. Upward velocity 0.75 and radial speed 0.18 favor a column with modest spread. Scale 2.5 overlaps the low-opacity, alpha-0.55 sprites into a continuous volume.
-
-Uniform scale values and color strings use the standard input shortcuts.
-
-
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L24)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L28)
 
 ```js
+import * as THREE from 'three';
+import { Emitter, EmissionShape } from '@rzmps/rzmps';
+
     emitters: [
       new Emitter({
         source: new EmissionShape({
@@ -113,37 +47,43 @@ Uniform scale values and color strings use the standard input shortcuts.
 ```
 
 
-## Modules
+## Let older smoke expand and lose definition
 
-Noise is stronger horizontally (0.65) than vertically (0.35), producing rolling lateral motion. Velocity limits and drag prevent indefinite acceleration. The scale multiplier grows from 0.35 to 1.8, representing dispersal, and the alpha curve hides the first fifth and final quarter of the lifetime. Random angular velocity breaks up repeated texture orientation.
+Horizontal noise bends the column into curls, while weaker vertical noise leaves the upward direction readable.
+Velocity limits and drag prevent the curls from becoming an accelerating spray. The scale ramp expands each wisp as
+it ages. The three opacity timestamps bring it into view, then remove it gradually. Rotation
+breaks up repeated texture orientation. Together these choices hide individual births without obscuring the plume's flow.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L43)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L48)
 
 ```js
+import { Curve } from 'curves';
+import { Easing } from 'eaz';
+import * as THREE from 'three';
+import { ColorOverLifetime, LimitVelocityOverLifetime, RotationOverLifetime, ScaleOverLifetime, TransformByNoise } from '@rzmps/rzmps';
+
     modules: [
       new TransformByNoise({
         strength: new THREE.Vector3(0.65, 0.35, 0.65),
         frequency: 0.8,
       }),
+
       new LimitVelocityOverLifetime({
         limit: new THREE.Vector3(1.1, 1.35, 1.1),
         drag: 0.1,
         multiplyDragByVelocity: true,
       }),
+
       new ScaleOverLifetime({
-        scale: (time) => {
-          const size = (0.35 + (1.8 - 0.35) * time);
-          return size;
-        },
+        scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
       }),
+
       new ColorOverLifetime({
         color: '#ffffff',
-        alpha: (time) =>
-          ((time) < 0.2 ? (time) / 0.2 : (time) < 0.75
-            ? 1 - 0.15 * (((time) - 0.2) / 0.55)
-            : 0.85 * (1 - (((time) - 0.75) / 0.25))),
+        alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
       }),
+
       new RotationOverLifetime({
         angularVelocity: [-1, 1],
       }),
@@ -151,14 +91,20 @@ Noise is stronger horizontally (0.65) than vertically (0.35), producing rolling 
 ```
 
 
-## Renderers
+## Give flat sprites a soft, lit silhouette
 
-Lit sprites use the smoke alpha image as their silhouette. Roughness 1 avoids glossy highlights; spherical normals 1 and normal lighting 0.5 give each billboard some volume under scene lighting. Soft-particle distance 1 reduces hard lines where the smoke intersects geometry.
+The smoke image is an alpha mask, not a solid square. Rough lighting and spherical normals give each billboard some
+volume under the scene's lights; soft particles blur the line where it meets geometry. Use a lit scene when tuning this
+material. For a glowing alternative, compare [Additive Smoke](https://rzmps.rzmay.com/docs/examples/additiveSmoke.html): its blending changes the meaning of overlap.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L72)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L76)
 
 ```js
+import { SpriteMaterialType } from '@rzmps/rzmps';
+import { SpriteRenderer, Textures } from '@rzmps/rzmps';
+import smokeAlpha from 'examples/assets/images/smoke_alpha.jpg?url';
+
     renderers: [
       new SpriteRenderer(Textures.Default, {
         material: SpriteMaterialType.Lit,
@@ -168,9 +114,8 @@ Lit sprites use the smoke alpha image as their silhouette. Roughness 1 avoids gl
           roughness: 1,
           normalLighting: 0.5,
           sphericalNormals: 1,
-        }
+        },
       }),
     ],
 ```
-
 
