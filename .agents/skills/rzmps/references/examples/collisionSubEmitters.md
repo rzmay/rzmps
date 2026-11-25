@@ -39,9 +39,8 @@ const withAudioSource = (buffer, url) => {
 import * as THREE from 'three';
 import ballHitUrl from 'examples/assets/audio/ball_hit.mp3?url';
 
-  const ballHit = await new THREE.AudioLoader().loadAsync(ballHitUrl);
-  withAudioSource(ballHit, ballHitUrl);
-
+const ballHit = await new THREE.AudioLoader().loadAsync(ballHitUrl);
+withAudioSource(ballHit, ballHitUrl);
 ```
 
 
@@ -52,39 +51,39 @@ The Collision module uses a lively bounce with modest damping, so contacts remai
 scene with geometry; the live cubemap and metallic material need an environment to reflect.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L46)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L39)
 
 ```js
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.25),
-        rate: 5,
-        radialSpeed: [1, 5],
-        initialValues: {
-          lifetime: 8,
-          scale: 0.125,
-          mass: 1,
-          color: '#aaa',
-        },
-      }),
-    ],
+const collisionEmitters = [
+  new Emitter({
+    source: EmissionShape.Sphere(0.25),
+    rate: 5,
+    radialSpeed: [1, 5],
+    initialValues: {
+      lifetime: 8,
+      scale: 0.125,
+      mass: 1,
+      color: '#aaa',
+    },
+  }),
+];
 ```
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L62)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L55)
 
 ```js
 import { Collision } from '@rzmps/rzmps';
 
-    modules: [
-      new Collision({
-        bounce: 0.75,
-        dampen: 0.05,
-        radiusScale: 1,
-      }),
-    ],
+const collisionModules = [
+  new Collision({
+    bounce: 0.75,
+    dampen: 0.05,
+    radiusScale: 1,
+  }),
+];
 ```
 
 
@@ -96,61 +95,67 @@ the response to the hit. The collision normal supplies a useful outward directio
 through the struck surface.
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L99)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L107)
 
 ```js
 import { Easing } from 'eaz';
 import * as THREE from 'three';
 import { ColorOverLifetime, Emitter, EmissionShape, EmissionSource, ParticleSystem, Textures, TrailRenderer } from '@rzmps/rzmps';
 
-  const sparks = new ParticleSystem({
-    maxParticles: 128,
-    duration: 0.08,
-    looping: false,
-    gravityModifier: 1,
+const sparksEmitters = [
+  new Emitter({
+    source: new EmissionShape({
+      geometry: new THREE.ConeGeometry(0.01, 0.01, 32, 1, true),
+      source: EmissionSource.Volume,
+    }),
+    rate: 0,
+    bursts: [{ time: 0, count: [3, 6] }],
+    radialSpeed: [0.5, 2],
+    initialValues: {
+      lifetime: [0.18, 0.42],
+      scale: [0.05, 0.15],
+      color: ['#fff4b0', '#ff8a3d'],
+    },
+  }),
+];
 
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.ConeGeometry(0.01, 0.01, 32, 1, true),
-          source: EmissionSource.Volume,
-        }),
-        rate: 0,
-        bursts: [{ time: 0, count: [3, 6] }],
-        radialSpeed: [0.5, 2],
-        initialValues: {
-          lifetime: [0.18, 0.42],
-          scale: [0.05, 0.15],
-          color: ['#fff4b0', '#ff8a3d'],
-        },
-      }),
-    ],
+const sparksModules = [
+  new ColorOverLifetime({
+    alpha: time => 1 - Easing.linear.in(Math.min(time, 1)),
+  }),
+];
 
-    modules: [
-      new ColorOverLifetime({
-        alpha: time => 1 - Easing.linear.in(Math.min(time, 1)),
-      }),
-    ],
+const sparksRenderers = [
+  new TrailRenderer({
+    texture: Textures.Circle,
+    lifetime: 0.16,
+    minimumVertexDistance: 0.015,
+    dieWithParticles: false,
+    width: 0.18,
+    sizeAffectsWidth: true,
+    inheritParticleColor: true,
+    materialOptions: {
+      emissive: new THREE.Color('#ffb347'),
+      emissiveIntensity: 2,
+      roughness: 1,
+      transparent: true,
+      depthWrite: false,
+    },
+  }),
+];
 
-    renderers: [
-      new TrailRenderer({
-        texture: Textures.Circle,
-        lifetime: 0.16,
-        minimumVertexDistance: 0.015,
-        dieWithParticles: false,
-        width: 0.18,
-        sizeAffectsWidth: true,
-        inheritParticleColor: true,
-        materialOptions: {
-          emissive: new THREE.Color('#ffb347'),
-          emissiveIntensity: 2,
-          roughness: 1,
-          transparent: true,
-          depthWrite: false,
-        },
-      }),
-    ],
-  });
+const sparks = new ParticleSystem({
+  maxParticles: 128,
+  duration: 0.08,
+  looping: false,
+  gravityModifier: 1,
+
+  emitters: sparksEmitters,
+
+  modules: sparksModules,
+
+  renderers: sparksRenderers,
+});
 ```
 
 
@@ -162,33 +167,79 @@ The short emissive spark trails provide a contrasting flash. Use the live demo w
 visual and audible cues meet.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L72)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L65)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import { AudioRenderer, SpriteRenderer, Textures } from '@rzmps/rzmps';
 
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          roughness: 0.2,
-          metalness: 0.6,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-      }),
+const collisionRenderers = [
+  new SpriteRenderer(Textures.Circle, {
+    material: SpriteMaterialType.Lit,
+    materialOptions: {
+      roughness: 0.2,
+      metalness: 0.6,
+      sphericalNormals: 1,
+      normalLighting: 1,
+    },
+  }),
 
-      new AudioRenderer({
-        onCollisionSound: ballHit,
-        collisionRatio: 1,
-        pitch: [0.8, 1.2],
-        volume: 0.18,
-        impulseAffectsVolume: 0.5,
-        impulseThreshold: 0.5,
-        lowPass: 1800,
-        impulseAffectsLowPass: 1,
-      }),
-    ],
+  new AudioRenderer({
+    onCollisionSound: ballHit,
+    collisionRatio: 1,
+    pitch: [0.8, 1.2],
+    volume: 0.18,
+    impulseAffectsVolume: 0.5,
+    impulseThreshold: 0.5,
+    lowPass: 1800,
+    impulseAffectsLowPass: 1,
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L90)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const collision = new ParticleSystem({
+  duration: 5,
+  looping: true,
+  gravityModifier: 1,
+  useLiveCubemap: true,
+  liveCubemapIntensity: 3,
+
+  emitters: collisionEmitters,
+
+  modules: collisionModules,
+
+  renderers: collisionRenderers,
+});
+```
+
+
+Connect the secondary behavior to the root with the relationships below. The root owns child updates; their
+inheritance and event filters decide when each layer starts and which source it follows.
+
+
+[Source: system:connections](https://github.com/rzmay/rzmps/blob/develop/examples/presets/metalBalls.js#L171)
+
+```js
+collision.addSubSystem(sparks, {
+  emitContinuous: false,
+  emitOnCollision: true,
+  inheritLifetime: 0,
+  impulseAffectsScale: 0.1,
+  impulseAffectsSpeed: 0.45,
+  impulseAffectsAlignment: true,
+  impulseThreshold: 1.2,
+});
+```

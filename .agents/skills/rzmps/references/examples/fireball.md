@@ -26,12 +26,11 @@ import * as THREE from 'three';
 import warpNormal from 'examples/assets/images/warp_norm.jpg?url';
 import scorchTexture from 'examples/assets/images/scorch.png?url';
 
-  const textureLoader = new THREE.TextureLoader();
-  const heatDistortion = textureLoader.load(warpNormal);
-  const scorchMap = textureLoader.load(scorchTexture);
-  scorchMap.colorSpace = THREE.SRGBColorSpace;
-  const scorchMaterial = new THREE.MeshBasicMaterial({ map: scorchMap });
-
+const textureLoader = new THREE.TextureLoader();
+const heatDistortion = textureLoader.load(warpNormal);
+const scorchMap = textureLoader.load(scorchTexture);
+scorchMap.colorSpace = THREE.SRGBColorSpace;
+const scorchMaterial = new THREE.MeshBasicMaterial({ map: scorchMap });
 ```
 
 
@@ -43,51 +42,51 @@ the cubic alpha fade removes the flame late in its life. Tune burst count and st
 the source, otherwise the explosion can break into unrelated small puffs.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L40)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L36)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.SphereGeometry(0.2, 16, 12),
-        }),
-        rate: 0,
-        bursts: [{ time: 0, count: 5 }],
-        initialValues: {
-          lifetime: 0.6,
-          speed: 1,
-          scale: 2.5,
-          color: ['#ffffff', '#ffd166'],
-          rotation: [-90, 90],
-          alpha: 1,
-          velocity: new THREE.Vector3(0, 0, 0),
-          radial: 0.45,
-        },
-      }),
-    ],
+const fireballEmitters = [
+  new Emitter({
+    source: new EmissionShape({
+      geometry: new THREE.SphereGeometry(0.2, 16, 12),
+    }),
+    rate: 0,
+    bursts: [{ time: 0, count: 5 }],
+    initialValues: {
+      lifetime: 0.6,
+      speed: 1,
+      scale: 2.5,
+      color: ['#ffffff', '#ffd166'],
+      rotation: [-90, 90],
+      alpha: 1,
+      velocity: new THREE.Vector3(0, 0, 0),
+      radial: 0.45,
+    },
+  }),
+];
 ```
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L62)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L58)
 
 ```js
 import * as THREE from 'three';
 import { ColorOverLifetime, ScaleOverLifetime } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-    modules: [
-      new ScaleOverLifetime({
-        scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
-      }),
+const fireballModules = [
+  new ScaleOverLifetime({
+    scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
+  }),
 
-      new ColorOverLifetime({
-        color: '#fff2e8',
-        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-      }),
-    ],
+  new ColorOverLifetime({
+    color: '#fff2e8',
+    alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+  }),
+];
 ```
 
 
@@ -99,55 +98,55 @@ so they remain after the flame disappears. Low opacity lets repeated bursts accu
 with nearby surfaces to see this layer; the empty background cannot receive decals.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L75)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L71)
 
 ```js
 import { Curve } from 'curves';
 import { DecalRenderer, LightRenderer, SpriteRenderer } from '@rzmps/rzmps';
 import fireballSprite from 'examples/assets/images/fireball_tile_5x4_n20.png?url';
 
-    renderers: [
-      new SpriteRenderer(fireballSprite, {
-        gridSize: { x: 5, y: 4 },
-        frames: 20,
-        fps: 30,
-        softParticleDistance: 1,
-      }),
+const fireballRenderers = [
+  new SpriteRenderer(fireballSprite, {
+    gridSize: { x: 5, y: 4 },
+    frames: 20,
+    fps: 30,
+    softParticleDistance: 1,
+  }),
 
-      new LightRenderer({
-        count: 18,
-        ratio: 0.3,
-        inheritParticleColor: true,
-        sizeAffectsRange: true,
-        alphaAffectsIntensity: true,
-        brightness: 5,
-        rangeMultiplier: 3,
-        lightOptions: {
-          color: '#ffae97',
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
-      }),
+  new LightRenderer({
+    count: 18,
+    ratio: 0.3,
+    inheritParticleColor: true,
+    sizeAffectsRange: true,
+    alphaAffectsIntensity: true,
+    brightness: 5,
+    rangeMultiplier: 3,
+    lightOptions: {
+      color: '#ffae97',
+      intensity: 1,
+      distance: 8,
+      decay: 2,
+    },
+  }),
 
-      new DecalRenderer(scorchMaterial, {
-        onSpawn: false,
-        ratio: 0.5,
-        continuousRate: 5,
-        direction: DecalRenderer.Radial(24),
-        hitSelection: DecalRenderer.Nearest,
-        maxHits: 5,
-        maxDistance: 2,
-        depth: 0.06,
-        size: 2.5,
-        inheritColor: 0,
-        inheritScale: 0,
-        inheritAlpha: 0,
-        lifetime: 8,
-        opacity: new Curve({ 0: 0, 0.025: 0.05, 0.6: 0.05, 1: 0 }),
-        maxDecals: 128,
-      }),
-    ],
+  new DecalRenderer(scorchMaterial, {
+    onSpawn: false,
+    ratio: 0.5,
+    continuousRate: 5,
+    direction: DecalRenderer.Radial(24),
+    hitSelection: DecalRenderer.Nearest,
+    maxHits: 5,
+    maxDistance: 2,
+    depth: 0.06,
+    size: 2.5,
+    inheritColor: 0,
+    inheritScale: 0,
+    inheritAlpha: 0,
+    lifetime: 8,
+    opacity: new Curve({ 0: 0, 0.025: 0.05, 0.6: 0.05, 1: 0 }),
+    maxDecals: 128,
+  }),
+];
 ```
 
 
@@ -158,7 +157,7 @@ connects the wave to the source without forcing it to copy the whole flame motio
 envelope soften the expanding shape. Keep this layer subtle enough that the background remains readable through it.
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L144)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L153)
 
 ```js
 import { Curve } from 'curves';
@@ -166,66 +165,119 @@ import * as THREE from 'three';
 import { ColorOverLifetime, Emitter, EmissionShape, ForceOverLifetime, ParticleSystem, RotationOverLifetime, ScaleOverLifetime, SpriteRenderer, Textures, TransformByNoise, VelocityOverLifetime } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
+function createHeatDistortion(alphaMap, distortionMap) {
+  const heatDistortionEmitters = [
+    new Emitter({
+      source: EmissionShape.Sphere(0.05, 8, 6),
+      bursts: [{ time: 0, count: 5 }],
+      radialSpeed: 2,
+      initialValues: {
+        lifetime: 0.5,
+        scale: 6,
+        velocity: new THREE.Vector3(0, 1.35, 0),
+        color: '#ffffff',
+        rotation: [-Math.PI, Math.PI],
+      },
+    }),
+  ];
+
+  const heatDistortionModules = [
+    new VelocityOverLifetime({
+      linear: new THREE.Vector3(0, 0.5, 0),
+    }),
+
+    new ForceOverLifetime({
+      force: new THREE.Vector3(0, 0.5, 0),
+    }),
+
+    new TransformByNoise({
+      strength: new THREE.Vector3(0.55, 0.3, 0.55),
+      frequency: 1.6,
+    }),
+
+    new ScaleOverLifetime({
+      scale: time => 2 * Easing.cubic.out(time),
+    }),
+
+    new ColorOverLifetime({
+      alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
+    }),
+
+    new RotationOverLifetime({
+      angularVelocity: [-0.45, 0.45],
+    }),
+  ];
+
+  const heatDistortionRenderers = [
+    new SpriteRenderer(Textures.Default, {
+      alphaMap,
+      softParticleDistance: 2.5,
+      materialOptions: {
+        opacity: 0.3,
+        transmission: 1,
+        distortionMap,
+        distortionStrength: 0.05,
+        depthWrite: false,
+      },
+    }),
+  ];
 
   return new ParticleSystem({
     duration: 1,
     looping: true,
 
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.05, 8, 6),
-        bursts: [{ time: 0, count: 5 }],
-        radialSpeed: 2,
-        initialValues: {
-          lifetime: 0.5,
-          scale: 6,
-          velocity: new THREE.Vector3(0, 1.35, 0),
-          color: '#ffffff',
-          rotation: [-Math.PI, Math.PI],
-        },
-      }),
-    ],
+    emitters: heatDistortionEmitters,
 
-    modules: [
-      new VelocityOverLifetime({
-        linear: new THREE.Vector3(0, 0.5, 0),
-      }),
+    modules: heatDistortionModules,
 
-      new ForceOverLifetime({
-        force: new THREE.Vector3(0, 0.5, 0),
-      }),
-
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.55, 0.3, 0.55),
-        frequency: 1.6,
-      }),
-
-      new ScaleOverLifetime({
-        scale: time => 2 * Easing.cubic.out(time),
-      }),
-
-      new ColorOverLifetime({
-        alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
-      }),
-
-      new RotationOverLifetime({
-        angularVelocity: [-0.45, 0.45],
-      }),
-    ],
-
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        alphaMap,
-        softParticleDistance: 2.5,
-        materialOptions: {
-          opacity: 0.3,
-          transmission: 1,
-          distortionMap,
-          distortionStrength: 0.05,
-          depthWrite: false,
-        },
-      }),
-    ],
+    renderers: heatDistortionRenderers,
   });
+}
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L116)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const fireball = new ParticleSystem({
+  duration: 1.25,
+  looping: true,
+
+  emitters: fireballEmitters,
+
+  modules: fireballModules,
+
+  renderers: fireballRenderers,
+});
+```
+
+
+Connect the secondary behavior to the root with the relationships below. The root owns child updates; their
+inheritance and event filters decide when each layer starts and which source it follows.
+
+
+[Source: system:connections](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireball.js#L130)
+
+```js
+import { Textures } from '@rzmps/rzmps';
+
+fireball.addSubSystem(createHeatDistortion(Textures.Simple, heatDistortion), {
+  inheritScale: 0,
+  inheritLifetime: 0,
+  inheritColor: 0,
+  inheritAlpha: 0,
+  inheritMass: 0,
+  inheritVelocity: 0.5,
+  emitOnSpawn: true,
+  ratio: 0.55,
+});
+```

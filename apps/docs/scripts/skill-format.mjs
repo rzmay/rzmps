@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseDocument } from 'yaml';
+
+// Authored guides may end with spacing after a component. Generated distributions need one final newline.
+export const normalizeGeneratedText = content => content.trimEnd() + '\n';
+
 export function validateSkill(skillPath, generated = new Map()) {
   const read = file => generated.get(file) ?? fs.readFileSync(file, 'utf8');
   const source = read(skillPath);

@@ -25,22 +25,21 @@ The palette is shared setup, while each birth chooses its own color.
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import suzanneModel from 'examples/assets/models/suzanne.glb?url';
 
-  const gltf = await new GLTFLoader().loadAsync(suzanneModel);
+const gltf = await new GLTFLoader().loadAsync(suzanneModel);
 
-  let suzanneGeometry = null;
-  gltf.scene.traverse(child => {
-    if (!suzanneGeometry && child.isMesh) {
-      suzanneGeometry = child.geometry.clone();
-      suzanneGeometry.rotateX(-90);
-    }
-  });
-
-  if (!suzanneGeometry) {
-    throw new Error('suzanne.glb does not contain a mesh');
+let suzanneGeometry = null;
+gltf.scene.traverse(child => {
+  if (!suzanneGeometry && child.isMesh) {
+    suzanneGeometry = child.geometry.clone();
+    suzanneGeometry.rotateX(-90);
   }
+});
 
-  const colors = new Set(['#ff3333', '#33ff66', '#ffdd22', '#3388ff']);
+if (!suzanneGeometry) {
+  throw new Error('suzanne.glb does not contain a mesh');
+}
 
+const colors = new Set(['#ff3333', '#33ff66', '#ffdd22', '#3388ff']);
 ```
 
 
@@ -52,25 +51,25 @@ four-color palette distinguishes neighboring instances. Widen the source before 
 begin to overlap too heavily.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L36)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L29)
 
 ```js
 import { Emitter } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        rate: 12,
-        radialSpeed: 1,
-        alignment: 1,
-        initialValues: {
-          lifetime: [4, 8],
-          speed: 1,
-          color: colors,
-          scale: [0.4, 1.0],
-          alpha: 1,
-        },
-      }),
-    ],
+const systemEmitters = [
+  new Emitter({
+    rate: 12,
+    radialSpeed: 1,
+    alignment: 1,
+    initialValues: {
+      lifetime: [4, 8],
+      speed: 1,
+      color: colors,
+      scale: [0.4, 1.0],
+      alpha: 1,
+    },
+  }),
+];
 ```
 
 
@@ -81,18 +80,18 @@ and alignment carry the effect. This is a useful starting point for debris or re
 first, then add the particular spin or acceleration that your intended material calls for.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L53)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L46)
 
 ```js
 import * as THREE from 'three';
 import { ColorOverLifetime } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-    modules: [
-      new ColorOverLifetime({
-        alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
-      }),
-    ],
+const systemModules = [
+  new ColorOverLifetime({
+    alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
+  }),
+];
 ```
 
 
@@ -103,18 +102,46 @@ billboard would not. The source mesh is a template for appearance, not the emiss
 [Suzanne](https://rzmps.rzmay.com/docs/examples/suzanne.html) for the opposite use of the same asset.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L61)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L54)
 
 ```js
 import * as THREE from 'three';
 import { MeshRenderer } from '@rzmps/rzmps';
 
-    renderers: [
-      new MeshRenderer({
-        mesh: new THREE.Mesh(suzanneGeometry, new THREE.MeshStandardMaterial()),
-        castShadow: true,
-        receiveShadow: true,
-      }),
-    ],
+const systemRenderers = [
+  new MeshRenderer({
+    mesh: new THREE.Mesh(suzanneGeometry, new THREE.MeshStandardMaterial()),
+    castShadow: true,
+    receiveShadow: true,
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanneInstances.js#L64)
+
+```js
+import * as THREE from 'three';
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const system = new ParticleSystem({
+  maxParticles: 256,
+  duration: 10,
+  looping: true,
+  gravity: new THREE.Vector3(0, 0, 0),
+  gravityModifier: 0,
+
+  emitters: systemEmitters,
+
+  modules: systemModules,
+
+  renderers: systemRenderers,
+});
+```

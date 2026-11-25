@@ -43,21 +43,20 @@ import bubblesUrl from 'examples/assets/audio/bubbles.mp3?url';
 import bubblePop1Url from 'examples/assets/audio/bubble_pop_1.mp3?url';
 import bubblePop2Url from 'examples/assets/audio/bubble_pop_2.mp3?url';
 
-  const audioLoader = new THREE.AudioLoader();
+const audioLoader = new THREE.AudioLoader();
 
-  const simple = new THREE.TextureLoader().load(Textures.Simple);
-  const distortionSimple = new THREE.TextureLoader().load(simpleNorm);
+const simple = new THREE.TextureLoader().load(Textures.Simple);
+const distortionSimple = new THREE.TextureLoader().load(simpleNorm);
 
-  const [bubbles, bubblePop1, bubblePop2] = await Promise.all([
-    audioLoader.loadAsync(bubblesUrl),
-    audioLoader.loadAsync(bubblePop1Url),
-    audioLoader.loadAsync(bubblePop2Url),
-  ]);
+const [bubbles, bubblePop1, bubblePop2] = await Promise.all([
+  audioLoader.loadAsync(bubblesUrl),
+  audioLoader.loadAsync(bubblePop1Url),
+  audioLoader.loadAsync(bubblePop2Url),
+]);
 
-  withAudioSource(bubbles, bubblesUrl);
-  withAudioSource(bubblePop1, bubblePop1Url);
-  withAudioSource(bubblePop2, bubblePop2Url);
-
+withAudioSource(bubbles, bubblesUrl);
+withAudioSource(bubblePop1, bubblePop1Url);
+withAudioSource(bubblePop2, bubblePop2Url);
 ```
 
 
@@ -68,27 +67,27 @@ and their long lifetimes leave time for drifting and contact. A small gravity mo
 Live cubemap reflections supply environmental cues; they do not replace the particles' ordinary motion.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/bubbles.js#L62)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/bubbles.js#L56)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.SphereGeometry(0.5, 16, 12),
-        }),
-        rate: 8,
-        radialSpeed: [1, 3],
-        initialValues: {
-          lifetime: [7, 12],
-          scale: [0.25, 1],
-          mass: 0.25,
-          color: ['#bdefff', '#d8c8ff'],
-        },
-      }),
-    ],
+const systemEmitters = [
+  new Emitter({
+    source: new EmissionShape({
+      geometry: new THREE.SphereGeometry(0.5, 16, 12),
+    }),
+    rate: 8,
+    radialSpeed: [1, 3],
+    initialValues: {
+      lifetime: [7, 12],
+      scale: [0.25, 1],
+      mass: 0.25,
+      color: ['#bdefff', '#d8c8ff'],
+    },
+  }),
+];
 ```
 
 
@@ -99,35 +98,35 @@ module removes a bubble on contact. DistortionBySize makes larger bubbles bend t
 size variation affects appearance as well as silhouette. Use a scene with collision geometry to see the pop behavior.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/bubbles.js#L80)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/bubbles.js#L74)
 
 ```js
 import * as THREE from 'three';
 import { Collision, TransformByNoise, ScaleOverLifetime, DistortionBySize } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.2, 0.05, 0.2),
-        frequency: 0.6,
-      }),
+const systemModules = [
+  new TransformByNoise({
+    strength: new THREE.Vector3(0.2, 0.05, 0.2),
+    frequency: 0.6,
+  }),
 
-      new Collision({
-        bounce: 0.9,
-        dampen: 0.03,
-        radiusScale: 1,
-        lifetimeLoss: 1,
-      }),
+  new Collision({
+    bounce: 0.9,
+    dampen: 0.03,
+    radiusScale: 1,
+    lifetimeLoss: 1,
+  }),
 
-      new ScaleOverLifetime({
-        scale: time => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)),
-      }),
+  new ScaleOverLifetime({
+    scale: time => Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)),
+  }),
 
-      new DistortionBySize({
-        sizeRange: [0, 1],
-        distortionStrength: [0, 1],
-      }),
-    ],
+  new DistortionBySize({
+    sizeRange: [0, 1],
+    distortionStrength: [0, 1],
+  }),
+];
 ```
 
 
@@ -139,52 +138,78 @@ a pop. Larger bubbles sound deeper. Adjust the material under scene lighting, th
 level of the continuous bed and individual pops.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/bubbles.js#L105)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/bubbles.js#L99)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import { AudioRenderer, SpriteRenderer, Textures } from '@rzmps/rzmps';
 
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          roughness: 0.15,
-          metalness: 0.5,
-          sphericalNormals: 1,
-          normalLighting: 0.75,
-          transmissionMap: simple,
-          transmission: 0.7,
-          distortionMap: distortionSimple,
-          distortionStrength: -0.05,
-        },
-      }),
+const systemRenderers = [
+  new SpriteRenderer(Textures.Circle, {
+    material: SpriteMaterialType.Lit,
+    materialOptions: {
+      roughness: 0.15,
+      metalness: 0.5,
+      sphericalNormals: 1,
+      normalLighting: 0.75,
+      transmissionMap: simple,
+      transmission: 0.7,
+      distortionMap: distortionSimple,
+      distortionStrength: -0.05,
+    },
+  }),
 
-      new AudioRenderer({
-        sound: bubbles,
-        onCollisionSound: [bubblePop1, bubblePop2],
+  new AudioRenderer({
+    sound: bubbles,
+    onCollisionSound: [bubblePop1, bubblePop2],
 
-        // Only a few particles need looping positional audio.
-        // Having every bubble play the same bubbling track would get loud.
-        ratio: 0.15,
+    // Only a few particles need looping positional audio.
+    // Having every bubble play the same bubbling track would get loud.
+    ratio: 0.15,
 
-        // Every bubble pops
-        collisionRatio: 1,
-        pitch: 1,
-        volume: 1,
+    // Every bubble pops
+    collisionRatio: 1,
+    pitch: 1,
+    volume: 1,
 
-        // Larger bubbles have a somewhat deeper sound.
-        sizeAffectsPitch: 0.3,
-        sizeAffectsVolume: 0.15,
+    // Larger bubbles have a somewhat deeper sound.
+    sizeAffectsPitch: 0.3,
+    sizeAffectsVolume: 0.15,
 
-        // Fade the looping sound with the particle.
-        alphaAffectsPitch: 0,
-        alphaAffectsVolume: 1,
+    // Fade the looping sound with the particle.
+    alphaAffectsPitch: 0,
+    alphaAffectsVolume: 1,
 
-        // Fast-moving bubbles become slightly more animated sounding.
-        speedAffectsPitch: 0.08,
-        speedAffectsVolume: 0.05,
-      }),
-    ],
+    // Fast-moving bubbles become slightly more animated sounding.
+    speedAffectsPitch: 0.08,
+    speedAffectsVolume: 0.05,
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/bubbles.js#L143)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const system = new ParticleSystem({
+  duration: 10,
+  looping: true,
+  gravityModifier: 0.05,
+  useLiveCubemap: true,
+
+  emitters: systemEmitters,
+
+  modules: systemModules,
+
+  renderers: systemRenderers,
+});
+```

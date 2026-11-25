@@ -19,27 +19,27 @@ splatter footprint, while a little upward velocity gives gravity room to bend th
 the marks from sharing one orientation. Choose Checkerboard or another collision scene so the paint has somewhere to land.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/splatter.js#L43)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/splatter.js#L38)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.12),
-        rate: 5,
-        radialSpeed: 3,
-        initialValues: {
-          position: new THREE.Vector3(0, 3.5, 0),
-          velocity: new THREE.Vector3(0, 1.5, 0),
-          lifetime: 8,
-          scale: new THREE.Vector3(0.2, 0.2, 0.2),
-          color: colors,
-          rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
-        },
-      }),
-    ],
+const systemEmitters = [
+  new Emitter({
+    source: EmissionShape.Sphere(0.12),
+    rate: 5,
+    radialSpeed: 3,
+    initialValues: {
+      position: new THREE.Vector3(0, 3.5, 0),
+      velocity: new THREE.Vector3(0, 1.5, 0),
+      lifetime: 8,
+      scale: new THREE.Vector3(0.2, 0.2, 0.2),
+      color: colors,
+      rotation: [new THREE.Vector3(), new THREE.Vector3(0, 0, Math.PI * 2)],
+    },
+  }),
+];
 ```
 
 
@@ -50,12 +50,12 @@ mark and inherit the paint color and scale. The ball therefore disappears at the
 rather than bouncing away and leaving an unexplained duplicate.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/splatter.js#L61)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/splatter.js#L56)
 
 ```js
 import { Collision } from '@rzmps/rzmps';
 
-    modules: [new Collision({ lifetimeLoss: 1 })],
+const systemModules = [new Collision({ lifetimeLoss: 1 })];
 ```
 
 
@@ -67,40 +67,65 @@ hold their opacity for most of their long lifetime, then fade rather than vanish
 relative to the ball when adapting the preset to another surface scale.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/splatter.js#L65)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/splatter.js#L60)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import { DecalRenderer, SpriteRenderer, Textures } from '@rzmps/rzmps';
 
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          roughness: 0.95,
-          metalness: 0,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-      }),
+const systemRenderers = [
+  new SpriteRenderer(Textures.Circle, {
+    material: SpriteMaterialType.Lit,
+    materialOptions: {
+      roughness: 0.95,
+      metalness: 0,
+      sphericalNormals: 1,
+      normalLighting: 1,
+    },
+  }),
 
-      new DecalRenderer(paint, {
-        onSpawn: false,
-        onCollision: true,
-        // Backends without mesh identity search opposite the collision normal, including on walls.
-        maxDistance: 1,
-        depth: 0.08,
-        size: 5,
-        inheritColor: 1,
-        inheritScale: 1,
-        inheritAlpha: 1,
-        lifetime: 90,
-        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.85, 1),
-        maxDecals: 512,
-      }),
-    ],
+  new DecalRenderer(paint, {
+    onSpawn: false,
+    onCollision: true,
+    // Backends without mesh identity search opposite the collision normal, including on walls.
+    maxDistance: 1,
+    depth: 0.08,
+    size: 5,
+    inheritColor: 1,
+    inheritScale: 1,
+    inheritAlpha: 1,
+    lifetime: 90,
+    opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.85, 1),
+    maxDecals: 512,
+  }),
+];
 ```
 
 
 For other surface reactions, compare [Fire](https://rzmps.rzmay.com/docs/examples/fire.html) or read [Surface Decals](https://rzmps.rzmay.com/docs/guides/decals.html).
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/splatter.js#L89)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const system = new ParticleSystem({
+  duration: 8,
+  looping: true,
+  gravityModifier: 1,
+
+  emitters: systemEmitters,
+
+  modules: systemModules,
+
+  renderers: systemRenderers,
+});
+```

@@ -20,24 +20,31 @@ time to move the camera and inspect the lighting. The module list is empty: ther
 explain the highlights or silhouette.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/spheres.js#L16)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/spheres.js#L10)
 
 ```js
 import { Emitter } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        rate: 12,
-        radialSpeed: 1,
-        initialValues: {
-          lifetime: [6, 12],
-          speed: 1,
-          color: colors,
-          scale: [0.1, 0.25],
-          alpha: 1,
-        },
-      }),
-    ],
+const systemEmitters = [
+  new Emitter({
+    rate: 12,
+    radialSpeed: 1,
+    initialValues: {
+      lifetime: [6, 12],
+      speed: 1,
+      color: colors,
+      scale: [0.1, 0.25],
+      alpha: 1,
+    },
+  }),
+];
+```
+
+
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/spheres.js#L26)
+
+```js
+const systemModules = [];
 ```
 
 
@@ -49,21 +56,48 @@ The model is still a billboard, so this is useful when the appearance matters mo
 from every angle. Compare [Cube Instances](https://rzmps.rzmay.com/docs/examples/cubes.html) when actual faces and edges should be visible.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/spheres.js#L36)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/spheres.js#L30)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import { SpriteRenderer, Textures } from '@rzmps/rzmps';
 
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          roughness: 0.5,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-      }),
-    ],
+const systemRenderers = [
+  new SpriteRenderer(Textures.Circle, {
+    material: SpriteMaterialType.Lit,
+    materialOptions: {
+      roughness: 0.5,
+      sphericalNormals: 1,
+      normalLighting: 1,
+    },
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/spheres.js#L43)
+
+```js
+import * as THREE from 'three';
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const system = new ParticleSystem({
+  duration: 10,
+  looping: true,
+  gravity: new THREE.Vector3(0, 0, 0),
+  gravityModifier: 0,
+
+  emitters: systemEmitters,
+
+  modules: systemModules,
+
+  renderers: systemRenderers,
+});
+```

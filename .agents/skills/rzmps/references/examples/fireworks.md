@@ -19,50 +19,50 @@ loop keeps launches recurring. A discrete palette gives each rocket a coherent c
 rocket has no extra motion modules: launch velocity and gravity establish its flight.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L60)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L55)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(1),
-        rate: 3,
-        initialValues: {
-          lifetime: 2,
-          velocity: new THREE.Vector3(0, 8.5, 0),
-          scale: 0.5,
-          color: new Set(['#ff4d6d', '#ffe14b', '#3eff3b', '#f786ff', '#11dfff']),
-        },
-      }),
-    ],
+const fireworksEmitters = [
+  new Emitter({
+    source: EmissionShape.Sphere(1),
+    rate: 3,
+    initialValues: {
+      lifetime: 2,
+      velocity: new THREE.Vector3(0, 8.5, 0),
+      scale: 0.5,
+      color: new Set(['#ff4d6d', '#ffe14b', '#3eff3b', '#f786ff', '#11dfff']),
+    },
+  }),
+];
 ```
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L79)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L74)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import { AudioRenderer, SpriteRenderer } from '@rzmps/rzmps';
 import fireworkSprite from 'examples/assets/images/firework.png?url';
 
-    renderers: [
-      new AudioRenderer({
-        sound: [launchSound1, launchSound2],
-        onDeathSound: [blastSound1, blastSound2],
-        pitch: [0.8, 1.2],
-        loop: false,
-      }),
+const fireworksRenderers = [
+  new AudioRenderer({
+    sound: [launchSound1, launchSound2],
+    onDeathSound: [blastSound1, blastSound2],
+    pitch: [0.8, 1.2],
+    loop: false,
+  }),
 
-      new SpriteRenderer(fireworkSprite, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          normalLighting: 1.0,
-          sphericalNormals: 1.0,
-        },
-      }),
-    ],
+  new SpriteRenderer(fireworkSprite, {
+    material: SpriteMaterialType.Lit,
+    materialOptions: {
+      normalLighting: 1.0,
+      sphericalNormals: 1.0,
+    },
+  }),
+];
 ```
 
 
@@ -73,7 +73,7 @@ the launch path remains visible after the bright source has passed. Its own life
 death. Noise and a cubic fade keep the trail soft rather than turning it into another rigid streak.
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L100)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L108)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
@@ -82,67 +82,73 @@ import { ColorOverLifetime, Emitter, EmissionShape, ParticleSystem, ScaleOverLif
 import smokeAlpha from 'examples/assets/images/smoke_alpha.jpg?url';
 import { Easing } from 'eaz';
 
-  const smoke = new ParticleSystem({
-    maxParticles: 2048,
-    duration: 10,
-    looping: true,
-    gravityModifier: -0.015,
+const smokeEmitters = [
+  new Emitter({
+    source: EmissionShape.Sphere(0.1),
+    rate: 36,
+    radialSpeed: 0.18,
+    initialValues: {
+      lifetime: 4.5,
+      speed: 0.55,
+      scale: 0.75,
+      color: ['#4e4d4a', '#a7a097'],
+      alpha: 0.1,
+      velocity: new THREE.Vector3(0, 0.75, 0),
+    },
+  }),
+];
 
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.1),
-        rate: 36,
-        radialSpeed: 0.18,
-        initialValues: {
-          lifetime: 4.5,
-          speed: 0.55,
-          scale: 0.75,
-          color: ['#4e4d4a', '#a7a097'],
-          alpha: 0.1,
-          velocity: new THREE.Vector3(0, 0.75, 0),
-        },
-      }),
-    ],
+const smokeModules = [
+  new TransformByNoise({
+    strength: new THREE.Vector3(0.65, 0.35, 0.65),
+    frequency: 0.8,
+  }),
 
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.35, 0.65),
-        frequency: 0.8,
-      }),
+  new LimitVelocityOverLifetime({
+    limit: new THREE.Vector3(1.1, 1.35, 1.1),
+    drag: 0.1,
+    multiplyDragByVelocity: true,
+  }),
 
-      new LimitVelocityOverLifetime({
-        limit: new THREE.Vector3(1.1, 1.35, 1.1),
-        drag: 0.1,
-        multiplyDragByVelocity: true,
-      }),
+  new ScaleOverLifetime({
+    scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
+  }),
 
-      new ScaleOverLifetime({
-        scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
-      }),
+  new ColorOverLifetime({
+    color: '#ffffff',
+    alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+  }),
 
-      new ColorOverLifetime({
-        color: '#ffffff',
-        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-      }),
+  new RotationOverLifetime({
+    angularVelocity: [-1, 1],
+  }),
+];
 
-      new RotationOverLifetime({
-        angularVelocity: [-1, 1],
-      }),
-    ],
+const smokeRenderers = [
+  new SpriteRenderer(Textures.Default, {
+    material: SpriteMaterialType.Lit,
+    alphaMap: smokeAlpha,
+    softParticleDistance: 1,
+    materialOptions: {
+      roughness: 1,
+      normalLighting: 0.5,
+      sphericalNormals: 1,
+    },
+  }),
+];
 
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        material: SpriteMaterialType.Lit,
-        alphaMap: smokeAlpha,
-        softParticleDistance: 1,
-        materialOptions: {
-          roughness: 1,
-          normalLighting: 0.5,
-          sphericalNormals: 1,
-        },
-      }),
-    ],
-  });
+const smoke = new ParticleSystem({
+  maxParticles: 2048,
+  duration: 10,
+  looping: true,
+  gravityModifier: -0.015,
+
+  emitters: smokeEmitters,
+
+  modules: smokeModules,
+
+  renderers: smokeRenderers,
+});
 ```
 
 
@@ -154,7 +160,7 @@ points with lingering motion. Artistic renderer children broaden each spark's vi
 marks the transition from climb to explosion; enable audio in the demo when tuning that moment.
 
 
-[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L171)
+[Source: system:3](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L185)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
@@ -163,75 +169,134 @@ import { ColorOverLifetime, Emitter, CompensationMode, EmissionShape, LightRende
 import sparklesSprite from 'examples/assets/images/sparkle_tile_5x2_n10.png?url';
 import { Easing } from 'eaz';
 
-  const sparkles = new ParticleSystem({
-    maxParticles: 512,
-    lod: { distance: 30, quality: 0.5, maxLevel: 2, continuous: true },
-    duration: 5,
-    looping: false,
-    gravityModifier: 0.18,
+const sparklesEmitters = [
+  new Emitter({
+    source: EmissionShape.Sphere(0.08),
+    rate: 0,
+    bursts: [{ time: 0, count: [50, 150] }],
+    radialSpeed: [4.5, 12],
+    initialValues: {
+      lifetime: [0.75, 1.35],
+      scale: [0.5, 1],
+      color: '#ffffff',
+    },
+  }),
+];
 
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.08),
-        rate: 0,
-        bursts: [{ time: 0, count: [50, 150] }],
-        radialSpeed: [4.5, 12],
-        initialValues: {
-          lifetime: [0.75, 1.35],
-          scale: [0.5, 1],
-          color: '#ffffff',
-        },
-      }),
-    ],
+const sparklesModules = [
+  new ColorOverLifetime({
+    color: '#ffffff',
+    alpha: time => 1 - Easing.linear.in(Math.min(time, 1)),
+  }),
+];
 
-    modules: [
-      new ColorOverLifetime({
-        color: '#ffffff',
-        alpha: time => 1 - Easing.linear.in(Math.min(time, 1)),
-      }),
-    ],
+const sparklesRenderers = [
+  new SpriteRenderer(sparklesSprite, {
+    children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
+    compensation: CompensationMode.Children,
+    material: SpriteMaterialType.Unlit,
+    gridSize: { x: 5, y: 2 },
+    fps: 10,
+    randomStartFrame: true,
+  }),
 
-    renderers: [
-      new SpriteRenderer(sparklesSprite, {
-        children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
-        compensation: CompensationMode.Children,
-        material: SpriteMaterialType.Unlit,
-        gridSize: { x: 5, y: 2 },
-        fps: 10,
-        randomStartFrame: true,
-      }),
+  new TrailRenderer({
+    children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
+    lifetime: 0.1,
+    minimumVertexDistance: 0.02,
+    dieWithParticles: false,
+    width: t => 0.05 * (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1))),
+    inheritParticleColor: true,
+    alpha: 0.5,
+    textureMode: TrailTextureMode.Stretch,
+    materialOptions: {
+      roughness: 1,
+      transparent: true,
+      map: new THREE.TextureLoader().load(Textures.Simple),
+    },
+  }),
 
-      new TrailRenderer({
-        children: { count: 1, radius: 0.12, scale: 0.65, alpha: 0.7 },
-        lifetime: 0.1,
-        minimumVertexDistance: 0.02,
-        dieWithParticles: false,
-        width: t => 0.05 * (1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1))),
-        inheritParticleColor: true,
-        alpha: 0.5,
-        textureMode: TrailTextureMode.Stretch,
-        materialOptions: {
-          roughness: 1,
-          transparent: true,
-          map: new THREE.TextureLoader().load(Textures.Simple),
-        },
-      }),
+  new LightRenderer({
+    count: 10,
+    ratio: 0.5,
+    inheritParticleColor: true,
+    sizeAffectsRange: false,
+    alphaAffectsIntensity: true,
+    brightness: 50,
+    rangeMultiplier: 5,
+    lightOptions: {
+      intensity: 1,
+      distance: 8,
+      decay: 2,
+    },
+  }),
+];
 
-      new LightRenderer({
-        count: 10,
-        ratio: 0.5,
-        inheritParticleColor: true,
-        sizeAffectsRange: false,
-        alphaAffectsIntensity: true,
-        brightness: 50,
-        rangeMultiplier: 5,
-        lightOptions: {
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
-      }),
-    ],
-  });
+const sparkles = new ParticleSystem({
+  maxParticles: 512,
+  lod: { distance: 30, quality: 0.5, maxLevel: 2, continuous: true },
+  duration: 5,
+  looping: false,
+  gravityModifier: 0.18,
+
+  emitters: sparklesEmitters,
+
+  modules: sparklesModules,
+
+  renderers: sparklesRenderers,
+});
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L93)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const fireworks = new ParticleSystem({
+  maxParticles: 32,
+  duration: 2.6,
+  looping: true,
+
+  emitters: fireworksEmitters,
+
+  modules: fireworksModules,
+
+  renderers: fireworksRenderers,
+});
+```
+
+
+Connect the secondary behavior to the root with the relationships below. The root owns child updates; their
+inheritance and event filters decide when each layer starts and which source it follows.
+
+
+[Source: system:connections](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L271)
+
+```js
+fireworks.addSubSystem(smoke, {
+  emitContinuous: true,
+  inheritLifetime: 0,
+  inheritColor: 0,
+  inheritScale: 0,
+});
+```
+
+
+[Source: system:connections](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fireworks.js#L280)
+
+```js
+fireworks.addSubSystem(sparkles, {
+  emitOnDeath: true,
+  inheritLifetime: 0,
+  inheritColor: 1,
+  inheritScale: 0,
+});
+```

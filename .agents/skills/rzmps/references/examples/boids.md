@@ -24,13 +24,12 @@ named makes the tagged emitter configuration below easier to follow.
 ```js
 import { EmissionShape } from '@rzmps/rzmps';
 
-  const flockColors = new Set(['#7ce7ff', '#c7fff3', '#95ff7c']);
+const flockColors = new Set(['#7ce7ff', '#c7fff3', '#95ff7c']);
 
-  const hazardColors = new Set(['#ff4c5f', '#ff9a4c']);
+const hazardColors = new Set(['#ff4c5f', '#ff9a4c']);
 
-  const flockSource = EmissionShape.Sphere(12, 32, 16);
-  const hazardSource = EmissionShape.Torus(7.5, 0.45, 16, 48);
-
+const flockSource = EmissionShape.Sphere(12, 32, 16);
+const hazardSource = EmissionShape.Torus(7.5, 0.45, 16, 48);
 ```
 
 
@@ -41,40 +40,40 @@ build over time. Tags separate their behaviors; cool flock colors and larger war
 roles before motion begins. Gravity is disabled so steering, rather than falling, determines their paths.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L67)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L60)
 
 ```js
 import { Emitter } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: flockSource,
-        rate: 38,
-        radialSpeed: 0.9,
-        tags: 'boid',
-        initialValues: {
-          lifetime: [9, 16],
-          speed: [3.2, 4.8],
-          color: flockColors,
-          scale: [0.34, 0.48],
-          alpha: 0.88,
-        },
-      }),
+const systemEmitters = [
+  new Emitter({
+    source: flockSource,
+    rate: 38,
+    radialSpeed: 0.9,
+    tags: 'boid',
+    initialValues: {
+      lifetime: [9, 16],
+      speed: [3.2, 4.8],
+      color: flockColors,
+      scale: [0.34, 0.48],
+      alpha: 0.88,
+    },
+  }),
 
-      new Emitter({
-        source: hazardSource,
-        rate: 2,
-        radialSpeed: 0.72,
-        tags: 'hazard',
-        initialValues: {
-          lifetime: [14, 22],
-          speed: [2.6, 3.7],
-          color: hazardColors,
-          scale: [0.65, 1.05],
-          alpha: 0.95,
-        },
-      }),
-    ],
+  new Emitter({
+    source: hazardSource,
+    rate: 2,
+    radialSpeed: 0.72,
+    tags: 'hazard',
+    initialValues: {
+      lifetime: [14, 22],
+      speed: [2.6, 3.7],
+      color: hazardColors,
+      scale: [0.65, 1.05],
+      alpha: 0.95,
+    },
+  }),
+];
 ```
 
 
@@ -91,24 +90,24 @@ These are this preset's steering choices, not a universal flocking recipe.
 ```js
 import { Boids } from '@rzmps/rzmps';
 
-  const boids = new Boids({
-    tags: 'boid',
-    alignmentWeight: 1.55,
-    cohesionWeight: 1.35,
-    separationWeight: 2.4,
-    affectorWeight: 2.2,
-    affectorDistance: 1.8,
-    neighborRadius: 5,
-    steering: 3.75,
-    particleAffectors: [
-      {
-        sourceTags: 'hazard',
-        tags: 'boid',
-        weight: Boids.BoidAffector.Weight.Obstacle,
-        distance: 1.8,
-      },
-    ],
-  });
+const boids = new Boids({
+  tags: 'boid',
+  alignmentWeight: 1.55,
+  cohesionWeight: 1.35,
+  separationWeight: 2.4,
+  affectorWeight: 2.2,
+  affectorDistance: 1.8,
+  neighborRadius: 5,
+  steering: 3.75,
+  particleAffectors: [
+    {
+      sourceTags: 'hazard',
+      tags: 'boid',
+      weight: Boids.BoidAffector.Weight.Obstacle,
+      distance: 1.8,
+    },
+  ],
+});
 ```
 
 
@@ -117,40 +116,40 @@ import { Boids } from '@rzmps/rzmps';
 ```js
 import { Boids } from '@rzmps/rzmps';
 
-  const hazardBoids = new Boids({
-    tags: 'hazard',
-    alignmentWeight: 1.25,
-    cohesionWeight: 1,
-    separationWeight: 2.15,
-    affectorWeight: 5.5,
-    affectorDistance: 3.2,
-    neighborRadius: 5,
-    steering: 3.35,
-    particleAffectors: [
-      {
-        sourceTags: 'boid',
-        tags: 'hazard',
-        weight: Boids.BoidAffector.Weight.Target,
-        distance: 2.6,
-      },
-    ],
-  });
+const hazardBoids = new Boids({
+  tags: 'hazard',
+  alignmentWeight: 1.25,
+  cohesionWeight: 1,
+  separationWeight: 2.15,
+  affectorWeight: 5.5,
+  affectorDistance: 3.2,
+  neighborRadius: 5,
+  steering: 3.35,
+  particleAffectors: [
+    {
+      sourceTags: 'boid',
+      tags: 'hazard',
+      weight: Boids.BoidAffector.Weight.Target,
+      distance: 2.6,
+    },
+  ],
+});
 ```
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L99)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L92)
 
 ```js
 import * as THREE from 'three';
 import { OrientToDirection } from '@rzmps/rzmps';
 
-    modules: [
-      boids,
-      hazardBoids,
-      new OrientToDirection({
-        axis: new THREE.Vector3(0, 1, 0),
-      }),
-    ],
+const systemModules = [
+  boids,
+  hazardBoids,
+  new OrientToDirection({
+    axis: new THREE.Vector3(0, 1, 0),
+  }),
+];
 ```
 
 
@@ -161,38 +160,66 @@ shows heading more clearly than a round billboard. Separate materials and a warm
 Start with the supplied scene, then adapt the tagged particle-affector arrangement to your own obstacles and targets.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L109)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L102)
 
 ```js
 import * as THREE from 'three';
 import { MeshRenderer } from '@rzmps/rzmps';
 
-    renderers: [
-      new MeshRenderer({
-        tags: 'boid',
-        mesh: new THREE.Mesh(
-          new THREE.ConeGeometry(0.32, 0.9, 12, 1),
-          new THREE.MeshStandardMaterial({
-            roughness: 0.52,
-            metalness: 0.05,
-            emissive: new THREE.Color('#071018'),
-            emissiveIntensity: 0.18,
-          }),
-        ),
+const systemRenderers = [
+  new MeshRenderer({
+    tags: 'boid',
+    mesh: new THREE.Mesh(
+      new THREE.ConeGeometry(0.32, 0.9, 12, 1),
+      new THREE.MeshStandardMaterial({
+        roughness: 0.52,
+        metalness: 0.05,
+        emissive: new THREE.Color('#071018'),
+        emissiveIntensity: 0.18,
       }),
+    ),
+  }),
 
-      new MeshRenderer({
-        tags: 'hazard',
-        mesh: new THREE.Mesh(
-          new THREE.ConeGeometry(0.38, 1.05, 14, 1),
-          new THREE.MeshStandardMaterial({
-            roughness: 0.35,
-            metalness: 0.05,
-            emissive: new THREE.Color('#601018'),
-            emissiveIntensity: 0.55,
-          }),
-        ),
+  new MeshRenderer({
+    tags: 'hazard',
+    mesh: new THREE.Mesh(
+      new THREE.ConeGeometry(0.38, 1.05, 14, 1),
+      new THREE.MeshStandardMaterial({
+        roughness: 0.35,
+        metalness: 0.05,
+        emissive: new THREE.Color('#601018'),
+        emissiveIntensity: 0.55,
       }),
-    ],
+    ),
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/boids.js#L132)
+
+```js
+import * as THREE from 'three';
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const system = new ParticleSystem({
+  duration: 24,
+  looping: true,
+  gravity: new THREE.Vector3(0, 0, 0),
+  gravityModifier: 0,
+  maxParticles: 700,
+
+  emitters: systemEmitters,
+
+  modules: systemModules,
+
+  renderers: systemRenderers,
+});
+```

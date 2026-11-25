@@ -19,33 +19,33 @@ shading distinguishes the incoming object from the fragments it will create. Cho
 and fragment textures against a floor, wall and ramp; the particle factory does not add that geometry itself.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L165)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L161)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: new Emitter({
-      source: EmissionShape.Sphere(0.3),
-      rate: 3,
-      radialSpeed: [2, 4],
-      initialValues: {
-        position: new THREE.Vector3(0, 3, 0),
-        velocity: new THREE.Vector3(0, -2, 0),
-        lifetime: 4,
-        scale: 0.16,
-        mass: 1,
-      },
-    }),
+const systemEmitters = new Emitter({
+  source: EmissionShape.Sphere(0.3),
+  rate: 3,
+  radialSpeed: [2, 4],
+  initialValues: {
+    position: new THREE.Vector3(0, 3, 0),
+    velocity: new THREE.Vector3(0, -2, 0),
+    lifetime: 4,
+    scale: 0.16,
+    mass: 1,
+  },
+});
 ```
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L180)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L176)
 
 ```js
 import { Collision } from '@rzmps/rzmps';
 
-    modules: new Collision({ bounce: 0.55, dampen: 0.1 }),
+const systemModules = new Collision({ bounce: 0.55, dampen: 0.1 });
 ```
 
 
@@ -86,125 +86,125 @@ import impact6Opacity from 'examples/assets/images/impact/512/T_concrete_impact_
 import impact6AO from 'examples/assets/images/impact/512/T_concrete_impact_06_ambientocclusion.PNG?url';
 import impact6Roughness from 'examples/assets/images/impact/512/T_concrete_impact_06_roughness.PNG?url';
 
-  // Load each matching map bundle together, then choose one whole material per impact.
-  const impactURLs = [
-    {
-      normalMap: impact1Normal,
-      alphaMap: impact1Opacity,
-      aoMap: impact1AO,
-      roughnessMap: impact1Roughness,
-    },
-    {
-      normalMap: impact2Normal,
-      alphaMap: impact2Opacity,
-      aoMap: impact2AO,
-      roughnessMap: impact2Roughness,
-    },
-    {
-      normalMap: impact3Normal,
-      alphaMap: impact3Opacity,
-      aoMap: impact3AO,
-      roughnessMap: impact3Roughness,
-    },
-    {
-      normalMap: impact4Normal,
-      alphaMap: impact4Opacity,
-      aoMap: impact4AO,
-      roughnessMap: impact4Roughness,
-    },
-    {
-      normalMap: impact5Normal,
-      alphaMap: impact5Opacity,
-      aoMap: impact5AO,
-      roughnessMap: impact5Roughness,
-    },
-    {
-      normalMap: impact6Normal,
-      alphaMap: impact6Opacity,
-      aoMap: impact6AO,
-      roughnessMap: impact6Roughness,
-    },
-  ];
-  const [fragments, impactTextures] = await Promise.all([
-    loadFragments(),
-    Promise.all(
-      impactURLs.map(async urls => {
-        const entries = await Promise.all(
-          Object.entries(urls).map(async ([key, url]) => {
-            const texture = await textureLoader.loadAsync(url);
-            texture.colorSpace = THREE.NoColorSpace;
-            texture.channel = 0;
-            return [key, texture];
-          }),
-        );
-        return Object.fromEntries(entries);
-      }),
-    ),
-  ]);
-  const impactMaterials = impactTextures.map(
-    maps =>
-      new THREE.MeshStandardMaterial({
-        ...maps,
-        normalScale: new THREE.Vector2(2, 2),
-        roughness: 1,
-        metalness: 0,
-        transparent: true,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -1,
-      }),
-  );
+// Load each matching map bundle together, then choose one whole material per impact.
+const impactURLs = [
+  {
+    normalMap: impact1Normal,
+    alphaMap: impact1Opacity,
+    aoMap: impact1AO,
+    roughnessMap: impact1Roughness,
+  },
+  {
+    normalMap: impact2Normal,
+    alphaMap: impact2Opacity,
+    aoMap: impact2AO,
+    roughnessMap: impact2Roughness,
+  },
+  {
+    normalMap: impact3Normal,
+    alphaMap: impact3Opacity,
+    aoMap: impact3AO,
+    roughnessMap: impact3Roughness,
+  },
+  {
+    normalMap: impact4Normal,
+    alphaMap: impact4Opacity,
+    aoMap: impact4AO,
+    roughnessMap: impact4Roughness,
+  },
+  {
+    normalMap: impact5Normal,
+    alphaMap: impact5Opacity,
+    aoMap: impact5AO,
+    roughnessMap: impact5Roughness,
+  },
+  {
+    normalMap: impact6Normal,
+    alphaMap: impact6Opacity,
+    aoMap: impact6AO,
+    roughnessMap: impact6Roughness,
+  },
+];
+const [fragments, impactTextures] = await Promise.all([
+  loadFragments(),
+  Promise.all(
+    impactURLs.map(async urls => {
+      const entries = await Promise.all(
+        Object.entries(urls).map(async ([key, url]) => {
+          const texture = await textureLoader.loadAsync(url);
+          texture.colorSpace = THREE.NoColorSpace;
+          texture.channel = 0;
+          return [key, texture];
+        }),
+      );
+      return Object.fromEntries(entries);
+    }),
+  ),
+]);
+const impactMaterials = impactTextures.map(
+  maps =>
+    new THREE.MeshStandardMaterial({
+      ...maps,
+      normalScale: new THREE.Vector2(2, 2),
+      roughness: 1,
+      metalness: 0,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+    }),
+);
 ```
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L184)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L180)
 
 ```js
 import * as THREE from 'three';
 import { DecalRenderer, MeshRenderer } from '@rzmps/rzmps';
 
-    renderers: [
-      new MeshRenderer({
-        geometry: new THREE.SphereGeometry(0.5, 12, 8),
-        materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
-      }),
+const systemRenderers = [
+  new MeshRenderer({
+    geometry: new THREE.SphereGeometry(0.5, 12, 8),
+    materialOptions: { color: '#888888', roughness: 0.25, metalness: 0.6 },
+  }),
 
-      new DecalRenderer(impactMaterials, {
-        atlasOptions: { minCapacity: 4 },
-        textureCopyQuality: 1,
-        // The final opacity blend masks all damage lighting once, preserving soft edges.
-        materialComposite: (source, dest) => ({
-          color: source.color,
-          opacity: `${source.opacity} * ${dest.opacity}`,
-          normal: source.normal,
-          roughness: `${source.roughness} * ${dest.roughness}`,
-          metalness: source.metalness,
-        }),
-        materialCompositeGPU: (source, dest) => ({
-          color: source.color,
-          opacity: source.opacity.mul(dest.opacity),
-          normal: source.normal,
-          roughness: source.roughness.mul(dest.roughness),
-          metalness: source.metalness,
-        }),
-        onSpawn: false,
-        impulseThreshold: 4,
-        rotation: [-Math.PI, Math.PI],
-        size: 0.55,
-        impulseAffectsSize: 0.3,
-        onCollision: (hit, source, parameters) => ({
-          size: parameters.size.clone().clampScalar(0.5, 1.4),
-        }),
-        depth: 0.06,
-        maxDistance: 0.5,
-        inheritScale: 0,
-        inheritColor: 0,
-        inheritAlpha: 0,
-        lifetime: 60,
-        maxDecals: 384,
-        opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1),
-      }),
-    ],
+  new DecalRenderer(impactMaterials, {
+    atlasOptions: { minCapacity: 4 },
+    textureCopyQuality: 1,
+    // The final opacity blend masks all damage lighting once, preserving soft edges.
+    materialComposite: (source, dest) => ({
+      color: source.color,
+      opacity: `${source.opacity} * ${dest.opacity}`,
+      normal: source.normal,
+      roughness: `${source.roughness} * ${dest.roughness}`,
+      metalness: source.metalness,
+    }),
+    materialCompositeGPU: (source, dest) => ({
+      color: source.color,
+      opacity: source.opacity.mul(dest.opacity),
+      normal: source.normal,
+      roughness: source.roughness.mul(dest.roughness),
+      metalness: source.metalness,
+    }),
+    onSpawn: false,
+    impulseThreshold: 4,
+    rotation: [-Math.PI, Math.PI],
+    size: 0.55,
+    impulseAffectsSize: 0.3,
+    onCollision: (hit, source, parameters) => ({
+      size: parameters.size.clone().clampScalar(0.5, 1.4),
+    }),
+    depth: 0.06,
+    maxDistance: 0.5,
+    inheritScale: 0,
+    inheritColor: 0,
+    inheritAlpha: 0,
+    lifetime: 60,
+    maxDecals: 384,
+    opacity: t => 1 - THREE.MathUtils.smoothstep(t, 0.75, 1),
+  }),
+];
 ```
 
 
@@ -216,58 +216,109 @@ and UV patch. Their authored mesh sizes, bounce and spin let them settle like sm
 without a sudden disappearance. Adjust fragment count and launch speed to change how violent the impact feels.
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L231)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L239)
 
 ```js
 import * as THREE from 'three';
 import { Collision, Emitter, EmissionShape, MaterialCopySampleMode, MaterialCopy, MaterialCopySource, MeshRenderer, ParticleSystem, RotationBySpeed, ColorOverLifetime } from '@rzmps/rzmps';
-import { Easing } from 'eaz';
+import { Curve } from 'curves';
 
-  const debris = new ParticleSystem({
-    gpuProcessing: true,
-    duration: 0.05,
-    looping: false,
-    maxParticles: 512,
-    gravityModifier: 1,
+const debrisEmitters = new Emitter({
+  source: EmissionShape.Sphere(0.02),
+  rate: 0,
+  bursts: [{ time: 0, count: [6, 10] }],
+  radialSpeed: [0.25, 1.5],
+  initialValues: {
+    lifetime: [2, 3],
+    mass: 1,
+    scale: 1,
+  },
+});
 
-    emitters: new Emitter({
-      source: EmissionShape.Sphere(0.02),
-      rate: 0,
-      bursts: [{ time: 0, count: [6, 10] }],
-      radialSpeed: [0.25, 1.5],
-      initialValues: {
-        lifetime: [2, 3],
-        mass: 1,
-        scale: 1,
-      },
-    }),
+const debrisModules = [
+  new MaterialCopy({ source: MaterialCopySource.Collision, sampleMode: MaterialCopySampleMode.UVPatch }),
+  // Contact damping reduces sliding while allowing fragments to tumble and rebound.
+  new Collision({ bounce: 0.3, dampen: [0.2, 0.5], radiusScale: collisionDiameter }),
+  new RotationBySpeed({
+    speedRange: [0.25, 0.5],
+    angularVelocity: [new THREE.Vector3(), new THREE.Vector3(20, 40, 10)],
+  }),
 
-    modules: [
-      new MaterialCopy({ source: MaterialCopySource.Collision, sampleMode: MaterialCopySampleMode.UVPatch }),
-      // Contact damping reduces sliding while allowing fragments to tumble and rebound.
-      new Collision({ bounce: 0.3, dampen: [0.2, 0.5], radiusScale: collisionDiameter }),
-      new RotationBySpeed({
-        speedRange: [0.25, 0.5],
-        angularVelocity: [new THREE.Vector3(), new THREE.Vector3(20, 40, 10)],
-      }),
+  new ColorOverLifetime({
+    alpha: new Curve({ 0: 1, 0.8: 1, 1: 0 }),
+  }),
+];
 
-      new ColorOverLifetime({
-        alpha: t => (t < 0.8 ? 1 : Easing.cubic.out(1 - (t - 0.8) * 5)),
-      }),
-    ],
+// Neutral factors preserve the source appearance. Render each fragment only once.
+const debrisRenderers = new MeshRenderer({
+  mesh: fragments,
+  atlasOptions: { minCapacity: 4 },
+  textureCopyQuality: 1,
+  maxParticles: 512,
+  materialOptions: { roughness: 1, metalness: 1 },
+});
 
-    // Neutral factors preserve the source appearance. Render each fragment only once.
-    renderers: new MeshRenderer({
-      mesh: fragments,
-      atlasOptions: { minCapacity: 4 },
-      textureCopyQuality: 1,
-      maxParticles: 512,
-      materialOptions: { roughness: 1, metalness: 1 },
-    }),
-  });
+const debris = new ParticleSystem({
+  gpuProcessing: true,
+  duration: 0.05,
+  looping: false,
+  maxParticles: 512,
+  gravityModifier: 1,
+
+  emitters: debrisEmitters,
+
+  modules: debrisModules,
+
+  renderers: debrisRenderers,
+});
 ```
 
 
 The mesh list supplies varied silhouettes; it does not change the incoming ball. See
 [Material Copying](https://rzmps.rzmay.com/docs/guides/material-copying.html) for other sampling modes and [Surface Decals](https://rzmps.rzmay.com/docs/guides/decals.html)
 when adapting the crack to another material.
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L225)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const system = new ParticleSystem({
+  gpuProcessing: true,
+  gravityModifier: 1,
+
+  emitters: systemEmitters,
+
+  modules: systemModules,
+
+  renderers: systemRenderers,
+});
+```
+
+
+Connect the secondary behavior to the root with the relationships below. The root owns child updates; their
+inheritance and event filters decide when each layer starts and which source it follows.
+
+
+[Source: system:connections](https://github.com/rzmay/rzmps/blob/develop/examples/presets/destruction.js#L297)
+
+```js
+system.addSubSystem(debris, {
+  emitOnCollision: true,
+  inheritScale: 0,
+  inheritColor: 0,
+  inheritLifetime: 0,
+  inheritVelocity: 0,
+  impulseAffectsCount: 0.5,
+  impulseAffectsSpeed: 0.45,
+  impulseAffectsAlignment: true,
+  impulseThreshold: 0.5,
+});
+```

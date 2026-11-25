@@ -32,25 +32,25 @@ const lod = {
 ```
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L41)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L32)
 
 ```js
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.7, 24, 12),
-        rate: 1800,
-        radialSpeed: 1.8,
-        initialValues: {
-          lifetime: [2.5, 5],
-          speed: [0.6, 1.8],
-          scale: 0.08,
-          color: new Set(['#57d6ff', '#fff176', '#ff6fb1', '#8aff8a']),
-          alpha: 0.85,
-        },
-      }),
-    ],
+const systemEmitters = [
+  new Emitter({
+    source: EmissionShape.Sphere(0.7, 24, 12),
+    rate: 1800,
+    radialSpeed: 1.8,
+    initialValues: {
+      lifetime: [2.5, 5],
+      speed: [0.6, 1.8],
+      scale: 0.08,
+      color: new Set(['#57d6ff', '#fff176', '#ff6fb1', '#8aff8a']),
+      alpha: 0.85,
+    },
+  }),
+];
 ```
 
 
@@ -61,7 +61,7 @@ hide individual births and deaths. LOD changes how many particles exist rather t
 steps. Tune the visual envelope first, then the distances at which a thinner field still reads as the same effect.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L58)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L49)
 
 ```js
 import { Curve } from 'curves';
@@ -69,24 +69,24 @@ import * as THREE from 'three';
 import { ColorOverLifetime, ScaleOverLifetime, TransformByNoise, VelocityOverLifetime } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-    modules: [
-      new VelocityOverLifetime({
-        linear: new THREE.Vector3(0, 0.35, 0),
-      }),
+const systemModules = [
+  new VelocityOverLifetime({
+    linear: new THREE.Vector3(0, 0.35, 0),
+  }),
 
-      new TransformByNoise({
-        strength: 2.5,
-        frequency: 2.2,
-      }),
+  new TransformByNoise({
+    strength: 2.5,
+    frequency: 2.2,
+  }),
 
-      new ScaleOverLifetime({
-        scale: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
-      }),
+  new ScaleOverLifetime({
+    scale: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
+  }),
 
-      new ColorOverLifetime({
-        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-      }),
-    ],
+  new ColorOverLifetime({
+    alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+  }),
+];
 ```
 
 
@@ -98,18 +98,48 @@ this example isolates compensation. Soft particles help the copies meet geometry
 See [Renderer Children and LOD](https://rzmps.rzmay.com/docs/guides/renderer-children-lod.html) for the settings and their visual tradeoffs.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L79)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L70)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import { CompensationMode, SpriteRenderer, Textures } from '@rzmps/rzmps';
 
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        softParticleDistance: 1,
-        compensation: CompensationMode.Children,
-      }),
-    ],
+const systemRenderers = [
+  new SpriteRenderer(Textures.Circle, {
+    material: SpriteMaterialType.Lit,
+    softParticleDistance: 1,
+    compensation: CompensationMode.Children,
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/lodStressTest.js#L80)
+
+```js
+import * as THREE from 'three';
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const system = new ParticleSystem({
+  duration: 10,
+  looping: true,
+  maxParticles: 50000,
+  simulationSpeed: 1,
+  lod,
+  gravity: new THREE.Vector3(0, 0, 0),
+  gravityModifier: 0,
+
+  emitters: systemEmitters,
+
+  modules: systemModules,
+
+  renderers: systemRenderers,
+});
+```

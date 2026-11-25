@@ -21,29 +21,29 @@ Large initial sprites overlap; their low opacity lets those overlaps suggest a v
 puff, or increase it when the smoke should travel farther before disappearing.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L28)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L23)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.ConeGeometry(0.75, 1.2, 24),
-        }),
-        rate: 36,
-        radialSpeed: 0.18,
-        initialValues: {
-          lifetime: 4.5,
-          speed: 0.55,
-          scale: 2.5,
-          color: ['#4e4d4a', '#a7a097'],
-          alpha: 0.55,
-          velocity: new THREE.Vector3(0, 0.75, 0),
-        },
-      }),
-    ],
+const smokeEmitters = [
+  new Emitter({
+    source: new EmissionShape({
+      geometry: new THREE.ConeGeometry(0.75, 1.2, 24),
+    }),
+    rate: 36,
+    radialSpeed: 0.18,
+    initialValues: {
+      lifetime: 4.5,
+      speed: 0.55,
+      scale: 2.5,
+      color: ['#4e4d4a', '#a7a097'],
+      alpha: 0.55,
+      velocity: new THREE.Vector3(0, 0.75, 0),
+    },
+  }),
+];
 ```
 
 
@@ -55,7 +55,7 @@ it ages. The three opacity timestamps bring it into view, then remove it gradual
 breaks up repeated texture orientation. Together these choices hide individual births without obscuring the plume's flow.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L48)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L43)
 
 ```js
 import { Curve } from 'curves';
@@ -63,31 +63,31 @@ import { Easing } from 'eaz';
 import * as THREE from 'three';
 import { ColorOverLifetime, LimitVelocityOverLifetime, RotationOverLifetime, ScaleOverLifetime, TransformByNoise } from '@rzmps/rzmps';
 
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.35, 0.65),
-        frequency: 0.8,
-      }),
+const smokeModules = [
+  new TransformByNoise({
+    strength: new THREE.Vector3(0.65, 0.35, 0.65),
+    frequency: 0.8,
+  }),
 
-      new LimitVelocityOverLifetime({
-        limit: new THREE.Vector3(1.1, 1.35, 1.1),
-        drag: 0.1,
-        multiplyDragByVelocity: true,
-      }),
+  new LimitVelocityOverLifetime({
+    limit: new THREE.Vector3(1.1, 1.35, 1.1),
+    drag: 0.1,
+    multiplyDragByVelocity: true,
+  }),
 
-      new ScaleOverLifetime({
-        scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
-      }),
+  new ScaleOverLifetime({
+    scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
+  }),
 
-      new ColorOverLifetime({
-        color: '#ffffff',
-        alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
-      }),
+  new ColorOverLifetime({
+    color: '#ffffff',
+    alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
+  }),
 
-      new RotationOverLifetime({
-        angularVelocity: [-1, 1],
-      }),
-    ],
+  new RotationOverLifetime({
+    angularVelocity: [-1, 1],
+  }),
+];
 ```
 
 
@@ -98,24 +98,49 @@ volume under the scene's lights; soft particles blur the line where it meets geo
 material. For a glowing alternative, compare [Additive Smoke](https://rzmps.rzmay.com/docs/examples/additiveSmoke.html): its blending changes the meaning of overlap.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L76)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L71)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import { SpriteRenderer, Textures } from '@rzmps/rzmps';
 import smokeAlpha from 'examples/assets/images/smoke_alpha.jpg?url';
 
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        material: SpriteMaterialType.Lit,
-        alphaMap: smokeAlpha,
-        softParticleDistance: 1,
-        materialOptions: {
-          roughness: 1,
-          normalLighting: 0.5,
-          sphericalNormals: 1,
-        },
-      }),
-    ],
+const smokeRenderers = [
+  new SpriteRenderer(Textures.Default, {
+    material: SpriteMaterialType.Lit,
+    alphaMap: smokeAlpha,
+    softParticleDistance: 1,
+    materialOptions: {
+      roughness: 1,
+      normalLighting: 0.5,
+      sphericalNormals: 1,
+    },
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/smoke.js#L86)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const smoke = new ParticleSystem({
+  duration: 10,
+  looping: true,
+  gravityModifier: -0.015,
+
+  emitters: smokeEmitters,
+
+  modules: smokeModules,
+
+  renderers: smokeRenderers,
+});
+```

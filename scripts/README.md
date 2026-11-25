@@ -32,9 +32,16 @@ an intended workspace under npm's rules.
 
 `npm run scripts pr:prepare` builds packages in dependency order once, runs the discovered
 unit and type tests, measures the reported browser benchmark set, updates README tables from
-that artifact, generates documentation and the published skill, checks generated docs and
+that artifact, checks documentation freshness, checks generated docs and
 links, builds the demo and checks whitespace. Steps log their activity and stop on failure.
 It does not create commits or open an editor. Cross-branch ABBAAB comparisons run separately in CI.
+After a successful preparation, an ignored local receipt fingerprints source files and build outputs.
+Repeating preparation with identical inputs and outputs exits before builds, tests or benchmarks.
+A clean worktree alone does not skip preparation: committed changes can still need preparation.
+Documentation uses CI's `generate --check` first and regenerates documentation and the published skill
+only when that check reports stale output (exit code 2). An up-to-date check skips regeneration;
+other validation failures stop preparation. The check still runs TypeDoc in a temporary directory to
+compare expected output and restores ignored build artifacts required by the docs build.
 
 `build:site` builds packages, generates source documentation, validates it, builds the demo and
 assembles `dist/`. `deploy:site` additionally restores/generates preview media and validates assets

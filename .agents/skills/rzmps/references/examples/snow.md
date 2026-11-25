@@ -19,29 +19,29 @@ create a slow fall; long lifetimes let flakes cross the scene. Prewarm fills the
 does not look like a newly opened tap. Keep radial speed at zero to avoid an outward explosion from the source.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L28)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L22)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.BoxGeometry(30, 0.1, 30),
-        }),
-        rate: 70,
-        radialSpeed: 0,
-        initialValues: {
-          lifetime: 16,
-          speed: 1,
-          scale: 0.25,
-          color: '#e9f7ff',
-          alpha: 0.9,
-          velocity: new THREE.Vector3(0, -0.35, 0),
-        },
-      }),
-    ],
+const snowEmitters = [
+  new Emitter({
+    source: new EmissionShape({
+      geometry: new THREE.BoxGeometry(30, 0.1, 30),
+    }),
+    rate: 70,
+    radialSpeed: 0,
+    initialValues: {
+      lifetime: 16,
+      speed: 1,
+      scale: 0.25,
+      color: '#e9f7ff',
+      alpha: 0.9,
+      velocity: new THREE.Vector3(0, -0.35, 0),
+    },
+  }),
+];
 ```
 
 
@@ -53,43 +53,43 @@ the camera and soften distant ones; the lifetime fade hides normal turnover. Mov
 check those boundaries rather than judging only a stationary view.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L48)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L42)
 
 ```js
 import { Curve } from 'curves';
 import * as THREE from 'three';
 import { LimitVelocityOverLifetime, RotationOverLifetime, TransformByNoise, ColorOverLifetime, ColorByDepth } from '@rzmps/rzmps';
 
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.28, 0.02, 0.28),
-        frequency: 0.55,
-      }),
+const snowModules = [
+  new TransformByNoise({
+    strength: new THREE.Vector3(0.28, 0.02, 0.28),
+    frequency: 0.55,
+  }),
 
-      new LimitVelocityOverLifetime({
-        limit: new THREE.Vector3(0.7, 0.65, 0.7),
-        drag: 0.12,
-        multiplyDragByVelocity: true,
-      }),
+  new LimitVelocityOverLifetime({
+    limit: new THREE.Vector3(0.7, 0.65, 0.7),
+    drag: 0.12,
+    multiplyDragByVelocity: true,
+  }),
 
-      new RotationOverLifetime({
-        angularVelocity: 0.65,
-      }),
+  new RotationOverLifetime({
+    angularVelocity: 0.65,
+  }),
 
-      new ColorOverLifetime({
-        alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
-      }),
+  new ColorOverLifetime({
+    alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
+  }),
 
-      new ColorByDepth({
-        alpha: [1, 0.5],
-        depthRange: [6, 24],
-      }),
+  new ColorByDepth({
+    alpha: [1, 0.5],
+    depthRange: [6, 24],
+  }),
 
-      new ColorByDepth({
-        alpha: [0, 1],
-        depthRange: [1, 2],
-      }),
-    ],
+  new ColorByDepth({
+    alpha: [0, 1],
+    depthRange: [1, 2],
+  }),
+];
 ```
 
 
@@ -101,23 +101,49 @@ small cloud of flakes. LOD is disabled here: the children are part of the chosen
 count or radius if your scene needs more isolated flakes.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L81)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L75)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import { SpriteRenderer, Textures } from '@rzmps/rzmps';
 import snowflakeAlpha from 'examples/assets/images/snowflake_alpha.png?url';
 
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        material: SpriteMaterialType.Lit,
-        children: { count: 5, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
-        alphaMap: snowflakeAlpha,
-        materialOptions: {
-          normalLighting: 0.25,
-          sphericalNormals: 0.1,
-        },
-      }),
-    ],
+const snowRenderers = [
+  new SpriteRenderer(Textures.Default, {
+    material: SpriteMaterialType.Lit,
+    children: { count: 5, radius: 1.5, scale: [0.9, 0.5], alpha: [0.9, 0.6] },
+    alphaMap: snowflakeAlpha,
+    materialOptions: {
+      normalLighting: 0.25,
+      sphericalNormals: 0.1,
+    },
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/snow.js#L89)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const snow = new ParticleSystem({
+  duration: 10,
+  prewarm: true,
+  looping: true,
+  gravityModifier: 0.025,
+
+  emitters: snowEmitters,
+
+  modules: snowModules,
+
+  renderers: snowRenderers,
+});
+```

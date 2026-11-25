@@ -19,27 +19,27 @@ color palette keep the populations visually related. Zero gravity makes their di
 longer lifetimes leave enough time for growth and rotation to become apparent.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L28)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L22)
 
 ```js
 import { TagSelectionMethod } from '@rzmps/rzmps';
 import { Emitter } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        rate: 12,
-        radialSpeed: 1,
-        tags: ['spheres', 'cubes'],
-        tagSelection: TagSelectionMethod.Distribute,
-        initialValues: {
-          lifetime: [6, 12],
-          speed: 1,
-          color: colors,
-          scale: [0.1, 0.25],
-          alpha: 1,
-        },
-      }),
-    ],
+const systemEmitters = [
+  new Emitter({
+    rate: 12,
+    radialSpeed: 1,
+    tags: ['spheres', 'cubes'],
+    tagSelection: TagSelectionMethod.Distribute,
+    initialValues: {
+      lifetime: [6, 12],
+      speed: 1,
+      color: colors,
+      scale: [0.1, 0.25],
+      alpha: 1,
+    },
+  }),
+];
 ```
 
 
@@ -50,31 +50,31 @@ geometry. Each module carries the tag for the group it should affect. If a new b
 leave its filter shared; if it belongs to just one, match that group's tag deliberately.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L46)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L40)
 
 ```js
 import * as THREE from 'three';
 import { Collision, RotationOverLifetime, ColorOverLifetime, ScaleOverLifetime } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-    modules: [
-      new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
-        tags: 'cubes',
-      }),
+const systemModules = [
+  new RotationOverLifetime({
+    angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
+    tags: 'cubes',
+  }),
 
-      new ColorOverLifetime({
-        alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
-        tags: 'cubes',
-      }),
+  new ColorOverLifetime({
+    alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
+    tags: 'cubes',
+  }),
 
-      new ScaleOverLifetime({
-        scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
-        tags: 'spheres',
-      }),
+  new ScaleOverLifetime({
+    scale: time => THREE.MathUtils.lerp(0.35, 1.8, Easing.linear.in(time)),
+    tags: 'spheres',
+  }),
 
-      new Collision({ tags: 'spheres' }),
-    ],
+  new Collision({ tags: 'spheres' }),
+];
 ```
 
 
@@ -86,31 +86,58 @@ sprite lighting. Add a collision scene to see the sphere-only contacts. See [Usi
 the pattern to more groups.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L67)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L61)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import * as THREE from 'three';
 import { SpriteRenderer, MeshRenderer, Textures } from '@rzmps/rzmps';
 
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        tags: 'spheres',
-        materialOptions: {
-          roughness: 0.5,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-        castShadow: true,
-      }),
+const systemRenderers = [
+  new SpriteRenderer(Textures.Circle, {
+    material: SpriteMaterialType.Lit,
+    tags: 'spheres',
+    materialOptions: {
+      roughness: 0.5,
+      sphericalNormals: 1,
+      normalLighting: 1,
+    },
+    castShadow: true,
+  }),
 
-      new MeshRenderer({
-        tags: 'cubes',
-        mesh: new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()),
-        castShadow: true,
-        receiveShadow: true,
-      }),
-    ],
+  new MeshRenderer({
+    tags: 'cubes',
+    mesh: new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial()),
+    castShadow: true,
+    receiveShadow: true,
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubesAndSpheres.js#L83)
+
+```js
+import * as THREE from 'three';
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const system = new ParticleSystem({
+  duration: 10,
+  looping: true,
+  gravity: new THREE.Vector3(0, 0, 0),
+  gravityModifier: 0,
+
+  emitters: systemEmitters,
+
+  modules: systemModules,
+
+  renderers: systemRenderers,
+});
+```

@@ -19,24 +19,24 @@ palette keeps the cubes colorful without producing intermediate hues. The emitte
 geometry, so tune both together when adapting the preset to another scene's units.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L17)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L10)
 
 ```js
 import { Emitter } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        rate: 12,
-        radialSpeed: 1,
-        initialValues: {
-          lifetime: [4, 8],
-          speed: 1,
-          color: colors,
-          scale: [0.4, 1.0],
-          alpha: 1,
-        },
-      }),
-    ],
+const systemEmitters = [
+  new Emitter({
+    rate: 12,
+    radialSpeed: 1,
+    initialValues: {
+      lifetime: [4, 8],
+      speed: 1,
+      color: colors,
+      scale: [0.4, 1.0],
+      alpha: 1,
+    },
+  }),
+];
 ```
 
 
@@ -47,22 +47,22 @@ The cubic alpha fade keeps them readable early in life and removes them near the
 layer: add those only if the intended motion needs more than the emitter's initial trajectory.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L33)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L26)
 
 ```js
 import * as THREE from 'three';
 import { ColorOverLifetime, RotationOverLifetime } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-    modules: [
-      new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
-      }),
+const systemModules = [
+  new RotationOverLifetime({
+    angularVelocity: [new THREE.Vector3(5, 0, 1), new THREE.Vector3(-1, 0, -5)],
+  }),
 
-      new ColorOverLifetime({
-        alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
-      }),
-    ],
+  new ColorOverLifetime({
+    alpha: t => 1 - Easing.cubic.in(THREE.MathUtils.clamp(t, 0, 1)),
+  }),
+];
 ```
 
 
@@ -73,18 +73,46 @@ lights to see that contact cue. Unlike [Spheres](https://rzmps.rzmay.com/docs/ex
 billboard: every visible face belongs to the shared mesh.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L45)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L38)
 
 ```js
 import * as THREE from 'three';
 import { MeshRenderer } from '@rzmps/rzmps';
 
-    renderers: [
-      new MeshRenderer({
-        mesh: new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshStandardMaterial()),
-        castShadow: true,
-        receiveShadow: true,
-      }),
-    ],
+const systemRenderers = [
+  new MeshRenderer({
+    mesh: new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshStandardMaterial()),
+    castShadow: true,
+    receiveShadow: true,
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/cubeInstances.js#L48)
+
+```js
+import * as THREE from 'three';
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const system = new ParticleSystem({
+  maxParticles: 256,
+  duration: 10,
+  looping: true,
+  gravity: new THREE.Vector3(0, 0, 0),
+  gravityModifier: 0,
+
+  emitters: systemEmitters,
+
+  modules: systemModules,
+
+  renderers: systemRenderers,
+});
+```

@@ -19,27 +19,27 @@ you watch repeated contacts rather than only the first hit. A consistent small s
 easy to compare. The warm color range separates the particles from the environment.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L14)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L9)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.SphereGeometry(0.25, 16, 12),
-        }),
-        rate: 30,
-        radialSpeed: [1, 5],
-        initialValues: {
-          lifetime: 8,
-          scale: 0.125,
-          mass: 1,
-          color: ['#ff6633', '#ffd166'],
-        },
-      }),
-    ],
+const collisionEmitters = [
+  new Emitter({
+    source: new EmissionShape({
+      geometry: new THREE.SphereGeometry(0.25, 16, 12),
+    }),
+    rate: 30,
+    radialSpeed: [1, 5],
+    initialValues: {
+      lifetime: 8,
+      scale: 0.125,
+      mass: 1,
+      color: ['#ff6633', '#ffd166'],
+    },
+  }),
+];
 ```
 
 
@@ -51,18 +51,18 @@ some energy on each contact. Lower bounce for heavy or soft material; raise damp
 still works when you only need particles to react to geometry.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L32)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L27)
 
 ```js
 import { Collision } from '@rzmps/rzmps';
 
-    modules: [
-      new Collision({
-        bounce: 0.75,
-        dampen: 0.05,
-        radiusScale: 1,
-      }),
-    ],
+const collisionModules = [
+  new Collision({
+    bounce: 0.75,
+    dampen: 0.05,
+    radiusScale: 1,
+  }),
+];
 ```
 
 
@@ -73,21 +73,46 @@ the scene has shadow-enabled lighting. The appearance remains deliberately plain
 animation, explains the contact. For effects triggered by those contacts, continue with [Metal Balls](https://rzmps.rzmay.com/docs/examples/collisionSubEmitters.html).
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L42)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L37)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import { SpriteRenderer, Textures } from '@rzmps/rzmps';
 
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-        materialOptions: {
-          roughness: 0.5,
-          sphericalNormals: 1,
-          normalLighting: 1,
-        },
-      }),
-    ],
+const collisionRenderers = [
+  new SpriteRenderer(Textures.Circle, {
+    material: SpriteMaterialType.Lit,
+    materialOptions: {
+      roughness: 0.5,
+      sphericalNormals: 1,
+      normalLighting: 1,
+    },
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/collision.js#L50)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const collision = new ParticleSystem({
+  duration: 5,
+  looping: true,
+  gravityModifier: 1,
+
+  emitters: collisionEmitters,
+
+  modules: collisionModules,
+
+  renderers: collisionRenderers,
+});
+```

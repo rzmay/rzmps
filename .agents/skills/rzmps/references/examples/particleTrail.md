@@ -19,25 +19,25 @@ arcs. Only a modest stream is needed because a trail occupies the path, not just
 launches separate enough to follow one before increasing their overlap.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L26)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L20)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.SphereGeometry(0.15, 12, 8),
-        }),
-        rate: 8,
-        initialValues: {
-          lifetime: 2.5,
-          velocity: [new THREE.Vector3(-1.5, 4, -1.5), new THREE.Vector3(1.5, 6, 1.5)],
-          scale: 0.15,
-        },
-      }),
-    ],
+const particleTrailEmitters = [
+  new Emitter({
+    source: new EmissionShape({
+      geometry: new THREE.SphereGeometry(0.15, 12, 8),
+    }),
+    rate: 8,
+    initialValues: {
+      lifetime: 2.5,
+      velocity: [new THREE.Vector3(-1.5, 4, -1.5), new THREE.Vector3(1.5, 6, 1.5)],
+      scale: 0.15,
+    },
+  }),
+];
 ```
 
 
@@ -48,18 +48,18 @@ That choice produces erratic lateral motion instead of a smooth fountain. The st
 reduce it when adapting the effect to a calmer wake or a smaller scene.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L42)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L36)
 
 ```js
 import * as THREE from 'three';
 import { TransformByNoise } from '@rzmps/rzmps';
 
-    modules: [
-      new TransformByNoise({
-        strength: new THREE.Vector3(100, 0, 100),
-        frequency: 5,
-      }),
-    ],
+const particleTrailModules = [
+  new TransformByNoise({
+    strength: new THREE.Vector3(100, 0, 100),
+    frequency: 5,
+  }),
+];
 ```
 
 
@@ -71,31 +71,58 @@ the streak does not end as a blunt strip. A cyan-to-pink gradient makes progress
 `dieWithParticles: false` lets the remaining segments finish after their source disappears.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L51)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L45)
 
 ```js
 import { Curve } from 'curves';
 import * as THREE from 'three';
 import { TrailRenderer, TrailMode, TrailTextureMode } from '@rzmps/rzmps';
 
-    renderers: [
-      new TrailRenderer({
-        mode: TrailMode.Particle,
-        ratio: 1,
-        lifetime: 0.75,
-        minimumVertexDistance: 0.05,
-        dieWithParticles: false,
-        width: 0.18,
-        widthOverTrail: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
-        colorOverTrail: time =>
-          new THREE.Color().lerpColors(new THREE.Color('#00d0ff'), new THREE.Color('#ff66ba'), time),
-        inheritParticleColor: true,
-        textureMode: TrailTextureMode.Stretch,
-        materialOptions: {
-          roughness: 0.7,
-          map: simpleSpriteTexture,
-        },
-      }),
-    ],
+const particleTrailRenderers = [
+  new TrailRenderer({
+    mode: TrailMode.Particle,
+    ratio: 1,
+    lifetime: 0.75,
+    minimumVertexDistance: 0.05,
+    dieWithParticles: false,
+    width: 0.18,
+    widthOverTrail: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
+    colorOverTrail: time =>
+      new THREE.Color().lerpColors(new THREE.Color('#00d0ff'), new THREE.Color('#ff66ba'), time),
+    inheritParticleColor: true,
+    textureMode: TrailTextureMode.Stretch,
+    materialOptions: {
+      roughness: 0.7,
+      map: simpleSpriteTexture,
+    },
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/particleTrail.js#L67)
+
+```js
+import * as THREE from 'three';
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const particleTrail = new ParticleSystem({
+  maxParticles: 64,
+  duration: 2,
+  looping: true,
+  gravity: new THREE.Vector3(0, -1.5, 0),
+
+  emitters: particleTrailEmitters,
+
+  modules: particleTrailModules,
+
+  renderers: particleTrailRenderers,
+});
+```

@@ -26,12 +26,11 @@ import * as THREE from 'three';
 import warpNormal from 'examples/assets/images/warp_norm.jpg?url';
 import scorchTexture from 'examples/assets/images/scorch.png?url';
 
-  const textureLoader = new THREE.TextureLoader();
-  const heatDistortion = textureLoader.load(warpNormal);
-  const scorchMap = textureLoader.load(scorchTexture);
-  scorchMap.colorSpace = THREE.SRGBColorSpace;
-  const scorchMaterial = new THREE.MeshBasicMaterial({ map: scorchMap });
-
+const textureLoader = new THREE.TextureLoader();
+const heatDistortion = textureLoader.load(warpNormal);
+const scorchMap = textureLoader.load(scorchTexture);
+scorchMap.colorSpace = THREE.SRGBColorSpace;
+const scorchMaterial = new THREE.MeshBasicMaterial({ map: scorchMap });
 ```
 
 
@@ -43,34 +42,34 @@ maintains the overall direction. The scale ramp narrows old flames, and opacity 
 Start by tuning this layer before adding light or distortion.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L42)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L38)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape, EmissionSource } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.ConeGeometry(1, 1.7, 24),
-          source: EmissionSource.Surface,
-        }),
-        rate: 90,
-        radialSpeed: 0.2,
-        initialValues: {
-          lifetime: 1.35,
-          speed: 1.2,
-          scale: 2.5,
-          color: ['#ff9c88', '#ffd47f'],
-          alpha: 0.95,
-          velocity: new THREE.Vector3(0, 2.2, 0),
-        },
-      }),
-    ],
+const fireEmitters = [
+  new Emitter({
+    source: new EmissionShape({
+      geometry: new THREE.ConeGeometry(1, 1.7, 24),
+      source: EmissionSource.Surface,
+    }),
+    rate: 90,
+    radialSpeed: 0.2,
+    initialValues: {
+      lifetime: 1.35,
+      speed: 1.2,
+      scale: 2.5,
+      color: ['#ff9c88', '#ffd47f'],
+      alpha: 0.95,
+      velocity: new THREE.Vector3(0, 2.2, 0),
+    },
+  }),
+];
 ```
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L63)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L59)
 
 ```js
 import { Curve } from 'curves';
@@ -78,70 +77,70 @@ import * as THREE from 'three';
 import { ColorOverLifetime, ForceOverLifetime, RotationOverLifetime, ScaleOverLifetime, TransformByNoise, VelocityOverLifetime } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-    modules: [
-      new VelocityOverLifetime({
-        linear: new THREE.Vector3(0, 0.25, 0),
-      }),
+const fireModules = [
+  new VelocityOverLifetime({
+    linear: new THREE.Vector3(0, 0.25, 0),
+  }),
 
-      new TransformByNoise({
-        strength: 2.1,
-        frequency: 1.35,
-      }),
+  new TransformByNoise({
+    strength: 2.1,
+    frequency: 1.35,
+  }),
 
-      new ForceOverLifetime({
-        force: new THREE.Vector3(0, 0.5, 0),
-      }),
+  new ForceOverLifetime({
+    force: new THREE.Vector3(0, 0.5, 0),
+  }),
 
-      new ScaleOverLifetime({
-        scale: time => THREE.MathUtils.lerp(1.3, 0.2, Easing.linear.in(time)),
-      }),
+  new ScaleOverLifetime({
+    scale: time => THREE.MathUtils.lerp(1.3, 0.2, Easing.linear.in(time)),
+  }),
 
-      new ColorOverLifetime({
-        color: '#ffffff',
-        alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
-      }),
+  new ColorOverLifetime({
+    color: '#ffffff',
+    alpha: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
+  }),
 
-      new RotationOverLifetime({
-        angularVelocity: [new THREE.Vector3(-0.5, 0, 0), new THREE.Vector3(0.5, 0, 0)],
-      }),
-    ],
+  new RotationOverLifetime({
+    angularVelocity: [new THREE.Vector3(-0.5, 0, 0), new THREE.Vector3(0.5, 0, 0)],
+  }),
+];
 ```
 
 
-[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L190)
+[Source: modules:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L196)
 
 ```js
 import * as THREE from 'three';
 import { ColorOverLifetime, RotationOverLifetime, ScaleOverLifetime, TransformByNoise, VelocityOverLifetime } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-    modules: [
-      new VelocityOverLifetime({
-        linear: new THREE.Vector3(0, 0.5, 0),
-      }),
+const heatDistortionModules = [
+  new VelocityOverLifetime({
+    linear: new THREE.Vector3(0, 0.5, 0),
+  }),
 
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.35, 0.65),
-        frequency: 1.7,
-      }),
+  new TransformByNoise({
+    strength: new THREE.Vector3(0.65, 0.35, 0.65),
+    frequency: 1.7,
+  }),
 
-      new ScaleOverLifetime({
-        scale: time => {
-          const size = (0.35 + (1.8 - 0.35) * time) * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)));
-          return size;
-        },
-      }),
+  new ScaleOverLifetime({
+    scale: time => {
+      const size = (0.35 + (1.8 - 0.35) * time) * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)));
+      return size;
+    },
+  }),
 
-      new ColorOverLifetime({
-        alpha: time =>
-          Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)) *
-          (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
-      }),
+  new ColorOverLifetime({
+    alpha: time =>
+      Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)) *
+      (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
+  }),
 
-      new RotationOverLifetime({
-        angularVelocity: [-0.45, 0.45],
-      }),
-    ],
+  new RotationOverLifetime({
+    angularVelocity: [-0.45, 0.45],
+  }),
+];
 ```
 
 
@@ -154,55 +153,55 @@ alpha inheritance are disabled so the marks do not shrink or disappear with the 
 floor darken; adjust scorch opacity separately from flame brightness.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L93)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L89)
 
 ```js
 import { Curve } from 'curves';
 import { DecalRenderer, LightRenderer, SpriteRenderer } from '@rzmps/rzmps';
 import fireSprite from 'examples/assets/images/fire_tile_8x4_n32.png?url';
 
-    renderers: [
-      new SpriteRenderer(fireSprite, {
-        gridSize: { x: 8, y: 4 },
-        frames: 32,
-        fps: 24,
-        softParticleDistance: 1,
-      }),
+const fireRenderers = [
+  new SpriteRenderer(fireSprite, {
+    gridSize: { x: 8, y: 4 },
+    frames: 32,
+    fps: 24,
+    softParticleDistance: 1,
+  }),
 
-      new LightRenderer({
-        count: 18,
-        ratio: 0.3,
-        inheritParticleColor: true,
-        sizeAffectsRange: true,
-        alphaAffectsIntensity: true,
-        brightness: 1.8,
-        rangeMultiplier: 3,
-        lightOptions: {
-          color: '#ffb570',
-          intensity: 1,
-          distance: 8,
-          decay: 2,
-        },
-      }),
+  new LightRenderer({
+    count: 18,
+    ratio: 0.3,
+    inheritParticleColor: true,
+    sizeAffectsRange: true,
+    alphaAffectsIntensity: true,
+    brightness: 1.8,
+    rangeMultiplier: 3,
+    lightOptions: {
+      color: '#ffb570',
+      intensity: 1,
+      distance: 8,
+      decay: 2,
+    },
+  }),
 
-      new DecalRenderer(scorchMaterial, {
-        onSpawn: false,
-        ratio: 0.5,
-        continuousRate: 3,
-        direction: DecalRenderer.Radial(24),
-        hitSelection: (hits, particle, maxHits) =>
-          DecalRenderer.Random(DecalRenderer.Nearest(hits, particle, 5), particle, maxHits),
-        maxDistance: 1.5,
-        depth: 0.06,
-        size: 2.5,
-        inheritColor: 0,
-        inheritScale: 0,
-        inheritAlpha: 0,
-        lifetime: 8,
-        opacity: new Curve({ 0: 0, 0.025: 0.05, 0.6: 0.05, 1: 0 }),
-        maxDecals: 100,
-      }),
-    ],
+  new DecalRenderer(scorchMaterial, {
+    onSpawn: false,
+    ratio: 0.5,
+    continuousRate: 3,
+    direction: DecalRenderer.Radial(24),
+    hitSelection: (hits, particle, maxHits) =>
+      DecalRenderer.Random(DecalRenderer.Nearest(hits, particle, 5), particle, maxHits),
+    maxDistance: 1.5,
+    depth: 0.06,
+    size: 2.5,
+    inheritColor: 0,
+    inheritScale: 0,
+    inheritAlpha: 0,
+    lifetime: 8,
+    opacity: new Curve({ 0: 0, 0.025: 0.05, 0.6: 0.05, 1: 0 }),
+    maxDecals: 100,
+  }),
+];
 ```
 
 
@@ -213,72 +212,132 @@ layer disperse, while its own motion keeps it from looking like another flame ca
 so flame color and lifetime changes do not collapse the shimmer. Update only the root system; it owns this child.
 
 
-[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L168)
+[Source: system:2](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L177)
 
 ```js
 import * as THREE from 'three';
 import { ColorOverLifetime, Emitter, EmissionShape, ParticleSystem, RotationOverLifetime, ScaleOverLifetime, SpriteRenderer, TransformByNoise, VelocityOverLifetime, Textures } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
+function createHeatDistortion(alphaMap, distortionMap, options) {
+  const heatDistortionEmitters = [
+    new Emitter({
+      source: EmissionShape.Sphere(0.05, 8, 6),
+      rate: options.rate,
+      radialSpeed: 1,
+      initialValues: {
+        lifetime: options.lifetime,
+        scale: options.scale,
+        velocity: new THREE.Vector3(0, options.velocity, 0),
+        color: '#ffffff',
+        rotation: [-Math.PI, Math.PI],
+      },
+    }),
+  ];
+
+  const heatDistortionModules = [
+    new VelocityOverLifetime({
+      linear: new THREE.Vector3(0, 0.5, 0),
+    }),
+
+    new TransformByNoise({
+      strength: new THREE.Vector3(0.65, 0.35, 0.65),
+      frequency: 1.7,
+    }),
+
+    new ScaleOverLifetime({
+      scale: time => {
+        const size = (0.35 + (1.8 - 0.35) * time) * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)));
+        return size;
+      },
+    }),
+
+    new ColorOverLifetime({
+      alpha: time =>
+        Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)) *
+        (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
+    }),
+
+    new RotationOverLifetime({
+      angularVelocity: [-0.45, 0.45],
+    }),
+  ];
+
+  const heatDistortionRenderers = [
+    new SpriteRenderer(Textures.Default, {
+      alphaMap,
+      softParticleDistance: 2.5,
+      materialOptions: {
+        transmission: 1,
+        distortionMap,
+        distortionStrength: 0.05,
+        depthWrite: false,
+      },
+    }),
+  ];
+
   return new ParticleSystem({
     duration: 1,
     looping: true,
 
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Sphere(0.05, 8, 6),
-        rate: options.rate,
-        radialSpeed: 1,
-        initialValues: {
-          lifetime: options.lifetime,
-          scale: options.scale,
-          velocity: new THREE.Vector3(0, options.velocity, 0),
-          color: '#ffffff',
-          rotation: [-Math.PI, Math.PI],
-        },
-      }),
-    ],
+    emitters: heatDistortionEmitters,
 
-    modules: [
-      new VelocityOverLifetime({
-        linear: new THREE.Vector3(0, 0.5, 0),
-      }),
+    modules: heatDistortionModules,
 
-      new TransformByNoise({
-        strength: new THREE.Vector3(0.65, 0.35, 0.65),
-        frequency: 1.7,
-      }),
-
-      new ScaleOverLifetime({
-        scale: time => {
-          const size = (0.35 + (1.8 - 0.35) * time) * (1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)));
-          return size;
-        },
-      }),
-
-      new ColorOverLifetime({
-        alpha: time =>
-          Easing.cubic.in(THREE.MathUtils.clamp(time * 5, 0, 1)) *
-          (1 - Easing.cubic.in(THREE.MathUtils.clamp((time - 0.8) * 5, 0, 1))),
-      }),
-
-      new RotationOverLifetime({
-        angularVelocity: [-0.45, 0.45],
-      }),
-    ],
-
-    renderers: [
-      new SpriteRenderer(Textures.Default, {
-        alphaMap,
-        softParticleDistance: 2.5,
-        materialOptions: {
-          transmission: 1,
-          distortionMap,
-          distortionStrength: 0.05,
-          depthWrite: false,
-        },
-      }),
-    ],
+    renderers: heatDistortionRenderers,
   });
+}
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L134)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const fire = new ParticleSystem({
+  duration: 10,
+  looping: true,
+
+  emitters: fireEmitters,
+
+  modules: fireModules,
+
+  renderers: fireRenderers,
+});
+```
+
+
+Connect the secondary behavior to the root with the relationships below. The root owns child updates; their
+inheritance and event filters decide when each layer starts and which source it follows.
+
+
+[Source: system:connections](https://github.com/rzmay/rzmps/blob/develop/examples/presets/fire.js#L148)
+
+```js
+import { Textures } from '@rzmps/rzmps';
+
+fire.addSubSystem(
+  createHeatDistortion(Textures.Simple, heatDistortion, {
+    rate: 4,
+    scale: 4,
+    velocity: 0,
+    lifetime: 1,
+  }),
+  {
+    inheritScale: 0,
+    inheritLifetime: 0,
+    inheritColor: 0,
+    inheritAlpha: 0,
+    inheritMass: 0,
+    ratio: 0.5,
+  },
+);
+```

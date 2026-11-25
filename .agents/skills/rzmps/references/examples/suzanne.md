@@ -25,20 +25,19 @@ The source is ready before the particle system is constructed.
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import suzanneModel from 'examples/assets/models/suzanne.glb?url';
 
-  const gltf = await new GLTFLoader().loadAsync(suzanneModel);
+const gltf = await new GLTFLoader().loadAsync(suzanneModel);
 
-  let suzanneGeometry = null;
-  gltf.scene.traverse(child => {
-    if (!suzanneGeometry && child.isMesh) {
-      suzanneGeometry = child.geometry.clone();
-      suzanneGeometry.rotateX(-90);
-    }
-  });
-
-  if (!suzanneGeometry) {
-    throw new Error('suzanne.glb does not contain a mesh');
+let suzanneGeometry = null;
+gltf.scene.traverse(child => {
+  if (!suzanneGeometry && child.isMesh) {
+    suzanneGeometry = child.geometry.clone();
+    suzanneGeometry.rotateX(-90);
   }
+});
 
+if (!suzanneGeometry) {
+  throw new Error('suzanne.glb does not contain a mesh');
+}
 ```
 
 
@@ -50,30 +49,30 @@ speed carries particles away from it. Lower that speed to hold a shell around th
 surface appear to dissolve outward.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L40)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L36)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape, EmissionSource } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: suzanneGeometry,
-          source: EmissionSource.Surface,
-        }),
-        rate: 256,
-        radialSpeed: 1.1,
-        initialValues: {
-          lifetime: 2.2,
-          speed: 0,
-          scale: 0.1125,
-          color: '#70d6ff',
-          alpha: 0.85,
-          velocity: new THREE.Vector3(0, 0, 0),
-        },
-      }),
-    ],
+const suzanneEmitters = [
+  new Emitter({
+    source: new EmissionShape({
+      geometry: suzanneGeometry,
+      source: EmissionSource.Surface,
+    }),
+    rate: 256,
+    radialSpeed: 1.1,
+    initialValues: {
+      lifetime: 2.2,
+      speed: 0,
+      scale: 0.1125,
+      color: '#70d6ff',
+      alpha: 0.85,
+      velocity: new THREE.Vector3(0, 0, 0),
+    },
+  }),
+];
 ```
 
 
@@ -84,19 +83,19 @@ is added because the surface distribution is the feature being taught. Add motio
 recognizable, otherwise it becomes difficult to tell whether a change comes from emission or later movement.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L61)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L57)
 
 ```js
 import * as THREE from 'three';
 import { ColorOverLifetime } from '@rzmps/rzmps';
 import { Easing } from 'eaz';
 
-    modules: [
-      new ColorOverLifetime({
-        color: '#70d6ff',
-        alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
-      }),
-    ],
+const suzanneModules = [
+  new ColorOverLifetime({
+    color: '#70d6ff',
+    alpha: time => 1 - Easing.cubic.in(THREE.MathUtils.clamp(time, 0, 1)),
+  }),
+];
 ```
 
 
@@ -107,16 +106,40 @@ Compare [Suzanne Instances](https://rzmps.rzmay.com/docs/examples/suzanneInstanc
 point sampled from its surface.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L70)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L66)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import { SpriteRenderer, Textures } from '@rzmps/rzmps';
 
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Lit,
-      }),
-    ],
+const suzanneRenderers = [
+  new SpriteRenderer(Textures.Circle, {
+    material: SpriteMaterialType.Lit,
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/suzanne.js#L74)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const suzanne = new ParticleSystem({
+  duration: 10,
+  looping: true,
+
+  emitters: suzanneEmitters,
+
+  modules: suzanneModules,
+
+  renderers: suzanneRenderers,
+});
+```

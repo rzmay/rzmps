@@ -19,27 +19,27 @@ does not compete with the depth-dependent motion. Slow initial drift gives you t
 particles. The system's offset places the volume in front of the initial camera.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/stylizedDepth.js#L30)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/stylizedDepth.js#L19)
 
 ```js
 import * as THREE from 'three';
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: new EmissionShape({
-          geometry: new THREE.BoxGeometry(20, 10, 20),
-        }),
-        rate: 200,
-        radialSpeed: 0,
-        initialValues: {
-          lifetime: [7, 12],
-          speed: 1,
-          velocity: new THREE.Vector3(0.01, 0.02, 0.3),
-          scale: 0.02,
-        },
-      }),
-    ],
+const systemEmitters = [
+  new Emitter({
+    source: new EmissionShape({
+      geometry: new THREE.BoxGeometry(20, 10, 20),
+    }),
+    rate: 200,
+    radialSpeed: 0,
+    initialValues: {
+      lifetime: [7, 12],
+      speed: 1,
+      velocity: new THREE.Vector3(0.01, 0.02, 0.3),
+      scale: 0.02,
+    },
+  }),
+];
 ```
 
 
@@ -51,44 +51,46 @@ move the camera to understand the distinction. Keep one shared range while tunin
 a particular layer should change sooner than the others.
 
 
-[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/stylizedDepth.js#L48)
+[Source: modules:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/stylizedDepth.js#L37)
 
 ```js
 import * as THREE from 'three';
 import { ColorByDepth, RotationByDepth, ScaleByDepth, SpeedByDepth, VelocityByDepth } from '@rzmps/rzmps';
 
-    modules: [
-      new ColorByDepth({
-        color: ['#fff7db', '#84d7ff'],
-        alpha: [1, 0.5],
-        depthRange,
-      }),
+const depthRange = [5, 24];
 
-      new ScaleByDepth({
-        scale: [1, 2],
-        depthRange,
-      }),
+const systemModules = [
+  new ColorByDepth({
+    color: ['#fff7db', '#84d7ff'],
+    alpha: [1, 0.5],
+    depthRange,
+  }),
 
-      new RotationByDepth({
-        angularVelocity: t => THREE.MathUtils.lerp(0.12, 1.6, THREE.MathUtils.smoothstep(t, 0.15, 1)),
-        depthRange,
-      }),
+  new ScaleByDepth({
+    scale: [1, 2],
+    depthRange,
+  }),
 
-      new VelocityByDepth({
-        velocity: t =>
-          new THREE.Vector3(
-            Math.sin(t * Math.PI * 2) * 0.08,
-            THREE.MathUtils.lerp(-1, 1, t),
-            THREE.MathUtils.lerp(0, 1, t),
-          ),
-        depthRange,
-      }),
+  new RotationByDepth({
+    angularVelocity: t => THREE.MathUtils.lerp(0.12, 1.6, THREE.MathUtils.smoothstep(t, 0.15, 1)),
+    depthRange,
+  }),
 
-      new SpeedByDepth({
-        speed: t => THREE.MathUtils.lerp(0.5, 3, THREE.MathUtils.smoothstep(t, 0, 1)),
-        depthRange,
-      }),
-    ],
+  new VelocityByDepth({
+    velocity: t =>
+      new THREE.Vector3(
+        Math.sin(t * Math.PI * 2) * 0.08,
+        THREE.MathUtils.lerp(-1, 1, t),
+        THREE.MathUtils.lerp(0, 1, t),
+      ),
+    depthRange,
+  }),
+
+  new SpeedByDepth({
+    speed: t => THREE.MathUtils.lerp(0.5, 3, THREE.MathUtils.smoothstep(t, 0, 1)),
+    depthRange,
+  }),
+];
 ```
 
 
@@ -99,17 +101,47 @@ explicit depth scale define the intended apparent size. Re-enable it for a more 
 this arrangement when you want graphic, screen-oriented particles.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/stylizedDepth.js#L83)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/stylizedDepth.js#L74)
 
 ```js
 import { SpriteMaterialType } from '@rzmps/rzmps';
 import { SpriteRenderer, Textures } from '@rzmps/rzmps';
 
-    renderers: [
-      new SpriteRenderer(Textures.Circle, {
-        material: SpriteMaterialType.Unlit,
-        sizeAttenuation: false,
-      }),
-    ],
+const systemRenderers = [
+  new SpriteRenderer(Textures.Circle, {
+    material: SpriteMaterialType.Unlit,
+    sizeAttenuation: false,
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/stylizedDepth.js#L83)
+
+```js
+import * as THREE from 'three';
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const system = new ParticleSystem({
+  maxParticles: 2048,
+  duration: 14,
+  prewarm: true,
+  prewarmFPS: 30,
+  looping: true,
+  gravity: new THREE.Vector3(0, 0, 0),
+  gravityModifier: 0,
+
+  emitters: systemEmitters,
+
+  modules: systemModules,
+
+  renderers: systemRenderers,
+});
+```

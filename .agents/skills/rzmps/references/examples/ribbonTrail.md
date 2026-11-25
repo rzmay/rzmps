@@ -19,22 +19,22 @@ neighboring samples remain close. Motion uses the initial velocity and ordinary 
 modules are needed. Increasing speed without increasing emission spreads the samples apart and stretches the strands.
 
 
-[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L16)
+[Source: emitters:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L11)
 
 ```js
 import { Emitter, EmissionShape } from '@rzmps/rzmps';
 
-    emitters: [
-      new Emitter({
-        source: EmissionShape.Torus(),
-        rate: 50,
-        radialSpeed: 5,
-        initialValues: {
-          lifetime: 1,
-          scale: 0.12,
-        },
-      }),
-    ],
+const ribbonTrailEmitters = [
+  new Emitter({
+    source: EmissionShape.Torus(),
+    rate: 50,
+    radialSpeed: 5,
+    initialValues: {
+      lifetime: 1,
+      scale: 0.12,
+    },
+  }),
+];
 ```
 
 
@@ -46,27 +46,50 @@ keeps the appearance clean. Adjust ribbon count to change the number of strands,
 spacing together rather than treating them as unrelated settings.
 
 
-[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L30)
+[Source: renderers:1](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L25)
 
 ```js
 import { Curve } from 'curves';
 import * as THREE from 'three';
 import { TrailRenderer, TrailMode } from '@rzmps/rzmps';
 
-    renderers: [
-      new TrailRenderer({
-        mode: TrailMode.Ribbon,
-        ratio: 1,
-        ribbonCount: 3,
-        width: 0.15,
-        widthOverTrail: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
-        colorOverTrail: time => new THREE.Color().lerpColors(new THREE.Color('#fff'), new THREE.Color('#66e0ff'), time),
-        inheritParticleColor: true,
-        materialOptions: {
-          roughness: 0,
-          metalness: 0,
-        },
-      }),
-    ],
+const ribbonTrailRenderers = [
+  new TrailRenderer({
+    mode: TrailMode.Ribbon,
+    ratio: 1,
+    ribbonCount: 3,
+    width: 0.15,
+    widthOverTrail: new Curve({ 0: 0, 0.2: 1, 1: 0 }),
+    colorOverTrail: time => new THREE.Color().lerpColors(new THREE.Color('#fff'), new THREE.Color('#66e0ff'), time),
+    inheritParticleColor: true,
+    materialOptions: {
+      roughness: 0,
+      metalness: 0,
+    },
+  }),
+];
 ```
 
+
+## Assemble the effect
+
+Pass the prepared components into the system constructor. The settings here control the whole effect, while the
+emitters, modules and renderers above define its individual layers. Add the returned root to your scene and update
+that root once per frame.
+
+
+[Source: system:assembly](https://github.com/rzmay/rzmps/blob/develop/examples/presets/ribbonTrail.js#L43)
+
+```js
+import { ParticleSystem } from '@rzmps/rzmps';
+
+const ribbonTrail = new ParticleSystem({
+  maxParticles: 128,
+  duration: 4,
+  looping: true,
+
+  emitters: ribbonTrailEmitters,
+
+  renderers: ribbonTrailRenderers,
+});
+```

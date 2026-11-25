@@ -1,18 +1,22 @@
 import { discoverWorkspaces } from './workspaces.utils.mjs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { prepareDocumentation, preparationIsCurrent, rememberPreparation } from './prepare.utils.mjs';
+import { buildArtifacts } from '../apps/docs/scripts/artifacts.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const [task, ...flags] = process.argv.slice(2);
 const skipBuild = flags.includes('--skip-build');
 const checkGenerated = flags.includes('--check-generated');
-async function run(command, args) {
+async function run(command, args, allowedExitCodes = []) {
   console.log(`[${task}] ${command} ${args.join(' ')}`);
-  await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd: root, stdio: 'inherit' });
     child.once('error', reject);
     child.once('exit', (code, signal) =>
-      code === 0 ? resolve() : reject(new Error(`${command} failed (${signal ?? code})`)),
+      code === 0 || allowedExitCodes.includes(code)
+        ? resolve(code)
+        : reject(new Error(`${command} failed (${signal ?? code})`)),
     );
   });
 }
@@ -56,13 +60,34 @@ else if (task === 'check:dependencies')
 else if (task === 'check:docs' || task === 'check:docs:prepared') await checkDocs(task.endsWith(':prepared'));
 else if (task === 'check:site') await tests('site');
 else if (task === 'build:site' || task === 'deploy:site' || task === 'pr:prepare') {
+  const artifacts =
+    task === 'pr:prepare'
+      ? [
+          ...buildArtifacts.filter(file => !file.startsWith('apps/docs/public/previews/')),
+          ...(await discoverWorkspaces(root))
+            .filter(p => p.location.startsWith('packages/'))
+            .map(p => `${p.location}/build`),
+          'apps/docs/.vitepress/dist',
+          'apps/demo/dist',
+        ]
+      : [];
+  if (task === 'pr:prepare' && preparationIsCurrent(root, artifacts)) {
+    // Staging may change independently of working-file contents recorded in the receipt.
+    await run('git', ['--no-pager', 'diff', '--check']);
+    await run('git', ['--no-pager', 'diff', '--cached', '--check']);
+    console.log('[pr:prepare] Inputs and outputs match the last successful preparation; nothing to prepare.');
+    process.exit(0);
+  }
   if (!skipBuild) await buildPackages();
   if (task === 'pr:prepare') {
     await tests();
     await node('benchmarks/run.mjs', '--set', 'reported', '--runtime', 'browser', '--skip-build');
     await npm('run', 'update-report', '--workspace', '@rzmps/benchmarks');
   }
-  if (!checkGenerated) await docs('generate');
+  if (!checkGenerated) {
+    if (task === 'pr:prepare') await prepareDocumentation(run);
+    else await docs('generate');
+  }
   if (task === 'deploy:site') {
     await docs('restore:previews');
     await docs('generate:previews');
@@ -73,6 +98,7 @@ else if (task === 'build:site' || task === 'deploy:site' || task === 'pr:prepare
   if (task === 'pr:prepare') {
     await run('git', ['--no-pager', 'diff', '--check']);
     await run('git', ['--no-pager', 'diff', '--cached', '--check']);
+    rememberPreparation(root, artifacts);
   } else {
     await node('scripts/site/assemble.mjs');
     if (task === 'deploy:site') {
